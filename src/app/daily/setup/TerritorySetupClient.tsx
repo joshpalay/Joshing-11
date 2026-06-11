@@ -792,7 +792,7 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
           <span
             style={{
               color: color.primary,
-              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+              fontFamily: 'var(--font-serif)',
               fontSize: 18,
               fontWeight: 700,
               lineHeight: 1,
@@ -978,7 +978,7 @@ function TerritoryCircle({
             style={{
               fontSize: countFontSize,
               color: color.primary,
-              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+              fontFamily: 'var(--font-serif)',
               fontWeight: 700,
               lineHeight: 1,
             }}

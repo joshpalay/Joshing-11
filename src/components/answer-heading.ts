@@ -9,7 +9,7 @@ import type { CSSProperties } from 'react'
 // Apply the result tone on top of this (green `--game-correct` when the player
 // nailed it, `--brand-ink` otherwise) so the headline still reads as a verdict.
 export const answerHeadingStyle: CSSProperties = {
-  fontFamily: 'var(--font-cormorant), Georgia, serif',
+  fontFamily: 'var(--font-serif)',
   fontSize: '1.65rem',
   fontWeight: 700,
   lineHeight: 1.14,

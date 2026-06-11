@@ -487,7 +487,7 @@ function QuestionRow({
               ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--tri-amber)'
               : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
             padding: '14px 18px',
-            fontFamily: 'var(--font-cormorant), Georgia, serif',
+            fontFamily: 'var(--font-serif)',
             fontSize: '1.4875rem',
             fontWeight: 700,
             letterSpacing: 0,
@@ -600,7 +600,7 @@ function UserRow({ text }: { text: string }) {
           borderRadius: 'var(--radius-md) var(--radius-md) 0 var(--radius-md)',
           padding: '9px 15px',
           // Figma answer bubble — Cormorant serif, not the sans body font.
-          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontFamily: 'var(--font-serif)',
           fontSize: '1.495rem',
           fontWeight: 700,
           letterSpacing: '-0.01em',

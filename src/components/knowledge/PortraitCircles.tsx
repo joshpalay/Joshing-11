@@ -285,7 +285,7 @@ export function PortraitDomainCircle({
                 style={{
                   fontSize: countFontSize,
                   color: dc.primary,
-                  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+                  fontFamily: 'var(--font-serif)',
                   fontWeight: 'bold',
                   lineHeight: 1,
                 }}
@@ -337,7 +337,7 @@ export function PortraitDomainCircle({
                 placeItems: 'center',
                 fontSize: 12,
                 fontWeight: 700,
-                fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+                fontFamily: 'var(--font-serif)',
                 lineHeight: 1,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
               }}
@@ -351,7 +351,7 @@ export function PortraitDomainCircle({
         style={{
           fontSize: 10.5,
           color: dc.text,
-          fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+          fontFamily: 'var(--font-serif)',
           textAlign: 'center',
           lineHeight: 1.3,
           maxWidth: Math.max(90, resolvedCircleSlotSize),
@@ -475,7 +475,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
               color: '#b0a090',
               fontStyle: 'italic',
               marginLeft: 'auto',
-              fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+              fontFamily: 'var(--font-serif)',
             }}
           >
             Size = depth
@@ -511,7 +511,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                   marginBottom: 14,
                   paddingBottom: 6,
                   borderBottom: `1px solid ${color}33`,
-                  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+                  fontFamily: 'var(--font-serif)',
                 }}
               >
                 {label}
@@ -616,7 +616,7 @@ const sparsePromptStyle: CSSProperties = {
   fontSize: 13,
   color: '#8a8070',
   fontStyle: 'italic',
-  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+  fontFamily: 'var(--font-serif)',
   textAlign: 'center',
 }
 
@@ -625,5 +625,5 @@ const explainerStyle: CSSProperties = {
   fontSize: 9.5,
   color: '#b0a090',
   fontStyle: 'italic',
-  fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+  fontFamily: 'var(--font-serif)',
 }
