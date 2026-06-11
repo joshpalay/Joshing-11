@@ -8,6 +8,7 @@ import { EditorialCarousel } from '@/components/feed/EditorialCarousel';
 import { EditorialFeature } from '@/components/feed/EditorialFeature';
 import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { expandingTerritoryAccent } from '@/components/knowledge/PortraitCircles';
 import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-ground-circles';
 import type { StreamEmbed } from '@/lib/activity-stream';
 
@@ -15,14 +16,9 @@ import type { StreamEmbed } from '@/lib/activity-stream';
 // motif is the hero artwork, so it should catch the eye before the copy.
 const SHARED_GROUND_CIRCLE_SCALE = 1.35;
 
-// Badge accents for the "Your World Is Expanding" territory rows — the
-// reds / golds / blues from the /knowledge "Recently Expanding" module, trimmed
-// to the three we ever render.
-const EXPANDING_ROW_ACCENTS = [
-  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
-  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
-  { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.2)' },
-] as const;
+// Badge accents for the "Your World Is Expanding" territory rows are keyed by
+// the row's domain via expandingTerritoryAccent — shared with the /knowledge
+// "Recently Expanding" module, so a territory carries one hue on both surfaces.
 
 // A faded decorative cluster of overlapping avatar circles for the
 // "Grow Your Circle" invite state — purely decorative (aria-hidden, no
@@ -233,8 +229,8 @@ export function RecentlyExpandingFeature({
       headline={rotate(RECENTLY_EXPANDING_HEADLINES, embed.headlineIndex)}
       artwork={
         <div className="flex flex-col gap-3">
-          {embed.domains.map((d, i) => {
-            const accent = EXPANDING_ROW_ACCENTS[i % EXPANDING_ROW_ACCENTS.length]!;
+          {embed.domains.map((d) => {
+            const accent = expandingTerritoryAccent(d.label);
             return (
               <div key={d.label} className="flex items-center gap-3">
                 <span

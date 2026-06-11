@@ -293,6 +293,7 @@ function baseTypedFields(item: FeedApiItem, answered = false, hideTimestamp = fa
     id: item.id,
     metadata: feedMetadata(item, answered),
     category: item.domain_pill,
+    broadCategory: item.broad_category ?? null,
     question: item.question_text ?? 'Untitled question',
     personalMessage: item.personal_message,
     isInBank: item.is_in_bank,

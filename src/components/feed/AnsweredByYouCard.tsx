@@ -236,7 +236,7 @@ function AnsweredResult({
 
 export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: AnsweredByYouCardProps) {
   const category = visibleFeedCategory(item.category)
-  const categoryColor = colorForCategory(item.category)
+  const categoryColor = colorForCategory(item.category, item.broadCategory)
 
   return (
     <FeedCardShell accentColor={categoryColor} accentPlacement="left">

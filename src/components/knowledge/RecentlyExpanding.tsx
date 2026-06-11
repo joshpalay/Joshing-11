@@ -3,6 +3,8 @@
 import { useMemo, type CSSProperties } from 'react';
 import { Share2 } from 'lucide-react';
 
+import { expandingTerritoryAccent } from '@/components/knowledge/PortraitCircles';
+
 export type ExpandingDomain = {
   domain: string;
   momentumScore: number;
@@ -22,13 +24,6 @@ type RecentlyExpandingProps = {
 };
 
 const MAX_EXPANDING_DOMAINS = 5;
-const ROW_ACCENTS = [
-  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)', text: '#9b3f37' },
-  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)', text: '#7c6332' },
-  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)', text: '#9b3f37' },
-  { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.20)', text: '#2f7487' },
-  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)', text: '#7c6332' },
-];
 
 export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotice }: RecentlyExpandingProps) {
   const visibleDomains = domains.slice(0, MAX_EXPANDING_DOMAINS);
@@ -93,7 +88,7 @@ type RowProps = {
 };
 
 function ExpandingDomainRow({ domain, index }: RowProps) {
-  const accent = ROW_ACCENTS[index % ROW_ACCENTS.length];
+  const accent = expandingTerritoryAccent(domain.domain);
   const activity = getRowActivity(domain);
   const initial = getDomainInitial(domain.domain);
 
