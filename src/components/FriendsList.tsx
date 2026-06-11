@@ -111,7 +111,9 @@ function FriendCard({ person }: { person: Person }) {
       href={`/users/${person.id}`}
       className="group focus-visible:ring-ring block py-4 transition focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <h3 className="text-foreground font-medium group-hover:underline group-hover:underline-offset-4">
+      {/* Name-as-headline is the Editorial voice (STYLE-GUIDE-TYPE §5):
+          heavier serif, full ink. */}
+      <h3 className="text-foreground font-serif text-lg font-semibold leading-tight group-hover:underline group-hover:underline-offset-4">
         {person.displayName}
       </h3>
       <p className="text-muted-foreground mt-1 text-sm leading-6">{friendSecondary(person)}</p>
@@ -138,7 +140,7 @@ function PendingInviteCard({
     <article className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-foreground font-medium">{invitationName(invite)}</h3>
+          <h3 className="text-foreground font-serif text-lg font-semibold leading-tight">{invitationName(invite)}</h3>
           <p className="text-muted-foreground mt-1 text-sm">{invitationTiming(invite.sentAt)}</p>
         </div>
         <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">

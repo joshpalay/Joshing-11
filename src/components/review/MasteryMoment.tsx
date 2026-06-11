@@ -77,7 +77,7 @@ export default function MasteryMoment({
       >
         <p
           style={{
-            fontFamily: 'var(--font-cormorant), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-serif)',
             fontSize: 'clamp(1.2rem, 4vw, 1.6rem)',
             color: 'var(--brand-ink-700)',
             marginBottom: '12px',
@@ -87,7 +87,7 @@ export default function MasteryMoment({
         </p>
         <p
           style={{
-            fontFamily: 'var(--font-cormorant), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-serif)',
             fontSize: 'clamp(2rem, 7vw, 3rem)',
             fontWeight: 700,
             color: 'var(--brand-ink)',
