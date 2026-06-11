@@ -31,8 +31,10 @@ import {
 const HOME_FEED_FETCH_LIMIT = 30
 
 // The overflow subpages render the FULL pending queue, so they fetch deeper
-// than the home edition does. Anything beyond this is pathological volume.
-const PENDING_QUEUE_FETCH_LIMIT = 100
+// than the home edition does. getFeedForUser clamps to MAX_FEED_LIMIT (50), so
+// this is the true ceiling — anything beyond it is pathological volume, and
+// the subpage title still reports the accurate total from meta.
+const PENDING_QUEUE_FETCH_LIMIT = 50
 
 // The weekly reflection has its own editorial marker (CeremonyPin) above the
 // feed; drop the redundant 'ceremony_ready' activity so it doesn't double up
@@ -61,6 +63,9 @@ export async function buildHomeEdition(userId: string): Promise<HomeEditionResul
 
   const edition = selectHomeEdition({
     feedItems: feedPage.items,
+    // Whole-table pending count for the direct zone, so the "N more →" count
+    // stays accurate even when the queue outgrows HOME_FEED_FETCH_LIMIT.
+    directPendingTotal: feedPage.meta.active_item_count,
     activityItems: homeActivityItems,
     promos: {
       sharedGround: commonGroundPromo,
