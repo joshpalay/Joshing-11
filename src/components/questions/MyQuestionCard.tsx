@@ -45,7 +45,7 @@ export function MyQuestionCard({
             <span
               className="truncate text-[12px] italic leading-tight"
               style={{
-                fontFamily: 'var(--font-literata)',
+                fontFamily: 'var(--font-serif)',
                 color: 'var(--ink)',
                 opacity: 0.7,
               }}

@@ -257,7 +257,7 @@ export function AnswerFeedbackSheet({
               <p
                 className="text-[13px] italic"
                 style={{
-                  fontFamily: 'var(--font-literata)',
+                  fontFamily: 'var(--font-serif)',
                   color: 'var(--ink)',
                   opacity: 0.7,
                 }}

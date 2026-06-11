@@ -1,6 +1,6 @@
 // Re-pointed to the JOSHING brand palette so the Lately surface matches the
-// rest of the app. The Playfair "Lately." flourish (FS), Caveat accent (FH),
-// and warm highlighter (HILITE) are kept as intentional editorial character.
+// rest of the app. The Playfair "Lately." flourish (FS) and warm highlighter
+// (HILITE) are kept as intentional editorial character.
 export const INK = '#0a1f3d'; // --brand-ink
 export const INK2 = '#3a4a5f'; // --brand-ink-700
 export const INK3 = '#8a8a8a'; // --brand-ink-400
@@ -16,4 +16,3 @@ export const FF = 'var(--font-sans-body), -apple-system, system-ui, sans-serif';
 export const FM = '"Courier New", ui-monospace, monospace';
 export const FS = 'var(--font-display), Georgia, serif';
 export const FI = 'Georgia, var(--font-display), serif';
-export const FH = 'var(--font-caveat), "Caveat", cursive';

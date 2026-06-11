@@ -180,7 +180,7 @@ function AnsweredResult({
           </p>
           <p
             className="mt-1 text-[13px] leading-6"
-            style={{ fontFamily: 'var(--font-literata)', color: 'var(--ink)' }}
+            style={{ fontFamily: 'var(--font-serif)', color: 'var(--ink)' }}
           >
             {item.creatorNote}
           </p>
@@ -263,7 +263,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
               <p
                 className="mt-1 truncate text-xs italic leading-tight"
                 style={{
-                  fontFamily: 'var(--font-literata)',
+                  fontFamily: 'var(--font-serif)',
                   color: 'var(--ink)',
                   opacity: 0.7,
                 }}
@@ -301,7 +301,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
           <p
             className="mt-2 text-[13px] italic leading-snug"
             style={{
-              fontFamily: 'var(--font-literata)',
+              fontFamily: 'var(--font-serif)',
               color: 'var(--ink)',
               opacity: 0.65,
             }}

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Caveat, Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google'
+import { Cormorant_Garamond, Inter, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
@@ -39,13 +39,6 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 })
 
-// Handwritten register for the Lately flourish on /activities. Used sparingly.
-const caveat = Caveat({
-  subsets: ['latin'],
-  variable: '--font-caveat',
-  display: 'swap',
-})
-
 // Inter — loaded for opt-in use (e.g. the login subtitle's display/heading/section
 // spec). Exposed via --font-inter and surfaced to Tailwind as `font-inter` in
 // globals.css. Montserrat remains the app-wide body font.
@@ -77,7 +70,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${montserrat.variable} ${playfair.variable} ${caveat.variable} ${cormorant.variable} ${inter.variable}`}
+      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable} ${inter.variable}`}
     >
       <body className={montserrat.className}>
         <Nav
