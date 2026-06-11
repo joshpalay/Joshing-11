@@ -40,10 +40,11 @@ function milestoneItem(
   friendId: string,
   friendName: string,
   questions: StreamQuestion[],
+  sortAt: Date = new Date('2026-06-01T00:00:00Z'),
 ): StreamItem {
   return {
     id,
-    sortAt: new Date('2026-06-01T00:00:00Z'),
+    sortAt,
     tier: 2,
     friendId,
     homeEligible: true,
@@ -82,6 +83,21 @@ describe('buildFriendTerritoryCards — one card per milestone bundle, capped at
     expect(cards[1]!.questions.map((q) => q.questionId)).toEqual(['q3'])
     // Bundles map to distinct cards (and distinct status seeds).
     expect(cards[0]!.id).not.toBe(cards[1]!.id)
+  })
+
+  it('orders cards chronologically across friends — an active friend\'s older bundle drops below another friend\'s newer one (no friend-major stacking)', () => {
+    const cards = buildFriendTerritoryCards([
+      milestoneItem('m1', 'robyn', 'Robyn', [question({ questionId: 'q1' })],
+        new Date('2026-06-03T00:00:00Z')),
+      milestoneItem('m2', 'shanea', 'Shanea', [question({ questionId: 'q5', domain: 'Jazz' })],
+        new Date('2026-06-02T00:00:00Z')),
+      milestoneItem('m3', 'robyn', 'Robyn', [question({ questionId: 'q3', domain: 'French Herbs' })],
+        new Date('2026-06-01T00:00:00Z')),
+    ])
+    // Friend-major would give ['robyn','robyn','shanea']; chronological
+    // interleaves so Shanea's newer bundle sits above Robyn's stale one.
+    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'shanea', 'robyn'])
+    expect(cards.map((c) => c.questions[0]!.questionId)).toEqual(['q1', 'q5', 'q3'])
   })
 
   it('fills on attempt: a wrong answer marks a topic played EXACTLY like a correct one (two states, no third)', () => {

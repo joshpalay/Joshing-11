@@ -5,7 +5,9 @@
 // milestone builder already groups a friend's activity into semantic bundles —
 // a deep dive (one domain, ≤5 questions) and breadth bins (mixed domains, ≤5
 // each) — so each bundle becomes its own card and a deep dive reads distinctly
-// from a breadth sweep. A friend's bundles stack consecutively. A question
+// from a breadth sweep. Cards are ordered CHRONOLOGICALLY by each bundle's
+// recency (newest first), across friends — so a very active friend's older
+// bundles no longer leapfrog another friend's newer activity. A question
 // packed into two of a friend's bundles plays once (the newer card claims it),
 // and a bundle that somehow exceeds the cap splits rather than overflowing into
 // a muted "+N more".
@@ -71,19 +73,21 @@ function topicsForQuestions(
 }
 
 // Items must be the From Friends zone's milestone StreamItems, newest first.
-// Each qualifying bundle becomes its own card; a friend's bundles stack
-// consecutively (friend order = first appearance), so the lead cards belong to
-// the most recently active friend.
+// Each qualifying bundle becomes its own card; cards are then ordered
+// chronologically by their bundle's recency (newest first) across friends, so
+// the lead cards are the most recent activity from ANYONE — not a single active
+// friend's whole backlog stacked ahead of everybody else.
 export function buildFriendTerritoryCards(
   items: readonly StreamItem[],
 ): FriendTerritoryCardModel[] {
   // Group bundles by friend, preserving first-appearance friend order and the
-  // newest-first bundle order within each friend.
+  // newest-first bundle order within each friend — the per-friend `seen` dedup
+  // below relies on that order so the newer bundle claims a shared question.
   const byFriend = new Map<
     string,
     {
       friendName: string
-      bundles: Array<{ itemId: string; questions: readonly StreamQuestion[] }>
+      bundles: Array<{ itemId: string; sortMs: number; questions: readonly StreamQuestion[] }>
     }
   >()
 
@@ -95,10 +99,17 @@ export function buildFriendTerritoryCards(
       entry = { friendName: expand.friendName, bundles: [] }
       byFriend.set(expand.friendId, entry)
     }
-    entry.bundles.push({ itemId: item.id, questions: expand.questions })
+    entry.bundles.push({
+      itemId: item.id,
+      sortMs: item.sortAt.getTime(),
+      questions: expand.questions,
+    })
   }
 
-  const cards: FriendTerritoryCardModel[] = []
+  // Build cards per friend (so dedup runs over a friend's bundles in order),
+  // tagging each with its bundle's timestamp; the final sort then interleaves
+  // friends by recency.
+  const built: Array<{ sortMs: number; card: FriendTerritoryCardModel }> = []
   for (const [friendId, entry] of byFriend.entries()) {
     // `seen` spans the friend's bundles so a question packed into two of them
     // (deep + breadth overlap) plays once — the newer bundle's card claims it.
@@ -124,16 +135,24 @@ export function buildFriendTerritoryCards(
           chunkCount === 1
             ? `${friendId}:${bundle.itemId}`
             : `${friendId}:${bundle.itemId}:${chunk}`
-        cards.push({
-          id: `territory:${seed}`,
-          friendId,
-          friendName: entry.friendName,
-          statusLine: friendTerritoryStatusLine(seed),
-          topics: topicsForQuestions(chunkQuestions),
-          questions: chunkQuestions,
+        built.push({
+          sortMs: bundle.sortMs,
+          card: {
+            id: `territory:${seed}`,
+            friendId,
+            friendName: entry.friendName,
+            statusLine: friendTerritoryStatusLine(seed),
+            topics: topicsForQuestions(chunkQuestions),
+            questions: chunkQuestions,
+          },
         })
       }
     }
   }
-  return cards
+
+  // Newest bundle first, across friends. The sort is stable (ES2019+), so a
+  // friend's same-instant bundles (and the split chunks of one bundle) keep
+  // their build order and stay adjacent.
+  built.sort((a, b) => b.sortMs - a.sortMs)
+  return built.map((b) => b.card)
 }
