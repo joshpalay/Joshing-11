@@ -481,7 +481,6 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
       const signal = previous === next ? null : next
       setRating(signal)
 
-      if (!signal) return
       startFeedbackTransition(async () => {
         const response = await fetch('/api/daily/feedback', {
           method: 'POST',
