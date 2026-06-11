@@ -745,6 +745,11 @@ export const dailyQueues = pgTable(
     queueDate: date('queue_date').notNull(),
     slots: jsonb('slots').notNull(),
     createdAt: createdAt(),
+    // Set when the daily reminder email has been sent for this queue (one row
+    // per user/day). Claimed atomically before send so the cron's retry-replay
+    // can't double-send; null = not yet sent, or released back to null after a
+    // send failure so a later run can retry.
+    emailReminderSentAt: timestamp('email_reminder_sent_at', { withTimezone: true }),
   },
   (table) => [
     unique('DailyQueue_user_id_queue_date_key').on(table.userId, table.queueDate),
