@@ -12,17 +12,35 @@
  * and surface tabs read from.
  */
 
+import type { StreamItem } from '@/lib/activity-stream'
 import { buildActivityStream } from '@/server/activity/build-stream'
 import { getAddFriendsPromo } from '@/server/activity/add-friends-promo'
 import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
 import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
-import { selectHomeEdition, type HomeEdition } from '@/server/home/select-edition'
+import {
+  orderDirectPending,
+  orderPendingPlayables,
+  selectHomeEdition,
+  type HomeEdition,
+} from '@/server/home/select-edition'
 
 // The home feed leads with a deep first page; the budget then windows it down to
 // the served caps. Keep this generous so the pending pools (and therefore the
 // overflow counts) are accurate rather than truncated by the page size.
 const HOME_FEED_FETCH_LIMIT = 30
+
+// The overflow subpages render the FULL pending queue, so they fetch deeper
+// than the home edition does. Anything beyond this is pathological volume.
+const PENDING_QUEUE_FETCH_LIMIT = 100
+
+// The weekly reflection has its own editorial marker (CeremonyPin) above the
+// feed; drop the redundant 'ceremony_ready' activity so it doesn't double up
+// on the home surfaces. Shared by the home edition and the overflow subpages
+// so both read the same activity pool.
+function isHomeActivityItem(item: StreamItem): boolean {
+  return !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/'))
+}
 
 export type HomeEditionResult = {
   edition: HomeEdition
@@ -39,12 +57,7 @@ export async function buildHomeEdition(userId: string): Promise<HomeEditionResul
       getAddFriendsPromo(userId),
     ])
 
-  // The weekly reflection has its own editorial marker (CeremonyPin) above the
-  // feed; drop the redundant 'ceremony_ready' activity so it doesn't double up
-  // in the home stream. (Unchanged from the prior inline assembly.)
-  const homeActivityItems = activityItems.filter(
-    (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
-  )
+  const homeActivityItems = activityItems.filter(isHomeActivityItem)
 
   const edition = selectHomeEdition({
     feedItems: feedPage.items,
@@ -57,4 +70,35 @@ export async function buildHomeEdition(userId: string): Promise<HomeEditionResul
   })
 
   return { edition, feedMeta: feedPage.meta }
+}
+
+/**
+ * B-HOME-OVERFLOW-02 §7 — the full pending direct ("For You") queue, in the
+ * same sender-rotated order the home edition windows. Home shows the top 3 of
+ * exactly this list; the /for-you subpage renders all of it. Pending semantics
+ * live in the feed query itself (active/skipped only — answering anywhere
+ * flips the row to 'answered' and it leaves this list on the next read).
+ */
+export async function buildPendingDirectQueue(userId: string): Promise<{
+  items: ReturnType<typeof orderDirectPending>
+  meta: Awaited<ReturnType<typeof getFeedPagePayload>>['meta']
+}> {
+  const page = await getFeedPagePayload(userId, {
+    limit: PENDING_QUEUE_FETCH_LIMIT,
+    cursor: null,
+    filter: 'all',
+  })
+  return { items: orderDirectPending(page.items), meta: page.meta }
+}
+
+/**
+ * B-HOME-OVERFLOW-02 §7 — the full pending-playables queue, in the same
+ * actor-interleaved order the home edition windows. Home shows the top 4 of
+ * exactly this list; the /from-friends subpage renders all of it. A bundle
+ * leaves the queue once every question in it has been answered (see
+ * isPendingPlayable).
+ */
+export async function buildPendingPlayablesQueue(userId: string): Promise<StreamItem[]> {
+  const activityItems = await buildActivityStream(userId)
+  return orderPendingPlayables(activityItems.filter(isHomeActivityItem))
 }
