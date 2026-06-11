@@ -2,11 +2,31 @@
 
 import * as React from "react";
 
+import { usePrefersReducedMotion } from "@/components/feed/usePrefersReducedMotion";
+
 type LoadingScreenProps = {
+  /** A single fixed message. Renders statically with the animated dots. */
   label?: string;
+  /** A set of phrases to rotate through, each fading in and out. */
+  messages?: string[];
   className?: string;
   fullScreen?: boolean;
 };
+
+// The default rotating copy — evocative of what's happening behind the curtain
+// rather than a bare "Loading". Shown when neither `label` nor `messages` is
+// passed (e.g. the game/route-level loading fallbacks).
+const DEFAULT_MESSAGES = [
+  "Crafting your bespoke questions",
+  "Finding the right multitudes",
+  "Reading the room",
+  "Tuning the difficulty",
+];
+
+// How long each rotating phrase stays on screen — must match the
+// `loading-message` keyframe duration in globals.css so the fade-out lands
+// exactly as the next phrase mounts.
+const MESSAGE_CYCLE_MS = 3200;
 
 const VIEWBOX_W = 400;
 const VIEWBOX_H = 900;
@@ -91,11 +111,32 @@ function buildTriangles(): Tri[] {
 }
 
 export default function LoadingScreen({
-  label = "Loading",
+  label,
+  messages,
   className,
   fullScreen = false,
 }: LoadingScreenProps) {
   const triangles = React.useMemo(() => buildTriangles(), []);
+  const reducedMotion = usePrefersReducedMotion();
+
+  // A caller-supplied `label` is a single fixed message; otherwise rotate
+  // through `messages` (or the curated defaults). One item ⇒ no rotation.
+  const rotation = React.useMemo(
+    () => messages ?? (label != null ? [label] : DEFAULT_MESSAGES),
+    [messages, label],
+  );
+  const rotating = rotation.length > 1 && !reducedMotion;
+
+  const [index, setIndex] = React.useState(0);
+  React.useEffect(() => {
+    if (!rotating) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % rotation.length);
+    }, MESSAGE_CYCLE_MS);
+    return () => window.clearInterval(id);
+  }, [rotating, rotation.length]);
+
+  const current = rotation[Math.min(index, rotation.length - 1)] ?? rotation[0];
 
   const wrapperClass = [
     "isolate flex items-center justify-center overflow-hidden bg-[#E8DCC0]",
@@ -113,7 +154,7 @@ export default function LoadingScreen({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      aria-label={`${label}…`}
+      aria-label={`${current}…`}
     >
       <svg
         className="absolute inset-0 h-full w-full"
@@ -147,33 +188,47 @@ export default function LoadingScreen({
         aria-hidden="true"
       />
 
-      <div className="relative z-10 mx-6 flex w-full max-w-xs flex-col items-center rounded-2xl bg-[#F5EBD3] px-8 py-10 shadow-[0_8px_24px_rgba(20,18,8,0.18)] ring-1 ring-black/5">
-        <p className="font-sans text-3xl font-bold tracking-[0.1em] text-[var(--brand-ink-950)]">
+      <div className="relative z-10 mx-6 w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
+        <p className="font-sans text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
           JOSHING
         </p>
-        <div className="mt-6 h-px w-12 bg-[#1a1208]/20" aria-hidden="true" />
-        <p className="mt-5 flex items-baseline gap-1 font-sans text-sm font-normal tracking-wider uppercase text-[#1a1208]/70">
-          <span>{label}</span>
-          <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+        <div
+          className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--tri-amber)]"
+          aria-hidden="true"
+        />
+        <p className="relative mx-auto mt-4 flex h-6 items-baseline justify-center font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
+          {rotating ? (
             <span
-              className="triangle-loader-dot inline-block"
-              style={{ animation: "loading-dot 1.2s ease-in-out 0s infinite" }}
+              key={index}
+              className="loading-message inline-flex items-baseline gap-1"
             >
-              .
+              {current}
             </span>
-            <span
-              className="triangle-loader-dot inline-block"
-              style={{ animation: "loading-dot 1.2s ease-in-out 0.2s infinite" }}
-            >
-              .
+          ) : (
+            <span className="inline-flex items-baseline gap-1">
+              <span>{current}</span>
+              <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+                <span
+                  className="triangle-loader-dot inline-block"
+                  style={{ animation: "loading-dot 1.2s ease-in-out 0s infinite" }}
+                >
+                  .
+                </span>
+                <span
+                  className="triangle-loader-dot inline-block"
+                  style={{ animation: "loading-dot 1.2s ease-in-out 0.2s infinite" }}
+                >
+                  .
+                </span>
+                <span
+                  className="triangle-loader-dot inline-block"
+                  style={{ animation: "loading-dot 1.2s ease-in-out 0.4s infinite" }}
+                >
+                  .
+                </span>
+              </span>
             </span>
-            <span
-              className="triangle-loader-dot inline-block"
-              style={{ animation: "loading-dot 1.2s ease-in-out 0.4s infinite" }}
-            >
-              .
-            </span>
-          </span>
+          )}
         </p>
       </div>
     </div>
