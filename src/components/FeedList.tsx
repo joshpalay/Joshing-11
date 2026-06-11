@@ -9,6 +9,7 @@ import {
   AnswerSheet,
   DirectSentCard,
   DismissedFeedBar,
+  FeedActionLink,
   FeedCardSwipe,
   FeedOverflowMenu,
   FriendAddedCard,
@@ -21,6 +22,8 @@ import {
   type FriendLikedFeedItem,
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
+import { FriendTerritoryCard } from '@/components/feed/FriendTerritoryCard'
+import { buildFriendTerritoryCards } from '@/components/feed/friend-territory'
 import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
@@ -683,10 +686,10 @@ function FeedContributeFooter() {
   )
 }
 
-// "From Friends" shows at most this many of the most-recent milestone cards
-// before collapsing the rest behind a "View more" control; each tap of "View
-// more" then reveals another FROM_FRIENDS_STEP cards (and keeps the control
-// while more remain).
+// "From Friends" shows at most this many of the most-recent friend-territory
+// cards (one card per friend) before collapsing the rest behind a "View more"
+// control; each tap of "View more" then reveals another FROM_FRIENDS_STEP
+// cards (and keeps the control while more remain).
 const FROM_FRIENDS_COLLAPSED_COUNT = 5
 const FROM_FRIENDS_STEP = 10
 
@@ -1010,13 +1013,27 @@ function FeedListContent({
     return { forYouRows: forYou, fromFriendsRows: fromFriends, restRows: rest }
   }, [displayRows, unifiedHome])
 
-  // "From Friends" reveals its most recent cards in batches (fromFriendsRows is
+  // "From Friends" renders friend-territory cards (B-FRIEND-TERRITORY-CARD-01):
+  // each friend's milestone bundle rows merge into ONE knowledge-portrait card
+  // — name, a discovery-register status line, their recent topics with
+  // two-state territory triangles, and the same inline answer flow the old
+  // event rows carried. fromFriendsRows is newest-first, so the stack leads
+  // with the most recently active friend.
+  const fromFriendsCards = useMemo(
+    () =>
+      buildFriendTerritoryCards(
+        fromFriendsRows.flatMap((row) => (row.kind === 'activity' ? [row.item] : [])),
+      ),
+    [fromFriendsRows],
+  )
+
+  // "From Friends" reveals its most recent cards in batches (cards are
   // newest-first, so slicing the head keeps the latest). The "View more" control
   // appears while cards remain hidden; each tap reveals up to FROM_FRIENDS_STEP
   // more, and the label names how many that next tap will show.
-  const visibleFromFriendsRows = fromFriendsRows.slice(0, fromFriendsVisibleCount)
+  const visibleFromFriendsCards = fromFriendsCards.slice(0, fromFriendsVisibleCount)
   const fromFriendsHiddenCount =
-    fromFriendsRows.length - visibleFromFriendsRows.length
+    fromFriendsCards.length - visibleFromFriendsCards.length
   const fromFriendsNextBatch = Math.min(fromFriendsHiddenCount, FROM_FRIENDS_STEP)
 
   const emptyCopy = useMemo(() => {
@@ -1770,27 +1787,26 @@ function FeedListContent({
               {groupActivityByFriend(forYouRows).map(renderRow)}
             </Fragment>
           ) : null}
-          {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
-              you can answer inline) are pinned into a "From Friends" section
-              below "For You", capped to the most recent few with a "View more"
-              control. groupActivityByFriend is a pass-through here (milestone
-              rows never group), keeping the render path uniform. */}
-          {fromFriendsRows.length > 0 ? (
+          {/* Home-only: friend-territory cards — one knowledge portrait per
+              friend (hero first, then stacked smaller), each playable inline,
+              pinned into a "From Friends" section below "For You" and capped
+              to the most recent few with a "View more" control. */}
+          {fromFriendsCards.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {groupActivityByFriend(visibleFromFriendsRows).map(renderRow)}
+              {visibleFromFriendsCards.map((card) => (
+                <FriendTerritoryCard key={card.id} card={card} />
+              ))}
               {fromFriendsHiddenCount > 0 ? (
-                <button
-                  type="button"
+                <FeedActionLink
+                  size="sm"
                   onClick={() =>
                     setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
                   }
-                  className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
-                    unifiedHome ? 'pl-[2px]' : ''
-                  }`}
+                  className={unifiedHome ? 'pl-[2px]' : undefined}
                 >
                   View {fromFriendsNextBatch} more
-                </button>
+                </FeedActionLink>
               ) : null}
             </Fragment>
           ) : null}
