@@ -3,6 +3,7 @@
 import { Bookmark } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 import { EditorialCarousel } from '@/components/feed/EditorialCarousel';
 import { EditorialFeature } from '@/components/feed/EditorialFeature';
@@ -76,6 +77,13 @@ export function CommonGroundFeature({
   );
   const count = embed.friends.length;
   const headline = rotate(COMMON_GROUND_HEADLINES, embed.headlineIndex);
+  // The headline names the friend in the active carousel slide, so rotating the
+  // carousel updates the copy with it. The trailing "invite" slide has no friend
+  // (index === count), so clamp back to the last friend rather than flicker.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeFriend = embed.friends[Math.min(activeIndex, count - 1)];
+  const friendFirstName = activeFriend?.friendFirstName ?? embed.friendFirstName;
+  const friendHref = activeFriend?.friendHref ?? embed.friendHref;
   return (
     <EditorialFeature
       tone="parchment"
@@ -85,10 +93,10 @@ export function CommonGroundFeature({
         <>
           {headline.before}
           <Link
-            href={embed.friendHref}
+            href={friendHref}
             className="text-[var(--brand-ink)] underline-offset-4 hover:underline"
           >
-            {embed.friendFirstName}
+            {friendFirstName}
           </Link>
           {headline.after}
         </>
@@ -96,6 +104,7 @@ export function CommonGroundFeature({
       artwork={
         <EditorialCarousel
           ariaLabel="Friends you share ground with"
+          onActiveIndexChange={setActiveIndex}
           slides={[
             ...embed.friends.map((f) => (
               <div key={f.friendId} className="flex flex-col gap-4">
@@ -142,7 +151,7 @@ export function CommonGroundFeature({
         />
       }
       supporting={`Shared ground with ${count} ${count === 1 ? 'friend' : 'friends'}`}
-      cta={{ label: 'Explore your overlap →', href: embed.friendHref }}
+      cta={{ label: 'Explore your overlap →', href: friendHref }}
     />
   );
 }

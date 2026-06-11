@@ -12,6 +12,9 @@ type EditorialCarouselProps = {
   slides: ReactNode[];
   // Describes the set for assistive tech (e.g. "Shared interests").
   ariaLabel?: string;
+  // Fired when the visible slide changes (scroll or dot tap), so a parent can
+  // mirror copy outside the artwork (e.g. a headline) to the active slide.
+  onActiveIndexChange?: (index: number) => void;
 };
 
 /**
@@ -23,7 +26,11 @@ type EditorialCarouselProps = {
  * prefers-reduced-motion by jumping dot taps instantly. SSR-safe: with no
  * client scroll yet, the first dot reads active.
  */
-export function EditorialCarousel({ slides, ariaLabel }: EditorialCarouselProps) {
+export function EditorialCarousel({
+  slides,
+  ariaLabel,
+  onActiveIndexChange,
+}: EditorialCarouselProps) {
   const reducedMotion = usePrefersReducedMotion();
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -31,7 +38,9 @@ export function EditorialCarousel({ slides, ariaLabel }: EditorialCarouselProps)
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const track = event.currentTarget;
     const next = Math.round(track.scrollLeft / track.clientWidth);
-    setActiveIndex((prev) => (prev === next ? prev : next));
+    if (next === activeIndex) return;
+    setActiveIndex(next);
+    onActiveIndexChange?.(next);
   }
 
   function goTo(index: number) {
