@@ -51,6 +51,11 @@ const COMMON_GROUND_HEADLINES = [
   { before: 'The ground you and ', after: ' share.' },
 ] as const;
 
+// The closing carousel slide isn't a friend — it nudges toward widening the
+// circle — so the headline and CTA shift to match it instead of naming a friend.
+const COMMON_GROUND_INVITE_HEADLINE = 'There’s more ground to share.';
+const COMMON_GROUND_INVITE_HREF = '/friends/find';
+
 function rotate<T>(pool: readonly T[], index: number | undefined): T {
   return pool[(index ?? 0) % pool.length]!;
 }
@@ -74,9 +79,10 @@ export function CommonGroundFeature({
   const count = embed.friends.length;
   const headline = rotate(COMMON_GROUND_HEADLINES, embed.headlineIndex);
   // The headline names the friend in the active carousel slide, so rotating the
-  // carousel updates the copy with it. The trailing "invite" slide has no friend
-  // (index === count), so clamp back to the last friend rather than flicker.
+  // carousel updates the copy with it. The trailing slide is the "invite" nudge
+  // (index === count), not a friend, so headline + CTA swap to the invite copy.
   const [activeIndex, setActiveIndex] = useState(0);
+  const onInviteSlide = activeIndex >= count;
   const activeFriend = embed.friends[Math.min(activeIndex, count - 1)];
   const friendFirstName = activeFriend?.friendFirstName ?? embed.friendFirstName;
   const friendHref = activeFriend?.friendHref ?? embed.friendHref;
@@ -86,16 +92,20 @@ export function CommonGroundFeature({
       eyebrow="Shared Ground"
       eyebrowIcon={<Bookmark size={13} strokeWidth={0} fill="currentColor" />}
       headline={
-        <>
-          {headline.before}
-          <Link
-            href={friendHref}
-            className="text-[var(--brand-ink)] underline-offset-4 hover:underline"
-          >
-            {friendFirstName}
-          </Link>
-          {headline.after}
-        </>
+        onInviteSlide ? (
+          COMMON_GROUND_INVITE_HEADLINE
+        ) : (
+          <>
+            {headline.before}
+            <Link
+              href={friendHref}
+              className="text-[var(--brand-ink)] underline-offset-4 hover:underline"
+            >
+              {friendFirstName}
+            </Link>
+            {headline.after}
+          </>
+        )
       }
       artwork={
         <EditorialCarousel
@@ -129,7 +139,11 @@ export function CommonGroundFeature({
             // Final slide: a gentle nudge to widen the circle. The personal-invite
             // modal isn't mounted on the home feed, so this routes to the Find
             // Friends hub (where the invite flows live).
-            <Link key="invite" href="/friends/find" className="flex flex-col gap-4 no-underline">
+            <Link
+              key="invite"
+              href={COMMON_GROUND_INVITE_HREF}
+              className="flex flex-col gap-4 no-underline"
+            >
               <span aria-hidden="true" className="flex h-[76px] items-center">
                 {INVITE_CLUSTER_SEEDS.map((seed, i) => (
                   <span
@@ -147,7 +161,11 @@ export function CommonGroundFeature({
         />
       }
       supporting={`Shared ground with ${count} ${count === 1 ? 'friend' : 'friends'}`}
-      cta={{ label: 'Explore your overlap →', href: friendHref }}
+      cta={
+        onInviteSlide
+          ? { label: 'Find friends →', href: COMMON_GROUND_INVITE_HREF }
+          : { label: 'Explore your overlap →', href: friendHref }
+      }
     />
   );
 }
