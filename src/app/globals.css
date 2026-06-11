@@ -136,8 +136,11 @@
          surfaces (login, knowledge portrait, sparkle envelope).
        • Card radius — content cards use `rounded-md`; the login cards use
          `rounded-[8px]` (Figma) and the envelope uses `rounded-[1.5rem]`.
-       • Correct/wrong — use `--success` (#178245) and #b42318 (destructive ink)
-         with a 3px colored left border (see GameplayChat ResultRow + summary).
+       • Correct/wrong (grading) — use `--game-correct` / `--game-wrong` /
+         `--game-wrong-strong` ONLY (STYLE-GUIDE-COLOR §1: grading is reserved;
+         exactly one correct and one wrong value). `--success`/`--danger`/
+         `--destructive` are system states — saves, errors, destructive
+         actions — never answer grading.
        ──────────────────────────────────────────────────────────────────── */
 
     --background: var(--brand-cream-page);
@@ -183,7 +186,9 @@
     --user-bubble-foreground: oklch(0.99 0 0);
     --success: #178245;
     --danger: var(--destructive);
-    --wrong: var(--destructive);
+    /* (--wrong, an alias of --destructive, was retired: a grading-named token
+       pointing at the system-error red was exactly the §1 confusion. Grading is
+       --game-wrong/--game-wrong-strong; errors are --danger.) */
     /* Status surfaces — banner/chip fills + hairlines for the success / warning /
        error roles. Formalizes the raw amber-50/300/700/900 + emerald/red/rose
        50–200 utilities the 2026-05-30 audit flagged (DESIGN-SYSTEM.md §1.7).
