@@ -59,10 +59,10 @@ export function Line({ parts }: { parts: StreamLinePart[] }) {
           return <ActorLink key={i} name={part.name} userId={part.userId} />;
         }
         if (part.t === 'category') {
-          // Same editorial serif register categories get as the homepage
-          // "What's Happening" second line, applied inline here.
+          // Category names are structured metadata — System voice (mono), per
+          // STYLE-GUIDE-TYPE §5. The sentence around them stays in the sans.
           return (
-            <span key={i} style={{ fontFamily: 'Georgia, serif', color: INK2 }}>
+            <span key={i} style={{ fontFamily: 'var(--font-mono)', color: INK2 }}>
               {part.v}
             </span>
           );
@@ -333,7 +333,13 @@ export function ActivityStreamItem({
             <p
               style={{
                 margin: '2px 0 0',
-                fontFamily: 'Georgia, serif',
+                // Voice follows content (STYLE-GUIDE-TYPE §5): domain/label
+                // metadata is System mono; question text / sentences are
+                // Editorial serif.
+                fontFamily:
+                  item.secondLineVoice === 'system'
+                    ? 'var(--font-mono)'
+                    : 'var(--font-serif)',
                 fontSize: 14,
                 lineHeight: 1.45,
                 color: INK2,

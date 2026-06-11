@@ -36,9 +36,9 @@ import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 export type StreamLinePart =
   | { t: 'text'; v: string }
   | { t: 'actor'; name: string; userId: string | null }
-  // A category/topic name embedded in a one-liner. Rendered in the editorial
-  // serif register — the SAME font treatment categories get as the `secondLine`
-  // on the homepage "What's Happening" head (see ActivityStreamItem).
+  // A category/topic name embedded in a one-liner. Structured metadata, so it
+  // renders in the System mono register (STYLE-GUIDE-TYPE §5) — the same
+  // treatment metadata `secondLine`s get (see ActivityStreamItem).
   | { t: 'category'; v: string };
 
 export type StreamQuestion = {
@@ -243,6 +243,11 @@ export type StreamItem = {
   homeEligible: boolean;
   line: StreamLinePart[];
   secondLine: string | null;
+  // Which type voice renders `secondLine` (STYLE-GUIDE-TYPE §5): 'system' for
+  // structured metadata (domain names, reaction labels) → mono; omitted for
+  // Editorial content (question text, sentences) → serif. secondLine carries
+  // both kinds depending on the row, so the builder declares which it is.
+  secondLineVoice?: 'system';
   // Optional DOM id (friend-invitation deep link: /activities#friendship-{id}).
   anchorId: string | null;
   action: StreamAction | null;
@@ -377,6 +382,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line,
         secondLine: got ? null : domain,
+        secondLineVoice: 'system',
         icon: 'diamond',
         relationship: 'got_you',
         topic: domain,
@@ -405,6 +411,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' answered your question — someone shares this corner')],
         secondLine: domain,
+        secondLineVoice: 'system',
         icon: 'diamond',
         action: null,
         expand:
@@ -431,6 +438,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [txt('You answered '), a, txt("'s question — you found someone")],
         secondLine: domain,
+        secondLineVoice: 'system',
         icon: 'diamond',
         action: null,
         expand:
@@ -457,6 +465,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(domain ? ' opened ' + domain : ' opened a new domain')],
         secondLine: domain,
+        secondLineVoice: 'system',
         icon: 'domain',
         action: domain
           ? {
@@ -475,6 +484,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(` reached ${m?.tier ?? 'a new tier'}`)],
         secondLine: m?.domain ?? null,
+        secondLineVoice: 'system',
         action: null,
         expand: null,
       };
@@ -490,6 +500,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [a, txt(' reacted to your question')],
         secondLine: label,
+        secondLineVoice: 'system',
         relationship: 'reacted',
         topic: domain,
         // Keep the lightweight "got it" acknowledgement AND let the row expand to
@@ -554,6 +565,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         ...base,
         line: [txt(`You shared a question with ${count} ${friendWord}`)],
         secondLine: shared?.domain ?? null,
+        secondLineVoice: 'system',
         icon: 'hourglass',
         // Friend-less: this is the viewer's own broadcast, not one friend acting.
         friendId: null,

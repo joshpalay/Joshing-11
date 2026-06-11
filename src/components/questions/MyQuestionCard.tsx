@@ -43,9 +43,11 @@ export function MyQuestionCard({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
-              className="truncate text-[12px] italic leading-tight"
+              className="truncate text-[12px] leading-tight"
               style={{
-                fontFamily: 'var(--font-serif)',
+                // Category label is metadata — System voice (mono), per
+                // STYLE-GUIDE-TYPE §5. No italic: mono carries its own register.
+                fontFamily: 'var(--font-mono)',
                 color: 'var(--ink)',
                 opacity: 0.7,
               }}
