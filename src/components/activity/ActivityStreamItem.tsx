@@ -59,10 +59,21 @@ export function Line({ parts }: { parts: StreamLinePart[] }) {
           return <ActorLink key={i} name={part.name} userId={part.userId} />;
         }
         if (part.t === 'category') {
-          // Category names are structured metadata — System voice (mono), per
-          // STYLE-GUIDE-TYPE §5. The sentence around them stays in the sans.
+          // Category names are structured metadata — System voice (mono) with
+          // its caps + tracking signature (STYLE-GUIDE-TYPE §2, §5), set a step
+          // smaller than the sentence so it reads as a label, not typewriter
+          // prose. The sentence around it stays in the sans.
           return (
-            <span key={i} style={{ fontFamily: 'var(--font-mono)', color: INK2 }}>
+            <span
+              key={i}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.8em',
+                textTransform: 'uppercase',
+                letterSpacing: 0.8,
+                color: INK2,
+              }}
+            >
               {part.v}
             </span>
           );
@@ -334,13 +345,19 @@ export function ActivityStreamItem({
               style={{
                 margin: '2px 0 0',
                 // Voice follows content (STYLE-GUIDE-TYPE §5): domain/label
-                // metadata is System mono; question text / sentences are
-                // Editorial serif.
-                fontFamily:
-                  item.secondLineVoice === 'system'
-                    ? 'var(--font-mono)'
-                    : 'var(--font-serif)',
-                fontSize: 14,
+                // metadata is System mono with the caps + tracking label
+                // signature (§2); question text / sentences are Editorial serif.
+                ...(item.secondLineVoice === 'system'
+                  ? {
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      textTransform: 'uppercase' as const,
+                      letterSpacing: 1,
+                    }
+                  : {
+                      fontFamily: 'var(--font-serif)',
+                      fontSize: 14,
+                    }),
                 lineHeight: 1.45,
                 color: INK2,
                 display: '-webkit-box',
