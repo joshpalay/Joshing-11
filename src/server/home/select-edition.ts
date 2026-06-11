@@ -254,16 +254,27 @@ function playableType(item: StreamItem): string {
   return item.relationship ?? item.expand?.kind ?? 'milestone'
 }
 
-function serve<T>(ordered: readonly T[], cap: number): ServedZone<T> {
+function serve<T>(ordered: readonly T[], cap: number, totalPending?: number): ServedZone<T> {
+  // The fetched page may be capped upstream (HOME_FEED_FETCH_LIMIT); when the
+  // caller knows the full pending count, the overflow reflects it rather than
+  // silently understating at "fetch limit minus cap".
+  const total = Math.max(ordered.length, totalPending ?? 0)
   return {
     served: ordered.slice(0, cap),
-    overflowCount: Math.max(0, ordered.length - cap),
+    overflowCount: Math.max(0, total - cap),
   }
 }
 
 export type SelectHomeEditionInput = {
   /** The question feed (filter 'all'): direct-sent + broadcasts + legacy. */
   feedItems: readonly FeedEditionItem[]
+  /**
+   * Full pending count for the direct zone (meta.active_item_count from the
+   * filter:'all' first page — a whole-table count, not page-bounded). The
+   * fetched feedItems page is capped, so without this the "N more →" count
+   * would silently understate once the queue outgrows the fetch limit.
+   */
+  directPendingTotal?: number
   /** The full activity/Lately stream for the viewer. */
   activityItems: readonly StreamItem[]
   /** The three home discovery promos (each already null when data-absent). */
@@ -281,7 +292,7 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
 
   // Direct ("For You") zone — broadcasts budgeted alongside direct sends (§5).
   const directOrdered = orderDirectPending(input.feedItems)
-  const direct = serve(directOrdered, DIRECT_SERVE_CAP)
+  const direct = serve(directOrdered, DIRECT_SERVE_CAP, input.directPendingTotal)
 
   // Split the activity stream into pending playables (answerable milestone
   // bundles with ≥1 unanswered question), texture (everything else non-feed),

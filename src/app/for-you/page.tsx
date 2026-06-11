@@ -15,6 +15,9 @@ export default async function ForYouPage() {
   if (!session) redirect('/login')
 
   const { items, meta } = await buildPendingDirectQueue(session.userId)
+  // The fetch is clamped (MAX_FEED_LIMIT), but active_item_count is the
+  // whole-table pending count — the title states the true abundance.
+  const pendingTotal = Math.max(items.length, meta.active_item_count)
 
   const initialPage = {
     viewer_user_id: session.userId,
@@ -29,9 +32,7 @@ export default async function ForYouPage() {
       <OverflowSubpageHeader
         eyebrow="For You"
         title={
-          items.length > 0
-            ? `${items.length} waiting for you`
-            : 'Waiting for you'
+          pendingTotal > 0 ? `${pendingTotal} waiting for you` : 'Waiting for you'
         }
       />
       <section>

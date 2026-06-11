@@ -160,6 +160,32 @@ describe('selectHomeEdition — serve-and-overflow', () => {
     expect(edition.playables.overflowCount).toBe(9 - PLAYABLE_SERVE_CAP)
   })
 
+  it('uses the full pending total for the direct overflow when the fetched page is capped', () => {
+    // 7 items fetched (page cap), but the whole-table count says 40 pending:
+    // the overflow must reflect the real abundance, not "fetch limit minus cap".
+    const feedItems = Array.from({ length: 7 }, (_, i) =>
+      feedItem(`d${i}`, `sender${i}`, `2026-06-11T0${i}:00:00Z`),
+    )
+    const edition = selectHomeEdition({
+      feedItems,
+      directPendingTotal: 40,
+      activityItems: [],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(edition.direct.served).toHaveLength(DIRECT_SERVE_CAP)
+    expect(edition.direct.overflowCount).toBe(40 - DIRECT_SERVE_CAP)
+    // A stale/smaller total never shrinks the overflow below what was fetched.
+    const clamped = selectHomeEdition({
+      feedItems,
+      directPendingTotal: 2,
+      activityItems: [],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(clamped.direct.overflowCount).toBe(7 - DIRECT_SERVE_CAP)
+  })
+
   it('reports zero overflow when a zone is under budget', () => {
     const edition = selectHomeEdition({
       feedItems: [feedItem('d0', 's0', '2026-06-11T09:00:00Z')],

@@ -1951,7 +1951,22 @@ function FeedListContent({
             // server's zone order (sender rotation) — no recency buckets, no
             // section headings; the page header carries the one title.
             restRows.length > 0 ? (
-              <Fragment key="texture">{restRows.map(renderRow)}</Fragment>
+              <Fragment key="texture">
+                {restRows.map(renderRow)}
+                {/* §4: texture gets NO third subpage — older moments belong to
+                    Lately (/activities), the archive of this same stream. Revive
+                    the retired "See all activity →" affordance as the zone's
+                    quiet see-more row, in the same voice as the overflow rows.
+                    Texture-anchored: hidden with the zone (§9), and never on
+                    the pendingQueue subpages (no texture there). */}
+                {budget ? (
+                  <OverflowRow
+                    unifiedHome={unifiedHome}
+                    label="See all activity →"
+                    href="/activities"
+                  />
+                ) : null}
+              </Fragment>
             ) : null
           ) : (
             groupItemsByRecency(restRows).map((group) => (
