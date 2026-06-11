@@ -25,7 +25,8 @@ const STORAGE_KEY = 'joshing-palette';
 // What the toggle visibly changes, so a tester knows where to look. Extend this
 // as more color jobs (category, gold) get routed onto tokens.
 const CHANGES: Array<{ label: string; from: string; to: string }> = [
-  { label: 'WRONG', from: '#c96b4a', to: '#c1121f' },
+  { label: 'WRONG WASH', from: '#c96b4a', to: '#a93b3b' },
+  { label: 'WRONG TEXT', from: '#c33d14', to: '#c1121f' },
   { label: 'LITERATURE', from: '#c0392b', to: '#7d2c3f' },
   { label: 'LANGUAGE', from: '#4a7a5a', to: '#2e6e7e' },
 ];

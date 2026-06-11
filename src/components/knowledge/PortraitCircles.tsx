@@ -90,6 +90,18 @@ export function getPortraitDomainColor(domain: string): DomainColor {
   return DOMAIN_COLORS[domain] ?? hashColor(domain)
 }
 
+// Accent pair for an "expanding territory" row — keyed by the row's domain
+// (STYLE-GUIDE-COLOR §3: color = category) instead of the old row-position
+// red/gold/blue. Known domains ride the --cat-* scale; unknown ones get the
+// deterministic hash hue — either way a territory keeps ONE color everywhere.
+export function expandingTerritoryAccent(domain: string): { border: string; fill: string } {
+  const c = getPortraitDomainColor(domain)
+  return {
+    border: c.primary,
+    fill: `color-mix(in srgb, ${c.primary} 15%, transparent)`,
+  }
+}
+
 const SPARSE_THRESHOLD = 5
 const MIN_OPACITY = 0.22
 

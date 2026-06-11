@@ -1,6 +1,9 @@
-// Brand-muted palette (triangle + domain colors from the Figma design system)
-// so category accents (feed top bars) and avatars stay on-brand instead of the
-// old vibrant Tailwind-600 set.
+import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
+
+// Legacy brand-muted hash palette — now only the FALLBACK for items whose
+// broad category didn't resolve (so nothing renders the off-brand gray).
+// Category-bearing accents use the --cat-* domain scale via colorForCategory.
 const CATEGORY_COLORS = [
   '#1f3a5a', // navy
   '#d15e36', // triangle orange
@@ -27,7 +30,16 @@ function hashString(str: string): number {
   return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)
 }
 
-export function colorForCategory(category?: string | null): string {
+// Category accent = the top-level domain's hue from the --cat-* scale
+// (STYLE-GUIDE-COLOR §3: color attaches to the domain, leaf categories inherit
+// the parent hue, no hashing). The leaf-name hash survives only as the
+// fallback for items without a resolved broad category.
+export function colorForCategory(
+  category?: string | null,
+  broadCategory?: string | null,
+): string {
+  const broad = normalizeBroadCategory(broadCategory) ?? broadCategory?.trim()
+  if (broad) return getPortraitDomainColor(broad).primary
   if (!category) return '#9ca3af'
   return CATEGORY_COLORS[
     hashString(category.toLowerCase()) % CATEGORY_COLORS.length

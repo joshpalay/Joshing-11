@@ -71,6 +71,12 @@
     --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
     --domain-language:   #7a9eaa;
     --domain-science:    #8aa68a;
+    /* Triangle palette — DECORATIVE by decision (STYLE-GUIDE-COLOR §3 note +
+       §5 fix-list step 5, option b): triangle fill hue is a deterministic hash
+       over these six muted fills and carries NO category meaning. The one bit a
+       triangle encodes is solid/hollow = unplayed/played — safe from grading
+       confusion once WRONG leaves the orange family (§1). Revisit to option (a)
+       (hue = --cat-* category) only as a deliberate product change. */
     --tri-orange:        #d15e36;
     --tri-cream:         #f8e6c7;
     --tri-darkteal:      #6d837f;
@@ -78,6 +84,15 @@
     --tri-darkyellow:    #deae5c;
     --tri-lighttan:      #edd2a3;
     --tri-amber:         #d9a82e;
+    /* Accent gold (STYLE-GUIDE-COLOR §4) — THE editorial highlight. One value,
+       scarcity-bound: gold marks the single most notable moment in view (the
+       ceremony countdown wins ties). Shares the amber value, but this token is
+       the accent JOB — triangle fills keep --tri-amber (decorative palette
+       job), and --warning stays separate (system caution, not the accent). */
+    --accent-gold:       #d9a82e;
+    /* AA-darkened gold for small text on cream (eyebrows, "BETWEEN US!",
+       "NEW TERRITORY") — was the GOLD_INK formula copy-pasted in three files. */
+    --accent-gold-ink:   color-mix(in srgb, var(--accent-gold) 50%, var(--brand-ink));
     /* Gameplay surface — sourced from the Figma "Game" frame variables.
        game/card/question fill, plus the forest-green/terracotta result accents
        (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
@@ -268,9 +283,15 @@
 :root[data-palette="proposed"] {
     /* §1 GRADING — WRONG leaves the terracotta family for a true red. This is the
        thesis change: it de-collides wrong from the brand/link orange (#d15e36)
-       and from the solid "still to play" triangle, in one move. */
-    --game-wrong:        #c1121f;  /* was #c96b4a terracotta */
-    --game-wrong-strong: #8c0d17;  /* was #c33d14            */
+       and from the solid "still to play" triangle, in one move.
+       Two registers, mirroring how the tokens are consumed:
+       • --game-wrong is the WASH/FILL base (result-card backgrounds at 8–12%
+         mixes) — a MUTED brick red, per feedback that the vivid red made the
+         incorrect-answer background too harsh. Still clearly red, not orange.
+       • --game-wrong-strong is the SIGNAL (rail + label text) — the clear,
+         saturated red that says "wrong" at a glance. */
+    --game-wrong:        #a93b3b;  /* was #c96b4a terracotta; muted brick red */
+    --game-wrong-strong: #c1121f;  /* was #c33d14; clear true red             */
     /* CORRECT stays forest green; kept here as the single tuning point and to
        confirm by eye that it clears the knowledge greens. */
     --game-correct:      #366045;

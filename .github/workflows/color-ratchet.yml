@@ -1,0 +1,21 @@
+# Color ratchet (B-VISUAL-STYLE-GUIDE-COLOR-01, fix-list step 6): fail the PR
+# if off-system color usage (hardcoded hex / rgb / hsl / raw Tailwind color
+# arbitraries) in src/ rises above the recorded ceiling. The ceiling and the
+# exemption list live in scripts/check-color-ratchet.mjs. Independent of the
+# font ratchet by design — the two halves of the style guide enforce separately.
+name: Color ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  color-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-color-ratchet.mjs
