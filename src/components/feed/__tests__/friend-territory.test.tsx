@@ -56,8 +56,8 @@ function milestoneItem(
   }
 }
 
-describe('buildFriendTerritoryCards — knowledge portraits, capped at 5 per card', () => {
-  it('merges a friend\'s deep + breadth bundles (≤5 questions stay one card), topics deduped in order, lead = newest first', () => {
+describe('buildFriendTerritoryCards — one card per milestone bundle, capped at 5', () => {
+  it('emits one card per bundle (deep vs breadth stay distinct); a question across two of a friend\'s bundles plays once', () => {
     const cards = buildFriendTerritoryCards([
       milestoneItem('m1', 'robyn', 'Robyn', [
         question({ questionId: 'q1', domain: 'Star Trek' }),
@@ -72,11 +72,16 @@ describe('buildFriendTerritoryCards — knowledge portraits, capped at 5 per car
         question({ questionId: 'q1', domain: 'Star Trek' }),
       ]),
     ])
-    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'shanea'])
-    const robyn = cards[0]!
-    expect(robyn.friendName).toBe('Robyn')
-    expect(robyn.topics.map((t) => t.name)).toEqual(['Star Trek', 'French Herbs'])
-    expect(robyn.questions.map((q) => q.questionId)).toEqual(['q1', 'q2', 'q3'])
+    // Robyn's two bundles → two consecutive cards; Shanea's one bundle → one.
+    expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'robyn', 'shanea'])
+    expect(cards[0]!.friendName).toBe('Robyn')
+    expect(cards[0]!.topics.map((t) => t.name)).toEqual(['Star Trek'])
+    expect(cards[0]!.questions.map((q) => q.questionId)).toEqual(['q1', 'q2'])
+    // q1 already claimed by the first card, so this bundle's card plays only q3.
+    expect(cards[1]!.topics.map((t) => t.name)).toEqual(['French Herbs'])
+    expect(cards[1]!.questions.map((q) => q.questionId)).toEqual(['q3'])
+    // Bundles map to distinct cards (and distinct status seeds).
+    expect(cards[0]!.id).not.toBe(cards[1]!.id)
   })
 
   it('fills on attempt: a wrong answer marks a topic played EXACTLY like a correct one (two states, no third)', () => {
@@ -102,15 +107,15 @@ describe('buildFriendTerritoryCards — knowledge portraits, capped at 5 per car
     expect(untried.topics[0]).toEqual({ name: 'Star Trek', played: false })
   })
 
-  it('splits a friend with more than 5 questions onto consecutive cards (newest first), 5 max each', () => {
+  it('defensively splits an over-cap bundle across consecutive cards (5 max each) rather than "+N more"', () => {
     const qs = Array.from({ length: 7 }, (_, i) =>
       question({ questionId: `q${i}`, domain: `Domain ${i}` }),
     )
+    // A single bundle carrying 7 questions (above the cap) — should not exist in
+    // practice, but the builder splits it instead of overflowing one card.
     const cards = buildFriendTerritoryCards([milestoneItem('m1', 'robyn', 'Robyn', qs)])
     expect(cards).toHaveLength(2)
-    // Both cards are the same friend, consecutive in the stack.
     expect(cards.map((c) => c.friendId)).toEqual(['robyn', 'robyn'])
-    // The first card carries the 5 newest; the overflow continues on the next.
     expect(cards[0]!.questions.map((q) => q.questionId)).toEqual([
       'q0', 'q1', 'q2', 'q3', 'q4',
     ])

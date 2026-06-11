@@ -1,11 +1,14 @@
 // Friend-territory cards (B-FRIEND-TERRITORY-CARD-01): the "From Friends"
-// zone's milestone bundle rows, reframed per friend as a knowledge portrait —
-// name, a warm discovery-register status line, and the territory (topics) their
-// recent questions cover. Each card is a single playable unit capped at
-// CARD_QUESTION_CAP questions — the same per-bundle cap the milestone rows
-// carried. A friend's deep + breadth milestone rows merge and dedupe, then
-// split across consecutive cards (newest questions first) when they overflow
-// the cap, rather than collapsing into one card with a muted "+N more".
+// zone's milestone bundle rows, reframed as knowledge portraits — name, a warm
+// discovery-register status line, and the territory (topics) their recent
+// questions cover. One card PER milestone bundle (not per friend): the
+// milestone builder already groups a friend's activity into semantic bundles —
+// a deep dive (one domain, ≤5 questions) and breadth bins (mixed domains, ≤5
+// each) — so each bundle becomes its own card and a deep dive reads distinctly
+// from a breadth sweep. A friend's bundles stack consecutively. A question
+// packed into two of a friend's bundles plays once (the newer card claims it),
+// and a bundle that somehow exceeds the cap splits rather than overflowing into
+// a muted "+N more".
 //
 // Thesis constraint (load-bearing): the card celebrates breadth, never
 // performance. A topic's `played` is the VIEWER's "have I been here?" —
@@ -31,15 +34,15 @@ export type FriendTerritoryCardModel = {
   friendName: string
   statusLine: string
   topics: FriendTerritoryTopic[]
-  // The deduped union of the friend's bundle questions, newest milestone
-  // first — what "Play these →" actually plays.
+  // This card's bundle questions (deduped against the friend's earlier cards),
+  // newest first — what "Play these →" actually plays.
   questions: StreamQuestion[]
 }
 
-// At most this many questions ride on a single card. A friend with more recent
-// questions than this splits across consecutive cards (newest first) — the cap
-// matches the milestone builder's MILESTONE_CARD_QUESTION_CAP so each card stays
-// a digestible, fully-playable bundle.
+// A card carries at most this many questions. Each milestone bundle is already
+// built ≤ MILESTONE_CARD_QUESTION_CAP upstream, so per-bundle cards are normally
+// under the cap on their own; this is the defensive ceiling — if a bundle ever
+// arrives over-cap it splits into extra cards rather than overflowing.
 export const CARD_QUESTION_CAP = 5
 
 // Distinct visible topics in question order (newest milestone first).
@@ -67,20 +70,20 @@ function topicsForQuestions(
   return topics
 }
 
-// Items must be the From Friends zone's milestone StreamItems, newest first;
-// card order follows first appearance, so the lead card is the most recently
-// active friend. Each friend's questions split into one or more cards of at
-// most CARD_QUESTION_CAP, consecutive in the stack.
+// Items must be the From Friends zone's milestone StreamItems, newest first.
+// Each qualifying bundle becomes its own card; a friend's bundles stack
+// consecutively (friend order = first appearance), so the lead cards belong to
+// the most recently active friend.
 export function buildFriendTerritoryCards(
   items: readonly StreamItem[],
 ): FriendTerritoryCardModel[] {
+  // Group bundles by friend, preserving first-appearance friend order and the
+  // newest-first bundle order within each friend.
   const byFriend = new Map<
     string,
     {
       friendName: string
-      newestItemId: string
-      questions: StreamQuestion[]
-      seen: Set<string>
+      bundles: Array<{ itemId: string; questions: readonly StreamQuestion[] }>
     }
   >()
 
@@ -89,47 +92,47 @@ export function buildFriendTerritoryCards(
     if (expand?.kind !== 'milestone' || expand.questions.length === 0) continue
     let entry = byFriend.get(expand.friendId)
     if (!entry) {
-      entry = {
-        friendName: expand.friendName,
-        newestItemId: item.id,
-        questions: [],
-        seen: new Set(),
-      }
+      entry = { friendName: expand.friendName, bundles: [] }
       byFriend.set(expand.friendId, entry)
     }
-    // A question can sit in two of the same friend's bundles (deep + breadth
-    // packing overlap); the card plays it once.
-    for (const q of expand.questions) {
-      if (entry.seen.has(q.questionId)) continue
-      entry.seen.add(q.questionId)
-      entry.questions.push(q)
-    }
+    entry.bundles.push({ itemId: item.id, questions: expand.questions })
   }
 
   const cards: FriendTerritoryCardModel[] = []
   for (const [friendId, entry] of byFriend.entries()) {
-    // Split the friend's deduped questions (newest milestone first) into cards
-    // of at most CARD_QUESTION_CAP; overflow lands on the next card. Each card
-    // derives its own topics and plays only its own slice, so the territory
-    // list never spills into a "+N more" — it continues on the card beneath.
-    const chunkCount = Math.ceil(entry.questions.length / CARD_QUESTION_CAP)
-    for (let chunk = 0; chunk < chunkCount; chunk++) {
-      const chunkQuestions = entry.questions.slice(
-        chunk * CARD_QUESTION_CAP,
-        (chunk + 1) * CARD_QUESTION_CAP,
-      )
-      if (chunkQuestions.length === 0) continue
-      // Seed includes the chunk index so a friend's stacked cards draw
-      // different status lines from the pool instead of repeating one line.
-      const seed = `${friendId}:${entry.newestItemId}:${chunk}`
-      cards.push({
-        id: `territory:${seed}`,
-        friendId,
-        friendName: entry.friendName,
-        statusLine: friendTerritoryStatusLine(seed),
-        topics: topicsForQuestions(chunkQuestions),
-        questions: chunkQuestions,
-      })
+    // `seen` spans the friend's bundles so a question packed into two of them
+    // (deep + breadth overlap) plays once — the newer bundle's card claims it.
+    const seen = new Set<string>()
+    for (const bundle of entry.bundles) {
+      const questions: StreamQuestion[] = []
+      for (const q of bundle.questions) {
+        if (seen.has(q.questionId)) continue
+        seen.add(q.questionId)
+        questions.push(q)
+      }
+      if (questions.length === 0) continue
+      // Normally one card per bundle (it arrives ≤ cap). The chunk loop is the
+      // defensive ceiling: an over-cap bundle splits into extra cards (seeded
+      // distinctly) rather than overflowing into a "+N more".
+      const chunkCount = Math.ceil(questions.length / CARD_QUESTION_CAP)
+      for (let chunk = 0; chunk < chunkCount; chunk++) {
+        const chunkQuestions = questions.slice(
+          chunk * CARD_QUESTION_CAP,
+          (chunk + 1) * CARD_QUESTION_CAP,
+        )
+        const seed =
+          chunkCount === 1
+            ? `${friendId}:${bundle.itemId}`
+            : `${friendId}:${bundle.itemId}:${chunk}`
+        cards.push({
+          id: `territory:${seed}`,
+          friendId,
+          friendName: entry.friendName,
+          statusLine: friendTerritoryStatusLine(seed),
+          topics: topicsForQuestions(chunkQuestions),
+          questions: chunkQuestions,
+        })
+      }
     }
   }
   return cards
