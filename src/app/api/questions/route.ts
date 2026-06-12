@@ -210,7 +210,11 @@ export async function POST(request: NextRequest) {
     verdict = verdictResult.value;
   } else {
     // Failed vet falls back to needs_review (never auto-publishes) — the cron
-    // sweep re-vets these. This mirrors vetQuestion's own internal llm_error path.
+    // sweep re-vets these at every visibility except 'blocked', so a question
+    // fanned out below still gets a definitive safety verdict; if that verdict
+    // is a safety fail, the cron hard-blocks it and the feed render predicate
+    // retires the already-written rows. Mirrors vetQuestion's internal
+    // llm_error path.
     logEnrichmentFailure('vet', verdictResult.reason);
     verdict = { status: 'needs_review' as const, score: null, reason: 'llm_error' };
   }

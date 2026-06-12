@@ -21,8 +21,13 @@ import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
-import { computeAnswerState } from '@/server/answer-state';
-import { readPriorAnswersForQuestion } from '@/server/answer-history';
+// B-ANSWER-PIPELINE-01: both branches derive answer_state/points through the
+// shared pipeline. Their side-effect tails stay inline DELIBERATELY — they
+// diverge from the daily/answer ordering (mastery event written before the
+// surface write, adaptive difficulty awaited rather than detached, and the
+// feed branch fans out on correct answers only). Unifying those is a behavior
+// change that needs its own decision, not a refactor.
+import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
 import {
   CATCHUP_SURFACE_WEIGHT,
   RECOVERY_STATE_WEIGHT,
@@ -140,7 +145,9 @@ async function handleDailyCatchupAnswer({
     catchupItem.correctAnswer,
     catchupItem.alternateAnswers,
     catchupItem.questionText,
-    'factual',
+    // Friend slots carry the author's stored type ('personal' gets the lenient
+    // policy); daily-generated items are 'factual' by construction.
+    catchupItem.questionType,
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
   // real verdict — never persist 'wrong'. Hold for retry.
@@ -239,24 +246,21 @@ async function handleDailyCatchupAnswer({
     userId,
   );
 
-  const priorAnswers = canonicalQuestionId
-    ? await readPriorAnswersForQuestion(userId, canonicalQuestionId)
-    : [];
-  const masteryAnswerState = computeAnswerState(
-    isCorrect ? 'correct' : 'wrong',
-    priorAnswers,
-  );
-
   const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
-  const pointsAwarded =
-    masteryAnswerState === 'first_correct'
-      ? baseCatchupPoints
-      : masteryAnswerState === 'first_correct_after_wrong'
-        // Recovery on a catch-up answer = 25% of the original live base (not 6.25%).
-        // RECOVERY_STATE_WEIGHT applies to the full base, not the already-reduced
-        // catch-up base, so wrong-then-right on catch-up still earns meaningful credit.
-        ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
-        : 0;
+  const { masteryAnswerState, pointsAwarded } = await deriveAnswerOutcome({
+    userId,
+    canonicalQuestionId,
+    isCorrect,
+    pointsFor: (state) =>
+      state === 'first_correct'
+        ? baseCatchupPoints
+        : state === 'first_correct_after_wrong'
+          // Recovery on a catch-up answer = 25% of the original live base (not 6.25%).
+          // RECOVERY_STATE_WEIGHT applies to the full base, not the already-reduced
+          // catch-up base, so wrong-then-right on catch-up still earns meaningful credit.
+          ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
+          : 0,
+  });
 
   const nextSlots = replaceQueueSlot(slots, catchupItem.slotIndex, (item) => {
     return {
@@ -447,19 +451,18 @@ async function handleFeedCatchupAnswer({
     userId,
   );
 
-  const priorAnswers = await readPriorAnswersForQuestion(userId, feedRow.question.id);
-  const masteryAnswerState = computeAnswerState(
-    isCorrect ? 'correct' : 'wrong',
-    priorAnswers,
-  );
-
   const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
-  const pointsAwarded =
-    masteryAnswerState === 'first_correct'
-      ? baseCatchupPoints
-      : masteryAnswerState === 'first_correct_after_wrong'
-        ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
-        : 0;
+  const { masteryAnswerState, pointsAwarded } = await deriveAnswerOutcome({
+    userId,
+    canonicalQuestionId: feedRow.question.id,
+    isCorrect,
+    pointsFor: (state) =>
+      state === 'first_correct'
+        ? baseCatchupPoints
+        : state === 'first_correct_after_wrong'
+          ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
+          : 0,
+  });
 
   let masteryDelta = null;
   try {

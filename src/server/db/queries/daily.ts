@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -15,6 +15,7 @@ import {
   users,
 } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
+import type { GradableQuestionType } from '@/server/grading';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { notSuppressedByContentReport } from '@/server/db/queries/content-reports';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -95,6 +96,13 @@ export type CatchupQueueItem = {
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
   submittedAnswer: string | null;
   wasSkipped: boolean;
+  /**
+   * The grader's leniency policy branches on this — 'personal' questions grade
+   * against the creator's intended answer. Canonical (friend-authored) items
+   * carry the stored Question.question_type; daily-generated items are
+   * 'factual' by construction (generatedQuestions has no question_type column).
+   */
+  questionType: GradableQuestionType;
   /**
    * Display name of the human author, when one exists. Null for LLM-origin
    * questions (daily-generated, or curated_sent feed items with no creator) —
@@ -606,6 +614,8 @@ async function getDailyCatchupItems(
           difficultyEstimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? null,
           submittedAnswer: slot.submitted_answer ?? null,
           wasSkipped: Boolean(slot.skipped),
+          // generatedQuestions has no question_type column — factual by construction.
+          questionType: 'factual',
           authorName: null, // daily-generated: LLM origin, no human author
           authorIsHouse: false,
         } satisfies CatchupQuestion;
@@ -646,6 +656,7 @@ async function getDailyCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
+        questionType: question.questionType,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
@@ -674,6 +685,9 @@ async function getFeedCatchupItems(
         eq(feedItems.answerResult, 'incorrect'),
         isNull(feedItems.catchupResolvedAt),
         gte(feedItems.sourceEventAt, oldestDate),
+        // Safety hard-block: a question blocked after the original answer
+        // (cron re-vet, upheld report) must not resurface in catch-up.
+        ne(canonicalQuestions.visibility, 'blocked'),
       ))
       .orderBy(desc(feedItems.sourceEventAt));
   } catch (error) {
@@ -724,6 +738,7 @@ async function getFeedCatchupItems(
         difficultyEstimate: difficulty,
         submittedAnswer: feedItem.submittedAnswer ?? null,
         wasSkipped: false,
+        questionType: question.questionType,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })

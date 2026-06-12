@@ -71,7 +71,9 @@ export async function POST(request: NextRequest) {
     replayItem.correctAnswer,
     [],
     replayItem.questionText,
-    'factual',
+    // Friend slots carry the author's stored type ('personal' gets the lenient
+    // policy); bot slots are 'factual' by construction.
+    replayItem.questionType,
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
   if (grade.status === 'unscored') {

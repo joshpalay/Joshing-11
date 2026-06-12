@@ -448,6 +448,55 @@ describe('getFeedForUser feed visibility', () => {
     expect(result.totalCount).toBe(1);
   });
 
+  it('never renders a safety-blocked question, even direct_sent to a named recipient', async () => {
+    // The deferred-vet leak: a question fanned out while the inline vet verdict
+    // was needs_review can be hard-blocked LATER (cron re-vet sets
+    // visibility='blocked'; same for an admin-upheld offensive report). The
+    // already-written direct_sent row must stop rendering — the direct_sent
+    // exemption is for 'friends'/'private' reachability, not for safety.
+    state.questionRows = [{ id: 'question-1', visibility: 'blocked', deletedAt: null, canonicalSubcategory: 'Music' }];
+    state.feedRows = [{
+      id: 'feed-blocked-direct',
+      recipientUserId: 'recipient-1',
+      questionId: 'question-1',
+      sourceType: 'direct_sent',
+      sourceUserId: 'sender-1',
+      sourceResult: null,
+      sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+      personalMessage: 'Try this one.',
+      state: 'active',
+      isPinned: true,
+      joshingGameId: null,
+    }];
+
+    const result = await getFeedForUser('recipient-1');
+    expect(result.items).toEqual([]);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('keeps the direct_sent exemption for non-blocked visibilities (private send still renders)', async () => {
+    // Guard the legitimate exemption while fixing the blocked leak: a 'private'
+    // question sent directly to a recipient has no admitting branch in
+    // questionVisibilityPredicate — only the direct_sent exemption renders it.
+    state.questionRows = [{ id: 'question-1', visibility: 'private', deletedAt: null, canonicalSubcategory: 'Music' }];
+    state.feedRows = [{
+      id: 'feed-private-direct',
+      recipientUserId: 'recipient-1',
+      questionId: 'question-1',
+      sourceType: 'direct_sent',
+      sourceUserId: 'sender-1',
+      sourceResult: null,
+      sourceEventAt: new Date('2026-05-14T12:00:00.000Z'),
+      personalMessage: null,
+      state: 'active',
+      isPinned: false,
+      joshingGameId: null,
+    }];
+
+    const result = await getFeedForUser('recipient-1');
+    expect(result.items).toEqual([expect.objectContaining({ id: 'feed-private-direct' })]);
+  });
+
   it('leads the from-friends (Broadcasts) surface with a pinned direct_sent question', async () => {
     // A question a friend sends you is pinned (route.ts sets isPinned: true). It
     // must surface on the DEFAULT Broadcasts tab too — not only behind the Sent
