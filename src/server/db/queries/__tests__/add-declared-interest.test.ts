@@ -53,7 +53,7 @@ vi.mock('@/server/db', () => ({
 
 import { TooBroadInterestError } from '@/lib/knowledge/interest-specificity';
 
-import { addDeclaredInterest, DeclaredInterestLimitError } from '../users';
+import { addDeclaredInterest, DeclaredInterestLimitError, MAX_ACTIVE_DECLARED_INTERESTS } from '../users';
 
 describe('addDeclaredInterest', () => {
   beforeEach(() => {
@@ -86,7 +86,7 @@ describe('addDeclaredInterest', () => {
   });
 
   it('rejects with DeclaredInterestLimitError when already at the cap', async () => {
-    state.activeRows = Array.from({ length: 5 }, (_, i) => ({
+    state.activeRows = Array.from({ length: MAX_ACTIVE_DECLARED_INTERESTS }, (_, i) => ({
       domain: `interest-${i}`,
       broadCategory: null,
     }));
