@@ -11,6 +11,11 @@ type AnswerSheetProps = {
   onSubmit: (answer: string) => void;
   onClose: () => void;
   loading?: boolean;
+  // Warm, non-alarming progress note shown while a transient grader outage is
+  // being auto-retried (the answer hasn't been scored — nothing went wrong).
+  statusMessage?: string | null;
+  // Terminal failure shown once auto-retries are spent ("try again later").
+  errorMessage?: string | null;
 };
 
 export function AnswerSheet({
@@ -19,6 +24,8 @@ export function AnswerSheet({
   onSubmit,
   onClose,
   loading = false,
+  statusMessage = null,
+  errorMessage = null,
 }: AnswerSheetProps) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +95,20 @@ export function AnswerSheet({
             autoComplete="off"
             className="bg-background focus:border-primary focus-visible:ring-ring min-h-11 w-full rounded-xl border px-4 text-base outline-none focus-visible:ring-2 disabled:opacity-60"
           />
+          {statusMessage ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="mt-3 text-sm text-[var(--brand-ink-400)]"
+            >
+              {statusMessage}
+            </p>
+          ) : null}
+          {errorMessage ? (
+            <p role="alert" className="mt-3 text-sm text-[var(--brand-ink-400)]">
+              {errorMessage}
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={loading || !value.trim()}

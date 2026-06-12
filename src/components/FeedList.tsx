@@ -34,6 +34,10 @@ import {
 } from '@/components/feed/EditorialPromos'
 import type { StreamItem } from '@/lib/activity-stream'
 import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
+import {
+  ANSWER_GRADER_RETRY_MESSAGE,
+  submitAnswerWithRetry,
+} from '@/lib/answer-submit'
 
 type FriendResult = {
   userId: string
@@ -877,6 +881,13 @@ function FeedListContent({
   }, [dismissPhase])
   const reducedMotion = usePrefersReducedMotion()
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
+  // In-sheet notice for the grade: warm "retrying…" while a transient grader
+  // outage is auto-retried, then a terminal "try again later" once retries are
+  // spent. Kept out of the page-level `error` so the feed's empty-state and
+  // invite CTA are unaffected by a one-off grader hiccup.
+  const [answerNotice, setAnswerNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(
+    null,
+  )
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1465,24 +1476,25 @@ function FeedListContent({
   const submitAnswer = useCallback(
     async (item: FeedApiItem, submittedAnswer: string) => {
       setBusyId(item.id)
-      setError(null)
+      setAnswerNotice(null)
       try {
-        const response = await fetch(`/api/feed/${item.id}/answer`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ submitted_answer: submittedAnswer }),
-        })
-        const body = (await response.json().catch(() => null)) as
-          | AnswerResponse
-          | { message?: string }
-          | null
-        if (!response.ok || !body || !('isCorrect' in body)) {
-          throw new Error(
-            (body as { message?: string } | null)?.message ??
-              'Could not submit that answer.'
-          )
-        }
+        // A grader outage returns a retryable 503 (never a real 'wrong' verdict),
+        // so auto-retry it with backoff behind a warm in-sheet notice, and only
+        // ask the player to try again later once the retries are exhausted.
+        const body = await submitAnswerWithRetry<AnswerResponse>(
+          `/api/feed/${item.id}/answer`,
+          {
+            body: { submitted_answer: submittedAnswer },
+            isSuccessBody: (value): value is AnswerResponse =>
+              value != null && typeof value === 'object' && 'isCorrect' in value,
+            onRetry: ({ attempt, maxAttempts }) =>
+              setAnswerNotice({
+                tone: 'info',
+                text: `${ANSWER_GRADER_RETRY_MESSAGE} (${attempt}/${maxAttempts})…`,
+              }),
+          }
+        )
+        setAnswerNotice(null)
         const isCorrect = Boolean(body.isCorrect)
         setResults((current) => ({
           ...current,
@@ -1520,6 +1532,7 @@ function FeedListContent({
         )
         setCardStates((s) => ({ ...s, [item.id]: 'answered' }))
         setAnswerSheetId(null)
+        setAnswerNotice(null)
         setFeedbackSheetId(item.id)
         // §7 hardening (B-HOME-OVERFLOW-02): an answer on the overflow subpage
         // shrinks the shared pending queue, so invalidate the client router
@@ -1528,11 +1541,14 @@ function FeedListContent({
         // is untouched: the just-answered card stays visible as answered here.
         if (pendingQueue) router.refresh()
       } catch (caught) {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Could not submit that answer.'
-        )
+        // Keep the sheet open with the player's answer intact so they can resubmit.
+        setAnswerNotice({
+          tone: 'error',
+          text:
+            caught instanceof Error
+              ? caught.message
+              : 'Could not submit that answer.',
+        })
       } finally {
         setBusyId(null)
       }
@@ -1713,7 +1729,10 @@ function FeedListContent({
       // sheet). Other source types still close on answer.
       const onRetry =
         isIncorrect && item.source_type === 'direct_sent'
-          ? () => setAnswerSheetId(item.id)
+          ? () => {
+              setAnswerNotice(null)
+              setAnswerSheetId(item.id)
+            }
           : undefined
       return (
         <AnsweredByYouCard
@@ -1728,7 +1747,12 @@ function FeedListContent({
 
     const typedItem = toTypedFeedItem(item, homeZoneCards)
     const dismissible = !item.viewer_is_author
-    const onAnswer = dismissible ? () => setAnswerSheetId(item.id) : undefined
+    const onAnswer = dismissible
+      ? () => {
+          setAnswerNotice(null)
+          setAnswerSheetId(item.id)
+        }
+      : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
 
     // On the home "What's Happening" feed these answerable question cards are
@@ -2019,8 +2043,13 @@ function FeedListContent({
             question={sheetItem.question_text ?? ''}
             category={sheetItem.domain_pill}
             onSubmit={(answer) => void submitAnswer(sheetItem, answer)}
-            onClose={() => setAnswerSheetId(null)}
+            onClose={() => {
+              setAnswerSheetId(null)
+              setAnswerNotice(null)
+            }}
             loading={busyId === sheetItem.id}
+            statusMessage={answerNotice?.tone === 'info' ? answerNotice.text : null}
+            errorMessage={answerNotice?.tone === 'error' ? answerNotice.text : null}
           />
         )
       })() : null}

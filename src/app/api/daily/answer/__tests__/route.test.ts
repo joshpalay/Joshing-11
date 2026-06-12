@@ -366,6 +366,51 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
   })
 })
 
+describe('POST /api/daily/answer — slot identity guard (stale snapshot)', () => {
+  // Regression: the client displays slot.question_text but only submits
+  // slot_index; if the queue is re-indexed after load (a +2 bonus insert
+  // re-sorts slots) the slot_index now holds a different question, and grading
+  // would score the typed answer against the wrong question (answered Austerlitz,
+  // marked wrong against Omaha Beach). expected_question_id pins the displayed
+  // question so the server refuses to grade a mismatched slot.
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readPriorAnswersForQuestionMock.mockResolvedValue([])
+  })
+
+  it('grades normally when expected_question_id matches the slot FK', async () => {
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    const res = await POST(
+      jsonRequest({ ...VALID_BODY, expected_question_id: 'gen-q-1' }) as never,
+    )
+
+    expect(res.status).toBe(200)
+    expect(gradeAnswerMock).toHaveBeenCalled()
+  })
+
+  it('refuses to grade (409 slot_changed) and returns fresh slots when the FK no longer matches', async () => {
+    // Only the queue select is reached — the guard returns before the question
+    // lookup, so no grading / persistence / mastery side effects fire.
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [dbState.queue])
+
+    const res = await POST(
+      jsonRequest({ ...VALID_BODY, expected_question_id: 'gen-q-STALE' }) as never,
+    )
+
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.error).toBe('slot_changed')
+    expect(body.slots).toEqual(dbState.queue.slots)
+
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+    expect(dbMock.update).not.toHaveBeenCalled()
+    expect(writeMasteryEventMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('POST /api/daily/answer grader outage (#6 — never score wrong on LLM failure)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

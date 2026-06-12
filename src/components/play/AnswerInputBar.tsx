@@ -10,6 +10,10 @@ type AnswerInputBarProps = {
   disabled?: boolean;
   fixed?: boolean;
   inputRef?: Ref<HTMLInputElement>;
+  // Optional progress/error note rendered above the input. `info` is a warm,
+  // non-alarming status (e.g. a transient grader outage being auto-retried);
+  // `error` is a terminal failure once retries are spent.
+  notice?: { tone: 'info' | 'error'; text: string } | null;
 };
 
 const DRAG_CANCEL_THRESHOLD_PX = 8;
@@ -22,6 +26,7 @@ export function AnswerInputBar({
   disabled = false,
   fixed = true,
   inputRef,
+  notice = null,
 }: AnswerInputBarProps) {
   const pointerStartRef = useRef<{ x: number; y: number; dragged: boolean } | null>(null);
   const interactionDisabled = disabled || submitting;
@@ -48,6 +53,15 @@ export function AnswerInputBar({
       }}
       onSubmit={handleSubmit}
     >
+      {notice ? (
+        <p
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+          aria-live={notice.tone === 'error' ? 'assertive' : 'polite'}
+          className="mb-2 text-sm text-[var(--text-muted)]"
+        >
+          {notice.text}
+        </p>
+      ) : null}
       <div className="flex gap-2">
         <input
           ref={inputRef}
