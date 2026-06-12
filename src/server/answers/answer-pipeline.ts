@@ -7,6 +7,7 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
 import {
+  runMasteryWriteSideEffects,
   writeMasteryEvent,
   type MasteryEventWriteResult,
   type WriteMasteryEventParams,
@@ -87,9 +88,31 @@ export async function recordAnswerSideEffects(input: {
 }): Promise<MasteryEventWriteResult | null> {
   let masteryDelta: MasteryEventWriteResult | null = null;
   try {
-    masteryDelta = await writeMasteryEvent({ userId: input.userId, ...input.masteryEvent });
+    // deferSideEffects (B-GRADE-PERCEIVED-01): the event insert + mastery upsert
+    // stay synchronous (the answer response's masteryDelta and the daily summary
+    // both read the mastery tables), but the best-effort tail — trust-on-play +
+    // inviter first-five notify — is scheduled after the response below so it
+    // doesn't sit on the user-blocking answer path. Uniform across every surface
+    // that runs through this pipeline.
+    masteryDelta = await writeMasteryEvent({ userId: input.userId, ...input.masteryEvent, deferSideEffects: true });
   } catch (error) {
     console.warn(`[${input.logTag}] writeMasteryEvent failed`, error);
+  }
+
+  // Only fires when the event was actually inserted (not a dedup conflict); the
+  // helper swallows its own errors. after() keeps the function alive past the
+  // response so a frozen lambda doesn't drop it.
+  if (masteryDelta?.eventInserted) {
+    const { previousTier, newTier, tierChanged } = masteryDelta;
+    after(() => runMasteryWriteSideEffects({
+      userId: input.userId,
+      domain: input.masteryEvent.domain,
+      eventQuestionId: input.masteryEvent.eventQuestionId,
+      sourceType: input.masteryEvent.sourceType,
+      previousTier,
+      newTier,
+      tierChanged,
+    }));
   }
 
   // Adaptive-difficulty bookkeeping is not consumed by the response; let it

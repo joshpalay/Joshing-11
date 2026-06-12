@@ -3,7 +3,7 @@
  * Model: claude-sonnet-4-6 | Prompts from joshing-llm-prompts.md
  *
  * PRD Section 9:
- *   Prompt 1 — gradeAnswerWithLLM:  lenient grader, correct/wrong + reason
+ *   Prompt 1 — gradeAnswerWithLLM:  lenient grader (Haiku), correct/wrong + consolation
  *   Prompt 2 — categorizeQuestion:  assign category to question text
  *   Prompt 3 — generateExplainer:   brief + full JSON (tests only; not private play)
  *            — generateFactualReflectionExplanation: factual_explanation backfill
@@ -28,7 +28,6 @@ export type ScoredGradingResponse = {
   status: 'scored';
   result: GradeResult;
   confidence: number;
-  reason: string;
   // "Snarky but Sweet" — a short, warm quip when the answer is wrong but thematically close.
   // null if the answer is simply off-base or unrelated.
   consolation: string | null;
@@ -622,7 +621,7 @@ CONSOLATION RULES (for wrong answers only):
 - If the answer is completely off-base, unrelated, or a wild guess, set consolation to null.
 - Never write a consolation for correct answers (set consolation to null).
 
-Return only valid JSON with keys: result, confidence, reason, consolation. No explanation outside the JSON object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+Return only valid JSON with keys: result, confidence, consolation. Put result first. Do not include any other keys, reasoning, or explanation — inside or outside the JSON object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
   const client = getAnthropicClient();
   if (!client) {
@@ -642,9 +641,9 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
       // Grading system prompt is ~800 tokens — below Haiku's 2048 cacheable
       // threshold, so cache_control would be a silent no-op. Pass the prompt
       // as a plain string for clarity. max_tokens is generous (the reply is a
-      // tiny JSON object, ~120 tokens in practice) purely so a verbose reason or
-      // consolation can never truncate the JSON mid-object — you only pay for
-      // tokens actually produced.
+      // tiny JSON object — result/confidence/consolation, well under ~100 tokens)
+      // purely so a long consolation can never truncate the JSON mid-object —
+      // you only pay for tokens actually produced.
       const response = await loggedMessagesCreate(client, 'grade', {
         model: GRADING_MODEL,
         max_tokens: 1024,
@@ -677,10 +676,13 @@ Return only valid JSON with keys: result, confidence, reason, consolation. No ex
       }
 
       const confidence = clampConfidence(parsed.confidence, 0);
-      const reason = asTrimmedString(parsed.reason) ?? 'llm_invalid_response';
       const consolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
 
-      return { status: 'scored', result, confidence, reason, consolation };
+      // No `reason` field is requested or read on this path: the verdict is
+      // emitted first and nothing downstream consumes a justification, so asking
+      // for one is just output-token overhead and the only reasoning-shaped text
+      // on the user-blocking grade. (A stray `reason` key in the reply is ignored.)
+      return { status: 'scored', result, confidence, consolation };
     } catch (error) {
       lastReason = 'request_failed';
       logFallback('gradeAnswerWithLLM', 'request_failed', { attempt, ...summarizeError(error) });
