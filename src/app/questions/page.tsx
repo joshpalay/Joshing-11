@@ -8,6 +8,7 @@ import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm
 import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
 import { AnsweredQuestionsList, type AnsweredQuestionItem } from '@/components/questions/AnsweredQuestionsList';
 import type { QuestionView } from '@/server/db/queries/questions';
+import { getQuestionPageMetrics } from './question-metrics';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
 type OrderMode = 'category' | 'recency';
@@ -75,6 +76,8 @@ type CreateQuestionResponse = {
   };
 };
 
+const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
+
 const NO_QUESTIONS_PATTERNS = [
   /no questions/i,
   /not found/i,
@@ -99,6 +102,16 @@ function initialValues(question: QuestionView): QuestionFormValues {
     critiqueIterations: question.critiqueIterations,
     sendToFriendIds: [],
   };
+}
+
+function QuestionMetricCard({ label, value, helper }: { label: string; value: number; helper: string }) {
+  return (
+    <div className="rounded-lg border bg-card px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{label}</p>
+      <p className="mt-1 font-serif text-3xl font-semibold tabular-nums">{NUMBER_FORMATTER.format(value)}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+    </div>
+  );
 }
 
 function LoadingSkeleton() {
@@ -236,6 +249,8 @@ function QuestionsPageContent() {
     clearComposerParams();
   }, [clearComposerParams]);
 
+  const questionMetrics = useMemo(() => getQuestionPageMetrics(questions), [questions]);
+
   const filteredQuestions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return questions
@@ -369,6 +384,19 @@ function QuestionsPageContent() {
           Answered
         </button>
       </div>
+
+      <section className="mb-5 grid grid-cols-2 gap-3" aria-label="Question metrics">
+        <QuestionMetricCard
+          label="Answers received"
+          value={questionMetrics.answersReceived}
+          helper="Total replies to your questions"
+        />
+        <QuestionMetricCard
+          label="Questions answered"
+          value={questionMetrics.questionsAnswered}
+          helper="Your questions with at least one answer"
+        />
+      </section>
 
       {tab === 'authored' ? (
         <>
