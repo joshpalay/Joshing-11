@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, MoreHorizontal, Sparkles, X } from 'lucide-react'
 
 import { answerHeadingStyle } from '@/components/answer-heading'
+import { firstSentence } from '@/lib/first-sentence'
 import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
@@ -238,10 +239,6 @@ export function AnswerFeedbackSheet({
             />
           ) : null}
 
-          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
-            {question}
-          </p>
-
           <div className="space-y-1 pb-2">
             {correctAnswer ? (
               <p
@@ -267,22 +264,22 @@ export function AnswerFeedbackSheet({
             ) : null}
           </div>
 
+          {/* The question reads as context for the answer, so it sits below the
+              answer headline (not above it). De-boxed: plain text, no panel. */}
+          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
+            {question}
+          </p>
+
           {explanation ? (
-            <div className="rounded-2xl bg-muted p-3.5">
-              <p className="font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
-                {explanation}
-              </p>
-            </div>
+            // Match the daily-5 game's reveal: a single-sentence explainer under
+            // the answer, not the full paragraph (which ran too long here).
+            <p className="pb-2 font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
+              {firstSentence(explanation)}
+            </p>
           ) : null}
 
           {insideJoke ? (
-            <div
-              className="mt-2.5 rounded-2xl border p-3.5"
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--accent-gold) 12%, var(--brand-card))',
-                borderColor: 'color-mix(in srgb, var(--accent-gold) 40%, var(--brand-border))',
-              }}
-            >
+            <div className="pt-1">
               <p
                 className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
                 style={{ color: GOLD_INK }}
@@ -296,7 +293,7 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {creatorNote ? (
-            <div className="mt-2.5 rounded-2xl border bg-muted p-3.5">
+            <div className="pt-3">
               <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                 Why they asked
               </p>

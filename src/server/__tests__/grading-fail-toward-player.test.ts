@@ -32,6 +32,34 @@ describe('gradeAnswer — acceptable variants (B4 Phase 4)', () => {
     if (result.status !== 'scored') throw new Error('expected scored');
     expect(result.result).toBe('correct');
   });
+
+  // The deterministic fast-path normalizes away trivial differences so the
+  // common "right answer, slightly off spelling" case skips the blocking LLM
+  // round-trip entirely. Each of these must score WITHOUT calling the LLM.
+  it.each([
+    ['punctuation', 'Spider Man', 'Spider-Man!'],
+    ['diacritics', 'Beyonce', 'Beyoncé'],
+    ['leading article', 'Eroica', 'The Eroica'],
+    ['hyphenation', 'Wall E', 'Wall-E'],
+    ['extra whitespace', '  the   police ', 'The Police'],
+  ])('marks a %s variant correct without the LLM', async (_label, submitted, canonical) => {
+    const result = await gradeAnswer(submitted, canonical, [], 'q');
+    expect(result.status).toBe('scored');
+    if (result.status !== 'scored') throw new Error('expected scored');
+    expect(result.result).toBe('correct');
+    expect(result.gradedVia).toBe('exact');
+    expect(llmMock.gradeAnswerWithLLM).not.toHaveBeenCalled();
+  });
+
+  // Guard against over-eager normalization: dropping an *interior* article would
+  // collapse "Vitamin A" onto "Vitamin". It must not — that defers to the LLM.
+  it('does not collapse an interior article (Vitamin A ≠ Vitamin)', async () => {
+    llmMock.gradeAnswerWithLLM.mockResolvedValue({
+      status: 'scored', result: 'wrong', confidence: 0.9, reason: 'different', consolation: null,
+    });
+    await gradeAnswer('Vitamin', 'Vitamin A', [], 'q');
+    expect(llmMock.gradeAnswerWithLLM).toHaveBeenCalledOnce();
+  });
 });
 
 describe('gradeAnswer — fail toward the player on outage (Drift Risk 2)', () => {
