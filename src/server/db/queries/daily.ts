@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -674,6 +674,9 @@ async function getFeedCatchupItems(
         eq(feedItems.answerResult, 'incorrect'),
         isNull(feedItems.catchupResolvedAt),
         gte(feedItems.sourceEventAt, oldestDate),
+        // Safety hard-block: a question blocked after the original answer
+        // (cron re-vet, upheld report) must not resurface in catch-up.
+        ne(canonicalQuestions.visibility, 'blocked'),
       ))
       .orderBy(desc(feedItems.sourceEventAt));
   } catch (error) {

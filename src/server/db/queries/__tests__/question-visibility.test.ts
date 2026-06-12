@@ -47,18 +47,33 @@ vi.mock('@/server/db', () => ({
 import { feedItemVisibilityPredicate, questionVisibilityPredicate } from '@/server/db/queries/feed';
 
 describe('feedItemVisibilityPredicate (direct_sent exemption)', () => {
-  it('admits a feed item when it is direct_sent OR the question visibility gate passes', () => {
+  it('gates EVERYTHING — including direct_sent — on the question not being safety-blocked', () => {
+    // 'blocked' is the safety hard-block terminal state (vet verdict or upheld
+    // offensive report). The direct_sent exemption must not bypass it: a
+    // question blocked AFTER fan-out (cron re-vet, admin action) must stop
+    // rendering for its named recipients too.
     const predicate = feedItemVisibilityPredicate('viewer-1') as { op: string; parts: unknown[] };
 
-    expect(predicate.op).toBe('or');
+    expect(predicate.op).toBe('and');
+    expect(predicate.parts).toContainEqual({ op: 'ne', column: 'questions.visibility', value: 'blocked' });
+  });
+
+  it('admits a non-blocked feed item when it is direct_sent OR the question visibility gate passes', () => {
+    const predicate = feedItemVisibilityPredicate('viewer-1') as { op: string; parts: unknown[] };
+
+    const orBranch = predicate.parts.find(
+      (p): p is { op: string; parts: unknown[] } =>
+        typeof p === 'object' && p !== null && (p as { op?: string }).op === 'or',
+    );
+    expect(orBranch).toBeDefined();
 
     // A question addressed directly to the viewer renders regardless of the
     // question's visibility — otherwise a 'friends' send to a non-follower is
     // silently filtered out of the recipient's feed.
-    expect(predicate.parts).toContainEqual({ op: 'eq', column: 'feedItems.sourceType', value: 'direct_sent' });
+    expect(orBranch!.parts).toContainEqual({ op: 'eq', column: 'feedItems.sourceType', value: 'direct_sent' });
 
     // The broadcast/feed visibility gate is still the other branch.
-    const visibilityBranch = predicate.parts.find(
+    const visibilityBranch = orBranch!.parts.find(
       (p): p is { op: string; parts: unknown[] } =>
         typeof p === 'object' && p !== null && (p as { op?: string }).op === 'or',
     );

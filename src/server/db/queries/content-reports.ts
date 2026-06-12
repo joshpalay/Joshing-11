@@ -407,8 +407,10 @@ export async function upholdReport(reportId: string, reviewReason?: string): Pro
 
   let hardRemoved = false;
   if (report.category === 'inappropriate' && report.questionId) {
-    // The ONLY visibility='blocked' write in the codebase (excluded by
-    // questionVisibilityPredicate + every bank/send/game read path).
+    // One of three visibility='blocked' writes (with the create route's
+    // safety-fail vet and the vet-questions cron sweep). Excluded by
+    // feedItemVisibilityPredicate — including for direct_sent recipients —
+    // and every bank/send/game read path.
     await db.update(questions).set({ visibility: 'blocked' }).where(eq(questions.id, report.questionId));
     hardRemoved = true;
   } else if (report.category === 'inappropriate' && report.generatedQuestionId) {

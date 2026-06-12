@@ -87,6 +87,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const question = row.question;
+  // Safety hard-block: a question can become visibility='blocked' AFTER its
+  // feed row was written (cron re-vet of a failed inline vet, or an upheld
+  // offensive report). The feed render predicate hides it, but a stale
+  // FeedItem id POSTed directly here would still grade it — treat it as gone.
+  if (question.visibility === 'blocked') {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
   // Authors can't answer their own questions. The feed query helper at
   // src/server/db/queries/feed.ts:334 already excludes authored items
   // from the feed surface, but a stale FeedItem row id sent directly
