@@ -95,7 +95,40 @@ type LoginPanelProps = {
   inviteContext?: InviteContext | null;
 };
 
-type Step = 'invite' | 'phone' | 'code';
+type Step = 'invite' | 'phone' | 'code' | 'profile';
+
+type VerifiedIdentity = {
+  displayName: string;
+  handle: string;
+};
+
+type VerifyOtpUserPayload = {
+  display_name?: unknown;
+  displayName?: unknown;
+  handle?: unknown;
+};
+
+function identityValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function readVerifiedIdentity(data: unknown): VerifiedIdentity {
+  const user =
+    data && typeof data === 'object' && 'user' in data
+      ? (data as { user?: VerifyOtpUserPayload }).user
+      : null;
+
+  if (!user || typeof user !== 'object') return { displayName: '', handle: '' };
+
+  return {
+    displayName: identityValue(user.display_name ?? user.displayName),
+    handle: identityValue(user.handle),
+  };
+}
+
+export function shouldCollectProfileIdentity(identity: VerifiedIdentity): boolean {
+  return !identity.displayName || !identity.handle;
+}
 
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
@@ -128,6 +161,12 @@ export default function LoginPanel({
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [verifiedIdentity, setVerifiedIdentity] = useState<VerifiedIdentity>({
+    displayName: '',
+    handle: '',
+  });
   // Start on the invite confirmation step only when the link resolved to a
   // recipient phone; otherwise fall straight through to manual entry.
   const [step, setStep] = useState<Step>(invitePrefill?.maskedPhone ? 'invite' : 'phone');
@@ -263,9 +302,78 @@ export default function LoginPanel({
         return;
       }
 
+      const identity = readVerifiedIdentity(data);
+      setVerifiedIdentity(identity);
+      setDisplayName(identity.displayName);
+      setHandle(identity.handle);
+
+      if (shouldCollectProfileIdentity(identity)) {
+        setLoading(false);
+        swapStep('profile');
+        return;
+      }
+
       // Success: navigation is async and doesn't block, so keep the button in
       // its "Verifying…" state. Resetting loading here would flash "Continue"
       // before the redirect lands.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      router.replace('/');
+      router.refresh();
+    } catch {
+      setError('Something went wrong. Please try again.');
+      setLoading(false);
+    }
+  }
+
+  async function completeProfile(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    const trimmedDisplayName = displayName.trim();
+    const trimmedHandle = handle.trim().replace(/^@+/, '');
+
+    if (!trimmedDisplayName) {
+      setError('Enter your display name.');
+      return;
+    }
+
+    if (!trimmedHandle) {
+      setError('Enter your call sign.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const profileResponse = await fetch('/api/account/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ displayName: trimmedDisplayName }),
+      });
+      const profileData = await profileResponse.json().catch(() => ({}));
+
+      if (!profileResponse.ok) {
+        setError(profileData?.message ?? 'Unable to save your display name.');
+        setLoading(false);
+        return;
+      }
+
+      if (trimmedHandle !== verifiedIdentity.handle) {
+        const handleResponse = await fetch('/api/account/handle', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ handle: trimmedHandle }),
+        });
+        const handleData = await handleResponse.json().catch(() => ({}));
+
+        if (!handleResponse.ok) {
+          setError(handleData?.message ?? 'Unable to save your call sign.');
+          setLoading(false);
+          return;
+        }
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
       router.replace('/');
       router.refresh();
@@ -374,7 +482,7 @@ export default function LoginPanel({
             {loading ? 'Continuing…' : 'Continue'}
           </button>
         </form>
-      ) : (
+      ) : step === 'code' ? (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
           {/* Two overlapping oval speech bubbles — navy behind, orange in front
               — recreating the Figma two-tone mark. The front bubble is drawn
@@ -447,6 +555,54 @@ export default function LoginPanel({
               Change number
             </button>
           </div>
+        </form>
+      ) : (
+        <form className="space-y-[14px]" onSubmit={completeProfile}>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
+            @
+          </div>
+          <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+            Finish your profile
+          </p>
+          <p className="text-center text-[15px] leading-6 text-black/70">
+            Pick the name friends will see and the call sign they can use to find you.
+          </p>
+          <div className="space-y-2">
+            <label
+              className="block text-center text-sm font-medium text-black"
+              htmlFor="display-name"
+            >
+              Display name
+            </label>
+            <input
+              id="display-name"
+              type="text"
+              autoComplete="name"
+              className={INPUT_CLASS}
+              placeholder="Jane Palay"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              disabled={loading}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-center text-sm font-medium text-black" htmlFor="handle">
+              Call sign / handle
+            </label>
+            <input
+              id="handle"
+              type="text"
+              autoComplete="username"
+              className={INPUT_CLASS}
+              placeholder="jpalay"
+              value={handle}
+              onChange={(event) => setHandle(event.target.value.replace(/^@+/, ''))}
+              disabled={loading}
+            />
+          </div>
+          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+            {loading ? 'Saving…' : 'Enter Joshing'}
+          </button>
         </form>
       )}
 

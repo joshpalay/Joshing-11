@@ -39,6 +39,7 @@ type AuthUser = {
   id: string
   phoneNumber: string
   displayName: string | null
+  handle: string | null
   timezone: string
 }
 
@@ -46,6 +47,7 @@ const USER_SELECTION = {
   id: users.id,
   phoneNumber: users.phoneNumber,
   displayName: users.displayName,
+  handle: users.handle,
   timezone: users.timezone,
 }
 
@@ -206,6 +208,7 @@ export async function POST(request: Request) {
           id: existingUser.id,
           phone_number: existingUser.phoneNumber,
           display_name: existingUser.displayName,
+          handle: existingUser.handle,
           timezone: existingUser.timezone,
           onboardingComplete: false,
         },
@@ -273,6 +276,7 @@ export async function POST(request: Request) {
         id: user.id,
         phone_number: user.phoneNumber,
         display_name: user.displayName,
+        handle: user.handle,
         timezone: user.timezone,
         onboardingComplete: false,
       },
