@@ -1,15 +1,15 @@
-import type { ReactNode } from 'react'
-import Link from 'next/link'
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 
-import { AvatarChip } from '@/components/AvatarChip'
-import { getFriendInvitationLandingByToken } from '@/server/friends/invitations'
+import { AvatarChip } from '@/components/AvatarChip';
+import { getFriendInvitationLandingByToken } from '@/server/friends/invitations';
 
 type InvitePageProps = {
-  params: Promise<{ token: string }>
-}
+  params: Promise<{ token: string }>;
+};
 
 function inviteLoginHref(token: string) {
-  return `/login?invitationToken=${encodeURIComponent(token)}`
+  return `/login?invitationToken=${encodeURIComponent(token)}`;
 }
 
 function InviterIdentity({
@@ -17,18 +17,18 @@ function InviterIdentity({
   userId,
   avatarColor,
 }: {
-  name: string
-  userId: string | null
-  avatarColor: string | null
+  name: string;
+  userId: string | null;
+  avatarColor: string | null;
 }) {
-  if (!userId) return null
+  if (!userId) return null;
 
   return (
     <div className="mb-4 flex items-center gap-3">
       <AvatarChip displayName={name} userId={userId} color={avatarColor} size="lg" />
       <span className="text-sm font-semibold">{name}</span>
     </div>
-  )
+  );
 }
 
 function InviteShell({ children }: { children: ReactNode }) {
@@ -38,12 +38,12 @@ function InviteShell({ children }: { children: ReactNode }) {
         {children}
       </section>
     </main>
-  )
+  );
 }
 
 export default async function InvitePage({ params }: InvitePageProps) {
-  const { token } = await params
-  const invitation = await getFriendInvitationLandingByToken(token)
+  const { token } = await params;
+  const invitation = await getFriendInvitationLandingByToken(token);
 
   if (invitation.status === 'valid') {
     return (
@@ -56,9 +56,9 @@ export default async function InvitePage({ params }: InvitePageProps) {
               avatarColor={invitation.inviterAvatarColor}
             />
             <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              A note from a friend
+              A friend thought of you
             </p>
-            <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight">
+            <h1 className="mt-2 font-serif text-3xl leading-tight font-semibold">
               {invitation.inviterName} thought of you for Joshing.
             </h1>
           </div>
@@ -67,11 +67,11 @@ export default async function InvitePage({ params }: InvitePageProps) {
             href={inviteLoginHref(token)}
             className="bg-primary text-primary-foreground inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium"
           >
-            See the note
+            Continue to Joshing
           </Link>
         </div>
       </InviteShell>
-    )
+    );
   }
 
   if (invitation.status === 'expired') {
@@ -81,9 +81,8 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Invitation expired
           </p>
-          <h1 className="font-serif text-2xl font-semibold leading-tight">
-            This invitation has expired. Ask {invitation.inviterName} to send
-            you a new one.
+          <h1 className="font-serif text-2xl leading-tight font-semibold">
+            This invitation has expired. Ask {invitation.inviterName} to send you a new one.
           </h1>
           <Link
             href="/login"
@@ -93,7 +92,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           </Link>
         </div>
       </InviteShell>
-    )
+    );
   }
 
   if (invitation.status === 'accepted') {
@@ -103,7 +102,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Invitation already used
           </p>
-          <h1 className="font-serif text-2xl font-semibold leading-tight">
+          <h1 className="font-serif text-2xl leading-tight font-semibold">
             This invitation has already been used.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
@@ -117,7 +116,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           </Link>
         </div>
       </InviteShell>
-    )
+    );
   }
 
   return (
@@ -140,5 +139,5 @@ export default async function InvitePage({ params }: InvitePageProps) {
         </Link>
       </div>
     </InviteShell>
-  )
+  );
 }
