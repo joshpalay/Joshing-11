@@ -22,6 +22,13 @@ export type WriteMasteryEventParams = {
   basePoints?: number;
   weight?: number;
   answeredByUserId?: string | null;
+  // When true, the best-effort tail (trust-on-play + inviter first-five notify)
+  // is NOT run inline. The caller must schedule runMasteryWriteSideEffects()
+  // itself (e.g. via after()) when result.eventInserted is true. Used on the
+  // user-blocking grading path to keep those queries off the critical section
+  // WITHOUT deferring the event/mastery write itself (the daily summary reads
+  // the mastery tables, so the write must stay synchronous). Defaults to inline.
+  deferSideEffects?: boolean;
 };
 
 export type MasteryEventWriteResult = {
@@ -32,6 +39,9 @@ export type MasteryEventWriteResult = {
   newTier: MasteryTier;
   tierChanged: boolean;
   openedNewTerritory: boolean;
+  // Whether THIS call actually inserted the mastery event (false on dedup
+  // conflict). The deferred side-effect tail must only run when true.
+  eventInserted: boolean;
 };
 
 async function readAuthorCredit(userId: string, domain: string) {
@@ -62,6 +72,67 @@ async function writeTierCrossingActivityForFriends(params: {
   void params;
   // TODO Phase 8: write friend_mastery activity for each friend when
   // friend system is built. Friends list: getFriends(userId).
+}
+
+/**
+ * The best-effort tail of a mastery write: friend tier-crossing activity,
+ * trust-on-play promotion, and the inviter first-five notification. None of
+ * these feed the answer response or the daily summary, so they are safe to run
+ * off the user-blocking path. Run inline by writeMasteryEvent unless
+ * `deferSideEffects` was set, in which case the caller schedules this after the
+ * response. Only valid to call when the mastery event was actually inserted.
+ * Swallows its own errors — a failed side effect must never surface to the user.
+ */
+export async function runMasteryWriteSideEffects(params: {
+  userId: string;
+  domain: string;
+  eventQuestionId: string | null | undefined;
+  sourceType: MasteryEventSourceType;
+  previousTier: MasteryTier;
+  newTier: MasteryTier;
+  tierChanged: boolean;
+}): Promise<void> {
+  if (params.tierChanged) {
+    await writeTierCrossingActivityForFriends({
+      userId: params.userId,
+      domain: params.domain,
+      previousTier: params.previousTier,
+      newTier: params.newTier,
+    });
+  }
+
+  // Human-play trust promotion + "nobody got it" smell (B4 Phase 2). A freshly
+  // recorded human answer may push the canonical question over the
+  // human_validated threshold or the nobody-correct smell. Skipped for
+  // author/curator credit (no real answer_state) and when there is no canonical
+  // question id to evaluate.
+  if (
+    params.eventQuestionId &&
+    params.sourceType !== 'author_credit' &&
+    params.sourceType !== 'curator_credit'
+  ) {
+    try {
+      await evaluateQuestionTrustOnPlay(params.eventQuestionId);
+    } catch (error) {
+      console.warn('[mastery] trust-on-play evaluation failed', {
+        questionId: params.eventQuestionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Only the surfaces a new user actually plays count toward the invited-friend
+  // first-five milestone; author/curator credit and feed writes don't.
+  if (params.sourceType === 'daily' || params.sourceType === 'joshing_game') {
+    try {
+      await maybeNotifyInviterOfFirstFive(params.userId);
+    } catch (error) {
+      console.warn('[mastery] inviter first-five notify failed', {
+        userId: params.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }
 
 export async function writeMasteryEvent(params: WriteMasteryEventParams): Promise<MasteryEventWriteResult> {
@@ -175,42 +246,24 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       newTier: previousTier,
       tierChanged: false,
       openedNewTerritory: false,
+      eventInserted: false,
     };
   }
 
-  if (tierChanged) {
-    await writeTierCrossingActivityForFriends({
+  // The event + mastery upsert above stay synchronous (the daily summary and the
+  // response's masteryDelta both read them). Only this best-effort tail is
+  // deferrable; when the caller opts in, it schedules runMasteryWriteSideEffects
+  // itself off the critical path.
+  if (!params.deferSideEffects) {
+    await runMasteryWriteSideEffects({
       userId: params.userId,
       domain: params.domain,
+      eventQuestionId: params.eventQuestionId,
+      sourceType: params.sourceType,
       previousTier,
       newTier: nextTier,
+      tierChanged,
     });
-  }
-
-  // Human-play trust promotion + "nobody got it" smell (B4 Phase 2). Best-effort
-  // and fire-after-write: a freshly-recorded human answer may push the canonical
-  // question over the human_validated threshold or the nobody-correct smell.
-  // Skipped for author/curator credit (no real answer_state) and when there is no
-  // canonical question id to evaluate. Never blocks the mastery write.
-  if (
-    params.eventQuestionId &&
-    params.sourceType !== 'author_credit' &&
-    params.sourceType !== 'curator_credit'
-  ) {
-    try {
-      await evaluateQuestionTrustOnPlay(params.eventQuestionId);
-    } catch (error) {
-      console.warn('[mastery] trust-on-play evaluation failed', {
-        questionId: params.eventQuestionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  // Only the surfaces a new user actually plays count toward the invited-friend
-  // first-five milestone; author/curator credit and feed writes don't.
-  if (params.sourceType === 'daily' || params.sourceType === 'joshing_game') {
-    await maybeNotifyInviterOfFirstFive(params.userId);
   }
 
   return {
@@ -221,5 +274,6 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
     newTier: nextTier,
     tierChanged,
     openedNewTerritory,
+    eventInserted: true,
   };
 }

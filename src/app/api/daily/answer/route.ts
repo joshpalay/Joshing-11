@@ -23,6 +23,44 @@ import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 
 export const dynamic = 'force-dynamic';
 
+// Cold-start tag (B-GRADE-COLDSTART-01): true only for the first request a fresh
+// serverless instance handles — the one that waited behind register()'s boot DB
+// work. Flipped to false after the first request so warm requests are tagged
+// accurately. Lets the timing log separate cold vs warm grade latency.
+let isFirstRequestOnInstance = true;
+
+// Coarse per-request step timing for the grading critical path
+// (B-GRADE-FASTPATH-01). Absolute Date.now() stamps; deltas are computed
+// defensively at the end so an early error-return still logs whatever stages it
+// reached. Telemetry only — logging never alters the response.
+type StepMarks = {
+  start: number;
+  cold: boolean;
+  session?: number;
+  load?: number;
+  grade?: number;
+  persist?: number;
+  mastery?: number;
+};
+
+function logStepTimings(marks: StepMarks) {
+  try {
+    const delta = (to: number | undefined, from: number | undefined) =>
+      to != null && from != null ? to - from : undefined;
+    console.info('[daily/answer timings]', {
+      cold: marks.cold,
+      session_ms: delta(marks.session, marks.start),
+      load_ms: delta(marks.load, marks.session),
+      grade_ms: delta(marks.grade, marks.load),
+      persist_ms: delta(marks.persist, marks.grade),
+      mastery_ms: delta(marks.mastery, marks.persist),
+      total_ms: Date.now() - marks.start,
+    });
+  } catch {
+    // telemetry only — swallow
+  }
+}
+
 type DailyAnswerErrorCode =
   | 'unauthorized'
   | 'validation'
@@ -97,8 +135,11 @@ function parseBody(value: unknown): { queueId: string; slotIndex: number; submit
 }
 
 export async function POST(request: NextRequest) {
+  const marks: StepMarks = { start: Date.now(), cold: isFirstRequestOnInstance };
+  isFirstRequestOnInstance = false;
   try {
     const session = await getSession();
+    marks.session = Date.now();
     if (!session) {
       return dailyAnswerErrorResponse(401, 'unauthorized', "Please sign in to answer today's question.");
     }
@@ -220,6 +261,7 @@ export async function POST(request: NextRequest) {
     }
 
     const canonicalAnswer = question.answer;
+    marks.load = Date.now();
 
     // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
     // failure — so it's constructed as a scored outcome and never held for retry.
@@ -232,6 +274,7 @@ export async function POST(request: NextRequest) {
           question.questionText,
           question.questionType,
         );
+    marks.grade = Date.now();
     // The LLM grader was unreachable (timeout, parse error, no client), so there is
     // no verdict at all — the outcome is `unscored`, never a 'wrong'. Scoring the
     // player wrong for an Anthropic outage is the most off-brand failure mode in a
@@ -314,6 +357,7 @@ export async function POST(request: NextRequest) {
         canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
       persistedInsideJoke = canonicalRow?.insideJoke ?? null;
     }
+    marks.persist = Date.now();
 
     // Authors can't answer their own questions. The Daily Five candidate
     // selection at src/server/db/queries/daily.ts:612 already filters out
@@ -402,6 +446,7 @@ export async function POST(request: NextRequest) {
           }
         : null,
     });
+    marks.mastery = Date.now();
 
     return NextResponse.json({
       isCorrect,
@@ -424,5 +469,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');
+  } finally {
+    logStepTimings(marks);
   }
 }

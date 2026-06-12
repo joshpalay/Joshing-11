@@ -2,7 +2,8 @@
  * Answer grading — LLM primary, exact-match fast-path for obvious hits.
  * PRD 8.9: answers graded immediately on submission; result shown in session UI.
  * PRD 9.3: case insensitivity, accepted_alternatives treated as correct.
- * PRD 9 / Prompt 1: lenient grader via claude-sonnet-4-6; on infra failure the
+ * PRD 9 / Prompt 1: lenient grader via Haiku (claude-haiku-4-5, per CLAUDE.md —
+ * Haiku for grading/categorization, Sonnet for generation); on infra failure the
  * grader returns an UNSCORED outcome (no `result`), never a 'wrong' verdict.
  */
 
@@ -85,6 +86,33 @@ function exactMatch(
 }
 
 /**
+ * Side-effect-only telemetry for the fast-path hit rate (B-GRADE-FASTPATH-01).
+ * `graded_via: 'exact'` means the submission short-circuited before the LLM;
+ * `'llm'` means it paid for a model round-trip. Aggregating these in logs turns
+ * the diagnosis's estimated hit rate into a measured one. Never let a logging
+ * failure escape into the grade path — a missing log must not degrade grading.
+ */
+function logGrade(
+  startedAt: number,
+  gradedVia: 'exact' | 'llm',
+  empty: boolean,
+  outcome: GradeOutcome,
+): GradeOutcome {
+  try {
+    console.info('[grade]', {
+      graded_via: gradedVia,
+      empty,
+      status: outcome.status,
+      result: outcome.status === 'scored' ? outcome.result : undefined,
+      duration_ms: Date.now() - startedAt,
+    });
+  } catch {
+    // telemetry only — swallow
+  }
+  return outcome;
+}
+
+/**
  * Grade a submitted answer.
  * Uses exact-match fast-path first, then LLM for nuanced cases.
  * Returns the result and an optional consolation quip for near-miss wrong answers.
@@ -96,16 +124,22 @@ export async function gradeAnswer(
   questionText: string,
   questionType: GradableQuestionType
 ): Promise<GradeOutcome> {
+  const startedAt = Date.now();
+
   // An empty submission is a genuine, deliberate wrong — a real scored verdict,
   // not an infra failure. (The daily give-up path is the analogous deliberate
   // wrong on its own route.)
   if (!submitted.trim()) {
-    return { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' };
+    return logGrade(startedAt, 'exact', true, {
+      status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact',
+    });
   }
 
   // Fast-path: skip the LLM for obvious exact matches and accepted alternatives
   if (exactMatch(submitted, canonicalAnswer, acceptedAlternatives)) {
-    return { status: 'scored', result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact' };
+    return logGrade(startedAt, 'exact', false, {
+      status: 'scored', result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact',
+    });
   }
 
   const llmResult = await gradeAnswerWithLLM(
@@ -124,14 +158,14 @@ export async function gradeAnswer(
 
   // Infra failure (timeout, parse error, no client) — never a scored verdict.
   if (llmResult.status === 'unscored') {
-    return { status: 'unscored', reason: llmResult.reason };
+    return logGrade(startedAt, 'llm', false, { status: 'unscored', reason: llmResult.reason });
   }
 
-  return {
+  return logGrade(startedAt, 'llm', false, {
     status: 'scored',
     result: llmResult.result,
     consolation: llmResult.consolation ?? null,
     confidence: llmResult.confidence,
     gradedVia: 'llm',
-  };
+  });
 }

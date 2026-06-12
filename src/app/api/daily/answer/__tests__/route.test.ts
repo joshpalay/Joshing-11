@@ -10,6 +10,7 @@ const {
   suggestAnswerMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
+  runMasteryWriteSideEffectsMock,
   dbState,
   selectCallChain,
   dbMock,
@@ -95,7 +96,9 @@ const {
       newTier: 'establishing',
       tierChanged: false,
       openedNewTerritory: false,
+      eventInserted: true,
     })),
+    runMasteryWriteSideEffectsMock: vi.fn(async () => undefined),
     dbState,
     selectCallChain,
     dbMock,
@@ -130,6 +133,7 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
   writeMasteryEvent: writeMasteryEventMock,
+  runMasteryWriteSideEffects: runMasteryWriteSideEffectsMock,
 }))
 
 vi.mock('@/server/feed/create-feed-items-for-answer', () => ({
