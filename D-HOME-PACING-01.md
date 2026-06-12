@@ -26,8 +26,8 @@ This division is load-bearing for the rest of the spec: it is *why* the temporal
 | 1 | **Today's Five (hero)** | 1 | Full-width, display-scale, the one loud thing. Everything below is subordinate. |
 | 2 | **Direct questions** | 3 served | Serve-and-overflow (see §3). Overflow → "N more →" → direct-questions subpage. |
 | 3 | **Playable friend activity** | 4 served | Serve-and-overflow. Actor-interleaved (see §5). Overflow → "N more →" → pending-playables subpage. |
-| 4 | **Texture (social connection)** | ~5 | Chronological full-sentence lone events per locked Group 3 spec. Today-and-yesterday only. Reaction affordance lives here. |
-| 5 | **One panel** | 1 | Shared Ground / World Expanding / Grow Your Circle rotate; exactly one per page load. |
+| 4 | **Texture (social connection)** | ~8 | Chronological full-sentence lone events per locked Group 3 spec. Today-and-yesterday preferred, older items backfill to the cap. Reaction affordance lives here. *(Tuned 2026-06-12 from ~5/hard window.)* |
+| 5 | **One panel** | 1 | Shared Ground / World Expanding / Grow Your Circle rotate; exactly one per page load. Runs mid-texture, after the third texture row *(tuned 2026-06-12; falls to the page foot when texture is empty)*. |
 | 6 | **Composer** | 1 | "Write a Question." Closes the page, as today. |
 
 Caps are serving sizes, not access ceilings. Nothing is hidden; everything overflows to a findable place.
@@ -127,6 +127,6 @@ A budgeted page of same-sized rows is still flat. The tier system (**B-VISUAL-CA
 3. **Tier rendering** — B-VISUAL-CARD-TIERS-01, already scoped; carries the rhythm (§9).
 
 Decisions locked (2026-06-11):
-- **Served caps:** Direct 3, Playables 4. Texture ~5 (still a soft cap, tune in build).
+- **Served caps:** Direct 3, Playables 4. Texture ~5 (still a soft cap, tune in build). *Tuned 2026-06-12: texture soft cap 8, rendered as 3 rows → panel → up to 5 more rows → "See all activity →"; the 48h window backfills with older items rather than starving the zone.*
 - **Panel:** rotates one per load, activity-aware (quiet pages bias to Grow Your Circle; never Shared Ground for a user with no overlap data). Suppressed entirely on the all-empty page per §9.
 - **Both overflows are subpages** (back-navigable routes), not modals.

@@ -4,6 +4,7 @@ import type { StreamItem } from '@/lib/activity-stream'
 import {
   DIRECT_SERVE_CAP,
   PLAYABLE_SERVE_CAP,
+  TEXTURE_SOFT_CAP,
   interleaveByActor,
   isPendingPlayable,
   orderBySenderRotation,
@@ -246,11 +247,11 @@ describe('isPendingPlayable / orderPendingPlayables — §7 pending definition',
 // --- selectHomeEdition: texture bounding (§4) --------------------------------
 
 describe('selectHomeEdition — texture', () => {
-  it('bounds texture to today-and-yesterday and soft-caps it', () => {
+  it('soft-caps texture at 8 and prefers today-and-yesterday over older items', () => {
     const activityItems = [
       textureItem('t-now', '2026-06-11T17:00:00Z'),
       textureItem('t-yesterday', '2026-06-10T20:00:00Z'),
-      textureItem('t-old', '2026-06-01T12:00:00Z'), // > 2 days → dropped
+      textureItem('t-old', '2026-06-01T12:00:00Z'), // fresh items fill the cap → dropped
       ...Array.from({ length: 8 }, (_, i) => textureItem(`t-fresh${i}`, '2026-06-11T1' + (i % 9) + ':00:00Z')),
     ]
     const edition = selectHomeEdition({
@@ -259,8 +260,24 @@ describe('selectHomeEdition — texture', () => {
       promos: { sharedGround: null, expanding: null, growCircle: null },
       now: NOW,
     })
-    expect(edition.texture.length).toBeLessThanOrEqual(5)
+    expect(edition.texture).toHaveLength(TEXTURE_SOFT_CAP)
     expect(edition.texture.map((t) => t.id)).not.toContain('t-old')
+  })
+
+  it('backfills older moments (newest-first) when the fresh window is under the cap', () => {
+    const activityItems = [
+      textureItem('t-old-newer', '2026-06-05T12:00:00Z'),
+      textureItem('t-fresh', '2026-06-11T17:00:00Z'),
+      textureItem('t-old-older', '2026-06-02T12:00:00Z'),
+    ]
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems,
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    // Fresh leads; the quiet window no longer starves the zone at one row.
+    expect(edition.texture.map((t) => t.id)).toEqual(['t-fresh', 't-old-newer', 't-old-older'])
   })
 })
 

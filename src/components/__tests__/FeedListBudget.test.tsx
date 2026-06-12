@@ -142,7 +142,15 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
         has_more: false,
         next_cursor: null,
       },
-      activityItems: [playable('p0', 'josh'), playable('p1', 'rob'), texture('t0')],
+      activityItems: [
+        playable('p0', 'josh'),
+        playable('p1', 'rob'),
+        texture('t0'),
+        texture('t1'),
+        texture('t2'),
+        texture('t3'),
+        texture('t4'),
+      ],
       budget: {
         directOverflowCount: 4,
         playablesOverflowCount: 3,
@@ -170,8 +178,13 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     // subpage (§4); the revived "See all activity →" row closes the zone.
     expect(html).toContain('See all activity →')
     expect(html).toContain('href="/activities"')
-    // Exactly one rotating panel.
-    expect(html).toContain('PANEL:add_friends')
+    // Exactly one rotating panel, interleaved after the third texture row
+    // (§2 slot 5, tuned 2026-06-12): t0 t1 t2, panel, t3 t4, see-all.
+    const panelAt = html.indexOf('PANEL:add_friends')
+    expect(panelAt).toBeGreaterThan(html.indexOf('activity:t2:'))
+    expect(panelAt).toBeLessThan(html.indexOf('activity:t3:'))
+    expect(html.indexOf('See all activity →')).toBeGreaterThan(html.indexOf('activity:t4:'))
+    expect(html.lastIndexOf('PANEL:')).toBe(panelAt) // one panel, not two
   })
 
   it('all three zones empty → inline empty state, panel suppressed (§9)', () => {

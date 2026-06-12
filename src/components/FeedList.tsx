@@ -518,6 +518,12 @@ type QuestionCardState = 'unanswered' | 'answered'
 // grouping helpers live in ./feed/person-grouping (pure + unit-tested).
 type UnifiedRow = GroupInputRow<FeedApiItem>
 
+// D-HOME-PACING-01 §2 (tuned 2026-06-12): on the budgeted home, the texture
+// zone runs this many rows, then the rotating panel as a mid-zone interlude,
+// then the remaining rows (the server caps the set at TEXTURE_SOFT_CAP = 8),
+// closed by the "See all activity →" row.
+const TEXTURE_LEAD_COUNT = 3
+
 // Wrap a promo/panel StreamItem as an activity row so the single rotating panel
 // renders through the shared renderRow path (D-HOME-PACING-01 §2 slot 5).
 function panelRow(item: StreamItem): UnifiedRow {
@@ -1952,7 +1958,13 @@ function FeedListContent({
             // section headings; the page header carries the one title.
             restRows.length > 0 ? (
               <Fragment key="texture">
-                {restRows.map(renderRow)}
+                {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
+                {/* §2 slot 5 (tuned 2026-06-12) — the one rotating panel per
+                    load now runs as a mid-zone interlude after the lead texture
+                    rows, with the remaining rows continuing below it. Budget-
+                    only: the pendingQueue subpages carry no panel. */}
+                {budget?.panel ? renderRow(panelRow(budget.panel)) : null}
+                {restRows.slice(TEXTURE_LEAD_COUNT).map(renderRow)}
                 {/* §4: texture gets NO third subpage — older moments belong to
                     Lately (/activities), the archive of this same stream. Revive
                     the retired "See all activity →" affordance as the zone's
@@ -1976,9 +1988,12 @@ function FeedListContent({
               </Fragment>
             ))
           )}
-          {/* D-HOME-PACING-01 §2 slot 5 — exactly one rotating panel per load,
-              chosen server-side and suppressed on the all-empty page. */}
-          {budget?.panel ? renderRow(panelRow(budget.panel)) : null}
+          {/* D-HOME-PACING-01 §2 slot 5 fallback — when the texture zone is
+              empty the single rotating panel still renders once, here at the
+              foot of the page (suppressed on the all-empty page, where the
+              server sends panel: null). With texture present it renders mid-
+              zone above instead. */}
+          {budget?.panel && restRows.length === 0 ? renderRow(panelRow(budget.panel)) : null}
         </section>
       )}
 

@@ -28,7 +28,10 @@ export type FeedEditionItem = FeedPagePayload['items'][number]
 // overflow is always reachable via the subpages (B-HOME-OVERFLOW-02).
 export const DIRECT_SERVE_CAP = 3
 export const PLAYABLE_SERVE_CAP = 4
-export const TEXTURE_SOFT_CAP = 5
+// Tuned 2026-06-12: the texture zone runs three rows, then the rotating panel
+// as a mid-zone interlude, then up to five more rows (FeedList owns the panel
+// placement; this layer just bounds the set).
+export const TEXTURE_SOFT_CAP = 8
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -54,7 +57,8 @@ export type HomeEdition = {
   playables: ServedZone<StreamItem>
   /**
    * Texture — chronological full-sentence lone social events (locked Group 3),
-   * bounded to today-and-yesterday, soft-capped (~5). No overflow subpage.
+   * newest-first, today-and-yesterday preferred with older backfill, soft-
+   * capped (~8). No overflow subpage.
    */
   texture: StreamItem[]
   /** Exactly one rotating panel per load; null on the all-empty page (§9). */
@@ -162,10 +166,11 @@ export function interleaveByActor<T>(
 }
 
 /**
- * §2 slot 4 / §4 — texture is bounded to today-and-yesterday. Older social
- * moments belong to the biweekly ceremony / archive, not the home edition. A
- * rolling 48-hour window from `now` is a timezone-agnostic proxy for "today and
- * yesterday." Newest-first, then soft-capped.
+ * §2 slot 4 / §4 — texture prefers today-and-yesterday (a rolling 48-hour
+ * window from `now` is the timezone-agnostic proxy). Tuned 2026-06-12: when
+ * the fresh window can't fill the soft cap, older moments backfill —
+ * newest-first — so a quiet stretch doesn't leave the zone threadbare. The
+ * cap, not the window, bounds the page.
  */
 export function boundTexture(
   items: readonly StreamItem[],
@@ -173,10 +178,10 @@ export function boundTexture(
   cap = TEXTURE_SOFT_CAP,
 ): StreamItem[] {
   const floor = now - 2 * DAY_MS
-  return [...items]
-    .filter((item) => ms(item.sortAt) >= floor)
-    .sort((a, b) => ms(b.sortAt) - ms(a.sortAt))
-    .slice(0, cap)
+  const sorted = [...items].sort((a, b) => ms(b.sortAt) - ms(a.sortAt))
+  const fresh = sorted.filter((item) => ms(item.sortAt) >= floor)
+  if (fresh.length >= cap) return fresh.slice(0, cap)
+  return [...fresh, ...sorted.filter((item) => ms(item.sortAt) < floor)].slice(0, cap)
 }
 
 /**
