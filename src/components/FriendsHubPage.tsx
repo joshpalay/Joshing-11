@@ -1,9 +1,13 @@
 'use client';
 
+import { useState } from 'react';
+
 import AddFriendInvite from '@/components/AddFriendInvite';
 import FriendsList from '@/components/FriendsList';
 
 export default function FriendsHubPage() {
+  const [inviteOpen, setInviteOpen] = useState(false);
+
   function openInviteFlow() {
     window.dispatchEvent(new CustomEvent('friend-invitations:create-new', { detail: {} }));
   }
@@ -15,25 +19,28 @@ export default function FriendsHubPage() {
       </header>
 
       <section className="border-primary/15 bg-primary/5 text-card-foreground mb-5 rounded-[2rem] border p-6 shadow-sm">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-          Invite
-        </p>
-        <h2 className="text-foreground mt-3 font-serif text-3xl leading-tight font-semibold">
-          Who shares your world?
-        </h2>
-        <p className="text-muted-foreground mt-3 text-base leading-7">
-          Invite someone who would enjoy the questions and discoveries happening here.
-        </p>
-        <button
-          type="button"
-          className="btn-primary mt-5 min-h-12 w-full rounded-full px-5 text-base sm:w-auto"
-          onClick={openInviteFlow}
-        >
-          Invite Someone
-        </button>
+        {!inviteOpen ? (
+          <>
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
+              Invite
+            </p>
+            <h2 className="text-foreground mt-3 font-serif text-3xl leading-tight font-semibold">
+              Who shares your world?
+            </h2>
+            <p className="text-muted-foreground mt-3 text-base leading-7">
+              Invite someone who would enjoy the questions and discoveries happening here.
+            </p>
+            <button
+              type="button"
+              className="btn-primary mt-5 min-h-12 w-full rounded-full px-5 text-base sm:w-auto"
+              onClick={openInviteFlow}
+            >
+              Invite Someone
+            </button>
+          </>
+        ) : null}
+        <AddFriendInvite embedded onExpandedChange={setInviteOpen} />
       </section>
-
-      <AddFriendInvite />
       <FriendsList />
     </main>
   );
