@@ -328,7 +328,23 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
 //     LARGE_SCALE) to roughly the line height, so anchored at the cap they sit
 //     beside the first line with only a small tail below it — no longer the
 //     ~half-line droop that the 0.7-scale top-anchor produced.
-export function ActivityIcon({ spec, seed }: { spec: ActivityIconSpec | null; seed: string }) {
+export function ActivityIcon({
+  spec,
+  seed,
+  open = false,
+}: {
+  spec: ActivityIconSpec | null;
+  seed: string;
+  // When the row is an expandable reveal and currently open, the inward
+  // (right-pointing) triangle rotates a quarter-turn so its apex points DOWN —
+  // the familiar "disclosure open" cue. Only the single inward-triangle marks
+  // (diamond/hourglass/domain) carry this; the bundle/star clusters are left
+  // alone since rotating a multi-triangle glyph reads as noise.
+  open?: boolean;
+}) {
+  const rotates = spec
+    ? spec.kind === 'diamond' || spec.kind === 'hourglass' || spec.kind === 'domain'
+    : false;
   return (
     <div
       aria-hidden
@@ -346,7 +362,17 @@ export function ActivityIcon({ spec, seed }: { spec: ActivityIconSpec | null; se
         overflow: 'visible',
       }}
     >
-      {spec ? <Mark spec={spec} seed={seed} /> : null}
+      {spec ? (
+        <span
+          style={{
+            display: 'flex',
+            transition: 'transform 150ms ease',
+            transform: rotates && open ? 'rotate(90deg)' : 'none',
+          }}
+        >
+          <Mark spec={spec} seed={seed} />
+        </span>
+      ) : null}
     </div>
   );
 }

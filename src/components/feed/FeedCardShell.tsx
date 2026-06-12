@@ -24,7 +24,7 @@ const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 // shadow make it step forward off the cream while the chatter stays quiet text.
 // Shares the shadow color (#28201E warm ink) with the resting cards, just at a
 // higher opacity. The stroke uses the editorial accent gold (--accent-gold).
-const FEED_CARD_ELEVATED_FILL = 'bg-[var(--game-card-question)]'
+const FEED_CARD_ELEVATED_FILL = 'bg-[var(--feed-card-elevated)]'
 const FEED_CARD_ELEVATED_STROKE = 'border-[var(--accent-gold)]'
 const FEED_CARD_ELEVATED_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.10)]'
 
