@@ -1,8 +1,32 @@
 import { and, count, eq, inArray, sql } from 'drizzle-orm';
 
-import { db, feedItems, questionRatings, questions } from '@/server/db';
+import { db, feedItems, questionFeedback, questionRatings, questions } from '@/server/db';
 
 export type QuestionRatingValue = 'up' | 'down';
+
+/**
+ * Feed thumbs-up: record the quality signal once per (user, question) — the
+ * QuestionFeedback unique key dedupes — and bump surfacePriorityScore only
+ * when the signal is newly recorded, so repeat taps are no-ops (matching
+ * setRating's previous-rating idempotency below). This is the ONLY feed-side
+ * surfacePriorityScore write; keep it next to setRating's so the two paths
+ * can't drift. The score itself is write-only today: thumbs-up → ordering is
+ * an open product decision (DECISIONS.md "Thumbs-up → surface priority").
+ */
+export async function recordFeedThumbsUp(userId: string, questionId: string): Promise<void> {
+  const inserted = await db
+    .insert(questionFeedback)
+    .values({ userId, questionId, signal: 'thumbs_up' })
+    .onConflictDoNothing()
+    .returning({ id: questionFeedback.id });
+
+  if (inserted.length === 0) return;
+
+  await db
+    .update(questions)
+    .set({ surfacePriorityScore: sql`${questions.surfacePriorityScore} + 1` })
+    .where(eq(questions.id, questionId));
+}
 
 export async function setRating(
   userId: string,
