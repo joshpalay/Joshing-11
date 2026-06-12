@@ -56,7 +56,8 @@ export type StreamQuestion = {
   //   - undefined        — provenance not resolved for this source; show nothing
   //                        (the row frame already attributes it, e.g. moments are
   //                        human by construction).
-  //   - null             — a non-person LLM-origin question → render "Generated".
+  //   - null             — a non-person LLM-origin question → render the
+  //                        LLM_QUESTION_ATTRIBUTION label.
   //   - string (+isHouse) — a human name, or the house identity when authorIsHouse.
   // A house/LLM question must NEVER render as if a person wrote it.
   authorName?: string | null;
