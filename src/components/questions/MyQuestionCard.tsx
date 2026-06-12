@@ -43,9 +43,11 @@ export function MyQuestionCard({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
-              className="truncate text-[12px] italic leading-tight"
+              className="truncate text-[10px] uppercase tracking-[0.1em] leading-tight"
               style={{
-                fontFamily: 'var(--font-literata)',
+                // Category label is metadata — System voice (mono) with the
+                // caps + tracking label signature, per STYLE-GUIDE-TYPE §2/§5.
+                fontFamily: 'var(--font-mono)',
                 color: 'var(--ink)',
                 opacity: 0.7,
               }}

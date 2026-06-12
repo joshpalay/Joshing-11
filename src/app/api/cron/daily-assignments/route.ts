@@ -1,7 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getTodaysDailyQueue } from '@/server/db/queries/daily';
+import {
+  claimDailyEmailReminder,
+  getTodaysDailyQueue,
+  releaseDailyEmailReminder,
+} from '@/server/db/queries/daily';
 import { db, users } from '@/server/db';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { type QueueSlot } from '@/server/daily/types';
@@ -110,34 +114,42 @@ export async function GET(request: NextRequest) {
         results.smsSent += 1;
       }
 
-      // Email reminder — mirrors the SMS nudge for opted-in + verified users,
-      // but previews today's first question as a no-spoiler teaser. sendEmail
-      // never throws (returns a discriminated union), so a provider failure
-      // counts as a skipped email, not a failed user. Same freshly-generated
-      // gate as SMS (there is no email-send log to dedupe against).
-      if (freshlyGenerated && queue && user.emailOptIn === 'opted_in' && user.emailVerified && user.email) {
+      // Email reminder — previews today's first question as a no-spoiler teaser.
+      // Unlike SMS, this is NOT gated on freshlyGenerated: a user whose queue
+      // already existed (self-generated before this drift-prone cron, or built
+      // by an earlier run) should still get one nudge. The idempotency that the
+      // freshly-generated gate used to provide is now an atomic per-queue claim
+      // (claimDailyEmailReminder), so the workflow's retry-replay can't
+      // double-send. Only fires when an unanswered slot remains, so a user who
+      // already finished today is skipped. sendEmail never throws (returns a
+      // discriminated union), so a provider failure counts as a skipped email.
+      if (queue && user.emailOptIn === 'opted_in' && user.emailVerified && user.email) {
         const teaserSlot = asQueueSlots(queue.slots).find(
           (slot) => !slot.answered && !slot.skipped && slot.question_text,
         );
-        const template = buildDailyReminderTemplate({
-          dailyUrl: `${baseUrl}/daily`,
-          teaser: teaserSlot
-            ? { questionText: teaserSlot.question_text, domain: teaserSlot.domain }
-            : null,
-        });
-        const emailResult = await sendEmail({
-          to: user.email,
-          subject: template.subject,
-          html: template.html,
-          text: template.text,
-        });
-        if (emailResult.ok) {
-          results.emailSent += 1;
-        } else {
-          console.warn('[cron/daily-assignments] reminder email failed', {
-            userId: user.id,
-            reason: emailResult.reason,
+        // Claim before send so concurrent retries race on the DB, not the
+        // provider; a losing claim (already sent today) skips silently.
+        if (teaserSlot && (await claimDailyEmailReminder(queue.id))) {
+          const template = buildDailyReminderTemplate({
+            dailyUrl: `${baseUrl}/daily`,
+            teaser: { questionText: teaserSlot.question_text, domain: teaserSlot.domain },
           });
+          const emailResult = await sendEmail({
+            to: user.email,
+            subject: template.subject,
+            html: template.html,
+            text: template.text,
+          });
+          if (emailResult.ok) {
+            results.emailSent += 1;
+          } else {
+            // Send failed after we claimed — release so a later run can retry.
+            await releaseDailyEmailReminder(queue.id);
+            console.warn('[cron/daily-assignments] reminder email failed', {
+              userId: user.id,
+              reason: emailResult.reason,
+            });
+          }
         }
       }
     } catch (error) {

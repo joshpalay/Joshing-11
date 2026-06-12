@@ -248,8 +248,8 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
       <section
         className="mt-5 rounded-md border px-5 py-5"
         style={{
-          background: 'color-mix(in srgb, var(--success) 10%, var(--surface))',
-          borderColor: 'color-mix(in srgb, var(--success) 22%, var(--border))',
+          background: 'color-mix(in srgb, var(--game-correct) 10%, var(--surface))',
+          borderColor: 'color-mix(in srgb, var(--game-correct) 22%, var(--border))',
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>

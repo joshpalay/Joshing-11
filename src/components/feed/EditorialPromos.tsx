@@ -3,11 +3,13 @@
 import { Bookmark } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 import { EditorialCarousel } from '@/components/feed/EditorialCarousel';
 import { EditorialFeature } from '@/components/feed/EditorialFeature';
 import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { expandingTerritoryAccent } from '@/components/knowledge/PortraitCircles';
 import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-ground-circles';
 import type { StreamEmbed } from '@/lib/activity-stream';
 
@@ -15,14 +17,9 @@ import type { StreamEmbed } from '@/lib/activity-stream';
 // motif is the hero artwork, so it should catch the eye before the copy.
 const SHARED_GROUND_CIRCLE_SCALE = 1.35;
 
-// Badge accents for the "Your World Is Expanding" territory rows — the
-// reds / golds / blues from the /knowledge "Recently Expanding" module, trimmed
-// to the three we ever render.
-const EXPANDING_ROW_ACCENTS = [
-  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
-  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
-  { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.2)' },
-] as const;
+// Badge accents for the "Your World Is Expanding" territory rows are keyed by
+// the row's domain via expandingTerritoryAccent — shared with the /knowledge
+// "Recently Expanding" module, so a territory carries one hue on both surfaces.
 
 // A faded decorative cluster of overlapping avatar circles for the
 // "Grow Your Circle" invite state — purely decorative (aria-hidden, no
@@ -54,15 +51,21 @@ const COMMON_GROUND_HEADLINES = [
   { before: 'The ground you and ', after: ' share.' },
 ] as const;
 
+// The closing carousel slide isn't a friend — it nudges toward widening the
+// circle — so the headline and CTA shift to match it instead of naming a friend.
+const COMMON_GROUND_INVITE_HEADLINE = 'There’s more ground to share.';
+const COMMON_GROUND_INVITE_HREF = '/friends/find';
+
 function rotate<T>(pool: readonly T[], index: number | undefined): T {
   return pool[(index ?? 0) % pool.length]!;
 }
 
 /**
  * "Shared Ground" — the overlapping-circle motif as a full-bleed editorial
- * feature. A carousel with a slide per friend (each their strongest shared-but-
- * untested domain), so the viewer can rotate through a few of the people they
- * share ground with, plus a closing nudge to widen their circle.
+ * feature. A carousel with a slide per friend (each showing their one or two
+ * strongest shared-but-untested areas), so swiping moves between PEOPLE the
+ * viewer shares ground with — never between areas — plus a closing nudge to
+ * widen their circle.
  */
 export function CommonGroundFeature({
   embed,
@@ -72,59 +75,85 @@ export function CommonGroundFeature({
   // One shared scale across every slide so circles are comparable friend to
   // friend, not re-normalized per slide.
   const datasetMax = circleDatasetMax(
-    embed.friends.flatMap((f) => [f.domain.viewer.points, f.domain.friend.points]),
+    embed.friends.flatMap((f) =>
+      f.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
+    ),
   );
   const count = embed.friends.length;
   const headline = rotate(COMMON_GROUND_HEADLINES, embed.headlineIndex);
+  // The headline names the friend in the active carousel slide, so rotating the
+  // carousel updates the copy with it. The trailing slide is the "invite" nudge
+  // (index === count), not a friend, so headline + CTA swap to the invite copy.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const onInviteSlide = activeIndex >= count;
+  const activeFriend = embed.friends[Math.min(activeIndex, count - 1)];
+  const friendFirstName = activeFriend?.friendFirstName ?? embed.friendFirstName;
+  const friendHref = activeFriend?.friendHref ?? embed.friendHref;
   return (
     <EditorialFeature
       tone="parchment"
       eyebrow="Shared Ground"
       eyebrowIcon={<Bookmark size={13} strokeWidth={0} fill="currentColor" />}
       headline={
-        <>
-          {headline.before}
-          <Link
-            href={embed.friendHref}
-            className="text-[var(--brand-ink)] underline-offset-4 hover:underline"
-          >
-            {embed.friendFirstName}
-          </Link>
-          {headline.after}
-        </>
+        onInviteSlide ? (
+          COMMON_GROUND_INVITE_HEADLINE
+        ) : (
+          <>
+            {headline.before}
+            <Link
+              href={friendHref}
+              className="text-[var(--brand-ink)] underline-offset-4 hover:underline"
+            >
+              {friendFirstName}
+            </Link>
+            {headline.after}
+          </>
+        )
       }
       artwork={
         <EditorialCarousel
           ariaLabel="Friends you share ground with"
+          onActiveIndexChange={setActiveIndex}
           slides={[
             ...embed.friends.map((f) => (
               <div key={f.friendId} className="flex flex-col gap-4">
-                <DomainCircleSvg
-                  viewerPoints={f.domain.viewer.points}
-                  friendPoints={f.domain.friend.points}
-                  viewerTier={f.domain.viewer.tier}
-                  friendTier={f.domain.friend.tier}
-                  datasetMax={datasetMax}
-                  scale={SHARED_GROUND_CIRCLE_SCALE}
-                  ariaLabel={`${f.domain.label}: shared with ${f.friendFirstName}, still untested`}
-                />
-                <span className="flex max-w-[150px] flex-col gap-0.5">
-                  <Link
-                    href={f.friendHref}
-                    className="font-serif text-[15px] leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
-                  >
-                    {f.friendFirstName}
-                  </Link>
-                  <span className="font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
-                    {f.domain.label}
-                  </span>
-                </span>
+                {/* One or two shared areas side by side — each circle motif with
+                    its area label underneath, bottom-aligned so the labels share
+                    a baseline whatever the circle heights. */}
+                <div className="flex items-end gap-10">
+                  {f.domains.map((d) => (
+                    <span key={d.label} className="flex flex-col gap-2">
+                      <DomainCircleSvg
+                        viewerPoints={d.viewer.points}
+                        friendPoints={d.friend.points}
+                        viewerTier={d.viewer.tier}
+                        friendTier={d.friend.tier}
+                        datasetMax={datasetMax}
+                        scale={SHARED_GROUND_CIRCLE_SCALE}
+                        ariaLabel={`${d.label}: shared with ${f.friendFirstName}, still untested`}
+                      />
+                      <span className="max-w-[150px] font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
+                        {d.label}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <Link
+                  href={f.friendHref}
+                  className="max-w-[150px] font-serif text-[15px] leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
+                >
+                  {f.friendFirstName}
+                </Link>
               </div>
             )),
             // Final slide: a gentle nudge to widen the circle. The personal-invite
             // modal isn't mounted on the home feed, so this routes to the Find
             // Friends hub (where the invite flows live).
-            <Link key="invite" href="/friends/find" className="flex flex-col gap-4 no-underline">
+            <Link
+              key="invite"
+              href={COMMON_GROUND_INVITE_HREF}
+              className="flex flex-col gap-4 no-underline"
+            >
               <span aria-hidden="true" className="flex h-[76px] items-center">
                 {INVITE_CLUSTER_SEEDS.map((seed, i) => (
                   <span
@@ -142,7 +171,11 @@ export function CommonGroundFeature({
         />
       }
       supporting={`Shared ground with ${count} ${count === 1 ? 'friend' : 'friends'}`}
-      cta={{ label: 'Explore your overlap →', href: embed.friendHref }}
+      cta={
+        onInviteSlide
+          ? { label: 'Find friends →', href: COMMON_GROUND_INVITE_HREF }
+          : { label: 'Explore your overlap →', href: friendHref }
+      }
     />
   );
 }
@@ -233,8 +266,8 @@ export function RecentlyExpandingFeature({
       headline={rotate(RECENTLY_EXPANDING_HEADLINES, embed.headlineIndex)}
       artwork={
         <div className="flex flex-col gap-3">
-          {embed.domains.map((d, i) => {
-            const accent = EXPANDING_ROW_ACCENTS[i % EXPANDING_ROW_ACCENTS.length]!;
+          {embed.domains.map((d) => {
+            const accent = expandingTerritoryAccent(d.label);
             return (
               <div key={d.label} className="flex items-center gap-3">
                 <span

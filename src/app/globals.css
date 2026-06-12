@@ -6,9 +6,7 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: var(--font-sans);
     --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
-    --font-inter: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -73,6 +71,12 @@
     --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
     --domain-language:   #7a9eaa;
     --domain-science:    #8aa68a;
+    /* Triangle palette — DECORATIVE by decision (STYLE-GUIDE-COLOR §3 note +
+       §5 fix-list step 5, option b): triangle fill hue is a deterministic hash
+       over these six muted fills and carries NO category meaning. The one bit a
+       triangle encodes is solid/hollow = unplayed/played — safe from grading
+       confusion once WRONG leaves the orange family (§1). Revisit to option (a)
+       (hue = --cat-* category) only as a deliberate product change. */
     --tri-orange:        #d15e36;
     --tri-cream:         #f8e6c7;
     --tri-darkteal:      #6d837f;
@@ -80,6 +84,15 @@
     --tri-darkyellow:    #deae5c;
     --tri-lighttan:      #edd2a3;
     --tri-amber:         #d9a82e;
+    /* Accent gold (STYLE-GUIDE-COLOR §4) — THE editorial highlight. One value,
+       scarcity-bound: gold marks the single most notable moment in view (the
+       ceremony countdown wins ties). Shares the amber value, but this token is
+       the accent JOB — triangle fills keep --tri-amber (decorative palette
+       job), and --warning stays separate (system caution, not the accent). */
+    --accent-gold:       #d9a82e;
+    /* AA-darkened gold for small text on cream (eyebrows, "BETWEEN US!",
+       "NEW TERRITORY") — was the GOLD_INK formula copy-pasted in three files. */
+    --accent-gold-ink:   color-mix(in srgb, var(--accent-gold) 50%, var(--brand-ink));
     /* Gameplay surface — sourced from the Figma "Game" frame variables.
        game/card/question fill, plus the forest-green/terracotta result accents
        (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
@@ -89,6 +102,39 @@
     --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
     --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
     --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
+    /* ── Category scale (STYLE-GUIDE-COLOR §3) ──────────────────────────────
+       One color per top-level domain; leaf categories inherit the parent hue.
+       Values = the knowledge map's DOMAIN_COLORS (the only true per-category
+       map in live code), now tokenized so consumers route through one scale
+       and the palette preview can flip them. `-text` is the hand-tuned darker
+       label variant; the soft circle fill derives from the primary at render
+       (domainBubbleGradient). The other category systems (feed hash palette,
+       expanding accents, ceremony gradients) are still hardcoded — collapsing
+       them onto this scale is color fix-list step 3, in progress. */
+    --cat-literature:       #c0392b;
+    --cat-literature-text:  #8b1a0e;
+    --cat-music:            #1a6b8a;
+    --cat-music-text:       #0e4060;
+    --cat-film-tv:          #6b3fa0;
+    --cat-film-tv-text:     #3d1f6b;
+    --cat-architecture:     #b07d2e;
+    --cat-architecture-text:#7a5010;
+    --cat-food:             #2e8b57;
+    --cat-food-text:        #0e5c30;
+    --cat-technology:       #3a6b8a;
+    --cat-technology-text:  #1a3f5c;
+    --cat-sports:           #c06b1a;
+    --cat-sports-text:      #8b3e0e;
+    --cat-history:          #5a6b7a;
+    --cat-history-text:     #2a3f50;
+    --cat-science:          #5a7a2e;
+    --cat-science-text:     #2a4a0e;
+    --cat-philosophy:       #7a5a8a;
+    --cat-philosophy-text:  #4a2a5c;
+    --cat-pop-culture:      #8a2a4a;
+    --cat-pop-culture-text: #5c0e2a;
+    --cat-language:         #4a7a5a;
+    --cat-language-text:    #1e4e30;
     /* Shared width for every left-aligned card in the play thread (question,
        bonus, result, reflection, session-close) so the column reads as one
        coherent conversation with a consistent left + right edge. A percentage of
@@ -105,8 +151,11 @@
          surfaces (login, knowledge portrait, sparkle envelope).
        • Card radius — content cards use `rounded-md`; the login cards use
          `rounded-[8px]` (Figma) and the envelope uses `rounded-[1.5rem]`.
-       • Correct/wrong — use `--success` (#178245) and #b42318 (destructive ink)
-         with a 3px colored left border (see GameplayChat ResultRow + summary).
+       • Correct/wrong (grading) — use `--game-correct` / `--game-wrong` /
+         `--game-wrong-strong` ONLY (STYLE-GUIDE-COLOR §1: grading is reserved;
+         exactly one correct and one wrong value). `--success`/`--danger`/
+         `--destructive` are system states — saves, errors, destructive
+         actions — never answer grading.
        ──────────────────────────────────────────────────────────────────── */
 
     --background: var(--brand-cream-page);
@@ -152,7 +201,9 @@
     --user-bubble-foreground: oklch(0.99 0 0);
     --success: #178245;
     --danger: var(--destructive);
-    --wrong: var(--destructive);
+    /* (--wrong, an alias of --destructive, was retired: a grading-named token
+       pointing at the system-error red was exactly the §1 confusion. Grading is
+       --game-wrong/--game-wrong-strong; errors are --danger.) */
     /* Status surfaces — banner/chip fills + hairlines for the success / warning /
        error roles. Formalizes the raw amber-50/300/700/900 + emerald/red/rose
        50–200 utilities the 2026-05-30 audit flagged (DESIGN-SYSTEM.md §1.7).
@@ -201,15 +252,60 @@
     --warm-paper:       #faf8f2;  /* warm off-white surface (share chrome)*/
     --warm-cream:       #f5f0e8;  /* warm cream panel                     */
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    /* Editorial serif — Cormorant Garamond (the brand serif). Playfair Display
-       italic remains available via --font-display for the few editorial labels
-       that intentionally use it (PortraitCircles, Hero subtitle). */
-    --font-literata: var(--font-cormorant, Georgia), "Times New Roman", serif;
+    /* System voice (STYLE-GUIDE-TYPE §2). The typewriter face (Courier New) was
+       retired app-wide — the System voice now shares the sans (Montserrat) and is
+       distinguished from the Interface voice by its caps + letterspacing label
+       signature, not by a separate font file. This token is kept (rather than
+       renamed) so the ~40 `var(--font-mono)` / `FM` consumers route here from one
+       place; it intentionally resolves to the sans stack. */
+    --font-mono: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
+    /* Editorial serif — Cormorant Garamond (the brand serif). Mirrors the
+       @theme --font-serif above so inline `var(--font-serif)` styles resolve.
+       Playfair Display italic remains available via --font-display for the few
+       editorial labels that intentionally use it (PortraitCircles, Hero). */
+    --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TESTING ONLY — proposed color palette preview (see _docs/STYLE-GUIDE-COLOR.md).
+   Toggled by <PaletteToggle> via the `data-palette` attribute on <html>. This
+   block repoints color *tokens* to their proposed values, so flipping the
+   attribute re-colors every surface that reads a token — no per-page edits. Any
+   surface still on hardcoded hex (the five category systems, some golds) will
+   NOT flip here; routing those onto tokens is the actual color build (color
+   fix-list steps 3–4). First-pass values — tune them in place.
+   Remove this block and the component before merging to a shipping branch.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root[data-palette="proposed"] {
+    /* §1 GRADING — WRONG leaves the terracotta family for a true red. This is the
+       thesis change: it de-collides wrong from the brand/link orange (#d15e36)
+       and from the solid "still to play" triangle, in one move.
+       Two registers, mirroring how the tokens are consumed:
+       • --game-wrong is the WASH/FILL base (result-card backgrounds at 8–12%
+         mixes) — a MUTED brick red, per feedback that the vivid red made the
+         incorrect-answer background too harsh. Still clearly red, not orange.
+       • --game-wrong-strong is the SIGNAL (rail + label text) — the clear,
+         saturated red that says "wrong" at a glance. */
+    --game-wrong:        #a93b3b;  /* was #c96b4a terracotta; muted brick red */
+    --game-wrong-strong: #c1121f;  /* was #c33d14; clear true red             */
+    /* CORRECT stays forest green; kept here as the single tuning point and to
+       confirm by eye that it clears the knowledge greens. */
+    --game-correct:      #366045;
+
+    /* §3 CATEGORY — shift the two hues the guide flags as grading collisions.
+       Literature's strong red sat next to the NEW WRONG-red; it moves to a
+       darker bordeaux. Language was the green closest to CORRECT (#366045); it
+       moves to a teal, leaving the green family to Science/Food (judge those
+       by eye with the toggle — the guide says category greens move if they
+       crowd CORRECT, never the grading green). First-pass values — tune here. */
+    --cat-literature:      #7d2c3f;  /* was #c0392b */
+    --cat-literature-text: #571f2c;
+    --cat-language:        #2e6e7e;  /* was #4a7a5a */
+    --cat-language-text:   #173f4a;
 }
 
 .dark {
@@ -331,6 +427,25 @@
   40%           { opacity: 1;    transform: translateY(-2px); }
 }
 
+/* Rotating loader copy — each phrase fades up, holds, then fades away just as
+   the next one mounts. Duration is mirrored by MESSAGE_CYCLE_MS in
+   LoadingScreen.tsx; keep the two in sync. */
+@keyframes loading-message {
+  0%   { opacity: 0; transform: translate(-50%, 4px); }
+  14%  { opacity: 1; transform: translate(-50%, 0); }
+  86%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}
+
+.loading-message {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  animation: loading-message 3.2s ease-in-out forwards;
+  will-change: opacity, transform;
+}
+
 /* B-Feed-Swipe-1 — collapse a dismissed feed card before the inline bar shows. */
 @keyframes feed-card-collapse {
   from { opacity: 1; max-height: 600px; }
@@ -345,7 +460,8 @@
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
   .triangle-loader-sweep,
-  .triangle-loader-dot {
+  .triangle-loader-dot,
+  .loading-message {
     animation: none !important;
   }
 

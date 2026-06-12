@@ -9,22 +9,14 @@ import TodaysFiveCard, {
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { getSession } from '@/server/auth/session'
-import { buildActivityStream } from '@/server/activity/build-stream'
-import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
-import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
-import { getAddFriendsPromo } from '@/server/activity/add-friends-promo'
+import { buildHomeEdition } from '@/server/home/build-edition'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
-import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 
 const FEED_PAGE_SIZE = 20
-// The home "What's Happening" feed leads with a deeper first page (the last ~30
-// items) and then pages in older rows on scroll. The prefetch limit matches the
-// FeedList pageSize so the seeded first page is full (no round-trip first paint).
-const HOME_FEED_PAGE_SIZE = 30
 
 export default async function Home() {
   const session = await getSession()
@@ -124,33 +116,25 @@ async function CeremonyPinSection({ userId }: { userId: string }) {
 }
 
 async function FromYourFriendsSection({ userId }: { userId: string }) {
-  // The unified "What's Happening" home feed: the question feed merged with the
-  // full activity/Lately stream, interleaved chronologically inside FeedList.
-  // Filter 'all' (not 'from-friends') so directly-sent questions thread in; the
-  // prefetch matches FeedList's unifiedHome seeding for a no-round-trip paint.
-  const [feedPage, activityItems, commonGroundPromo, recentlyExpandingPromo, addFriendsPromo] = await Promise.all([
-    getFeedPagePayload(userId, {
-      limit: HOME_FEED_PAGE_SIZE,
-      cursor: null,
-      filter: 'all',
-    }),
-    buildActivityStream(userId),
-    getCommonGroundPromo(userId),
-    getRecentlyExpandingPromo(userId),
-    getAddFriendsPromo(userId),
-  ])
-  // The weekly reflection lives in the dedicated CeremonyPin editorial marker
-  // above this feed (calm, gold, no CTA). Drop the redundant 'ceremony_ready'
-  // activity card here so the reflection doesn't double up / compete with social
-  // activity in the home stream. It's the only activity that links to /ceremony/;
-  // the card still appears in the full /activities log.
-  // The common-ground discovery promo is no longer prepended into the activity
-  // rows (which would float it to row 0 on its `now` timestamp). It's passed
-  // separately as a pinned promo so it never leads the feed when there's other
-  // activity to show — see FeedList's displayRows.
-  const homeActivityItems = activityItems.filter(
-    (item) => !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/')),
-  )
+  // D-HOME-PACING-01: the unified "What's Happening" home feed is now a fixed-
+  // budget EDITION, not a render of everything. The server-side selection layer
+  // computes the served slice of each zone (Direct 3, Playables 4, Texture ~5),
+  // the overflow counts the question zones window against, the one rotating
+  // panel, and the all-empty switch. FeedList renders this pre-budgeted edition
+  // (no client-side selection, no infinite scroll, no temporal buckets).
+  const { edition, feedMeta } = await buildHomeEdition(userId)
+
+  // Seed FeedList with the served direct slice and the same meta the empty-state
+  // copy / surface tabs read. has_more is false: the budget is the page; the
+  // remainder is reached via the overflow affordances, not by paging.
+  const initialPage = {
+    viewer_user_id: userId,
+    meta: feedMeta,
+    items: edition.direct.served,
+    has_more: false,
+    next_cursor: null,
+  }
+
   return (
     <>
       {/* Sit the header on the feed's left gutter — the same 2px the activity
@@ -161,15 +145,17 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         What&rsquo;s happening
       </p>
       <FeedList
-        pageSize={HOME_FEED_PAGE_SIZE}
-        infinite
-        initialPage={feedPage}
+        pageSize={FEED_PAGE_SIZE}
+        initialPage={initialPage}
         showContributeFooter
         unifiedHome
-        activityItems={homeActivityItems}
-        commonGroundPromo={commonGroundPromo}
-        expandingPromo={recentlyExpandingPromo}
-        addFriendsPromo={addFriendsPromo}
+        activityItems={[...edition.playables.served, ...edition.texture]}
+        budget={{
+          directOverflowCount: edition.direct.overflowCount,
+          playablesOverflowCount: edition.playables.overflowCount,
+          panel: edition.panel,
+          isAllEmpty: edition.isAllEmpty,
+        }}
       />
     </>
   )

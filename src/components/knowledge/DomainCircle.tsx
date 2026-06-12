@@ -52,12 +52,12 @@ export function DomainCircle({
     ? getPortraitDomainColor(normalizedCategory)
     : null
   const circleBackground = domainColor
-    ? domainBubbleGradient(domainColor.light)
+    ? domainBubbleGradient(domainColor.primary)
     : territoryType === 'declared'
       ? 'rgba(245, 240, 232, 0.3)'
-      : '#f5f0e8'
+      : 'var(--warm-cream)'
   const circleBorder = highlighted
-    ? '#0a1f3d'
+    ? 'var(--ink)'
     : (domainColor?.primary ?? '#d4cfc7')
   const resolvedCircleSlotSize = Math.max(circleSlotSize ?? diameter, diameter)
 
@@ -85,7 +85,7 @@ export function DomainCircle({
             border="1px dashed #c8c0b0"
             opacity={0.5}
           >
-            {Icon ? <Icon size={iconSize} color="#0a1f3d" /> : null}
+            {Icon ? <Icon size={iconSize} color="var(--ink)" /> : null}
           </KnowledgeBubble>
         </div>
         <p style={{ ...nameStyle, opacity: 0.3 }}>{canonicalSubcategory}</p>
@@ -117,10 +117,10 @@ export function DomainCircle({
           border={`1px solid ${circleBorder}`}
           style={{
             transition: 'border-color 300ms ease, box-shadow 300ms ease',
-            boxShadow: highlighted ? '0 0 8px #f0c060' : undefined,
+            boxShadow: highlighted ? '0 0 8px var(--accent-gold)' : undefined,
           }}
         >
-          {Icon ? <Icon size={iconSize} color="#0a1f3d" /> : null}
+          {Icon ? <Icon size={iconSize} color="var(--ink)" /> : null}
         </KnowledgeBubble>
       </div>
       <p style={nameStyle}>{canonicalSubcategory}</p>
@@ -155,7 +155,7 @@ const circleSlotStyle: CSSProperties = {
 const nameStyle: CSSProperties = {
   marginTop: '8px',
   fontSize: '11px',
-  color: '#0a1f3d',
+  color: 'var(--ink)',
   lineHeight: 1.25,
   overflowWrap: 'anywhere',
 }
@@ -163,7 +163,7 @@ const nameStyle: CSSProperties = {
 const tierStyle: CSSProperties = {
   marginTop: '2px',
   fontSize: '10px',
-  color: '#8a8a8a',
+  color: 'var(--text-muted-warm)',
 }
 
 const dotsWrapStyle: CSSProperties = {
@@ -178,11 +178,11 @@ const dotStyle: CSSProperties = {
   width: '6px',
   height: '6px',
   borderRadius: '999px',
-  background: '#8a8a8a',
+  background: 'var(--text-muted-warm)',
 }
 
 const plusStyle: CSSProperties = {
   fontSize: '10px',
-  color: '#8a8a8a',
+  color: 'var(--text-muted-warm)',
   marginLeft: '2px',
 }

@@ -131,7 +131,7 @@ const rowTextStyle: CSSProperties = {
 const domainNameStyle: CSSProperties = {
   margin: 0,
   color: 'var(--warm-ink)',
-  fontFamily: 'var(--font-literata), Georgia, serif',
+  fontFamily: 'var(--font-serif), Georgia, serif',
   fontSize: '0.92rem',
   fontWeight: 700,
   lineHeight: 1.18,

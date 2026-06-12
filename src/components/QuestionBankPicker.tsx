@@ -73,7 +73,7 @@ export function QuestionBankPicker({ onSelect, onQuestionsLoaded, maxSelect = 5,
   }
 
   if (error) {
-    return <p className="text-sm text-[var(--wrong)]">{error}</p>;
+    return <p className="text-sm text-[var(--danger)]">{error}</p>;
   }
 
   return (

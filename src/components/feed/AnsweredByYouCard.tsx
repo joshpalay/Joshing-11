@@ -180,7 +180,7 @@ function AnsweredResult({
           </p>
           <p
             className="mt-1 text-[13px] leading-6"
-            style={{ fontFamily: 'var(--font-literata)', color: 'var(--ink)' }}
+            style={{ fontFamily: 'var(--font-serif)', color: 'var(--ink)' }}
           >
             {item.creatorNote}
           </p>
@@ -236,7 +236,7 @@ function AnsweredResult({
 
 export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: AnsweredByYouCardProps) {
   const category = visibleFeedCategory(item.category)
-  const categoryColor = colorForCategory(item.category)
+  const categoryColor = colorForCategory(item.category, item.broadCategory)
 
   return (
     <FeedCardShell accentColor={categoryColor} accentPlacement="left">
@@ -263,7 +263,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
               <p
                 className="mt-1 truncate text-xs italic leading-tight"
                 style={{
-                  fontFamily: 'var(--font-literata)',
+                  fontFamily: 'var(--font-serif)',
                   color: 'var(--ink)',
                   opacity: 0.7,
                 }}
@@ -289,7 +289,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         <p
           className="mt-3 text-base leading-snug"
           style={{
-            fontFamily: 'var(--font-cormorant, Georgia), "Times New Roman", serif',
+            fontFamily: 'var(--font-serif)',
             color: 'var(--ink)',
             opacity: 0.65,
           }}
@@ -301,7 +301,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
           <p
             className="mt-2 text-[13px] italic leading-snug"
             style={{
-              fontFamily: 'var(--font-literata)',
+              fontFamily: 'var(--font-serif)',
               color: 'var(--ink)',
               opacity: 0.65,
             }}

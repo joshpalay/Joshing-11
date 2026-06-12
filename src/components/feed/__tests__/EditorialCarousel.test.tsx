@@ -62,36 +62,48 @@ describe('CommonGroundFeature carousel', () => {
         friendId: 'sadie',
         friendFirstName: 'Sadie',
         friendHref: '/users/sadie',
-        domain: {
-          label: 'Simpsons Catchphrases',
-          viewer: { points: 40, tier: 'solid' },
-          friend: { points: 30, tier: 'familiar' },
-        },
+        domains: [
+          {
+            label: 'Simpsons Catchphrases',
+            viewer: { points: 40, tier: 'solid' },
+            friend: { points: 30, tier: 'familiar' },
+          },
+          {
+            label: 'Star Wars',
+            viewer: { points: 25, tier: 'familiar' },
+            friend: { points: 35, tier: 'solid' },
+          },
+        ],
       },
       {
         friendId: 'theo',
         friendFirstName: 'Theo',
         friendHref: '/users/theo',
-        domain: {
-          label: 'Bikini Bottom',
-          viewer: { points: 20, tier: 'familiar' },
-          friend: { points: 20, tier: 'familiar' },
-        },
+        domains: [
+          {
+            label: 'Bikini Bottom',
+            viewer: { points: 20, tier: 'familiar' },
+            friend: { points: 20, tier: 'familiar' },
+          },
+        ],
       },
     ],
   };
 
   it('renders a slide per friend plus a final "Invite someone" slide linking to /friends/find', () => {
     const html = renderToStaticMarkup(<CommonGroundFeature embed={embed} />);
-    // Each friend slide shows the friend's name and their shared domain.
+    // Each friend slide shows the friend's name and their shared areas — both of
+    // Sadie's, Theo's single one.
     expect(html).toContain('Sadie');
     expect(html).toContain('Simpsons Catchphrases');
+    expect(html).toContain('Star Wars');
     expect(html).toContain('Theo');
     expect(html).toContain('Bikini Bottom');
     expect(html).toContain('href="/users/theo"');
     expect(html).toContain('Invite someone');
     expect(html).toContain('href="/friends/find"');
-    // Two friends + invite = three pagination dots.
+    // Two friends + invite = three pagination dots: the carousel pages by
+    // FRIEND, so Sadie's two areas share one slide rather than adding a fourth.
     const dots = html.match(/aria-label="Go to item \d+ of 3"/g) ?? [];
     expect(dots).toHaveLength(3);
   });

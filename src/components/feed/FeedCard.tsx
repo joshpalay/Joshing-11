@@ -67,7 +67,7 @@ export function FeedCard({
   dimQuestion,
   elevated,
 }: FeedCardProps) {
-  const categoryColor = colorForCategory(item.category)
+  const categoryColor = colorForCategory(item.category, item.broadCategory)
   const visibleCategory = visibleFeedCategory(item.category)
   const authorName = item.avatarName ?? 'Someone'
   // Figma colors the actor name in the user's avatar color (e.g. Allan blue,

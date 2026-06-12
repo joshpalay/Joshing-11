@@ -294,6 +294,34 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
 }
 
 /**
+ * Atomically claim the daily reminder email for a queue so concurrent cron
+ * retries can't double-send. The single UPDATE flips email_reminder_sent_at
+ * from null to now() only if it is still null, and RETURNs the row iff this
+ * call won the race. Returns true iff THIS call should send; a losing or
+ * duplicate call returns false and must not send.
+ */
+export async function claimDailyEmailReminder(queueId: string): Promise<boolean> {
+  const claimed = await db
+    .update(dailyQueues)
+    .set({ emailReminderSentAt: new Date() })
+    .where(and(eq(dailyQueues.id, queueId), isNull(dailyQueues.emailReminderSentAt)))
+    .returning({ id: dailyQueues.id });
+
+  return claimed.length > 0;
+}
+
+/**
+ * Release a claim (reset email_reminder_sent_at to null) after a send failure,
+ * so a later cron run can retry the reminder for this queue. Idempotent.
+ */
+export async function releaseDailyEmailReminder(queueId: string): Promise<void> {
+  await db
+    .update(dailyQueues)
+    .set({ emailReminderSentAt: null })
+    .where(eq(dailyQueues.id, queueId));
+}
+
+/**
  * Total number of daily queues ever built for this user, across all dates.
  *
  * Used to detect a user's FIRST Daily Five: the orchestrator treats a zero count

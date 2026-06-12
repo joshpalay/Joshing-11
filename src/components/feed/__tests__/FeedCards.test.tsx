@@ -91,6 +91,19 @@ describe('Feed card preview fixtures', () => {
     expect(answeredByYou).toContain('You both had it')
   })
 
+  it('marks direct sends with the eyebrow on the plain bordered tile (no triangle mat)', () => {
+    const directSent = html(
+      <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
+    )
+    expect(directSent).toContain('Sent directly to you')
+    expect(directSent).not.toContain('/images/Variant4.png')
+
+    const friendAdded = html(
+      <FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />
+    )
+    expect(friendAdded).not.toContain('Sent directly to you')
+  })
+
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
     const variants = [
       html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
@@ -400,7 +413,7 @@ describe('Answer feedback sheet recheck affordance', () => {
 })
 
 describe('Authored-by-viewer card', () => {
-  it('renders the authored attribution and category (Figma triangle card has no eyebrow)', () => {
+  it('renders the authored attribution and category (broadcast card has no eyebrow)', () => {
     const rendered = html(
       <FriendAddedCard
         item={feedCardPreviewFixtures.authoredByViewerUnanswered}
@@ -485,35 +498,42 @@ describe('FeedCardShell (shared C7 shell)', () => {
     )
     expect(rendered).toContain('bg-[var(--brand-card)]')
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).toContain('border-[var(--brand-rule)]')
     expect(rendered).not.toContain('bg-[var(--game-card-question)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
+    // No elevated lift on the resting card.
+    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('border-[rgba(40,32,30,0.22)]')
   })
 
-  it('lifts the bordered card with cream fill on the soft drop shadow + hairline stroke when elevated', () => {
+  it('lifts the bordered card with cream fill + visible stroke + deeper drop shadow when elevated', () => {
     const rendered = html(
       <FeedCardShell elevated accentColor="#abc123">
         <p>body</p>
       </FeedCardShell>
     )
     expect(rendered).toContain('bg-[var(--game-card-question)]')
-    // Same soft drop shadow as every card — the cream fill + stroke do the lift.
-    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
-    // The hairline border stays, defining the lifted card's edge.
-    expect(rendered).toContain('border-[var(--brand-rule)]')
-    // No hard ink offset shadow.
+    // Deeper drop shadow (10% ink) than the ambient cards' 4%.
+    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    // Gold accent stroke replaces the faint hairline rule.
+    expect(rendered).toContain('border-[var(--accent-gold)]')
+    expect(rendered).not.toContain('border-[var(--brand-rule)]')
+    // No hard ink offset shadow, no near-white resting fill.
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
   })
 
-  it('lifts the triangle variant with the soft drop shadow + cream inner panel when elevated', () => {
+  it('lifts the triangle variant with the deeper drop shadow + cream inner panel when elevated', () => {
     const rendered = html(
       <FeedCardShell variant="triangle" elevated>
         <p>body</p>
       </FeedCardShell>
     )
-    // Mat image intact; the matted card carries the soft drop shadow.
+    // Mat image intact; the matted card carries the deeper drop shadow.
     expect(rendered).toContain('/images/Variant4.png')
-    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     // Inner panel carries the warm cream fill instead of brand-card.
     expect(rendered).toContain('bg-[var(--game-card-question)]')

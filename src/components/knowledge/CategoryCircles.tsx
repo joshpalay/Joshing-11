@@ -161,7 +161,7 @@ export function KnowledgeCircle({
     >
       <KnowledgeBubble
         diameter={displaySize}
-        light={dc.light}
+        tint={dc.primary}
         opacity={opacity}
         style={{ transition: animate ? undefined : 'none' }}
       />
@@ -229,7 +229,7 @@ function GameCircleRow({
         <div
           style={{
             fontSize: 14,
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
             fontWeight: 600,
             color: 'var(--text)',
             lineHeight: 1.25,
@@ -325,7 +325,7 @@ function RoundCircleRow({
         <div
           style={{
             fontSize: 13,
-            fontFamily: 'var(--font-literata), ui-serif, Georgia, serif',
+            fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
             fontWeight: 600,
             color: 'var(--text)',
             lineHeight: 1.25,

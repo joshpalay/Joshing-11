@@ -108,9 +108,12 @@ export type CatchupBatchRecord = {
 
 /**
  * 'playing' — the round's chat thread + answer input is live.
- * 'summary' — the round is done; show the recap with "play next" / "return home".
+ * 'round_complete' — the round is done; the thread stays up and closes with a
+ *   card offering the recap or another round (mirroring the Daily Five
+ *   session-close turn) instead of cutting straight to the recap.
+ * 'summary' — show the recap with "play next" / "return home".
  */
-export type CatchupPhase = 'playing' | 'summary';
+export type CatchupPhase = 'playing' | 'round_complete' | 'summary';
 
 function formatQuestionSubhead(item: CatchupQueueItem): string {
   if (item.queueAge <= 1) return 'FROM YESTERDAY';
@@ -316,8 +319,9 @@ export function useCatchupFlow() {
   useEffect(() => {
     const id = currentItem?.dailyQueueItemId ?? null;
     if (!currentItem) return;
-    // Don't introduce the next round's first question while the summary is up;
-    // it gets introduced when startNextBatch flips the phase back to 'playing'.
+    // Don't introduce the next round's first question while the round-close
+    // card or the summary is up; it gets introduced when startNextBatch flips
+    // the phase back to 'playing'.
     if (phase !== 'playing') return;
     if (!shouldIntroduceCatchUpQuestion({
       currentCatchUpItemId: id,
@@ -335,8 +339,10 @@ export function useCatchupFlow() {
     setItems((existing) => existing.filter((item) => item.dailyQueueItemId !== dailyQueueItemId));
   }, []);
 
-  // Records the resolved turn and, once the round is full, flips to the summary.
-  // Called from inside the post-result timeout in both submit and give-up.
+  // Records the resolved turn and, once the round is full, closes the round
+  // (the thread stays up with the round-close options; the recap is opened
+  // explicitly via openSummary). Called from inside the post-result timeout in
+  // both submit and give-up.
   const finishTurn = useCallback((dailyQueueItemId: string, record: CatchupBatchRecord) => {
     answeredInBatchRef.current += 1;
     setBatchRecords((existing) => [...existing, record]);
@@ -344,9 +350,14 @@ export function useCatchupFlow() {
     setIsResolvingTurn(false);
     const roundSize = Math.min(CATCH_UP_BATCH_SIZE, batchStartRemainingRef.current);
     if (answeredInBatchRef.current >= roundSize) {
-      setPhase('summary');
+      setPhase('round_complete');
     }
   }, [advancePast]);
+
+  // Moves from the round-close card to the full recap.
+  const openSummary = useCallback(() => {
+    setPhase('summary');
+  }, []);
 
   // Begins the next round: clears the thread + recap and re-enters 'playing',
   // which re-introduces the next current question via the effect above.
@@ -378,7 +389,7 @@ export function useCatchupFlow() {
     // End the round if the queue is now empty (otherwise the thread dead-ends
     // with no current question and no input) or the shrunken target is met.
     if (emptiesQueue || answeredInBatchRef.current >= roundSize) {
-      setPhase('summary');
+      setPhase('round_complete');
     }
   }, [advancePast, items.length]);
 
@@ -678,6 +689,7 @@ export function useCatchupFlow() {
     remainingCount,
     nextBatchSize,
     startNextBatch,
+    openSummary,
     reload: load,
     submitCurrent,
     skipCurrent,

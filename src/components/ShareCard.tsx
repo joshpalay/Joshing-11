@@ -126,7 +126,7 @@ const CREAM = 'var(--brand-cream-card)';
 const PAPER = 'var(--brand-card)';
 const RULE = 'var(--brand-border)';
 const MONO = 'var(--font-mono)';
-const SERIF = "var(--font-cormorant), Georgia, 'Times New Roman', serif";
+const SERIF = 'var(--font-serif)';
 
 const cardStyle: CSSProperties = {
   background: `linear-gradient(180deg, ${PAPER} 0%, ${CREAM} 100%)`,

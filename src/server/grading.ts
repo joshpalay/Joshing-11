@@ -38,18 +38,42 @@ export type UnscoredGrade = {
 export type GradeOutcome = ScoredGrade | UnscoredGrade;
 
 /**
- * Fast-path exact match before calling the LLM.
- * Returns true if the submission is an obvious exact/alternative match.
+ * Normalize an answer for the deterministic fast-path: lower-case, strip
+ * diacritics, drop punctuation, collapse whitespace, and remove a single
+ * leading article. This is deliberately conservative — it only ever causes the
+ * fast-path to fire (returning `correct`) when two answers are character-for-
+ * character the same once trivial differences are removed, so it cannot
+ * manufacture a false `correct` for a genuinely different answer. A leading
+ * article is dropped (e.g. "The Eroica" ≡ "Eroica") but interior articles are
+ * kept so distinct answers like "Vitamin A" don't collapse onto "Vitamin".
+ */
+function normalizeForMatch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // strip diacritics: "Beyoncé" → "Beyonce"
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ') // punctuation → space: "J.S. Bach" → "j s bach"
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(the|a|an) /, ''); // drop a single leading article
+}
+
+/**
+ * Fast-path exact match before calling the LLM. Returns true if the submission
+ * is the same answer as the canonical (or an accepted alternative) once trivial
+ * differences — case, diacritics, punctuation, whitespace, a leading article —
+ * are normalized away. Catching these here skips the blocking LLM round-trip for
+ * the common "right answer, slightly different spelling" case.
  */
 function exactMatch(
   submitted: string,
   canonicalAnswer: string,
   acceptedAlternatives: string[]
 ): boolean {
-  const normalized = submitted.trim().toLowerCase();
+  const normalized = normalizeForMatch(submitted);
   if (!normalized) return false;
-  if (normalized === canonicalAnswer.trim().toLowerCase()) return true;
-  return acceptedAlternatives.some((alt) => alt.trim().toLowerCase() === normalized);
+  if (normalized === normalizeForMatch(canonicalAnswer)) return true;
+  return acceptedAlternatives.some((alt) => normalizeForMatch(alt) === normalized);
 }
 
 /**

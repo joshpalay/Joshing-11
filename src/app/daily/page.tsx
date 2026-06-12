@@ -12,6 +12,11 @@ import {
   type RecheckActionResult,
 } from '@/components/play/GameplayChat';
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
+import {
+  ANSWER_GRADER_RETRY_MESSAGE,
+  AnswerSubmitError,
+  submitAnswerWithRetry,
+} from '@/lib/answer-submit';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
@@ -121,9 +126,15 @@ const QUEUE_CREATE_BACKOFF_MS = [2000, 4000, 8000];
 const QUEUE_GENERATION_FAILED_MESSAGE =
   "We're still crafting today's bespoke questions and it's taking longer than usual. Give it a moment and try again.";
 
-function generatingLabel(): string {
-  return 'Crafting your bespoke questions';
-}
+// Rotated through, fading in and out, while a round is being generated — the
+// LoadingScreen cycles these so the wait reads as deliberate craft rather than
+// a stall.
+const GENERATING_MESSAGES = [
+  'Crafting your bespoke questions',
+  'Finding the right multitudes',
+  'Reading the room',
+  'Tuning the difficulty',
+];
 
 // Returns the slot the player should be on, or null when the round is over.
 // The `!answered && !skipped` predicate is the canonical "pending" definition
@@ -163,6 +174,14 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline answer-bar notice for the grade itself: a warm "retrying…" note while
+  // the grader is transiently unavailable, then a terminal "try again later" once
+  // the auto-retries are spent. Kept separate from the page-level `error` (which
+  // is for queue-load failures and replaces the whole thread) so the question
+  // stays on screen and the player can simply resubmit.
+  const [submitNotice, setSubmitNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(
+    null,
+  );
   // Non-null while we're auto-retrying queue generation; drives the friendly
   // "still working (attempt N/4)" loading label instead of a bare error.
   const [generatingAttempt, setGeneratingAttempt] = useState<number | null>(null);
@@ -518,12 +537,14 @@ export default function DailyPage() {
       if (!queue || !currentSlot || submitting) return;
       setSubmitting(true);
       setError(null);
+      setSubmitNotice(null);
       try {
-        const response = await fetch('/api/daily/answer', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
+        // The grader is allowed to be transiently unavailable (it returns a
+        // retryable 503 rather than ever scoring a real player wrong). Auto-retry
+        // those with backoff, showing a warm "retrying…" notice, and only ask the
+        // player to try again later once the retries are spent.
+        const body = await submitAnswerWithRetry<AnswerResponse>('/api/daily/answer', {
+          body: {
             queue_id: queue.queue_id,
             slot_index: currentSlot.slot_index,
             // Pin the question this slot is displaying so the server won't grade
@@ -534,31 +555,18 @@ export default function DailyPage() {
               currentSlot.generated_question_id ?? currentSlot.question_id,
             submitted_answer: opts.submittedAnswer,
             gave_up: opts.gaveUp,
-          }),
+          },
+          isSuccessBody: (value): value is AnswerResponse =>
+            value != null && typeof value === 'object',
+          resolveErrorMessage: (value) =>
+            answerFailureMessage(value as FailedAnswerResponse | null),
+          onRetry: ({ attempt, maxAttempts }) =>
+            setSubmitNotice({
+              tone: 'info',
+              text: `${ANSWER_GRADER_RETRY_MESSAGE} (${attempt}/${maxAttempts})…`,
+            }),
         });
-        if (!response.ok) {
-          const failedBody = (await response
-            .json()
-            .catch(() => null)) as FailedAnswerResponse | null;
-          // Stale snapshot: the slot moved on under us. Reconcile to the server's
-          // fresh slots and let the corrected current question re-render, rather
-          // than recording this answer against the wrong question. Clear the
-          // input since the refreshed question is a different prompt.
-          if (failedBody?.error === 'slot_changed' && Array.isArray(failedBody.slots)) {
-            const reconciledSlots = failedBody.slots;
-            setQueue((existing) =>
-              existing ? { ...existing, slots: reconciledSlots } : existing,
-            );
-            setAnswer('');
-            return;
-          }
-          throw new Error(answerFailureMessage(failedBody));
-        }
-
-        const body = (await response.json().catch(() => null)) as AnswerResponse | null;
-        if (!body) {
-          throw new Error('Could not record that answer.');
-        }
+        setSubmitNotice(null);
 
         const isCorrect = Boolean(body.isCorrect ?? body.correct);
         // A correct answer in an unfamiliar domain default-adds it to the KB
@@ -601,7 +609,27 @@ export default function DailyPage() {
         window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
         setAnswer('');
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'Could not record that answer.');
+        // Stale snapshot: the slot moved on under us (the queue was re-indexed
+        // after we loaded it). The server returned 409 slot_changed with its
+        // fresh slots — reconcile to those and let the corrected current question
+        // re-render rather than surfacing an error or recording a bogus miss.
+        // Clear the input since the refreshed question is a different prompt.
+        if (caught instanceof AnswerSubmitError) {
+          const failed = caught.body as FailedAnswerResponse | null;
+          if (failed?.error === 'slot_changed' && Array.isArray(failed.slots)) {
+            const reconciledSlots = failed.slots;
+            setQueue((existing) =>
+              existing ? { ...existing, slots: reconciledSlots } : existing,
+            );
+            setAnswer('');
+            setSubmitNotice(null);
+            return;
+          }
+        }
+        setSubmitNotice({
+          tone: 'error',
+          text: caught instanceof Error ? caught.message : 'Could not record that answer.',
+        });
       } finally {
         setSubmitting(false);
       }
@@ -749,10 +777,11 @@ export default function DailyPage() {
         style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
       >
         {loading ? (
-          <LoadingScreen
-            fullScreen
-            label={generatingAttempt != null ? generatingLabel() : 'Loading today'}
-          />
+          generatingAttempt != null ? (
+            <LoadingScreen fullScreen messages={GENERATING_MESSAGES} />
+          ) : (
+            <LoadingScreen fullScreen label="Loading today" />
+          )
         ) : error ? (
           // Generation hiccups are warm and retryable, not alarming — keep this
           // neutral (not --danger) and give the player a one-tap way to retry.
@@ -803,6 +832,15 @@ export default function DailyPage() {
             void submitAnswer();
           }}
         >
+          {submitNotice ? (
+            <p
+              role={submitNotice.tone === 'error' ? 'alert' : 'status'}
+              aria-live={submitNotice.tone === 'error' ? 'assertive' : 'polite'}
+              className="mb-2 text-sm text-[var(--text-muted)]"
+            >
+              {submitNotice.text}
+            </p>
+          ) : null}
           <div className="flex gap-2">
             <input
               ref={answerInputRef}

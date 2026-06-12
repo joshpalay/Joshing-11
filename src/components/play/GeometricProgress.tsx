@@ -20,9 +20,9 @@ export function GeometricProgress({
         const done = !!res;
 
         const dotColor = res === 'correct'
-          ? 'var(--success)'
+          ? 'var(--game-correct)'
           : res === 'wrong'
-            ? 'var(--wrong)'
+            ? 'var(--game-wrong-strong)'
             : res === 'expired'
               ? 'color-mix(in srgb, var(--text-muted) 60%, transparent)'
               : 'color-mix(in srgb, var(--text) 22%, transparent)';

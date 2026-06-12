@@ -538,7 +538,7 @@ function KnowledgePageContent() {
       <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
         <section className="bg-white border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
-          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[#111111] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
+          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
           <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
         </section>
       </main>
@@ -628,11 +628,11 @@ function KnowledgePageContent() {
               pendingDomain={hidePending}
             />
             {hideError ? (
-              <p className="mt-3 text-[0.78rem] text-[#8b1a0e] border border-[#c0392b]/40 p-2">{hideError}</p>
+              <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
             ) : null}
             {!editMode ? (
               <div className="mt-5 flex justify-center">
-                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[#0e0e0e] bg-[#0e0e0e] text-[var(--warm-paper)] font-['Courier_New',monospace] text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
+                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[var(--warm-ink)] bg-[var(--warm-ink)] text-[var(--warm-paper)] font-mono text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
                   Share portrait
                 </button>
               </div>
@@ -642,9 +642,9 @@ function KnowledgePageContent() {
       )}
 
       {emptyQuestionDomain ? (
-        <section className="bg-[#fff7e8] border border-[#d9b56c] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
+        <section className="bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--brand-card))] border border-[color-mix(in_srgb,var(--accent-gold)_55%,var(--brand-border))] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
-          <h2 className="mt-[0.4rem] text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-literata)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <h2 className="mt-[0.4rem] text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-[10px] mt-5">
             <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
@@ -658,7 +658,7 @@ function KnowledgePageContent() {
       ) : null}
 
       <section className="bg-[var(--cream)] border border-[var(--border-warm)] px-[0.95rem] py-5">
-        <h2 className="m-0 text-[1.1rem] font-[var(--font-literata)] text-[var(--ink)]">Grow your map</h2>
+        <h2 className="m-0 text-[1.1rem] font-[var(--font-serif)] text-[var(--ink)]">Grow your map</h2>
         <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
           Answer a friend&apos;s question correctly, or write your own — writing opens new territory; a friend&apos;s correct answer proves it.
         </p>
@@ -713,7 +713,7 @@ function KnowledgePageContent() {
           <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
+                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
                 {activeModal.currentDomain ? (
                   <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
                 ) : null}
@@ -790,7 +790,7 @@ function KnowledgePageContent() {
               </div>
             </div>
 
-            {interestError ? <p className="mt-4 border border-[#c0392b]/40 text-[#8b1a0e] p-3 text-[0.88rem]">{interestError}</p> : null}
+            {interestError ? <p className="mt-4 border border-[var(--cat-literature)]/40 text-[var(--cat-literature-text)] p-3 text-[0.88rem]">{interestError}</p> : null}
 
             <div className="flex justify-end gap-2 mt-5">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
@@ -807,7 +807,7 @@ function KnowledgePageContent() {
           <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Tidy up your map?</h2>
+                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Tidy up your map?</h2>
                 <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
@@ -839,7 +839,7 @@ function KnowledgePageContent() {
           <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Manage interests</h2>
+                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Manage interests</h2>
                 <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
@@ -882,7 +882,7 @@ function KnowledgePageContent() {
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
           <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
-              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-literata)]">Write a question</h2>
+              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
               </button>

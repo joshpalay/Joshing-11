@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, MoreHorizontal, Sparkles, X } from 'lucide-react'
 
 import { answerHeadingStyle } from '@/components/answer-heading'
+import { firstSentence } from '@/lib/first-sentence'
 import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
@@ -11,9 +12,9 @@ import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
-// card (raw --tri-amber #d9a82e is too light for small text). Used by the
+// card (raw --accent-gold #d9a82e is too light for small text). Used by the
 // "New territory" celebration and the "Between us friends" inside-joke card.
-const GOLD_INK = 'color-mix(in srgb, var(--tri-amber) 50%, var(--brand-ink))'
+const GOLD_INK = 'var(--accent-gold-ink)'
 
 type AnswerFeedbackSheetProps = {
   question: string
@@ -158,7 +159,7 @@ export function AnswerFeedbackSheet({
             ? 'relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
             : 'relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
         }
-        style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--tri-amber) 55%, transparent)' } as CSSProperties : undefined}
+        style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--accent-gold) 55%, transparent)' } as CSSProperties : undefined}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-1">
           {showNewTerritory ? (
@@ -238,10 +239,6 @@ export function AnswerFeedbackSheet({
             />
           ) : null}
 
-          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
-            {question}
-          </p>
-
           <div className="space-y-1 pb-2">
             {correctAnswer ? (
               <p
@@ -257,7 +254,7 @@ export function AnswerFeedbackSheet({
               <p
                 className="text-[13px] italic"
                 style={{
-                  fontFamily: 'var(--font-literata)',
+                  fontFamily: 'var(--font-serif)',
                   color: 'var(--ink)',
                   opacity: 0.7,
                 }}
@@ -267,22 +264,22 @@ export function AnswerFeedbackSheet({
             ) : null}
           </div>
 
+          {/* The question reads as context for the answer, so it sits below the
+              answer headline (not above it). De-boxed: plain text, no panel. */}
+          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
+            {question}
+          </p>
+
           {explanation ? (
-            <div className="rounded-2xl bg-muted p-3.5">
-              <p className="font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
-                {explanation}
-              </p>
-            </div>
+            // Match the daily-5 game's reveal: a single-sentence explainer under
+            // the answer, not the full paragraph (which ran too long here).
+            <p className="pb-2 font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
+              {firstSentence(explanation)}
+            </p>
           ) : null}
 
           {insideJoke ? (
-            <div
-              className="mt-2.5 rounded-2xl border p-3.5"
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--tri-amber) 12%, var(--brand-card))',
-                borderColor: 'color-mix(in srgb, var(--tri-amber) 40%, var(--brand-border))',
-              }}
-            >
+            <div className="pt-1">
               <p
                 className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
                 style={{ color: GOLD_INK }}
@@ -296,7 +293,7 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {creatorNote ? (
-            <div className="mt-2.5 rounded-2xl border bg-muted p-3.5">
+            <div className="pt-3">
               <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                 Why they asked
               </p>

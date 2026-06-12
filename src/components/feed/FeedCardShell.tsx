@@ -17,12 +17,16 @@ const FEED_CARD_RADIUS = 'rounded-[4px]'
 const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 
 // Elevated ("playable" / Tier 1) treatment for the unified home feed
-// (D-FEED-TIER): the warm light-cream question fill, kept on the same hairline
-// stroke and soft drop shadow as every other card. On the home feed the
-// ambient activity rows render as flat one-liners (no card), so a cream card
-// with a stroke + lift visibly steps forward as the thing you can play, while
-// the chatter stays quiet text. Zero new tokens.
+// (D-FEED-TIER): the warm light-cream question fill, a gold accent stroke, and
+// a deeper soft drop shadow than the ambient cards carry. On the home feed the
+// activity rows render as flat one-liners (no card), so a playable question card
+// needs more than a 4% lift to read as the thing you can play; the gold stroke +
+// shadow make it step forward off the cream while the chatter stays quiet text.
+// Shares the shadow color (#28201E warm ink) with the resting cards, just at a
+// higher opacity. The stroke uses the editorial accent gold (--accent-gold).
 const FEED_CARD_ELEVATED_FILL = 'bg-[var(--game-card-question)]'
+const FEED_CARD_ELEVATED_STROKE = 'border-[var(--accent-gold)]'
+const FEED_CARD_ELEVATED_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.10)]'
 
 export type FeedCardShellProps = {
   children: ReactNode
@@ -39,10 +43,10 @@ export type FeedCardShellProps = {
   variant?: 'bordered' | 'triangle'
   /**
    * Tier 1 "playable" lift for the unified home feed: the warm light-cream
-   * question fill (on the same hairline stroke + soft drop shadow as every
-   * card) so a playable card steps forward off the cream while the ambient
-   * activity one-liners stay flat. Defaults to false (the standalone Feed tab
-   * and answered/result cards keep the near-white resting fill).
+   * question fill + a visible warm-ink stroke + a deeper drop shadow than the
+   * ambient cards, so a playable card clearly steps forward off the cream while
+   * the activity one-liners stay flat. Defaults to false (the standalone Feed
+   * tab and answered/result cards keep the near-white resting fill + hairline).
    */
   elevated?: boolean
 }
@@ -72,9 +76,10 @@ export function FeedCardShell({
         className={cn(
           "overflow-hidden bg-[url('/images/Variant4.png')] bg-[length:300px_auto] bg-center p-3",
           FEED_CARD_RADIUS,
-          // The whole matted card carries the soft drop shadow (mat image
-          // intact); the inset panel below carries the warm cream fill.
-          FEED_CARD_SHADOW,
+          // The whole matted card carries the drop shadow (mat image intact);
+          // elevated cards lift on the deeper shadow. The inset panel below
+          // carries the warm cream fill.
+          elevated ? FEED_CARD_ELEVATED_SHADOW : FEED_CARD_SHADOW,
           className,
         )}
       >
@@ -95,10 +100,11 @@ export function FeedCardShell({
   return (
     <article
       className={cn(
-        'relative overflow-hidden border border-[var(--brand-rule)]',
+        'relative overflow-hidden border',
+        elevated ? FEED_CARD_ELEVATED_STROKE : 'border-[var(--brand-rule)]',
         elevated ? FEED_CARD_ELEVATED_FILL : 'bg-[var(--brand-card)]',
         FEED_CARD_RADIUS,
-        FEED_CARD_SHADOW,
+        elevated ? FEED_CARD_ELEVATED_SHADOW : FEED_CARD_SHADOW,
         className,
       )}
     >

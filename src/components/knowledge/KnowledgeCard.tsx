@@ -194,7 +194,7 @@ const shareButtonStyle: CSSProperties = {
 
 const statementStyle: CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-cormorant), Georgia, serif',
+  fontFamily: 'var(--font-serif)',
   fontSize: 21,
   color: 'var(--brand-ink)',
   lineHeight: 1.35,
