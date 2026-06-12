@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 
 import { answerHeadingStyle } from '@/components/answer-heading';
+import { firstSentence } from '@/lib/first-sentence';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { ThreadCard } from '@/components/play/ThreadCard';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
@@ -190,12 +191,6 @@ const WRONG_NAMED_SUBLABEL: Array<(name: string) => string> = [
 // Trim an explainer to its first sentence for the live thread — the full text
 // still lives in the End of Session Review. Keeps the thread moving while giving
 // a one-line "why" directly under the answer.
-function firstSentence(text: string): string {
-  const trimmed = text.trim();
-  const match = trimmed.match(/^.*?[.!?](?=\s|$)/);
-  return match ? match[0] : trimmed;
-}
-
 function firstNameFrom(creatorName: string): string {
   const trimmed = creatorName.trim();
   const space = trimmed.indexOf(' ');
