@@ -503,8 +503,8 @@ describe('FeedCardShell (shared C7 shell)', () => {
     // Deeper drop shadow (10% ink) than the ambient cards' 4%.
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
     expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
-    // Visible warm-ink stroke replaces the faint hairline rule.
-    expect(rendered).toContain('border-[rgba(40,32,30,0.22)]')
+    // Gold accent stroke replaces the faint hairline rule.
+    expect(rendered).toContain('border-[var(--accent-gold)]')
     expect(rendered).not.toContain('border-[var(--brand-rule)]')
     // No hard ink offset shadow, no near-white resting fill.
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
