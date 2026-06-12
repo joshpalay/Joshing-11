@@ -81,6 +81,7 @@ const REPLAY_ITEM = {
   questionId: 'q-personal-1',
   questionText: 'Where did we first meet?',
   correctAnswer: 'At the lake house',
+  alternateAnswers: ['the lake'],
   explanation: null,
   domain: 'memories',
   domainDisplayName: 'Memories',
@@ -112,7 +113,7 @@ describe('POST /api/replay/grade — questionType reaches the grader (B-GRADE-TY
     expect(gradeAnswerMock).toHaveBeenCalledWith(
       'the beach',
       'At the lake house',
-      [],
+      ['the lake'],
       'Where did we first meet?',
       'personal',
     )
@@ -129,7 +130,7 @@ describe('POST /api/replay/grade — questionType reaches the grader (B-GRADE-TY
     expect(gradeAnswerMock).toHaveBeenCalledWith(
       'the beach',
       'At the lake house',
-      [],
+      ['the lake'],
       'Where did we first meet?',
       'factual',
     )

@@ -7,6 +7,13 @@ export type ReplayItem = {
   questionId: string;
   questionText: string;
   correctAnswer: string;
+  /**
+   * Author-approved alternative answers, passed to the grader so a replay
+   * grades with the same leniency as the original live answer. Canonical
+   * slots carry Question.accepted_alternatives; bot slots carry
+   * GeneratedQuestion.acceptable_variants.
+   */
+  alternateAnswers: string[];
   explanation: string | null;
   domain: string;
   domainDisplayName: string;

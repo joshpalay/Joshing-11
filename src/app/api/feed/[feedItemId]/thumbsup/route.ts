@@ -1,8 +1,9 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, questionFeedback, questions } from '@/server/db';
+import { db, feedItems } from '@/server/db';
+import { recordFeedThumbsUp } from '@/server/db/queries/ratings';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,21 +24,10 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (!item?.questionId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  // Record quality signal
-  await db
-    .insert(questionFeedback)
-    .values({
-      userId: session.userId,
-      questionId: item.questionId,
-      signal: 'thumbs_up',
-    })
-    .onConflictDoNothing();
-
-  // Increment surface priority score — thumbs-up affects ordering, not propagation
-  await db
-    .update(questions)
-    .set({ surfacePriorityScore: sql`${questions.surfacePriorityScore} + 1` })
-    .where(eq(questions.id, item.questionId));
+  // Quality signal + surface-priority bump live in the query layer next to the
+  // bank-rating writes, so the two surfacePriorityScore paths can't drift.
+  // Thumbs-up affects ordering (eventually), not propagation.
+  await recordFeedThumbsUp(session.userId, item.questionId);
 
   return NextResponse.json({ ok: true });
 }
