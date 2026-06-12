@@ -1,6 +1,5 @@
 'use client';
 
-import { Bookmark } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -91,9 +90,10 @@ export function CommonGroundFeature({
   const friendHref = activeFriend?.friendHref ?? embed.friendHref;
   return (
     <EditorialFeature
-      tone="parchment"
+      // Sage tone (the green accent + soft green wash) — "shared ground" reads
+      // as earthy/green, and it moves the eyebrow + CTA off the brand orange.
+      tone="sage"
       eyebrow="Shared Ground"
-      eyebrowIcon={<Bookmark size={13} strokeWidth={0} fill="currentColor" />}
       headline={
         onInviteSlide ? (
           COMMON_GROUND_INVITE_HEADLINE
@@ -158,7 +158,7 @@ export function CommonGroundFeature({
                 {INVITE_CLUSTER_SEEDS.map((seed, i) => (
                   <span
                     key={seed}
-                    className="size-12 rounded-full ring-4 ring-[var(--editorial-parchment)]"
+                    className="size-12 rounded-full ring-4 ring-[var(--editorial-sage)]"
                     style={{ background: colorForUser(seed), marginLeft: i === 0 ? 0 : -16 }}
                   />
                 ))}

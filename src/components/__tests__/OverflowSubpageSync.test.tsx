@@ -207,7 +207,7 @@ describe('FeedList — pendingQueue subpage mode (/for-you)', () => {
     for (let i = 0; i < 5; i++) expect(html).toContain(`direct:sender${i}`)
     // No surface tabs, no home section headings, no recency buckets.
     expect(html).not.toContain('Broadcasts')
-    expect(html).not.toContain('For You')
+    expect(html).not.toContain('questions your friends created or sent directly to you')
     expect(html).not.toContain('Today')
     // No overflow affordance — nothing is windowed here — and no texture
     // see-more row (the subpage has no texture zone).

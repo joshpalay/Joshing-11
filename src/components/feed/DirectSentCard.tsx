@@ -45,6 +45,8 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, elevated }
       // (the triangle mat is retired); the eyebrow is what marks them out.
       variant="bordered"
       eyebrow="Sent directly to you"
+      // The direct-send marker reads in the brand gold accent.
+      eyebrowClassName="font-semibold text-[var(--accent-gold)]"
       signal={signal}
       question={item.question}
       overflow={overflow}

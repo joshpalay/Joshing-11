@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Nav } from "@/components/Nav";
-// TESTING ONLY — proposed-palette preview bar (see _docs/STYLE-GUIDE-COLOR.md).
+// TESTING ONLY — card-background cycler bar (see PaletteToggle).
 // Remove this import + the <PaletteToggle/> + boot script before shipping.
 import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
@@ -67,11 +67,12 @@ export default async function RootLayout({
       className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
     >
       <body className={montserrat.className}>
-        {/* TESTING ONLY — apply the saved palette choice before paint so there's
-            no flash on navigation. Remove with <PaletteToggle/> before shipping. */}
+        {/* TESTING ONLY — apply the saved card-background choice before paint so
+            there's no flash on navigation. Remove with <PaletteToggle/> before
+            shipping. The token map mirrors CARD_BGS in PaletteToggle. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('joshing-palette')==='proposed')document.documentElement.setAttribute('data-palette','proposed')}catch(e){}`,
+            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}}catch(e){}`,
           }}
         />
         <PaletteToggle />

@@ -702,14 +702,14 @@ function FeedContributeFooter() {
   }
 
   return (
-    <footer className="pt-6 pb-8">
+    <footer className="pb-8">
       {/* Add-a-Question prompt — the same full-bleed editorial wash language as
           the feed's other featured moments (no card, border, or triangle
           mosaic): a parchment band that bleeds to the feed edges, with an
           eyebrow, the serif prompt, and the composer. The box stays an input:
           the reader's typed idea rides to the writer via ?text=
           (buildQuestionWriterHref). */}
-      <div className="-mx-4 mt-6 bg-[var(--editorial-parchment)] px-[30px] py-12 md:py-14">
+      <div className="-mx-4 bg-[var(--editorial-parchment)] px-[30px] py-12 md:py-14">
         <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--brand-orange)] uppercase">
           Your Turn
         </p>
@@ -1899,7 +1899,9 @@ function FeedListContent({
               group), keeping the render path uniform. */}
           {forYouRows.length > 0 ? (
             <Fragment key="for-you">
-              <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
+              <FeedSectionHeading unifiedHome={unifiedHome}>
+                questions your friends created or sent directly to you
+              </FeedSectionHeading>
               {groupActivityByFriend(forYouRows).map(renderRow)}
               {/* D-HOME-PACING-01 §3 — quiet overflow row. Abundance, never
                   obligation; the subpage it will open is B-HOME-OVERFLOW-02. */}
