@@ -242,6 +242,10 @@ export const users = pgTable(
     // until the user sees the cinematic recap that fires after their first ever
     // completed Daily Five; set once so re-entry/refresh/catch-up never re-fire it.
     firstSessionRecapSeenAt: timestamp('first_session_recap_seen_at', { withTimezone: true }),
+    // B-FirstGameRecap-1: timestamp the one-time first-game recap was shown.
+    // Separate from firstSessionRecapSeenAt so Daily Five and Joshing game
+    // onboarding ceremonies never suppress each other.
+    firstGameRecapSeenAt: timestamp('first_game_recap_seen_at', { withTimezone: true }),
     birthYear: integer('birth_year'),
     grewUpCountry: text('grew_up_country'),
     grewUpRegion: text('grew_up_region'),

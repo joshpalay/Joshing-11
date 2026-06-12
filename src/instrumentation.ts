@@ -1280,6 +1280,21 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0076 (B-FirstGameRecap-1) adds the nullable
+    // User.first_game_recap_seen_at timestamp. The first-game recap endpoint
+    // reads it on the game-summary path, so pre-apply this additive nullable
+    // column idempotently for databases whose migration journal got ahead of
+    // the physical column.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "first_game_recap_seen_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     // Migration 0073 (B-Report-1) adds the ContentReport table + its three
     // enums (ContentReportCategory / ContentReportIncorrectKind /
     // ContentReportStatus). Purely additive substrate — nothing reads it yet
