@@ -123,6 +123,21 @@ describe('readSessionClaims', () => {
     const claims = await readSessionClaims('not.a.jwt')
     expect(claims).toBeNull()
   })
+
+  it('returns null for an expired token (proxy treats the bearer as logged out)', async () => {
+    const token = await mintJwt({ sub: 'u1', sid: 's1', inv: true, onb: true, expiresIn: '-1s' })
+    expect(await readSessionClaims(token)).toBeNull()
+  })
+
+  it('returns null for a token signed with a different secret', async () => {
+    const foreign = await new SignJWT({ sid: 's1' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('u1')
+      .setIssuedAt()
+      .setExpirationTime('90d')
+      .sign(new TextEncoder().encode('some-other-secret'))
+    expect(await readSessionClaims(foreign)).toBeNull()
+  })
 })
 
 describe('refreshSessionOnboardingClaim', () => {
