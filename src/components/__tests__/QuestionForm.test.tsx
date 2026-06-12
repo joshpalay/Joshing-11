@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { scopeSignpost } from '@/components/QuestionForm';
+import { defaultShareToFeed, scopeSignpost } from '@/components/QuestionForm';
 
 // B5 / D9 (PRD-D-5 §5.1): the authoring signpost is a feature, not a privacy
 // warning. Public is the default and reads as a reward (others can play this);
@@ -34,5 +34,16 @@ describe('scopeSignpost (D9 authoring signpost)', () => {
 
   it('keeps private author-only', () => {
     expect(scopeSignpost('private')).toMatch(/only you/i);
+  });
+});
+
+describe('defaultShareToFeed (authoring destinations)', () => {
+  it('does not broadcast newly created questions to friends by default', () => {
+    expect(defaultShareToFeed()).toBe(false);
+  });
+
+  it('preserves explicit initial share state when editing or hydrating drafts', () => {
+    expect(defaultShareToFeed({ shareToFeed: true })).toBe(true);
+    expect(defaultShareToFeed({ shareToFeed: false })).toBe(false);
   });
 });

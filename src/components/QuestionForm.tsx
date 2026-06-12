@@ -96,6 +96,10 @@ type Action =
   | { type: 'FRIEND_SEARCH'; value: string }
   | { type: 'TOGGLE_FRIEND'; id: string };
 
+export function defaultShareToFeed(initialValues?: Pick<Partial<QuestionFormValues>, 'shareToFeed'>): boolean {
+  return initialValues?.shareToFeed ?? false;
+}
+
 function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecificMode = false): State {
   return {
     stage: 'WRITING',
@@ -114,7 +118,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggestionError: null,
     suggesting: false,
     specificMode: initialSpecificMode,
-    shareToFeed: initialValues?.shareToFeed ?? !initialSpecificMode,
+    shareToFeed: defaultShareToFeed(initialValues),
     visibility: initialValues?.visibility ?? 'public',
     friends: [],
     friendsLoading: false,
@@ -250,14 +254,15 @@ function remainingCopy(state: State): string | null {
 }
 
 // D9 (PRD-D-5 §5.1): authored questions are public by default — reach is a
-// reward, not a risk. The signpost states this plainly and positively; it is
-// never a cautionary or blocking warning. Friends-only is the calm exception.
-// `visibility` is the existing column the unified pool layer reads as `scope`
-// (public → public, friends → friends_only); no new field is written.
+// reward, not a risk. Broadcast to friends is opt-in, so this signpost describes
+// scope without implying the friend-feed checkbox is enabled. Friends-only is
+// the calm exception. `visibility` is the existing column the unified pool layer
+// reads as `scope` (public → public, friends → friends_only); no new field is
+// written.
 export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): string {
   switch (visibility) {
     case 'public':
-      return 'Others can play this. Your friends will see it’s from you.';
+      return 'Others can play this if it surfaces. It stays credited from you.';
     case 'friends':
       return 'Kept to friends only — only people who follow you will see it.';
     case 'private':
