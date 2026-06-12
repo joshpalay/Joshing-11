@@ -75,6 +75,9 @@ type AnswerResponse = {
 type FailedAnswerResponse = {
   message?: string;
   error?: string;
+  // Present on a 409 'slot_changed': the server's fresh slots, so the client can
+  // reconcile a stale snapshot instead of grading against the wrong question.
+  slots?: QueueSlot[];
 };
 
 type RecheckResponse = {
@@ -523,6 +526,12 @@ export default function DailyPage() {
           body: JSON.stringify({
             queue_id: queue.queue_id,
             slot_index: currentSlot.slot_index,
+            // Pin the question this slot is displaying so the server won't grade
+            // a stale slot_index against a different question (see the answer
+            // route's identity guard). Bot slots carry generated_question_id,
+            // friend/house slots carry question_id.
+            expected_question_id:
+              currentSlot.generated_question_id ?? currentSlot.question_id,
             submitted_answer: opts.submittedAnswer,
             gave_up: opts.gaveUp,
           }),
@@ -531,6 +540,18 @@ export default function DailyPage() {
           const failedBody = (await response
             .json()
             .catch(() => null)) as FailedAnswerResponse | null;
+          // Stale snapshot: the slot moved on under us. Reconcile to the server's
+          // fresh slots and let the corrected current question re-render, rather
+          // than recording this answer against the wrong question. Clear the
+          // input since the refreshed question is a different prompt.
+          if (failedBody?.error === 'slot_changed' && Array.isArray(failedBody.slots)) {
+            const reconciledSlots = failedBody.slots;
+            setQueue((existing) =>
+              existing ? { ...existing, slots: reconciledSlots } : existing,
+            );
+            setAnswer('');
+            return;
+          }
           throw new Error(answerFailureMessage(failedBody));
         }
 

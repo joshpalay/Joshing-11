@@ -37,10 +37,29 @@ type DailyAnswerErrorCode =
   | 'question_not_found'
   | 'forbidden'
   | 'grader_unavailable'
+  | 'slot_changed'
   | 'unexpected';
 
 function dailyAnswerErrorResponse(status: number, error: DailyAnswerErrorCode, message: string) {
   return NextResponse.json({ error, message }, { status });
+}
+
+// The slot the client is answering no longer holds the question it displayed —
+// the stored queue was mutated (e.g. a +2 bonus inserted, slots re-indexed)
+// after the client snapshotted it, so this slot_index now resolves to a
+// different question. Grading would score the typed answer against the wrong
+// question (the "answered Austerlitz, marked wrong against Omaha Beach" bug).
+// Refuse to grade and hand back the fresh slots so the client can reconcile and
+// re-display the real current question without recording a bogus miss.
+function slotChangedResponse(slots: QueueSlot[]) {
+  return NextResponse.json(
+    {
+      error: 'slot_changed' satisfies DailyAnswerErrorCode,
+      message: 'This question just refreshed — give it another look and answer again.',
+      slots,
+    },
+    { status: 409 },
+  );
 }
 
 async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
@@ -79,6 +98,12 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
 const bodySchema = z.object({
   queue_id: z.string().min(1),
   slot_index: z.number().int(),
+  // The question id (generated_question_id ?? question_id) the client believes
+  // occupies this slot. Optional for backward compatibility, but when present
+  // the server verifies the slot still resolves to it before grading, so a
+  // client answering a stale slot_index can't be scored against a different
+  // question. See slotChangedResponse.
+  expected_question_id: z.string().optional().catch(undefined),
   // gave_up / submitted_answer / answer are permissive: a malformed type is
   // coerced away (matching the prior hand-rolled parser) rather than 400-ing.
   gave_up: z.boolean().optional().catch(undefined),
@@ -86,10 +111,16 @@ const bodySchema = z.object({
   answer: z.string().optional().catch(undefined),
 });
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number; submittedAnswer: string; gaveUp: boolean } | null {
+function parseBody(value: unknown): {
+  queueId: string;
+  slotIndex: number;
+  submittedAnswer: string;
+  gaveUp: boolean;
+  expectedQuestionId: string | null;
+} | null {
   const parsed = bodySchema.safeParse(value);
   if (!parsed.success) return null;
-  const { queue_id, slot_index, gave_up, submitted_answer, answer } = parsed.data;
+  const { queue_id, slot_index, expected_question_id, gave_up, submitted_answer, answer } = parsed.data;
   const gaveUp = gave_up === true;
   const submittedAnswer = (
     typeof submitted_answer === 'string'
@@ -99,7 +130,13 @@ function parseBody(value: unknown): { queueId: string; slotIndex: number; submit
         : ''
   ).trim();
   if (!gaveUp && !submittedAnswer) return null;
-  return { queueId: queue_id, slotIndex: slot_index, submittedAnswer, gaveUp };
+  return {
+    queueId: queue_id,
+    slotIndex: slot_index,
+    submittedAnswer,
+    gaveUp,
+    expectedQuestionId: expected_question_id ?? null,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -134,6 +171,19 @@ export async function POST(request: NextRequest) {
     }
     if (!slot.generated_question_id && !slot.question_id) {
       return dailyAnswerErrorResponse(400, 'invalid_state', 'That Daily Five slot is not ready yet.');
+    }
+
+    // Identity guard: the client displays slot.question_text but only submits
+    // slot_index, and grading below resolves the question from the slot's FK. If
+    // the queue was re-indexed after the client snapshotted it (a +2 bonus
+    // insert re-sorts slots by slot_index), this slot_index can now hold a
+    // different question than the one the player saw. Verify the slot still
+    // resolves to the question id the client expected; on mismatch, refuse to
+    // grade and return the fresh slots so the client re-displays the real
+    // question rather than scoring the answer against the wrong one.
+    const slotQuestionId = slot.generated_question_id ?? slot.question_id ?? null;
+    if (parsed.expectedQuestionId && slotQuestionId && parsed.expectedQuestionId !== slotQuestionId) {
+      return slotChangedResponse(slots);
     }
 
     // The Daily 5 mixes two slot shapes — bot-generated questions live in
