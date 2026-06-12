@@ -140,7 +140,9 @@ async function handleDailyCatchupAnswer({
     catchupItem.correctAnswer,
     catchupItem.alternateAnswers,
     catchupItem.questionText,
-    'factual',
+    // Friend slots carry the author's stored type ('personal' gets the lenient
+    // policy); daily-generated items are 'factual' by construction.
+    catchupItem.questionType,
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): a grader outage is not a
   // real verdict — never persist 'wrong'. Hold for retry.

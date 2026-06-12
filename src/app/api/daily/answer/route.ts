@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { gradeAnswer, type GradeOutcome } from '@/server/grading';
+import { gradeAnswer, type GradableQuestionType, type GradeOutcome } from '@/server/grading';
 import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
 import { getSession } from '@/server/auth/session';
 import {
@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
       broadCategory: string | null;
       basePoints: number;
       acceptedAlternatives: string[];
+      questionType: GradableQuestionType;
     };
 
     let question: DailyAnswerQuestion;
@@ -190,6 +191,9 @@ export async function POST(request: NextRequest) {
         basePoints,
         // acceptable_variants (B4 Phase 4): right-but-rephrased answers grade correct.
         acceptedAlternatives: row.acceptableVariants ?? [],
+        // generatedQuestions has no question_type column — bot questions are
+        // factual by construction (the D-5 retrieval-grounded pipeline).
+        questionType: 'factual',
       };
     } else {
       const [row] = await db
@@ -215,6 +219,9 @@ export async function POST(request: NextRequest) {
         broadCategory: row.broadCategory,
         basePoints: resolveDailyBasePoints(difficulty),
         acceptedAlternatives: row.acceptedAlternatives ?? [],
+        // Friend slots are canonical questions and carry the author's stored
+        // type — a 'personal' question must reach the grader's leniency branch.
+        questionType: row.questionType,
       };
     }
 
@@ -229,7 +236,7 @@ export async function POST(request: NextRequest) {
           canonicalAnswer,
           question.acceptedAlternatives,
           question.questionText,
-          'factual',
+          question.questionType,
         );
     // The LLM grader was unreachable (timeout, parse error, no client), so there is
     // no verdict at all — the outcome is `unscored`, never a 'wrong'. Scoring the

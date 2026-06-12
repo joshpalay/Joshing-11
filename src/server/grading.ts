@@ -8,6 +8,14 @@
 
 import { gradeAnswerWithLLM } from '@/lib/llm';
 
+// Mirrors questionTypeEnum in src/server/db/schema.ts. The grader's leniency
+// policy branches on this (a 'personal' question's canonical answer is the
+// creator's intended answer, not objective truth), so callers MUST pass the
+// question's stored type — there is deliberately no default. Generated bot
+// questions (generatedQuestions has no question_type column) are factual by
+// construction and pass the literal 'factual'.
+export type GradableQuestionType = 'factual' | 'personal' | 'ambiguous' | 'factual_uncertain';
+
 export type GradeResult = 'correct' | 'wrong';
 
 // A genuine, scored verdict — exact-match hit/miss or a real model judgement.
@@ -62,7 +70,7 @@ export async function gradeAnswer(
   canonicalAnswer: string,
   acceptedAlternatives: string[],
   questionText: string,
-  questionType: string = 'factual'
+  questionType: GradableQuestionType
 ): Promise<GradeOutcome> {
   // An empty submission is a genuine, deliberate wrong — a real scored verdict,
   // not an infra failure. (The daily give-up path is the analogous deliberate

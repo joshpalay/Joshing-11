@@ -1,3 +1,5 @@
+import type { GradableQuestionType } from '@/server/grading';
+
 export type ReplayItem = {
   dailyQueueItemId: string;
   queueDate: string;
@@ -9,6 +11,11 @@ export type ReplayItem = {
   domain: string;
   domainDisplayName: string;
   originalSubmittedAnswer: string | null;
+  /**
+   * Grader leniency policy input. Friend-authored (canonical) slots carry the
+   * stored Question.question_type; bot slots are 'factual' by construction.
+   */
+  questionType: GradableQuestionType;
   /** Human author's name, the house name ('Joshing'), or null for LLM-origin (bot) slots. */
   authorName: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, no relational copy). */
