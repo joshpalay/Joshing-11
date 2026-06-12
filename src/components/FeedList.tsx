@@ -481,6 +481,37 @@ type FeedListProps = {
    * promo. See getAddFriendsPromo / displayRows.
    */
   addFriendsPromo?: StreamItem | null
+  /**
+   * B-HOME-OVERFLOW-02: the /for-you overflow subpage. Renders the FULL pending
+   * direct queue (server-seeded via initialPage, in the same sender-rotated
+   * order Home windows) as a flat answerable list: filter pinned to 'all',
+   * surface tabs hidden, no recency buckets, no section headings, server order
+   * preserved. Cards keep the home-zone treatment (elevated, timestamp-free)
+   * and the full existing answer flow. After a successful answer the client
+   * router cache is refreshed so Home recomputes its top-N on return (§7).
+   */
+  pendingQueue?: boolean
+  /**
+   * D-HOME-PACING-01: the server-computed budget for the unified home edition.
+   * When supplied, FeedList renders a FIXED-BUDGET view rather than the unbounded
+   * stream: the served direct/playable slices it was handed are shown with a
+   * quiet "N more →" overflow affordance per question zone, the temporal recency
+   * buckets are dropped (§4), exactly one rotating panel renders (§2), and the
+   * all-empty switch (§9) is driven by `isAllEmpty`. Selection happens entirely
+   * server-side; this prop carries only the counts and the chosen panel.
+   */
+  budget?: HomeBudget | null
+}
+
+export type HomeBudget = {
+  /** Direct ("For You") questions pending beyond the served slice. */
+  directOverflowCount: number
+  /** Playable friend-activity bundles pending beyond the served slice. */
+  playablesOverflowCount: number
+  /** The single rotating panel for this load, or null on the all-empty page. */
+  panel: StreamItem | null
+  /** True when all three content zones are empty — drives the empty switch. */
+  isAllEmpty: boolean
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -490,6 +521,48 @@ type QuestionCardState = 'unanswered' | 'answered'
 // existing recency grouping works over the merged list unchanged. The per-person
 // grouping helpers live in ./feed/person-grouping (pure + unit-tested).
 type UnifiedRow = GroupInputRow<FeedApiItem>
+
+// D-HOME-PACING-01 §2 (tuned 2026-06-12): on the budgeted home, the texture
+// zone runs this many rows, then the rotating panel as a mid-zone interlude,
+// then the remaining rows (the server caps the set at TEXTURE_SOFT_CAP = 8),
+// closed by the "See all activity →" row.
+const TEXTURE_LEAD_COUNT = 3
+
+// Wrap a promo/panel StreamItem as an activity row so the single rotating panel
+// renders through the shared renderRow path (D-HOME-PACING-01 §2 slot 5).
+function panelRow(item: StreamItem): UnifiedRow {
+  const sortAt = item.sortAt instanceof Date ? item.sortAt : new Date(item.sortAt)
+  return {
+    kind: 'activity',
+    item,
+    source_event_at: sortAt.toISOString(),
+    sortMs: sortAt.getTime(),
+  }
+}
+
+// The quiet "N more →" overflow affordance under a budgeted question zone (§3).
+// Plain by design — it states the abundance ("6 more waiting for you," never
+// "6 unanswered") and opens that zone's overflow subpage (B-HOME-OVERFLOW-02).
+function OverflowRow({
+  unifiedHome,
+  label,
+  href,
+}: {
+  unifiedHome: boolean
+  label: string
+  href: string
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex min-h-11 items-center pt-1 text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] ${
+        unifiedHome ? 'pl-[2px]' : ''
+      }`}
+    >
+      {label}
+    </Link>
+  )
+}
 
 export default function FeedList(props: FeedListProps) {
   return (
@@ -730,25 +803,33 @@ function FeedListContent({
   commonGroundPromo = null,
   expandingPromo = null,
   addFriendsPromo = null,
+  budget = null,
+  pendingQueue = false,
 }: FeedListProps) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const initialFilterParam =
     searchParams.get('filter') ?? searchParams.get('feed_filter') ?? 'from-friends'
   // D-1 Stage 5: the feed is two surfaces — Broadcasts ('from-friends', default)
   // and Sent ('sent-to-me'). Legacy ?filter=all links land on Broadcasts.
   // unifiedHome overrides both: one merged surface pinned to 'all' so directly-
-  // sent questions thread in alongside the activity stream.
-  const initialFilter: FeedFilter = unifiedHome
-    ? 'all'
-    : initialFilterParam === 'sent-to-me'
-      ? 'sent-to-me'
-      : 'from-friends'
+  // sent questions thread in alongside the activity stream. The pendingQueue
+  // subpage windows the same 'all' source Home does, so it pins 'all' too.
+  const initialFilter: FeedFilter =
+    unifiedHome || pendingQueue
+      ? 'all'
+      : initialFilterParam === 'sent-to-me'
+        ? 'sent-to-me'
+        : 'from-friends'
   // initialPage is the server pre-fetch of the active surface, so it only seeds
   // state when that's the active filter; other surfaces fall back to a client
-  // fetch. On unifiedHome the prefetch is the 'all' page, so it seeds directly.
+  // fetch. On unifiedHome/pendingQueue the prefetch is the 'all' page, so it
+  // seeds directly.
   const initialPageMatchesFilter =
     initialPage !== null &&
-    (unifiedHome ? initialFilter === 'all' : initialFilter === 'from-friends')
+    (unifiedHome || pendingQueue
+      ? initialFilter === 'all'
+      : initialFilter === 'from-friends')
   const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialFilter)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [items, setItems] = useState<FeedApiItem[]>(
@@ -945,8 +1026,15 @@ function FeedListContent({
         sortMs: sortAt.getTime(),
       })
     }
+    // Under the budget (D-HOME-PACING-01) the zones are rendered as separate
+    // sections, NOT one chronological stream, so the server's intra-zone order
+    // is authoritative: rotate-by-sender for direct (§5), actor-interleave for
+    // playables (§5), newest-first for the bounded texture. A global recency
+    // re-sort here would undo that ordering, so preserve server order — feed
+    // (direct) rows first, then activity (playables then texture) rows.
+    if (budget) return [...feedRows, ...activityRows]
     return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
-  }, [items, activityItems, unifiedHome])
+  }, [items, activityItems, unifiedHome, budget])
 
   // Place the home-only discovery modules. They are NOT part of the chronological
   // union above; each renders whenever its data exists. Rather than clump them at
@@ -1254,8 +1342,11 @@ function FeedListContent({
         const body = await response.json().catch(() => null)
         throw new Error(body?.message ?? 'Could not update that card.')
       }
+      // §7: a dismiss (or its undo) on the overflow subpage also changes the
+      // shared pending queue — invalidate the router cache like an answer does.
+      if (pendingQueue) router.refresh()
     },
-    [],
+    [pendingQueue, router],
   )
 
   // Shared by the left-swipe and the on-card Dismiss button — one handler, one
@@ -1440,6 +1531,12 @@ function FeedListContent({
         setAnswerSheetId(null)
         setAnswerNotice(null)
         setFeedbackSheetId(item.id)
+        // §7 hardening (B-HOME-OVERFLOW-02): an answer on the overflow subpage
+        // shrinks the shared pending queue, so invalidate the client router
+        // cache — a back-navigation to Home then refetches and recomputes its
+        // top-N window instead of restoring a stale edition. Local list state
+        // is untouched: the just-answered card stays visible as answered here.
+        if (pendingQueue) router.refresh()
       } catch (caught) {
         // Keep the sheet open with the player's answer intact so they can resubmit.
         setAnswerNotice({
@@ -1453,7 +1550,7 @@ function FeedListContent({
         setBusyId(null)
       }
     },
-    []
+    [pendingQueue, router]
   )
 
   const submitRecheck = useCallback(
@@ -1496,6 +1593,11 @@ function FeedListContent({
     },
     []
   )
+
+  // The home zones and the overflow subpages share one card treatment: elevated
+  // Tier-1 cream cards with the relative timestamp hidden (the calmer register).
+  // The standalone Broadcasts/Sent surfaces keep flat, timestamped cards.
+  const homeZoneCards = unifiedHome || pendingQueue
 
   // One row of the rendered feed, shared by every section (the home-only "For
   // You" / "From Friends" splits and the recency groups all call this). Closes
@@ -1540,10 +1642,11 @@ function FeedListContent({
           key={`a-${row.item.id}`}
           item={row.item}
           timestamp={formatRelativeTime(row.item.sortAt)}
-          // The home "What's Happening" feed reads calmer without the per-row
-          // "1d ago" ledger; the full /activities log keeps its timestamps.
-          showTimestamp={!unifiedHome}
-          elevated={unifiedHome}
+          // The home "What's Happening" feed (and the overflow subpages, which
+          // share its register) reads calmer without the per-row "1d ago"
+          // ledger; the full /activities log keeps its timestamps.
+          showTimestamp={!homeZoneCards}
+          elevated={homeZoneCards}
         />
       )
     }
@@ -1613,7 +1716,7 @@ function FeedListContent({
     )
 
     if (isAnswered) {
-      const answeredItem = toAnsweredByYouItem(item, result, unifiedHome)
+      const answeredItem = toAnsweredByYouItem(item, result, homeZoneCards)
       const isIncorrect = answeredItem.isCorrect === false
       const recheckAction: FeedRecheckAction | null = isIncorrect
         ? { onSubmit: () => submitRecheck(item) }
@@ -1639,7 +1742,7 @@ function FeedListContent({
       )
     }
 
-    const typedItem = toTypedFeedItem(item, unifiedHome)
+    const typedItem = toTypedFeedItem(item, homeZoneCards)
     const dismissible = !item.viewer_is_author
     const onAnswer = dismissible
       ? () => {
@@ -1660,7 +1763,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
-          elevated={unifiedHome}
+          elevated={homeZoneCards}
         />
       )
     } else if (typedItem.type === 'friend_liked') {
@@ -1670,7 +1773,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
-          elevated={unifiedHome}
+          elevated={homeZoneCards}
         />
       )
     } else {
@@ -1680,8 +1783,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
-          onHideCategory={() => void hideCategory(item)}
-          elevated={unifiedHome}
+          elevated={homeZoneCards}
         />
       )
     }
@@ -1716,7 +1818,7 @@ function FeedListContent({
           empty (otherwise a directly-sent question would be hidden behind a tab
           the recipient can't see). Fully empty feeds still fall back to the
           empty state's own "Questions from friends" eyebrow. */}
-      {!unifiedHome && hasAnySurfaceContent ? (
+      {!unifiedHome && !pendingQueue && hasAnySurfaceContent ? (
         <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
       ) : null}
 
@@ -1750,11 +1852,38 @@ function FeedListContent({
               </p>
             ) : null}
           </section>
+        ) : unifiedHome || pendingQueue ? (
+          // D-HOME-PACING-01 §9 — the all-three-empty home edition. The hero
+          // and composer always render around this; this is the inline empty
+          // state between them (NOT a full-screen takeover), reviving the
+          // earlier centered treatment: the speech-bubble graphic over a serif
+          // headline carrying the existing §8.2.8/§8.2.12 copy. The rotating
+          // panel does NOT also render here — the empty state is the one
+          // invitation (no double-invite).
+          <section className="flex flex-col items-center gap-3 py-8 text-center">
+            <SpeechBubbleIllustration className="h-24 w-auto" />
+            <h2 className="font-serif text-xl font-medium text-[var(--brand-ink)]">
+              {emptyCopy}
+            </h2>
+            {showInviteFriendCta ? (
+              <Link
+                href="/friends"
+                className="font-serif text-lg font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
+              >
+                add friends →
+              </Link>
+            ) : null}
+            {emptyDiagnostics ? (
+              <p className="bg-muted text-muted-foreground mt-3 max-w-xl rounded px-3 py-2 font-mono text-xs break-words">
+                {emptyDiagnostics}
+              </p>
+            ) : null}
+          </section>
         ) : (
-          // Questions-from-Friends empty state — matches the Figma mock: a muted
-          // eyebrow (standing in for the hidden surface tabs), a left-aligned
-          // serif headline, the centered speech-bubble art, and a right-aligned
-          // orange "add friends" link.
+          // Questions-from-Friends empty state (standalone Feed surface) — a
+          // muted eyebrow (standing in for the hidden surface tabs), a left-
+          // aligned serif headline, the centered speech-bubble art, and a
+          // right-aligned orange "add friends" link.
           <section className="py-4">
             <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
               Questions from friends
@@ -1793,18 +1922,37 @@ function FeedListContent({
             <Fragment key="for-you">
               <FeedSectionHeading unifiedHome={unifiedHome}>For You</FeedSectionHeading>
               {groupActivityByFriend(forYouRows).map(renderRow)}
+              {/* D-HOME-PACING-01 §3 — quiet overflow row. Abundance, never
+                  obligation; the subpage it will open is B-HOME-OVERFLOW-02. */}
+              {budget && budget.directOverflowCount > 0 ? (
+                <OverflowRow
+                  unifiedHome={unifiedHome}
+                  label={`${budget.directOverflowCount} more from friends →`}
+                  href="/for-you"
+                />
+              ) : null}
             </Fragment>
           ) : null}
           {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
               you can answer inline) are pinned into a "From Friends" section
-              below "For You", capped to the most recent few with a "View more"
-              control. groupActivityByFriend is a pass-through here (milestone
-              rows never group), keeping the render path uniform. */}
+              below "For You". Under the budget the server has already capped the
+              served slice (Playables 4), so we render all of it and surface the
+              remainder as a quiet "N more →" overflow; off the budget the legacy
+              client "View more" batching still applies. groupActivityByFriend is
+              a pass-through here (milestone rows never group). */}
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
               <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {groupActivityByFriend(visibleFromFriendsRows).map(renderRow)}
-              {fromFriendsHiddenCount > 0 ? (
+              {groupActivityByFriend(budget ? fromFriendsRows : visibleFromFriendsRows).map(renderRow)}
+              {budget ? (
+                budget.playablesOverflowCount > 0 ? (
+                  <OverflowRow
+                    unifiedHome={unifiedHome}
+                    label={`${budget.playablesOverflowCount} more →`}
+                    href="/from-friends"
+                  />
+                ) : null
+              ) : fromFriendsHiddenCount > 0 ? (
                 <button
                   type="button"
                   onClick={() =>
@@ -1819,18 +1967,56 @@ function FeedListContent({
               ) : null}
             </Fragment>
           ) : null}
-          {/* Everything else — question cards sent to you, relationship events,
-              promos — stays in a single calm chronological stream grouped by
-              recency, rendered as full-sentence LONE events (D-FEED-GROUP3-01 §2
-              styling). Per-person clustering (PersonActivityCard) stays dropped
-              here: the cluster form was the source of the subject-stripped
-              "wording is weird" copy, and density now comes from visual quiet. */}
-          {groupItemsByRecency(restRows).map((group) => (
-            <Fragment key={group.key}>
-              <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
-              {group.items.map(renderRow)}
-            </Fragment>
-          ))}
+          {/* Texture — relationship events and other social moments, rendered as
+              full-sentence LONE events (D-FEED-GROUP3-01 §2 styling). Per-person
+              clustering (PersonActivityCard) stays dropped: the cluster form was
+              the source of the subject-stripped copy, and density comes from
+              visual quiet. Under the budget the temporal recency buckets are
+              removed (§4) — the set is already bounded to today-and-yesterday —
+              so it renders as one calm flat stream; off the budget the standalone
+              Feed keeps its recency grouping. */}
+          {budget || pendingQueue ? (
+            // The overflow subpage renders the full pending queue flat, in the
+            // server's zone order (sender rotation) — no recency buckets, no
+            // section headings; the page header carries the one title.
+            restRows.length > 0 ? (
+              <Fragment key="texture">
+                {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
+                {/* §2 slot 5 (tuned 2026-06-12) — the one rotating panel per
+                    load now runs as a mid-zone interlude after the lead texture
+                    rows, with the remaining rows continuing below it. Budget-
+                    only: the pendingQueue subpages carry no panel. */}
+                {budget?.panel ? renderRow(panelRow(budget.panel)) : null}
+                {restRows.slice(TEXTURE_LEAD_COUNT).map(renderRow)}
+                {/* §4: texture gets NO third subpage — older moments belong to
+                    Lately (/activities), the archive of this same stream. Revive
+                    the retired "See all activity →" affordance as the zone's
+                    quiet see-more row, in the same voice as the overflow rows.
+                    Texture-anchored: hidden with the zone (§9), and never on
+                    the pendingQueue subpages (no texture there). */}
+                {budget ? (
+                  <OverflowRow
+                    unifiedHome={unifiedHome}
+                    label="See all activity →"
+                    href="/activities"
+                  />
+                ) : null}
+              </Fragment>
+            ) : null
+          ) : (
+            groupItemsByRecency(restRows).map((group) => (
+              <Fragment key={group.key}>
+                <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
+                {group.items.map(renderRow)}
+              </Fragment>
+            ))
+          )}
+          {/* D-HOME-PACING-01 §2 slot 5 fallback — when the texture zone is
+              empty the single rotating panel still renders once, here at the
+              foot of the page (suppressed on the all-empty page, where the
+              server sends panel: null). With texture present it renders mid-
+              zone above instead. */}
+          {budget?.panel && restRows.length === 0 ? renderRow(panelRow(budget.panel)) : null}
         </section>
       )}
 

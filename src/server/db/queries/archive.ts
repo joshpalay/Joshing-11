@@ -211,7 +211,7 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
         // Route the canonical question through resolveAuthorDisplay so a house
         // slot (creatorId null, source 'house_authored') positively resolves to
         // 'Joshing' + authorIsHouse, instead of falling through to ''. Pure-LLM
-        // slots carry no bankQuestion, so they keep the 'Generated'/'' fallback.
+        // slots carry no bankQuestion, so they keep the LLM-attribution/'' fallback.
         const authored = bankQuestion
           ? resolveAuthorDisplay(bankQuestion.creatorId, bankQuestion.source, askerDisplay)
           : { authorName: null, authorIsHouse: false };

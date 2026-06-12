@@ -95,8 +95,8 @@ literal. Quoted verbatim from the `line:` arrays.
 
 | `card_type` | Verbatim template | Meaning | Playable? | Plural | Fallback name |
 |---|---|---|---|---|---|
-| `direct_sent` (`DirectSentCard`+`SparkleEnvelope`) | `{senderName}` + `" thought you'd like this"` + ` about {category}` *(if category)* + `.` ; optional italic `"{personalMessage}"` | A friend sent you this question | **YES** ("Answer →") | — | `'A friend'` |
-| `friend_added` (`FriendAddedCard`) | `{friendName}` + `' added a question'` + ` about {category}` *(if category)*; optional ` · Hide questions about {category}` | A friend authored/broadcast a question | **YES** ("Answer →") | — | `'A friend'` |
+| `direct_sent` (`DirectSentCard`+`SparkleEnvelope`) | eyebrow `'Sent directly to you'` + `{senderName}` + `" thought you'd like this"` + ` about {category}` *(if category)* + `.` ; optional italic `"{personalMessage}"` | A friend sent you this question | **YES** ("Answer →") | — | `'A friend'` |
+| `friend_added` (`FriendAddedCard`) | `{friendName}` + `' added a question'` + ` about {category}` *(if category)* | A friend authored/broadcast a question | **YES** ("Answer →") | — | `'A friend'` |
 | `friend_liked` (`FriendLikedCard`+`FeedCard`) | `{authorName}` + `' thought you would like this'` | A friend endorsed this question | **YES** ("Answer →") | endorsement collapse fields carried but **NOT rendered** (see §E) | `'Someone'` |
 | `answered_by_you` (`AnsweredByYouCard`) | eyebrow `'You answered'` + one of 6 comparison lines (§B) | Result of a question you already answered | No (Try again → / Recheck →) | single paired friend only | `'They'` |
 

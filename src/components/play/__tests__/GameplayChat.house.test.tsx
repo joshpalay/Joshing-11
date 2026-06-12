@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
-import { HOUSE_AUTHOR } from '@/lib/questions-types';
+import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
@@ -63,11 +63,11 @@ describe('GameplayChat house author labeling (D-3 Stage 2)', () => {
     expect(rendered).not.toContain('Editorial');
   });
 
-  it('leaves the existing LLM "Generated" treatment unbadged and non-relational', () => {
+  it('leaves the LLM attribution treatment unbadged and non-relational', () => {
     const rendered = html([
-      questionMessage({ creatorName: 'Generated', creatorIsHouse: false }),
+      questionMessage({ creatorName: LLM_QUESTION_ATTRIBUTION, creatorIsHouse: false }),
     ]);
-    expect(rendered).toContain('Generated');
+    expect(rendered).toContain(LLM_QUESTION_ATTRIBUTION);
     expect(rendered).not.toContain('gave you this');
     expect(rendered).not.toContain('editorial-badge');
   });

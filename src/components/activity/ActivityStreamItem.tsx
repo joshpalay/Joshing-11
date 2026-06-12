@@ -143,7 +143,7 @@ type Resolution = { submitted: string; isCorrect: boolean };
 // question, a house/LLM-authored question MUST be marked — never rendered as if
 // a person wrote it. Returns the marker text, or null when no marker is needed:
 //   - authorIsHouse        → the house identity ("Joshing · Editorial")
-//   - authorName === null  → a non-person LLM-origin question ("Generated")
+//   - authorName === null  → a non-person LLM-origin question (LLM_QUESTION_ATTRIBUTION)
 //   - human name / undefined → null (the row frame already attributes it; a
 //                              human author needs no machine-honesty marker)
 function questionProvenance(q: StreamQuestion): string | null {
@@ -177,6 +177,7 @@ export function ActivityStreamItem({
   nested = false,
   showTimestamp = true,
   elevated = false,
+  onQuestionResolved,
 }: {
   item: StreamItem;
   timestamp: string;
@@ -193,6 +194,11 @@ export function ActivityStreamItem({
   // page as the thing you can play, while the ambient one-liners stay flat. Off
   // by default (the full /activities log keeps every row flat).
   elevated?: boolean;
+  // Fires after a milestone question is resolved in place (answered right or
+  // wrong). The pending-playables overflow subpage (B-HOME-OVERFLOW-02 §7)
+  // uses it to invalidate the client router cache so Home recomputes its
+  // served window on return; surfaces that don't care simply omit it.
+  onQuestionResolved?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
@@ -239,6 +245,7 @@ export function ActivityStreamItem({
       next.set(questionId, { submitted, isCorrect });
       return next;
     });
+    onQuestionResolved?.();
   }
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
@@ -322,7 +329,7 @@ export function ActivityStreamItem({
       ? {
           padding: opened ? '16px 14px' : '14px',
           background: 'var(--game-card-question)',
-          border: '1px solid rgba(40, 32, 30, 0.22)',
+          border: '1px solid var(--accent-gold)',
           borderRadius: 4,
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
         }

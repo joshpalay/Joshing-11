@@ -56,7 +56,8 @@ export type StreamQuestion = {
   //   - undefined        — provenance not resolved for this source; show nothing
   //                        (the row frame already attributes it, e.g. moments are
   //                        human by construction).
-  //   - null             — a non-person LLM-origin question → render "Generated".
+  //   - null             — a non-person LLM-origin question → render the
+  //                        LLM_QUESTION_ATTRIBUTION label.
   //   - string (+isHouse) — a human name, or the house identity when authorIsHouse.
   // A house/LLM question must NEVER render as if a person wrote it.
   authorName?: string | null;
@@ -144,16 +145,17 @@ export type CommonGroundPromoDomain = {
   friend: { points: number; tier: MasteryTier };
 };
 
-// One friend in the common-ground promo carousel: the friend, plus their single
-// strongest shared-but-untested domain (the circle hero). The promo carries a
-// few of these so the carousel is a quiet tour of the viewer's circle — a slide
-// per friend — rather than a single relationship. One domain per slide keeps the
-// overlapping-circle motif uncrowded (more than one circle crowds it).
+// One friend in the common-ground promo carousel: the friend, plus their
+// strongest shared-but-untested domains (at least one, at most two — see
+// MAX_DOMAINS_PER_FRIEND in common-ground-promo.ts). The promo carries a few of
+// these so the carousel is a quiet tour of the viewer's circle — a slide per
+// friend, with swipes moving between PEOPLE, not between areas.
 export type CommonGroundPromoFriend = {
   friendId: string;
   friendFirstName: string;
   friendHref: string;
-  domain: CommonGroundPromoDomain;
+  // Strongest first; never empty.
+  domains: CommonGroundPromoDomain[];
 };
 
 export type RecentlyExpandingPromoDomain = {

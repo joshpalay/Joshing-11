@@ -91,6 +91,19 @@ describe('Feed card preview fixtures', () => {
     expect(answeredByYou).toContain('You both had it')
   })
 
+  it('marks direct sends with the eyebrow on the plain bordered tile (no triangle mat)', () => {
+    const directSent = html(
+      <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
+    )
+    expect(directSent).toContain('Sent directly to you')
+    expect(directSent).not.toContain('/images/Variant4.png')
+
+    const friendAdded = html(
+      <FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />
+    )
+    expect(friendAdded).not.toContain('Sent directly to you')
+  })
+
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
     const variants = [
       html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
@@ -400,7 +413,7 @@ describe('Answer feedback sheet recheck affordance', () => {
 })
 
 describe('Authored-by-viewer card', () => {
-  it('renders the authored attribution and category (Figma triangle card has no eyebrow)', () => {
+  it('renders the authored attribution and category (broadcast card has no eyebrow)', () => {
     const rendered = html(
       <FriendAddedCard
         item={feedCardPreviewFixtures.authoredByViewerUnanswered}
@@ -503,8 +516,8 @@ describe('FeedCardShell (shared C7 shell)', () => {
     // Deeper drop shadow (10% ink) than the ambient cards' 4%.
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
     expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
-    // Visible warm-ink stroke replaces the faint hairline rule.
-    expect(rendered).toContain('border-[rgba(40,32,30,0.22)]')
+    // Gold accent stroke replaces the faint hairline rule.
+    expect(rendered).toContain('border-[var(--accent-gold)]')
     expect(rendered).not.toContain('border-[var(--brand-rule)]')
     // No hard ink offset shadow, no near-white resting fill.
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')

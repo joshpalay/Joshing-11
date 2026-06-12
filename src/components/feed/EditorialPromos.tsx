@@ -62,9 +62,10 @@ function rotate<T>(pool: readonly T[], index: number | undefined): T {
 
 /**
  * "Shared Ground" — the overlapping-circle motif as a full-bleed editorial
- * feature. A carousel with a slide per friend (each their strongest shared-but-
- * untested domain), so the viewer can rotate through a few of the people they
- * share ground with, plus a closing nudge to widen their circle.
+ * feature. A carousel with a slide per friend (each showing their one or two
+ * strongest shared-but-untested areas), so swiping moves between PEOPLE the
+ * viewer shares ground with — never between areas — plus a closing nudge to
+ * widen their circle.
  */
 export function CommonGroundFeature({
   embed,
@@ -74,7 +75,9 @@ export function CommonGroundFeature({
   // One shared scale across every slide so circles are comparable friend to
   // friend, not re-normalized per slide.
   const datasetMax = circleDatasetMax(
-    embed.friends.flatMap((f) => [f.domain.viewer.points, f.domain.friend.points]),
+    embed.friends.flatMap((f) =>
+      f.domains.flatMap((d) => [d.viewer.points, d.friend.points]),
+    ),
   );
   const count = embed.friends.length;
   const headline = rotate(COMMON_GROUND_HEADLINES, embed.headlineIndex);
@@ -114,26 +117,33 @@ export function CommonGroundFeature({
           slides={[
             ...embed.friends.map((f) => (
               <div key={f.friendId} className="flex flex-col gap-4">
-                <DomainCircleSvg
-                  viewerPoints={f.domain.viewer.points}
-                  friendPoints={f.domain.friend.points}
-                  viewerTier={f.domain.viewer.tier}
-                  friendTier={f.domain.friend.tier}
-                  datasetMax={datasetMax}
-                  scale={SHARED_GROUND_CIRCLE_SCALE}
-                  ariaLabel={`${f.domain.label}: shared with ${f.friendFirstName}, still untested`}
-                />
-                <span className="flex max-w-[150px] flex-col gap-0.5">
-                  <Link
-                    href={f.friendHref}
-                    className="font-serif text-[15px] leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
-                  >
-                    {f.friendFirstName}
-                  </Link>
-                  <span className="font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
-                    {f.domain.label}
-                  </span>
-                </span>
+                {/* One or two shared areas side by side — each circle motif with
+                    its area label underneath, bottom-aligned so the labels share
+                    a baseline whatever the circle heights. */}
+                <div className="flex items-end gap-10">
+                  {f.domains.map((d) => (
+                    <span key={d.label} className="flex flex-col gap-2">
+                      <DomainCircleSvg
+                        viewerPoints={d.viewer.points}
+                        friendPoints={d.friend.points}
+                        viewerTier={d.viewer.tier}
+                        friendTier={d.friend.tier}
+                        datasetMax={datasetMax}
+                        scale={SHARED_GROUND_CIRCLE_SCALE}
+                        ariaLabel={`${d.label}: shared with ${f.friendFirstName}, still untested`}
+                      />
+                      <span className="max-w-[150px] font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
+                        {d.label}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <Link
+                  href={f.friendHref}
+                  className="max-w-[150px] font-serif text-[15px] leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
+                >
+                  {f.friendFirstName}
+                </Link>
               </div>
             )),
             // Final slide: a gentle nudge to widen the circle. The personal-invite

@@ -17,15 +17,15 @@ const FEED_CARD_RADIUS = 'rounded-[4px]'
 const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 
 // Elevated ("playable" / Tier 1) treatment for the unified home feed
-// (D-FEED-TIER): the warm light-cream question fill, a visible — but still
-// light — warm-ink stroke, and a deeper soft drop shadow than the ambient
-// cards carry. On the home feed the activity rows render as flat one-liners
-// (no card), so a playable question card needs more than a 4% lift to read as
-// the thing you can play; the stronger stroke + shadow make it step forward
-// off the cream while the chatter stays quiet text. Shares the shadow color
-// (#28201E warm ink) with the resting cards, just at a higher opacity.
+// (D-FEED-TIER): the warm light-cream question fill, a gold accent stroke, and
+// a deeper soft drop shadow than the ambient cards carry. On the home feed the
+// activity rows render as flat one-liners (no card), so a playable question card
+// needs more than a 4% lift to read as the thing you can play; the gold stroke +
+// shadow make it step forward off the cream while the chatter stays quiet text.
+// Shares the shadow color (#28201E warm ink) with the resting cards, just at a
+// higher opacity. The stroke uses the editorial accent gold (--accent-gold).
 const FEED_CARD_ELEVATED_FILL = 'bg-[var(--game-card-question)]'
-const FEED_CARD_ELEVATED_STROKE = 'border-[rgba(40,32,30,0.22)]'
+const FEED_CARD_ELEVATED_STROKE = 'border-[var(--accent-gold)]'
 const FEED_CARD_ELEVATED_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.10)]'
 
 export type FeedCardShellProps = {

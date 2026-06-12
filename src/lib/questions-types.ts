@@ -55,9 +55,10 @@ export function parseQuestionSource(value: string): QuestionSource {
 // Non-person, non-house attribution for LLM-origin questions
 // (source 'daily_generated' | 'curated_sent'; creatorId === null). A machine
 // question must never render a human name or imply a person wrote it.
-// PLACEHOLDER COPY — flagged for product sign-off. Must NOT be "Joshing"/"Editorial"
-// (those are the house identity below); this is for the non-house LLM origins.
-export const LLM_QUESTION_ATTRIBUTION = 'Generated' as const;
+// "Maid Acasa" is the named house-bot persona (product-approved, replacing the
+// placeholder "Generated"). Must NOT be "Joshing"/"Editorial" (those are the
+// house identity below); this is for the non-house LLM origins.
+export const LLM_QUESTION_ATTRIBUTION = 'Maid Acasa' as const;
 
 // D-3 — the single, fixed house/editorial author identity. House questions carry
 // creatorId === null + source 'house_authored'; this identity is resolved at
@@ -89,8 +90,8 @@ export function isHouseAttribution(name: string | null | undefined): boolean {
 //
 //   - creatorId set                      → human author (hydrate the users row)
 //   - (null, 'house_authored')           → the house identity constant
-//   - (null, 'daily_generated' | 'curated_sent') → the non-person 'Generated'
-//                                          treatment (B-5)
+//   - (null, 'daily_generated' | 'curated_sent') → the non-person
+//                                          LLM_QUESTION_ATTRIBUTION treatment (B-5)
 //
 // The switch ends in assertNever, so a future source value cannot compile until
 // it is routed here deliberately. No branch can resolve a house question to a
@@ -132,7 +133,7 @@ export function resolveQuestionAuthor<U>(input: {
 // into a view object: `{ ...resolveAuthorDisplay(creatorId, source, name) }`.
 //   - human author      → { authorName: displayName, authorIsHouse: false }
 //   - house             → { authorName: 'Joshing',   authorIsHouse: true  }
-//   - LLM-origin / null  → { authorName: null,        authorIsHouse: false } (client renders 'Generated')
+//   - LLM-origin / null  → { authorName: null,        authorIsHouse: false } (client renders LLM_QUESTION_ATTRIBUTION)
 export function resolveAuthorDisplay(
   creatorId: string | null,
   source: QuestionSource,
