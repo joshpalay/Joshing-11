@@ -10,7 +10,6 @@ type FriendAddedCardProps = {
   overflow?: ReactNode
   onAnswer?: () => void
   onDismiss?: () => void
-  onHideCategory?: () => void
   className?: string
   elevated?: boolean
 }
@@ -20,7 +19,6 @@ export function FriendAddedCard({
   overflow,
   onAnswer,
   onDismiss,
-  onHideCategory,
   className,
   elevated,
 }: FriendAddedCardProps) {
@@ -39,18 +37,6 @@ export function FriendAddedCard({
       )}{' '}
       added a question
       {visibleCategory ? <> about {visibleCategory}</> : null}
-      {visibleCategory && onHideCategory ? (
-        <>
-          <span className="mx-1.5 opacity-50">·</span>
-          <button
-            type="button"
-            onClick={onHideCategory}
-            className="font-medium text-[var(--brand-link)] hover:underline"
-          >
-            Hide questions about {visibleCategory}
-          </button>
-        </>
-      ) : null}
     </>
   )
 

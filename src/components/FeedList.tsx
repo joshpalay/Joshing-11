@@ -1759,7 +1759,6 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
-          onHideCategory={() => void hideCategory(item)}
           elevated={homeZoneCards}
         />
       )
