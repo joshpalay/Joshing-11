@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
 import { GameplayChatThread } from '@/components/play/GameplayChat';
+import { ThreadCard } from '@/components/play/ThreadCard';
 import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCatchupFlow';
 import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
 
@@ -25,6 +26,7 @@ export default function DailyCatchupPage() {
     remainingCount,
     nextBatchSize,
     startNextBatch,
+    openSummary,
     reload,
     submitCurrent,
     skipCurrent,
@@ -34,6 +36,7 @@ export default function DailyCatchupPage() {
 
   const hasItems = initialTotal > 0;
   const showSummary = phase === 'summary';
+  const roundComplete = phase === 'round_complete';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,7 +85,7 @@ export default function DailyCatchupPage() {
       <section
         className="flex-1 overflow-y-auto px-4 py-4"
         style={{
-          paddingBottom: currentItem && !showSummary
+          paddingBottom: currentItem && phase === 'playing'
             ? 'calc(130px + env(safe-area-inset-bottom))'
             : 'calc(24px + env(safe-area-inset-bottom))',
           // Cream backdrop on the recap so the near-white --brand-card recap cards
@@ -126,11 +129,20 @@ export default function DailyCatchupPage() {
               onDismiss={() => void dismissCurrent()}
               dismissDisabled={submitting || isResolvingTurn}
             />
+            {roundComplete ? (
+              <RoundCloseCard
+                records={batchRecords}
+                remainingCount={remainingCount}
+                nextBatchSize={nextBatchSize}
+                onSeeProgress={openSummary}
+                onPlayNext={startNextBatch}
+              />
+            ) : null}
           </>
         )}
       </section>
 
-      {currentItem && !loading && !showSummary ? (
+      {currentItem && !loading && phase === 'playing' ? (
         <form
           className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-lg border-t px-4 py-3"
           style={{
@@ -157,6 +169,60 @@ export default function DailyCatchupPage() {
         </form>
       ) : null}
     </main>
+  );
+}
+
+// Mirrors the Daily Five session-close turn (SessionCloseRow in GameplayChat):
+// when the round of five resolves, the thread stays up and closes with this
+// card — see the recap, or roll straight into another round — instead of
+// cutting directly to the recap.
+function RoundCloseCard({
+  records,
+  remainingCount,
+  nextBatchSize,
+  onSeeProgress,
+  onPlayNext,
+}: {
+  records: CatchupBatchRecord[];
+  remainingCount: number;
+  nextBatchSize: number;
+  onSeeProgress: () => void;
+  onPlayNext: () => void;
+}) {
+  const total = records.length;
+  const correct = records.filter((record) => record.outcome === 'correct').length;
+  const hasMore = remainingCount > 0;
+
+  return (
+    <ThreadCard
+      className="mt-4"
+      border="var(--border)"
+      fill="var(--surface-2)"
+      style={{ maxWidth: 'var(--play-thread-card-width)' }}
+    >
+      <p className="text-[1.22rem] leading-relaxed text-[var(--text)]">
+        {total > 0 ? `That’s the round — ${correct} of ${total}.` : 'That’s the round.'}
+      </p>
+      <p className="mt-1 text-[1.05rem] leading-relaxed text-[var(--text-muted)]">
+        {hasMore
+          ? `${remainingCount} missed ${remainingCount === 1 ? 'question' : 'questions'} still waiting.`
+          : 'You’re all caught up.'}
+      </p>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-3">
+        <button type="button" className="btn-primary" onClick={onSeeProgress}>
+          See all this progress
+        </button>
+        {hasMore ? (
+          <button
+            type="button"
+            className="text-sm font-medium text-[var(--text-muted)] underline underline-offset-4 transition hover:text-[var(--text)]"
+            onClick={onPlayNext}
+          >
+            Start another {nextBatchSize}
+          </button>
+        ) : null}
+      </div>
+    </ThreadCard>
   );
 }
 
