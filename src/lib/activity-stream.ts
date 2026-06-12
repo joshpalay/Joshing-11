@@ -849,38 +849,65 @@ export function milestoneToStreamItem(
 
 // --- From Friends activity card (D-FEED-FRIEND-ACTIVITY-01) -------------------
 
-// Per-context lead copy for the chronological From Friends card. PLACEHOLDER —
-// flagged for product sign-off (same soft-copy rule as the milestone leads: warm,
-// non-competitive, no "mastered"/"beat"/"crushed"). Unlike milestones these name
-// no domain — the card is a time/burst roll-up, not a topic roll-up. One lead is
-// picked per card id so a stack of same-context cards still reads varied.
-const FRIEND_ACTIVITY_LEADS: Record<FriendActivityCard['context'], readonly string[]> = {
-  daily: [' played their daily five', ' got through their daily five', ' did their five for the day'],
-  catchup: [' caught up on a few', ' went back and caught up', ' cleared a few they had missed'],
-  joshing_game: [' played a game', ' got through a game', ' sat down for a game'],
-  feed: [' has been playing', ' worked through a few', ' has been on a little run'],
-  profile: [' has been playing', ' worked through a few', ' has been on a little run'],
-  mixed: [' has been playing', ' has been chipping away', ' has been keeping busy'],
-};
+// Flattering, topic-attached leads for the From Friends card. Warm, complimentary
+// register (no "mastered"/"beat"/"crushed"). Each ends on a preposition so the
+// domain(s) the friend played in this burst follow as serif `category` parts —
+// e.g. "{Name} has been killing it in {Geography} and {History}". One lead is
+// picked per card id so a stack reads varied.
+const FRIEND_ACTIVITY_LEADS = [
+  ' has been killing it in ',
+  ' has been on a streak of wisdom in ',
+  ' is amazing answering questions about ',
+  ' has been all over ',
+  " can't get enough of ",
+  ' has been on a tear through ',
+] as const;
+
+// Fallback when none of the burst's questions resolved a domain — keep the same
+// complimentary voice without naming a topic.
+const FRIEND_ACTIVITY_LEADS_NO_TOPIC = [
+  ' has been killing it',
+  ' has been on a streak of wisdom',
+  ' is on a roll',
+] as const;
+
+// Distinct domains the friend played in this card, most-recent first (the
+// questions arrive most-recent first). Drives the topic tail.
+function friendActivityDomains(questions: StreamQuestion[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const q of questions) {
+    const d = q.domain?.trim();
+    if (d && !seen.has(d)) {
+      seen.add(d);
+      out.push(d);
+    }
+  }
+  return out;
+}
 
 // One From Friends play burst/batch, expanded to its answerable questions. Mirrors
 // `milestoneToStreamItem` (same StreamItem shape, same 'milestone' expand the feed
-// already renders) but sorts on the card's chronological `effectiveAt` and carries
-// time-based copy instead of deep/breadth domain copy.
+// already renders) but sorts on the card's chronological `effectiveAt`. The copy
+// keeps the flattering breadth voice — a complimentary lead + the burst's domains
+// rolled up "A, B and N others" — even though grouping is now time-based.
 export function friendActivityToStreamItem(
   card: FriendActivityCard,
   questions: StreamQuestion[],
 ): StreamItem {
   const friend = act(card.friendName, card.friendId);
-  const leads = FRIEND_ACTIVITY_LEADS[card.context];
-  const lead = leads[djb2(card.id) % leads.length];
+  const domains = friendActivityDomains(questions);
+  const tail: StreamLinePart[] =
+    domains.length > 0
+      ? breadthTail(domains, FRIEND_ACTIVITY_LEADS[djb2(card.id) % FRIEND_ACTIVITY_LEADS.length])
+      : [txt(FRIEND_ACTIVITY_LEADS_NO_TOPIC[djb2(card.id) % FRIEND_ACTIVITY_LEADS_NO_TOPIC.length])];
   return {
     id: card.id,
     sortAt: card.effectiveAt,
     tier: LATELY_TIER.MILESTONE,
     friendId: card.friendId,
     homeEligible: true,
-    line: [friend, txt(lead)],
+    line: [friend, ...tail],
     secondLine: null,
     anchorId: null,
     action: null,
