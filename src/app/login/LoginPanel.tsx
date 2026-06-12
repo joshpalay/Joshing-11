@@ -119,6 +119,12 @@ type HandleStatus =
   | { state: 'available' }
   | { state: 'unavailable'; reason: 'format' | 'reserved' | 'taken' };
 
+type DisplayNameDuplicateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'unique' }
+  | { state: 'duplicate'; count: number };
+
 type VerifyOtpUserPayload = {
   display_name?: unknown;
   displayName?: unknown;
@@ -182,6 +188,8 @@ export default function LoginPanel({
   const [handle, setHandle] = useState('');
   const [handleManuallyEdited, setHandleManuallyEdited] = useState(false);
   const [handleStatus, setHandleStatus] = useState<HandleStatus>({ state: 'idle' });
+  const [displayNameDuplicateStatus, setDisplayNameDuplicateStatus] =
+    useState<DisplayNameDuplicateStatus>({ state: 'idle' });
   const [verifiedIdentity, setVerifiedIdentity] = useState<VerifiedIdentity>({
     displayName: '',
     handle: '',
@@ -199,6 +207,60 @@ export default function LoginPanel({
   // Controls the bottom-card transition: the title card (in page.tsx) stays
   // fixed; only this form card animates out, swaps content, then animates in.
   const [entering, setEntering] = useState(true);
+
+  useEffect(() => {
+    if (step !== 'profile') return;
+
+    const candidate = displayName.trim();
+    const controller = new AbortController();
+
+    const immediate = window.setTimeout(() => {
+      if (candidate.length < 1 || candidate.length > 60) {
+        setDisplayNameDuplicateStatus({ state: 'idle' });
+        return;
+      }
+      setDisplayNameDuplicateStatus({ state: 'checking' });
+    }, 0);
+
+    const debounced = window.setTimeout(async () => {
+      if (candidate.length < 1 || candidate.length > 60) return;
+
+      try {
+        const response = await fetch(
+          `/api/account/display-name/check?displayName=${encodeURIComponent(candidate)}`,
+          {
+            credentials: 'include',
+            signal: controller.signal,
+          },
+        );
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          setDisplayNameDuplicateStatus({ state: 'idle' });
+          return;
+        }
+
+        if (data?.duplicate === true) {
+          setDisplayNameDuplicateStatus({
+            state: 'duplicate',
+            count: typeof data?.count === 'number' ? data.count : 1,
+          });
+        } else {
+          setDisplayNameDuplicateStatus({ state: 'unique' });
+        }
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setDisplayNameDuplicateStatus({ state: 'idle' });
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(immediate);
+      window.clearTimeout(debounced);
+    };
+  }, [displayName, step]);
 
   useEffect(() => {
     if (step !== 'profile') return;
@@ -397,6 +459,7 @@ export default function LoginPanel({
       setHandle(identity.handle);
       setHandleManuallyEdited(Boolean(identity.handle));
       setHandleStatus({ state: 'idle' });
+      setDisplayNameDuplicateStatus({ state: 'idle' });
 
       if (shouldCollectProfileIdentity(identity)) {
         setLoading(false);
@@ -426,6 +489,21 @@ export default function LoginPanel({
 
     if (!trimmedDisplayName) {
       setError('Enter your display name.');
+      return;
+    }
+
+    if (trimmedDisplayName.length > 60) {
+      setError('Display name must be 60 characters or fewer.');
+      return;
+    }
+
+    if (displayNameDuplicateStatus.state === 'checking') {
+      setError('Please wait while we check that display name.');
+      return;
+    }
+
+    if (displayNameDuplicateStatus.state === 'duplicate') {
+      setError('Choose a display name that is not already taken.');
       return;
     }
 
@@ -695,7 +773,14 @@ export default function LoginPanel({
               value={displayName}
               onChange={(event) => updateDisplayName(event.target.value)}
               disabled={loading}
+              maxLength={60}
             />
+            {displayNameDuplicateStatus.state === 'duplicate' ? (
+              <p className="rounded-md border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--brand-rule))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--brand-card))] px-3 py-2 text-center text-sm leading-5 text-[var(--brand-ink)]">
+                That display name is already taken. Choose a distinctive name so friends can find
+                the right account.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label className="block text-center text-sm font-medium text-black" htmlFor="handle">
@@ -746,7 +831,11 @@ export default function LoginPanel({
             type="submit"
             className={SUBMIT_CLASS}
             disabled={
-              loading || handleStatus.state === 'checking' || handleStatus.state === 'unavailable'
+              loading ||
+              displayNameDuplicateStatus.state === 'checking' ||
+              displayNameDuplicateStatus.state === 'duplicate' ||
+              handleStatus.state === 'checking' ||
+              handleStatus.state === 'unavailable'
             }
           >
             {loading ? 'Saving…' : 'Enter Joshing'}
