@@ -1,3 +1,5 @@
+import type { GradableQuestionType } from '@/server/grading';
+
 export type ReplayItem = {
   dailyQueueItemId: string;
   queueDate: string;
@@ -5,10 +7,22 @@ export type ReplayItem = {
   questionId: string;
   questionText: string;
   correctAnswer: string;
+  /**
+   * Author-approved alternative answers, passed to the grader so a replay
+   * grades with the same leniency as the original live answer. Canonical
+   * slots carry Question.accepted_alternatives; bot slots carry
+   * GeneratedQuestion.acceptable_variants.
+   */
+  alternateAnswers: string[];
   explanation: string | null;
   domain: string;
   domainDisplayName: string;
   originalSubmittedAnswer: string | null;
+  /**
+   * Grader leniency policy input. Friend-authored (canonical) slots carry the
+   * stored Question.question_type; bot slots are 'factual' by construction.
+   */
+  questionType: GradableQuestionType;
   /** Human author's name, the house name ('Joshing'), or null for LLM-origin (bot) slots. */
   authorName: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, no relational copy). */

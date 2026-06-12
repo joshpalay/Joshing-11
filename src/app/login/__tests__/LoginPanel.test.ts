@@ -4,6 +4,8 @@ import {
   buildInviteVerifyOtpRequestBody,
   buildVerifyOtpRequestBody,
   readInvitationToken,
+  readVerifiedIdentity,
+  shouldCollectProfileIdentity,
 } from '@/app/login/LoginPanel'
 
 describe('LoginPanel invitation token query aliases', () => {
@@ -83,5 +85,23 @@ describe('LoginPanel invite-phone verify payload', () => {
       useInvitePhone: true,
       userInvite: { handle: 'jpalay', token: 'user-token' },
     })
+  })
+})
+
+describe('LoginPanel profile identity detection', () => {
+  it('collects both identity fields from verify-otp user payloads', () => {
+    expect(
+      readVerifiedIdentity({
+        user: { display_name: '  Jane Palay  ', handle: '  jpalay  ' },
+      })
+    ).toEqual({ displayName: 'Jane Palay', handle: 'jpalay' })
+  })
+
+  it('requires the profile step when either display name or handle is missing', () => {
+    expect(shouldCollectProfileIdentity({ displayName: '', handle: 'jpalay' })).toBe(true)
+    expect(shouldCollectProfileIdentity({ displayName: 'Jane Palay', handle: '' })).toBe(true)
+    expect(shouldCollectProfileIdentity({ displayName: 'Jane Palay', handle: 'jpalay' })).toBe(
+      false
+    )
   })
 })

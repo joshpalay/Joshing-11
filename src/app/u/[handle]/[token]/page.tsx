@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
+import { AvatarChip } from '@/components/AvatarChip'
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
 import { getSession } from '@/server/auth/session'
 import { getRelationship } from '@/server/db/queries/friend-requests'
@@ -23,6 +24,23 @@ import { resolveInviteLink } from '@/server/friends/user-invite-token'
 
 type InvitePageProps = {
   params: Promise<{ handle: string; token: string }>
+}
+
+function InviterIdentity({
+  name,
+  userId,
+  avatarColor,
+}: {
+  name: string
+  userId: string
+  avatarColor: string | null
+}) {
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      <AvatarChip displayName={name} userId={userId} color={avatarColor} size="lg" />
+      <span className="text-sm font-semibold">{name}</span>
+    </div>
+  )
 }
 
 function InviteShell({ children }: { children: ReactNode }) {
@@ -114,6 +132,11 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
     <InviteShell>
       <div className="space-y-5">
         <div>
+          <InviterIdentity
+            name={displayName}
+            userId={inviter.inviterUserId}
+            avatarColor={inviter.inviterAvatarColor}
+          />
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
             A note from a friend
           </p>

@@ -126,6 +126,7 @@ type AnswerResponse = {
   insideJokeKind?: InsideJokeKind | null
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
+  unverified?: boolean
 }
 
 type ResultState = {
@@ -138,6 +139,7 @@ type ResultState = {
   insideJokeKind: InsideJokeKind | null
   awardedPoints: number | null
   masteryDelta: unknown | null
+  unverified: boolean
 }
 
 function formatEventTime(value: string) {
@@ -1506,6 +1508,7 @@ function FeedListContent({
             insideJokeKind: body.insideJokeKind ?? null,
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
+            unverified: Boolean(body.unverified),
           },
         }))
         setItems((current) =>
@@ -2071,6 +2074,7 @@ function FeedListContent({
             openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}
+            unverified={result.unverified}
             onRecheck={result.correct ? null : () => submitRecheck(sheetItem)}
             onClose={() => setFeedbackSheetId(null)}
           />

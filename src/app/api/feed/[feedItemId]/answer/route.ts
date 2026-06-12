@@ -9,8 +9,14 @@ import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
-import { computeAnswerState } from '@/server/answer-state';
-import { readPriorAnswersForQuestion } from '@/server/answer-history';
+// B-ANSWER-PIPELINE-01: answer_state/points derive through the shared
+// pipeline. The side-effect tail stays inline DELIBERATELY — this surface
+// diverges from daily/answer (synthetic masteryDelta fallback instead of
+// null, no adaptive-difficulty bookkeeping, transactional asked/correct
+// counters with the feed-item write, correct-only fan-out, and questionStats
+// passed through to author credit). Unifying any of those is a behavior
+// change that needs its own decision, not a refactor.
+import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { getFeedItemAnswerForRecipient } from '@/server/db/queries/feed';
 
@@ -87,6 +93,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const question = row.question;
+  // Safety hard-block: a question can become visibility='blocked' AFTER its
+  // feed row was written (cron re-vet of a failed inline vet, or an upheld
+  // offensive report). The feed render predicate hides it, but a stale
+  // FeedItem id POSTed directly here would still grade it — treat it as gone.
+  if (question.visibility === 'blocked') {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
   // Authors can't answer their own questions. The feed query helper at
   // src/server/db/queries/feed.ts:334 already excludes authored items
   // from the feed surface, but a stale FeedItem row id sent directly
@@ -116,13 +129,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
   const isCorrect = grade.result === 'correct';
 
-  // F2.3: compute answer_state against the user's prior history on this
-  // canonical question so first_correct_after_wrong (recovery) is detected
-  // instead of being collapsed into first_correct. getBasePoints returns the
-  // correct state-adjusted credit (full for first_correct, 0.25x for
-  // first_correct_after_wrong, 0 for repeat_correct / incorrect).
-  const priorAnswers = await readPriorAnswersForQuestion(session.userId, question.id);
-  const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
+  // F2.3: derive answer_state against the user's prior history on this
+  // canonical question (shared pipeline) so first_correct_after_wrong
+  // (recovery) is detected instead of being collapsed into first_correct.
+  // getBasePoints returns the correct state-adjusted credit (full for
+  // first_correct, 0.25x for first_correct_after_wrong, 0 for
+  // repeat_correct / incorrect).
+  const { masteryAnswerState: answerState, pointsAwarded } = await deriveAnswerOutcome({
+    userId: session.userId,
+    canonicalQuestionId: question.id,
+    isCorrect,
+    pointsFor: (state) =>
+      isCorrect
+        ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, state)
+        : 0,
+  });
 
   const existingMastery = await db
     .select()
@@ -131,10 +152,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
-  const basePoints = isCorrect
-    ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState)
-    : 0;
-  const pointsAwarded = basePoints;
+  const basePoints = pointsAwarded;
   const awardsMasteryCredit = pointsAwarded > 0;
   const masteryDelta = await writeMasteryEvent({
     userId: session.userId,
@@ -251,6 +269,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
+    // Flags an author-written answer the LLM never confirmed, so the reveal can
+    // tag it. Only authored questions carry this; curated/house answers default
+    // to 'verified'. The legacy `verified` boolean mirrors `status`.
+    unverified: question.status === 'unverified',
     creatorNote: question.creatorNote ?? null,
     insideJoke: insideJoke?.text ?? null,
     insideJokeKind: insideJoke?.kind ?? null,

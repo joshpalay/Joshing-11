@@ -19,6 +19,7 @@ type Feedback = {
   insideJokeKind: InsideJokeKind | null;
   openedNewTerritory: boolean;
   openedTerritoryDomain: string | null;
+  unverified: boolean;
 };
 
 // The "ANSWER →" action on a "{friend} sent you a question" stream row. A direct
@@ -48,8 +49,9 @@ export function DirectQuestionAnswer({
         body: JSON.stringify({ submitted_answer: answer }),
       });
       const body = (await res.json().catch(() => null)) as
-        | (Omit<Feedback, 'openedNewTerritory' | 'openedTerritoryDomain'> & {
+        | (Omit<Feedback, 'openedNewTerritory' | 'openedTerritoryDomain' | 'unverified'> & {
             masteryDelta?: { openedNewTerritory?: boolean; domain?: string | null };
+            unverified?: boolean;
           })
         | null;
       if (!res.ok || !body) throw new Error('Could not score that answer.');
@@ -66,6 +68,7 @@ export function DirectQuestionAnswer({
         openedTerritoryDomain: body.masteryDelta?.openedNewTerritory
           ? body.masteryDelta?.domain ?? null
           : null,
+        unverified: Boolean(body.unverified),
       });
       setPhase('result');
     } catch {
@@ -134,6 +137,7 @@ export function DirectQuestionAnswer({
           openedTerritoryDomain={feedback.openedTerritoryDomain}
           questionId={action.questionId}
           feedItemId={action.feedItemId}
+          unverified={feedback.unverified}
           onClose={finish}
         />
       ) : null}

@@ -10,8 +10,10 @@ import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
-import { computeAnswerState } from '@/server/answer-state';
-import { readPriorAnswersForQuestion } from '@/server/answer-history';
+// B-ANSWER-PIPELINE-01: answer_state/points derive through the shared
+// pipeline; the side-effect tail stays inline (same deliberate divergences as
+// the feed answer route — see the note there).
+import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,8 +96,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
   const isCorrect = grade.result === 'correct';
 
-  const priorAnswers = await readPriorAnswersForQuestion(session.userId, question.id);
-  const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
+  const { masteryAnswerState: answerState, pointsAwarded } = await deriveAnswerOutcome({
+    userId: session.userId,
+    canonicalQuestionId: question.id,
+    isCorrect,
+    pointsFor: (state) =>
+      isCorrect
+        ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, state)
+        : 0,
+  });
 
   const existingMastery = await db
     .select()
@@ -104,10 +113,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .limit(1);
 
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
-  const basePoints = isCorrect
-    ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState)
-    : 0;
-  const pointsAwarded = basePoints;
+  const basePoints = pointsAwarded;
   const awardsMasteryCredit = pointsAwarded > 0;
   const sourceId = `profile:${question.id}:${session.userId}`;
   const masteryDelta = await writeMasteryEvent({

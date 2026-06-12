@@ -83,6 +83,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // An unverified question (its answer was never machine-confirmed) is a private
+  // ask between the author and the people they hand it to directly. The author
+  // may keep direct-sending it, but a recipient cannot forward it onward — an
+  // unconfirmed answer should not travel beyond the people its author chose. The
+  // author's own send is allowed (creatorId === sender); anyone else is forwarding.
+  if (question[0].status === 'unverified' && question[0].creatorId !== session.userId) {
+    return NextResponse.json(
+      { error: 'unverified_no_forward', message: "This question isn't verified, so it can't be forwarded. Only the person who wrote it can send it." },
+      { status: 400 },
+    );
+  }
+
   const [alreadyCorrect, alreadyInFeed] = await Promise.all([
     userAnsweredQuestionCorrectly(parsed.recipientUserId, sendableQuestionId!),
     userHasQuestionInBlockingFeed(parsed.recipientUserId, sendableQuestionId!),

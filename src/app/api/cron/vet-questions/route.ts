@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db, questions } from '@/server/db';
@@ -40,7 +40,13 @@ export async function GET(request: NextRequest) {
     .from(questions)
     .where(and(
       eq(questions.publicStatus, 'not_scored'),
-      eq(questions.visibility, 'public'),
+      // Sweep every visibility except 'blocked'. A friends/private question
+      // whose inline create vet failed (Haiku error → needs_review) gets its
+      // definitive safety verdict here — restricting the sweep to 'public'
+      // left those questions permanently unvetted while already fanned out to
+      // recipients. 'blocked' stays excluded so an already-blocked question is
+      // never re-vetted and can never flip back to shareable.
+      ne(questions.visibility, 'blocked'),
       isNull(questions.deletedAt),
     ))
     .limit(BATCH_SIZE);
@@ -64,11 +70,14 @@ export async function GET(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory,
       });
       const scoring = verdictToPublicStatus(verdict);
-      // This sweep only scans visibility='public' rows (see query above), so it
-      // never re-vets an already-blocked question and can never flip one back to
-      // shareable. But it CAN be the first place a safety-fail is detected (when
-      // the inline create vet returned needs_review on a Haiku error/unknown).
-      // In that case apply the same hard-block the create route does.
+      // The scan excludes visibility='blocked' rows, so this never re-vets an
+      // already-blocked question and can never flip one back to shareable. But
+      // it CAN be the first place a safety-fail is detected (when the inline
+      // create vet returned needs_review on a Haiku error/unknown) — including
+      // for friends/private questions that were already fanned out to direct
+      // recipients. In that case apply the same hard-block the create route
+      // does; the feed render predicate stops already-written direct_sent rows
+      // from rendering once visibility flips to 'blocked'.
       const blockedVisibility = verdictToBlockedVisibility(verdict);
 
       // Skip the update when we'd just re-write 'not_scored' with the same

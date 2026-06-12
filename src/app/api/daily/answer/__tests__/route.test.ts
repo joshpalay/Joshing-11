@@ -10,6 +10,7 @@ const {
   suggestAnswerMock,
   updateDomainDifficultyOnAnswerMock,
   writeMasteryEventMock,
+  runMasteryWriteSideEffectsMock,
   dbState,
   selectCallChain,
   dbMock,
@@ -95,7 +96,9 @@ const {
       newTier: 'establishing',
       tierChanged: false,
       openedNewTerritory: false,
+      eventInserted: true,
     })),
+    runMasteryWriteSideEffectsMock: vi.fn(async () => undefined),
     dbState,
     selectCallChain,
     dbMock,
@@ -130,6 +133,7 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
   writeMasteryEvent: writeMasteryEventMock,
+  runMasteryWriteSideEffects: runMasteryWriteSideEffectsMock,
 }))
 
 vi.mock('@/server/feed/create-feed-items-for-answer', () => ({
@@ -483,6 +487,74 @@ describe('POST /api/daily/answer — acceptable variants reach the grader (B4 Ph
   })
 
   it('defaults to no alternatives when the row has none (null column)', async () => {
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(gradeAnswerMock).toHaveBeenCalledWith('A', 'A', [], 'q?', 'factual')
+  })
+})
+
+describe('POST /api/daily/answer — questionType reaches the grader (B-GRADE-TYPE-01)', () => {
+  // The grader's leniency policy branches on the question's stored type: a
+  // 'personal' question grades against the creator's intended answer. Friend
+  // slots (canonical questions) must pass the row's questionType — this route
+  // used to hardcode 'factual', silently disabling the personal branch.
+  it('passes the canonical row questionType for a friend slot (personal)', async () => {
+    const friendQueue = {
+      id: 'queue-1',
+      userId: 'user-1',
+      slots: [
+        {
+          slot_index: 0,
+          source: 'friend',
+          question_id: 'q-personal-1',
+          domain: 'memories',
+          question_text: 'Where did we first meet?',
+          answered: false,
+        },
+      ],
+    }
+    const personalQuestion = {
+      id: 'q-personal-1',
+      deletedAt: null,
+      questionText: 'Where did we first meet?',
+      answerText: 'At the lake house',
+      acceptedAlternatives: ['the lake'],
+      questionType: 'personal',
+      canonicalSubcategory: 'memories',
+      broadCategory: 'personal',
+      category: 'personal',
+      explainerFull: null,
+      explainerBrief: null,
+      factualExplanation: null,
+      calibratedDifficulty: null,
+      llmDifficulty: null,
+      difficultyEstimate: null,
+      creatorId: 'author-1',
+      insideJoke: null,
+    }
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [friendQueue])
+    selectCallChain.push(async () => [personalQuestion])
+    // Post-grade canonical-metadata read (creator info for author credit).
+    selectCallChain.push(async () => [personalQuestion])
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'wrong', consolation: null })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(res.status).toBe(200)
+    expect(gradeAnswerMock).toHaveBeenCalledWith(
+      'A',
+      'At the lake house',
+      ['the lake'],
+      'Where did we first meet?',
+      'personal',
+    )
+  })
+
+  it('still passes factual for a bot slot (generated questions are factual by construction)', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
 

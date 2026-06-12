@@ -31,6 +31,10 @@ type AnswerFeedbackSheetProps = {
   openedTerritoryDomain?: string | null
   questionId: string
   feedItemId: string
+  // The author's answer was never machine-confirmed (it differs from the LLM's
+  // suggestion). Surfaces an "Unverified answer" tag on the reveal so the
+  // recipient knows to take the answer with a grain of salt.
+  unverified?: boolean
   // Requests a second look at a wrong answer (typos, accepted synonyms, a
   // disputed canonical answer). Resolves with the verdict to surface inline.
   // Omit (or pass null) to hide the recheck affordance.
@@ -60,6 +64,7 @@ export function AnswerFeedbackSheet({
   openedTerritoryDomain = null,
   questionId,
   feedItemId,
+  unverified = false,
   onRecheck = null,
   report = null,
   onClose,
@@ -249,6 +254,17 @@ export function AnswerFeedbackSheet({
               >
                 {correctAnswer}
               </p>
+            ) : null}
+            {unverified ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]"
+                style={{
+                  color: GOLD_INK,
+                  backgroundColor: 'color-mix(in srgb, var(--accent-gold) 16%, var(--brand-card))',
+                }}
+              >
+                Unverified answer
+              </span>
             ) : null}
             {!isCorrect ? (
               <p

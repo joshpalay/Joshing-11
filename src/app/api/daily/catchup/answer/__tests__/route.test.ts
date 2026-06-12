@@ -71,6 +71,7 @@ const CATCHUP_ITEM = {
   broadCategory: 'humanities',
   basePoints: 100,
   difficultyEstimate: 'specialist' as const,
+  questionType: 'factual' as const,
 }
 
 const QUEUE = {
@@ -375,5 +376,49 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
       }),
     )
     expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/daily/catchup/answer — questionType reaches the grader (B-GRADE-TYPE-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readPriorAnswersForQuestionMock.mockResolvedValue([])
+    persistGeneratedQuestionMock.mockResolvedValue({
+      questionId: 'canonical-q-1',
+      alreadyExisted: false,
+    })
+    writeMasteryEventMock.mockResolvedValue({
+      domain: 'history',
+      points: 0,
+      previousTier: 'establishing',
+      newTier: 'establishing',
+      tierChanged: false,
+      openedNewTerritory: false,
+    })
+  })
+
+  // The daily-catchup branch used to hardcode 'factual', silently disabling the
+  // grader's personal-question leniency for friend-authored slots. The catchup
+  // item now carries the stored questionType and the route must forward it.
+  it('forwards a personal catchup item questionType to gradeAnswer', async () => {
+    getCatchupQuestionsMock.mockResolvedValue([
+      { ...CATCHUP_ITEM, questionType: 'personal' as const },
+    ])
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'wrong', consolation: null })
+
+    await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(gradeAnswerMock).toHaveBeenCalledWith('A', 'A', [], 'q?', 'personal')
+  })
+
+  it('forwards factual for daily-generated catchup items', async () => {
+    getCatchupQuestionsMock.mockResolvedValue([CATCHUP_ITEM])
+    setupDbChain()
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(gradeAnswerMock).toHaveBeenCalledWith('A', 'A', [], 'q?', 'factual')
   })
 })

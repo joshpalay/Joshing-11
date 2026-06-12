@@ -280,13 +280,23 @@ export function questionVisibilityPredicate(viewerUserId: string) {
 // Without this exemption a 'friends'-visibility question sent straight to a
 // recipient who doesn't (yet) follow the author is silently filtered out of
 // their feed even though a feed row was written. Mirrors the direct_sent
-// special-case in viewerNotAlreadyAnsweredPredicate. Exported so get-feed-page's
-// diagnostic/badge counts apply the identical rule and stay in sync with what
-// actually renders.
+// special-case in viewerNotAlreadyAnsweredPredicate.
+//
+// The exemption does NOT extend to 'blocked' (the safety hard-block set by a
+// vet verdict or an upheld offensive report): a question can be blocked AFTER
+// fan-out — the inline create vet fell back to needs_review on a Haiku error
+// and the vet cron caught it later, or an admin upheld a report — and the
+// already-written direct_sent rows must stop rendering for their recipients.
+//
+// Exported so get-feed-page's diagnostic/badge counts apply the identical rule
+// and stay in sync with what actually renders.
 export function feedItemVisibilityPredicate(viewerUserId: string) {
-  return or(
-    eq(feedItems.sourceType, 'direct_sent'),
-    questionVisibilityPredicate(viewerUserId),
+  return and(
+    ne(questions.visibility, 'blocked'),
+    or(
+      eq(feedItems.sourceType, 'direct_sent'),
+      questionVisibilityPredicate(viewerUserId),
+    ),
   )!;
 }
 
@@ -548,6 +558,9 @@ export async function getFeedItemAnswerForRecipient(
     .where(and(
       eq(feedItems.id, feedItemId),
       eq(feedItems.recipientUserId, recipientUserId),
+      // Safety hard-block: never reveal a blocked question's text/answer, even
+      // to a direct recipient holding a stale feed item id.
+      ne(questions.visibility, 'blocked'),
     ))
     .limit(1);
 

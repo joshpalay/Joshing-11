@@ -899,7 +899,9 @@ function TypingRow() {
       <div
         style={{
           alignSelf: 'flex-start',
-          display: 'inline-block',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
           background: 'var(--surface-2)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)',
@@ -908,8 +910,24 @@ function TypingRow() {
           color: 'var(--text-muted)',
           fontStyle: 'italic',
         }}
+        aria-live="polite"
       >
-        Grading...
+        <span>Grading</span>
+        <span aria-hidden="true" style={{ display: 'inline-flex', gap: '3px' }}>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="grading-dot"
+              style={{
+                width: '4px',
+                height: '4px',
+                borderRadius: '50%',
+                background: 'currentColor',
+                animationDelay: `${i * 0.16}s`,
+              }}
+            />
+          ))}
+        </span>
       </div>
     </div>
   );
@@ -1018,7 +1036,7 @@ function ResultRow({
 
   return (
     <div
-      className="flex flex-col gap-0 pt-0.5"
+      className="result-reveal flex flex-col gap-0 pt-0.5"
       style={{ alignItems: 'flex-start', maxWidth: THREAD_CARD_MAX_WIDTH }}
     >
       <ThreadCard

@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { AvatarChip } from '@/components/AvatarChip';
+
 const US_E164_REGEX = /^\+1\d{10}$/;
 
 /** Format a stored E.164 US number as (734)-277-6819 for display. */
@@ -38,7 +40,9 @@ function normalizePhone(phone: string): string {
 }
 
 export function readInvitationToken(searchParams: URLSearchParams) {
-  return searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
+  return (
+    searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token')
+  );
 }
 
 export function readUserInvite(searchParams: URLSearchParams) {
@@ -50,7 +54,7 @@ export function readUserInvite(searchParams: URLSearchParams) {
 export function buildVerifyOtpRequestBody(
   phone: string,
   code: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ) {
   return {
     phone,
@@ -68,7 +72,7 @@ export function buildVerifyOtpRequestBody(
 export function buildInviteVerifyOtpRequestBody(
   code: string,
   invitationToken: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ) {
   return {
     code,
@@ -78,15 +82,78 @@ export function buildInviteVerifyOtpRequestBody(
   };
 }
 
-type InvitePrefill = { inviterName: string; maskedPhone: string };
+type InviteContext = {
+  inviterName: string;
+  inviterUserId: string;
+  inviterAvatarColor: string | null;
+};
+
+type InvitePrefill = InviteContext & { maskedPhone: string };
 
 type LoginPanelProps = {
   invitePrefill?: InvitePrefill | null;
+  inviteContext?: InviteContext | null;
 };
 
-type Step = 'invite' | 'phone' | 'code';
+type Step = 'invite' | 'phone' | 'code' | 'profile';
 
-export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
+type VerifiedIdentity = {
+  displayName: string;
+  handle: string;
+};
+
+type VerifyOtpUserPayload = {
+  display_name?: unknown;
+  displayName?: unknown;
+  handle?: unknown;
+};
+
+function identityValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function readVerifiedIdentity(data: unknown): VerifiedIdentity {
+  const user =
+    data && typeof data === 'object' && 'user' in data
+      ? (data as { user?: VerifyOtpUserPayload }).user
+      : null;
+
+  if (!user || typeof user !== 'object') return { displayName: '', handle: '' };
+
+  return {
+    displayName: identityValue(user.display_name ?? user.displayName),
+    handle: identityValue(user.handle),
+  };
+}
+
+export function shouldCollectProfileIdentity(identity: VerifiedIdentity): boolean {
+  return !identity.displayName || !identity.handle;
+}
+
+function InviteContextCard({ invite }: { invite: InviteContext }) {
+  return (
+    <div className="space-y-3 rounded-[8px] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+      <div className="flex items-center justify-center gap-3">
+        <AvatarChip
+          displayName={invite.inviterName}
+          userId={invite.inviterUserId}
+          color={invite.inviterAvatarColor}
+          size="lg"
+        />
+        <span className="text-[17px] leading-6 font-semibold text-black">{invite.inviterName}</span>
+      </div>
+      <p className="text-[15px] leading-6 text-black/75">
+        {invite.inviterName} invited you to Joshing. Enter your phone number to join and start
+        answering their questions.
+      </p>
+    </div>
+  );
+}
+
+export default function LoginPanel({
+  invitePrefill = null,
+  inviteContext = null,
+}: LoginPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationToken = readInvitationToken(searchParams);
@@ -94,11 +161,15 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [verifiedIdentity, setVerifiedIdentity] = useState<VerifiedIdentity>({
+    displayName: '',
+    handle: '',
+  });
   // Start on the invite confirmation step only when the link resolved to a
   // recipient phone; otherwise fall straight through to manual entry.
-  const [step, setStep] = useState<Step>(
-    invitePrefill?.maskedPhone ? 'invite' : 'phone'
-  );
+  const [step, setStep] = useState<Step>(invitePrefill?.maskedPhone ? 'invite' : 'phone');
   // True once the OTP was sent to the invite's phone (so the code step and
   // verify call use the masked phone + token instead of a typed number).
   const [invitePhoneMode, setInvitePhoneMode] = useState(false);
@@ -231,9 +302,78 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
         return;
       }
 
+      const identity = readVerifiedIdentity(data);
+      setVerifiedIdentity(identity);
+      setDisplayName(identity.displayName);
+      setHandle(identity.handle);
+
+      if (shouldCollectProfileIdentity(identity)) {
+        setLoading(false);
+        swapStep('profile');
+        return;
+      }
+
       // Success: navigation is async and doesn't block, so keep the button in
       // its "Verifying…" state. Resetting loading here would flash "Continue"
       // before the redirect lands.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      router.replace('/');
+      router.refresh();
+    } catch {
+      setError('Something went wrong. Please try again.');
+      setLoading(false);
+    }
+  }
+
+  async function completeProfile(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    const trimmedDisplayName = displayName.trim();
+    const trimmedHandle = handle.trim().replace(/^@+/, '');
+
+    if (!trimmedDisplayName) {
+      setError('Enter your display name.');
+      return;
+    }
+
+    if (!trimmedHandle) {
+      setError('Enter your call sign.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const profileResponse = await fetch('/api/account/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ displayName: trimmedDisplayName }),
+      });
+      const profileData = await profileResponse.json().catch(() => ({}));
+
+      if (!profileResponse.ok) {
+        setError(profileData?.message ?? 'Unable to save your display name.');
+        setLoading(false);
+        return;
+      }
+
+      if (trimmedHandle !== verifiedIdentity.handle) {
+        const handleResponse = await fetch('/api/account/handle', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ handle: trimmedHandle }),
+        });
+        const handleData = await handleResponse.json().catch(() => ({}));
+
+        if (!handleResponse.ok) {
+          setError(handleData?.message ?? 'Unable to save your call sign.');
+          setLoading(false);
+          return;
+        }
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
       router.replace('/');
       router.refresh();
@@ -256,11 +396,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
         <form className="space-y-[14px]" onSubmit={sendCodeToInvitePhone}>
           {/* Texting glyph (the two-tone speech bubble) — this step is about us
               sending a code by text, so it mirrors the OTP step's mark. */}
-          <svg
-            className="mx-auto h-14 w-auto"
-            viewBox="-3 -3 54 44"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
             <g fill="var(--brand-navy)">
               <ellipse cx="15" cy="15" rx="15" ry="12" />
               <path d="M3 22 L11 26.5 L1 31 Z" />
@@ -277,12 +413,16 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
               <path d="M44 30 L36 34.5 L46.5 39 Z" />
             </g>
           </svg>
-          <p className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black">
-            {invitePrefill?.inviterName ?? 'A friend'} invited you to Joshing.
-          </p>
+          {inviteContext ? (
+            <InviteContextCard invite={inviteContext} />
+          ) : (
+            <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+              {invitePrefill?.inviterName ?? 'A friend'} invited you to Joshing.
+            </p>
+          )}
           <p className="text-center text-[15px] leading-6 text-black/70">
             We&rsquo;ll text a code to{' '}
-            <span className="whitespace-nowrap font-medium text-black">{maskedPhone}</span>.
+            <span className="font-medium whitespace-nowrap text-black">{maskedPhone}</span>.
           </p>
 
           {/* Button + divider + secondary action form a tight 6px cluster,
@@ -300,7 +440,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
             <button
               type="button"
-              className="mx-auto block text-sm font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setInvitePhoneMode(false);
                 swapStep('phone');
@@ -317,15 +457,12 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
               (and the filled treatment of the OTP step's bubble icon).
               Hand-drawn as a fill-only glyph rather than a force-filled
               lucide outline, which rendered with a muddy stroked edge. */}
-          <svg
-            className="mx-auto h-12 w-12 fill-black"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-12 w-12 fill-black" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
           </svg>
+          {inviteContext ? <InviteContextCard invite={inviteContext} /> : null}
           <label
-            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="phone"
           >
             What is your phone number?
@@ -345,18 +482,14 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
             {loading ? 'Continuing…' : 'Continue'}
           </button>
         </form>
-      ) : (
+      ) : step === 'code' ? (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
           {/* Two overlapping oval speech bubbles — navy behind, orange in front
               — recreating the Figma two-tone mark. The front bubble is drawn
               twice: first as a slightly larger cream copy (the page background
               color) so a crescent of background shows where it overlaps the
               navy, then as the orange bubble on top. */}
-          <svg
-            className="mx-auto h-14 w-auto"
-            viewBox="-3 -3 54 44"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
             <g fill="var(--brand-navy)">
               <ellipse cx="15" cy="15" rx="15" ry="12" />
               <path d="M3 22 L11 26.5 L1 31 Z" />
@@ -375,7 +508,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
             </g>
           </svg>
           <label
-            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="code"
           >
             Enter your code for{' '}
@@ -410,7 +543,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
             <button
               type="button"
-              className="mx-auto block text-sm font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setCode('');
                 // Leaving the invite phone behind — collect a number manually.
@@ -423,10 +556,58 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
             </button>
           </div>
         </form>
+      ) : (
+        <form className="space-y-[14px]" onSubmit={completeProfile}>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
+            @
+          </div>
+          <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+            Finish your profile
+          </p>
+          <p className="text-center text-[15px] leading-6 text-black/70">
+            Pick the name friends will see and the call sign they can use to find you.
+          </p>
+          <div className="space-y-2">
+            <label
+              className="block text-center text-sm font-medium text-black"
+              htmlFor="display-name"
+            >
+              Display name
+            </label>
+            <input
+              id="display-name"
+              type="text"
+              autoComplete="name"
+              className={INPUT_CLASS}
+              placeholder="Jane Palay"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              disabled={loading}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-center text-sm font-medium text-black" htmlFor="handle">
+              Call sign / handle
+            </label>
+            <input
+              id="handle"
+              type="text"
+              autoComplete="username"
+              className={INPUT_CLASS}
+              placeholder="jpalay"
+              value={handle}
+              onChange={(event) => setHandle(event.target.value.replace(/^@+/, ''))}
+              disabled={loading}
+            />
+          </div>
+          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+            {loading ? 'Saving…' : 'Enter Joshing'}
+          </button>
+        </form>
       )}
 
       {error ? (
-        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+        <p className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-center text-sm">
           {error}
         </p>
       ) : null}
