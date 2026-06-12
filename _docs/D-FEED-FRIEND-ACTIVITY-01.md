@@ -1,10 +1,24 @@
 # D-FEED-FRIEND-ACTIVITY-01 — "From Friends" as a chronological activity log
 
-**Status:** Spec, agreed in discussion 2026-06-12. Not yet built. Supersedes the
-deep/breadth **domain** grouping of the From Friends surface (`PRD-D-4` §A,
-`src/lib/lately-milestones.ts`). The underlying read-derived, additive,
-correct-`friend_answered`-only data source is unchanged — only the grouping,
-ordering, and lifecycle of the cards change.
+**Status:** Spec agreed in discussion 2026-06-12. **Cut-1 wired** — the surface
+now derives from `getFriendActivity` / `deriveFriendActivity` instead of the
+deep/breadth milestone grouping (`PRD-D-4` §A, `src/lib/lately-milestones.ts`).
+The underlying read-derived, additive, correct-`friend_answered`-only data source
+is unchanged — only the grouping, ordering, and lifecycle of the cards change.
+
+**Cut-1 scope (what's wired vs deferred).** Grouping, ordering, and held-singles
+are live and pure. Two lifecycle nuances are **deferred to a persistence
+follow-up** because a pure re-derivation can't tell "answered *before* the card
+existed" from "answered *in-place*" without a frozen surfaced-at record:
+- **§3 pre-answered exclusion** is NOT applied in cut-1. `playableForViewer`
+  excludes only the viewer's *own authored* questions; already-answered questions
+  stay in the bundle and render as spent triangles (carrying their prior result).
+  This is exactly today's behavior and is what keeps an answered-in-place card
+  alive (§5 / Q4) without persistence — at the cost of also showing cards whose
+  fresh questions you happen to have all played elsewhere.
+- **Static membership** is approximate: the bundle re-derives each load. A card
+  doesn't vanish when you answer it (the answered questions remain as spent), but
+  its membership isn't truly frozen. True freezing is the same persistence item.
 
 ## Why
 
