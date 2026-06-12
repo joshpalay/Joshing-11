@@ -975,9 +975,10 @@ function ResultRow({
   // Correct keeps its explainer inline within the verdict block (before the
   // "common ground" beat); the other reveals render it after the discovery copy.
   const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
-  // One reflection card beneath the result: the lighter "Between us!" wink is
+  // One reflection beneath the verdict: the lighter "Between us!" wink is
   // preferred over the creator note, which otherwise falls back in on correct
-  // answers. The fuller creator note lives in the review.
+  // answers. The wink renders as an inset panel INSIDE the result card (one
+  // item, not a second card); the fuller creator note lives in the review.
   const showJokeCard = Boolean(insideJoke);
   const showNoteCard = correct && !insideJoke && Boolean(authorNote);
   const requestRecheck = useCallback(async () => {
@@ -1224,6 +1225,41 @@ function ResultRow({
         {showDiscoveryExplainer && explainerSentence ? (
           <ExplainerLine text={explainerSentence} />
         ) : null}
+        {showJokeCard && insideJoke ? (
+          <div
+            style={{
+              marginTop: '12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid color-mix(in srgb, var(--brand-link) 22%, var(--border))',
+              background: 'var(--editorial-slate)',
+              padding: '10px 12px',
+            }}
+          >
+            <p
+              style={{
+                ...monoStyle,
+                fontSize: '0.55rem',
+                color: GOLD_INK,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
+            </p>
+            <p
+              style={{
+                marginTop: '4px',
+                fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
+                // Reflection body bumped ~14% for readability (D-5); the small,
+                // letter-spaced label above stays secondary.
+                fontSize: '1.05rem',
+                lineHeight: 1.5,
+              }}
+            >
+              {insideJoke}
+            </p>
+          </div>
+        ) : null}
         {typeof pointsAwarded === 'number' ? (
           <p
             style={{
@@ -1238,37 +1274,6 @@ function ResultRow({
           </p>
         ) : null}
       </ThreadCard>
-      {showJokeCard && insideJoke ? (
-        <ThreadCard
-          border="color-mix(in srgb, var(--accent-gold) 40%, var(--border))"
-          fill="color-mix(in srgb, var(--accent-gold) 12%, var(--surface-2))"
-          style={{ marginTop: '8px' }}
-        >
-          <p
-            style={{
-              ...monoStyle,
-              fontSize: '0.55rem',
-              color: GOLD_INK,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
-          </p>
-          <p
-            style={{
-              marginTop: '4px',
-              fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
-              // Reflection body bumped ~14% for readability (D-5); the small,
-              // letter-spaced label above stays secondary.
-              fontSize: '1.05rem',
-              lineHeight: 1.5,
-            }}
-          >
-            {insideJoke}
-          </p>
-        </ThreadCard>
-      ) : null}
       {showNoteCard && authorNote ? (
         <AuthorNoteCard
           text={authorNote}

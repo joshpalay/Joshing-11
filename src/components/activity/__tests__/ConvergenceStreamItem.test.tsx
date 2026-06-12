@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { convergenceToStreamItem, type StreamExpand } from '@/lib/activity-stream';
 import type { Convergence } from '@/lib/convergence';
+import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
 vi.mock('next/link', () => ({
   default: ({
@@ -153,7 +154,7 @@ describe('ConvergenceExpansion — the expanded reveal', () => {
       questions: [
         // House/editorial question — must be marked, never read as person-written.
         { questionId: 'h1', text: 'A house question', domain: 'History', priorResult: 'correct', authorName: 'Joshing', authorIsHouse: true },
-        // LLM-origin question — marked "Generated".
+        // LLM-origin question — marked with the LLM attribution label.
         { questionId: 'g1', text: 'A generated question', domain: 'Science', priorResult: 'correct', authorName: null, authorIsHouse: false },
         // Human-authored — no machine-honesty marker needed.
         { questionId: 'p1', text: 'A human question', domain: 'Music', priorResult: 'correct', authorName: 'Sadie', authorIsHouse: false },
@@ -161,7 +162,7 @@ describe('ConvergenceExpansion — the expanded reveal', () => {
     };
     const html = renderToStaticMarkup(<ConvergenceExpansion expand={expand} />);
     expect(html).toContain('JOSHING · EDITORIAL');
-    expect(html).toContain('GENERATED');
+    expect(html).toContain(LLM_QUESTION_ATTRIBUTION.toUpperCase());
     // The human author is not surfaced as a provenance marker.
     expect(html).not.toContain('SADIE');
   });

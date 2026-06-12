@@ -143,7 +143,7 @@ type Resolution = { submitted: string; isCorrect: boolean };
 // question, a house/LLM-authored question MUST be marked — never rendered as if
 // a person wrote it. Returns the marker text, or null when no marker is needed:
 //   - authorIsHouse        → the house identity ("Joshing · Editorial")
-//   - authorName === null  → a non-person LLM-origin question ("Generated")
+//   - authorName === null  → a non-person LLM-origin question (LLM_QUESTION_ATTRIBUTION)
 //   - human name / undefined → null (the row frame already attributes it; a
 //                              human author needs no machine-honesty marker)
 function questionProvenance(q: StreamQuestion): string | null {
