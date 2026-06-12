@@ -24,6 +24,7 @@ Last updated: 2026-06-11 (D-HOME-PACING-01 aligned — Home page pacing & budget
 | [`audits/2026-06-02-restructure-conformance-audit.md`](./audits/2026-06-02-restructure-conformance-audit.md) | Read-only conformance audit of the shipped code against the specs (D-1 / D-2 / D-3). |
 | [`audits/2026-06-02-d4-plus2-reframe-reaudit-findings.md`](./audits/2026-06-02-d4-plus2-reframe-reaudit-findings.md) | Read-only re-audit of the D-4 +2 reframe against shipped code. |
 | [`D-HOME-PACING-01.md`](./D-HOME-PACING-01.md) | Spec — Home page pacing & budget model (edition-not-log, serve-and-overflow, empty-state floor). **Aligned, not yet sequenced into build prompts** — read-and-ratify before any B-prompt is written. |
+| [`_docs/D-FEED-FRIEND-ACTIVITY-01.md`](./_docs/D-FEED-FRIEND-ACTIVITY-01.md) | Spec — recast "From Friends" from a topic-grouped 30-day mastery summary into a **chronological activity log** (context-routed burst grouping, held-singles, static cards). **Agreed in discussion, not yet built**; supersedes the deep/breadth domain grouping of `PRD-D-4` §A. |
 
 Execution scaffolding (kept separate, not product spec): [`docs/build-prompts/`](./docs/build-prompts/).
 
@@ -51,4 +52,5 @@ Execution scaffolding (kept separate, not product spec): [`docs/build-prompts/`]
 - **Thumbs-up → surface priority.** No effect on feed ordering yet; computation model and weighting formula undecided. (`PRD-D-0` §3.)
 - **House author (Capability 23) + Invariant H-1 guard.** ~~D-3 is spec-only~~ **Update 2026-06-10: the house author has shipped** (`source='house_authored'`, `pickHouseQuestions`, house smoke script) — the conformance audit's §3.1 "UNBUILT" is stale. Remaining open item: verify the `'A friend'` fallback was replaced for house-origin questions and lock Invariant H-1 with a regression test. (Conformance audit §3.1, §5.)
 - **Feed verb `'wrote this'` on broadcast.** The `authored_shared` branch claims authorship unconditionally; resolve before D-3. (Conformance audit §3.2.)
+- **"From Friends" → chronological activity log.** Agreed in discussion (2026-06-12), spec in `_docs/D-FEED-FRIEND-ACTIVITY-01.md`; **not yet built**. Replaces the deep/breadth domain grouping with context-routed burst cards, held-singles, and static (non-mutating) cards. Open sub-decisions live in that note (burst gap threshold, held-singles state/persistence, completed-card fate, copy).
 - **Home page pacing & budget model.** Aligned in discussion but **not yet sequenced into build prompts**: edition-not-log budget, serve-and-overflow for the question zones, removal of the temporal archive, two overflow subpages, and the two-state empty-state switch. Sequence alongside the tier system (`B-VISUAL-CARD-TIERS-01`). (`D-HOME-PACING-01`.)
