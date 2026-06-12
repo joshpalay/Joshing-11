@@ -9,6 +9,12 @@ import { FeedDismissButton } from './FeedDismissButton'
 type SparkleEnvelopeProps = {
   /** Small-caps line above the attribution — e.g. "Sent directly to you". */
   eyebrow?: ReactNode
+  /**
+   * Color/weight override for the eyebrow. Defaults to the quiet muted-ink
+   * register; "Sent directly to you" passes the gold accent so the direct-send
+   * marker reads in the brand gold.
+   */
+  eyebrowClassName?: string
   /** Attribution line — e.g. "<actor> thought you'd like this about <category>." */
   signal: ReactNode
   question: string
@@ -41,6 +47,7 @@ type SparkleEnvelopeProps = {
  */
 export function SparkleEnvelope({
   eyebrow,
+  eyebrowClassName = 'text-[var(--brand-ink)] opacity-70',
   signal,
   question,
   overflow,
@@ -58,7 +65,12 @@ export function SparkleEnvelope({
           <div className="min-w-0 flex-1">
             {eyebrow ? (
               // Same small-caps eyebrow rhythm as the AnsweredByYouCard header.
-              <p className="mb-2 text-[11px] uppercase leading-none tracking-[0.08em] text-[var(--brand-ink)] opacity-70">
+              <p
+                className={cn(
+                  'mb-2 text-[11px] uppercase leading-none tracking-[0.08em]',
+                  eyebrowClassName,
+                )}
+              >
                 {eyebrow}
               </p>
             ) : null}

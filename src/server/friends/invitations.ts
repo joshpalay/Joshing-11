@@ -32,10 +32,14 @@ export type OutgoingFriendInvitation = FriendInvitation & {
 export type FriendInvitationLanding = {
   status: 'valid' | 'expired' | 'accepted' | 'invalid'
   inviterName: string
+  inviterUserId: string | null
+  inviterAvatarColor: string | null
 }
 
 export type InvitePrefill = {
   inviterName: string
+  inviterUserId: string
+  inviterAvatarColor: string | null
   // Server-only: the recipient's E.164 phone resolved from the invite token.
   // Never expose this to the client — surface `maskedPhone` instead.
   inviteePhone: string
@@ -105,7 +109,7 @@ export async function getFriendInvitationLandingByToken(
 ): Promise<FriendInvitationLanding> {
   const normalizedToken = token.trim()
   if (!normalizedToken) {
-    return { status: 'invalid', inviterName: 'Someone' }
+    return { status: 'invalid', inviterName: 'Someone', inviterUserId: null, inviterAvatarColor: null }
   }
 
   const [row] = await db
@@ -115,6 +119,8 @@ export async function getFriendInvitationLandingByToken(
       expiresAt: friendInvitations.expiresAt,
       preSeededInterests: friendInvitations.preSeededInterests,
       inviterName: users.displayName,
+      inviterUserId: users.id,
+      inviterAvatarColor: users.avatarColor,
     })
     .from(friendInvitations)
     .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
@@ -126,7 +132,7 @@ export async function getFriendInvitationLandingByToken(
       status: 'invalid',
       invite_hash: hashTelemetryValue(normalizedToken),
     })
-    return { status: 'invalid', inviterName: 'Someone' }
+    return { status: 'invalid', inviterName: 'Someone', inviterUserId: null, inviterAvatarColor: null }
   }
 
   const inviterName = displayInviterName(row.inviterName)
@@ -143,7 +149,12 @@ export async function getFriendInvitationLandingByToken(
       invite_hash: hashTelemetryValue(normalizedToken),
       suggested_interest_count: 0,
     })
-    return { status: 'accepted', inviterName }
+    return {
+      status: 'accepted',
+      inviterName,
+      inviterUserId: row.inviterUserId,
+      inviterAvatarColor: row.inviterAvatarColor,
+    }
   }
 
   if (row.expiresAt <= now) {
@@ -152,7 +163,12 @@ export async function getFriendInvitationLandingByToken(
       invite_hash: hashTelemetryValue(normalizedToken),
       suggested_interest_count: 0,
     })
-    return { status: 'expired', inviterName }
+    return {
+      status: 'expired',
+      inviterName,
+      inviterUserId: row.inviterUserId,
+      inviterAvatarColor: row.inviterAvatarColor,
+    }
   }
 
   logTelemetry('friend_invite_link_opened', {
@@ -161,7 +177,12 @@ export async function getFriendInvitationLandingByToken(
     suggested_interest_count: interestCount,
   })
 
-  return { status: 'valid', inviterName }
+  return {
+    status: 'valid',
+    inviterName,
+    inviterUserId: row.inviterUserId,
+    inviterAvatarColor: row.inviterAvatarColor,
+  }
 }
 
 /**
@@ -186,6 +207,8 @@ export async function getInvitePrefillByToken(
       expiresAt: friendInvitations.expiresAt,
       inviteePhone: friendInvitations.inviteePhone,
       inviterName: users.displayName,
+      inviterUserId: users.id,
+      inviterAvatarColor: users.avatarColor,
     })
     .from(friendInvitations)
     .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
@@ -201,6 +224,8 @@ export async function getInvitePrefillByToken(
 
   return {
     inviterName: displayInviterName(row.inviterName),
+    inviterUserId: row.inviterUserId ?? 'friend-invite',
+    inviterAvatarColor: row.inviterAvatarColor,
     inviteePhone,
     maskedPhone: maskPhoneE164(inviteePhone),
   }

@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { readSessionClaimsMock } = vi.hoisted(() => ({
@@ -8,7 +11,7 @@ vi.mock('@/server/auth/session', () => ({
   readSessionClaims: readSessionClaimsMock,
 }))
 
-import { proxy } from '@/proxy'
+import { config, proxy } from '@/proxy'
 
 function makeRequest(
   pathname: string,
@@ -183,6 +186,33 @@ describe('proxy (invitation gate)', () => {
       expect(res.status).toBe(401)
       const body = await res.json()
       expect(body.error).toBe('session_refresh_required')
+    })
+  })
+
+  describe('proxy hygiene (the middleware.ts regression)', () => {
+    it('src/middleware.ts must not exist — this repo uses src/proxy.ts', () => {
+      // Adding a middleware.ts breaks Next 16's proxy. This consolidation
+      // (commit 635abc6) has been reverted at least 5 times; this assertion is
+      // the CI tripwire the CLAUDE.md prose warning could never be.
+      expect(existsSync(join(__dirname, '..', 'middleware.ts'))).toBe(false)
+    })
+
+    it('locks the matcher exclusions (auth, cron, share, telemetry, images, internals)', () => {
+      // The matcher regex is declarative config Next evaluates at build time —
+      // it can't be exercised through proxy() here, so pin it literally. If
+      // this fails, someone changed which surfaces bypass the auth gate:
+      // review against the exclusion rationale in src/proxy.ts before updating.
+      expect(config.matcher).toEqual([
+        '/((?!api/auth|api/cron|api/share|api/telemetry|share|images|_next/static|_next/image|favicon\\.ico|__nextjs).*)',
+      ])
+    })
+
+    it('short-circuits OPTIONS preflights without reading the session', async () => {
+      const request = makeRequest('/api/feed')
+      ;(request as { method: string }).method = 'OPTIONS'
+      const res = await proxy(request)
+      expect(res.status).toBe(200)
+      expect(readSessionClaimsMock).not.toHaveBeenCalled()
     })
   })
 })

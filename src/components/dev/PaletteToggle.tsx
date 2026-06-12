@@ -3,69 +3,78 @@
 import { useSyncExternalStore, type CSSProperties } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TESTING ONLY — proposed-palette preview switch (see _docs/STYLE-GUIDE-COLOR.md).
+// TESTING ONLY — card-background cycler (repurposed from the palette preview bar).
 //
-// Flips the `data-palette` attribute on <html>. The `:root[data-palette="proposed"]`
-// override block in globals.css repoints the color *tokens*, so every surface
-// that reads a token recolors automatically — no per-page edits. Surfaces still
-// on hardcoded hex (the category systems, some golds) won't flip until they're
-// routed onto tokens; that routing is the actual color build.
+// Cycles the `--brand-card` token — the resting feed-card surface — through the
+// SANCTIONED background colors (globals.css), so a tester can audit how the
+// cards read on each cream / wash without per-page edits. Every surface that
+// fills with `var(--brand-card)` recolors automatically.
 //
-// Colors here are inline (not Tailwind classes) on purpose: this is chrome, not
-// app surface, so it deliberately sits outside the brand-token lint.
+// Only the system's own background tokens are offered (no off-palette hex), so
+// nothing here introduces an unsanctioned color. Inline styles are on purpose:
+// this is chrome, not app surface, so it sits outside the brand-token lint.
 //
-// Remove this component (and the globals.css block) before merging to a shipping
-// branch. The boot script in layout.tsx applies the saved choice pre-paint.
+// Remove this component (and the boot script in layout.tsx) before merging to a
+// shipping branch. The boot script applies the saved choice pre-paint.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Palette = 'current' | 'proposed';
+type CardBg = { label: string; value: string; swatch: string };
 
-const STORAGE_KEY = 'joshing-palette';
-
-// What the toggle visibly changes, so a tester knows where to look. Extend this
-// as more color jobs (category, gold) get routed onto tokens.
-const CHANGES: Array<{ label: string; from: string; to: string }> = [
-  { label: 'WRONG WASH', from: '#c96b4a', to: '#a93b3b' },
-  { label: 'WRONG TEXT', from: '#c33d14', to: '#c1121f' },
-  { label: 'LITERATURE', from: '#c0392b', to: '#7d2c3f' },
-  { label: 'LANGUAGE', from: '#4a7a5a', to: '#2e6e7e' },
+// Each entry is a sanctioned background token. 'Default' clears the override
+// (back to --brand-card's own value, #fdfcfb).
+const CARD_BGS: CardBg[] = [
+  { label: 'Default', value: '', swatch: '#fdfcfb' },
+  { label: 'Cream page', value: 'var(--brand-cream-page)', swatch: 'var(--brand-cream-page)' },
+  { label: 'Warm cream', value: 'var(--brand-cream-card)', swatch: 'var(--brand-cream-card)' },
+  { label: 'Cream accent', value: 'var(--brand-cream)', swatch: 'var(--brand-cream)' },
+  { label: 'Question', value: 'var(--game-card-question)', swatch: 'var(--game-card-question)' },
+  { label: 'Parchment', value: 'var(--editorial-parchment)', swatch: 'var(--editorial-parchment)' },
+  { label: 'Sage', value: 'var(--editorial-sage)', swatch: 'var(--editorial-sage)' },
+  { label: 'Slate', value: 'var(--editorial-slate)', swatch: 'var(--editorial-slate)' },
 ];
 
-const PALETTE_EVENT = 'joshing-palette-change';
+const STORAGE_KEY = 'joshing-card-bg';
+const CARD_BG_EVENT = 'joshing-card-bg-change';
 
-// Read the live palette straight off the <html> attribute (the source of truth,
+// Read the live choice straight off the <html> attribute (the source of truth,
 // also set by the boot script before paint). useSyncExternalStore keeps the
 // control in sync without an effect-setState and without a hydration mismatch —
-// the server snapshot is always 'current'.
+// the server snapshot is always the default (index 0).
 function subscribe(onChange: () => void) {
-  window.addEventListener(PALETTE_EVENT, onChange);
-  return () => window.removeEventListener(PALETTE_EVENT, onChange);
+  window.addEventListener(CARD_BG_EVENT, onChange);
+  return () => window.removeEventListener(CARD_BG_EVENT, onChange);
 }
-function readSnapshot(): Palette {
-  return document.documentElement.getAttribute('data-palette') === 'proposed' ? 'proposed' : 'current';
+function readSnapshot(): number {
+  const raw = document.documentElement.getAttribute('data-card-bg');
+  const i = raw ? Number(raw) : 0;
+  return Number.isInteger(i) && i >= 0 && i < CARD_BGS.length ? i : 0;
 }
-function serverSnapshot(): Palette {
-  return 'current';
+function serverSnapshot(): number {
+  return 0;
 }
 
 export function PaletteToggle() {
-  const palette = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
+  const index = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
 
-  function apply(next: Palette) {
-    if (next === 'proposed') {
-      document.documentElement.setAttribute('data-palette', 'proposed');
+  function apply(next: number) {
+    const i = ((next % CARD_BGS.length) + CARD_BGS.length) % CARD_BGS.length;
+    const { value } = CARD_BGS[i];
+    const root = document.documentElement;
+    if (value) {
+      root.style.setProperty('--brand-card', value);
     } else {
-      document.documentElement.removeAttribute('data-palette');
+      root.style.removeProperty('--brand-card');
     }
+    root.setAttribute('data-card-bg', String(i));
     try {
-      localStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(STORAGE_KEY, String(i));
     } catch {
       /* private mode / disabled storage — non-fatal */
     }
-    window.dispatchEvent(new Event(PALETTE_EVENT));
+    window.dispatchEvent(new Event(CARD_BG_EVENT));
   }
 
-  const proposed = palette === 'proposed';
+  const current = CARD_BGS[index];
 
   return (
     <div
@@ -85,58 +94,63 @@ export function PaletteToggle() {
       }}
     >
       <span style={{ fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-        ⚠ PALETTE TEST
+        ⚠ CARD COLOR
       </span>
 
-      <div
-        role="group"
-        aria-label="Color palette preview"
-        style={{
-          display: 'inline-flex',
-          padding: 2,
-          gap: 2,
-          borderRadius: 999,
-          background: 'rgba(255,255,255,0.08)',
-        }}
+      {/* The toggle: each tap advances to the next background color. */}
+      <button
+        type="button"
+        onClick={() => apply(index + 1)}
+        aria-label={`Card background: ${current.label}. Tap to cycle.`}
+        style={cycleStyle}
       >
-        <button type="button" onClick={() => apply('current')} style={segStyle(!proposed)}>
-          Current
-        </button>
-        <button type="button" onClick={() => apply('proposed')} style={segStyle(proposed)}>
-          Proposed
-        </button>
-      </div>
+        <Swatch color={current.swatch} active />
+        {current.label}
+        <span aria-hidden style={{ opacity: 0.6 }}>→</span>
+      </button>
 
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-        {CHANGES.map((c) => (
-          <span key={c.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-            <span style={{ opacity: 0.8, letterSpacing: '0.04em' }}>{c.label}</span>
-            <Swatch color={c.from} dim={proposed} />
-            <span style={{ opacity: 0.5 }}>→</span>
-            <Swatch color={c.to} dim={!proposed} />
-          </span>
+      {/* Jump straight to any background. */}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {CARD_BGS.map((bg, i) => (
+          <button
+            key={bg.label}
+            type="button"
+            onClick={() => apply(i)}
+            aria-label={bg.label}
+            title={bg.label}
+            style={{
+              appearance: 'none',
+              border: 'none',
+              background: 'transparent',
+              padding: 0,
+              cursor: 'pointer',
+              lineHeight: 0,
+            }}
+          >
+            <Swatch color={bg.swatch} active={i === index} />
+          </button>
         ))}
       </div>
     </div>
   );
 }
 
-function segStyle(active: boolean): CSSProperties {
-  return {
-    appearance: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    borderRadius: 999,
-    padding: '3px 12px',
-    fontSize: 12,
-    fontWeight: 600,
-    background: active ? '#e7e1d4' : 'transparent',
-    color: active ? '#11161c' : '#e7e1d4',
-    transition: 'background 120ms ease, color 120ms ease',
-  };
-}
+const cycleStyle: CSSProperties = {
+  appearance: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  borderRadius: 999,
+  padding: '3px 12px 3px 6px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 12,
+  fontWeight: 600,
+  background: '#e7e1d4',
+  color: '#11161c',
+};
 
-function Swatch({ color, dim }: { color: string; dim: boolean }) {
+function Swatch({ color, active }: { color: string; active: boolean }) {
   return (
     <span
       aria-hidden="true"
@@ -147,9 +161,9 @@ function Swatch({ color, dim }: { color: string; dim: boolean }) {
         height: 14,
         borderRadius: 3,
         background: color,
-        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.25)',
-        opacity: dim ? 0.35 : 1,
-        transition: 'opacity 120ms ease',
+        boxShadow: active
+          ? '0 0 0 2px #e7e1d4, 0 0 0 3px #11161c'
+          : 'inset 0 0 0 1px rgba(255,255,255,0.25)',
       }}
     />
   );

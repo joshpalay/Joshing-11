@@ -69,9 +69,13 @@ export async function POST(request: NextRequest) {
   const grade = await gradeAnswer(
     parsed.submittedAnswer,
     replayItem.correctAnswer,
-    [],
+    // Author-approved alternatives travel into replay grading so a replayed
+    // answer grades with the same leniency as the original live answer.
+    replayItem.alternateAnswers,
     replayItem.questionText,
-    'factual',
+    // Friend slots carry the author's stored type ('personal' gets the lenient
+    // policy); bot slots are 'factual' by construction.
+    replayItem.questionType,
   );
   // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
   if (grade.status === 'unscored') {

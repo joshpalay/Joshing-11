@@ -1,9 +1,8 @@
 import { and, eq } from 'drizzle-orm';
-import { after, NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { gradeAnswer, type GradeOutcome } from '@/server/grading';
-import { updateDomainDifficultyOnAnswer } from '@/server/adaptive-difficulty';
+import { gradeAnswer, type GradableQuestionType, type GradeOutcome } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import {
   dailyQueues,
@@ -11,10 +10,7 @@ import {
   generatedQuestions,
   questions,
 } from '@/server/db';
-import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
-import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
-import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
+import { deriveAnswerOutcome, recordAnswerSideEffects } from '@/server/answers/answer-pipeline';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
 import { asQueueSlots } from '@/server/daily/catchup';
@@ -22,12 +18,48 @@ import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
-import { computeAnswerState } from '@/server/answer-state';
-import { readPriorAnswersForQuestion } from '@/server/answer-history';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 
 export const dynamic = 'force-dynamic';
+
+// Cold-start tag (B-GRADE-COLDSTART-01): true only for the first request a fresh
+// serverless instance handles — the one that waited behind register()'s boot DB
+// work. Flipped to false after the first request so warm requests are tagged
+// accurately. Lets the timing log separate cold vs warm grade latency.
+let isFirstRequestOnInstance = true;
+
+// Coarse per-request step timing for the grading critical path
+// (B-GRADE-FASTPATH-01). Absolute Date.now() stamps; deltas are computed
+// defensively at the end so an early error-return still logs whatever stages it
+// reached. Telemetry only — logging never alters the response.
+type StepMarks = {
+  start: number;
+  cold: boolean;
+  session?: number;
+  load?: number;
+  grade?: number;
+  persist?: number;
+  mastery?: number;
+};
+
+function logStepTimings(marks: StepMarks) {
+  try {
+    const delta = (to: number | undefined, from: number | undefined) =>
+      to != null && from != null ? to - from : undefined;
+    console.info('[daily/answer timings]', {
+      cold: marks.cold,
+      session_ms: delta(marks.session, marks.start),
+      load_ms: delta(marks.load, marks.session),
+      grade_ms: delta(marks.grade, marks.load),
+      persist_ms: delta(marks.persist, marks.grade),
+      mastery_ms: delta(marks.mastery, marks.persist),
+      total_ms: Date.now() - marks.start,
+    });
+  } catch {
+    // telemetry only — swallow
+  }
+}
 
 type DailyAnswerErrorCode =
   | 'unauthorized'
@@ -140,8 +172,11 @@ function parseBody(value: unknown): {
 }
 
 export async function POST(request: NextRequest) {
+  const marks: StepMarks = { start: Date.now(), cold: isFirstRequestOnInstance };
+  isFirstRequestOnInstance = false;
   try {
     const session = await getSession();
+    marks.session = Date.now();
     if (!session) {
       return dailyAnswerErrorResponse(401, 'unauthorized', "Please sign in to answer today's question.");
     }
@@ -201,6 +236,7 @@ export async function POST(request: NextRequest) {
       broadCategory: string | null;
       basePoints: number;
       acceptedAlternatives: string[];
+      questionType: GradableQuestionType;
     };
 
     let question: DailyAnswerQuestion;
@@ -240,6 +276,9 @@ export async function POST(request: NextRequest) {
         basePoints,
         // acceptable_variants (B4 Phase 4): right-but-rephrased answers grade correct.
         acceptedAlternatives: row.acceptableVariants ?? [],
+        // generatedQuestions has no question_type column — bot questions are
+        // factual by construction (the D-5 retrieval-grounded pipeline).
+        questionType: 'factual',
       };
     } else {
       const [row] = await db
@@ -265,10 +304,14 @@ export async function POST(request: NextRequest) {
         broadCategory: row.broadCategory,
         basePoints: resolveDailyBasePoints(difficulty),
         acceptedAlternatives: row.acceptedAlternatives ?? [],
+        // Friend slots are canonical questions and carry the author's stored
+        // type — a 'personal' question must reach the grader's leniency branch.
+        questionType: row.questionType,
       };
     }
 
     const canonicalAnswer = question.answer;
+    marks.load = Date.now();
 
     // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
     // failure — so it's constructed as a scored outcome and never held for retry.
@@ -279,8 +322,9 @@ export async function POST(request: NextRequest) {
           canonicalAnswer,
           question.acceptedAlternatives,
           question.questionText,
-          'factual',
+          question.questionType,
         );
+    marks.grade = Date.now();
     // The LLM grader was unreachable (timeout, parse error, no client), so there is
     // no verdict at all — the outcome is `unscored`, never a 'wrong'. Scoring the
     // player wrong for an Anthropic outage is the most off-brand failure mode in a
@@ -363,6 +407,7 @@ export async function POST(request: NextRequest) {
         canonicalRow?.domain || canonicalRow?.broadCategory || canonicalRow?.category || null;
       persistedInsideJoke = canonicalRow?.insideJoke ?? null;
     }
+    marks.persist = Date.now();
 
     // Authors can't answer their own questions. The Daily Five candidate
     // selection at src/server/db/queries/daily.ts:612 already filters out
@@ -372,38 +417,33 @@ export async function POST(request: NextRequest) {
       return dailyAnswerErrorResponse(403, 'forbidden', 'You can’t answer your own question.');
     }
 
-    // Compute answer_state against masteryEvents history so first_correct
-    // vs first_correct_after_wrong vs repeat_correct vs incorrect is
-    // determined correctly across surfaces (F2.1). Falls back to the old
-    // behaviour (treat as first attempt) only if persistence failed and we
-    // have no canonical id to look up history against.
-    // priorAnswers (mastery history) and insideJokeForViewer (friendship check)
-    // are independent of each other and of the grader output, so fan them out
-    // in parallel. The viewer joke isn't consumed until nextSlots is built
-    // below; pre-resolving it here removes a serial round-trip.
-    const [priorAnswers, insideJokeForViewer] = await Promise.all([
-      canonicalQuestionId
-        ? readPriorAnswersForQuestion(session.userId, canonicalQuestionId)
-        : Promise.resolve<{ result: 'correct' | 'wrong' }[]>([]),
+    // deriveAnswerOutcome reads mastery history (F2.1 answer_state) and the
+    // inside-joke display read (friendship check) is independent of it and of
+    // the grader output, so fan them out in parallel. The viewer joke isn't
+    // consumed until nextSlots is built below; pre-resolving it here removes a
+    // serial round-trip.
+    const basePoints = question.basePoints;
+    const [{ masteryAnswerState, pointsAwarded }, insideJokeForViewer] = await Promise.all([
+      deriveAnswerOutcome({
+        userId: session.userId,
+        canonicalQuestionId,
+        isCorrect,
+        // A correct answer in an unfamiliar domain default-adds it to the
+        // player's Knowledge base — including bot-generated Daily Five
+        // questions, which now match the authored path. The old PRD §8.4.3
+        // gate (bot questions could only deepen existing domains) has been
+        // removed in favour of default-add with an easy undo;
+        // writeMasteryEvent's ON CONFLICT DO UPDATE opens the domain the same
+        // way the authored flow does (src/app/api/questions/[id]/answer).
+        pointsFor: (answerState) =>
+          answerState === 'first_correct'
+            ? basePoints
+            : answerState === 'first_correct_after_wrong'
+              ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
+              : 0,
+      }),
       selectInsideJokeForViewer(persistedInsideJoke, persistedCreatorId, session.userId),
     ]);
-    const masteryAnswerState = computeAnswerState(
-      isCorrect ? 'correct' : 'wrong',
-      priorAnswers,
-    );
-    const basePoints = question.basePoints;
-    // A correct answer in an unfamiliar domain default-adds it to the player's
-    // Knowledge base — including bot-generated Daily Five questions, which now
-    // match the authored path. The old PRD §8.4.3 gate (bot questions could only
-    // deepen existing domains) has been removed in favour of default-add with an
-    // easy undo; writeMasteryEvent's ON CONFLICT DO UPDATE opens the domain the
-    // same way the authored flow does (src/app/api/questions/[id]/answer).
-    const pointsAwarded =
-      masteryAnswerState === 'first_correct'
-        ? basePoints
-        : masteryAnswerState === 'first_correct_after_wrong'
-          ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
-          : 0;
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
@@ -426,10 +466,13 @@ export async function POST(request: NextRequest) {
       .set({ slots: nextSlots })
       .where(eq(dailyQueues.id, queue.id));
 
-    let masteryDelta = null;
-    try {
-      masteryDelta = await writeMasteryEvent({
-        userId: session.userId,
+    const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
+    const masteryDelta = await recordAnswerSideEffects({
+      userId: session.userId,
+      isCorrect,
+      logTag: 'daily/answer',
+      logContext: { generatedQuestionId: question.generatedId },
+      masteryEvent: {
         questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,
         domain: question.canonicalSubcategory,
         answerState: masteryAnswerState,
@@ -440,70 +483,20 @@ export async function POST(request: NextRequest) {
         eventQuestionId: canonicalQuestionId,
         basePoints,
         weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
-      });
-    } catch (error) {
-      console.warn('[daily/answer] writeMasteryEvent failed', error);
-    }
-
-    // Adaptive-difficulty bookkeeping is not consumed by the response; let it
-    // run after we've already returned. The function swallows its own errors
-    // via the .catch below, so an unhandled rejection cannot escape.
-    void updateDomainDifficultyOnAnswer(
-      session.userId,
-      question.canonicalSubcategory,
-      isCorrect,
-    ).catch((err) => {
-      console.warn('[daily/answer] updateDomainDifficultyOnAnswer failed', err);
+      },
+      adaptiveDifficultyDomain: question.canonicalSubcategory,
+      // Give-ups are deliberate wrongs: no author credit, no friend fan-out.
+      propagation: canonicalQuestionId && !parsed.gaveUp
+        ? {
+            canonicalQuestionId,
+            creator: { creatorId: persistedCreatorId, domain: persistedDomainForCreator },
+            creditSourceId: `daily:${propagationKey}:${session.userId}`,
+            creditScope: 'daily/answer',
+            feedSourceId: `daily:${propagationKey}:${session.userId}`,
+          }
+        : null,
     });
-
-    if (canonicalQuestionId && !parsed.gaveUp) {
-      const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
-      try {
-        const creditContext = {
-          isCorrect,
-          creatorId: persistedCreatorId,
-          answererUserId: session.userId,
-          domain: persistedDomainForCreator,
-        };
-        if (isAuthorCreditEligible(creditContext)) {
-          void promoteDeclaredToDemonstrated({
-            userId: creditContext.creatorId,
-            domain: creditContext.domain,
-            triggeringFriendId: session.userId,
-            questionId: canonicalQuestionId,
-          });
-
-          // Author credit (PRD §8.32): off the user's hot path — three queries
-          // the answerer never sees in their response.
-          void awardAuthorCredit({
-            creatorUserId: creditContext.creatorId,
-            answererUserId: session.userId,
-            questionId: canonicalQuestionId,
-            domain: creditContext.domain,
-            sourceId: `daily:${propagationKey}:${session.userId}`,
-            scope: 'daily/answer',
-          });
-        }
-
-        // Fan-out runs after the response is sent: the user-visible reveal does
-        // not depend on this work, and the propagation function swallows its
-        // own errors (see create-feed-items-for-answer.ts). after() keeps the
-        // function alive past the response so Vercel doesn't freeze the work
-        // mid-flight — bare `void` would drop the promise on production lambdas.
-        after(() => createFeedItemsForFriendsFromAnswer(
-          session.userId,
-          canonicalQuestionId,
-          isCorrect ? 'correct' : 'incorrect',
-          `daily:${propagationKey}:${session.userId}`,
-        ));
-      } catch (error) {
-        console.warn('[daily/answer] feed propagation failed', {
-          generatedQuestionId: question.generatedId,
-          canonicalQuestionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    marks.mastery = Date.now();
 
     return NextResponse.json({
       isCorrect,
@@ -526,5 +519,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');
+  } finally {
+    logStepTimings(marks);
   }
 }

@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { answerHeadingStyle } from '@/components/answer-heading';
+import { FirstGameRecapGate } from '@/components/games/FirstGameRecapGate';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -412,6 +413,8 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
       ) : null}
 
       <Link className="btn-ghost mt-4" href="/">Back to Home</Link>
+
+      {viewerHasPlayed ? <FirstGameRecapGate gameId={id} /> : null}
     </main>
   );
 }

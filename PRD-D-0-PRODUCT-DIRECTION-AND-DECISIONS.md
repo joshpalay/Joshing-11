@@ -74,9 +74,9 @@ Recorded in `PRD_BACKLOG.md`; deferred deliberately, not dropped.
 
 - **Personal Rounds** — on-demand practice from the Knowledge page. *Deferred to a future phase.* `PRD_BACKLOG.md` §8.37.
 - **Archive** — searchable history of all interactions. *Deferred to a future phase* (Catch-up split out as its own shipped surface). `PRD_BACKLOG.md` §8.7.
-- **Activities Tab** — fully implemented but not linked from nav/Account; not a reachable surface. *Deferred until re-enabled.* `PRD_BACKLOG.md` §8.15.
+- **Activities Tab** — ~~not a reachable surface~~ **shipped as the Lately full view at `/activities`** (D-4 CORRECTION 2): reachable via the header bell (`src/components/Nav.tsx`), the home "See all activity →" link, and the feed texture-zone overflow row. It is deliberately NOT a bottom-nav tab. *(Stale "not reachable" claim corrected 2026-06-12 — structural audit STRUCT-07.)* `PRD_BACKLOG.md` §8.15.
 - **Joshing Games** — fully implemented (schema, API, play, summary, feed, SMS) but creation gated off by `GAME_CREATION_DISABLED_IN_V11_1 = true` (`src/app/api/joshing-games/route.ts:12`). *Deferred until re-enabled.* `PRD_BACKLOG.md` §8.14.
-- **House / editorial author (Capability 23)** — spec complete (`PRD-D-3-…`), implementation deferred. Depends on D-1's follow model and D-2's niche-match rules.
+- **House / editorial author (Capability 23)** — ~~implementation deferred~~ **shipped 2026-06-10** (`source='house_authored'`, `pickHouseQuestions`, house smoke script — see DECISIONS.md "Open" for the remaining Invariant H-1 verification). Spec: `PRD-D-3-…`.
 
 ---
 

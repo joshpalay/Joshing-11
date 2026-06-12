@@ -1,10 +1,15 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { AvatarChip } from '@/components/AvatarChip';
+
 const US_E164_REGEX = /^\+1\d{10}$/;
+const HANDLE_MIN = 3;
+const HANDLE_MAX = 20;
+const HANDLE_FORMAT = /^[a-z][a-z0-9_]{2,19}$/;
 
 /** Format a stored E.164 US number as (734)-277-6819 for display. */
 function formatPhoneForDisplay(e164: string): string {
@@ -37,8 +42,18 @@ function normalizePhone(phone: string): string {
   return phone.startsWith('+') ? phone : `+${digits}`;
 }
 
+function sanitizeForSuggestedHandle(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, HANDLE_MAX);
+}
+
 export function readInvitationToken(searchParams: URLSearchParams) {
-  return searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token');
+  return (
+    searchParams.get('invitationToken') ?? searchParams.get('invite') ?? searchParams.get('token')
+  );
 }
 
 export function readUserInvite(searchParams: URLSearchParams) {
@@ -50,7 +65,7 @@ export function readUserInvite(searchParams: URLSearchParams) {
 export function buildVerifyOtpRequestBody(
   phone: string,
   code: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ) {
   return {
     phone,
@@ -68,7 +83,7 @@ export function buildVerifyOtpRequestBody(
 export function buildInviteVerifyOtpRequestBody(
   code: string,
   invitationToken: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
 ) {
   return {
     code,
@@ -78,15 +93,90 @@ export function buildInviteVerifyOtpRequestBody(
   };
 }
 
-type InvitePrefill = { inviterName: string; maskedPhone: string };
+type InviteContext = {
+  inviterName: string;
+  inviterUserId: string;
+  inviterAvatarColor: string | null;
+};
+
+type InvitePrefill = InviteContext & { maskedPhone: string };
 
 type LoginPanelProps = {
   invitePrefill?: InvitePrefill | null;
+  inviteContext?: InviteContext | null;
 };
 
-type Step = 'invite' | 'phone' | 'code';
+type Step = 'invite' | 'phone' | 'code' | 'profile';
 
-export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
+type VerifiedIdentity = {
+  displayName: string;
+  handle: string;
+};
+
+type HandleStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available' }
+  | { state: 'unavailable'; reason: 'format' | 'reserved' | 'taken' };
+
+type DisplayNameDuplicateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'unique' }
+  | { state: 'duplicate'; count: number };
+
+type VerifyOtpUserPayload = {
+  display_name?: unknown;
+  displayName?: unknown;
+  handle?: unknown;
+};
+
+function identityValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function readVerifiedIdentity(data: unknown): VerifiedIdentity {
+  const user =
+    data && typeof data === 'object' && 'user' in data
+      ? (data as { user?: VerifyOtpUserPayload }).user
+      : null;
+
+  if (!user || typeof user !== 'object') return { displayName: '', handle: '' };
+
+  return {
+    displayName: identityValue(user.display_name ?? user.displayName),
+    handle: identityValue(user.handle),
+  };
+}
+
+export function shouldCollectProfileIdentity(identity: VerifiedIdentity): boolean {
+  return !identity.displayName || !identity.handle;
+}
+
+function InviteContextCard({ invite }: { invite: InviteContext }) {
+  return (
+    <div className="space-y-3 rounded-[8px] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+      <div className="flex items-center justify-center gap-3">
+        <AvatarChip
+          displayName={invite.inviterName}
+          userId={invite.inviterUserId}
+          color={invite.inviterAvatarColor}
+          size="lg"
+        />
+        <span className="text-[17px] leading-6 font-semibold text-black">{invite.inviterName}</span>
+      </div>
+      <p className="text-[15px] leading-6 text-black/75">
+        {invite.inviterName} invited you to Joshing. Enter your phone number to join and start
+        answering their questions.
+      </p>
+    </div>
+  );
+}
+
+export default function LoginPanel({
+  invitePrefill = null,
+  inviteContext = null,
+}: LoginPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationToken = readInvitationToken(searchParams);
@@ -94,11 +184,19 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [handleManuallyEdited, setHandleManuallyEdited] = useState(false);
+  const [handleStatus, setHandleStatus] = useState<HandleStatus>({ state: 'idle' });
+  const [displayNameDuplicateStatus, setDisplayNameDuplicateStatus] =
+    useState<DisplayNameDuplicateStatus>({ state: 'idle' });
+  const [verifiedIdentity, setVerifiedIdentity] = useState<VerifiedIdentity>({
+    displayName: '',
+    handle: '',
+  });
   // Start on the invite confirmation step only when the link resolved to a
   // recipient phone; otherwise fall straight through to manual entry.
-  const [step, setStep] = useState<Step>(
-    invitePrefill?.maskedPhone ? 'invite' : 'phone'
-  );
+  const [step, setStep] = useState<Step>(invitePrefill?.maskedPhone ? 'invite' : 'phone');
   // True once the OTP was sent to the invite's phone (so the code step and
   // verify call use the masked phone + token instead of a typed number).
   const [invitePhoneMode, setInvitePhoneMode] = useState(false);
@@ -109,6 +207,121 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
   // Controls the bottom-card transition: the title card (in page.tsx) stays
   // fixed; only this form card animates out, swaps content, then animates in.
   const [entering, setEntering] = useState(true);
+
+  useEffect(() => {
+    if (step !== 'profile') return;
+
+    const candidate = displayName.trim();
+    const controller = new AbortController();
+
+    const immediate = window.setTimeout(() => {
+      if (candidate.length < 1 || candidate.length > 60) {
+        setDisplayNameDuplicateStatus({ state: 'idle' });
+        return;
+      }
+      setDisplayNameDuplicateStatus({ state: 'checking' });
+    }, 0);
+
+    const debounced = window.setTimeout(async () => {
+      if (candidate.length < 1 || candidate.length > 60) return;
+
+      try {
+        const response = await fetch(
+          `/api/account/display-name/check?displayName=${encodeURIComponent(candidate)}`,
+          {
+            credentials: 'include',
+            signal: controller.signal,
+          },
+        );
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          setDisplayNameDuplicateStatus({ state: 'idle' });
+          return;
+        }
+
+        if (data?.duplicate === true) {
+          setDisplayNameDuplicateStatus({
+            state: 'duplicate',
+            count: typeof data?.count === 'number' ? data.count : 1,
+          });
+        } else {
+          setDisplayNameDuplicateStatus({ state: 'unique' });
+        }
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setDisplayNameDuplicateStatus({ state: 'idle' });
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(immediate);
+      window.clearTimeout(debounced);
+    };
+  }, [displayName, step]);
+
+  useEffect(() => {
+    if (step !== 'profile') return;
+
+    const candidate = handle.trim().replace(/^@+/, '').toLowerCase();
+    const currentHandle = verifiedIdentity.handle.toLowerCase();
+    const controller = new AbortController();
+
+    const immediate = window.setTimeout(() => {
+      if (candidate.length < HANDLE_MIN) {
+        setHandleStatus({ state: 'idle' });
+        return;
+      }
+      if (!HANDLE_FORMAT.test(candidate)) {
+        setHandleStatus({ state: 'unavailable', reason: 'format' });
+        return;
+      }
+      if (candidate === currentHandle) {
+        setHandleStatus({ state: 'available' });
+        return;
+      }
+      setHandleStatus({ state: 'checking' });
+    }, 0);
+
+    const debounced = window.setTimeout(async () => {
+      if (
+        candidate.length < HANDLE_MIN ||
+        !HANDLE_FORMAT.test(candidate) ||
+        candidate === currentHandle
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(candidate)}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) return;
+        if (data?.available === true) {
+          setHandleStatus({ state: 'available' });
+        } else if (typeof data?.reason === 'string') {
+          setHandleStatus({
+            state: 'unavailable',
+            reason: data.reason as 'format' | 'reserved' | 'taken',
+          });
+        }
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setHandleStatus({ state: 'idle' });
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(immediate);
+      window.clearTimeout(debounced);
+    };
+  }, [handle, step, verifiedIdentity.handle]);
 
   const swapStep = useCallback((next: Step, nextError: string | null = null) => {
     // Return to the top so the title card is back in view after the button
@@ -124,6 +337,15 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
       requestAnimationFrame(() => setEntering(true)); // enter: fade + slide in
     }, 200);
   }, []);
+
+  function updateDisplayName(nextDisplayName: string) {
+    setDisplayName(nextDisplayName);
+
+    if (!handleManuallyEdited) {
+      const suggested = sanitizeForSuggestedHandle(nextDisplayName);
+      setHandle(suggested.length >= HANDLE_MIN ? suggested : '');
+    }
+  }
 
   async function sendCodeToInvitePhone(event: FormEvent) {
     event.preventDefault();
@@ -231,9 +453,117 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
         return;
       }
 
+      const identity = readVerifiedIdentity(data);
+      setVerifiedIdentity(identity);
+      setDisplayName(identity.displayName);
+      setHandle(identity.handle);
+      setHandleManuallyEdited(Boolean(identity.handle));
+      setHandleStatus({ state: 'idle' });
+      setDisplayNameDuplicateStatus({ state: 'idle' });
+
+      if (shouldCollectProfileIdentity(identity)) {
+        setLoading(false);
+        swapStep('profile');
+        return;
+      }
+
       // Success: navigation is async and doesn't block, so keep the button in
       // its "Verifying…" state. Resetting loading here would flash "Continue"
       // before the redirect lands.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      router.replace('/');
+      router.refresh();
+    } catch {
+      setError('Something went wrong. Please try again.');
+      setLoading(false);
+    }
+  }
+
+  async function completeProfile(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    const trimmedDisplayName = displayName.trim();
+    const trimmedHandle = handle.trim().replace(/^@+/, '').toLowerCase();
+    const currentHandle = verifiedIdentity.handle.toLowerCase();
+
+    if (!trimmedDisplayName) {
+      setError('Enter your display name.');
+      return;
+    }
+
+    if (trimmedDisplayName.length > 60) {
+      setError('Display name must be 60 characters or fewer.');
+      return;
+    }
+
+    if (displayNameDuplicateStatus.state === 'checking') {
+      setError('Please wait while we check that display name.');
+      return;
+    }
+
+    if (displayNameDuplicateStatus.state === 'duplicate') {
+      setError('Choose a display name that is not already taken.');
+      return;
+    }
+
+    if (!trimmedHandle) {
+      setError('Enter your call sign.');
+      return;
+    }
+
+    if (!HANDLE_FORMAT.test(trimmedHandle)) {
+      setError('Use 3–20 lowercase letters, numbers, or underscores. Start with a letter.');
+      return;
+    }
+
+    if (handleStatus.state === 'checking') {
+      setError('Please wait while we check that call sign.');
+      return;
+    }
+
+    if (handleStatus.state === 'unavailable') {
+      setError('Choose an available call sign.');
+      return;
+    }
+
+    if (trimmedHandle !== currentHandle && handleStatus.state !== 'available') {
+      setError('Please wait until we confirm that call sign is available.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const profileResponse = await fetch('/api/account/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ displayName: trimmedDisplayName }),
+      });
+      const profileData = await profileResponse.json().catch(() => ({}));
+
+      if (!profileResponse.ok) {
+        setError(profileData?.message ?? 'Unable to save your display name.');
+        setLoading(false);
+        return;
+      }
+
+      if (trimmedHandle !== currentHandle) {
+        const handleResponse = await fetch('/api/account/handle', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ handle: trimmedHandle }),
+        });
+        const handleData = await handleResponse.json().catch(() => ({}));
+
+        if (!handleResponse.ok) {
+          setError(handleData?.message ?? 'Unable to save your call sign.');
+          setLoading(false);
+          return;
+        }
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
       router.replace('/');
       router.refresh();
@@ -256,11 +586,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
         <form className="space-y-[14px]" onSubmit={sendCodeToInvitePhone}>
           {/* Texting glyph (the two-tone speech bubble) — this step is about us
               sending a code by text, so it mirrors the OTP step's mark. */}
-          <svg
-            className="mx-auto h-14 w-auto"
-            viewBox="-3 -3 54 44"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
             <g fill="var(--brand-navy)">
               <ellipse cx="15" cy="15" rx="15" ry="12" />
               <path d="M3 22 L11 26.5 L1 31 Z" />
@@ -277,12 +603,16 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
               <path d="M44 30 L36 34.5 L46.5 39 Z" />
             </g>
           </svg>
-          <p className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black">
-            {invitePrefill?.inviterName ?? 'A friend'} invited you to Joshing.
-          </p>
+          {inviteContext ? (
+            <InviteContextCard invite={inviteContext} />
+          ) : (
+            <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+              {invitePrefill?.inviterName ?? 'A friend'} invited you to Joshing.
+            </p>
+          )}
           <p className="text-center text-[15px] leading-6 text-black/70">
             We&rsquo;ll text a code to{' '}
-            <span className="whitespace-nowrap font-medium text-black">{maskedPhone}</span>.
+            <span className="font-medium whitespace-nowrap text-black">{maskedPhone}</span>.
           </p>
 
           {/* Button + divider + secondary action form a tight 6px cluster,
@@ -300,7 +630,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
             <button
               type="button"
-              className="mx-auto block text-sm font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setInvitePhoneMode(false);
                 swapStep('phone');
@@ -317,15 +647,12 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
               (and the filled treatment of the OTP step's bubble icon).
               Hand-drawn as a fill-only glyph rather than a force-filled
               lucide outline, which rendered with a muddy stroked edge. */}
-          <svg
-            className="mx-auto h-12 w-12 fill-black"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-12 w-12 fill-black" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
           </svg>
+          {inviteContext ? <InviteContextCard invite={inviteContext} /> : null}
           <label
-            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="phone"
           >
             What is your phone number?
@@ -345,18 +672,14 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
             {loading ? 'Continuing…' : 'Continue'}
           </button>
         </form>
-      ) : (
+      ) : step === 'code' ? (
         <form className="space-y-[14px]" onSubmit={verifyCode}>
           {/* Two overlapping oval speech bubbles — navy behind, orange in front
               — recreating the Figma two-tone mark. The front bubble is drawn
               twice: first as a slightly larger cream copy (the page background
               color) so a crescent of background shows where it overlaps the
               navy, then as the orange bubble on top. */}
-          <svg
-            className="mx-auto h-14 w-auto"
-            viewBox="-3 -3 54 44"
-            aria-hidden="true"
-          >
+          <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
             <g fill="var(--brand-navy)">
               <ellipse cx="15" cy="15" rx="15" ry="12" />
               <path d="M3 22 L11 26.5 L1 31 Z" />
@@ -375,7 +698,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
             </g>
           </svg>
           <label
-            className="block text-center text-[17px] font-medium leading-[26px] tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="code"
           >
             Enter your code for{' '}
@@ -410,7 +733,7 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
 
             <button
               type="button"
-              className="mx-auto block text-sm font-medium uppercase leading-5 tracking-[0.56px] text-[var(--brand-orange)] underline underline-offset-4 disabled:opacity-60"
+              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
               onClick={() => {
                 setCode('');
                 // Leaving the invite phone behind — collect a number manually.
@@ -423,10 +746,105 @@ export default function LoginPanel({ invitePrefill = null }: LoginPanelProps) {
             </button>
           </div>
         </form>
+      ) : (
+        <form className="space-y-[14px]" onSubmit={completeProfile}>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
+            @
+          </div>
+          <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+            Finish your profile
+          </p>
+          <p className="text-center text-[15px] leading-6 text-black/70">
+            Pick the name friends will see and the call sign they can use to find you.
+          </p>
+          <div className="space-y-2">
+            <label
+              className="block text-center text-sm font-medium text-black"
+              htmlFor="display-name"
+            >
+              Display name
+            </label>
+            <input
+              id="display-name"
+              type="text"
+              autoComplete="name"
+              className={INPUT_CLASS}
+              placeholder="Jane Palay"
+              value={displayName}
+              onChange={(event) => updateDisplayName(event.target.value)}
+              disabled={loading}
+              maxLength={60}
+            />
+            {displayNameDuplicateStatus.state === 'duplicate' ? (
+              <p className="rounded-md border border-[color-mix(in_srgb,var(--accent-gold)_45%,var(--brand-rule))] bg-[color-mix(in_srgb,var(--accent-gold)_12%,var(--brand-card))] px-3 py-2 text-center text-sm leading-5 text-[var(--brand-ink)]">
+                That display name is already taken. Choose a distinctive name so friends can find
+                the right account.
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <label className="block text-center text-sm font-medium text-black" htmlFor="handle">
+              Call sign / handle
+            </label>
+            <input
+              id="handle"
+              type="text"
+              autoComplete="username"
+              className={INPUT_CLASS}
+              placeholder="jpalay"
+              value={handle}
+              onChange={(event) => {
+                setHandleManuallyEdited(true);
+                setHandle(sanitizeForSuggestedHandle(event.target.value.replace(/^@+/, '')));
+              }}
+              disabled={loading}
+              maxLength={HANDLE_MAX}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <p
+              className={`text-center text-sm ${
+                handleStatus.state === 'available'
+                  ? 'text-emerald-600'
+                  : handleStatus.state === 'unavailable'
+                    ? 'text-destructive'
+                    : 'text-black/60'
+              }`}
+            >
+              {handle.length < HANDLE_MIN
+                ? 'Use 3–20 characters: lowercase letters, numbers, or underscores. Start with a letter.'
+                : handleStatus.state === 'checking'
+                  ? 'Checking call sign…'
+                  : handleStatus.state === 'available'
+                    ? `@${handle} is available.`
+                    : handleStatus.state === 'unavailable'
+                      ? handleStatus.reason === 'taken'
+                        ? 'That call sign is already taken.'
+                        : handleStatus.reason === 'reserved'
+                          ? 'That call sign is reserved.'
+                          : 'Use 3–20 lowercase letters, numbers, or underscores. Start with a letter.'
+                      : 'We’ll check whether this call sign is available.'}
+            </p>
+          </div>
+          <button
+            type="submit"
+            className={SUBMIT_CLASS}
+            disabled={
+              loading ||
+              displayNameDuplicateStatus.state === 'checking' ||
+              displayNameDuplicateStatus.state === 'duplicate' ||
+              handleStatus.state === 'checking' ||
+              handleStatus.state === 'unavailable'
+            }
+          >
+            {loading ? 'Saving…' : 'Enter Joshing'}
+          </button>
+        </form>
       )}
 
       {error ? (
-        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+        <p className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-center text-sm">
           {error}
         </p>
       ) : null}

@@ -68,6 +68,11 @@ export async function register() {
     // than relying on a guard as a migration's only application path. See
     // CLAUDE.md.
     const runBootGuards = process.env.SKIP_BOOT_DB_GUARDS !== '1';
+    // Boot-cost telemetry (B-GRADE-COLDSTART-01): the guard chain is the
+    // suspected dominant cold-start cost that the first request waits behind.
+    // Measure guard-chain vs migrate() time so the estimate becomes a number and
+    // the SKIP_BOOT_DB_GUARDS trade-off can be judged on real data.
+    const guardChainStartedAt = Date.now();
     if (runBootGuards) {
     // Migration 0006 sets NOT NULL on senderUserId/recipientUserId after adding them
     // as nullable columns. If any rows have NULL values (from a partial migration or
@@ -229,6 +234,16 @@ export async function register() {
       await db.execute(sql`
         CREATE UNIQUE INDEX IF NOT EXISTS "Question_generated_question_id_key"
         ON "Question" USING btree ("generated_question_id")
+      `);
+      // Question.surface_priority_score (migration 0024's runtime hotfix,
+      // journaled later): some preview databases have the feed migrations
+      // recorded without this column actually present. This guard replaces
+      // the lazy ALTER-on-first-query shim that used to live in
+      // src/server/db/queries/questions.ts — boot guards belong here, not in
+      // the query layer.
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "surface_priority_score" DOUBLE PRECISION NOT NULL DEFAULT 0
       `);
     } catch {
       // Question or GeneratedQuestion may not exist yet — migrate() handles
@@ -1265,6 +1280,21 @@ export async function register() {
       // before this migration runs.
     }
 
+    // Migration 0076 (B-FirstGameRecap-1) adds the nullable
+    // User.first_game_recap_seen_at timestamp. The first-game recap endpoint
+    // reads it on the game-summary path, so pre-apply this additive nullable
+    // column idempotently for databases whose migration journal got ahead of
+    // the physical column.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "first_game_recap_seen_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
+    }
+
     // Migration 0073 (B-Report-1) adds the ContentReport table + its three
     // enums (ContentReportCategory / ContentReportIncorrectKind /
     // ContentReportStatus). Purely additive substrate — nothing reads it yet
@@ -1381,7 +1411,9 @@ export async function register() {
       // database — migrate() creates them before this migration runs.
     }
     } // end if (runBootGuards)
+    const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
+    const migrateStartedAt = Date.now();
     try {
       await migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
@@ -1391,5 +1423,14 @@ export async function register() {
     } finally {
       await pool.end();
     }
+    // One line per cold boot. guards_ms is the latency the first request waits
+    // behind when SKIP_BOOT_DB_GUARDS is unset; compare against migrate_ms to see
+    // how much the defensive guard chain actually costs in this environment.
+    console.info('[instrumentation boot]', {
+      guards_ran: runBootGuards,
+      guards_ms: guardChainMs,
+      migrate_ms: Date.now() - migrateStartedAt,
+      total_ms: Date.now() - guardChainStartedAt,
+    });
   }
 }

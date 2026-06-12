@@ -446,6 +446,24 @@
   will-change: opacity, transform;
 }
 
+/* B-GRADE-PERCEIVED-1 — the "Grading…" indicator while an answer is checked
+   (GameplayChat TypingRow). Three dots pulse on the shared loading-dot
+   keyframe so the wait reads as alive, not frozen. Delays are set inline. */
+.grading-dot {
+  animation: loading-dot 1.4s ease-in-out infinite;
+}
+
+/* B-GRADE-PERCEIVED-1 — the result card eases up as it replaces the grading
+   indicator, so the verdict lands as an intentional reveal rather than a
+   jump-cut. Kept short to never delay the perceived result. */
+@keyframes result-reveal {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.result-reveal {
+  animation: result-reveal 280ms ease-out both;
+}
+
 /* B-Feed-Swipe-1 — collapse a dismissed feed card before the inline bar shows. */
 @keyframes feed-card-collapse {
   from { opacity: 1; max-height: 600px; }
@@ -466,6 +484,14 @@
   }
 
   .feed-card-collapsing {
+    animation: none !important;
+  }
+
+  .grading-dot {
+    animation: none !important;
+  }
+
+  .result-reveal {
     animation: none !important;
   }
 }

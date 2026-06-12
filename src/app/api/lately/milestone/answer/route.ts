@@ -2,8 +2,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { computeAnswerState } from '@/server/answer-state';
-import { readPriorAnswersForQuestion } from '@/server/answer-history';
+// B-ANSWER-PIPELINE-01: answer_state/points derive through the shared
+// pipeline; the side-effect tail stays inline (feed-route parity by design,
+// plus this route's milestone_missed catch-up write on a wrong answer).
+import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, playerMastery, questions } from '@/server/db';
 import { getSeededPlayQuestions } from '@/server/db/queries/lately';
@@ -91,8 +93,15 @@ export async function POST(request: NextRequest) {
   // F2.3 parity with the feed route: state-adjusted credit against prior history
   // on this canonical question — full for first_correct, 0.25x for recovery,
   // ZERO for repeat_correct (this is the no-double-credit guarantee).
-  const priorAnswers = await readPriorAnswersForQuestion(session.userId, question.id);
-  const answerState = computeAnswerState(isCorrect ? 'correct' : 'wrong', priorAnswers);
+  const { masteryAnswerState: answerState, pointsAwarded } = await deriveAnswerOutcome({
+    userId: session.userId,
+    canonicalQuestionId: question.id,
+    isCorrect,
+    pointsFor: (state) =>
+      isCorrect
+        ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, state)
+        : 0,
+  });
 
   const existingMastery = await db
     .select()
@@ -101,10 +110,7 @@ export async function POST(request: NextRequest) {
     .limit(1);
   const previousTier: MasteryTier = existingMastery[0]?.tier ?? 'establishing';
 
-  const basePoints = isCorrect
-    ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, answerState)
-    : 0;
-  const pointsAwarded = basePoints;
+  const basePoints = pointsAwarded;
   const awardsMasteryCredit = pointsAwarded > 0;
 
   const masteryDelta = await writeMasteryEvent({

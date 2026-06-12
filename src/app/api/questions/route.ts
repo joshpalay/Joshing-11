@@ -75,6 +75,16 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    if (errors.includes('unverifiedBroadcast')) {
+      return NextResponse.json(
+        {
+          error: 'unverified_no_broadcast',
+          fields: errors,
+          message: "This question isn't verified, so it can only be sent directly to specific friends — not shared with all friends.",
+        },
+        { status: 400 },
+      );
+    }
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
@@ -210,7 +220,11 @@ export async function POST(request: NextRequest) {
     verdict = verdictResult.value;
   } else {
     // Failed vet falls back to needs_review (never auto-publishes) — the cron
-    // sweep re-vets these. This mirrors vetQuestion's own internal llm_error path.
+    // sweep re-vets these at every visibility except 'blocked', so a question
+    // fanned out below still gets a definitive safety verdict; if that verdict
+    // is a safety fail, the cron hard-blocks it and the feed render predicate
+    // retires the already-written rows. Mirrors vetQuestion's internal
+    // llm_error path.
     logEnrichmentFailure('vet', verdictResult.reason);
     verdict = { status: 'needs_review' as const, score: null, reason: 'llm_error' };
   }

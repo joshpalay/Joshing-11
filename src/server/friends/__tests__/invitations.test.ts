@@ -470,6 +470,8 @@ describe('friend invitation helpers', () => {
     await expect(getFriendInvitationLandingByToken('', now)).resolves.toEqual({
       status: 'invalid',
       inviterName: 'Someone',
+      inviterUserId: null,
+      inviterAvatarColor: null,
     })
 
     setInvitation({ cancelledAt: new Date('2026-05-13T11:00:00.000Z') })
@@ -478,6 +480,8 @@ describe('friend invitation helpers', () => {
     ).resolves.toEqual({
       status: 'invalid',
       inviterName: 'Someone',
+      inviterUserId: null,
+      inviterAvatarColor: null,
     })
   })
 
@@ -576,6 +580,7 @@ describe('friend invitation helpers', () => {
 
     await expect(getInvitePrefillByToken('valid-token', now)).resolves.toEqual({
       inviterName: 'Alex Inviter',
+      inviterUserId: 'friend-invite',
       inviteePhone: '+17345556819',
       maskedPhone: '•••-•••-6819',
     })

@@ -80,10 +80,13 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
           questionId: question.id,
           questionText: slot.question_text || question.questionText,
           correctAnswer: question.answer,
+          alternateAnswers: question.acceptableVariants ?? [],
           explanation: question.explainer,
           domain,
           domainDisplayName: categoryLabel(domain),
           originalSubmittedAnswer: slot.submitted_answer ?? null,
+          // generatedQuestions has no question_type column — factual by construction.
+          questionType: 'factual',
           authorName: null, // bot slot: LLM origin, no human author
           authorIsHouse: false,
         } satisfies ReplayItem;
@@ -106,10 +109,12 @@ export async function getReplayWrongQuestions(userId: string): Promise<ReplayIte
         questionId: question.id,
         questionText: slot.question_text || question.questionText,
         correctAnswer: question.answerText,
+        alternateAnswers: question.acceptedAlternatives ?? [],
         explanation,
         domain,
         domainDisplayName: categoryLabel(domain),
         originalSubmittedAnswer: slot.submitted_answer ?? null,
+        questionType: question.questionType,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies ReplayItem;
     })
