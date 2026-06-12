@@ -329,7 +329,7 @@ export function ActivityStreamItem({
       ? {
           padding: opened ? '16px 14px' : '14px',
           background: 'var(--game-card-question)',
-          border: '1px solid rgba(40, 32, 30, 0.22)',
+          border: '1px solid var(--accent-gold)',
           borderRadius: 4,
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
         }

@@ -90,7 +90,7 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
       <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" elevated showTimestamp={false} />,
     );
     expect(html).toContain('var(--game-card-question)');
-    expect(html).toContain('rgba(40, 32, 30, 0.22)'); // the light warm-ink stroke
+    expect(html).toContain('var(--accent-gold)'); // the gold accent stroke
     expect(html).toContain('rgba(40, 32, 30, 0.1)'); // the soft drop shadow
   });
 
