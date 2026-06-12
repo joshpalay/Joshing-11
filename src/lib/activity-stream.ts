@@ -24,6 +24,7 @@ import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir, djb2 } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
+import type { FriendActivityCard } from '@/lib/friend-activity';
 import type { Convergence } from '@/lib/convergence';
 import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 
@@ -841,6 +842,53 @@ export function milestoneToStreamItem(
       kind: 'milestone',
       friendId: milestone.friendId,
       friendName: milestone.friendName,
+      questions,
+    },
+  };
+}
+
+// --- From Friends activity card (D-FEED-FRIEND-ACTIVITY-01) -------------------
+
+// Per-context lead copy for the chronological From Friends card. PLACEHOLDER —
+// flagged for product sign-off (same soft-copy rule as the milestone leads: warm,
+// non-competitive, no "mastered"/"beat"/"crushed"). Unlike milestones these name
+// no domain — the card is a time/burst roll-up, not a topic roll-up. One lead is
+// picked per card id so a stack of same-context cards still reads varied.
+const FRIEND_ACTIVITY_LEADS: Record<FriendActivityCard['context'], readonly string[]> = {
+  daily: [' played their daily five', ' got through their daily five', ' did their five for the day'],
+  catchup: [' caught up on a few', ' went back and caught up', ' cleared a few they had missed'],
+  joshing_game: [' played a game', ' got through a game', ' sat down for a game'],
+  feed: [' has been playing', ' worked through a few', ' has been on a little run'],
+  profile: [' has been playing', ' worked through a few', ' has been on a little run'],
+  mixed: [' has been playing', ' has been chipping away', ' has been keeping busy'],
+};
+
+// One From Friends play burst/batch, expanded to its answerable questions. Mirrors
+// `milestoneToStreamItem` (same StreamItem shape, same 'milestone' expand the feed
+// already renders) but sorts on the card's chronological `effectiveAt` and carries
+// time-based copy instead of deep/breadth domain copy.
+export function friendActivityToStreamItem(
+  card: FriendActivityCard,
+  questions: StreamQuestion[],
+): StreamItem {
+  const friend = act(card.friendName, card.friendId);
+  const leads = FRIEND_ACTIVITY_LEADS[card.context];
+  const lead = leads[djb2(card.id) % leads.length];
+  return {
+    id: card.id,
+    sortAt: card.effectiveAt,
+    tier: LATELY_TIER.MILESTONE,
+    friendId: card.friendId,
+    homeEligible: true,
+    line: [friend, txt(lead)],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'bundle',
+    expand: {
+      kind: 'milestone',
+      friendId: card.friendId,
+      friendName: card.friendName,
       questions,
     },
   };

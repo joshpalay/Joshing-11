@@ -18,7 +18,7 @@ vi.mock('@/lib/activity-stream', () => ({
   activityToStreamItem: (x: unknown) => x,
   momentToStreamItem: (x: unknown) => x,
   convergenceToStreamItem: (_c: unknown, questions: unknown) => ({ kind: 'convergence', questions }),
-  milestoneToStreamItem: (m: { id: string }, questions: unknown) => ({ kind: 'milestone', id: m.id, questions }),
+  friendActivityToStreamItem: (card: { id: string }, questions: unknown) => ({ kind: 'milestone', id: card.id, questions }),
 }));
 vi.mock('@/lib/lately', () => ({
   sortByProminence: (items: unknown[]) => items,
@@ -32,7 +32,7 @@ vi.mock('@/server/db/queries/content-reports', () => ({
 vi.mock('@/server/db/queries/lately', () => ({
   getLatelyMoments: vi.fn(async () => []),
   getLatelyConvergences: vi.fn(async () => []),
-  getLatelyMilestones: vi.fn(async () => [{ id: 'm1', questionIds: ['q-keep', 'q-hidden'] }]),
+  getFriendActivity: vi.fn(async () => [{ id: 'm1', questionIds: ['q-keep', 'q-hidden'] }]),
   getMilestoneQuestionText: vi.fn(async (ids: string[]) =>
     new Map(ids.map((id) => [id, { questionId: id, text: `text ${id}`, domain: 'history' }])),
   ),
