@@ -78,6 +78,41 @@ export function InlineAnswerFlow({
     }
   }
 
+  // "Challenge the response" on a wrong answer — a second look at the verdict.
+  // A wrong milestone answer is persisted as a `milestone_missed` row keyed by
+  // its question, so the recheck route resolves it by questionId. Mirrors the
+  // feed's recheck affordance; the AnswerFeedbackSheet only surfaces it when the
+  // answer was wrong.
+  async function recheck(): Promise<{ accepted: boolean; message: string }> {
+    const res = await fetch('/api/lately/milestone/recheck', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ questionId: question.questionId }),
+    });
+    const body = (await res.json().catch(() => null)) as {
+      accepted?: boolean;
+      status?: string;
+      reason?: string;
+      pointsAwarded?: number;
+      message?: string;
+    } | null;
+    if (!res.ok) throw new Error(body?.message ?? 'Could not recheck that answer.');
+    if (body?.accepted) {
+      const points = typeof body.pointsAwarded === 'number' ? body.pointsAwarded : 0;
+      // Reflect the overturned verdict locally so the result reads as correct.
+      setFeedback((prev) => (prev ? { ...prev, isCorrect: true, pointsAwarded: points } : prev));
+      return {
+        accepted: true,
+        message: `Recheck accepted — +${points} ${points === 1 ? 'point' : 'points'}.`,
+      };
+    }
+    if (body?.status === 'needs_human') {
+      return { accepted: false, message: body.reason ?? 'Flagged for a human look.' };
+    }
+    return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' };
+  }
+
   // Hand the resolution up only once the viewer dismisses the result pop-up, so
   // this block stays mounted (and the sheet visible) through the reveal, then
   // the parent moves the question into the answered history.
@@ -148,6 +183,7 @@ export function InlineAnswerFlow({
           openedTerritoryDomain={feedback.openedTerritoryDomain}
           questionId={question.questionId}
           feedItemId={`milestone:${question.questionId}`}
+          onRecheck={feedback.isCorrect ? null : recheck}
           report={{ target: { questionId: question.questionId }, surface: 'lately_result' }}
           onClose={finish}
         />

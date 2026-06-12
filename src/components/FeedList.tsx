@@ -802,16 +802,18 @@ function FeedGroupHeading({
   subtitle,
 }: {
   title: string
-  subtitle: string
+  subtitle?: string
 }) {
   return (
     <div className="pt-4 pl-[2px] first:pt-0">
       <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         {title}
       </p>
-      <p className="text-muted-foreground/70 mt-1 text-[11px] font-medium tracking-[0.12em] uppercase">
-        {subtitle}
-      </p>
+      {subtitle ? (
+        <p className="text-muted-foreground/70 mt-1 text-[11px] font-medium tracking-[0.12em] uppercase">
+          {subtitle}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -1949,10 +1951,7 @@ function FeedListContent({
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
               {unifiedHome ? (
-                <FeedGroupHeading
-                  title="Friends&rsquo; Mastery"
-                  subtitle="questions your friends have answered — play along"
-                />
+                <FeedGroupHeading title="From Friends" />
               ) : (
                 <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
               )}

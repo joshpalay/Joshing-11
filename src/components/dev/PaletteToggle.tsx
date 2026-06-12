@@ -5,10 +5,12 @@ import { useSyncExternalStore, type CSSProperties } from 'react';
 // ─────────────────────────────────────────────────────────────────────────────
 // TESTING ONLY — card-background cycler (repurposed from the palette preview bar).
 //
-// Cycles the `--brand-card` token — the resting feed-card surface — through the
-// SANCTIONED background colors (globals.css), so a tester can audit how the
-// cards read on each cream / wash without per-page edits. Every surface that
-// fills with `var(--brand-card)` recolors automatically.
+// Cycles the card-surface tokens — the resting card fill (`--brand-card`) AND
+// the elevated/"playable" card fill (`--game-card-question`) — through the
+// SANCTIONED background colors (globals.css), so a tester can audit how EVERY
+// card reads on each cream / wash without per-page edits. Every surface that
+// fills with one of these tokens (the Daily Five card, the feed cards, the
+// playable bundles, …) recolors automatically.
 //
 // Only the system's own background tokens are offered (no off-palette hex), so
 // nothing here introduces an unsanctioned color. Inline styles are on purpose:
@@ -32,6 +34,12 @@ const CARD_BGS: CardBg[] = [
   { label: 'Sage', value: 'var(--editorial-sage)', swatch: 'var(--editorial-sage)' },
   { label: 'Slate', value: 'var(--editorial-slate)', swatch: 'var(--editorial-slate)' },
 ];
+
+// The card-surface tokens, overridden together so every card recolors: the
+// resting fill (`--brand-card`, also feeds `--card`) and the elevated/"playable"
+// fill (`--game-card-question`). Mirror any change here in the boot script
+// (layout.tsx) that pre-applies the saved choice before paint.
+const CARD_SURFACE_TOKENS = ['--brand-card', '--game-card-question'] as const;
 
 const STORAGE_KEY = 'joshing-card-bg';
 const CARD_BG_EVENT = 'joshing-card-bg-change';
@@ -60,10 +68,15 @@ export function PaletteToggle() {
     const i = ((next % CARD_BGS.length) + CARD_BGS.length) % CARD_BGS.length;
     const { value } = CARD_BGS[i];
     const root = document.documentElement;
-    if (value) {
-      root.style.setProperty('--brand-card', value);
-    } else {
-      root.style.removeProperty('--brand-card');
+    // Override every card-surface token together so ALL cards recolor — not just
+    // the resting `--brand-card` ones (the Daily Five card), but the elevated
+    // `--game-card-question` fill the feed cards / playable bundles use.
+    for (const token of CARD_SURFACE_TOKENS) {
+      if (value) {
+        root.style.setProperty(token, value);
+      } else {
+        root.style.removeProperty(token);
+      }
     }
     root.setAttribute('data-card-bg', String(i));
     try {

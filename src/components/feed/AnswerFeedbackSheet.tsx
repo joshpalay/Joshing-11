@@ -50,7 +50,9 @@ type BankState = 'idle' | 'saving' | 'saved' | 'undoing' | 'undone' | 'error'
 type RecheckState = 'idle' | 'submitting' | 'done' | 'error'
 
 export function AnswerFeedbackSheet({
-  question,
+  // `question` is intentionally not destructured/rendered — the sheet no longer
+  // restates the question (the viewer just answered it). Kept on the props type
+  // so call sites can keep passing it without churn.
   category,
   isCorrect,
   pointsAwarded,
@@ -267,25 +269,26 @@ export function AnswerFeedbackSheet({
               </span>
             ) : null}
             {!isCorrect ? (
-              <p
-                className="text-[13px] italic"
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  color: 'var(--ink)',
-                  opacity: 0.7,
-                }}
-              >
-                Your answer: {submittedAnswer}
-              </p>
+              // Surface what they actually typed clearly — labelled, full-
+              // strength, in the wrong-verdict color — so a wrong result always
+              // shows their own answer back to them (not a faint aside).
+              <div className="pt-0.5">
+                <p className="text-[0.62rem] font-semibold tracking-[0.16em] uppercase text-[var(--brand-ink-400)]">
+                  Your answer
+                </p>
+                <p
+                  className="mt-0.5 font-serif text-[17px] leading-6"
+                  style={{ color: 'var(--game-wrong-strong)' }}
+                >
+                  {submittedAnswer}
+                </p>
+              </div>
             ) : null}
           </div>
 
-          {/* The question reads as context for the answer, so it sits below the
-              answer headline (not above it). De-boxed: plain text, no panel. */}
-          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
-            {question}
-          </p>
-
+          {/* The question itself is NOT restated here — the viewer just answered
+              it moments ago, so repeating it only adds noise. The answer + a
+              one-line explainer carry the reveal. */}
           {explanation ? (
             // Match the daily-5 game's reveal: a single-sentence explainer under
             // the answer, not the full paragraph (which ran too long here).
