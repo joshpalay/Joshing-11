@@ -91,6 +91,19 @@ describe('Feed card preview fixtures', () => {
     expect(answeredByYou).toContain('You both had it')
   })
 
+  it('marks direct sends with the eyebrow on the plain bordered tile (no triangle mat)', () => {
+    const directSent = html(
+      <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
+    )
+    expect(directSent).toContain('Sent directly to you')
+    expect(directSent).not.toContain('/images/Variant4.png')
+
+    const friendAdded = html(
+      <FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />
+    )
+    expect(friendAdded).not.toContain('Sent directly to you')
+  })
+
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {
     const variants = [
       html(<DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />),
@@ -400,7 +413,7 @@ describe('Answer feedback sheet recheck affordance', () => {
 })
 
 describe('Authored-by-viewer card', () => {
-  it('renders the authored attribution and category (Figma triangle card has no eyebrow)', () => {
+  it('renders the authored attribution and category (broadcast card has no eyebrow)', () => {
     const rendered = html(
       <FriendAddedCard
         item={feedCardPreviewFixtures.authoredByViewerUnanswered}

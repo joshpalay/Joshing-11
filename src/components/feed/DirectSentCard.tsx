@@ -41,6 +41,10 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, elevated }
 
   return (
     <SparkleEnvelope
+      // Direct sends share the plain hairline-bordered tile with broadcasts
+      // (the triangle mat is retired); the eyebrow is what marks them out.
+      variant="bordered"
+      eyebrow="Sent directly to you"
       signal={signal}
       question={item.question}
       overflow={overflow}
