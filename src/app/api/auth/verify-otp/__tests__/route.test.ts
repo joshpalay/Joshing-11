@@ -62,6 +62,7 @@ vi.mock('@/server/db', () => ({
     id: 'users.id',
     phoneNumber: 'users.phoneNumber',
     displayName: 'users.displayName',
+    handle: 'users.handle',
     timezone: 'users.timezone',
   },
 }))
@@ -84,6 +85,7 @@ const EXISTING_USER = {
   id: 'user-1',
   phoneNumber: '+15551234567',
   displayName: null,
+  handle: null,
   timezone: 'America/New_York',
 }
 
@@ -91,6 +93,7 @@ const NEW_USER = {
   id: 'user-2',
   phoneNumber: '+15559876543',
   displayName: null,
+  handle: null,
   timezone: 'America/New_York',
 }
 
@@ -145,6 +148,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
 
       expect(response.status).toBe(200)
       expect(body.user.id).toBe('user-1')
+      expect(body.user.handle).toBeNull()
       expect(body.invitation).toEqual({ accepted: false })
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
@@ -332,6 +336,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
 
       expect(response.status).toBe(200)
       expect(body.user.id).toBe('user-2')
+      expect(body.user.handle).toBeNull()
       expect(body.invitation).toEqual({ accepted: true })
       expect(provisionUserInsertMock).toHaveBeenCalled()
       expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
