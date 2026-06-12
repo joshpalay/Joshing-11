@@ -166,7 +166,7 @@ describe('overflow subpages — §7 state sync (Home is a window onto the pendin
     expect(after).toContain('1 more from friends →')
   })
 
-  it('finishing a playable bundle on the subpage promotes the next bundle and decrements the count on Home', () => {
+  it('keeps a finished From Friends bundle on Home as a spent card (chronological log, Q4)', () => {
     const pending = [0, 1, 2, 3, 4, 5].map((i) => bundle(i, [null]))
 
     const before = renderHome([], pending)
@@ -176,14 +176,15 @@ describe('overflow subpages — §7 state sync (Home is a window onto the pendin
     expect(before).toContain('2 more →')
     expect(before).toContain('href="/from-friends"')
 
-    // The subpage answer records the viewer's result on p0's last open
-    // question, so the bundle is no longer pending on Home's next read.
+    // The subpage answer records the viewer's result on p0's last open question.
+    // Unlike the old pending-queue, the bundle does NOT leave — it stays as a
+    // spent card in the same slot, and the overflow count is unchanged.
     const afterAnswer = [bundle(0, ['correct']), ...pending.slice(1)]
 
     const after = renderHome([], afterAnswer)
-    expect(after).not.toContain('activity:p0:friend0')
-    expect(after).toContain('activity:p4:friend4') // promoted into the freed slot
-    expect(after).toContain('1 more →')
+    expect(after).toContain('activity:p0:friend0') // still here (now spent)
+    expect(after).not.toContain('activity:p4:friend4') // still beyond the served window
+    expect(after).toContain('2 more →') // count unchanged — nothing was consumed
   })
 })
 
