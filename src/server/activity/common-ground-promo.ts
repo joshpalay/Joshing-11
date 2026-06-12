@@ -20,11 +20,14 @@ import {
 import { getCommonGround } from '@/server/db/queries/common-ground';
 import { getFriends } from '@/server/db/queries/friends';
 
-// The editorial "Shared Ground" carousel shows a slide per friend (each with
-// their single strongest shared-but-untested domain), so the viewer can rotate
-// through a few of the people they share ground with. One circle per slide keeps
-// the motif the hero (more than one crowds it). See CommonGroundFeature.
+// The editorial "Shared Ground" carousel shows a slide per friend, so swiping
+// rotates through PEOPLE the viewer shares ground with (not through areas). See
+// CommonGroundFeature.
 const MAX_PROMO_FRIENDS = 3;
+// Each friend's slide shows their strongest shared-but-untested domains — at
+// least one, and a second when they share more than one area. Two keeps the
+// circle motif the hero without crowding the slide.
+const MAX_DOMAINS_PER_FRIEND = 2;
 // Cap the per-render getCommonGround probes so the homepage stays cheap even for
 // users with many friends; the rotation still cycles through everyone over time.
 const MAX_CANDIDATES = 4;
@@ -69,17 +72,17 @@ export async function getCommonGroundPromo(
     const latent = grounds[i].latent;
     if (latent.length === 0) continue;
 
-    // The friend's single strongest shared-but-untested domain is the hero.
-    const top = latent[0];
+    // The friend's strongest shared-but-untested domains (up to two), strongest
+    // first — latent is already sorted by combined mastery points.
     promoFriends.push({
       friendId: friend.id,
       friendFirstName: firstName(friend.displayName),
       friendHref: `/users/${friend.id}`,
-      domain: {
-        label: top.canonical_subcategory,
-        viewer: { points: top.viewer.mastery_points, tier: top.viewer.current_tier },
-        friend: { points: top.friend.mastery_points, tier: top.friend.current_tier },
-      },
+      domains: latent.slice(0, MAX_DOMAINS_PER_FRIEND).map((d) => ({
+        label: d.canonical_subcategory,
+        viewer: { points: d.viewer.mastery_points, tier: d.viewer.current_tier },
+        friend: { points: d.friend.mastery_points, tier: d.friend.current_tier },
+      })),
     });
   }
 
