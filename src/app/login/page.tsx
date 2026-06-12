@@ -2,32 +2,44 @@ import { Suspense } from 'react';
 
 import TriangleBackground from '@/components/TriangleBackground';
 import { getInvitePrefillByToken } from '@/server/friends/invitations';
+import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
 import LoginPanel from './LoginPanel';
 
 // Mirror LoginPanel.readInvitationToken: accept any of the aliases an invite
 // link may use so the prefill resolves regardless of which one routed here.
-function readInvitationToken(
-  params: Record<string, string | string[] | undefined>
-): string | null {
-  const first = (value: string | string[] | undefined) =>
-    Array.isArray(value) ? value[0] : value;
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function readInvitationToken(params: Record<string, string | string[] | undefined>): string | null {
   return (
-    first(params.invitationToken) ??
-    first(params.invite) ??
-    first(params.token) ??
+    firstParam(params.invitationToken) ??
+    firstParam(params.invite) ??
+    firstParam(params.token) ??
     null
   );
+}
+
+function readUserInvite(
+  params: Record<string, string | string[] | undefined>,
+): { handle: string; token: string } | null {
+  const handle = firstParam(params.inviteHandle);
+  const token = firstParam(params.inviteUserToken);
+  return handle && token ? { handle, token } : null;
 }
 
 function TitleCard() {
   return (
     <section className="w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
-      <h1 className="font-sans text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
+      <h1 className="font-sans text-5xl leading-[52px] font-bold tracking-[4.8px] text-[var(--brand-ink-950)]">
         JOSHING
       </h1>
-      <div className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]" aria-hidden="true" />
-      <p className="mt-4 text-center font-sans text-lg font-normal uppercase leading-6 tracking-[3.6px] text-[var(--warm-ink)]">
+      <div
+        className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]"
+        aria-hidden="true"
+      />
+      <p className="mt-4 text-center font-sans text-lg leading-6 font-normal tracking-[3.6px] text-[var(--warm-ink)] uppercase">
         Trivia you wish you were asked
       </p>
     </section>
@@ -41,15 +53,37 @@ type LoginPageProps = {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const invitationToken = readInvitationToken(params);
+  const userInvite = readUserInvite(params);
   // Resolve the invite's recipient phone server-side so the login panel can
   // skip manual phone entry. Only the masked form crosses to the client — the
   // raw phone never leaves the server.
-  const prefill = invitationToken
-    ? await getInvitePrefillByToken(invitationToken)
+  const prefill = invitationToken ? await getInvitePrefillByToken(invitationToken) : null;
+  const userInviteResolution = userInvite
+    ? await resolveInviteLink(userInvite.handle, userInvite.token)
     : null;
   const invitePrefill = prefill
-    ? { inviterName: prefill.inviterName, maskedPhone: prefill.maskedPhone }
+    ? {
+        inviterName: prefill.inviterName,
+        inviterUserId: prefill.inviterUserId,
+        inviterAvatarColor: prefill.inviterAvatarColor,
+        maskedPhone: prefill.maskedPhone,
+      }
     : null;
+  const inviteContext = prefill
+    ? {
+        inviterName: prefill.inviterName,
+        inviterUserId: prefill.inviterUserId,
+        inviterAvatarColor: prefill.inviterAvatarColor,
+      }
+    : userInviteResolution
+      ? {
+          inviterName:
+            userInviteResolution.inviterDisplayName?.trim() ||
+            `@${userInviteResolution.inviterHandle}`,
+          inviterUserId: userInviteResolution.inviterUserId,
+          inviterAvatarColor: userInviteResolution.inviterAvatarColor,
+        }
+      : null;
 
   return (
     <TriangleBackground>
@@ -60,7 +94,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <div className="h-72 w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5" />
           }
         >
-          <LoginPanel invitePrefill={invitePrefill} />
+          <LoginPanel invitePrefill={invitePrefill} inviteContext={inviteContext} />
         </Suspense>
       </main>
     </TriangleBackground>
