@@ -791,6 +791,31 @@ function FeedSectionHeading({
   )
 }
 
+// A two-tier GROUP header for the unified-home feed: a bold primary title with a
+// quiet descriptive subtitle beneath it, matching the "For you" header that opens
+// the page (page.tsx). Each home zone past the first — "Friends' Mastery" (the
+// playable milestone bundles) and "Lately" (the activity stream) — gets one so
+// the feed reads as three labelled groups rather than an unbroken scroll. The
+// standalone Feed tab keeps the plain single-line FeedSectionHeading.
+function FeedGroupHeading({
+  title,
+  subtitle,
+}: {
+  title: string
+  subtitle: string
+}) {
+  return (
+    <div className="pt-4 pl-[2px] first:pt-0">
+      <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+        {title}
+      </p>
+      <p className="text-muted-foreground/70 mt-1 text-[11px] font-medium tracking-[0.12em] uppercase">
+        {subtitle}
+      </p>
+    </div>
+  )
+}
+
 function FeedListContent({
   pageSize = 20,
   infinite = false,
@@ -1923,7 +1948,14 @@ function FeedListContent({
               a pass-through here (milestone rows never group). */}
           {fromFriendsRows.length > 0 ? (
             <Fragment key="from-friends">
-              <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
+              {unifiedHome ? (
+                <FeedGroupHeading
+                  title="Friends&rsquo; Mastery"
+                  subtitle="questions your friends have answered — play along"
+                />
+              ) : (
+                <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
+              )}
               {groupActivityByFriend(budget ? fromFriendsRows : visibleFromFriendsRows).map(renderRow)}
               {budget ? (
                 budget.playablesOverflowCount > 0 ? (
@@ -1962,6 +1994,15 @@ function FeedListContent({
             // section headings; the page header carries the one title.
             restRows.length > 0 ? (
               <Fragment key="texture">
+                {/* Home-only: the activity stream is the third labelled group.
+                    The pendingQueue subpages stay heading-less (they carry their
+                    own page title), so this is gated on the home surface. */}
+                {unifiedHome ? (
+                  <FeedGroupHeading
+                    title="Lately"
+                    subtitle="what your friends have been up to"
+                  />
+                ) : null}
                 {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
                 {/* §2 slot 5 (tuned 2026-06-12) — the one rotating panel per
                     load now runs as a mid-zone interlude after the lead texture

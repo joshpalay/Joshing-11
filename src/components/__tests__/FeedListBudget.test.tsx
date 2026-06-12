@@ -162,7 +162,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     // Both question zones render their headings and overflow affordances,
     // each linking to its zone's overflow subpage (B-HOME-OVERFLOW-02).
     expect(html).toContain('questions your friends created or sent directly to you')
-    expect(html).toContain('From Friends')
+    expect(html).toContain('Friends’ Mastery')
+    // The activity stream is the third labelled group.
+    expect(html).toContain('Lately')
     expect(html).toContain('4 more from friends →')
     expect(html).toContain('3 more →')
     expect(html).toContain('href="/for-you"')
@@ -200,7 +202,7 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     // No panel double-invite, no zone headings.
     expect(html).not.toContain('PANEL')
     expect(html).not.toContain('questions your friends created or sent directly to you')
-    expect(html).not.toContain('From Friends')
+    expect(html).not.toContain('Friends’ Mastery')
   })
 
   it('partial-empty → empty zones omitted, populated zones shown (§9)', () => {
@@ -225,9 +227,11 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('questions your friends created or sent directly to you')
     expect(html).toContain('direct:robyn')
     // The empty playable zone is omitted entirely — no heading, no placeholder.
-    expect(html).not.toContain('From Friends')
+    expect(html).not.toContain('Friends’ Mastery')
     expect(html).not.toContain('Quiet today')
-    // Empty texture zone → its see-more row is hidden with it (§9).
+    // Empty texture zone → no "Lately" group heading, and its see-more row is
+    // hidden with it (§9).
+    expect(html).not.toContain('Lately')
     expect(html).not.toContain('See all activity')
     // The populated page still gets its one panel.
     expect(html).toContain('PANEL:common_ground')
