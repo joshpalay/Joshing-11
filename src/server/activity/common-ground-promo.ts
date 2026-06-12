@@ -32,6 +32,20 @@ const MAX_DOMAINS_PER_FRIEND = 2;
 // users with many friends; the rotation still cycles through everyone over time.
 const MAX_CANDIDATES = 4;
 
+// Keep the first occurrence of each id, preserving order. Guards the carousel
+// against a friend surfacing on more than one slide when getMutualFollows
+// returns duplicate rows for them.
+function dedupeById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+
 function firstName(displayName: string | null): string {
   const trimmed = (displayName ?? '').trim();
   if (!trimmed) return 'They';
@@ -51,7 +65,11 @@ export async function getCommonGroundPromo(
 ): Promise<StreamItem | null> {
   // First-class module: render deterministically whenever there's latent common
   // ground to surface (the data-existence guards below are the only gate).
-  const friends = await getFriends(userId);
+  // Dedupe by id first: getMutualFollows can return the same person more than
+  // once when there are duplicate approved follow edges, and the carousel is a
+  // tour of PEOPLE (one slide per friend) — the same friend must never occupy
+  // two stations. See CommonGroundFeature.
+  const friends = dedupeById(await getFriends(userId));
   if (friends.length === 0) return null;
 
   const seed = daySeed(now);
