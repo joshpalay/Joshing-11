@@ -1,12 +1,15 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { AvatarChip } from '@/components/AvatarChip';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
+const HANDLE_MIN = 3;
+const HANDLE_MAX = 20;
+const HANDLE_FORMAT = /^[a-z][a-z0-9_]{2,19}$/;
 
 /** Format a stored E.164 US number as (734)-277-6819 for display. */
 function formatPhoneForDisplay(e164: string): string {
@@ -37,6 +40,14 @@ function normalizePhone(phone: string): string {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
   return phone.startsWith('+') ? phone : `+${digits}`;
+}
+
+function sanitizeForSuggestedHandle(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^[^a-z]+/, '')
+    .slice(0, HANDLE_MAX);
 }
 
 export function readInvitationToken(searchParams: URLSearchParams) {
@@ -102,6 +113,12 @@ type VerifiedIdentity = {
   handle: string;
 };
 
+type HandleStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available' }
+  | { state: 'unavailable'; reason: 'format' | 'reserved' | 'taken' };
+
 type VerifyOtpUserPayload = {
   display_name?: unknown;
   displayName?: unknown;
@@ -163,6 +180,8 @@ export default function LoginPanel({
   const [code, setCode] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [handle, setHandle] = useState('');
+  const [handleManuallyEdited, setHandleManuallyEdited] = useState(false);
+  const [handleStatus, setHandleStatus] = useState<HandleStatus>({ state: 'idle' });
   const [verifiedIdentity, setVerifiedIdentity] = useState<VerifiedIdentity>({
     displayName: '',
     handle: '',
@@ -181,6 +200,67 @@ export default function LoginPanel({
   // fixed; only this form card animates out, swaps content, then animates in.
   const [entering, setEntering] = useState(true);
 
+  useEffect(() => {
+    if (step !== 'profile') return;
+
+    const candidate = handle.trim().replace(/^@+/, '').toLowerCase();
+    const currentHandle = verifiedIdentity.handle.toLowerCase();
+    const controller = new AbortController();
+
+    const immediate = window.setTimeout(() => {
+      if (candidate.length < HANDLE_MIN) {
+        setHandleStatus({ state: 'idle' });
+        return;
+      }
+      if (!HANDLE_FORMAT.test(candidate)) {
+        setHandleStatus({ state: 'unavailable', reason: 'format' });
+        return;
+      }
+      if (candidate === currentHandle) {
+        setHandleStatus({ state: 'available' });
+        return;
+      }
+      setHandleStatus({ state: 'checking' });
+    }, 0);
+
+    const debounced = window.setTimeout(async () => {
+      if (
+        candidate.length < HANDLE_MIN ||
+        !HANDLE_FORMAT.test(candidate) ||
+        candidate === currentHandle
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(candidate)}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) return;
+        if (data?.available === true) {
+          setHandleStatus({ state: 'available' });
+        } else if (typeof data?.reason === 'string') {
+          setHandleStatus({
+            state: 'unavailable',
+            reason: data.reason as 'format' | 'reserved' | 'taken',
+          });
+        }
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setHandleStatus({ state: 'idle' });
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(immediate);
+      window.clearTimeout(debounced);
+    };
+  }, [handle, step, verifiedIdentity.handle]);
+
   const swapStep = useCallback((next: Step, nextError: string | null = null) => {
     // Return to the top so the title card is back in view after the button
     // press — on mobile the focused input scrolls the page down, and landing
@@ -195,6 +275,15 @@ export default function LoginPanel({
       requestAnimationFrame(() => setEntering(true)); // enter: fade + slide in
     }, 200);
   }, []);
+
+  function updateDisplayName(nextDisplayName: string) {
+    setDisplayName(nextDisplayName);
+
+    if (!handleManuallyEdited) {
+      const suggested = sanitizeForSuggestedHandle(nextDisplayName);
+      setHandle(suggested.length >= HANDLE_MIN ? suggested : '');
+    }
+  }
 
   async function sendCodeToInvitePhone(event: FormEvent) {
     event.preventDefault();
@@ -306,6 +395,8 @@ export default function LoginPanel({
       setVerifiedIdentity(identity);
       setDisplayName(identity.displayName);
       setHandle(identity.handle);
+      setHandleManuallyEdited(Boolean(identity.handle));
+      setHandleStatus({ state: 'idle' });
 
       if (shouldCollectProfileIdentity(identity)) {
         setLoading(false);
@@ -330,7 +421,8 @@ export default function LoginPanel({
     setError(null);
 
     const trimmedDisplayName = displayName.trim();
-    const trimmedHandle = handle.trim().replace(/^@+/, '');
+    const trimmedHandle = handle.trim().replace(/^@+/, '').toLowerCase();
+    const currentHandle = verifiedIdentity.handle.toLowerCase();
 
     if (!trimmedDisplayName) {
       setError('Enter your display name.');
@@ -339,6 +431,26 @@ export default function LoginPanel({
 
     if (!trimmedHandle) {
       setError('Enter your call sign.');
+      return;
+    }
+
+    if (!HANDLE_FORMAT.test(trimmedHandle)) {
+      setError('Use 3–20 lowercase letters, numbers, or underscores. Start with a letter.');
+      return;
+    }
+
+    if (handleStatus.state === 'checking') {
+      setError('Please wait while we check that call sign.');
+      return;
+    }
+
+    if (handleStatus.state === 'unavailable') {
+      setError('Choose an available call sign.');
+      return;
+    }
+
+    if (trimmedHandle !== currentHandle && handleStatus.state !== 'available') {
+      setError('Please wait until we confirm that call sign is available.');
       return;
     }
 
@@ -358,7 +470,7 @@ export default function LoginPanel({
         return;
       }
 
-      if (trimmedHandle !== verifiedIdentity.handle) {
+      if (trimmedHandle !== currentHandle) {
         const handleResponse = await fetch('/api/account/handle', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -581,7 +693,7 @@ export default function LoginPanel({
               className={INPUT_CLASS}
               placeholder="Jane Palay"
               value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
+              onChange={(event) => updateDisplayName(event.target.value)}
               disabled={loading}
             />
           </div>
@@ -596,11 +708,47 @@ export default function LoginPanel({
               className={INPUT_CLASS}
               placeholder="jpalay"
               value={handle}
-              onChange={(event) => setHandle(event.target.value.replace(/^@+/, ''))}
+              onChange={(event) => {
+                setHandleManuallyEdited(true);
+                setHandle(sanitizeForSuggestedHandle(event.target.value.replace(/^@+/, '')));
+              }}
               disabled={loading}
+              maxLength={HANDLE_MAX}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
             />
+            <p
+              className={`text-center text-sm ${
+                handleStatus.state === 'available'
+                  ? 'text-emerald-600'
+                  : handleStatus.state === 'unavailable'
+                    ? 'text-destructive'
+                    : 'text-black/60'
+              }`}
+            >
+              {handle.length < HANDLE_MIN
+                ? 'Use 3–20 characters: lowercase letters, numbers, or underscores. Start with a letter.'
+                : handleStatus.state === 'checking'
+                  ? 'Checking call sign…'
+                  : handleStatus.state === 'available'
+                    ? `@${handle} is available.`
+                    : handleStatus.state === 'unavailable'
+                      ? handleStatus.reason === 'taken'
+                        ? 'That call sign is already taken.'
+                        : handleStatus.reason === 'reserved'
+                          ? 'That call sign is reserved.'
+                          : 'Use 3–20 lowercase letters, numbers, or underscores. Start with a letter.'
+                      : 'We’ll check whether this call sign is available.'}
+            </p>
           </div>
-          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+          <button
+            type="submit"
+            className={SUBMIT_CLASS}
+            disabled={
+              loading || handleStatus.state === 'checking' || handleStatus.state === 'unavailable'
+            }
+          >
             {loading ? 'Saving…' : 'Enter Joshing'}
           </button>
         </form>
