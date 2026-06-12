@@ -251,6 +251,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     breadcrumb: null,
     masteryDelta,
     correctAnswer: question.answerText,
+    // Flags an author-written answer the LLM never confirmed, so the reveal can
+    // tag it. Only authored questions carry this; curated/house answers default
+    // to 'verified'. The legacy `verified` boolean mirrors `status`.
+    unverified: question.status === 'unverified',
     creatorNote: question.creatorNote ?? null,
     insideJoke: insideJoke?.text ?? null,
     insideJokeKind: insideJoke?.kind ?? null,

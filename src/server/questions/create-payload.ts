@@ -76,6 +76,12 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
   if (verified === null) errors.push('verified');
   if (!Number.isInteger(critiqueIterations) || critiqueIterations < 0) errors.push('critiqueIterations');
   if (shareToFeed && rawSendToFriendIds.length > 0) errors.push('shareToFeed');
+  // An unverified question (the author's answer differs from the LLM's, so it
+  // hasn't been machine-confirmed) can only be sent directly to specific people.
+  // It can never be broadcast to all friends — broadcast has no named recipient
+  // to take responsibility for an unconfirmed answer. The client disables the
+  // broadcast toggle when unverified; this is the server-side backstop.
+  if (verified === false && shareToFeed) errors.push('unverifiedBroadcast');
   if (text && correctAnswer && questionContainsAnswer(text, correctAnswer, alternateAnswers)) {
     errors.push('answerInQuestion');
   }

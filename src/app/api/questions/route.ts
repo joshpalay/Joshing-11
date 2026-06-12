@@ -75,6 +75,16 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    if (errors.includes('unverifiedBroadcast')) {
+      return NextResponse.json(
+        {
+          error: 'unverified_no_broadcast',
+          fields: errors,
+          message: "This question isn't verified, so it can only be sent directly to specific friends — not shared with all friends.",
+        },
+        { status: 400 },
+      );
+    }
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
 
