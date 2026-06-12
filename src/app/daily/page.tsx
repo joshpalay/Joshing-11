@@ -13,6 +13,7 @@ import {
 } from '@/components/play/GameplayChat';
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
@@ -173,8 +174,6 @@ export default function DailyPage() {
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
   const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
-  // Refs for keeping the answer bar above the on-screen keyboard on mobile.
-  const answerFormRef = useRef<HTMLFormElement>(null);
   const answerInputRef = useRef<HTMLInputElement>(null);
 
   // Show the first-run intro once, only for the server-flagged first untouched
@@ -668,31 +667,6 @@ export default function DailyPage() {
     }
   }, [queue, currentSlot, submitting]);
 
-  // Keep the "Answer" bar above the on-screen keyboard. On mobile the layout
-  // viewport doesn't shrink when the keyboard opens, so a `position: sticky`
-  // footer ends up hidden behind it (the original "scroll to find the button"
-  // bug). The VisualViewport API reports the genuinely-visible region, so we
-  // lift the bar by however much the keyboard overlaps it. Re-runs when the
-  // input bar mounts for a new pending slot. No-ops where VisualViewport is
-  // unsupported — the sticky positioning still applies as before.
-  useEffect(() => {
-    const form = answerFormRef.current;
-    const viewport = window.visualViewport;
-    if (!form || !viewport) return;
-    const update = () => {
-      const overlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      form.style.transform = overlap > 0 ? `translateY(-${overlap}px)` : '';
-    };
-    update();
-    viewport.addEventListener('resize', update);
-    viewport.addEventListener('scroll', update);
-    return () => {
-      viewport.removeEventListener('resize', update);
-      viewport.removeEventListener('scroll', update);
-      form.style.transform = '';
-    };
-  }, [currentSlot?.slot_index]);
-
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
       <header
@@ -731,7 +705,12 @@ export default function DailyPage() {
 
       <section
         className="flex-1 overflow-y-auto px-4 py-4"
-        style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
+        style={{
+          paddingBottom:
+            currentSlot && !loading
+              ? 'calc(120px + env(safe-area-inset-bottom))'
+              : 'calc(24px + env(safe-area-inset-bottom))',
+        }}
       >
         {loading ? (
           generatingAttempt != null ? (
@@ -768,62 +747,13 @@ export default function DailyPage() {
       </section>
 
       {currentSlot && !loading ? (
-        <form
-          ref={answerFormRef}
-          className="sticky bottom-0 z-30 mt-auto border-t px-4 py-3"
-          aria-label="Submit your answer"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
-            backdropFilter: 'blur(6px)',
-            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
-            // Smooth the lift/settle as the keyboard opens and closes (the
-            // translateY is driven imperatively by the VisualViewport effect).
-            transition: 'transform 0.15s ease-out',
-          }}
-          onSubmit={(event) => {
-            // Native single-input form submit already fires on Enter/Return;
-            // handling it here keeps the click and keyboard paths identical
-            // across platforms.
-            event.preventDefault();
-            void submitAnswer();
-          }}
-        >
-          <div className="flex gap-2">
-            <input
-              ref={answerInputRef}
-              value={answer}
-              onChange={(event) => setAnswer(event.target.value)}
-              onFocus={() => {
-                // Belt-and-suspenders for browsers without VisualViewport: nudge
-                // the field into view once the keyboard has begun animating in.
-                window.setTimeout(() => {
-                  answerInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                }, 250);
-              }}
-              disabled={submitting}
-              placeholder="Your answer..."
-              aria-label="Your answer"
-              // Label the keyboard's return key as a send/submit action so it's
-              // the obvious way to answer on mobile.
-              enterKeyHint="send"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
-              style={{ borderColor: 'var(--border)' }}
-            />
-            <button
-              type="submit"
-              className="btn-primary shrink-0"
-              aria-label="Submit answer"
-              disabled={submitting || !answer.trim()}
-            >
-              {submitting ? '...' : 'Answer'}
-            </button>
-          </div>
-        </form>
+        <AnswerInputBar
+          value={answer}
+          onChange={setAnswer}
+          onSubmit={submitAnswer}
+          submitting={submitting}
+          inputRef={answerInputRef}
+        />
       ) : null}
 
       {showFirstRunIntro ? (
