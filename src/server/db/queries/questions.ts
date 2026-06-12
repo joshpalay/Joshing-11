@@ -85,15 +85,9 @@ export type QuestionMutationResult = { ok: boolean; reason?: 'not_found' | 'in_u
 
 type QuestionRow = typeof questions.$inferSelect;
 
-let ensureQuestionSurfacePriorityColumnPromise: Promise<void> | null = null;
-
-function ensureQuestionSurfacePriorityColumn(): Promise<void> {
-  ensureQuestionSurfacePriorityColumnPromise ??= db.execute(sql`
-    ALTER TABLE "Question"
-      ADD COLUMN IF NOT EXISTS "surface_priority_score" DOUBLE PRECISION NOT NULL DEFAULT 0
-  `).then(() => undefined);
-  return ensureQuestionSurfacePriorityColumnPromise;
-}
+// The lazy surface_priority_score ALTER shim that lived here moved to the
+// boot guard chain in src/instrumentation.ts (where the repo keeps its
+// idempotent schema guards); migration 0024 owns the journaled DDL.
 
 const questionTableColumns = getTableColumns(questions);
 const questionViewColumns = {
@@ -475,8 +469,6 @@ export async function createQuestion(params: {
   // not user-selectable. See verdictToBlockedVisibility.
   visibility?: 'public' | 'friends' | 'private' | 'blocked';
 }): Promise<{ id: string }> {
-  await ensureQuestionSurfacePriorityColumn();
-
   const visibility = params.visibility ?? 'public';
 
   const difficulty = numberToDifficulty(params.difficulty);

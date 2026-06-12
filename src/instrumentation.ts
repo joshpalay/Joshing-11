@@ -230,6 +230,16 @@ export async function register() {
         CREATE UNIQUE INDEX IF NOT EXISTS "Question_generated_question_id_key"
         ON "Question" USING btree ("generated_question_id")
       `);
+      // Question.surface_priority_score (migration 0024's runtime hotfix,
+      // journaled later): some preview databases have the feed migrations
+      // recorded without this column actually present. This guard replaces
+      // the lazy ALTER-on-first-query shim that used to live in
+      // src/server/db/queries/questions.ts — boot guards belong here, not in
+      // the query layer.
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "surface_priority_score" DOUBLE PRECISION NOT NULL DEFAULT 0
+      `);
     } catch {
       // Question or GeneratedQuestion may not exist yet — migrate() handles
       // initial creation and the 0018 migration will add these schema pieces.
