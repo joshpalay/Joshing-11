@@ -1,12 +1,8 @@
-'use client'
+'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 
-const INTEREST_PLACEHOLDERS = [
-  'Sondheim',
-  'Mrs. Dalloway',
-  '1980s Saturday morning cartoons',
-]
+const INTEREST_PLACEHOLDERS = ['Sondheim', 'Mrs. Dalloway', '1980s Saturday morning cartoons'];
 
 const ERROR_COPY: Record<string, string> = {
   invalid_phone: 'Use a US mobile number.',
@@ -14,35 +10,34 @@ const ERROR_COPY: Record<string, string> = {
   missing_invitee_display_name: 'Add their name first.',
   invalid_invitee_display_name: 'Use a shorter, real display name.',
   invalid_suggested_interests: 'Keep each idea short and friendly.',
-  invite_cooldown:
-    'Give this invite a little breathing room before trying again.',
-}
+  invite_cooldown: 'Give this invite a little breathing room before trying again.',
+};
 
-type Step = 'identity' | 'interests' | 'handoff'
+type Step = 'identity' | 'interests' | 'handoff';
 
 type InviteResult = {
-  ok: boolean
-  type: 'friend_invitation' | 'friendship_request'
-  id: string
-  invitationId?: string | null
-  inviteUrl: string | null
-  message: string | null
-  inviteeDisplayName: string
-  inviteePhone: string
-  suggestedInterests: string[]
-}
+  ok: boolean;
+  type: 'friend_invitation' | 'friendship_request';
+  id: string;
+  invitationId?: string | null;
+  inviteUrl: string | null;
+  message: string | null;
+  inviteeDisplayName: string;
+  inviteePhone: string;
+  suggestedInterests: string[];
+};
 
 type ErrorResponse = {
-  error?: string
-  message?: string
-}
+  error?: string;
+  message?: string;
+};
 
 function normalizeInterestList(interests: string[]) {
-  return interests.map((interest) => interest.trim()).filter(Boolean)
+  return interests.map((interest) => interest.trim()).filter(Boolean);
 }
 
 function buildSmsHref(phone: string, message: string) {
-  return `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(message)}`
+  return `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(message)}`;
 }
 
 function sendTelemetry(event: string, metadata: Record<string, unknown> = {}) {
@@ -52,176 +47,171 @@ function sendTelemetry(event: string, metadata: Record<string, unknown> = {}) {
     credentials: 'include',
     body: JSON.stringify({ event, metadata }),
     keepalive: true,
-  }).catch(() => undefined)
+  }).catch(() => undefined);
 }
 
 function looksLikeUsMobileNumber(phone: string) {
-  const digits = phone.replace(/\D/g, '')
-  return (
-    digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
-  )
+  const digits = phone.replace(/\D/g, '');
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'));
 }
 
-export default function AddFriendInvite() {
-  const [expanded, setExpanded] = useState(false)
-  const [step, setStep] = useState<Step>('identity')
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [interests, setInterests] = useState(['', '', ''])
-  const [result, setResult] = useState<InviteResult | null>(null)
-  const [messageText, setMessageText] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [copyLabel, setCopyLabel] = useState('Copy message')
-  const [submitting, setSubmitting] = useState(false)
-  const [contactsSupported, setContactsSupported] = useState<boolean | null>(
-    null
-  )
-  const [isIos, setIsIos] = useState(false)
-  const messageRef = useRef<HTMLTextAreaElement | null>(null)
+type AddFriendInviteProps = {
+  embedded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+};
 
-  const trimmedName = name.trim()
-  const smsHref = result?.message
-    ? buildSmsHref(result.inviteePhone, messageText)
-    : null
+export default function AddFriendInvite({
+  embedded = false,
+  onExpandedChange,
+}: AddFriendInviteProps = {}) {
+  const [expanded, setExpanded] = useState(false);
+  const [step, setStep] = useState<Step>('identity');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [interests, setInterests] = useState(['', '', '']);
+  const [result, setResult] = useState<InviteResult | null>(null);
+  const [messageText, setMessageText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [copyLabel, setCopyLabel] = useState('Copy message');
+  const [submitting, setSubmitting] = useState(false);
+  const [contactsSupported, setContactsSupported] = useState<boolean | null>(null);
+  const [isIos, setIsIos] = useState(false);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const trimmedName = name.trim();
+  const smsHref = result?.message ? buildSmsHref(result.inviteePhone, messageText) : null;
 
   useEffect(() => {
     function prefillInvite(event: Event) {
       const detail = (
         event as CustomEvent<{
-          inviteeDisplayName?: string
-          phone?: string
-          suggestedInterests?: string[]
+          inviteeDisplayName?: string;
+          phone?: string;
+          suggestedInterests?: string[];
         }>
-      ).detail
+      ).detail;
 
-      sendTelemetry('add_friend_started', { source: 'custom_event' })
-      setExpanded(true)
-      setStep('identity')
-      setName(detail?.inviteeDisplayName ?? '')
-      setPhone(detail?.phone ?? '')
+      sendTelemetry('add_friend_started', { source: 'custom_event' });
+      setExpanded(true);
+      onExpandedChange?.(true);
+      setStep('identity');
+      setName(detail?.inviteeDisplayName ?? '');
+      setPhone(detail?.phone ?? '');
       setInterests([
         detail?.suggestedInterests?.[0] ?? '',
         detail?.suggestedInterests?.[1] ?? '',
         detail?.suggestedInterests?.[2] ?? '',
-      ])
-      setResult(null)
-      setMessageText('')
-      setError(null)
-      setCopyLabel('Copy message')
+      ]);
+      setResult(null);
+      setMessageText('');
+      setError(null);
+      setCopyLabel('Copy message');
     }
 
-    window.addEventListener('friend-invitations:create-new', prefillInvite)
-    return () =>
-      window.removeEventListener('friend-invitations:create-new', prefillInvite)
-  }, [])
+    window.addEventListener('friend-invitations:create-new', prefillInvite);
+    return () => window.removeEventListener('friend-invitations:create-new', prefillInvite);
+  }, [onExpandedChange]);
 
   useEffect(() => {
     void (async () => {
-      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (!('contacts' in navigator) || !('ContactsManager' in window)) {
-        setIsIos(ios)
-        setContactsSupported(false)
-        return
+        setIsIos(ios);
+        setContactsSupported(false);
+        return;
       }
       try {
-        const props = await navigator.contacts!.getProperties()
-        setIsIos(ios)
-        setContactsSupported(props.includes('name') && props.includes('tel'))
+        const props = await navigator.contacts!.getProperties();
+        setIsIos(ios);
+        setContactsSupported(props.includes('name') && props.includes('tel'));
       } catch {
-        setIsIos(ios)
-        setContactsSupported(false)
+        setIsIos(ios);
+        setContactsSupported(false);
       }
-    })()
-  }, [])
+    })();
+  }, []);
 
   async function pickContact() {
-    sendTelemetry('contact_picker_opened', {})
+    sendTelemetry('contact_picker_opened', {});
     try {
       const results = await navigator.contacts!.select(['name', 'tel'], {
         multiple: false,
-      })
+      });
       if (!results.length) {
-        sendTelemetry('contact_picker_cancelled', {})
-        return
+        sendTelemetry('contact_picker_cancelled', {});
+        return;
       }
-      const contact = results[0]
-      const pickedName = (contact.name ?? [])
-        .filter(Boolean)
-        .join(' ')
-        .trim()
-      const pickedTel =
-        (contact.tel ?? []).find(looksLikeUsMobileNumber) ?? null
+      const contact = results[0];
+      const pickedName = (contact.name ?? []).filter(Boolean).join(' ').trim();
+      const pickedTel = (contact.tel ?? []).find(looksLikeUsMobileNumber) ?? null;
       if (!pickedTel) {
-        setError(
-          'That contact has no US mobile number. Try another, or type one in.'
-        )
+        setError('That contact has no US mobile number. Try another, or type one in.');
         sendTelemetry('contact_picker_no_us_tel', {
           had_name: Boolean(pickedName),
-        })
-        return
+        });
+        return;
       }
-      if (pickedName) setName(pickedName)
-      setPhone(pickedTel)
-      setError(null)
+      if (pickedName) setName(pickedName);
+      setPhone(pickedTel);
+      setError(null);
       sendTelemetry('contact_picker_selected', {
         had_name: Boolean(pickedName),
         tel_count: contact.tel?.length ?? 0,
-      })
+      });
     } catch (err) {
-      setError('Could not open contacts. You can type the number instead.')
+      setError('Could not open contacts. You can type the number instead.');
       sendTelemetry('contact_picker_error', {
         message: err instanceof Error ? err.message : 'unknown',
-      })
+      });
     }
   }
 
   function resetFlow() {
-    setExpanded(false)
-    setStep('identity')
-    setName('')
-    setPhone('')
-    setInterests(['', '', ''])
-    setResult(null)
-    setMessageText('')
-    setError(null)
-    setCopyLabel('Copy message')
-    setSubmitting(false)
+    setExpanded(false);
+    onExpandedChange?.(false);
+    setStep('identity');
+    setName('');
+    setPhone('');
+    setInterests(['', '', '']);
+    setResult(null);
+    setMessageText('');
+    setError(null);
+    setCopyLabel('Copy message');
+    setSubmitting(false);
   }
 
   function updateInterest(index: number, value: string) {
-    setInterests((current) =>
-      current.map((interest, i) => (i === index ? value : interest))
-    )
-    if (error === ERROR_COPY.too_many_suggested_interests) setError(null)
+    setInterests((current) => current.map((interest, i) => (i === index ? value : interest)));
+    if (error === ERROR_COPY.too_many_suggested_interests) setError(null);
   }
 
   function goToInterests(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
     if (!trimmedName) {
-      setError(ERROR_COPY.missing_invitee_display_name)
-      return
+      setError(ERROR_COPY.missing_invitee_display_name);
+      return;
     }
 
     if (!looksLikeUsMobileNumber(phone)) {
-      setError(ERROR_COPY.invalid_phone)
-      return
+      setError(ERROR_COPY.invalid_phone);
+      return;
     }
 
-    setError(null)
-    setStep('interests')
+    setError(null);
+    setStep('interests');
   }
 
   async function createInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const currentInterests = normalizeInterestList(interests)
+    event.preventDefault();
+    const currentInterests = normalizeInterestList(interests);
 
     if (currentInterests.length > 3) {
-      setError(ERROR_COPY.too_many_suggested_interests)
-      return
+      setError(ERROR_COPY.too_many_suggested_interests);
+      return;
     }
 
-    setSubmitting(true)
-    setError(null)
+    setSubmitting(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/friend-invitations', {
@@ -233,71 +223,62 @@ export default function AddFriendInvite() {
           phone,
           suggestedInterests: currentInterests,
         }),
-      })
-      const body = (await response.json().catch(() => null)) as
-        | InviteResult
-        | ErrorResponse
-        | null
+      });
+      const body = (await response.json().catch(() => null)) as InviteResult | ErrorResponse | null;
 
       if (!response.ok || !body || !('ok' in body)) {
-        const apiError = body && 'error' in body ? body.error : undefined
+        const apiError = body && 'error' in body ? body.error : undefined;
         throw new Error(
           apiError
-            ? (ERROR_COPY[apiError] ??
-                body?.message ??
-                'Could not create the invite.')
-            : 'Could not create the invite.'
-        )
+            ? (ERROR_COPY[apiError] ?? body?.message ?? 'Could not create the invite.')
+            : 'Could not create the invite.',
+        );
       }
 
-      setResult(body)
-      setMessageText(body.message ?? '')
-      setStep('handoff')
-      window.dispatchEvent(new Event('friend-invitations:refresh'))
+      setResult(body);
+      setMessageText(body.message ?? '');
+      setStep('handoff');
+      window.dispatchEvent(new Event('friend-invitations:refresh'));
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not create the invite.'
-      )
+      setError(caught instanceof Error ? caught.message : 'Could not create the invite.');
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
   async function copyMessage() {
-    if (!messageText) return
+    if (!messageText) return;
 
     try {
-      await navigator.clipboard.writeText(messageText)
-      setCopyLabel('Copied ✓')
+      await navigator.clipboard.writeText(messageText);
+      setCopyLabel('Copied ✓');
       sendTelemetry('add_friend_message_copied', {
         invitation_id: result?.invitationId ?? result?.id ?? null,
         suggested_interest_count: result?.suggestedInterests.length ?? 0,
-      })
-      window.setTimeout(() => setCopyLabel('Copy message'), 2000)
+      });
+      window.setTimeout(() => setCopyLabel('Copy message'), 2000);
     } catch {
       if (navigator.share) {
-        await navigator.share({ text: messageText })
+        await navigator.share({ text: messageText });
         sendTelemetry('add_friend_message_copied', {
           invitation_id: result?.invitationId ?? result?.id ?? null,
           suggested_interest_count: result?.suggestedInterests.length ?? 0,
           fallback: 'share',
-        })
-        return
+        });
+        return;
       }
-      messageRef.current?.focus()
-      messageRef.current?.select()
-      setCopyLabel('Select text')
+      messageRef.current?.focus();
+      messageRef.current?.select();
+      setCopyLabel('Select text');
     }
   }
 
   if (!expanded) {
-    return null
+    return null;
   }
 
-  return (
-    <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-sm">
+  const inviteContent: ReactNode = (
+    <>
       {step === 'identity' ? (
         <form className="space-y-5" onSubmit={goToInterests}>
           <div>
@@ -326,9 +307,8 @@ export default function AddFriendInvite() {
                 className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-xl border px-3 text-base transition outline-none focus:ring-2"
                 value={name}
                 onChange={(event) => {
-                  setName(event.target.value)
-                  if (error === ERROR_COPY.missing_invitee_display_name)
-                    setError(null)
+                  setName(event.target.value);
+                  if (error === ERROR_COPY.missing_invitee_display_name) setError(null);
                 }}
                 autoComplete="name"
                 placeholder="Their name"
@@ -342,8 +322,8 @@ export default function AddFriendInvite() {
                 className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-xl border px-3 text-base transition outline-none focus:ring-2"
                 value={phone}
                 onChange={(event) => {
-                  setPhone(event.target.value)
-                  if (error === ERROR_COPY.invalid_phone) setError(null)
+                  setPhone(event.target.value);
+                  if (error === ERROR_COPY.invalid_phone) setError(null);
                 }}
                 autoComplete="tel"
                 inputMode="tel"
@@ -353,21 +333,16 @@ export default function AddFriendInvite() {
             </label>
             {isIos ? (
               <p className="text-muted-foreground text-xs leading-5">
-                Tip: tap the name or phone field and use the suggestion above
-                your keyboard to pull from Contacts.
+                Tip: tap the name or phone field and use the suggestion above your keyboard to pull
+                from Contacts.
               </p>
             ) : null}
           </div>
 
-          {error ? (
-            <p className="text-destructive text-sm font-medium">{error}</p>
-          ) : null}
+          {error ? <p className="text-destructive text-sm font-medium">{error}</p> : null}
 
           <div className="space-y-3">
-            <button
-              type="submit"
-              className="btn-primary min-h-12 w-full rounded-full"
-            >
+            <button type="submit" className="btn-primary min-h-12 w-full rounded-full">
               Next
             </button>
             <button
@@ -391,24 +366,19 @@ export default function AddFriendInvite() {
               A few ideas, lightly held
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              Add up to three areas that made you think of them. Just a few
-              ideas — they can keep, edit, or ignore these.
+              Add up to three areas that made you think of them. Just a few ideas — they can keep,
+              edit, or ignore these.
             </p>
           </div>
 
           <div className="space-y-4">
             {INTEREST_PLACEHOLDERS.map((placeholder, index) => (
-              <label
-                key={placeholder}
-                className="text-foreground block text-sm font-medium"
-              >
+              <label key={placeholder} className="text-foreground block text-sm font-medium">
                 Idea {index + 1}
                 <input
                   className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-full border px-4 text-base transition outline-none focus:ring-2"
                   value={interests[index] ?? ''}
-                  onChange={(event) =>
-                    updateInterest(index, event.target.value)
-                  }
+                  onChange={(event) => updateInterest(index, event.target.value)}
                   placeholder={placeholder}
                   maxLength={60}
                   enterKeyHint={index === 2 ? 'done' : 'next'}
@@ -417,9 +387,7 @@ export default function AddFriendInvite() {
             ))}
           </div>
 
-          {error ? (
-            <p className="text-destructive text-sm font-medium">{error}</p>
-          ) : null}
+          {error ? <p className="text-destructive text-sm font-medium">{error}</p> : null}
 
           <div className="space-y-3">
             <button
@@ -444,9 +412,7 @@ export default function AddFriendInvite() {
         <div className="space-y-5">
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              {result.type === 'friendship_request'
-                ? 'Warm note ready'
-                : 'Invite ready'}
+              {result.type === 'friendship_request' ? 'Warm note ready' : 'Invite ready'}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
               {result.type === 'friendship_request'
@@ -454,8 +420,7 @@ export default function AddFriendInvite() {
                 : `Send this to ${result.inviteeDisplayName}.`}
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              You’ll send the message yourself — Joshing won’t text them for
-              you.
+              You’ll send the message yourself — Joshing won’t text them for you.
             </p>
           </div>
 
@@ -525,6 +490,16 @@ export default function AddFriendInvite() {
           </div>
         </div>
       ) : null}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="pb-[max(0rem,env(safe-area-inset-bottom))]">{inviteContent}</div>;
+  }
+
+  return (
+    <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-sm">
+      {inviteContent}
     </section>
-  )
+  );
 }
