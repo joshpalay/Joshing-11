@@ -41,11 +41,22 @@ const DEFAULT_FAILURE_MESSAGE = 'Could not record that answer.';
  */
 export class AnswerSubmitError extends Error {
   readonly exhausted: boolean;
+  /** Parsed response body for a deterministic (4xx) failure, when present. Lets
+   *  callers act on a structured error payload — e.g. the daily answer route's
+   *  409 `slot_changed`, which carries fresh slots to reconcile against. */
+  readonly body: unknown;
+  /** HTTP status of the failed response (undefined for network-level failures). */
+  readonly status?: number;
 
-  constructor(message: string, options?: { exhausted?: boolean; cause?: unknown }) {
+  constructor(
+    message: string,
+    options?: { exhausted?: boolean; cause?: unknown; body?: unknown; status?: number },
+  ) {
     super(message);
     this.name = 'AnswerSubmitError';
     this.exhausted = options?.exhausted ?? false;
+    this.body = options?.body;
+    this.status = options?.status;
     if (options?.cause !== undefined) {
       (this as { cause?: unknown }).cause = options.cause;
     }
@@ -74,7 +85,9 @@ export type SubmitAnswerOptions<T> = {
   delayImpl?: (ms: number) => Promise<void>;
 };
 
-type Outcome = { kind: 'transient'; message: string } | { kind: 'permanent'; message: string };
+type Outcome =
+  | { kind: 'transient'; message: string }
+  | { kind: 'permanent'; message: string; body: unknown; status: number };
 
 function defaultDelay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -127,7 +140,7 @@ export async function submitAnswerWithRetry<T>(
       outcome =
         response.status >= 500
           ? { kind: 'transient', message }
-          : { kind: 'permanent', message };
+          : { kind: 'permanent', message, body: parsed, status: response.status };
     } catch (caught) {
       // An aborted request is intentional cancellation — propagate, don't retry.
       if (caught instanceof DOMException && caught.name === 'AbortError') {
@@ -138,7 +151,11 @@ export async function submitAnswerWithRetry<T>(
     }
 
     if (outcome.kind === 'permanent') {
-      throw new AnswerSubmitError(outcome.message, { exhausted: false });
+      throw new AnswerSubmitError(outcome.message, {
+        exhausted: false,
+        body: outcome.body,
+        status: outcome.status,
+      });
     }
 
     if (attempt < ANSWER_MAX_ATTEMPTS) {

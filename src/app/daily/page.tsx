@@ -14,6 +14,7 @@ import {
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import {
   ANSWER_GRADER_RETRY_MESSAGE,
+  AnswerSubmitError,
   submitAnswerWithRetry,
 } from '@/lib/answer-submit';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
@@ -79,6 +80,9 @@ type AnswerResponse = {
 type FailedAnswerResponse = {
   message?: string;
   error?: string;
+  // Present on a 409 'slot_changed': the server's fresh slots, so the client can
+  // reconcile a stale snapshot instead of grading against the wrong question.
+  slots?: QueueSlot[];
 };
 
 type RecheckResponse = {
@@ -543,6 +547,12 @@ export default function DailyPage() {
           body: {
             queue_id: queue.queue_id,
             slot_index: currentSlot.slot_index,
+            // Pin the question this slot is displaying so the server won't grade
+            // a stale slot_index against a different question (see the answer
+            // route's identity guard). Bot slots carry generated_question_id,
+            // friend/house slots carry question_id.
+            expected_question_id:
+              currentSlot.generated_question_id ?? currentSlot.question_id,
             submitted_answer: opts.submittedAnswer,
             gave_up: opts.gaveUp,
           },
@@ -599,6 +609,23 @@ export default function DailyPage() {
         window.setTimeout(() => setPausedAfterSlotIndex(null), 850);
         setAnswer('');
       } catch (caught) {
+        // Stale snapshot: the slot moved on under us (the queue was re-indexed
+        // after we loaded it). The server returned 409 slot_changed with its
+        // fresh slots — reconcile to those and let the corrected current question
+        // re-render rather than surfacing an error or recording a bogus miss.
+        // Clear the input since the refreshed question is a different prompt.
+        if (caught instanceof AnswerSubmitError) {
+          const failed = caught.body as FailedAnswerResponse | null;
+          if (failed?.error === 'slot_changed' && Array.isArray(failed.slots)) {
+            const reconciledSlots = failed.slots;
+            setQueue((existing) =>
+              existing ? { ...existing, slots: reconciledSlots } : existing,
+            );
+            setAnswer('');
+            setSubmitNotice(null);
+            return;
+          }
+        }
         setSubmitNotice({
           tone: 'error',
           text: caught instanceof Error ? caught.message : 'Could not record that answer.',
