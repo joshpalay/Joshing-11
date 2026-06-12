@@ -42,8 +42,8 @@ export function FriendAddedCard({
 
   return (
     <SparkleEnvelope
-      // Broadcasts render on the plain hairline-bordered tile (Figma Frame 2),
-      // not the triangle mat — that motif is reserved for direct sends.
+      // Plain hairline-bordered tile (Figma Frame 2) — the same chrome as
+      // direct sends, which carry the "Sent directly to you" eyebrow instead.
       variant="bordered"
       signal={signal}
       question={item.question}
