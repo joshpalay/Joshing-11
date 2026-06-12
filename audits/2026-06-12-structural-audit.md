@@ -186,3 +186,51 @@ Issued for the four High findings. Notes on the house format: `Master_App_Instru
 ---
 
 *Audit conducted 2026-06-12. Verified findings: hardcoded `'factual'` literals, the `direct_sent` visibility exemption, the cron's `visibility='public'` scan filter, fan-out ordering in the create route, and line counts were all confirmed by direct file reads, not just sub-investigation reports.*
+
+---
+
+## As-executed record (2026-06-12, same session)
+
+All four B-prompts were executed on `claude/joshing-structural-audit-30skfp`. Deviations from
+the prompts as written, and what they revealed:
+
+- **B-SAFETY-VET-01 — done.** Render-time `'blocked'` backstop in `feedItemVisibilityPredicate`
+  (exemption preserved for public/friends/private, with a regression test for the private
+  direct-send); cron sweep widened to every non-blocked visibility; stale-row hardening beyond
+  the prompt's letter (feed answer route 404s on blocked, answer-reveal helper excludes blocked,
+  feed catch-up filters blocked); new cron test suite. **Phase 4 (defer fan-out while the verdict
+  is `needs_review`) was deliberately NOT implemented** — it trades delivery latency on Haiku
+  hiccups for zero-window safety and is an open product decision. The render-time backstop
+  closes the user-visible window either way.
+- **B-GRADE-TYPE-01 — done.** `gradeAnswer`'s `questionType` is a required
+  `GradableQuestionType` union; `DailyAnswerQuestion`/`CatchupQueueItem`/`ReplayItem` carry the
+  stored type; bot rows pass `'factual'` with the invariant stated (verified:
+  `generatedQuestions` has no `question_type` column — factual by construction). Per-path tests
+  on daily, catchup, and a new replay harness. **Flagged, not fixed:** replay grades canonical
+  questions with `[]` acceptedAlternatives even when the row has them.
+- **B-PROXY-TESTS-01 — premise corrected, residual gaps closed.** See the amended STRUCT-04 row.
+  Added: the no-`middleware.ts` CI tripwire, the matcher snapshot, the OPTIONS branch, and
+  expired-token / foreign-secret cases for `readSessionClaims`.
+- **B-ANSWER-PIPELINE-01 — executed with a deliberate scope correction.** `src/server/answers/answer-pipeline.ts`
+  ships two seams: `deriveAnswerOutcome` (history → answer_state → points) and
+  `recordAnswerSideEffects` (mastery event → adaptive difficulty → author credit → fan-out).
+  Mapping every route's tail revealed the tails are **not** one copy-pasted sequence: only
+  daily/answer matches the full shape (now fully migrated). Catchup (both branches), feed
+  answer, profile answer, and milestone are migrated onto `deriveAnswerOutcome` — the genuinely
+  universal core — with characterization suites written first for the two previously-untested
+  routes (profile, milestone). Forcing their tails through `recordAnswerSideEffects` would have
+  silently unified the following per-surface differences, so they are documented at each route
+  head instead and listed here as **open questions** (intent vs. accumulated drift):
+  1. Catchup writes the mastery event BEFORE the surface write (daily: after).
+  2. Catchup awaits adaptive difficulty; daily detaches it (`void`); feed/profile/milestone
+     never call it at all.
+  3. Daily fans out incorrect answers too; catchup-feed, feed, profile, and milestone fan out
+     correct-only.
+  4. Feed/profile/milestone fall back to a synthetic `masteryDelta` on write failure; daily and
+     catchup return null.
+  5. `joshing-game` (dormant) stays unmigrated: it reads prior answers from its own local
+     `readPriorAnswers`, not the shared `answer-history` module — switching sources is a
+     behavior question, not a refactor.
+
+*Pre-existing, unrelated: `add-declared-interest.test.ts` has one failing test on the base
+commit; untouched by this work.*
