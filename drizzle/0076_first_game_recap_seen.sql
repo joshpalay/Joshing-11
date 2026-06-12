@@ -1,0 +1,12 @@
+-- B-FirstGameRecap-1 — First-Game Recap "seen" signal.
+--
+-- The one-time cinematic recap (recap.type = 'first_game') fires after the
+-- user's first ever completed Joshing game. This nullable timestamp records
+-- when it was shown so refreshes, direct summary re-entry, or later games never
+-- re-trigger it. NULL = not yet seen; a non-NULL value permanently suppresses it.
+--
+-- Separate from first_session_recap_seen_at: Daily Five and Joshing game
+-- onboarding helpers should not collide.
+--
+-- Rollback: ALTER TABLE "User" DROP COLUMN IF EXISTS "first_game_recap_seen_at";
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "first_game_recap_seen_at" timestamp with time zone;
