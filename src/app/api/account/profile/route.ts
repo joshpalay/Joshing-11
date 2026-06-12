@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
-import {
-  getEditableProfile,
-  updateProfileFields,
-} from '@/server/db/queries/account';
+import { getEditableProfile, updateProfileFields } from '@/server/db/queries/account';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,11 +50,12 @@ export async function PATCH(request: Request) {
   if (!result.ok) {
     const messages: Record<typeof result.reason, string> = {
       invalid_display_name: 'Display name must be 1–60 characters.',
+      duplicate_display_name: 'That display name is already taken.',
       empty_patch: 'At least one field is required.',
     };
     return NextResponse.json(
       { error: result.reason, message: messages[result.reason] },
-      { status: 400 },
+      { status: result.reason === 'duplicate_display_name' ? 409 : 400 },
     );
   }
 

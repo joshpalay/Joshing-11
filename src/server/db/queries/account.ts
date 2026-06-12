@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import {
   contactHashes,
@@ -72,6 +72,30 @@ function fallbackDisplayName(phoneNumber: string): string {
   return lastFour ? `Player ${lastFour}` : 'Player';
 }
 
+export type DisplayNameMatch = {
+  id: string;
+  displayName: string | null;
+};
+
+export async function findDisplayNameMatches(
+  displayName: string,
+  excludeUserId?: string,
+): Promise<DisplayNameMatch[]> {
+  const trimmed = displayName.trim();
+  if (!trimmed) return [];
+
+  const conditions = [sql`lower(${users.displayName}) = lower(${trimmed})`];
+  if (excludeUserId) conditions.push(ne(users.id, excludeUserId));
+
+  return db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+    })
+    .from(users)
+    .where(and(...conditions));
+}
+
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const [user] = await db
     .select({
@@ -126,7 +150,10 @@ export type ProfileFieldsPatch = {
 
 export type ProfileFieldsUpdateResult =
   | { ok: true }
-  | { ok: false; reason: 'invalid_display_name' | 'empty_patch' };
+  | {
+      ok: false;
+      reason: 'invalid_display_name' | 'duplicate_display_name' | 'empty_patch';
+    };
 
 // Updates the editable profile fields. Migration 0054 dropped bio,
 // tagline, and location, leaving only displayName editable on the
@@ -142,6 +169,10 @@ export async function updateProfileFields(
     const displayName = patch.displayName.trim();
     if (displayName.length < 1 || displayName.length > 60) {
       return { ok: false, reason: 'invalid_display_name' };
+    }
+    const displayNameMatches = await findDisplayNameMatches(displayName, userId);
+    if (displayNameMatches.length > 0) {
+      return { ok: false, reason: 'duplicate_display_name' };
     }
     set.displayName = displayName;
   }
