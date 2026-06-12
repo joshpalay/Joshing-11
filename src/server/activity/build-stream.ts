@@ -14,7 +14,7 @@ import { filterUtilityActivities } from '@/app/activities/filter-utility-activit
 import {
   activityToStreamItem,
   convergenceToStreamItem,
-  milestoneToStreamItem,
+  friendActivityToStreamItem,
   momentToStreamItem,
   type StreamItem,
   type StreamQuestion,
@@ -24,32 +24,33 @@ import { MILESTONE_CARD_QUESTION_CAP } from '@/lib/lately-milestones';
 import { getActivitiesForUser } from '@/server/db/queries/activity';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
 import {
+  getFriendActivity,
   getLatelyConvergences,
-  getLatelyMilestones,
   getLatelyMoments,
   getMilestoneQuestionText,
   getViewerPriorAnswerResults,
 } from '@/server/db/queries/lately';
 
 export async function buildActivityStream(userId: string): Promise<StreamItem[]> {
-  const [items, moments, milestones, convergences] = await Promise.all([
+  const [items, moments, friendCards, convergences] = await Promise.all([
     getActivitiesForUser(userId),
     getLatelyMoments(userId),
-    getLatelyMilestones(userId),
+    getFriendActivity(userId),
     getLatelyConvergences(userId),
   ]);
 
-  // Resolve every milestone's first ≤5 literal questions and every
-  // convergence's 3 cluster questions in one batch (text + display domain), and
-  // the viewer's prior result on each (right OR wrong) — so a question the
-  // viewer already attempted stays locked in the expansion across reloads.
-  const cappedIdsByMilestone = milestones.map((m) => ({
-    id: m.id,
-    ids: m.questionIds.slice(0, MILESTONE_CARD_QUESTION_CAP),
+  // Resolve every From Friends card's first ≤5 literal questions (most-recent
+  // first) and every convergence's 3 cluster questions in one batch (text +
+  // display domain), and the viewer's prior result on each (right OR wrong) — so
+  // a question the viewer already attempted stays locked in the expansion across
+  // reloads (an answered-in-place card keeps its spent triangles, Q4).
+  const cappedIdsByCard = friendCards.map((c) => ({
+    id: c.id,
+    ids: c.questionIds.slice(0, MILESTONE_CARD_QUESTION_CAP),
   }));
   const allQuestionIds = [
     ...new Set([
-      ...cappedIdsByMilestone.flatMap((m) => m.ids),
+      ...cappedIdsByCard.flatMap((c) => c.ids),
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
@@ -65,17 +66,17 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
     activityToStreamItem,
   );
   const momentItems = moments.map(momentToStreamItem);
-  const milestoneItems = milestones
-    .map((m, i) => {
-      const questions: StreamQuestion[] = cappedIdsByMilestone[i].ids
+  const friendActivityItems = friendCards
+    .map((card, i) => {
+      const questions: StreamQuestion[] = cappedIdsByCard[i].ids
         .map((id) => textById.get(id))
         .filter((q): q is NonNullable<typeof q> => Boolean(q))
         .filter((q) => !hiddenIds.has(q.questionId))
-        // Keep EVERY one of the friend's questions in the bundle — including the
-        // ones the viewer already answered. Each carries its prior result, so the
-        // answered ones render as spent (hollow) triangles in the expansion and
-        // the title stays stable across reloads (answered questions don't vanish,
-        // and the triangle count doesn't shrink as you play).
+        // Keep EVERY question in the bundle — including the ones the viewer
+        // already answered. Each carries its prior result, so the answered ones
+        // render as spent (hollow) triangles in the expansion and the card stays
+        // put after you play it (Q4), drifting down by recency rather than
+        // vanishing.
         .map((q) => ({
           questionId: q.questionId,
           text: q.text,
@@ -84,9 +85,9 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
           authorName: q.authorName,
           authorIsHouse: q.authorIsHouse,
         }));
-      // A milestone whose questions all collapse out is a contentless streak
-      // card — suppress it rather than render an empty triangle.
-      return questions.length > 0 ? milestoneToStreamItem(m, questions) : null;
+      // A card whose questions all collapse out (deleted / hidden) is contentless
+      // — suppress it rather than render an empty triangle.
+      return questions.length > 0 ? friendActivityToStreamItem(card, questions) : null;
     })
     .filter((item): item is StreamItem => item !== null);
   const convergenceItems = convergences.map((c) => {
@@ -114,7 +115,7 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
 
   return sortByProminence([
     ...momentItems,
-    ...milestoneItems,
+    ...friendActivityItems,
     ...convergenceItems,
     ...utilityItems,
   ]);
