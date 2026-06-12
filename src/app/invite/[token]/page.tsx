@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 
+import { AvatarChip } from '@/components/AvatarChip'
 import { getFriendInvitationLandingByToken } from '@/server/friends/invitations'
 
 type InvitePageProps = {
@@ -9,6 +10,25 @@ type InvitePageProps = {
 
 function inviteLoginHref(token: string) {
   return `/login?invitationToken=${encodeURIComponent(token)}`
+}
+
+function InviterIdentity({
+  name,
+  userId,
+  avatarColor,
+}: {
+  name: string
+  userId: string | null
+  avatarColor: string | null
+}) {
+  if (!userId) return null
+
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      <AvatarChip displayName={name} userId={userId} color={avatarColor} size="lg" />
+      <span className="text-sm font-semibold">{name}</span>
+    </div>
+  )
 }
 
 function InviteShell({ children }: { children: ReactNode }) {
@@ -30,6 +50,11 @@ export default async function InvitePage({ params }: InvitePageProps) {
       <InviteShell>
         <div className="space-y-5">
           <div>
+            <InviterIdentity
+              name={invitation.inviterName}
+              userId={invitation.inviterUserId}
+              avatarColor={invitation.inviterAvatarColor}
+            />
             <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               A note from a friend
             </p>
