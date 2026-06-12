@@ -12,9 +12,10 @@
 //                                 Unanswered = filled, answered = hollow outline.
 //   star     → five-point star     a friend you invited played their first five.
 //                                 Five palette triangles, one point per question.
-//   diamond  → rhombus             someone answered ("got") a question.
-//   hourglass→ two triangles apex-to-apex   someone sends you a question.
-//   domain   → half-triangles split on a diagonal   a new domain opened.
+//   diamond / hourglass / domain → a single triangle POINTING IN at the copy.
+//                                 The ambient one-liners (someone answered, saved
+//                                 your question, a new domain opened) all share
+//                                 this one calm inward triangle.
 //
 // COLOR: each individual triangle's fill is picked at random from the triangle
 // palette — but deterministically, hashed from a stable seed (the row id + the
@@ -56,23 +57,11 @@ const STAR_FILL_OPACITY = 1;
 const MARK_W = 24;
 const GAP = 8;
 const LINE_H = 22.5; // first text line: 15px × 1.5
-// The stacked single-shape marks (diamond / hourglass / domain) are a vertical
-// pair of triangles. Each half is base=height (24×24) so the triangles stay
-// isosceles and un-smushed — matching the BundleMark invariant below. The pair's
-// viewBox is therefore 24×48 (a 1:2 aspect). We render it at LARGE_SCALE so its
-// HEIGHT lands at ~the text line height (48 × 0.5 = 24 ≈ LINE_H 22.5) and the
-// mark sits TUCKED INSIDE the first line when vertically centered (see
-// ActivityIcon) instead of drooping far below it. Width = 24 × 0.5 = 12, which
-// matches a single BundleMark triangle, so the two icon families read as one set.
-// (Keep the halves base=height — drawing them shorter squishes the rhombus and
-// was reverted; the fix for "too tall" is the scale + centering here, not the
-// geometry.)
-const LARGE_SCALE = 0.5;
 // The 'star' mark (a friend you invited cleared their first five) is drawn in a
 // square 24×24 viewBox and rendered at STAR_SCALE so its height lands at ~the
-// text line height, sitting on a single-line row like the diamond. A point-up
-// five-point star is wider than the single stacked marks; this scale keeps its
-// footprint close to the old cluster it replaces (~20px) without dominating.
+// text line height, sitting on a single-line row like the inward triangle. A
+// point-up five-point star is wider than the single triangle; this scale keeps
+// its footprint close to the old cluster it replaces (~20px) without dominating.
 const STAR_SCALE = 0.85;
 // Five-point star geometry (centered in the 24×24 viewBox). Outer points touch
 // the box; the inner vertices sit at INNER_RATIO of the outer radius — large
@@ -81,10 +70,6 @@ const STAR_CX = 12;
 const STAR_CY = 12;
 const STAR_RO = 12;
 const STAR_INNER_RATIO = 0.4;
-// Height of each half of a stacked mark, and the total viewBox height of the
-// pair. base=height (= MARK_W) keeps the triangles un-smushed.
-const STACK_HALF = 24;
-const STACK_H = STACK_HALF * 2; // 48
 // Every mark TOP-ANCHORS its top near the first line's cap height (the top of
 // "R"), not the line-box top above it — so the top of the shape lines up with
 // the top of the letter beside it. The line's half-leading is ((22.5 − 15) / 2
@@ -297,63 +282,18 @@ export function MilestoneStar({ seed }: { seed: string }) {
   );
 }
 
-// Rhombus: upward triangle over downward triangle, shared base. Each half a
-// random palette colour.
-function DiamondMark({ seed }: { seed: string }) {
+// A single triangle POINTING IN toward the row copy (apex to the right), one
+// random palette colour. This is the ambient activity row's mark — it replaces
+// the diamond / hourglass / domain stacked marks so every one-liner (someone
+// answered, saved your question, a new domain opened) reads with the same calm
+// inward triangle rather than a distinct stacked glyph per event.
+function InwardTriangleMark({ seed }: { seed: string }) {
+  const S = 14; // base = height, a hair larger than one bundle triangle
   return (
-    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
-      <path
-        d={`M12,0 L0,${STACK_HALF} L24,${STACK_HALF} Z`}
-        fill={colorFor(seed, 0)}
-        fillOpacity={FILL_OPACITY}
-      />
-      <path
-        d={`M0,${STACK_HALF} L24,${STACK_HALF} L12,${STACK_H} Z`}
-        fill={colorFor(seed, 1)}
-        fillOpacity={FILL_OPACITY}
-      />
-    </MarkSvg>
-  );
-}
-
-// Two triangles meeting apex-to-apex at the center, tips touching. A question
-// sent your way.
-function HourglassMark({ seed }: { seed: string }) {
-  return (
-    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
-      <path
-        d={`M0,0 L24,0 L12,${STACK_HALF} Z`}
-        fill={colorFor(seed, 0)}
-        fillOpacity={FILL_OPACITY}
-      />
-      <path
-        d={`M12,${STACK_HALF} L0,${STACK_H} L24,${STACK_H} Z`}
-        fill={colorFor(seed, 1)}
-        fillOpacity={FILL_OPACITY}
-      />
-    </MarkSvg>
-  );
-}
-
-// The hourglass split apart on a diagonal: a half top-right and a half
-// bottom-left. Divergence = a new domain opened. The two halves are pulled in
-// toward the centerline (each shifted 6 units off the viewBox edge instead of
-// sitting flush against it) so the diagonal gap between them reads tighter —
-// they still split on the same diagonal and stay rotationally symmetric.
-function DomainMark({ seed }: { seed: string }) {
-  return (
-    <MarkSvg h={STACK_H} scale={LARGE_SCALE}>
-      <path
-        d={`M18,0 L6,0 L18,${STACK_HALF} Z`}
-        fill={colorFor(seed, 0)}
-        fillOpacity={FILL_OPACITY}
-      />
-      <path
-        d={`M6,${STACK_HALF} L18,${STACK_H} L6,${STACK_H} Z`}
-        fill={colorFor(seed, 1)}
-        fillOpacity={FILL_OPACITY}
-      />
-    </MarkSvg>
+    <svg width={S} height={S} viewBox={`0 0 ${S} ${S}`} fill="none">
+      {/* Apex on the right edge, base on the left — points "in" at the copy. */}
+      <path d={`M0,0 L${S},${S / 2} L0,${S} Z`} fill={colorFor(seed, 0)} fillOpacity={FILL_OPACITY} />
+    </svg>
   );
 }
 
@@ -367,12 +307,12 @@ function Mark({ spec, seed }: { spec: ActivityIconSpec; seed: string }) {
       // sibling of the diamond, but its radial silhouette sets the milestone
       // apart from the rest of the triangle family.
       return <StarMark seed={seed} />;
+    // The ambient one-liner events all share one calm mark now: a single
+    // palette triangle pointing in toward the copy.
     case 'diamond':
-      return <DiamondMark seed={seed} />;
     case 'hourglass':
-      return <HourglassMark seed={seed} />;
     case 'domain':
-      return <DomainMark seed={seed} />;
+      return <InwardTriangleMark seed={seed} />;
   }
 }
 

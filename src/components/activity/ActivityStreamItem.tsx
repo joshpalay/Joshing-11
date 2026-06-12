@@ -16,7 +16,7 @@ import type {
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
-import { ActivityIcon, MilestoneStar, QuestionTriangle, specForIcon } from './ActivityIcon';
+import { ActivityIcon, QuestionTriangle, specForIcon } from './ActivityIcon';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
@@ -86,7 +86,7 @@ const HEADLINE_NAME_STYLE: CSSProperties = {
   textDecoration: 'none',
 };
 
-export function Line({ parts }: { parts: StreamLinePart[] }) {
+export function Line({ parts, plain = false }: { parts: StreamLinePart[]; plain?: boolean }) {
   return (
     <>
       {parts.map((part, i) => {
@@ -94,10 +94,19 @@ export function Line({ parts }: { parts: StreamLinePart[] }) {
           return <ActorLink key={i} name={part.name} userId={part.userId} />;
         }
         if (part.t === 'category') {
-          // Category names read in the Editorial serif (STYLE-GUIDE-TYPE §5):
-          // warm, in their stored title case ("Shakespearean Tragedy"), a clear
-          // register away from the sans sentence around them — no caps, no
-          // tracking, no typewriter face (the System mono voice was retired).
+          // `plain` (the ambient activity stream): the category stays in the
+          // row's own sans face so the one-liner reads in a single voice — only
+          // a touch of weight + the secondary ink set it apart from the sentence.
+          if (plain) {
+            return (
+              <span key={i} style={{ fontWeight: 600, color: INK2 }}>
+                {part.v}
+              </span>
+            );
+          }
+          // Default (editorial surfaces): category names read in the Editorial
+          // serif (STYLE-GUIDE-TYPE §5) — warm, in their stored title case
+          // ("Shakespearean Tragedy"), a register away from the sans sentence.
           return (
             <span
               key={i}
@@ -271,14 +280,6 @@ export function ActivityStreamItem({
       : null;
   const iconSpec = specForIcon(item.icon, bundleCounts);
 
-  // The "invited friend played their first five" star is a celebratory
-  // announcement, not a normal left-aligned event row: it renders centered with
-  // a star flourish on each side (star — line — star) instead of a single mark
-  // in the left icon column. It carries no action/expansion/second line, so the
-  // centered branch is a self-contained one-liner. Nested rows keep the plain
-  // indented form.
-  const centeredStar = !nested && item.icon === 'star';
-
   function toggle() {
     if (expandable) setOpen((v) => !v);
   }
@@ -357,33 +358,12 @@ export function ActivityStreamItem({
         onKeyDown={handleKeyDown}
         style={{
           display: 'flex',
-          alignItems: centeredStar ? 'center' : 'flex-start',
-          justifyContent: centeredStar ? 'center' : undefined,
-          gap: centeredStar ? 10 : undefined,
+          alignItems: 'flex-start',
           cursor: expandable ? 'pointer' : 'default',
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        {centeredStar ? (
-          // Celebratory announcement: a star flourish on each side of the
-          // centered line (star — line — star).
-          <>
-            <MilestoneStar seed={item.id} />
-            <p
-              style={{
-                margin: 0,
-                fontSize: 15,
-                lineHeight: 1.5,
-                letterSpacing: 0.2,
-                color: INK,
-                textAlign: 'center',
-              }}
-            >
-              <Line parts={item.line} />
-            </p>
-            <MilestoneStar seed={`${item.id}-end`} />
-          </>
-        ) : playableCard ? (
+        {playableCard ? (
           // Playable milestone card (home "What's Happening"): an editorial
           // two-line headline — the person's NAME in the large serif, the rest
           // of the sentence in a medium serif below it — with the play
@@ -456,15 +436,20 @@ export function ActivityStreamItem({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
-                  fontSize: 12.5,
+                  // Same text treatment as the "Answer →" feed action: the
+                  // Editorial serif at 18px in the link slate, underlined.
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 18,
                   fontWeight: 600,
-                  letterSpacing: 0.2,
-                  color: INK,
+                  letterSpacing: '0.05em',
+                  color: 'var(--brand-link)',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 4,
                 }}
               >
                 {playFirstName ? `Play ${playFirstName}'s q's` : 'Play'}
                 <ChevronDown
-                  size={15}
+                  size={16}
                   aria-hidden
                   style={{
                     transition: 'transform 150ms ease',
@@ -490,15 +475,17 @@ export function ActivityStreamItem({
               color: INK,
             }}
           >
-            <Line parts={item.line} />
+            {/* `plain` keeps the whole one-liner in the row's sans face — no
+                serif category run — so the ambient stream reads in one voice. */}
+            <Line parts={item.line} plain />
           </p>
           {item.secondLine ? (
             <p
               style={{
                 margin: '2px 0 0',
-                // Voice follows content (STYLE-GUIDE-TYPE §5): domain/label
-                // metadata is System mono with the caps + tracking label
-                // signature (§2); question text / sentences are Editorial serif.
+                // Domain/label metadata stays System mono with the caps +
+                // tracking label signature (§2); everything else stays in the
+                // row's sans face (no serif), so the stream reads in one voice.
                 ...(item.secondLineVoice === 'system'
                   ? {
                       fontFamily: 'var(--font-mono)',
@@ -507,7 +494,6 @@ export function ActivityStreamItem({
                       letterSpacing: 1,
                     }
                   : {
-                      fontFamily: 'var(--font-serif)',
                       fontSize: 14,
                     }),
                 lineHeight: 1.45,
@@ -554,20 +540,8 @@ export function ActivityStreamItem({
               {timestamp}
             </span>
           ) : null}
-          {/* Decorative disclosure chevron — demoted; the row itself is the
-              button (aria-expanded above). */}
-          {expandable ? (
-            <ChevronDown
-              size={16}
-              aria-hidden
-              style={{
-                color: INK3,
-                opacity: 0.5,
-                transition: 'transform 150ms ease',
-                transform: open ? 'rotate(180deg)' : 'none',
-              }}
-            />
-          ) : null}
+          {/* No disclosure chevron — the whole row is the button (aria-expanded
+              above); the ambient one-liners read clean on the right edge. */}
         </div>
           </>
         )}
