@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
 import { GameplayChatThread } from '@/components/play/GameplayChat';
+import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import { ThreadCard } from '@/components/play/ThreadCard';
 import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCatchupFlow';
 import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
@@ -38,8 +39,7 @@ export default function DailyCatchupPage() {
   const showSummary = phase === 'summary';
   const roundComplete = phase === 'round_complete';
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit() {
     const submitted = answer.trim();
     if (!submitted) return;
     setAnswer('');
@@ -60,14 +60,16 @@ export default function DailyCatchupPage() {
           <Link
             href="/"
             aria-label="Close"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <X className="size-5" strokeWidth={1.9} />
           </Link>
         </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">Catch up</p>
+            <p className="text-xs font-medium tracking-[0.12em] text-[var(--text-muted)] uppercase">
+              Catch up
+            </p>
             <h1 className="font-serif text-xl font-semibold text-[var(--text)]">
               {loading
                 ? 'Missed questions'
@@ -75,7 +77,7 @@ export default function DailyCatchupPage() {
             </h1>
           </div>
           {!loading && hasItems && !showSummary ? (
-            <p className="shrink-0 text-right text-[0.65rem] font-medium uppercase tracking-[0.1em] text-[var(--text-muted)]">
+            <p className="shrink-0 text-right text-[0.65rem] font-medium tracking-[0.1em] text-[var(--text-muted)] uppercase">
               {remainingLabel}
             </p>
           ) : null}
@@ -85,9 +87,10 @@ export default function DailyCatchupPage() {
       <section
         className="flex-1 overflow-y-auto px-4 py-4"
         style={{
-          paddingBottom: currentItem && phase === 'playing'
-            ? 'calc(130px + env(safe-area-inset-bottom))'
-            : 'calc(24px + env(safe-area-inset-bottom))',
+          paddingBottom:
+            currentItem && phase === 'playing'
+              ? 'calc(130px + env(safe-area-inset-bottom))'
+              : 'calc(24px + env(safe-area-inset-bottom))',
           // Cream backdrop on the recap so the near-white --brand-card recap cards
           // read against the page, matching the daily Session-recap surface.
           background: showSummary ? 'var(--brand-cream-page)' : undefined,
@@ -98,7 +101,10 @@ export default function DailyCatchupPage() {
         ) : error ? (
           <div
             className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--danger)]"
-            style={{ borderColor: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 10%, var(--surface))' }}
+            style={{
+              borderColor: 'var(--danger)',
+              background: 'color-mix(in srgb, var(--danger) 10%, var(--surface))',
+            }}
           >
             <p>{error}</p>
             <button type="button" className="btn-ghost mt-3" onClick={() => void reload()}>
@@ -106,7 +112,10 @@ export default function DailyCatchupPage() {
             </button>
           </div>
         ) : !hasItems ? (
-          <div className="mt-10 rounded-[var(--radius-md)] border p-5 text-center" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
+          <div
+            className="mt-10 rounded-[var(--radius-md)] border p-5 text-center"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+          >
             <p className="font-serif text-lg text-[var(--text)]">{CATCH_UP_EMPTY_COPY}</p>
             <button type="button" className="btn-primary mt-4" onClick={() => router.push('/')}>
               Back home
@@ -143,30 +152,13 @@ export default function DailyCatchupPage() {
       </section>
 
       {currentItem && !loading && phase === 'playing' ? (
-        <form
-          className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-lg border-t px-4 py-3"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
-            backdropFilter: 'blur(8px)',
-            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
-          }}
-          onSubmit={(event) => void handleSubmit(event)}
-        >
-          <div className="flex gap-2">
-            <input
-              value={answer}
-              onChange={(event) => setAnswer(event.target.value)}
-              disabled={submitting || isResolvingTurn}
-              placeholder="Your answer..."
-              className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
-              style={{ borderColor: 'var(--border)' }}
-            />
-            <button type="submit" className="btn-primary shrink-0" disabled={submitting || isResolvingTurn || !answer.trim()}>
-              {submitting ? '...' : 'Answer'}
-            </button>
-          </div>
-        </form>
+        <AnswerInputBar
+          value={answer}
+          onChange={setAnswer}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          disabled={isResolvingTurn}
+        />
       ) : null}
     </main>
   );
@@ -252,7 +244,7 @@ function RoundSummary({
   return (
     <div className="mx-auto max-w-3xl text-[var(--brand-ink)]">
       <header className="pb-2">
-        <p className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-[var(--game-correct)]">
+        <p className="text-[0.62rem] font-medium tracking-[0.12em] text-[var(--game-correct)] uppercase">
           Round complete
         </p>
         <div className="mt-3 flex items-start justify-between gap-4">
@@ -304,7 +296,7 @@ function RoundSummary({
             type="button"
             className={
               hasMore
-                ? 'text-muted-foreground text-sm font-medium underline underline-offset-4 transition hover:text-foreground'
+                ? 'text-muted-foreground hover:text-foreground text-sm font-medium underline underline-offset-4 transition'
                 : 'btn-primary w-full rounded-full sm:w-auto sm:min-w-56'
             }
             onClick={onHome}
@@ -403,13 +395,13 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
 
       <div className="mt-5 grid gap-3 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] p-3 sm:grid-cols-2">
         <div>
-          <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+          <p className="text-muted-foreground text-[0.68rem] font-semibold tracking-[0.08em] uppercase">
             You said
           </p>
           <p className="mt-1 text-sm leading-6 text-[var(--brand-ink)]">{yourAnswer}</p>
         </div>
         <div className="border-t border-[var(--brand-border)] pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-3">
-          <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+          <p className="text-muted-foreground text-[0.68rem] font-semibold tracking-[0.08em] uppercase">
             Answer
           </p>
           <p
@@ -423,9 +415,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
 
       {record.explanation ? (
         <section className="mt-5 pl-1">
-          <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-            Why this is the answer
-          </h3>
+          <h3 className="text-sm font-semibold text-[var(--brand-ink)]">Why this is the answer</h3>
           <p
             className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]"
             style={
