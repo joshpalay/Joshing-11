@@ -329,7 +329,10 @@ export function ActivityStreamItem({
     : playableCard
       ? {
           padding: opened ? '16px 14px' : '14px',
-          background: 'var(--game-card-question)',
+          // The "From Friends" playable milestone cards share the elevated feed
+          // fill token (defaults to the warm game-card cream) so the dev CARD
+          // COLOR cycler repaints them alongside the For You cards.
+          background: 'var(--feed-card-elevated)',
           border: '1px solid var(--accent-gold)',
           borderRadius: 4,
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
