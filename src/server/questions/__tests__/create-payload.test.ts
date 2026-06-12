@@ -105,6 +105,41 @@ describe('create question payload categorization', () => {
     expect(result.value.sendToFriendIds).toEqual([]);
   });
 
+  describe('unverified question send constraints', () => {
+    it('rejects broadcasting an unverified question', () => {
+      const result = readCreateQuestionPayload({
+        ...basePayload,
+        verified: false,
+        shareToFeed: true,
+      });
+
+      expect(result.errors).toContain('unverifiedBroadcast');
+    });
+
+    it('allows direct-sending an unverified question to specific friends', () => {
+      const result = readCreateQuestionPayload({
+        ...basePayload,
+        verified: false,
+        shareToFeed: false,
+        sendToFriendIds: ['friend-1', 'friend-2'],
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(result.value.verified).toBe(false);
+      expect(result.value.sendToFriendIds).toEqual(['friend-1', 'friend-2']);
+    });
+
+    it('does not constrain broadcasting a verified question', () => {
+      const result = readCreateQuestionPayload({
+        ...basePayload,
+        verified: true,
+        shareToFeed: true,
+      });
+
+      expect(result.errors).not.toContain('unverifiedBroadcast');
+    });
+  });
+
   describe('visibility (D-1 Stage 4)', () => {
     it('defaults to public when omitted', () => {
       const result = readCreateQuestionPayload({ ...basePayload });

@@ -460,7 +460,10 @@ export function QuestionForm({
         llmSuggestedAnswer: state.llmSuggestedAnswer,
         critiqueIterations: state.critiqueIterations,
         sendToFriendIds: state.specificMode ? state.sendToFriendIds : [],
-        shareToFeed: state.shareToFeed,
+        // An unverified question can never be broadcast — only direct-sent. Force
+        // the broadcast flag off regardless of stale checkbox state (the toggle is
+        // also disabled in the UI, and the server rejects unverified broadcasts).
+        shareToFeed: verified ? state.shareToFeed : false,
         visibility: state.visibility,
       });
       dispatch({ type: 'DONE' });
@@ -655,8 +658,13 @@ export function QuestionForm({
                 </div>
                 <p className="mt-2 text-xs text-foreground">{scopeSignpost(state.visibility)}</p>
               </div>
+              {!verified ? (
+                <p className="mb-3 rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] px-3 py-2 text-xs leading-[1.5] text-[var(--warning)]">
+                  ⚠ This answer isn&apos;t verified. You can only send it directly to specific friends — it can&apos;t be shared with all friends, and the people you send it to won&apos;t be able to forward it. They&apos;ll see it tagged as unverified.
+                </p>
+              ) : null}
               <label className="mb-2 flex cursor-default items-center gap-2 text-sm"><input type="checkbox" checked readOnly disabled className="rounded" /><span className="text-foreground">Save to bank</span></label>
-              <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Share with all friends</span></label>
+              <label className={['mb-2 flex items-center gap-2 text-sm', !verified ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'].join(' ')}><input type="checkbox" checked={verified && state.shareToFeed} onChange={(event) => toggleShareToFeed(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private' || !verified} /><span className="text-foreground">Share with all friends{!verified ? ' (unavailable — answer not verified)' : ''}</span></label>
               <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={state.specificMode} onChange={(event) => toggleSpecificMode(event.target.checked)} className="rounded" disabled={state.stage === 'SUBMITTING' || state.visibility === 'private'} /><span className="text-foreground">Send to specific friends only</span></label>
               {state.specificMode ? (
                 <div className="mt-1 space-y-3">
@@ -750,7 +758,7 @@ export function QuestionForm({
                   )}
                 </div>
               ) : null}
-              <p className="mt-3 text-xs text-muted-foreground">{state.specificMode ? 'Sent directly to the friends you pick.' : state.shareToFeed ? "Your friends will see this in their feed (except friends who've marked this domain as Not my focus)." : 'Saved to your bank only.'}</p>
+              <p className="mt-3 text-xs text-muted-foreground">{state.specificMode ? 'Sent directly to the friends you pick.' : verified && state.shareToFeed ? "Your friends will see this in their feed (except friends who've marked this domain as Not my focus)." : 'Saved to your bank only.'}</p>
             </div>
           ) : null}
 
