@@ -11,9 +11,9 @@ describe('buildQuestionWriterHref', () => {
     expect(buildQuestionWriterHref('   ')).toBe('/questions?create=1&intent=bank')
   })
 
-  it('carries a trimmed, encoded idea through as ?text=', () => {
+  it('carries a trimmed, encoded idea through as ?text= and requests auto-submit', () => {
     expect(buildQuestionWriterHref('  Which Broadway musical opened in 1957?  ')).toBe(
-      '/questions?create=1&intent=bank&text=Which%20Broadway%20musical%20opened%20in%201957%3F'
+      '/questions?create=1&intent=bank&text=Which%20Broadway%20musical%20opened%20in%201957%3F&submit=1'
     )
   })
 })
