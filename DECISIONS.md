@@ -16,6 +16,7 @@ Last updated: 2026-06-11 (D-HOME-PACING-01 aligned — Home page pacing & budget
 | Doc | What it is |
 |-----|------------|
 | [`PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md`](./PRD-D-0-PRODUCT-DIRECTION-AND-DECISIONS.md) | Canonical "what the product is and why": target capabilities, deferred items, open hypotheses, **amended decisions**. |
+| [`PRODUCT-CANON.md`](./PRODUCT-CANON.md) | Designer-facing product canon: problem, emotional journey, loops, screens, principles, exclusions, evaluation checklist, recent changes, and open product questions. |
 | [`PRD-D-1-FEED-DAILY-RESTRUCTURE-SPEC.md`](./PRD-D-1-FEED-DAILY-RESTRUCTURE-SPEC.md) | Spec — directional follow + Feed/Daily split. |
 | [`PRD-D-2-NICHE-MATCH-DISCOVERY-SPEC.md`](./PRD-D-2-NICHE-MATCH-DISCOVERY-SPEC.md) | Spec — niche-match discovery engine. |
 | [`PRD-D-3-HOUSE-EDITORIAL-AUTHOR-SPEC.md`](./PRD-D-3-HOUSE-EDITORIAL-AUTHOR-SPEC.md) | Spec — house / editorial author (**unbuilt**). |
