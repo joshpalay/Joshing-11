@@ -1,12 +1,11 @@
 'use client'
 
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   AnsweredByYouCard,
-  AnswerFeedbackSheet,
-  AnswerSheet,
   DirectSentCard,
   DismissedFeedBar,
   FeedCardSwipe,
@@ -38,6 +37,22 @@ import {
   ANSWER_GRADER_RETRY_MESSAGE,
   submitAnswerWithRetry,
 } from '@/lib/answer-submit'
+
+// Both answer sheets are bottom-of-tree modals gated by component state: the
+// answer sheet only mounts when a card is tapped, and the feedback sheet only
+// after a grade returns (its chunk loads in parallel during the grading
+// round-trip, so the split adds no perceived latency). Code-splitting them keeps
+// their subtrees — AnswerFeedbackSheet alone pulls ReportReasonSheet,
+// NewTerritoryUndo and lucide icons — out of the initial JS shipped to home,
+// /for-you and /from-friends. ssr:false is safe: neither ever renders during SSR.
+const AnswerSheet = dynamic(
+  () => import('@/components/feed/AnswerSheet').then((m) => m.AnswerSheet),
+  { ssr: false },
+)
+const AnswerFeedbackSheet = dynamic(
+  () => import('@/components/feed/AnswerFeedbackSheet').then((m) => m.AnswerFeedbackSheet),
+  { ssr: false },
+)
 
 type FriendResult = {
   userId: string

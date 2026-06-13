@@ -27,6 +27,7 @@ import { readCreateQuestionPayload } from '@/server/questions/create-payload';
 import { textContainsAnswer } from '@/server/questions/self-answering';
 import { assessQuestionDifficulty, fallbackQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { isReconcileAuthoredDomainsEnabled, reconcileAuthoredDomain } from '@/server/questions/reconcile-authored-domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,7 +149,43 @@ export async function POST(request: NextRequest) {
       answer: value.correctAnswer,
     });
   }
-  const canonicalSubcategory = normalizedSubcategory;
+  // B-CATEGORY-AUTHORED-RECONCILE-01: the authored path historically wrote the
+  // blind categorizer label, unlike the generated/onboarding paths which
+  // reconcile against existing domains. Fold the proposal onto an existing
+  // domain (C: trgm-exact first, Haiku on miss; silent) so an authored "Hamlet"
+  // reuses the player's "Shakespearean Tragedy" instead of minting a sibling.
+  //
+  // Phase 1 ships flag-OFF: we ALWAYS compute + shadow-log the outcome to
+  // quantify pre-fix duplication, but only ADOPT it when RECONCILE_AUTHORED_DOMAINS
+  // is enabled — flag-off is a strict no-op on the written label.
+  const reconcileOutcome = await reconcileAuthoredDomain(normalizedSubcategory, session.userId);
+  const reconcileFlagEnabled = isReconcileAuthoredDomainsEnabled();
+  // Preserve the F4.5 write-boundary guard: never adopt a reconciled label the
+  // guard would reject — fall through to the already-validated proposed label
+  // rather than letting createQuestion throw.
+  const reconciledTooGeneric =
+    reconcileOutcome.differs && isGenericSubcategory(reconcileOutcome.canonicalDomain);
+  const applyReconcile = reconcileFlagEnabled && reconcileOutcome.differs && !reconciledTooGeneric;
+  // Emitted as a JSON string (not the inspected-object form) so the Phase 2
+  // gate aggregator can parse it deterministically from exported logs — see
+  // scripts/authored-reconcile-telemetry.mjs.
+  console.info('[questions/authored-reconcile]', JSON.stringify({
+    userId: session.userId,
+    proposed: normalizedSubcategory,
+    reconciled: reconcileOutcome.canonicalDomain,
+    differs: reconcileOutcome.differs,
+    method: reconcileOutcome.method,
+    trgmExact: reconcileOutcome.trgmExactLabel,
+    trgmFuzzy: reconcileOutcome.trgmFuzzyCandidates,
+    llmReconciled: reconcileOutcome.llmReconciled,
+    flagEnabled: reconcileFlagEnabled,
+    reconciledTooGeneric,
+    applied: applyReconcile,
+  }));
+  // broad_category is intentionally kept from the categorizer (matches the
+  // generated path, which swaps only the domain label on reconcile); reconcile
+  // does not emit a broad category.
+  const canonicalSubcategory = applyReconcile ? reconcileOutcome.canonicalDomain : normalizedSubcategory;
   const questionFields = {
     ...rawQuestionFields,
     category,
