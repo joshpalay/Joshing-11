@@ -5,10 +5,12 @@ import { useSyncExternalStore, type CSSProperties } from 'react';
 // ─────────────────────────────────────────────────────────────────────────────
 // TESTING ONLY — card-background cycler (repurposed from the palette preview bar).
 //
-// Cycles the `--brand-card` token — the resting feed-card surface — through the
-// SANCTIONED background colors (globals.css), so a tester can audit how the
-// cards read on each cream / wash without per-page edits. Every surface that
-// fills with `var(--brand-card)` recolors automatically.
+// Cycles the `--brand-card` token — the resting feed-card surface — AND the
+// `--feed-card-elevated` token (the warm fill behind the "For You" home-zone
+// cards) through the SANCTIONED background colors (globals.css), so a tester can
+// audit how the cards read on each cream / wash without per-page edits. Every
+// surface that fills with `var(--brand-card)` or `var(--feed-card-elevated)`
+// recolors automatically.
 //
 // Only the system's own background tokens are offered (no off-palette hex), so
 // nothing here introduces an unsanctioned color. Inline styles are on purpose:
@@ -62,8 +64,14 @@ export function PaletteToggle() {
     const root = document.documentElement;
     if (value) {
       root.style.setProperty('--brand-card', value);
+      // The "For You" home-zone cards fill with --feed-card-elevated (the warm
+      // game-card cream), not --brand-card, so drive it too — otherwise those
+      // cards stay put while the rest of the feed recolors. Default clears the
+      // override, restoring the token's globals.css value (game-card cream).
+      root.style.setProperty('--feed-card-elevated', value);
     } else {
       root.style.removeProperty('--brand-card');
+      root.style.removeProperty('--feed-card-elevated');
     }
     root.setAttribute('data-card-bg', String(i));
     try {

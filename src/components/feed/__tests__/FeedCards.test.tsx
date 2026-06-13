@@ -512,13 +512,14 @@ describe('FeedCardShell (shared C7 shell)', () => {
         <p>body</p>
       </FeedCardShell>
     )
-    expect(rendered).toContain('bg-[var(--game-card-question)]')
+    expect(rendered).toContain('bg-[var(--feed-card-elevated)]')
     // Deeper drop shadow (10% ink) than the ambient cards' 4%.
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
     expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
-    // Gold accent stroke replaces the faint hairline rule.
-    expect(rendered).toContain('border-[var(--accent-gold)]')
-    expect(rendered).not.toContain('border-[var(--brand-rule)]')
+    // Hairline stroke matching the Today's 5 card replaces the faint rule
+    // (no gold accent border on the elevated card).
+    expect(rendered).toContain('border-[var(--brand-border)]')
+    expect(rendered).not.toContain('border-[var(--accent-gold)]')
     // No hard ink offset shadow, no near-white resting fill.
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
@@ -536,7 +537,7 @@ describe('FeedCardShell (shared C7 shell)', () => {
     expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     // Inner panel carries the warm cream fill instead of brand-card.
-    expect(rendered).toContain('bg-[var(--game-card-question)]')
+    expect(rendered).toContain('bg-[var(--feed-card-elevated)]')
     expect(rendered).not.toContain('bg-[var(--brand-card)]')
   })
 })

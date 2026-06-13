@@ -329,7 +329,10 @@ export function ActivityStreamItem({
     : playableCard
       ? {
           padding: opened ? '16px 14px' : '14px',
-          background: 'var(--game-card-question)',
+          // The "From Friends" playable milestone cards share the elevated feed
+          // fill token (defaults to the warm game-card cream) so the dev CARD
+          // COLOR cycler repaints them alongside the For You cards.
+          background: 'var(--feed-card-elevated)',
           border: '1px solid var(--accent-gold)',
           borderRadius: 4,
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
@@ -463,7 +466,7 @@ export function ActivityStreamItem({
           <>
         {/* Nested rows carry no shape — the per-person heading holds the one
             diamond; everything beneath it is a plain indented line. */}
-        {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} />}
+        {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} open={opened} />}
 
         <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
           <p
@@ -747,6 +750,11 @@ export function ConvergenceExpansion({
 }: {
   expand: Extract<StreamExpand, { kind: 'same_correct' }>;
 }) {
+  // Per-question share affordance: the open drawer is keyed by questionId so
+  // each quote in the cluster carries its own Send glyph. The category and
+  // authorship labels are intentionally omitted here — the headline already
+  // names the cluster's domains, so each quote reads clean with just its share.
+  const [sendQuestionId, setSendQuestionId] = useState<string | null>(null);
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -760,10 +768,15 @@ export function ConvergenceExpansion({
       }}
     >
       {expand.questions.map((q) => (
-        <div key={q.questionId}>
+        <div
+          key={q.questionId}
+          style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}
+        >
           <p
             style={{
               margin: 0,
+              flex: 1,
+              minWidth: 0,
               fontFamily: 'var(--font-serif)',
               fontStyle: 'italic',
               fontSize: 14,
@@ -773,22 +786,36 @@ export function ConvergenceExpansion({
           >
             &ldquo;{q.text}&rdquo;
           </p>
-          {q.domain ? (
-            <p
-              style={{
-                margin: '4px 0 0',
-                fontFamily: FM,
-                fontSize: 10,
-                letterSpacing: 1,
-                color: INK3,
-              }}
-            >
-              {q.domain.toUpperCase()}
-            </p>
-          ) : null}
-          {/* Honest authorship (§4): mark a house/LLM question even in the
-              read-only convergence reveal. */}
-          <QuestionProvenance q={q} />
+          {/* Quiet, icon-only share affordance per quote — the paper-plane Send
+              glyph, matching the homepage share treatment. Opens the same
+              SendQuestionDrawer. */}
+          <button
+            type="button"
+            onClick={() => setSendQuestionId(q.questionId)}
+            aria-label="Send to a friend"
+            style={{
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'transparent',
+              border: 'none',
+              padding: 4,
+              color: INK,
+              cursor: 'pointer',
+            }}
+          >
+            <Send size={15} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <SendQuestionDrawer
+            isOpen={sendQuestionId === q.questionId}
+            onClose={() => setSendQuestionId(null)}
+            question={{
+              id: q.questionId,
+              text: q.text,
+              domain: q.domain ?? '',
+            }}
+          />
         </div>
       ))}
     </div>

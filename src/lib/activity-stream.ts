@@ -24,6 +24,7 @@ import type { MasteryTier } from '@/types/db';
 import type { LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir, djb2 } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
+import type { FriendActivityCard } from '@/lib/friend-activity';
 import type { Convergence } from '@/lib/convergence';
 import type { RelationshipResult } from '@/server/db/queries/friend-requests';
 
@@ -841,6 +842,80 @@ export function milestoneToStreamItem(
       kind: 'milestone',
       friendId: milestone.friendId,
       friendName: milestone.friendName,
+      questions,
+    },
+  };
+}
+
+// --- From Friends activity card (D-FEED-FRIEND-ACTIVITY-01) -------------------
+
+// Flattering, topic-attached leads for the From Friends card. Warm, complimentary
+// register (no "mastered"/"beat"/"crushed"). Each ends on a preposition so the
+// domain(s) the friend played in this burst follow as serif `category` parts —
+// e.g. "{Name} has been killing it in {Geography} and {History}". One lead is
+// picked per card id so a stack reads varied.
+const FRIEND_ACTIVITY_LEADS = [
+  ' has been killing it in ',
+  ' has been on a streak of wisdom in ',
+  ' is amazing answering questions about ',
+  ' has been all over ',
+  " can't get enough of ",
+  ' has been on a tear through ',
+] as const;
+
+// Fallback when none of the burst's questions resolved a domain — keep the same
+// complimentary voice without naming a topic.
+const FRIEND_ACTIVITY_LEADS_NO_TOPIC = [
+  ' has been killing it',
+  ' has been on a streak of wisdom',
+  ' is on a roll',
+] as const;
+
+// Distinct domains the friend played in this card, most-recent first (the
+// questions arrive most-recent first). Drives the topic tail.
+function friendActivityDomains(questions: StreamQuestion[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const q of questions) {
+    const d = q.domain?.trim();
+    if (d && !seen.has(d)) {
+      seen.add(d);
+      out.push(d);
+    }
+  }
+  return out;
+}
+
+// One From Friends play burst/batch, expanded to its answerable questions. Mirrors
+// `milestoneToStreamItem` (same StreamItem shape, same 'milestone' expand the feed
+// already renders) but sorts on the card's chronological `effectiveAt`. The copy
+// keeps the flattering breadth voice — a complimentary lead + the burst's domains
+// rolled up "A, B and N others" — even though grouping is now time-based.
+export function friendActivityToStreamItem(
+  card: FriendActivityCard,
+  questions: StreamQuestion[],
+): StreamItem {
+  const friend = act(card.friendName, card.friendId);
+  const domains = friendActivityDomains(questions);
+  const tail: StreamLinePart[] =
+    domains.length > 0
+      ? breadthTail(domains, FRIEND_ACTIVITY_LEADS[djb2(card.id) % FRIEND_ACTIVITY_LEADS.length])
+      : [txt(FRIEND_ACTIVITY_LEADS_NO_TOPIC[djb2(card.id) % FRIEND_ACTIVITY_LEADS_NO_TOPIC.length])];
+  return {
+    id: card.id,
+    sortAt: card.effectiveAt,
+    tier: LATELY_TIER.MILESTONE,
+    friendId: card.friendId,
+    homeEligible: true,
+    line: [friend, ...tail],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'bundle',
+    expand: {
+      kind: 'milestone',
+      friendId: card.friendId,
+      friendName: card.friendName,
       questions,
     },
   };

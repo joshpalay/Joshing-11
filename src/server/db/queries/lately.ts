@@ -1,11 +1,17 @@
 import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 
 import {
-  collectMilestoneQuestionIds,
   deriveLatelyMilestones,
   type LatelyMilestone,
   type MilestoneAnswerRow,
 } from '@/lib/lately-milestones';
+import {
+  collectFriendActivityQuestionIds,
+  deriveFriendActivity,
+  type FriendActivityCard,
+  type FriendPlayRow,
+  type PlayContext,
+} from '@/lib/friend-activity';
 import {
   deriveConvergences,
   type Convergence,
@@ -240,6 +246,129 @@ export async function getLatelyMilestones(userId: string): Promise<LatelyMilesto
   return deriveLatelyMilestones(answerRows);
 }
 
+// --- From Friends activity log (D-FEED-FRIEND-ACTIVITY-01) --------------------
+
+// Wider than the milestone window so a play can still reach its held-singles
+// 5-day solo release before its source row ages out of the scan.
+const FRIEND_ACTIVITY_WINDOW_DAYS = 35;
+
+// Map the FeedItem `sourceAnswerId` prefix to the originating play surface.
+// Unknown / legacy / null ids fall back to 'feed' (a time-gap burst) so no play
+// is dropped. The full id format lives in create-feed-items-for-answer.ts.
+function parsePlayContext(sourceAnswerId: string | null): PlayContext {
+  if (!sourceAnswerId) return 'feed';
+  const prefix = sourceAnswerId.slice(0, sourceAnswerId.indexOf(':'));
+  switch (prefix) {
+    case 'daily':
+      return 'daily';
+    case 'catchup':
+      return 'catchup';
+    case 'joshing_game':
+      return 'joshing_game';
+    case 'profile':
+      return 'profile';
+    default:
+      return 'feed';
+  }
+}
+
+// The natural-unit batch key for daily/catchup/game; null for feed/profile
+// (those sessionize into time-gap bursts in the pure derivation). NOTE: the
+// `sourceAnswerId` daily form is `daily:${propagationKey}:${userId}` — NOT a
+// day — so the daily/catchup batch is keyed on the calendar day of the answer.
+// Cut-1 uses the UTC day; a late-night play near midnight could split across
+// days under the viewer's tz (open: switch to the app display tz).
+function batchKeyFor(
+  context: PlayContext,
+  answeredAt: Date,
+  joshingGameId: string | null,
+): string | null {
+  switch (context) {
+    case 'daily':
+    case 'catchup':
+      return answeredAt.toISOString().slice(0, 10);
+    case 'joshing_game':
+      return joshingGameId ?? `game:${answeredAt.toISOString().slice(0, 10)}`;
+    case 'feed':
+    case 'profile':
+      return null;
+  }
+}
+
+/**
+ * From Friends — the chronological activity log that replaces the deep/breadth
+ * milestone grouping on this surface (D-FEED-FRIEND-ACTIVITY-01). Same correct-
+ * `friend_answered`-from-someone-I-follow rows as `getLatelyMilestones`, but
+ * routed by play context into time-and-context cards by the pure
+ * `deriveFriendActivity`.
+ *
+ * Cut-1 scope: `playableForViewer` excludes only the viewer's OWN authored
+ * questions (the dead "ANSWER →" button case). Already-answered questions stay
+ * in the bundle — build-stream renders them as spent triangles via their prior
+ * result, which is what keeps an answered-in-place card alive (Q4). Excluding
+ * pre-answered questions and freezing card membership both need persistence and
+ * are the documented follow-up (see the spec's Open section).
+ */
+export async function getFriendActivity(userId: string): Promise<FriendActivityCard[]> {
+  const windowStart = new Date(
+    Date.now() - FRIEND_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  );
+
+  const rows = await db
+    .select({
+      friendId: feedItems.sourceUserId,
+      friendDisplayName: users.displayName,
+      questionId: feedItems.questionId,
+      sourceAnswerId: feedItems.sourceAnswerId,
+      joshingGameId: feedItems.joshingGameId,
+      creatorId: questions.creatorId,
+      answeredAt: feedItems.sourceEventAt,
+    })
+    .from(feedItems)
+    .innerJoin(
+      follows,
+      and(
+        eq(follows.followeeId, feedItems.sourceUserId),
+        eq(follows.followerId, userId),
+        eq(follows.state, 'approved'),
+      ),
+    )
+    .innerJoin(questions, eq(questions.id, feedItems.questionId))
+    .innerJoin(users, eq(users.id, feedItems.sourceUserId))
+    .where(
+      and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+        eq(feedItems.sourceResult, 'correct'),
+        isNotNull(feedItems.questionId),
+        gte(feedItems.sourceEventAt, windowStart),
+      ),
+    )
+    .orderBy(desc(feedItems.sourceEventAt))
+    .limit(500);
+
+  const playRows: FriendPlayRow[] = [];
+  for (const row of rows) {
+    if (!row.questionId || !row.answeredAt) continue;
+    const context = parsePlayContext(row.sourceAnswerId);
+    const friendName = row.friendDisplayName?.trim() || 'A friend';
+    playRows.push({
+      friendId: row.friendId,
+      friendName,
+      friendFirstName: firstName(row.friendDisplayName, friendName),
+      questionId: row.questionId,
+      answeredAt: row.answeredAt,
+      context,
+      batchKey: batchKeyFor(context, row.answeredAt, row.joshingGameId),
+      // Authored-by-viewer questions are unplayable (the answer route 403s on
+      // your own question). Already-answered questions stay (rendered spent).
+      playableForViewer: row.creatorId !== userId,
+    });
+  }
+
+  return deriveFriendActivity(playRows, new Date());
+}
+
 // A friend's literal question, shaped for the seeded play session (the Lately
 // milestone click-through). Practice-only — carries everything needed to render
 // and grade, nothing about scoring.
@@ -267,7 +396,7 @@ export async function getSeededPlayQuestions(
 ): Promise<SeededPlayQuestion[]> {
   if (requestedIds.length === 0) return [];
 
-  const allowed = collectMilestoneQuestionIds(await getLatelyMilestones(userId));
+  const allowed = collectFriendActivityQuestionIds(await getFriendActivity(userId));
   const authorizedIds = requestedIds.filter((id) => allowed.has(id));
   if (authorizedIds.length === 0) return [];
 

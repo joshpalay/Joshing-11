@@ -51,8 +51,10 @@ export type HomeEdition = {
    */
   direct: ServedZone<FeedEditionItem>
   /**
-   * Playable friend activity — answerable milestone bundles. Cap 4, actor-
-   * interleaved so one chatty friend can't hold consecutive slots (§5).
+   * From Friends activity log — milestone bundles (pending OR answered),
+   * newest-first. Cap 4, serve-and-overflow; answered bundles stay as spent
+   * cards and drift down by recency (D-FEED-FRIEND-ACTIVITY-01 §Q4). The field
+   * name stays `playables` for the page/FeedList contract it already feeds.
    */
   playables: ServedZone<StreamItem>
   /**
@@ -210,22 +212,6 @@ function isMilestoneBundle(item: StreamItem): boolean {
 }
 
 /**
- * §7 pending definition: a bundle is PENDING only while the viewer still has at
- * least one unanswered question in it. build-stream keeps answered questions in
- * the bundle (they render as spent triangles), so questions.length alone would
- * keep a fully-played bundle in the queue forever — holding a served slot,
- * inflating the "N more →" count, and never leaving the overflow subpage.
- * Shared by Home, the overflow counts, and the pending-playables subpage so the
- * three views can't disagree about what "pending" means.
- */
-export function isPendingPlayable(item: StreamItem): boolean {
-  return (
-    item.expand?.kind === 'milestone' &&
-    item.expand.questions.some((q) => !q.priorResult)
-  )
-}
-
-/**
  * §5 zone order for the direct ("For You") queue — the one ordering Home's
  * served slice, the overflow count, and the /for-you subpage all window.
  */
@@ -240,23 +226,20 @@ export function orderDirectPending(
 }
 
 /**
- * §5 zone order for the pending-playables queue — filters to pending bundles
- * (see isPendingPlayable) and actor-interleaves. Home serves the top 4 of this;
- * the /from-friends subpage renders all of it.
+ * Zone order for the From Friends activity log (D-FEED-FRIEND-ACTIVITY-01):
+ * EVERY friend-activity bundle — pending OR fully answered — newest-first. A
+ * played bundle stays put as a spent card and drifts down by recency rather than
+ * leaving the surface; this is the chronological-log model, and it deliberately
+ * reverses the old §7 "pending-only" filter that consumed a bundle the moment
+ * its last question was answered. Home serves the top 4 of this; the
+ * /from-friends subpage renders all of it.
  */
-export function orderPendingPlayables(
+export function orderFriendActivity(
   items: readonly StreamItem[],
 ): StreamItem[] {
-  return interleaveByActor(
-    items.filter(isPendingPlayable),
-    (item) => item.friendId ?? null,
-    playableType,
-  )
-}
-
-/** Event-type key for the playable interleave's degenerate-case variety. */
-function playableType(item: StreamItem): string {
-  return item.relationship ?? item.expand?.kind ?? 'milestone'
+  return [...items]
+    .filter(isMilestoneBundle)
+    .sort((a, b) => ms(b.sortAt) - ms(a.sortAt))
 }
 
 function serve<T>(ordered: readonly T[], cap: number, totalPending?: number): ServedZone<T> {
@@ -299,22 +282,18 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
   const directOrdered = orderDirectPending(input.feedItems)
   const direct = serve(directOrdered, DIRECT_SERVE_CAP, input.directPendingTotal)
 
-  // Split the activity stream into pending playables (answerable milestone
-  // bundles with ≥1 unanswered question), texture (everything else non-feed),
-  // and consumed bundles. A fully-answered bundle is consumed: it is no longer
-  // pending (§7 — it left the queue) and it is not a texture moment either (the
-  // archive surfaces own anything cumulative), so it drops from the edition.
-  const playablePool: StreamItem[] = []
+  // From Friends activity log: EVERY milestone bundle (pending OR fully answered)
+  // is retained and ordered newest-first — an answered bundle stays as a spent
+  // card (D-FEED-FRIEND-ACTIVITY-01 §Q4) instead of being consumed. Non-milestone
+  // social events remain texture (locked Group 3 chronological treatment).
+  const friendActivityPool: StreamItem[] = []
   const texturePool: StreamItem[] = []
   for (const item of input.activityItems) {
-    if (isMilestoneBundle(item)) {
-      if (isPendingPlayable(item)) playablePool.push(item)
-    } else {
-      texturePool.push(item)
-    }
+    if (isMilestoneBundle(item)) friendActivityPool.push(item)
+    else texturePool.push(item)
   }
 
-  const playables = serve(orderPendingPlayables(playablePool), PLAYABLE_SERVE_CAP)
+  const playables = serve(orderFriendActivity(friendActivityPool), PLAYABLE_SERVE_CAP)
 
   const texture = boundTexture(texturePool, now)
 
@@ -322,11 +301,11 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
   // Direct uses the full pending pool (not the served slice) so a page that is
   // merely over-budget never reads as empty.
   const isAllEmpty =
-    directOrdered.length === 0 && playablePool.length === 0 && texture.length === 0
+    directOrdered.length === 0 && friendActivityPool.length === 0 && texture.length === 0
 
   // A quiet page biases the panel to Grow Your Circle; the all-empty page gets
   // no panel (the empty state already carries the one invitation, §9).
-  const isQuiet = playablePool.length + texturePool.length <= 2
+  const isQuiet = friendActivityPool.length + texturePool.length <= 2
   const panel = isAllEmpty ? null : selectPanel(input.promos, isQuiet)
 
   return { direct, playables, texture, panel, isAllEmpty }

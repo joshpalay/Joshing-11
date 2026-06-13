@@ -20,7 +20,7 @@ import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import {
   orderDirectPending,
-  orderPendingPlayables,
+  orderFriendActivity,
   selectHomeEdition,
   type HomeEdition,
 } from '@/server/home/select-edition'
@@ -97,13 +97,13 @@ export async function buildPendingDirectQueue(userId: string): Promise<{
 }
 
 /**
- * B-HOME-OVERFLOW-02 §7 — the full pending-playables queue, in the same
- * actor-interleaved order the home edition windows. Home shows the top 4 of
- * exactly this list; the /from-friends subpage renders all of it. A bundle
- * leaves the queue once every question in it has been answered (see
- * isPendingPlayable).
+ * The full From Friends activity log, newest-first, in the same order the home
+ * edition windows. Home shows the top 4; the /from-friends subpage renders all
+ * of it. Every milestone bundle is retained — an answered bundle stays as a
+ * spent card and drifts down by recency rather than leaving the surface
+ * (D-FEED-FRIEND-ACTIVITY-01 §Q4).
  */
-export async function buildPendingPlayablesQueue(userId: string): Promise<StreamItem[]> {
+export async function buildFriendActivityQueue(userId: string): Promise<StreamItem[]> {
   const activityItems = await buildActivityStream(userId)
-  return orderPendingPlayables(activityItems.filter(isHomeActivityItem))
+  return orderFriendActivity(activityItems.filter(isHomeActivityItem))
 }

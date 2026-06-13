@@ -6,9 +6,8 @@ import {
   PLAYABLE_SERVE_CAP,
   TEXTURE_SOFT_CAP,
   interleaveByActor,
-  isPendingPlayable,
   orderBySenderRotation,
-  orderPendingPlayables,
+  orderFriendActivity,
   selectHomeEdition,
   type FeedEditionItem,
 } from '@/server/home/select-edition'
@@ -199,16 +198,10 @@ describe('selectHomeEdition — serve-and-overflow', () => {
   })
 })
 
-// --- pending-playable definition (B-HOME-OVERFLOW-02 §7) ----------------------
+// --- From Friends chronological log (D-FEED-FRIEND-ACTIVITY-01 §Q4) -----------
 
-describe('isPendingPlayable / orderPendingPlayables — §7 pending definition', () => {
-  it('a bundle is pending only while ≥1 question is unanswered', () => {
-    expect(isPendingPlayable(bundleWithResults('b-fresh', 'f0', [null, null]))).toBe(true)
-    expect(isPendingPlayable(bundleWithResults('b-partial', 'f0', ['correct', null]))).toBe(true)
-    expect(isPendingPlayable(bundleWithResults('b-spent', 'f0', ['correct', 'incorrect']))).toBe(false)
-  })
-
-  it('fully-answered bundles leave the playable queue, the count, and texture', () => {
+describe('orderFriendActivity — chronological log keeps answered bundles', () => {
+  it('retains a fully-answered bundle (it stays as a spent card, not consumed)', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems: [
@@ -218,29 +211,35 @@ describe('isPendingPlayable / orderPendingPlayables — §7 pending definition',
       promos: { sharedGround: null, expanding: null, growCircle: null },
       now: NOW,
     })
-    // 5 pending bundles: served 4 + 1 overflow — the spent one counts nowhere.
-    expect(edition.playables.served.map((p) => p.id)).not.toContain('b-spent')
-    expect(edition.playables.overflowCount).toBe(1)
-    // Consumed, not texture: it does not fall through as an ambient row.
+    // 6 bundles total (1 spent + 5 pending): all retained, served 4 + 2 overflow.
+    // Equal sortAt → stable order → the spent bundle (first in input) is served.
+    expect(edition.playables.served.map((p) => p.id)).toContain('b-spent')
+    expect(edition.playables.overflowCount).toBe(2)
+    expect(edition.playables.served.length + edition.playables.overflowCount).toBe(6)
+    // Still never a texture row.
     expect(edition.texture.map((t) => t.id)).not.toContain('b-spent')
   })
 
-  it('answering the last question of a served bundle promotes the next one (§7 round trip)', () => {
-    const queue = (items: StreamItem[]) => orderPendingPlayables(items).map((i) => i.id)
+  it('does NOT drop a bundle when its last question is answered (Q4)', () => {
+    const queue = (items: StreamItem[]) => orderFriendActivity(items).map((i) => i.id)
     const before = [
       bundleWithResults('p0', 'f0', [null]),
       ...Array.from({ length: 5 }, (_, i) => playable(`p${i + 1}`, `f${i + 1}`)),
     ]
-    expect(queue(before).slice(0, PLAYABLE_SERVE_CAP)).toContain('p0')
-    // The viewer answers p0's only question on the subpage → next read shows it spent.
-    const after = [
-      bundleWithResults('p0', 'f0', ['correct']),
-      ...before.slice(1),
-    ]
-    const served = queue(after).slice(0, PLAYABLE_SERVE_CAP)
-    expect(served).not.toContain('p0')
-    expect(served).toContain('p4') // promoted into the freed slot
-    expect(queue(after)).toHaveLength(5)
+    expect(queue(before)).toContain('p0')
+    // The viewer answers p0's only question → it stays (now spent), still in the log.
+    const after = [bundleWithResults('p0', 'f0', ['correct']), ...before.slice(1)]
+    expect(queue(after)).toContain('p0')
+    expect(queue(after)).toHaveLength(6)
+  })
+
+  it('orders newest-first by sortAt', () => {
+    const ordered = orderFriendActivity([
+      playable('old', 'f0', 'milestone', '2026-06-09T12:00:00Z'),
+      playable('new', 'f1', 'milestone', '2026-06-11T12:00:00Z'),
+      playable('mid', 'f2', 'milestone', '2026-06-10T12:00:00Z'),
+    ])
+    expect(ordered.map((i) => i.id)).toEqual(['new', 'mid', 'old'])
   })
 })
 
