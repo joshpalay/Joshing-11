@@ -281,6 +281,20 @@ export async function register() {
       // DailyQueue table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0077 adds EmailVerificationToken.opt_in_on_confirm — the
+    // "turn reminders on when this link is confirmed" intent the onboarding
+    // beat sets and consumeVerificationToken reads. A preview/production DB
+    // that records 0077 without the column present would break token consume;
+    // pre-apply it idempotently (precedent: 0075's guard above).
+    try {
+      await db.execute(sql`
+        ALTER TABLE "EmailVerificationToken"
+          ADD COLUMN IF NOT EXISTS "opt_in_on_confirm" boolean NOT NULL DEFAULT false
+      `);
+    } catch {
+      // EmailVerificationToken may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value
