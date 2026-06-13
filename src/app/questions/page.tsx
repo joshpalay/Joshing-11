@@ -24,6 +24,10 @@ type DrawerState =
   | { mode: 'create'; intent: CreateIntent | null; prefillText?: string; autoSubmit?: boolean }
   | { mode: 'edit'; question: QuestionView };
 
+// How long the composer drawer stays open after a successful save so the
+// QuestionForm's in-form success confirmation registers before we close it.
+const SUCCESS_HOLD_MS = 1100;
+
 function parseIntent(raw: string | null): CreateIntent | null {
   return raw === 'bank' || raw === 'followers' || raw === 'specific' ? raw : null;
 }
@@ -274,7 +278,6 @@ function QuestionsPageContent() {
     const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not save that question.');
     setQuestions((current) => [body.question!, ...current]);
-    closeDrawer();
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
@@ -286,6 +289,9 @@ function QuestionsPageContent() {
     } else {
       setToast('Saved to your bank.');
     }
+    // Hold the drawer open a beat so the form's in-form success state is seen
+    // before we close it; the toast above is the destination-aware companion.
+    window.setTimeout(closeDrawer, SUCCESS_HOLD_MS);
   }
 
   async function saveEdit(questionId: string, values: QuestionFormValues) {
@@ -298,8 +304,8 @@ function QuestionsPageContent() {
     const body = await response.json().catch(() => null) as { question?: QuestionView; error?: string; message?: string } | null;
     if (!response.ok || !body?.question) throw new Error(body?.message ?? body?.error ?? 'Could not update that question.');
     setQuestions((current) => current.map((question) => question.id === questionId ? body.question! : question));
-    closeDrawer();
     setToast('Question updated.');
+    window.setTimeout(closeDrawer, SUCCESS_HOLD_MS);
   }
 
   async function confirmDelete(question: QuestionView) {

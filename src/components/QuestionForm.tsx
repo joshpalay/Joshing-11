@@ -514,6 +514,22 @@ export function QuestionForm({
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
   const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
+
+  // Save-success confirmation. The save lands, the form flips to DONE, and this
+  // panel replaces the fields so the writer gets an unmistakable in-form
+  // confirmation (the host page also fires its destination-aware toast as it
+  // closes the drawer a beat later). `Save to bank` is always forced on, so the
+  // create-mode baseline is always literally true regardless of sharing choices.
+  if (state.stage === 'DONE') {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col items-center justify-center gap-2 py-12 text-center" role="status" aria-live="polite">
+          <span className="text-3xl leading-none text-[var(--success)]" aria-hidden="true">✓</span>
+          <p className="m-0 text-base font-medium text-[var(--success)]">{mode === 'edit' ? 'Question updated.' : 'Saved to your bank.'}</p>
+        </div>
+      </div>
+    );
+  }
   // The form lives inside a scrollable drawer/modal (questions + knowledge
   // pages). Keep the action buttons pinned to the bottom on an opaque,
   // composited footer: the backdrop-blur layer prevents the iOS Safari
@@ -796,7 +812,18 @@ export function QuestionForm({
           ) : null}
 
           <div className={actionBarClass}>
-            <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
+            <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">
+              {submitDisabled ? (
+                <span className="inline-flex items-center">
+                  {loadingLabel.replace(/[.…]+$/, '')}
+                  <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+                    <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0s infinite' }}>.</span>
+                    <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.2s infinite' }}>.</span>
+                    <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.4s infinite' }}>.</span>
+                  </span>
+                </span>
+              ) : resolvedSubmitLabel}
+            </button>
             {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
           </div>
         </>

@@ -79,6 +79,10 @@ type ActiveModal =
   | { type: 'write-question' }
   | { type: 'tidy' };
 
+// How long the write-question modal stays open after a successful save so the
+// QuestionForm's in-form success confirmation registers before we close it.
+const SUCCESS_HOLD_MS = 1100;
+
 function asTier(value: string): MasteryTier {
   if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
   return 'establishing';
@@ -479,7 +483,6 @@ function KnowledgePageContent() {
     });
     const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
-    setActiveModal(null);
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setQuestionToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
@@ -492,6 +495,9 @@ function KnowledgePageContent() {
       setQuestionToast('Saved to your bank.');
     }
     window.setTimeout(() => setQuestionToast(null), 2500);
+    // Hold the modal open briefly so the form's in-form success state shows
+    // before it closes; the toast above carries the destination detail.
+    window.setTimeout(() => setActiveModal(null), SUCCESS_HOLD_MS);
   };
 
   const reinstateDomain = async (domain: string) => {
