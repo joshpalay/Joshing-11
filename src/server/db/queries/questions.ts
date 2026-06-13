@@ -177,58 +177,129 @@ function toIso(value: Date | string | null | undefined): string | null {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-async function readQuestionStats(questionId: string) {
-  const [responseStats, feedStats, gameStats] = await Promise.all([
+export type QuestionStats = {
+  timesAnswered: number;
+  timesCorrect: number;
+  correctRate: number;
+  lastUsedAt: string | null;
+  usedInGamesCount: number;
+};
+
+export const EMPTY_QUESTION_STATS: QuestionStats = {
+  timesAnswered: 0,
+  timesCorrect: 0,
+  correctRate: 0,
+  lastUsedAt: null,
+  usedInGamesCount: 0,
+};
+
+type StatCountRow = { questionId: string | null; timesAnswered: number; timesCorrect: number };
+type GameUsageRow = { questionId: string | null; lastUsedAt: Date | null; usedInGamesCount: number };
+
+// Pure merge of the three GROUP BY result sets into per-question stats. Extracted
+// from readQuestionStatsForIds so the count-combining and correctRate rounding is
+// unit-testable without a DB. Every requested id is present in the result (zero-
+// filled when it has no answers/usage rows).
+export function mergeQuestionStats(
+  questionIds: string[],
+  responseRows: StatCountRow[],
+  feedRows: StatCountRow[],
+  gameRows: GameUsageRow[],
+): Map<string, QuestionStats> {
+  const answered = new Map<string, number>();
+  const correct = new Map<string, number>();
+  for (const row of [...responseRows, ...feedRows]) {
+    if (!row.questionId) continue;
+    answered.set(row.questionId, (answered.get(row.questionId) ?? 0) + Number(row.timesAnswered ?? 0));
+    correct.set(row.questionId, (correct.get(row.questionId) ?? 0) + Number(row.timesCorrect ?? 0));
+  }
+
+  const usage = new Map<string, { lastUsedAt: string | null; usedInGamesCount: number }>();
+  for (const row of gameRows) {
+    if (!row.questionId) continue;
+    usage.set(row.questionId, {
+      lastUsedAt: toIso(row.lastUsedAt ?? null),
+      usedInGamesCount: Number(row.usedInGamesCount ?? 0),
+    });
+  }
+
+  const result = new Map<string, QuestionStats>();
+  for (const id of questionIds) {
+    const timesAnswered = answered.get(id) ?? 0;
+    const timesCorrect = correct.get(id) ?? 0;
+    const use = usage.get(id);
+    result.set(id, {
+      timesAnswered,
+      timesCorrect,
+      correctRate: timesAnswered > 0 ? Math.round((timesCorrect / timesAnswered) * 100) : 0,
+      lastUsedAt: use?.lastUsedAt ?? null,
+      usedInGamesCount: use?.usedInGamesCount ?? 0,
+    });
+  }
+  return result;
+}
+
+// Set-based replacement for the per-question readQuestionStats N+1: computes the
+// same stats for every id in 3 GROUP BY question_id queries total. The pg pool is
+// capped at max 5 (src/server/db/index.ts), so collapsing round-trips matters more
+// than parallelism. Note: questions.asked_count/correct_count are NOT a substitute
+// here — they only track joshing-game answers (joshing-game.ts), while these stats
+// also count "Send to friend" answers recorded in feedItems.
+export async function readQuestionStatsForIds(
+  questionIds: string[],
+): Promise<Map<string, QuestionStats>> {
+  const ids = [...new Set(questionIds)].filter(Boolean);
+  if (ids.length === 0) return new Map();
+
+  const [responseRows, feedRows, gameRows] = await Promise.all([
     db
       .select({
+        questionId: joshingGameResponses.questionId,
         timesAnswered: sql<number>`count(*)`,
         timesCorrect: sql<number>`count(*) filter (where ${joshingGameResponses.isCorrect} = true)`,
       })
       .from(joshingGameResponses)
       .where(and(
-        eq(joshingGameResponses.questionId, questionId),
+        inArray(joshingGameResponses.questionId, ids),
         sql`${joshingGameResponses.answeredAt} is not null`,
-      )),
+      ))
+      .groupBy(joshingGameResponses.questionId),
     // Answers submitted via "Send to friend" land in feedItems, not joshingGameResponses.
     // joshingGameId is null filters out feed items that mirror an already-counted game response.
     db
       .select({
+        questionId: feedItems.questionId,
         timesAnswered: sql<number>`count(*)`,
         timesCorrect: sql<number>`count(*) filter (where ${feedItems.answerResult} = 'correct')`,
       })
       .from(feedItems)
       .where(and(
-        eq(feedItems.questionId, questionId),
+        inArray(feedItems.questionId, ids),
         sql`${feedItems.answerResult} is not null`,
         isNull(feedItems.joshingGameId),
-      )),
+      ))
+      .groupBy(feedItems.questionId),
     db
       .select({
+        questionId: joshingGameQuestions.questionId,
         lastUsedAt: sql<Date | null>`max(${joshingGames.createdAt})`,
         usedInGamesCount: countDistinct(joshingGameQuestions.gameId),
       })
       .from(joshingGameQuestions)
       .innerJoin(joshingGames, eq(joshingGameQuestions.gameId, joshingGames.id))
-      .where(eq(joshingGameQuestions.questionId, questionId)),
+      .where(inArray(joshingGameQuestions.questionId, ids))
+      .groupBy(joshingGameQuestions.questionId),
   ]);
 
-  const timesAnswered =
-    Number(responseStats[0]?.timesAnswered ?? 0) + Number(feedStats[0]?.timesAnswered ?? 0);
-  const timesCorrect =
-    Number(responseStats[0]?.timesCorrect ?? 0) + Number(feedStats[0]?.timesCorrect ?? 0);
-  const usedInGamesCount = Number(gameStats[0]?.usedInGamesCount ?? 0);
-
-  return {
-    timesAnswered,
-    timesCorrect,
-    correctRate: timesAnswered > 0 ? Math.round((timesCorrect / timesAnswered) * 100) : 0,
-    lastUsedAt: toIso(gameStats[0]?.lastUsedAt ?? null),
-    usedInGamesCount,
-  };
+  return mergeQuestionStats(ids, responseRows, feedRows, gameRows);
 }
 
-export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView> {
-  const stats = await readQuestionStats(row.id);
+async function readQuestionStats(questionId: string): Promise<QuestionStats> {
+  const stats = await readQuestionStatsForIds([questionId]);
+  return stats.get(questionId) ?? EMPTY_QUESTION_STATS;
+}
+
+export function buildQuestionView(row: QuestionViewRow, stats: QuestionStats): QuestionView {
   const domain = row.canonicalSubcategory ?? row.category;
   const createdAt = toIso(row.createdAt) ?? new Date().toISOString();
   const updatedAt = toIso(row.updatedAt) ?? createdAt;
@@ -275,6 +346,11 @@ export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView
     llmSuggestedAnswer: row.llmSuggestedAnswer ?? null,
     critiqueIterations: row.critiqueIterations ?? 0,
   };
+}
+
+export async function toQuestionView(row: QuestionViewRow): Promise<QuestionView> {
+  const stats = await readQuestionStats(row.id);
+  return buildQuestionView(row, stats);
 }
 
 export async function getQuestionsForUser(userId: string): Promise<QuestionView[]> {
