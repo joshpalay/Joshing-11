@@ -115,51 +115,65 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ));
 
     const newlyComplete = completion.userComplete && !beforeCompletion.userComplete;
-    const creator = await getSmsUser(existingView.game.creatorId);
-    const actor = await getSmsUser(session.userId);
-    const baseUrl = getBaseUrl(request);
+    const newlyAllComplete = completion.allComplete && !beforeCompletion.allComplete;
 
-    if (newlyComplete && !completion.allComplete) {
-      if (creator?.phoneNumber && creator.smsOptIn !== 'opted_out') {
-        const actorName = actor?.displayName?.trim() || 'Someone';
-        await sendSms(
-          creator.phoneNumber,
-          `${actorName} played ${existingView.game.title}. ${completion.completedUserIds.length} of ${existingView.recipients.length} have played. ${baseUrl}/games/${id}/summary`,
-          'joshing_game_progress',
-          creator.id,
-        );
-      }
+    // Creator notifications, the played-state feed flip, and the creator-facing
+    // activity rows are all downstream side effects — none of them feed the
+    // player's own response. Defer them to `after()` so the player isn't held
+    // behind Twilio round-trips and extra writes; the only thing gating their
+    // grade is the grade itself. The two SMS-user lookups run in parallel
+    // rather than back-to-back.
+    if (newlyComplete || newlyAllComplete) {
+      const baseUrl = getBaseUrl(request);
+      after(async () => {
+        const [creator, actor] = await Promise.all([
+          getSmsUser(existingView.game.creatorId),
+          getSmsUser(session.userId),
+        ]);
 
-      await writeActivity({
-        userId: existingView.game.creatorId,
-        type: 'joshing_game_progress',
-        actorUserId: session.userId,
-        referenceId: id,
-        referenceType: 'joshing_game',
-      });
-    }
+        if (newlyComplete && !completion.allComplete) {
+          if (creator?.phoneNumber && creator.smsOptIn !== 'opted_out') {
+            const actorName = actor?.displayName?.trim() || 'Someone';
+            await sendSms(
+              creator.phoneNumber,
+              `${actorName} played ${existingView.game.title}. ${completion.completedUserIds.length} of ${existingView.recipients.length} have played. ${baseUrl}/games/${id}/summary`,
+              'joshing_game_progress',
+              creator.id,
+            );
+          }
 
-    if (completion.allComplete && !beforeCompletion.allComplete) {
-      if (creator?.phoneNumber && creator.smsOptIn !== 'opted_out') {
-        await sendSms(
-          creator.phoneNumber,
-          `Everyone played ${existingView.game.title}. See the full results. ${baseUrl}/games/${id}/summary`,
-          'joshing_game_complete',
-          creator.id,
-        );
-      }
+          await writeActivity({
+            userId: existingView.game.creatorId,
+            type: 'joshing_game_progress',
+            actorUserId: session.userId,
+            referenceId: id,
+            referenceType: 'joshing_game',
+          });
+        }
 
-      await db
-        .update(feedItems)
-        .set({ state: 'played' })
-        .where(and(eq(feedItems.joshingGameId, id), eq(feedItems.sourceType, 'joshing_game')));
+        if (newlyAllComplete) {
+          if (creator?.phoneNumber && creator.smsOptIn !== 'opted_out') {
+            await sendSms(
+              creator.phoneNumber,
+              `Everyone played ${existingView.game.title}. See the full results. ${baseUrl}/games/${id}/summary`,
+              'joshing_game_complete',
+              creator.id,
+            );
+          }
 
-      await writeActivity({
-        userId: existingView.game.creatorId,
-        type: 'joshing_game_result',
-        actorUserId: session.userId,
-        referenceId: id,
-        referenceType: 'joshing_game',
+          await db
+            .update(feedItems)
+            .set({ state: 'played' })
+            .where(and(eq(feedItems.joshingGameId, id), eq(feedItems.sourceType, 'joshing_game')));
+
+          await writeActivity({
+            userId: existingView.game.creatorId,
+            type: 'joshing_game_result',
+            actorUserId: session.userId,
+            referenceId: id,
+            referenceType: 'joshing_game',
+          });
+        }
       });
     }
 

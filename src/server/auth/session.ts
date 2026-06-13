@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 
 import { db } from '@/server/db';
 import { userSessions } from '@/server/db/schema';
@@ -329,7 +330,12 @@ export async function validateSessionToken(
   return { user_id: session.userId, session_id: session.id };
 }
 
-export async function getSession(): Promise<Session | null> {
+// Request-scoped memoization: a single page render commonly resolves the session
+// several times (layout + page + nested server components), and each call hits
+// the DB via validateSessionToken. `cache` collapses those to one lookup per
+// request. It is request-scoped — the cookie can't change mid-request — so there
+// is no cross-request staleness; login/logout land on a fresh request.
+export const getSession = cache(async (): Promise<Session | null> => {
   const token = await getSessionToken();
   if (!token) return null;
 
@@ -340,7 +346,7 @@ export async function getSession(): Promise<Session | null> {
     id: session.session_id,
     userId: session.user_id,
   };
-}
+});
 
 /**
  * Delete the session (logout): remove from DB and clear cookie.
