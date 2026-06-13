@@ -111,6 +111,12 @@ export type CatchupQueueItem = {
    */
   authorName: string | null;
   /**
+   * Human author's `users.id`, so the recap can link the name to their profile
+   * (parity with the daily-five summary's `authorId`). Null for house/editorial
+   * and LLM-origin questions, which have no `users.id` to link to.
+   */
+  authorId: string | null;
+  /**
    * D-3: the author is the non-human house/editorial author. `authorName` is the
    * house name ('Joshing') and the client renders the persistent Editorial badge
    * with no relational copy. Set explicitly (not inferred from the name string).
@@ -617,6 +623,7 @@ async function getDailyCatchupItems(
           // generatedQuestions has no question_type column — factual by construction.
           questionType: 'factual',
           authorName: null, // daily-generated: LLM origin, no human author
+          authorId: null,
           authorIsHouse: false,
         } satisfies CatchupQuestion;
       }
@@ -657,6 +664,7 @@ async function getDailyCatchupItems(
         submittedAnswer: slot.submitted_answer ?? null,
         wasSkipped: Boolean(slot.skipped),
         questionType: question.questionType,
+        authorId: question.creatorId ?? null,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })
@@ -739,6 +747,7 @@ async function getFeedCatchupItems(
         submittedAnswer: feedItem.submittedAnswer ?? null,
         wasSkipped: false,
         questionType: question.questionType,
+        authorId: question.creatorId ?? null,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
       } satisfies CatchupQuestion;
     })

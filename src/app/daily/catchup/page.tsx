@@ -9,6 +9,8 @@ import { GameplayChatThread } from '@/components/play/GameplayChat';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import { ThreadCard } from '@/components/play/ThreadCard';
 import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCatchupFlow';
+import { AuthorName } from '@/components/AuthorName';
+import { EditorialBadge } from '@/components/EditorialBadge';
 import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
 
 export default function DailyCatchupPage() {
@@ -383,7 +385,11 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
           {record.authorName ? (
             <>
               <span aria-hidden="true"> · </span>
-              <span>by {record.authorName}</span>
+              <span>by </span>
+              {/* Parity with the daily-five summary: human authors link to their
+                  profile; house/editorial render plain text + the Editorial badge. */}
+              <AuthorName name={record.authorName} authorId={record.authorId} />
+              {record.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             </>
           ) : null}
         </p>
