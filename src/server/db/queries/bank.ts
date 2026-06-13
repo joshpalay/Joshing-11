@@ -3,7 +3,13 @@ import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { writeActivity } from '@/server/activity/write-activity';
 import { db, feedItems, joshingGameResponses, questions, userQuestionBank, users } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
-import { bankQuestionSelectColumns, type QuestionView, toQuestionView } from '@/server/db/queries/questions';
+import {
+  bankQuestionSelectColumns,
+  buildQuestionView,
+  EMPTY_QUESTION_STATS,
+  type QuestionView,
+  readQuestionStatsForIds,
+} from '@/server/db/queries/questions';
 
 export type BankContextType = 'feed' | 'joshing_game' | 'manual';
 
@@ -214,13 +220,20 @@ export async function getBankedQuestions(
     .where(and(...filters))
     .orderBy(desc(userQuestionBank.addedAt));
 
-  const answerersByQuestion = await getAnswerersForQuestions(
-    rows.map((row) => row.question.id),
-    userId,
-  );
+  const questionIds = rows.map((row) => row.question.id);
+  // Two batched lookups instead of per-row aggregate queries: the answerer rollup
+  // and all question stats (3 GROUP BY queries total via readQuestionStatsForIds)
+  // — avoids an N+1 that fired ~3 queries per banked question through the max-5 pool.
+  const [answerersByQuestion, statsByQuestion] = await Promise.all([
+    getAnswerersForQuestions(questionIds, userId),
+    readQuestionStatsForIds(questionIds),
+  ]);
 
-  return Promise.all(rows.map(async (row) => {
-    const view = await toQuestionView(row.question);
+  return rows.map((row) => {
+    const view = buildQuestionView(
+      row.question,
+      statsByQuestion.get(row.question.id) ?? EMPTY_QUESTION_STATS,
+    );
     const answerers = answerersByQuestion.get(row.question.id);
     return {
       ...view,
@@ -231,5 +244,5 @@ export async function getBankedQuestions(
       authorName: row.question.creatorId === userId ? 'You' : displayName(row.author.displayName),
       answerers: answerers && answerers.total > 0 ? answerers : undefined,
     };
-  }));
+  });
 }

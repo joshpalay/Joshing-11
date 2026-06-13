@@ -36,6 +36,8 @@ export type CatchupQueueItem = {
   difficultyEstimate?: 'accessible' | 'moderate' | 'specialist' | null;
   /** Human author's name, the house name ('Joshing'), or null for LLM-origin questions (rendered non-relationally). */
   authorName?: string | null;
+  /** Human author's `users.id`, so the recap can link the name to their profile. Null for house/LLM-origin. */
+  authorId?: string | null;
   /** D-3: the author is the non-human house/editorial author (renders the Editorial badge, no relational copy). */
   authorIsHouse?: boolean;
 };
@@ -97,6 +99,8 @@ export type CatchupBatchRecord = {
   explanation: string | null;
   domainDisplayName: string;
   authorName: string | null;
+  /** Human author's `users.id` for the recap profile link. Null for house/LLM-origin. */
+  authorId: string | null;
   authorIsHouse: boolean;
   /**
    * Author's "why I asked" commentary. The live thread defers this to keep its
@@ -451,6 +455,7 @@ export function useCatchupFlow() {
         explanation: item.explanation,
         domainDisplayName: item.domainDisplayName,
         authorName: item.authorName ?? null,
+        authorId: item.authorId ?? null,
         authorIsHouse: item.authorIsHouse ?? false,
         authorNote: null,
       });
@@ -652,6 +657,7 @@ export function useCatchupFlow() {
           explanation: data.explanation ?? data.explainer ?? item.explanation ?? null,
           domainDisplayName: item.domainDisplayName,
           authorName: item.authorName ?? null,
+          authorId: item.authorId ?? null,
           authorIsHouse: item.authorIsHouse ?? false,
           authorNote: data.creatorNote ?? null,
         });

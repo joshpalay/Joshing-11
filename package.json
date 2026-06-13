@@ -25,6 +25,8 @@
     "pool:health": "tsx scripts/pool-health.ts",
     "pool:embed-backfill": "tsx scripts/backfill-pool-embeddings.ts",
     "pool:embed-backfill:apply": "tsx scripts/backfill-pool-embeddings.ts --apply",
+    "knowledge:casing-backfill": "tsx scripts/backfill-domain-casing.ts",
+    "knowledge:casing-backfill:apply": "tsx scripts/backfill-domain-casing.ts --apply",
     "format": "node scripts/format-changed.mjs",
     "format:all": "prettier --write ."
   },

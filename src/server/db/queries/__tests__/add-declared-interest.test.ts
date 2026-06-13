@@ -69,11 +69,12 @@ describe('addDeclaredInterest', () => {
 
   it('re-categorizes an uncategorized new interest', async () => {
     categorizeInterestDomainMock.mockResolvedValue('Finance');
+    // The label is standardized to title case before categorization/persistence.
     const result = await addDeclaredInterest('user-1', { label: 'Mortgage backed securities' });
-    expect(categorizeInterestDomainMock).toHaveBeenCalledWith('Mortgage backed securities');
+    expect(categorizeInterestDomainMock).toHaveBeenCalledWith('Mortgage Backed Securities');
     expect(result).toEqual({
       created: true,
-      domain: 'Mortgage backed securities',
+      domain: 'Mortgage Backed Securities',
       broadCategory: 'Finance',
     });
   });

@@ -2,6 +2,8 @@
 
 import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 
+import { formatUsPhoneInput } from '@/lib/phone-e164';
+
 const INTEREST_PLACEHOLDERS = ['Sondheim', 'Mrs. Dalloway', '1980s Saturday morning cartoons'];
 
 const ERROR_COPY: Record<string, string> = {
@@ -322,11 +324,12 @@ export default function AddFriendInvite({
                 className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-xl border px-3 text-base transition outline-none focus:ring-2"
                 value={phone}
                 onChange={(event) => {
-                  setPhone(event.target.value);
+                  setPhone(formatUsPhoneInput(event.target.value));
                   if (error === ERROR_COPY.invalid_phone) setError(null);
                 }}
                 autoComplete="tel"
                 inputMode="tel"
+                maxLength={14}
                 placeholder="(555) 123-4567"
                 enterKeyHint="next"
               />

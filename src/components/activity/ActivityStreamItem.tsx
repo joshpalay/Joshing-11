@@ -317,11 +317,16 @@ export function ActivityStreamItem({
   const headlinePredicate = headlineActor
     ? trimLeadingPredicate(item.line.slice(1))
     : null;
-  // The "Play {first}'s q's" affordance names the friend whose questions the
-  // bundle opens — their first name, from the headline actor (or the expand).
-  const playFirstName =
-    headlineActor?.name.split(/\s+/)[0] ??
-    (expand?.kind === 'milestone' ? expand.friendName.split(/\s+/)[0] : null);
+  // The lower-right affordance is a bare verb that tracks the card's state. The
+  // friend's name already headlines the card directly above it, so the link
+  // doesn't re-state it — it lands on the action instead. "Play" while there are
+  // questions left to answer, "Revisit" once they're all answered (opening then
+  // only reveals the read-only AnsweredHistory — nothing left to play, only to
+  // look back at), and "Close" while the bundle is open (in step with the
+  // chevron flipping up).
+  const allAnswered =
+    !!milestoneProgress && milestoneProgress.answered >= milestoneProgress.total;
+  const playAffordanceLabel = open ? 'Close' : allAnswered ? 'Revisit' : 'Play';
 
   const containerStyle: CSSProperties = nested
     ? // Nested under a per-person heading: no border/fill, light padding.
@@ -331,9 +336,10 @@ export function ActivityStreamItem({
           padding: opened ? '16px 14px' : '14px',
           // The "From Friends" playable milestone cards share the elevated feed
           // fill token (defaults to the warm game-card cream) so the dev CARD
-          // COLOR cycler repaints them alongside the For You cards.
+          // COLOR cycler repaints them alongside the For You cards, and the same
+          // neutral hairline stroke as the Today's 5 card (no gold accent).
           background: 'var(--feed-card-elevated)',
-          border: '1px solid var(--accent-gold)',
+          border: '1px solid var(--brand-border)',
           borderRadius: 4,
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
         }
@@ -450,7 +456,7 @@ export function ActivityStreamItem({
                   textUnderlineOffset: 4,
                 }}
               >
-                {playFirstName ? `Play ${playFirstName}'s q's` : 'Play'}
+                {playAffordanceLabel}
                 <ChevronDown
                   size={16}
                   aria-hidden

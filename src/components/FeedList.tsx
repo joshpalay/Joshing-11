@@ -656,11 +656,15 @@ function FeedSurfaceTabs({
 // composer opens pre-filled (see app/questions/page.tsx). "Invite a friend"
 // survives as a secondary link so we don't lose that path.
 // The reader's typed idea rides to the composer via ?text=; an empty box still
-// opens the writer. Pure so the two branches stay test-covered without a DOM.
+// opens the writer. When an idea is supplied the reader has effectively already
+// "written" the question here, so we also pass &submit=1: the composer runs the
+// review + answer suggestion and saves it without a second Save click (see
+// QuestionForm's autoSubmit). An empty box opens the writer to fill in manually.
+// Pure so the branches stay test-covered without a DOM.
 export function buildQuestionWriterHref(idea: string): string {
   const trimmed = idea.trim()
   return trimmed
-    ? `/questions?create=1&intent=bank&text=${encodeURIComponent(trimmed)}`
+    ? `/questions?create=1&intent=bank&text=${encodeURIComponent(trimmed)}&submit=1`
     : '/questions?create=1&intent=bank'
 }
 
@@ -1986,6 +1990,16 @@ function FeedListContent({
             // section headings; the page header carries the one title.
             restRows.length > 0 ? (
               <Fragment key="texture">
+                {/* Quiet eyebrow over the ambient texture stream so it reads as
+                    its own zone under "From Friends" (and its "N more →"
+                    overflow), not a continuation of it. Budget-only: the
+                    pendingQueue subpages carry no texture and let their page
+                    header hold the one title. */}
+                {budget ? (
+                  <FeedSectionHeading unifiedHome={unifiedHome}>
+                    Recent activity
+                  </FeedSectionHeading>
+                ) : null}
                 {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
                 {/* §2 slot 5 (tuned 2026-06-12) — the one rotating panel per
                     load now runs as a mid-zone interlude after the lead texture

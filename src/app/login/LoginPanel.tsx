@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { AvatarChip } from '@/components/AvatarChip';
+import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
 const HANDLE_MIN = 3;
@@ -663,9 +664,10 @@ export default function LoginPanel({
             inputMode="tel"
             autoComplete="tel"
             className={INPUT_CLASS}
-            placeholder="555-123-4567"
+            placeholder="(555) 123-4567"
+            maxLength={14}
             value={phone}
-            onChange={(event) => setPhone(event.target.value.replace(/\D/g, ''))}
+            onChange={(event) => setPhone(formatUsPhoneInput(event.target.value))}
             disabled={loading}
           />
           <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
