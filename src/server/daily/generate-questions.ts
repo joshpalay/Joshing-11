@@ -43,6 +43,12 @@ import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interes
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { normalizeBroadCategory } from '@/server/questions/broad-category';
+import {
+  domainWeeklyCap,
+  isCustomDomainWeightingEnabled,
+  selectCustomDomainsForRound,
+} from '@/server/daily/domain-selection';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
@@ -488,7 +494,10 @@ function parseBaseQuestion(item: unknown): LlmQuestion | null {
   if (!item || typeof item !== 'object') return null;
   const rec = item as Record<string, unknown>;
   const canonical = asString(rec.canonical_subcategory);
-  const broad = asString(rec.broad_category);
+  // Fold drifting LLM broad-category synonyms to one canonical bucket (Change 3)
+  // at the single point all generated rows enter the system, so every downstream
+  // write (generated row, canonical Question, analytics) sees the stable label.
+  const broad = normalizeBroadCategory(asString(rec.broad_category));
   const questionText = asString(rec.question_text);
   const answer = asString(rec.answer);
   const explainer = asString(rec.explainer);
@@ -1397,7 +1406,6 @@ export async function generateDailyQuestions(
 }
 
 const DECLARED_DOMAIN_WEIGHT = 0.5;
-const DOMAIN_PER_WEEK_CAP = 5;
 
 /**
  * Order a custom-mode domain list least-recently-generated first.
@@ -1433,14 +1441,16 @@ function selectDiverseDomains(
   knowledgeBase: Awaited<ReturnType<typeof getKnowledgeBase>>,
   count: number,
   recentCounts: ReadonlyMap<string, number> = new Map(),
+  frequencyByDomain: Record<string, string> = {},
 ): string[] {
-  // Apply the soft cap: drop any domain that has already produced
-  // DOMAIN_PER_WEEK_CAP questions in the last 7 days. If every domain is
-  // over cap, fall back to the full set rather than starve the queue.
+  // Apply the soft cap: drop any domain that has already produced its
+  // frequency-scaled weekly quota of questions in the last 7 days (Change 2).
+  // Untagged domains keep the historic flat DOMAIN_PER_WEEK_CAP. If every domain
+  // is over cap, fall back to the full set rather than starve the queue.
   // recentCounts is keyed by domainKey() (see getRecentDomainCounts); fold the
   // KB domain to the same key so spelling variants share one weekly tally.
   const overCap = (d: { domain: string }): boolean =>
-    (recentCounts.get(domainKey(d.domain)) ?? 0) >= DOMAIN_PER_WEEK_CAP;
+    (recentCounts.get(domainKey(d.domain)) ?? 0) >= domainWeeklyCap(frequencyByDomain[d.domain]);
   const eligibleKb = knowledgeBase.some((d) => !overCap(d))
     ? knowledgeBase.filter((d) => !overCap(d))
     : knowledgeBase;
@@ -1448,7 +1458,7 @@ function selectDiverseDomains(
   // Group by broad category so we can pick one domain per category
   const byCategory = new Map<string, (typeof eligibleKb)[number][]>();
   for (const d of eligibleKb) {
-    const cat = d.broadCategory ?? 'General Knowledge';
+    const cat = normalizeBroadCategory(d.broadCategory) ?? 'General Knowledge';
     const arr = byCategory.get(cat) ?? [];
     arr.push(d);
     byCategory.set(cat, arr);
@@ -1543,23 +1553,36 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // Leading with the least-mined domains steers generation (and the bank-pick
     // pass, which walks this list in order) toward the picks that still have
     // unseen facts, keeping the queue full and the rotation honest.
-    const ordered = orderCustomDomainsByLeastRecent(
-      preferences.selectedDomains.filter((domain) => allDomains.includes(domain)),
-      recentDomainCounts,
-    );
+    const selectable = preferences.selectedDomains.filter((domain) => allDomains.includes(domain));
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
-    // Order most-wanted first so generation (which walks this list) favors them:
-    // 'often' leads, 'sometimes' (and unset) in the middle, 'blue_moon' trails so
-    // those domains are drawn least. 'resting' never reaches here — it's filtered
-    // out of selectedDomains upstream.
-    const frequencyRank = (domain: string) => {
-      const frequency = frequencyByDomain[domain];
-      if (frequency === 'often') return 0;
-      if (frequency === 'blue_moon') return 2;
-      return 1;
-    };
-    const weightedOrder = [...ordered].sort((a, b) => frequencyRank(a) - frequencyRank(b));
-    domainsForRound = weightedOrder.length > 0 ? weightedOrder : allDomains;
+    if (isCustomDomainWeightingEnabled()) {
+      // Change 1+2: deterministic, frequency-weighted, recency-aware sample of
+      // just the day's domains. Handing generation a SHORT palette (≈ count) is
+      // what stops the model gravitating to the fact-rich few and finally makes
+      // the 'often'/'sometimes'/'blue_moon' tags proportionally honored across
+      // days. Falls back to the full set inside the helper if the weekly cap
+      // would otherwise empty the palette.
+      const sampled = selectCustomDomainsForRound(
+        selectable,
+        frequencyByDomain,
+        recentDomainCounts,
+        count,
+      );
+      domainsForRound = sampled.length > 0 ? sampled : (selectable.length > 0 ? selectable : allDomains);
+    } else {
+      // Legacy path (CUSTOM_DOMAIN_WEIGHTING=0): order the WHOLE list least-recent
+      // first, then by frequency rank, and hand it all to generation. Kept as an
+      // instant, no-redeploy rollback for the weighted pick above.
+      const ordered = orderCustomDomainsByLeastRecent(selectable, recentDomainCounts);
+      const frequencyRank = (domain: string) => {
+        const frequency = frequencyByDomain[domain];
+        if (frequency === 'often') return 0;
+        if (frequency === 'blue_moon') return 2;
+        return 1;
+      };
+      const weightedOrder = [...ordered].sort((a, b) => frequencyRank(a) - frequencyRank(b));
+      domainsForRound = weightedOrder.length > 0 ? weightedOrder : allDomains;
+    }
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
@@ -1594,7 +1617,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
     domainsForRound = firstRunPlan.length > 0
       ? firstRunPlan
-      : selectDiverseDomains(eligibleKb, count, recentDomainCounts);
+      : selectDiverseDomains(eligibleKb, count, recentDomainCounts, frequencyByDomain);
   }
 
   const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
