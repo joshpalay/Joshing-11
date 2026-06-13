@@ -317,25 +317,16 @@ export function ActivityStreamItem({
   const headlinePredicate = headlineActor
     ? trimLeadingPredicate(item.line.slice(1))
     : null;
-  // The lower-right affordance names the friend whose questions the bundle
-  // opens — their first name, from the headline actor (or the expand).
-  const playFirstName =
-    headlineActor?.name.split(/\s+/)[0] ??
-    (expand?.kind === 'milestone' ? expand.friendName.split(/\s+/)[0] : null);
-  // The verb tracks the card's state: "Play" while there are still questions to
-  // answer, but "Revisit" once they're all answered — at that point opening the
-  // bundle only reveals the read-only AnsweredHistory, so there's nothing left
-  // to play, only to look back at. While the bundle is open the label becomes a
-  // plain "Close" affordance (in step with the chevron flipping up).
+  // The lower-right affordance is a bare verb that tracks the card's state. The
+  // friend's name already headlines the card directly above it, so the link
+  // doesn't re-state it — it lands on the action instead. "Play" while there are
+  // questions left to answer, "Revisit" once they're all answered (opening then
+  // only reveals the read-only AnsweredHistory — nothing left to play, only to
+  // look back at), and "Close" while the bundle is open (in step with the
+  // chevron flipping up).
   const allAnswered =
     !!milestoneProgress && milestoneProgress.answered >= milestoneProgress.total;
-  const playAffordanceLabel = open
-    ? 'Close'
-    : playFirstName
-      ? `${allAnswered ? 'Revisit' : 'Play'} ${playFirstName}'s q's`
-      : allAnswered
-        ? 'Revisit'
-        : 'Play';
+  const playAffordanceLabel = open ? 'Close' : allAnswered ? 'Revisit' : 'Play';
 
   const containerStyle: CSSProperties = nested
     ? // Nested under a per-person heading: no border/fill, light padding.
