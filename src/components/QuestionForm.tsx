@@ -40,6 +40,13 @@ type Props = {
   mode?: 'create' | 'edit';
   initialValues?: Partial<QuestionFormValues>;
   initialSpecificMode?: boolean;
+  // When true (create-mode only), a prefilled question is carried all the way
+  // through on its own: the form runs the review + answer suggestion and saves
+  // without waiting for a manual Continue/Save click. Used by the home feed's
+  // "what would you like to be asked?" prompt, where the reader has already
+  // "written" the question. Falls back to the manual flow if the review surfaces
+  // issues or the answer suggestion is unavailable.
+  autoSubmit?: boolean;
   onSubmit: (values: QuestionFormValues) => Promise<void>;
   submitLabel?: string;
   loadingLabel?: string;
@@ -269,6 +276,7 @@ export function QuestionForm({
   mode = 'create',
   initialValues,
   initialSpecificMode = false,
+  autoSubmit = false,
   onSubmit,
   submitLabel,
   loadingLabel = 'Saving...',
@@ -277,6 +285,11 @@ export function QuestionForm({
   const [state, dispatch] = useReducer(reducer, undefined, () => initialState(initialValues, initialSpecificMode));
   const questionRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSuggestionQuestionTextRef = useRef<string | null>(initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null);
+  // autoSubmit drives the form through review → suggestion → save on its own.
+  // These guards keep each leg firing exactly once: `started` kicks the review,
+  // `submitted` fires the save once an answer exists. Reset on every new prefill.
+  const autoSubmitStartedRef = useRef(false);
+  const autoSubmittedRef = useRef(false);
 
   // PRD §16.12: first-time-author orientation panel. Shown on the first
   // create-mode mount for an account that has never authored a non-deleted
@@ -298,6 +311,8 @@ export function QuestionForm({
 
   useEffect(() => {
     lastSuggestionQuestionTextRef.current = initialValues?.llmSuggestedAnswer ? (initialValues.text ?? '').trim() : null;
+    autoSubmitStartedRef.current = false;
+    autoSubmittedRef.current = false;
     dispatch({ type: 'RESET', state: initialState(initialValues, initialSpecificMode) });
   }, [initialValues, initialSpecificMode]);
 
@@ -473,6 +488,29 @@ export function QuestionForm({
     }
   }
 
+  // autoSubmit leg 1: kick the review once for the prefilled question. The
+  // existing ANSWERING effect then auto-requests the answer suggestion. If the
+  // review surfaces issues (CRITIQUED) we stop here and let the author decide —
+  // we don't silently save a flagged question.
+  useEffect(() => {
+    if (!autoSubmit || mode !== 'create' || autoSubmitStartedRef.current) return;
+    if (state.stage !== 'WRITING' || !state.questionText.trim()) return;
+    autoSubmitStartedRef.current = true;
+    void runCritique();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit, mode, state.stage, state.questionText]);
+
+  // autoSubmit leg 2: once we're answering and the suggested answer has landed,
+  // save without a manual click. The userAnswer guard means a failed suggestion
+  // (no answer) leaves the author in the normal manual flow rather than blocking.
+  useEffect(() => {
+    if (!autoSubmit || mode !== 'create' || autoSubmittedRef.current) return;
+    if (state.stage !== 'ANSWERING' || state.suggesting || !state.userAnswer.trim()) return;
+    autoSubmittedRef.current = true;
+    void finalSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit, mode, state.stage, state.suggesting, state.userAnswer]);
+
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
   const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
@@ -601,11 +639,6 @@ export function QuestionForm({
             <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Creator note</label>
             <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Optional context for recipients" />
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.creatorNote.length}/200</p>
-          </div>
-
-          <div className="rounded-md border bg-muted/30 p-3">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">AI classification</p>
-            <p className="mt-1 text-sm text-muted-foreground">Joshing will read the question and answer when you save, then use the LLM to choose the broad category, precise domain, and difficulty.</p>
           </div>
 
           {state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (

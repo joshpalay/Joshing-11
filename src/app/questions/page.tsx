@@ -21,7 +21,7 @@ type DrawerState =
   // intent is null for the page's own "Write a question" buttons (and the
   // legacy `?create=1` link), which keep the form's existing defaults. Only the
   // CreateChooser supplies an explicit intent.
-  | { mode: 'create'; intent: CreateIntent | null; prefillText?: string }
+  | { mode: 'create'; intent: CreateIntent | null; prefillText?: string; autoSubmit?: boolean }
   | { mode: 'edit'; question: QuestionView };
 
 function parseIntent(raw: string | null): CreateIntent | null {
@@ -152,6 +152,9 @@ function QuestionsPageContent() {
           // The feed's "what would you like to be asked?" prompt rides the idea
           // in via ?text= so the composer opens pre-filled with the reader's words.
           prefillText: searchParams.get('text')?.trim() || undefined,
+          // ?submit=1 (also from that prompt) tells the composer to run review +
+          // answer suggestion and save without a second Save click.
+          autoSubmit: searchParams.get('submit') === '1',
         }
       : { mode: 'closed' };
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -215,7 +218,7 @@ function QuestionsPageContent() {
   // this separate lets the FAB reopen the composer with a fresh ?create=1 push —
   // a same-URL push would otherwise be a no-op and leave the drawer closed.
   const clearComposerParams = useCallback(() => {
-    if (searchParams.has('create') || searchParams.has('intent') || searchParams.has('text')) {
+    if (searchParams.has('create') || searchParams.has('intent') || searchParams.has('text') || searchParams.has('submit')) {
       router.replace(pathname, { scroll: false });
     }
   }, [pathname, router, searchParams]);
@@ -504,6 +507,7 @@ function QuestionsPageContent() {
                 ? initialValues(drawer.question)
                 : { ...createFormProps(drawer.intent).initialValues, ...(drawer.prefillText ? { text: drawer.prefillText } : {}) }}
               initialSpecificMode={drawer.mode === 'create' ? createFormProps(drawer.intent).initialSpecificMode : undefined}
+              autoSubmit={drawer.mode === 'create' ? drawer.autoSubmit : undefined}
               onSubmit={drawer.mode === 'edit' ? (values) => saveEdit(drawer.question.id, values) : saveCreate}
               onCancel={closeDrawer}
             />
