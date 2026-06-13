@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 
+import { formatUsPhoneInput } from '@/lib/phone-e164'
+
 type FriendOption = {
   id: string
   displayName: string
@@ -348,10 +350,13 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                     <input
                       className="bg-background focus:border-foreground mt-2 h-12 w-full rounded-xl border px-3 text-base outline-none"
                       value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
+                      onChange={(event) =>
+                        setPhone(formatUsPhoneInput(event.target.value))
+                      }
                       placeholder="(555) 123-4567"
                       autoComplete="tel"
                       inputMode="tel"
+                      maxLength={14}
                     />
                   </label>
                 </div>

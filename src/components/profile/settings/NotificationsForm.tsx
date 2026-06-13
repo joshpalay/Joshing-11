@@ -7,7 +7,7 @@ import type { ReminderState } from '@/server/db/queries/account';
 
 type Props = {
   initialState: ReminderState;
-  maskedPhone: string;
+  phone: string;
 };
 
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -68,7 +68,7 @@ async function resendVerification(): Promise<{
   return { ok: true, errorMessage: null, retryAfterMs: null };
 }
 
-export function NotificationsForm({ initialState, maskedPhone }: Props) {
+export function NotificationsForm({ initialState, phone }: Props) {
   const [state, setState] = useState<ReminderState>(initialState);
   const [emailDraft, setEmailDraft] = useState(state.pendingEmail ?? '');
   const [savingEmail, setSavingEmail] = useState(false);
@@ -178,7 +178,7 @@ export function NotificationsForm({ initialState, maskedPhone }: Props) {
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               SMS notifications are coming soon — this functionality isn&apos;t
-              available yet. Once it&apos;s ready, we&apos;ll text {maskedPhone}{' '}
+              available yet. Once it&apos;s ready, we&apos;ll text {phone}{' '}
               when a new round opens.
             </p>
           </div>

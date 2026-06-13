@@ -23,7 +23,7 @@ import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow'
 import { AccountActions } from '@/components/profile/settings/AccountActions'
 import { NotificationsForm } from '@/components/profile/settings/NotificationsForm'
 import { PrivacyForm } from '@/components/profile/settings/PrivacyForm'
-import { maskPhone } from '@/components/profile/settings/phone-mask'
+import { formatUsPhoneInput } from '@/lib/phone-e164'
 import { getSession } from '@/server/auth/session'
 import {
   getDiscoverability,
@@ -274,7 +274,7 @@ export default async function UserProfilePage({
           </p>
           <NotificationsForm
             initialState={reminderState}
-            maskedPhone={maskPhone(reminderState.phoneNumber)}
+            phone={formatUsPhoneInput(reminderState.phoneNumber)}
           />
         </section>
 
