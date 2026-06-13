@@ -90,7 +90,8 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
       <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" elevated showTimestamp={false} />,
     );
     expect(html).toContain('var(--feed-card-elevated)'); // shared elevated fill token
-    expect(html).toContain('var(--accent-gold)'); // the gold accent stroke
+    expect(html).toContain('var(--brand-border)'); // neutral hairline stroke (matches Today's 5)
+    expect(html).not.toContain('var(--accent-gold)'); // no gold accent stroke
     expect(html).toContain('rgba(40, 32, 30, 0.1)'); // the soft drop shadow
   });
 

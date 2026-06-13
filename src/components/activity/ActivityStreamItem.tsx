@@ -331,9 +331,10 @@ export function ActivityStreamItem({
           padding: opened ? '16px 14px' : '14px',
           // The "From Friends" playable milestone cards share the elevated feed
           // fill token (defaults to the warm game-card cream) so the dev CARD
-          // COLOR cycler repaints them alongside the For You cards.
+          // COLOR cycler repaints them alongside the For You cards, and the same
+          // neutral hairline stroke as the Today's 5 card (no gold accent).
           background: 'var(--feed-card-elevated)',
-          border: '1px solid var(--accent-gold)',
+          border: '1px solid var(--brand-border)',
           borderRadius: 4,
           boxShadow: '0 4px 12px rgba(40, 32, 30, 0.1)',
         }
