@@ -41,6 +41,7 @@ type AuthUser = {
   displayName: string | null
   handle: string | null
   timezone: string
+  onboardingComplete: boolean
 }
 
 const USER_SELECTION = {
@@ -49,6 +50,12 @@ const USER_SELECTION = {
   displayName: users.displayName,
   handle: users.handle,
   timezone: users.timezone,
+  // Read the real onboarding state so the re-login session is minted with the
+  // correct `onb` claim. Without this every login minted onb:false and the
+  // first post-login GET / was bounced through the
+  // /api/auth/refresh-onboarding-claim route handler to re-mint the claim —
+  // a redirect hop that opened an intermittent 404 window on / (B-ROOT-404).
+  onboardingComplete: users.onboardingComplete,
 }
 
 async function findUserByPhone(
@@ -200,7 +207,7 @@ export async function POST(request: Request) {
 
       await createSession(existingUser.id, {
         invitationAccepted: true,
-        onboardingComplete: false,
+        onboardingComplete: existingUser.onboardingComplete,
       })
 
       return NextResponse.json({
@@ -210,7 +217,7 @@ export async function POST(request: Request) {
           display_name: existingUser.displayName,
           handle: existingUser.handle,
           timezone: existingUser.timezone,
-          onboardingComplete: false,
+          onboardingComplete: existingUser.onboardingComplete,
         },
         invitation: invitationResult,
       })
