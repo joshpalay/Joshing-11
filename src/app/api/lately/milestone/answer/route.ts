@@ -220,6 +220,12 @@ export async function POST(request: NextRequest) {
         })
         .onConflictDoNothing({
           target: [feedItems.recipientUserId, feedItems.sourceAnswerId],
+          // The unique index is PARTIAL (`... WHERE sourceAnswerId IS NOT NULL`),
+          // so the arbiter predicate must be repeated here or Postgres raises
+          // 42P10 ("no unique or exclusion constraint matching the ON CONFLICT
+          // specification") on every insert — which the catch above would
+          // swallow, silently dropping every milestone miss from catch-up.
+          where: sql`${feedItems.sourceAnswerId} IS NOT NULL`,
         });
     } catch (error) {
       console.warn('[lately/milestone/answer] failed to write catch-up feed item', {
