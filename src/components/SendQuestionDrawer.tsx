@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Send, X } from 'lucide-react';
+import { Check, Search, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export type SendableQuestion = {
@@ -23,7 +23,7 @@ type SendQuestionDrawerProps = {
 
 export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQuestionDrawerProps) {
   const [users, setUsers] = useState<UserOption[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -63,7 +63,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
   if (prevIsOpen !== isOpen) {
     setPrevIsOpen(isOpen);
     if (!isOpen) {
-      setSelectedId(null);
+      setSelectedIds([]);
       setSearch('');
       setMessage('');
       setError(null);
@@ -81,36 +81,71 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
     return users.filter((user) => !query || user.displayName.toLowerCase().includes(query));
   }, [search, users]);
 
-  const selectedUser = users.find((user) => user.id === selectedId) ?? null;
+  const selectedUsers = users.filter((user) => selectedIds.includes(user.id));
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((existing) => existing !== id) : [...current, id],
+    );
+  }, []);
 
   const sendQuestion = useCallback(async () => {
-    if (!selectedId) return;
+    if (selectedIds.length === 0) return;
     setSending(true);
     setError(null);
-    try {
-      const response = await fetch('/api/questions/send', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          questionId: question.id,
-          recipientUserId: selectedId,
-          personalMessage: message.trim() || undefined,
-        }),
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message ?? body?.error ?? 'Could not send that question.');
-      }
-      setToast('Sent ✓');
+
+    // The send API takes one recipient per call, so fan out one request per
+    // selected friend. Settle them all so a single failure (e.g. that friend
+    // already has the question) doesn't drop the others.
+    const recipients = users.filter((user) => selectedIds.includes(user.id));
+    const results = await Promise.allSettled(
+      recipients.map(async (recipient) => {
+        const response = await fetch('/api/questions/send', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            questionId: question.id,
+            recipientUserId: recipient.id,
+            personalMessage: message.trim() || undefined,
+          }),
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.message ?? body?.error ?? `Could not send to ${recipient.displayName}.`);
+        }
+      }),
+    );
+
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [{ id: recipients[index].id, name: recipients[index].displayName, reason: result.reason instanceof Error ? result.reason.message : 'Could not send that question.' }]
+        : [],
+    );
+    const sentCount = results.length - failures.length;
+
+    setSending(false);
+
+    if (sentCount > 0) {
       onSent?.();
-      onClose();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not send that question.');
-    } finally {
-      setSending(false);
     }
-  }, [message, onClose, onSent, question.id, selectedId]);
+
+    if (failures.length === 0) {
+      setToast(sentCount > 1 ? `Sent to ${sentCount} people ✓` : 'Sent ✓');
+      onClose();
+      return;
+    }
+
+    // Some sends failed. Keep the drawer open so the user can see what happened,
+    // and drop the recipients that did go through from the selection.
+    const failedIds = new Set(failures.map((failure) => failure.id));
+    setSelectedIds((current) => current.filter((id) => failedIds.has(id)));
+    setError(
+      sentCount > 0
+        ? `Sent to ${sentCount} of ${results.length}. ${failures.map((failure) => `${failure.name}: ${failure.reason}`).join(' ')}`
+        : failures.map((failure) => `${failure.name}: ${failure.reason}`).join(' '),
+    );
+  }, [message, onClose, onSent, question.id, selectedIds, users]);
 
   if (!isOpen) {
     return toast ? (
@@ -156,19 +191,23 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
                 ) : filteredUsers.length === 0 ? (
                   <p className="p-4 text-sm text-muted-foreground">No people found.</p>
                 ) : (
-                  filteredUsers.map((user) => (
-                    <button
-                      key={user.id}
-                      type="button"
-                      className="flex w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 hover:bg-muted/60"
-                      onClick={() => setSelectedId(user.id)}
-                    >
-                      <span className="inline-flex size-4 items-center justify-center rounded-full border border-primary">
-                        {selectedId === user.id ? <span className="size-2 rounded-full bg-primary" /> : null}
-                      </span>
-                      <span className="text-sm font-medium">{user.displayName}</span>
-                    </button>
-                  ))
+                  filteredUsers.map((user) => {
+                    const isSelected = selectedIds.includes(user.id);
+                    return (
+                      <button
+                        key={user.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 hover:bg-muted/60"
+                        onClick={() => toggleSelected(user.id)}
+                        aria-pressed={isSelected}
+                      >
+                        <span className={`inline-flex size-4 items-center justify-center rounded border ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary'}`}>
+                          {isSelected ? <Check className="size-3" strokeWidth={3} /> : null}
+                        </span>
+                        <span className="text-sm font-medium">{user.displayName}</span>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -194,11 +233,15 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
             <button
               className="btn-primary inline-flex h-11 w-full items-center justify-center gap-2"
               type="button"
-              disabled={!selectedId || sending}
+              disabled={selectedIds.length === 0 || sending}
               onClick={() => void sendQuestion()}
             >
               <Send className="size-4" />
-              {selectedUser ? `Send to ${selectedUser.displayName}` : 'Send'}
+              {selectedUsers.length === 1
+                ? `Send to ${selectedUsers[0].displayName}`
+                : selectedUsers.length > 1
+                  ? `Send to ${selectedUsers.length} people`
+                  : 'Send'}
             </button>
           </footer>
         </aside>
