@@ -19,6 +19,7 @@ import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { titleCaseDomain } from '@/lib/knowledge/domain-casing';
 import { pgErrorCode } from '@/server/db/pg-error';
 import type { MasteryTier } from '@/types/db';
 
@@ -193,11 +194,10 @@ const STREAK_TIME_ZONE = 'America/New_York';
 const FRIEND_MEDIATED_CONTEXTS = ['feed', 'joshing_game'];
 
 function displayNameForDomain(domain: string): string {
-  return domain
-    .trim()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  // Standardize capitalization at render time so legacy rows stored with messy
+  // casing ("russian literature", "90's HIP HOP") display consistently, the same
+  // way newly-written labels are normalized in normalizeDeclaredInterest.
+  return titleCaseDomain(domain);
 }
 
 function percent(value: number): number {

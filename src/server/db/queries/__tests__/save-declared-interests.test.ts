@@ -65,25 +65,28 @@ describe('saveDeclaredInterests categorization backstop', () => {
     expect(result).toEqual([{ label: 'Jazz', broadCategory: 'Music', description: null }]);
   });
 
+  // Labels are standardized to title case by normalizeDeclaredInterest before
+  // categorization, so both the categorizer call and the persisted label use the
+  // canonical casing regardless of how the interest was typed.
   it('re-categorizes a "General Knowledge" catch-all instead of persisting it', async () => {
     categorizeInterestDomainMock.mockResolvedValue('Music');
     const result = await saveDeclaredInterests('user-1', [
       { label: 'Romantic Era Classical symphony music', broadCategory: 'General Knowledge' },
     ]);
     expect(categorizeInterestDomainMock).toHaveBeenCalledWith(
-      'Romantic Era Classical symphony music',
+      'Romantic Era Classical Symphony Music',
     );
     expect(result).toEqual([
-      { label: 'Romantic Era Classical symphony music', broadCategory: 'Music', description: null },
+      { label: 'Romantic Era Classical Symphony Music', broadCategory: 'Music', description: null },
     ]);
   });
 
   it('re-categorizes a missing broad category', async () => {
     categorizeInterestDomainMock.mockResolvedValue('Finance');
     const result = await saveDeclaredInterests('user-1', [{ label: 'Mortgage backed securities' }]);
-    expect(categorizeInterestDomainMock).toHaveBeenCalledWith('Mortgage backed securities');
+    expect(categorizeInterestDomainMock).toHaveBeenCalledWith('Mortgage Backed Securities');
     expect(result).toEqual([
-      { label: 'Mortgage backed securities', broadCategory: 'Finance', description: null },
+      { label: 'Mortgage Backed Securities', broadCategory: 'Finance', description: null },
     ]);
   });
 
@@ -92,9 +95,9 @@ describe('saveDeclaredInterests categorization backstop', () => {
     const result = await saveDeclaredInterests('user-1', [
       { label: "90's ballywood", broadCategory: 'Other' },
     ]);
-    expect(categorizeInterestDomainMock).toHaveBeenCalledWith("90's ballywood");
+    expect(categorizeInterestDomainMock).toHaveBeenCalledWith("90's Ballywood");
     expect(result).toEqual([
-      { label: "90's ballywood", broadCategory: 'Film & Television', description: null },
+      { label: "90's Ballywood", broadCategory: 'Film & Television', description: null },
     ]);
   });
 

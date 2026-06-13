@@ -16,6 +16,7 @@ import {
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
 import { LLM_QUESTION_ATTRIBUTION, resolveAuthorDisplay } from '@/lib/questions-types';
+import { titleCaseDomain } from '@/lib/knowledge/domain-casing';
 
 export type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
 export type ArchiveResultFilter = 'correct' | 'incorrect' | 'skipped';
@@ -78,11 +79,7 @@ function asQueueSlots(value: unknown): QueueSlot[] {
 }
 
 function displayNameForDomain(domain: string): string {
-  return domain
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'General';
+  return titleCaseDomain(domain) || 'General';
 }
 
 function questionDomain(question: typeof questions.$inferSelect | null | undefined): string {
