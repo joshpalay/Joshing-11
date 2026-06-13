@@ -13,6 +13,10 @@ export type SendEmailParams = {
   subject: string;
   html: string;
   text: string;
+  // Optional extra SMTP headers, forwarded to Resend verbatim. Used to set
+  // List-Unsubscribe / List-Unsubscribe-Post (RFC 8058 one-click) on bulk
+  // reminder emails.
+  headers?: Record<string, string>;
 };
 
 export type SendEmailResult =
@@ -45,6 +49,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         subject: params.subject,
         html: params.html,
         text: params.text,
+        ...(params.headers ? { headers: params.headers } : {}),
       }),
     });
 

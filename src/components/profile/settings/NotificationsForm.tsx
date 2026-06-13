@@ -286,7 +286,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
         ) : null}
         {hasVerifiedEmail && emailOn ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Saved. Emails will start when reminders launch.
+            On. We&apos;ll email you each day when your five are ready.
           </p>
         ) : null}
         {resendNotice ? (
@@ -298,8 +298,8 @@ export function NotificationsForm({ initialState, phone }: Props) {
       </section>
 
       <p className="text-xs text-muted-foreground">
-        Daily reminders aren&apos;t sending yet — we&apos;re still wiring up message delivery.
-        Verifying your email now means you&apos;ll be ready as soon as they launch.
+        Once your email is confirmed and reminders are on, we&apos;ll send a daily
+        nudge when your five are ready — with a no-spoiler peek at the first question.
       </p>
     </div>
   );

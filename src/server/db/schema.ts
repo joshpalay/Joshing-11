@@ -575,6 +575,10 @@ export const emailVerificationTokens = pgTable(
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    // When true, confirming this token also flips emailOptIn → 'opted_in'
+    // (the onboarding beat captures the user's intent up front). Profile-issued
+    // tokens leave this false: verifying only confirms the address there.
+    optInOnConfirm: boolean('opt_in_on_confirm').notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [

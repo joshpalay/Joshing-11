@@ -7,8 +7,11 @@ import { Loader2, X } from 'lucide-react'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
-// optional expander there; the cultural-anchor/background step was removed).
-type CurrentStep = 'display-name' | 'handle' | 'review'
+// optional expander there; the cultural-anchor/background step was removed) →
+// an optional daily-reminder email opt-in. The reminders beat is post-
+// completion bonus: picking areas already marks onboarding complete and starts
+// question generation, so the email ask never blocks finishing.
+type CurrentStep = 'display-name' | 'handle' | 'review' | 'reminders'
 
 export type WarmupAnswers = {
   deepDive?: string
@@ -86,7 +89,10 @@ const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
   { step: 'display-name', label: 'Name' },
   { step: 'handle', label: 'Handle' },
   { step: 'review', label: 'Areas' },
+  { step: 'reminders', label: 'Reminders' },
 ]
+
+const REMINDER_EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const MIN_INTERESTS = 3
 // Onboarding caps the starting-areas selection at 12 (per product spec). The cap
@@ -257,6 +263,11 @@ export default function OnboardingFlow({
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingCopyIndex, setLoadingCopyIndex] = useState(0)
+  const [reminderEmail, setReminderEmail] = useState('')
+  const [savingReminderEmail, setSavingReminderEmail] = useState(false)
+  const [reminderError, setReminderError] = useState<string | null>(null)
+  // null = not yet submitted; true/false = whether the confirmation email sent.
+  const [reminderSent, setReminderSent] = useState<boolean | null>(null)
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
@@ -629,11 +640,10 @@ export default function OnboardingFlow({
       }
 
       // Kick off first-round generation in the background so it's ready (or
-      // nearly) when the player lands in /daily, then take them straight into
-      // gameplay instead of the homepage. keepalive lets the POST survive the
-      // client navigation; the queue route is idempotent, so /daily's own load
-      // won't double-generate. A freshly-declared interest list guarantees a
-      // knowledge base, so /daily won't bounce to setup.
+      // nearly) when the player lands in /daily. keepalive lets the POST survive
+      // the client navigation; the queue route is idempotent, so /daily's own
+      // load won't double-generate. A freshly-declared interest list guarantees
+      // a knowledge base, so /daily won't bounce to setup.
       void fetch('/api/daily/queue', {
         method: 'POST',
         credentials: 'include',
@@ -641,11 +651,56 @@ export default function OnboardingFlow({
         keepalive: true,
       }).catch(() => {})
 
-      router.push('/daily')
+      // Onboarding is now complete (save-interests set the flag). Advance to the
+      // optional daily-reminder beat rather than jumping straight to /daily —
+      // skipping or submitting there both land in gameplay.
+      setCurrentStep('reminders')
     } catch {
       setError('Unable to save interests.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  function finishOnboarding() {
+    router.push('/daily')
+  }
+
+  async function submitReminderEmail() {
+    const trimmed = reminderEmail.trim()
+    if (!REMINDER_EMAIL_FORMAT.test(trimmed)) {
+      setReminderError('Enter a valid email address.')
+      return
+    }
+
+    setReminderError(null)
+    setSavingReminderEmail(true)
+
+    try {
+      const response = await fetch('/api/onboarding/email-reminder', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || data?.ok !== true) {
+        setReminderError(
+          typeof data?.message === 'string'
+            ? data.message
+            : "We couldn't save that email. Try again.",
+        )
+        return
+      }
+
+      // Address saved either way; data.sent tells us whether the confirm email
+      // actually went out (provider hiccups still let onboarding finish).
+      setReminderSent(data.sent === true)
+    } catch {
+      setReminderError("We couldn't save that email. Try again.")
+    } finally {
+      setSavingReminderEmail(false)
     }
   }
 
@@ -939,6 +994,91 @@ export default function OnboardingFlow({
                   {isLoading ? 'Saving…' : startCtaCopy(selectedInterests.length)}
                 </button>
               </div>
+            </div>
+          ) : null}
+
+          {currentStep === 'reminders' ? (
+            <div className="flex flex-1 flex-col justify-center gap-8">
+              {reminderSent === null ? (
+                <>
+                  <StepHeader
+                    title="Want a daily nudge?"
+                    subtitle="New questions land every day. Drop your email and we'll send a daily reminder — with a no-spoiler peek at your first question — so you never miss a round."
+                  />
+
+                  <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      if (!savingReminderEmail) void submitReminderEmail()
+                    }}
+                  >
+                    <label className="block">
+                      <span className="text-sm font-medium">Your email</span>
+                      <input
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                        placeholder="you@example.com"
+                        autoFocus
+                        value={reminderEmail}
+                        onChange={(event) => {
+                          setReminderEmail(event.target.value)
+                          if (reminderError) setReminderError(null)
+                        }}
+                      />
+                    </label>
+
+                    <p className="text-muted-foreground text-sm">
+                      We&apos;ll send one confirmation link to make sure it&apos;s
+                      you — reminders switch on the moment you tap it. Unsubscribe
+                      any time.
+                    </p>
+
+                    {reminderError ? (
+                      <p className="text-destructive text-sm">{reminderError}</p>
+                    ) : null}
+
+                    <button
+                      type="submit"
+                      className="btn-primary h-12 w-full"
+                      disabled={
+                        savingReminderEmail ||
+                        !REMINDER_EMAIL_FORMAT.test(reminderEmail.trim())
+                      }
+                    >
+                      {savingReminderEmail ? 'Sending…' : 'Send confirmation & finish'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost h-12 w-full"
+                      onClick={finishOnboarding}
+                      disabled={savingReminderEmail}
+                    >
+                      Skip for now
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="flex flex-1 flex-col justify-center gap-8">
+                  <StepHeader
+                    title={reminderSent ? 'Check your inbox' : "You're all set"}
+                    subtitle={
+                      reminderSent
+                        ? `We sent a confirmation link to ${reminderEmail.trim()}. Tap it and your daily reminders switch on automatically — no need to wait here.`
+                        : "We saved your email but couldn't send the confirmation just now. You can resend it any time from your profile."
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary h-12 w-full"
+                    onClick={finishOnboarding}
+                  >
+                    Start today&apos;s five
+                  </button>
+                </div>
+              )}
             </div>
           ) : null}
 

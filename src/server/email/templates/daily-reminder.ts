@@ -20,6 +20,13 @@ export type DailyReminderTemplateParams = {
    * built slot carries no reveal yet. Absent → the section is omitted.
    */
   teaser?: { questionText: string; domain?: string | null } | null;
+  /**
+   * Signed, session-less unsubscribe URL (see unsubscribe-token.ts). Rendered
+   * as the footer one-click opt-out and mirrored into the List-Unsubscribe
+   * header by the caller. Falls back to "turn off in profile settings" copy
+   * when absent (e.g. a preview send without a real recipient).
+   */
+  unsubscribeUrl?: string | null;
 };
 
 // Ink-on-Cream palette (mirrors verify-email.ts and the in-app design system).
@@ -54,7 +61,8 @@ export function buildDailyReminderTemplate(params: DailyReminderTemplateParams):
   html: string;
   text: string;
 } {
-  const { dailyUrl, interestsUrl, topics, activity, teaser } = params;
+  const { dailyUrl, interestsUrl, topics, activity, teaser, unsubscribeUrl } = params;
+  const unsubUrl = unsubscribeUrl?.trim() || null;
 
   const cleanTopics = topics.map((t) => t.trim()).filter(Boolean);
   const cleanActivity = (activity ?? []).map((a) => a.trim()).filter(Boolean).slice(0, 3);
@@ -64,8 +72,8 @@ export function buildDailyReminderTemplate(params: DailyReminderTemplateParams):
 
   return {
     subject,
-    text: buildText({ dailyUrl, interestsUrl, topics: cleanTopics, activity: cleanActivity, teaserText }),
-    html: buildHtml({ dailyUrl, interestsUrl, topics: cleanTopics, activity: cleanActivity, teaserText }),
+    text: buildText({ dailyUrl, interestsUrl, topics: cleanTopics, activity: cleanActivity, teaserText, unsubUrl }),
+    html: buildHtml({ dailyUrl, interestsUrl, topics: cleanTopics, activity: cleanActivity, teaserText, unsubUrl }),
   };
 }
 
@@ -75,8 +83,9 @@ function buildText(params: {
   topics: string[];
   activity: string[];
   teaserText: string | null;
+  unsubUrl: string | null;
 }): string {
-  const { dailyUrl, interestsUrl, topics, activity, teaserText } = params;
+  const { dailyUrl, interestsUrl, topics, activity, teaserText, unsubUrl } = params;
   const lines: string[] = [
     'Joshing',
     '',
@@ -109,7 +118,9 @@ function buildText(params: {
     `Play today’s five: ${dailyUrl}`,
     '',
     FOOTER_LINE,
-    'You can turn these reminders off any time from your profile settings.',
+    unsubUrl
+      ? `Don’t want these? Unsubscribe: ${unsubUrl}`
+      : 'You can turn these reminders off any time from your profile settings.',
   );
 
   return lines.join('\n');
@@ -121,8 +132,9 @@ function buildHtml(params: {
   topics: string[];
   activity: string[];
   teaserText: string | null;
+  unsubUrl: string | null;
 }): string {
-  const { dailyUrl, interestsUrl, topics, activity, teaserText } = params;
+  const { dailyUrl, interestsUrl, topics, activity, teaserText, unsubUrl } = params;
 
   const topicsBlock =
     topics.length > 0
@@ -187,7 +199,11 @@ function buildHtml(params: {
               <td style="font-family:${SERIF};font-size:14px;line-height:1.6;color:${INK_SOFT};padding-top:8px;padding-bottom:10px;">${FOOTER_LINE}</td>
             </tr>
             <tr>
-              <td style="font-family:${SANS};font-size:12px;line-height:1.55;color:${INK_FAINT};">You can turn these reminders off any time from your profile settings.</td>
+              <td style="font-family:${SANS};font-size:12px;line-height:1.55;color:${INK_FAINT};">${
+                unsubUrl
+                  ? `Don’t want these emails? <a href="${unsubUrl}" style="color:${INK_FAINT};text-decoration:underline;">Unsubscribe</a> — or manage reminders in your profile settings.`
+                  : 'You can turn these reminders off any time from your profile settings.'
+              }</td>
             </tr>
           </table>
         </td>
