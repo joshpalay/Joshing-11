@@ -120,7 +120,11 @@ function answerFailureMessage(body: FailedAnswerResponse | null): string {
 // state with the attempt counter (the server has already burned its own
 // internal top-up rounds by the time we see this, so these are fresh attempts).
 const MAX_QUEUE_CREATE_ATTEMPTS = 4;
-const QUEUE_CREATE_BACKOFF_MS = [2000, 4000, 8000];
+// Each retry re-runs a full synchronous generation pass (seconds of real work),
+// so the inter-attempt sleep only needs to debounce transient low-yield rounds,
+// not wait out a long backend job. Halved from the old [2000, 4000, 8000] (14s of
+// pure dead time worst-case) to a gentler 1→2→4s ramp.
+const QUEUE_CREATE_BACKOFF_MS = [1000, 2000, 4000];
 
 // Shown after the auto-retries are exhausted — kept warm and retryable rather
 // than alarming, since the most common cause is slow generation, not a fault.
@@ -231,6 +235,7 @@ export default function DailyPage() {
         // "still working" state. 409 (no_knowledge_base) means the user
         // genuinely has nothing to generate from — that's terminal; send them
         // to setup rather than retrying.
+        let createdQueue: QueueResponse | null = null;
         for (let attempt = 1; attempt <= MAX_QUEUE_CREATE_ATTEMPTS; attempt += 1) {
           setGeneratingAttempt(attempt);
           const createResponse = await fetch('/api/daily/queue', {
@@ -238,7 +243,13 @@ export default function DailyPage() {
             credentials: 'include',
             cache: 'no-store',
           });
-          if (createResponse.ok) break;
+          // A successful POST already returns the fully-built queue (the same
+          // serializeQueue shape as GET), so capture it and skip the follow-up
+          // GET round-trip entirely.
+          if (createResponse.ok) {
+            createdQueue = (await createResponse.json().catch(() => null)) as QueueResponse | null;
+            break;
+          }
 
           const createBody = await createResponse.json().catch(() => null);
           if (createResponse.status === 409) {
@@ -263,26 +274,19 @@ export default function DailyPage() {
           );
         }
         setGeneratingAttempt(null);
-        const refetchResponse = await fetch('/api/daily/queue', {
-          cache: 'no-store',
-          credentials: 'include',
-        });
-        const refetchBody = await refetchResponse.json().catch(() => null);
-        if (!refetchResponse.ok) {
-          throw new Error(refetchBody?.message ?? 'Could not load today.');
-        }
-        if (!refetchBody?.queue_id) {
+
+        if (!createdQueue?.queue_id) {
           setQueue(null);
           setLoading(false);
           return;
         }
-        const refetchSlots = Array.isArray(refetchBody.slots) ? refetchBody.slots : [];
+        const createdSlots = Array.isArray(createdQueue.slots) ? createdQueue.slots : [];
         setQueue({
-          queue_id: refetchBody.queue_id,
-          queue_date: refetchBody.queue_date,
-          slots: refetchSlots,
+          queue_id: createdQueue.queue_id,
+          queue_date: createdQueue.queue_date,
+          slots: createdSlots,
         });
-        maybeShowFirstRunIntro(refetchBody.is_first_daily);
+        maybeShowFirstRunIntro(createdQueue.is_first_daily);
         setLoading(false);
         return;
       }
