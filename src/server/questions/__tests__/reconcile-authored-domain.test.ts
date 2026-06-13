@@ -93,18 +93,14 @@ describe('reconcileAuthoredDomain', () => {
     expect(outcome.method).toBe('none');
   });
 
-  it('defaults the RECONCILE_AUTHORED_DOMAINS flag ON (Phase 2), with explicit falsey opt-out', () => {
-    // Graduated to default-on: unset / empty / any non-falsey value enables.
+  it('reads the RECONCILE_AUTHORED_DOMAINS flag with the repo boolean convention', () => {
     vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', '');
-    expect(isReconcileAuthoredDomainsEnabled()).toBe(true);
-    for (const truthy of ['true', '1', 'yes', 'on', 'TRUE', 'anything']) {
+    expect(isReconcileAuthoredDomainsEnabled()).toBe(false);
+    for (const truthy of ['true', '1', 'yes', 'on', 'TRUE']) {
       vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', truthy);
       expect(isReconcileAuthoredDomainsEnabled()).toBe(true);
     }
-    // Only an explicit falsey value disables (the production revert lever).
-    for (const falsey of ['false', '0', 'no', 'off', 'FALSE']) {
-      vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', falsey);
-      expect(isReconcileAuthoredDomainsEnabled()).toBe(false);
-    }
+    vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', 'false');
+    expect(isReconcileAuthoredDomainsEnabled()).toBe(false);
   });
 });
