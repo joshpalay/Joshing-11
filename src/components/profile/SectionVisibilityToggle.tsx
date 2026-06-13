@@ -26,6 +26,11 @@ type Props = {
   // instead of sizing to content. Useful when the toggle is stacked
   // below a label rather than placed inline beside it.
   fullWidth?: boolean;
+  // Optional per-scope helper micro-copy. When provided, the line for the
+  // currently-selected scope renders under the pill row so the player can see
+  // what each choice exposes. Tracks the optimistic local state, so it updates
+  // the instant a scope is tapped.
+  help?: Record<SectionVisibility, string>;
 };
 
 // Generalization of DomainVisibilityToggle (which is per-knowledge-domain).
@@ -40,6 +45,7 @@ export function SectionVisibilityToggle({
   onSaved,
   size = 'default',
   fullWidth = false,
+  help,
 }: Props) {
   const [visibility, setVisibility] = useState<SectionVisibility>(initialVisibility);
   const [isSaving, setIsSaving] = useState(false);
@@ -100,6 +106,7 @@ export function SectionVisibilityToggle({
           </button>
         ))}
       </div>
+      {help ? <p className="mt-1.5 text-xs text-muted-foreground">{help[visibility]}</p> : null}
       {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   );
