@@ -58,6 +58,20 @@ describe('titleCaseDomain', () => {
     expect(titleCaseDomain('ios development')).toBe('iOS Development');
   });
 
+  it('capitalizes a proper noun that follows leading punctuation (parens, quotes)', () => {
+    // Regression: capitalizeChunk previously lowercased the first letter when a
+    // token was led by punctuation, mangling "(Verdi" -> "(verdi".
+    expect(titleCaseDomain('19th-Century Italian Opera (Verdi & Puccini Era)')).toBe(
+      '19th-Century Italian Opera (Verdi & Puccini Era)',
+    );
+    expect(titleCaseDomain('Oklahoma! (Rodgers & Hammerstein Musical)')).toBe(
+      'Oklahoma! (Rodgers & Hammerstein Musical)',
+    );
+    expect(titleCaseDomain('the simpsons (seasons 1-10)')).toBe('The Simpsons (Seasons 1-10)');
+    // A digit-led chunk inside parens still stays lowercase past the digit.
+    expect(titleCaseDomain('playlists (90s edition)')).toBe('Playlists (90s Edition)');
+  });
+
   it('collapses whitespace and underscores', () => {
     expect(titleCaseDomain('  space   exploration ')).toBe('Space Exploration');
     expect(titleCaseDomain('space_exploration')).toBe('Space Exploration');

@@ -139,12 +139,17 @@ function isAcronymToken(token: string): boolean {
 
 // Title-case a single hyphen-free, space-free chunk: capitalize the first letter
 // and lowercase the rest. Chunks that start with a digit ("90s", "1990s") keep
-// their trailing letters lowercase rather than producing "90S".
+// their trailing letters lowercase rather than producing "90S". Chunks led by
+// punctuation ("(Verdi", quotes) still capitalize their first letter — only a
+// DIGIT before the first letter suppresses capitalization.
 function capitalizeChunk(chunk: string): string {
   const lower = chunk.toLowerCase();
   const firstLetter = lower.search(/[a-z]/);
-  if (firstLetter !== 0) return lower; // pure digits/symbols, or digit-led ("90s")
-  return lower[0].toUpperCase() + lower.slice(1);
+  if (firstLetter < 0) return lower; // no letters at all (pure digits/symbols)
+  // A digit anywhere before the first letter means a decade-/number-led chunk
+  // ("90s", "1990s") — keep it lowercase. Leading punctuation does not.
+  if (/\d/.test(lower.slice(0, firstLetter))) return lower;
+  return lower.slice(0, firstLetter) + lower[firstLetter].toUpperCase() + lower.slice(firstLetter + 1);
 }
 
 type Position = 'first' | 'last' | 'mid';
