@@ -101,12 +101,15 @@ export async function getUserByPhone(phone: string) {
   return user ?? null;
 }
 
-export async function getUserById(id: string) {
+// Request-scoped memoization: the viewer's own user row is read by multiple
+// server components in a single render (page + nav + profile sections). `cache`
+// dedupes those to one query per request without any cross-request staleness.
+export const getUserById = cache(async (id: string) => {
   const user = await db.query.users.findFirst({
     where: eq(users.id, id),
   });
   return user ?? null;
-}
+});
 
 export function createUser(phone: string) {
   return db

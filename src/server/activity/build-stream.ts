@@ -32,9 +32,15 @@ import {
 } from '@/server/db/queries/lately';
 
 export async function buildActivityStream(userId: string): Promise<StreamItem[]> {
-  const [items, moments, friendCards, convergences] = await Promise.all([
-    getActivitiesForUser(userId),
-    getLatelyMoments(userId),
+  // The dependent question-resolution batch below only needs friendCards +
+  // convergences (to know which question IDs to resolve). Activities and moments
+  // are independent, so let them resolve alongside that batch instead of gating
+  // it behind all four upstream queries — the critical path becomes
+  // max(friendCards, convergences) + the dependent batch, with items/moments
+  // overlapping rather than adding to it.
+  const itemsPromise = getActivitiesForUser(userId);
+  const momentsPromise = getLatelyMoments(userId);
+  const [friendCards, convergences] = await Promise.all([
     getFriendActivity(userId),
     getLatelyConvergences(userId),
   ]);
@@ -54,7 +60,9 @@ export async function buildActivityStream(userId: string): Promise<StreamItem[]>
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
-  const [textById, priorById, hiddenIds] = await Promise.all([
+  const [items, moments, textById, priorById, hiddenIds] = await Promise.all([
+    itemsPromise,
+    momentsPromise,
     getMilestoneQuestionText(allQuestionIds),
     getViewerPriorAnswerResults(userId, allQuestionIds),
     // B-Report-3: durable self-hide — a question the viewer reported as
