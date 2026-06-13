@@ -31,6 +31,7 @@ export async function GET() {
       expiresSoon: item.expiresSoon,
       difficultyEstimate: item.difficultyEstimate,
       authorName: item.authorName,
+      authorId: item.authorId,
       authorIsHouse: item.authorIsHouse,
     })),
     introCopy: first

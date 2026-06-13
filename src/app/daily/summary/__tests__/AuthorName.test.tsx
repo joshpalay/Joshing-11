@@ -13,7 +13,7 @@ vi.mock('next/link', () => ({
 // B5/D9: summary-page author attribution. Human authors link to their profile;
 // house/editorial authors (no users.id) stay plain text. Everyone with an
 // authorId gets the link (no friend/stranger gating — per product decision).
-import { AuthorName } from '@/app/daily/summary/page'
+import { AuthorName } from '@/components/AuthorName'
 
 function html(node: React.ReactElement): string {
   return renderToStaticMarkup(node)

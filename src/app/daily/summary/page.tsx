@@ -15,6 +15,7 @@ import {
 
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
+import { AuthorName } from '@/components/AuthorName'
 import { EditorialBadge } from '@/components/EditorialBadge'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
@@ -415,36 +416,6 @@ function bridgeSentence(bridge: NonNullable<DailySummaryView['recentFriendBridge
     default:
       return `${friendName} is around today.`
   }
-}
-
-// B5/D9: on the summary page (unlike the gameplay chat, which stays plain text)
-// author names link to the author's profile. Only human authors carry an
-// authorId; house/editorial names render as plain text.
-export function AuthorName({
-  name,
-  authorId,
-  weight,
-}: {
-  name: string
-  authorId: string | null
-  weight?: number
-}) {
-  if (!authorId) {
-    return <span style={{ fontWeight: weight }}>{name}</span>
-  }
-  return (
-    <Link
-      href={`/users/${encodeURIComponent(authorId)}`}
-      style={{
-        fontWeight: weight,
-        color: 'var(--brand-link)',
-        textDecoration: 'underline',
-        textUnderlineOffset: 2,
-      }}
-    >
-      {name}
-    </Link>
-  )
 }
 
 function InterpretiveLine({ text }: { text: string }) {
