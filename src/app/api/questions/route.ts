@@ -155,9 +155,9 @@ export async function POST(request: NextRequest) {
   // domain (C: trgm-exact first, Haiku on miss; silent) so an authored "Hamlet"
   // reuses the player's "Shakespearean Tragedy" instead of minting a sibling.
   //
-  // Phase 1 ships flag-OFF: we ALWAYS compute + shadow-log the outcome to
-  // quantify pre-fix duplication, but only ADOPT it when RECONCILE_AUTHORED_DOMAINS
-  // is enabled — flag-off is a strict no-op on the written label.
+  // We ALWAYS compute + shadow-log the outcome (telemetry on every authored
+  // question). Phase 2: RECONCILE_AUTHORED_DOMAINS now defaults ON, so the
+  // reconciled label is also ADOPTED; set it falsey to revert to log-only.
   const reconcileOutcome = await reconcileAuthoredDomain(normalizedSubcategory, session.userId);
   const reconcileFlagEnabled = isReconcileAuthoredDomainsEnabled();
   // Preserve the F4.5 write-boundary guard: never adopt a reconciled label the
