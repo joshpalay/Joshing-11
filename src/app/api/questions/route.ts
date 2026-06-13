@@ -166,7 +166,10 @@ export async function POST(request: NextRequest) {
   const reconciledTooGeneric =
     reconcileOutcome.differs && isGenericSubcategory(reconcileOutcome.canonicalDomain);
   const applyReconcile = reconcileFlagEnabled && reconcileOutcome.differs && !reconciledTooGeneric;
-  console.info('[questions/authored-reconcile]', {
+  // Emitted as a JSON string (not the inspected-object form) so the Phase 2
+  // gate aggregator can parse it deterministically from exported logs — see
+  // scripts/authored-reconcile-telemetry.mjs.
+  console.info('[questions/authored-reconcile]', JSON.stringify({
     userId: session.userId,
     proposed: normalizedSubcategory,
     reconciled: reconcileOutcome.canonicalDomain,
@@ -178,7 +181,7 @@ export async function POST(request: NextRequest) {
     flagEnabled: reconcileFlagEnabled,
     reconciledTooGeneric,
     applied: applyReconcile,
-  });
+  }));
   // broad_category is intentionally kept from the categorizer (matches the
   // generated path, which swaps only the domain label on reconcile); reconcile
   // does not emit a broad category.
