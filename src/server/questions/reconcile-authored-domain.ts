@@ -53,18 +53,13 @@ export type AuthoredReconcileOutcome = {
 };
 
 /**
- * Phase 2 (B-CATEGORY-AUTHORED-RECONCILE-01): the flag has GRADUATED to default
- * ON — the authored path now adopts the reconciled domain (folding an authored
- * "Hamlet" onto the player's existing "Shakespearean Tragedy" instead of minting
- * a sibling). The shadow-log still fires on every authored question regardless.
- * Set RECONCILE_AUTHORED_DOMAINS to a falsey value (false/0/no/off) to disable —
- * the revert lever if a bad fold surfaces in production. Mirrors the boolean-env
- * convention in create-payload.ts, inverted to default-on.
+ * Phase 1 ships flag-OFF: the authored path always COMPUTES + shadow-logs this
+ * outcome (to quantify pre-fix duplication) but only ADOPTS it when this flag is
+ * enabled. Mirrors the boolean-env convention in create-payload.ts.
  */
 export function isReconcileAuthoredDomainsEnabled(): boolean {
   const raw = process.env.RECONCILE_AUTHORED_DOMAINS?.trim().toLowerCase();
-  if (raw === undefined || raw === '') return true;
-  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
 export async function reconcileAuthoredDomain(
