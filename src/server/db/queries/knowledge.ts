@@ -78,23 +78,6 @@ export type MasteryOverview = {
   recentActivity: RecentActivity[];
 };
 
-export type ProgressionView = {
-  canonicalSubcategory: string;
-  canonicalSubcategorySlug: string;
-  broadCategory: string | null;
-  currentTier: MasteryTier | null;
-  correctAnswerCount: number;
-  authoredCount: number;
-  iconKey: string;
-  territoryType: 'declared' | 'demonstrated';
-};
-
-export type StreakData = {
-  currentStreak: number;
-  longestStreak: number;
-  lastActivityDate: string | null;
-};
-
 export type DomainVisibility = 'public' | 'friends' | 'private';
 
 export type MasteryEvent = {
@@ -190,7 +173,6 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
 }
 
 const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
-const STREAK_TIME_ZONE = 'America/New_York';
 const FRIEND_MEDIATED_CONTEXTS = ['feed', 'joshing_game'];
 
 function displayNameForDomain(domain: string): string {
@@ -414,8 +396,15 @@ function buildMasteryByDomain(
   return byKey;
 }
 
-export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
-  const [declaredRows, masteryRows, eventRows, recentRows, hiddenDomainKeys] = await Promise.all([
+// Shared per-request fetch for the knowledge route, which renders both the
+// mastery overview and the knowledge page data. Both derivations read the same
+// declared interests, player-mastery rows, mastery events, and hidden-domain
+// keys, so we fetch them once (4 queries) and hand the same inputs to both
+// builders instead of each re-fetching independently (which doubled the query
+// count against the max-5 pool). Events are ordered createdAt desc so the
+// overview can take the 10 most recent without a second LIMIT query.
+export async function loadKnowledgeInputs(userId: string) {
+  const [declaredRows, masteryRows, eventRows, hiddenDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
     getPlayerMasteryRows(userId, true),
     db
@@ -429,23 +418,23 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
         createdAt: masteryEvents.createdAt,
       })
       .from(masteryEvents)
-      .where(eq(masteryEvents.userId, userId)),
-    db
-      .select({
-        canonicalSubcategory: masteryEvents.canonicalSubcategory,
-        sourceType: masteryEvents.sourceType,
-        questionId: masteryEvents.questionId,
-        awardedPoints: masteryEvents.awardedPoints,
-        answerState: masteryEvents.answerState,
-        sessionContext: masteryEvents.sessionContext,
-        createdAt: masteryEvents.createdAt,
-      })
-      .from(masteryEvents)
       .where(eq(masteryEvents.userId, userId))
-      .orderBy(desc(masteryEvents.createdAt))
-      .limit(10),
+      .orderBy(desc(masteryEvents.createdAt)),
     getHiddenDomainKeys(userId),
   ]);
+  return { declaredRows, masteryRows, eventRows, hiddenDomainKeys };
+}
+
+export type KnowledgeInputs = Awaited<ReturnType<typeof loadKnowledgeInputs>>;
+
+export async function getUserMasteryOverview(
+  userId: string,
+  inputs?: KnowledgeInputs,
+): Promise<MasteryOverview> {
+  const { declaredRows, masteryRows, eventRows, hiddenDomainKeys } =
+    inputs ?? (await loadKnowledgeInputs(userId));
+  // eventRows arrive createdAt desc; the 10 most recent are the recent-activity feed.
+  const recentRows = eventRows.slice(0, 10);
 
   const totalPoints = masteryRows.reduce((sum, row) => sum + Number(row.totalPoints ?? 0), 0);
   const overall = getMasteryTierDisplay(totalPoints);
@@ -533,23 +522,12 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
   };
 }
 
-export async function getKnowledgePageData(userId: string): Promise<KnowledgePageData> {
-  const [declaredRows, masteryRows, eventRows, hiddenDomainKeys] = await Promise.all([
-    getActiveDeclaredInterests(userId),
-    getPlayerMasteryRows(userId, true),
-    db
-      .select({
-        canonicalSubcategory: masteryEvents.canonicalSubcategory,
-        sourceType: masteryEvents.sourceType,
-        answerState: masteryEvents.answerState,
-        sessionContext: masteryEvents.sessionContext,
-        awardedPoints: masteryEvents.awardedPoints,
-        createdAt: masteryEvents.createdAt,
-      })
-      .from(masteryEvents)
-      .where(eq(masteryEvents.userId, userId)),
-    getHiddenDomainKeys(userId),
-  ]);
+export async function getKnowledgePageData(
+  userId: string,
+  inputs?: KnowledgeInputs,
+): Promise<KnowledgePageData> {
+  const { declaredRows, masteryRows, eventRows, hiddenDomainKeys } =
+    inputs ?? (await loadKnowledgeInputs(userId));
 
   const statsByDomain = new Map<string, AnswerStats>();
   for (const event of eventRows) {
@@ -645,27 +623,6 @@ export async function getExpandingDomains(userId: string): Promise<ExpandingDoma
     .from(masteryEvents)
     .where(eq(masteryEvents.userId, userId));
   return deriveExpandingDomains(eventRows);
-}
-
-export async function getProgressionLandscape(userId: string): Promise<ProgressionView[]> {
-  const pageData = await getKnowledgePageData(userId);
-
-  return pageData.allDomains
-    .map((domain) => ({
-      canonicalSubcategory: domain.displayName,
-      canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
-      broadCategory: domain.broadCategory,
-      currentTier: domain.tier as MasteryTier,
-      correctAnswerCount: domain.questionsCorrect,
-      authoredCount: domain.questionsAnswered,
-      iconKey: domain.iconKey,
-      territoryType: domain.territoryType,
-    }))
-    .sort((a, b) => {
-      const tierDiff = TIER_ORDER.indexOf(b.currentTier ?? 'establishing') - TIER_ORDER.indexOf(a.currentTier ?? 'establishing');
-      if (tierDiff !== 0) return tierDiff;
-      return b.correctAnswerCount - a.correctAnswerCount || a.canonicalSubcategory.localeCompare(b.canonicalSubcategory);
-    });
 }
 
 export async function getDomainDetail(userId: string, domain: string): Promise<DomainDetail | null> {
@@ -1040,69 +997,3 @@ export async function removeKnowledgeDomain(userId: string, domain: string): Pro
   return { removed };
 }
 
-function calendarDay(value: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: STREAK_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(value);
-}
-
-function addDays(day: string, amount: number): string {
-  const [year, month, date] = day.split('-').map(Number);
-  const current = new Date(Date.UTC(year, month - 1, date));
-  current.setUTCDate(current.getUTCDate() + amount);
-  return current.toISOString().slice(0, 10);
-}
-
-export async function getUserAnswerStreak(userId: string): Promise<StreakData> {
-  const [dailyRows, gameRows] = await Promise.all([
-    db
-      .select({ answeredAt: masteryEvents.createdAt })
-      .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        eq(masteryEvents.sessionContext, 'daily'),
-        isNotNull(masteryEvents.answerState),
-      )),
-    db
-      .select({ answeredAt: joshingGameResponses.answeredAt })
-      .from(joshingGameResponses)
-      .where(and(
-        eq(joshingGameResponses.userId, userId),
-        isNotNull(joshingGameResponses.answeredAt),
-      )),
-  ]);
-
-  const days = new Set<string>();
-  for (const row of [...dailyRows, ...gameRows]) {
-    if (!row.answeredAt) continue;
-    days.add(calendarDay(row.answeredAt));
-  }
-
-  const sortedDays = [...days].sort();
-  if (sortedDays.length === 0) {
-    return { currentStreak: 0, longestStreak: 0, lastActivityDate: null };
-  }
-
-  let currentStreak = 0;
-  let cursor = calendarDay(new Date());
-  while (days.has(cursor)) {
-    currentStreak += 1;
-    cursor = addDays(cursor, -1);
-  }
-
-  let longestStreak = 1;
-  let run = 1;
-  for (let index = 1; index < sortedDays.length; index += 1) {
-    run = addDays(sortedDays[index - 1], 1) === sortedDays[index] ? run + 1 : 1;
-    longestStreak = Math.max(longestStreak, run);
-  }
-
-  return {
-    currentStreak,
-    longestStreak,
-    lastActivityDate: sortedDays.at(-1) ?? null,
-  };
-}
