@@ -9,7 +9,9 @@ const {
   getFriendsMock,
   getQuestionMock,
   getSessionMock,
+  isReconcileAuthoredDomainsEnabledMock,
   openKBDomainMock,
+  reconcileAuthoredDomainMock,
   rollOffOldItemsMock,
   state,
   userHasQuestionInBlockingFeedMock,
@@ -50,7 +52,9 @@ const {
     getFriendsMock: vi.fn(),
     getQuestionMock: vi.fn(),
     getSessionMock: vi.fn(),
+    isReconcileAuthoredDomainsEnabledMock: vi.fn(),
     openKBDomainMock: vi.fn(),
+    reconcileAuthoredDomainMock: vi.fn(),
     rollOffOldItemsMock: vi.fn(),
     state,
     userHasQuestionInBlockingFeedMock: vi.fn(),
@@ -128,6 +132,11 @@ vi.mock('@/server/knowledge/open-domain', () => ({
   openKBDomain: openKBDomainMock,
 }))
 
+vi.mock('@/server/questions/reconcile-authored-domain', () => ({
+  reconcileAuthoredDomain: reconcileAuthoredDomainMock,
+  isReconcileAuthoredDomainsEnabled: isReconcileAuthoredDomainsEnabledMock,
+}))
+
 vi.mock('@/server/questions/llm-difficulty', () => ({
   assessQuestionDifficulty: assessQuestionDifficultyMock,
   fallbackQuestionDifficulty: () => ({ tier: 'solid', difficulty: 3 }),
@@ -167,6 +176,18 @@ describe('POST /api/questions shareToFeed', () => {
       broad_category: 'Arts & Literature',
       subcategory: 'Victorian Literature',
     })
+    // Phase 1 default: flag off and reconcile reports no fold — strict no-op.
+    isReconcileAuthoredDomainsEnabledMock.mockReturnValue(false)
+    reconcileAuthoredDomainMock.mockImplementation(async (proposed: string) => ({
+      proposed,
+      canonicalDomain: proposed,
+      reconciled: false,
+      differs: false,
+      method: 'none',
+      trgmExactLabel: null,
+      trgmFuzzyCandidates: [],
+      llmReconciled: false,
+    }))
     assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
     createQuestionMock.mockResolvedValue({ id: 'question-1' })
     generateInsideJokeMock.mockResolvedValue(null)
@@ -470,6 +491,17 @@ describe('POST /api/questions category leak handling', () => {
     state.questionUpdateValues = []
 
     getSessionMock.mockResolvedValue({ userId: 'creator-1' })
+    isReconcileAuthoredDomainsEnabledMock.mockReturnValue(false)
+    reconcileAuthoredDomainMock.mockImplementation(async (proposed: string) => ({
+      proposed,
+      canonicalDomain: proposed,
+      reconciled: false,
+      differs: false,
+      method: 'none',
+      trgmExactLabel: null,
+      trgmFuzzyCandidates: [],
+      llmReconciled: false,
+    }))
     assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
     createQuestionMock.mockResolvedValue({ id: 'question-1' })
     generateInsideJokeMock.mockResolvedValue(null)
@@ -579,5 +611,133 @@ describe('POST /api/questions category leak handling', () => {
     const createArgs = createQuestionMock.mock.calls[0]?.[0] as { publicStatus: string }
     // verdictToPublicStatus maps needs_review → not_scored (never eligible/public).
     expect(createArgs.publicStatus).toBe('not_scored')
+  })
+})
+
+describe('POST /api/questions authored domain reconcile (B-CATEGORY-AUTHORED-RECONCILE-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    state.dismissedRows = []
+    state.feedInsertValues = []
+    state.questionUpdateValues = []
+
+    getSessionMock.mockResolvedValue({ userId: 'creator-1' })
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'Hamlet',
+    })
+    isReconcileAuthoredDomainsEnabledMock.mockReturnValue(false)
+    reconcileAuthoredDomainMock.mockImplementation(async (proposed: string) => ({
+      proposed,
+      canonicalDomain: proposed,
+      reconciled: false,
+      differs: false,
+      method: 'none',
+      trgmExactLabel: null,
+      trgmFuzzyCandidates: [],
+      llmReconciled: false,
+    }))
+    assessQuestionDifficultyMock.mockResolvedValue({ difficulty: 3, tier: 'moderate' })
+    createQuestionMock.mockResolvedValue({ id: 'question-1' })
+    generateInsideJokeMock.mockResolvedValue(null)
+    getQuestionMock.mockResolvedValue({ id: 'question-1' })
+    openKBDomainMock.mockResolvedValue({ opened: true })
+    rollOffOldItemsMock.mockResolvedValue(0)
+    userHasQuestionInBlockingFeedMock.mockResolvedValue(false)
+    vetQuestionMock.mockResolvedValue({ status: 'approved', score: 0.8, reason: 'looks good' })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  function foldOutcome(proposed: string, canonicalDomain: string, method: 'trgm-exact' | 'llm') {
+    return {
+      proposed,
+      canonicalDomain,
+      reconciled: true,
+      differs: true,
+      method,
+      trgmExactLabel: method === 'trgm-exact' ? canonicalDomain : null,
+      trgmFuzzyCandidates: [],
+      llmReconciled: method === 'llm',
+    }
+  }
+
+  it('shadow-logs the reconcile but is a strict no-op on the written label when the flag is OFF', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    // Reconcile WOULD fold Hamlet → Shakespearean Tragedy, but the flag is off.
+    reconcileAuthoredDomainMock.mockResolvedValue(foldOutcome('Hamlet', 'Shakespearean Tragedy', 'llm'))
+
+    const response = await POST(questionRequest({ text: 'Who skull does Hamlet hold?', correctAnswer: 'Yorick' }))
+
+    expect(response.status).toBe(201)
+    // Flag off → the blind label is still what gets written.
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { canonicalSubcategory: string }
+    expect(createArgs.canonicalSubcategory).toBe('Hamlet')
+    // …but the shadow-log records what the fold WOULD have been.
+    const shadowLog = infoSpy.mock.calls.find((c) => c[0] === '[questions/authored-reconcile]')
+    expect(shadowLog?.[1]).toMatchObject({
+      proposed: 'Hamlet',
+      reconciled: 'Shakespearean Tragedy',
+      differs: true,
+      flagEnabled: false,
+      applied: false,
+    })
+  })
+
+  it('writes the reconciled domain (trgm exact) across canonical_subcategory/subcategory/domain when the flag is ON', async () => {
+    isReconcileAuthoredDomainsEnabledMock.mockReturnValue(true)
+    reconcileAuthoredDomainMock.mockResolvedValue(foldOutcome('Hamlet', 'Shakespearean Tragedy', 'trgm-exact'))
+
+    const response = await POST(questionRequest({ text: 'Who skull does Hamlet hold?', correctAnswer: 'Yorick' }))
+
+    expect(response.status).toBe(201)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as {
+      canonicalSubcategory: string
+      subcategory: string
+      domain: string
+    }
+    // The authored "Hamlet" folds onto the existing "Shakespearean Tragedy"
+    // instead of minting a sibling — written consistently everywhere.
+    expect(createArgs.canonicalSubcategory).toBe('Shakespearean Tragedy')
+    expect(createArgs.subcategory).toBe('Shakespearean Tragedy')
+    expect(createArgs.domain).toBe('Shakespearean Tragedy')
+    // Phase 3: the KB domain opened for the author uses the reconciled label, so
+    // mastery credit lands on the reconciled domain, not the blind duplicate.
+    expect(openKBDomainMock).toHaveBeenCalledWith(
+      expect.objectContaining({ domain: 'Shakespearean Tragedy', via: 'authorship' }),
+    )
+  })
+
+  it('writes the reconciled domain from the Haiku (llm) fold when the flag is ON', async () => {
+    isReconcileAuthoredDomainsEnabledMock.mockReturnValue(true)
+    categorizeQuestionMock.mockResolvedValue({
+      broad_category: 'Arts & Literature',
+      subcategory: 'The Bard’s Tragedies',
+    })
+    reconcileAuthoredDomainMock.mockResolvedValue(
+      foldOutcome('The Bard’s Tragedies', 'Shakespearean Tragedy', 'llm'),
+    )
+
+    const response = await POST(questionRequest({ text: 'Who skull does Hamlet hold?', correctAnswer: 'Yorick' }))
+
+    expect(response.status).toBe(201)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { canonicalSubcategory: string }
+    expect(createArgs.canonicalSubcategory).toBe('Shakespearean Tragedy')
+  })
+
+  it('falls through to the proposed label (never throws) if reconcile yields a generic label, even flag ON', async () => {
+    isReconcileAuthoredDomainsEnabledMock.mockReturnValue(true)
+    // A would-be fold onto a generic bucket the F4.5 write-guard forbids.
+    reconcileAuthoredDomainMock.mockResolvedValue(foldOutcome('Hamlet', 'General Knowledge', 'llm'))
+
+    const response = await POST(questionRequest({ text: 'Who skull does Hamlet hold?', correctAnswer: 'Yorick' }))
+
+    expect(response.status).toBe(201)
+    const createArgs = createQuestionMock.mock.calls[0]?.[0] as { canonicalSubcategory: string }
+    // Guard preserved: we keep the already-validated proposed label.
+    expect(createArgs.canonicalSubcategory).toBe('Hamlet')
   })
 })
