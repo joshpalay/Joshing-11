@@ -64,6 +64,7 @@ vi.mock('@/server/db', () => ({
     displayName: 'users.displayName',
     handle: 'users.handle',
     timezone: 'users.timezone',
+    onboardingComplete: 'users.onboardingComplete',
   },
 }))
 
@@ -87,6 +88,7 @@ const EXISTING_USER = {
   displayName: null,
   handle: null,
   timezone: 'America/New_York',
+  onboardingComplete: false,
 }
 
 const NEW_USER = {
@@ -95,6 +97,7 @@ const NEW_USER = {
   displayName: null,
   handle: null,
   timezone: 'America/New_York',
+  onboardingComplete: false,
 }
 
 const VALID_INVITATION = {
@@ -173,6 +176,28 @@ describe('/api/auth/verify-otp invitation gate', () => {
         onboardingComplete: false,
       })
       expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled()
+    })
+
+    it('mints the session with the user real onboardingComplete on re-login (B-ROOT-404: avoids the refresh-onboarding-claim redirect hop on /)', async () => {
+      // A fully-onboarded user re-logging in must get onb:true straight away.
+      // Previously the route hardcoded onboardingComplete:false, so the first
+      // post-login GET / was bounced through /api/auth/refresh-onboarding-claim
+      // to re-mint the claim — a redirect hop that intermittently 404'd on /.
+      findUserSelectMock.mockResolvedValueOnce([
+        { ...EXISTING_USER, onboardingComplete: true },
+      ])
+
+      const response = await POST(
+        jsonRequest({ phone: '+15551234567', code: '000000' })
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.user.onboardingComplete).toBe(true)
+      expect(createSessionMock).toHaveBeenCalledWith('user-1', {
+        invitationAccepted: true,
+        onboardingComplete: true,
+      })
     })
 
     it('allows re-login when accepting a new invitation', async () => {
