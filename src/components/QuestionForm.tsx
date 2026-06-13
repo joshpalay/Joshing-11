@@ -272,6 +272,24 @@ export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): str
   }
 }
 
+// A single critique reformulation option. The "Use this" affordance label and
+// the reformulated question are rendered as two discrete block elements so the
+// label can never share a text node with — and run together into — the
+// suggestion value (the "Use this Which American city…" artifact,
+// B-COMPOSER-SUGGESTION-ARTIFACT-01). The reformulation value owns its own node.
+export function ReformulationOption({ text, onUse }: { text: string; onUse: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onUse}
+      className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
+    >
+      <span className="block font-medium">Use this</span>
+      <span className="block">{text}</span>
+    </button>
+  );
+}
+
 export function QuestionForm({
   mode = 'create',
   initialValues,
@@ -574,9 +592,7 @@ export function QuestionForm({
           <p className="mt-3 font-medium">Try one of these instead:</p>
           <div className="mt-2 space-y-2">
             {critique.reformulations.map((text) => (
-              <button key={text} type="button" onClick={() => dispatch({ type: 'USE_REFORMULATION', text })} className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted">
-                <span className="font-medium">Use this</span> {text}
-              </button>
+              <ReformulationOption key={text} text={text} onUse={() => dispatch({ type: 'USE_REFORMULATION', text })} />
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
