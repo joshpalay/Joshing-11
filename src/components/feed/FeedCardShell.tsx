@@ -16,6 +16,13 @@ import { cn } from '@/lib/utils'
 const FEED_CARD_RADIUS = 'rounded-[4px]'
 const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
 
+// Resting (non-elevated) home-feed card fill. Warm cream (--warm-cream #f5f0e8)
+// chosen over the near-white --brand-card for the feed surface — a product call
+// to warm the ambient cards while elevated/playable cards keep their distinct
+// --game-card-question lift. Scoped to the feed shell so other --brand-card
+// surfaces (login, knowledge, daily) are unaffected.
+const FEED_CARD_RESTING_FILL = 'bg-[var(--warm-cream)]'
+
 // Elevated ("playable" / Tier 1) treatment for the unified home feed
 // (D-FEED-TIER): the warm light-cream question fill, a hairline stroke, and
 // a deeper soft drop shadow than the ambient cards carry. On the home feed the
@@ -87,7 +94,7 @@ export function FeedCardShell({
         <div
           className={cn(
             'relative overflow-hidden',
-            elevated ? FEED_CARD_ELEVATED_FILL : 'bg-[var(--brand-card)]',
+            elevated ? FEED_CARD_ELEVATED_FILL : FEED_CARD_RESTING_FILL,
             FEED_CARD_RADIUS,
           )}
         >
@@ -103,7 +110,7 @@ export function FeedCardShell({
       className={cn(
         'relative overflow-hidden border',
         elevated ? FEED_CARD_ELEVATED_STROKE : 'border-[var(--brand-rule)]',
-        elevated ? FEED_CARD_ELEVATED_FILL : 'bg-[var(--brand-card)]',
+        elevated ? FEED_CARD_ELEVATED_FILL : FEED_CARD_RESTING_FILL,
         FEED_CARD_RADIUS,
         elevated ? FEED_CARD_ELEVATED_SHADOW : FEED_CARD_SHADOW,
         className,

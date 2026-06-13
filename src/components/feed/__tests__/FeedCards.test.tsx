@@ -455,7 +455,7 @@ describe('FeedCardShell (shared C7 shell)', () => {
     expect(rendered).not.toContain('w-[2px]')
     expect(rendered).toContain('background-color:#abc123')
     expect(rendered).toContain('border-[var(--brand-rule)]')
-    expect(rendered).toContain('bg-[var(--brand-card)]')
+    expect(rendered).toContain('bg-[var(--warm-cream)]')
   })
 
   it('moves the accent bar to the left edge when requested', () => {
@@ -485,7 +485,7 @@ describe('FeedCardShell (shared C7 shell)', () => {
       </FeedCardShell>
     )
     expect(rendered).toContain('/images/Variant4.png')
-    expect(rendered).toContain('bg-[var(--brand-card)]')
+    expect(rendered).toContain('bg-[var(--warm-cream)]')
     // triangle mat has no hairline border (the mat itself is the frame)
     expect(rendered).not.toContain('border-[var(--brand-rule)]')
   })
@@ -496,7 +496,7 @@ describe('FeedCardShell (shared C7 shell)', () => {
         <p>body</p>
       </FeedCardShell>
     )
-    expect(rendered).toContain('bg-[var(--brand-card)]')
+    expect(rendered).toContain('bg-[var(--warm-cream)]')
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
     expect(rendered).toContain('border-[var(--brand-rule)]')
     expect(rendered).not.toContain('bg-[var(--game-card-question)]')
@@ -520,9 +520,9 @@ describe('FeedCardShell (shared C7 shell)', () => {
     // (no gold accent border on the elevated card).
     expect(rendered).toContain('border-[var(--brand-border)]')
     expect(rendered).not.toContain('border-[var(--accent-gold)]')
-    // No hard ink offset shadow, no near-white resting fill.
+    // No hard ink offset shadow, no warm-cream resting fill.
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
-    expect(rendered).not.toContain('bg-[var(--brand-card)]')
+    expect(rendered).not.toContain('bg-[var(--warm-cream)]')
   })
 
   it('lifts the triangle variant with the deeper drop shadow + cream inner panel when elevated', () => {
@@ -536,9 +536,9 @@ describe('FeedCardShell (shared C7 shell)', () => {
     expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
     expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
-    // Inner panel carries the warm cream fill instead of brand-card.
+    // Inner panel carries the elevated fill instead of the resting fill.
     expect(rendered).toContain('bg-[var(--feed-card-elevated)]')
-    expect(rendered).not.toContain('bg-[var(--brand-card)]')
+    expect(rendered).not.toContain('bg-[var(--warm-cream)]')
   })
 })
 
