@@ -207,8 +207,8 @@ export function AnswerFeedbackSheet({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-2">
-          <div className="flex items-center gap-3 pb-2">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
+          <div className="flex items-center gap-3">
             <span
               className="inline-flex size-9 items-center justify-center rounded-full"
               style={{
@@ -237,14 +237,7 @@ export function AnswerFeedbackSheet({
             ) : null}
           </div>
 
-          {showTerritoryUndo && openedTerritoryDomain ? (
-            <NewTerritoryUndo
-              domain={openedTerritoryDomain}
-              category={visibleCategory}
-            />
-          ) : null}
-
-          <div className="space-y-1 pb-2">
+          <div className="space-y-1.5">
             {correctAnswer ? (
               <p
                 style={{
@@ -282,20 +275,20 @@ export function AnswerFeedbackSheet({
 
           {/* The question reads as context for the answer, so it sits below the
               answer headline (not above it). De-boxed: plain text, no panel. */}
-          <p className="pb-2 font-serif text-lg leading-6 text-[var(--brand-ink)]">
+          <p className="font-serif text-lg leading-7 text-[var(--brand-ink)]">
             {question}
           </p>
 
           {explanation ? (
             // Match the daily-5 game's reveal: a single-sentence explainer under
             // the answer, not the full paragraph (which ran too long here).
-            <p className="pb-2 font-serif text-[15px] leading-6 text-[var(--brand-ink-700)]">
+            <p className="font-serif text-[15px] leading-7 text-[var(--brand-ink-700)]">
               {firstSentence(explanation)}
             </p>
           ) : null}
 
           {insideJoke ? (
-            <div className="pt-1">
+            <div>
               <p
                 className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
                 style={{ color: GOLD_INK }}
@@ -309,7 +302,7 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {creatorNote ? (
-            <div className="pt-3">
+            <div>
               <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                 Why they asked
               </p>
@@ -320,7 +313,7 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {onRecheck ? (
-            <div className="space-y-2 pt-3">
+            <div className="space-y-2">
               {!isCorrect && recheckState !== 'done' ? (
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">
@@ -367,7 +360,7 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {!isCorrect ? (
-            <div className="pt-3 text-xs text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {bankState === 'saving' ? (
                 <span>Saving to your practice bank…</span>
               ) : null}
@@ -391,6 +384,17 @@ export function AnswerFeedbackSheet({
                 <span style={{ color: 'var(--game-wrong-strong)' }}>Could not update your practice bank.</span>
               ) : null}
             </div>
+          ) : null}
+
+          {/* "Knowledge updated" sits at the foot of the reveal: it's a follow-up
+              action (dial how often this new domain recurs), not part of reading
+              the answer, so it trails the answer/question/explanation content and
+              rests just above the Done button. */}
+          {showTerritoryUndo && openedTerritoryDomain ? (
+            <NewTerritoryUndo
+              domain={openedTerritoryDomain}
+              category={visibleCategory}
+            />
           ) : null}
         </div>
 
