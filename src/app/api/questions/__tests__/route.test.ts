@@ -676,9 +676,10 @@ describe('POST /api/questions authored domain reconcile (B-CATEGORY-AUTHORED-REC
     // Flag off → the blind label is still what gets written.
     const createArgs = createQuestionMock.mock.calls[0]?.[0] as { canonicalSubcategory: string }
     expect(createArgs.canonicalSubcategory).toBe('Hamlet')
-    // …but the shadow-log records what the fold WOULD have been.
+    // …but the shadow-log records what the fold WOULD have been. The payload is
+    // a JSON string (deterministically parseable from exported logs).
     const shadowLog = infoSpy.mock.calls.find((c) => c[0] === '[questions/authored-reconcile]')
-    expect(shadowLog?.[1]).toMatchObject({
+    expect(JSON.parse(shadowLog?.[1] as string)).toMatchObject({
       proposed: 'Hamlet',
       reconciled: 'Shakespearean Tragedy',
       differs: true,
