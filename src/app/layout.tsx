@@ -6,9 +6,6 @@ import { Nav } from "@/components/Nav";
 // Remove this import + the <PaletteToggle/> + boot script before shipping.
 import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
-import { getUserOnboardingProfile } from '@/server/db/queries/users';
-import { getBellBadgeCount } from '@/server/db/queries/activity';
-import { getNewDiscoveryStatus } from '@/server/db/queries/contact-hashes';
 
 // Intentional product choice (2026-05-16): Montserrat is the body font.
 // PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
@@ -52,15 +49,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Only the cheap JWT read stays in the blocking path; the DB-backed Nav badge
+  // values (display name, bell count, friends dot) are fetched client-side by Nav
+  // after mount (GET /api/nav) so the page shell streams immediately on every hard
+  // navigation instead of waiting on three queries just to render nav badges.
   const sessionToken = await getSessionToken()
   const claims = await readSessionClaims(sessionToken)
-  const [profile, bellBadgeCount, discoveryStatus] = claims
-    ? await Promise.all([
-        getUserOnboardingProfile(claims.userId),
-        getBellBadgeCount(claims.userId).catch(() => 0),
-        getNewDiscoveryStatus(claims.userId).catch(() => ({ hasNew: false, count: 0 })),
-      ])
-    : [null, 0, { hasNew: false, count: 0 }]
   return (
     <html
       lang="en"
@@ -76,12 +70,7 @@ export default async function RootLayout({
           }}
         />
         <PaletteToggle />
-        <Nav
-          initialUserId={claims?.userId ?? null}
-          initialDisplayName={profile?.displayName ?? null}
-          bellBadgeCount={bellBadgeCount}
-          friendsDotVisible={discoveryStatus.hasNew}
-        />
+        <Nav initialUserId={claims?.userId ?? null} />
         {children}
       </body>
     </html>

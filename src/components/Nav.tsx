@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Brain, Home, Pencil, Plus, User, Users } from 'lucide-react';
@@ -62,9 +62,35 @@ export function Nav({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const accountInitials = initialDisplayName ? initialsFor(initialDisplayName) || null : null;
   const currentUserId = initialUserId;
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
+
+  // Badge values seed from props (kept for any caller that still passes them) and
+  // are refreshed client-side after mount. The root layout no longer blocks HTML
+  // streaming on these DB queries — it passes only initialUserId — so Nav pulls
+  // them from GET /api/nav once mounted. Badges pop in slightly late by design.
+  const [displayName, setDisplayName] = useState(initialDisplayName);
+  const [badgeCount, setBadgeCount] = useState(bellBadgeCount);
+  const [friendsDot, setFriendsDot] = useState(friendsDotVisible);
+
+  useEffect(() => {
+    if (!initialUserId) return;
+    let active = true;
+    fetch('/api/nav', { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { displayName?: string | null; bellBadgeCount?: number; friendsDotVisible?: boolean } | null) => {
+        if (!active || !data) return;
+        setDisplayName(data.displayName ?? null);
+        setBadgeCount(typeof data.bellBadgeCount === 'number' ? data.bellBadgeCount : 0);
+        setFriendsDot(Boolean(data.friendsDotVisible));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [initialUserId]);
+
+  const accountInitials = displayName ? initialsFor(displayName) || null : null;
   // On Home and the Questions page the FAB is a dedicated "add a question"
   // shortcut: it drops straight into the composer (?create=1) rather than the
   // generic three-way Create chooser. The composer still surfaces every
@@ -124,8 +150,8 @@ export function Nav({
     return false;
   }
 
-  const showBadge = bellBadgeCount > 0;
-  const badgeText = formatBadgeCount(bellBadgeCount);
+  const showBadge = badgeCount > 0;
+  const badgeText = formatBadgeCount(badgeCount);
 
   return (
     <>
@@ -144,7 +170,7 @@ export function Nav({
             <Link
               href="/activities"
               aria-label={
-                showBadge ? `Activity, ${bellBadgeCount} unread` : 'Activity'
+                showBadge ? `Activity, ${badgeCount} unread` : 'Activity'
               }
               className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
@@ -233,7 +259,7 @@ export function Nav({
                   )}
                   {/* Discovery indicator for the Friends tab — muted neutral
                       so it doesn't compete with the bell badge accent. */}
-                  {friendsDotVisible && label === 'Friends' ? (
+                  {friendsDot && label === 'Friends' ? (
                     <span
                       className="absolute -right-1 -top-1 size-2 rounded-full"
                       style={{ backgroundColor: '#8a8a9a' }}

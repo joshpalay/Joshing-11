@@ -78,23 +78,6 @@ export type MasteryOverview = {
   recentActivity: RecentActivity[];
 };
 
-export type ProgressionView = {
-  canonicalSubcategory: string;
-  canonicalSubcategorySlug: string;
-  broadCategory: string | null;
-  currentTier: MasteryTier | null;
-  correctAnswerCount: number;
-  authoredCount: number;
-  iconKey: string;
-  territoryType: 'declared' | 'demonstrated';
-};
-
-export type StreakData = {
-  currentStreak: number;
-  longestStreak: number;
-  lastActivityDate: string | null;
-};
-
 export type DomainVisibility = 'public' | 'friends' | 'private';
 
 export type MasteryEvent = {
@@ -190,8 +173,6 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
 }
 
 const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
-const STREAK_TIME_ZONE = 'America/New_York';
-const FRIEND_MEDIATED_CONTEXTS = ['feed', 'joshing_game'];
 
 function displayNameForDomain(domain: string): string {
   // Standardize capitalization at render time so legacy rows stored with messy
@@ -222,14 +203,39 @@ function sourceLabel(row: SourceLabelRow): string {
 
 
 
-type ExpansionEvent = {
+// Per-domain aggregate row: one GROUP BY canonical_subcategory query over a
+// user's MASTERY_EVENTS computes every stat the knowledge surfaces need, so row
+// transfer stops scaling with lifetime event count. Grouping is by the raw
+// canonical_subcategory spelling (SQL can't replicate domainKey() folding); rows
+// that share a domainKey are merged in JS (mergeDomainStats /
+// deriveExpandingDomains), of which there are far fewer than raw events.
+export type DomainAggregateRow = {
   canonicalSubcategory: string;
-  sourceType?: string | null;
-  answerState?: string | null;
-  sessionContext?: string | null;
-  awardedPoints?: number | string | null;
-  createdAt: Date;
+  answered: number;
+  correct: number;
+  lastAnsweredAt: Date | string | null;
+  demonstrated: boolean;
+  firstAt: Date | string | null;
+  latestAt: Date | string | null;
+  recentAnswered: number;
+  recentPoints: number;
+  wrongAnswers: number;
+  socialEvents: number;
+  savedEvents: number;
 };
+
+// Recency window (days) for the "Recently Expanding" momentum heuristic.
+const EXPANSION_WINDOW_DAYS = 21;
+
+function expansionWindowStart(now: number = Date.now()): Date {
+  return new Date(now - EXPANSION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 function supportingTextFor(reason: ExpandingDomain['reason']): string {
   switch (reason) {
@@ -247,14 +253,17 @@ function supportingTextFor(reason: ExpandingDomain['reason']): string {
   }
 }
 
-function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
+// Merge per-domain aggregate rows (grouped by raw canonical_subcategory in SQL)
+// into the momentum heuristic, folding rows that share a domainKey. The windowed
+// counts (recent*/wrong/social/saved within EXPANSION_WINDOW_DAYS) are computed in
+// SQL; recency/novelty derive from the first/last activity timestamps here.
+export function deriveExpandingDomains(rows: DomainAggregateRow[]): ExpandingDomain[] {
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const byDomain = new Map<string, {
     domain: string;
-    firstAt: Date;
-    latestAt: Date;
-    answered: number;
+    firstAt: Date | null;
+    latestAt: Date | null;
     recentAnswered: number;
     recentPoints: number;
     wrongAnswers: number;
@@ -262,16 +271,16 @@ function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
     savedEvents: number;
   }>();
 
-  for (const event of events) {
-    const domain = event.canonicalSubcategory.trim().replace(/\s+/g, ' ');
-    if (!domain || !event.createdAt) continue;
+  for (const row of rows) {
+    const domain = row.canonicalSubcategory.trim().replace(/\s+/g, ' ');
+    if (!domain) continue;
     const key = domainKey(domain);
-    const ageDays = Math.max(0, (now - event.createdAt.getTime()) / dayMs);
+    const firstAt = toDate(row.firstAt);
+    const latestAt = toDate(row.latestAt);
     const existing = byDomain.get(key) ?? {
       domain,
-      firstAt: event.createdAt,
-      latestAt: event.createdAt,
-      answered: 0,
+      firstAt,
+      latestAt,
       recentAnswered: 0,
       recentPoints: 0,
       wrongAnswers: 0,
@@ -279,25 +288,20 @@ function deriveExpandingDomains(events: ExpansionEvent[]): ExpandingDomain[] {
       savedEvents: 0,
     };
 
-    if (event.createdAt < existing.firstAt) existing.firstAt = event.createdAt;
-    if (event.createdAt > existing.latestAt) existing.latestAt = event.createdAt;
-    if (event.answerState) existing.answered += 1;
-    if (event.answerState && ageDays <= 21) existing.recentAnswered += 1;
-    if (ageDays <= 21) existing.recentPoints += Number(event.awardedPoints ?? 0);
-    if (event.answerState === 'incorrect' && ageDays <= 21) existing.wrongAnswers += 1;
-    if (event.sessionContext && FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext) && ageDays <= 21) {
-      existing.socialEvents += 1;
-    }
-    if ((event.sourceType === 'authored' || event.sourceType === 'author_credit') && ageDays <= 21) {
-      existing.savedEvents += 1;
-    }
+    if (firstAt && (!existing.firstAt || firstAt < existing.firstAt)) existing.firstAt = firstAt;
+    if (latestAt && (!existing.latestAt || latestAt > existing.latestAt)) existing.latestAt = latestAt;
+    existing.recentAnswered += Number(row.recentAnswered ?? 0);
+    existing.recentPoints += Number(row.recentPoints ?? 0);
+    existing.wrongAnswers += Number(row.wrongAnswers ?? 0);
+    existing.socialEvents += Number(row.socialEvents ?? 0);
+    existing.savedEvents += Number(row.savedEvents ?? 0);
     byDomain.set(key, existing);
   }
 
   return [...byDomain.values()]
     .map((domain) => {
-      const latestAgeDays = Math.max(0, (now - domain.latestAt.getTime()) / dayMs);
-      const firstAgeDays = Math.max(0, (now - domain.firstAt.getTime()) / dayMs);
+      const latestAgeDays = domain.latestAt ? Math.max(0, (now - domain.latestAt.getTime()) / dayMs) : Infinity;
+      const firstAgeDays = domain.firstAt ? Math.max(0, (now - domain.firstAt.getTime()) / dayMs) : Infinity;
       const recency = Math.max(0, (30 - latestAgeDays) / 30);
       const novelty = firstAgeDays <= 14 ? 1 : 0;
       const reason: ExpandingDomain['reason'] = novelty
@@ -414,29 +418,90 @@ function buildMasteryByDomain(
   return byKey;
 }
 
-export async function getUserMasteryOverview(userId: string): Promise<MasteryOverview> {
-  const [declaredRows, masteryRows, eventRows, recentRows, hiddenDomainKeys] = await Promise.all([
+// Single GROUP BY canonical_subcategory pass that computes every per-domain stat
+// the knowledge surfaces need — answered/correct counts, last-answered timestamp,
+// the friend-mediated "demonstrated" flag, and the windowed momentum inputs — so
+// only one row per domain crosses the wire instead of every lifetime event. The
+// 'feed'/'joshing_game' session contexts and the 'authored'/'author_credit' source
+// types are the friend-mediated and saved-question signals respectively. Filtered
+// by user_id (MASTERY_EVENTS_user_id_idx); the aggregation is the row-transfer win.
+async function loadDomainAggregates(userId: string, since: Date): Promise<DomainAggregateRow[]> {
+  return db
+    .select({
+      canonicalSubcategory: masteryEvents.canonicalSubcategory,
+      answered: sql<number>`count(*) filter (where ${masteryEvents.answerState} is not null)`,
+      correct: sql<number>`count(*) filter (where ${masteryEvents.answerState} is not null and ${masteryEvents.answerState} <> 'incorrect')`,
+      lastAnsweredAt: sql<Date | null>`max(${masteryEvents.createdAt}) filter (where ${masteryEvents.answerState} is not null)`,
+      demonstrated: sql<boolean>`coalesce(bool_or(${masteryEvents.answerState} is not null and ${masteryEvents.answerState} <> 'incorrect' and ${masteryEvents.questionId} is not null and ${masteryEvents.sessionContext} in ('feed', 'joshing_game')), false)`,
+      firstAt: sql<Date | null>`min(${masteryEvents.createdAt})`,
+      latestAt: sql<Date | null>`max(${masteryEvents.createdAt})`,
+      recentAnswered: sql<number>`count(*) filter (where ${masteryEvents.answerState} is not null and ${masteryEvents.createdAt} >= ${since})`,
+      recentPoints: sql<number>`coalesce(sum(${masteryEvents.awardedPoints}) filter (where ${masteryEvents.createdAt} >= ${since}), 0)`,
+      wrongAnswers: sql<number>`count(*) filter (where ${masteryEvents.answerState} = 'incorrect' and ${masteryEvents.createdAt} >= ${since})`,
+      socialEvents: sql<number>`count(*) filter (where ${masteryEvents.sessionContext} in ('feed', 'joshing_game') and ${masteryEvents.createdAt} >= ${since})`,
+      savedEvents: sql<number>`count(*) filter (where ${masteryEvents.sourceType} in ('authored', 'author_credit') and ${masteryEvents.createdAt} >= ${since})`,
+    })
+    .from(masteryEvents)
+    .where(eq(masteryEvents.userId, userId))
+    .groupBy(masteryEvents.canonicalSubcategory);
+}
+
+export type MergedDomainStats = {
+  statsByDomain: Map<string, AnswerStats>;
+  demonstratedDomains: Set<string>;
+  demonstratedLabels: Map<string, string>;
+};
+
+// Fold the SQL aggregate rows (keyed by raw canonical_subcategory) into the
+// domainKey()-normalized stats the page consumes. statsByDomain only carries
+// domains with at least one answered event (mirrors the old `if (!answerState)
+// continue` guard); a domain is demonstrated if any of its rows set the flag.
+export function mergeDomainStats(rows: DomainAggregateRow[]): MergedDomainStats {
+  const statsByDomain = new Map<string, AnswerStats>();
+  const demonstratedDomains = new Set<string>();
+  const demonstratedLabels = new Map<string, string>();
+
+  for (const row of rows) {
+    const key = domainKey(row.canonicalSubcategory);
+    const answered = Number(row.answered ?? 0);
+    if (answered > 0) {
+      const existing = statsByDomain.get(key) ?? { answered: 0, correct: 0, lastActivityAt: null };
+      existing.answered += answered;
+      existing.correct += Number(row.correct ?? 0);
+      const last = toDate(row.lastAnsweredAt);
+      if (last && (!existing.lastActivityAt || last > existing.lastActivityAt)) {
+        existing.lastActivityAt = last;
+      }
+      statsByDomain.set(key, existing);
+    }
+    if (row.demonstrated) {
+      demonstratedDomains.add(key);
+      if (!demonstratedLabels.has(key)) demonstratedLabels.set(key, row.canonicalSubcategory);
+    }
+  }
+
+  return { statsByDomain, demonstratedDomains, demonstratedLabels };
+}
+
+// Shared per-request fetch for the knowledge route, which renders both the
+// mastery overview and the knowledge page data. Both derivations read the same
+// declared interests, player-mastery rows, per-domain mastery aggregates, and
+// hidden-domain keys, so we fetch them once and hand the same inputs to both
+// builders instead of each re-fetching independently (which doubled the query
+// count against the max-5 pool). The mastery events themselves are no longer
+// pulled in full — aggregated per-domain in SQL — except the 10 most recent rows
+// the overview needs for its recent-activity feed.
+export async function loadKnowledgeInputs(userId: string) {
+  const since = expansionWindowStart();
+  const [declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
     getPlayerMasteryRows(userId, true),
+    loadDomainAggregates(userId, since),
     db
       .select({
         canonicalSubcategory: masteryEvents.canonicalSubcategory,
         sourceType: masteryEvents.sourceType,
-        questionId: masteryEvents.questionId,
         awardedPoints: masteryEvents.awardedPoints,
-        answerState: masteryEvents.answerState,
-        sessionContext: masteryEvents.sessionContext,
-        createdAt: masteryEvents.createdAt,
-      })
-      .from(masteryEvents)
-      .where(eq(masteryEvents.userId, userId)),
-    db
-      .select({
-        canonicalSubcategory: masteryEvents.canonicalSubcategory,
-        sourceType: masteryEvents.sourceType,
-        questionId: masteryEvents.questionId,
-        awardedPoints: masteryEvents.awardedPoints,
-        answerState: masteryEvents.answerState,
         sessionContext: masteryEvents.sessionContext,
         createdAt: masteryEvents.createdAt,
       })
@@ -446,39 +511,25 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
       .limit(10),
     getHiddenDomainKeys(userId),
   ]);
+  return { declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys };
+}
+
+export type KnowledgeInputs = Awaited<ReturnType<typeof loadKnowledgeInputs>>;
+
+export async function getUserMasteryOverview(
+  userId: string,
+  inputs?: KnowledgeInputs,
+): Promise<MasteryOverview> {
+  const { declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys } =
+    inputs ?? (await loadKnowledgeInputs(userId));
+  const recentRows = recentEvents;
 
   const totalPoints = masteryRows.reduce((sum, row) => sum + Number(row.totalPoints ?? 0), 0);
   const overall = getMasteryTierDisplay(totalPoints);
   const nextOverallTier = nextTierFor(overall.tier);
   const nextThreshold = nextOverallTier ? TIER_THRESHOLD_POINTS[nextOverallTier] : null;
-  const statsByDomain = new Map<string, AnswerStats>();
-  const demonstratedDomains = new Set<string>();
-  const demonstratedDomainLabels = new Map<string, string>();
-
-  for (const event of eventRows) {
-    if (!event.answerState) continue;
-    if (
-      event.answerState !== 'incorrect'
-      && event.questionId
-      && FRIEND_MEDIATED_CONTEXTS.includes(event.sessionContext ?? '')
-    ) {
-      const key = domainKey(event.canonicalSubcategory);
-      demonstratedDomains.add(key);
-      demonstratedDomainLabels.set(key, event.canonicalSubcategory);
-    }
-    const key = domainKey(event.canonicalSubcategory);
-    const existing = statsByDomain.get(key) ?? {
-      answered: 0,
-      correct: 0,
-      lastActivityAt: null,
-    };
-    existing.answered += 1;
-    if (event.answerState !== 'incorrect') existing.correct += 1;
-    if (!existing.lastActivityAt || event.createdAt > existing.lastActivityAt) {
-      existing.lastActivityAt = event.createdAt;
-    }
-    statsByDomain.set(key, existing);
-  }
+  const { statsByDomain, demonstratedDomains, demonstratedLabels: demonstratedDomainLabels } =
+    mergeDomainStats(domainAggregates);
 
   const masteryByDomain = buildMasteryByDomain(masteryRows);
   const knowledgeDomainNames = new Map<string, {
@@ -533,40 +584,14 @@ export async function getUserMasteryOverview(userId: string): Promise<MasteryOve
   };
 }
 
-export async function getKnowledgePageData(userId: string): Promise<KnowledgePageData> {
-  const [declaredRows, masteryRows, eventRows, hiddenDomainKeys] = await Promise.all([
-    getActiveDeclaredInterests(userId),
-    getPlayerMasteryRows(userId, true),
-    db
-      .select({
-        canonicalSubcategory: masteryEvents.canonicalSubcategory,
-        sourceType: masteryEvents.sourceType,
-        answerState: masteryEvents.answerState,
-        sessionContext: masteryEvents.sessionContext,
-        awardedPoints: masteryEvents.awardedPoints,
-        createdAt: masteryEvents.createdAt,
-      })
-      .from(masteryEvents)
-      .where(eq(masteryEvents.userId, userId)),
-    getHiddenDomainKeys(userId),
-  ]);
+export async function getKnowledgePageData(
+  userId: string,
+  inputs?: KnowledgeInputs,
+): Promise<KnowledgePageData> {
+  const { declaredRows, masteryRows, domainAggregates, hiddenDomainKeys } =
+    inputs ?? (await loadKnowledgeInputs(userId));
 
-  const statsByDomain = new Map<string, AnswerStats>();
-  for (const event of eventRows) {
-    if (!event.answerState) continue;
-    const key = domainKey(event.canonicalSubcategory);
-    const existing = statsByDomain.get(key) ?? {
-      answered: 0,
-      correct: 0,
-      lastActivityAt: null,
-    };
-    existing.answered += 1;
-    if (event.answerState !== 'incorrect') existing.correct += 1;
-    if (!existing.lastActivityAt || event.createdAt > existing.lastActivityAt) {
-      existing.lastActivityAt = event.createdAt;
-    }
-    statsByDomain.set(key, existing);
-  }
+  const { statsByDomain } = mergeDomainStats(domainAggregates);
 
   const masteryByDomain = buildMasteryByDomain(masteryRows);
   const knowledgeDomainNames = new Map<string, {
@@ -588,7 +613,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
     });
   }
 
-  for (const row of eventRows) {
+  for (const row of domainAggregates) {
     const domain = row.canonicalSubcategory.trim().replace(/\s+/g, ' ');
     if (!domain) continue;
     const key = domainKey(domain);
@@ -597,7 +622,9 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
       domain: existing?.domain ?? domain,
       broadCategory: existing?.broadCategory ?? null,
       isDeclared: existing?.isDeclared ?? false,
-      isDemonstrated: existing?.isDemonstrated ?? Boolean(row.answerState),
+      // A domain present only in events is "demonstrated" when it has any answered
+      // event (statsByDomain carries exactly those).
+      isDemonstrated: existing?.isDemonstrated ?? statsByDomain.has(key),
     });
   }
 
@@ -622,7 +649,7 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
 
   return {
     allDomains,
-    expandingDomains: deriveExpandingDomains(eventRows),
+    expandingDomains: deriveExpandingDomains(domainAggregates),
     declaredInterests: declaredRows
       .map((row) => row.domain.trim().replace(/\s+/g, ' '))
       .filter(Boolean),
@@ -633,39 +660,8 @@ export async function getKnowledgePageData(userId: string): Promise<KnowledgePag
 // knowledge page uses, but without the mastery / declared / hidden joins, so the
 // home-feed promo (getRecentlyExpandingPromo) can read it cheaply.
 export async function getExpandingDomains(userId: string): Promise<ExpandingDomain[]> {
-  const eventRows = await db
-    .select({
-      canonicalSubcategory: masteryEvents.canonicalSubcategory,
-      sourceType: masteryEvents.sourceType,
-      answerState: masteryEvents.answerState,
-      sessionContext: masteryEvents.sessionContext,
-      awardedPoints: masteryEvents.awardedPoints,
-      createdAt: masteryEvents.createdAt,
-    })
-    .from(masteryEvents)
-    .where(eq(masteryEvents.userId, userId));
-  return deriveExpandingDomains(eventRows);
-}
-
-export async function getProgressionLandscape(userId: string): Promise<ProgressionView[]> {
-  const pageData = await getKnowledgePageData(userId);
-
-  return pageData.allDomains
-    .map((domain) => ({
-      canonicalSubcategory: domain.displayName,
-      canonicalSubcategorySlug: toCanonicalDomainSlug(domain.domain),
-      broadCategory: domain.broadCategory,
-      currentTier: domain.tier as MasteryTier,
-      correctAnswerCount: domain.questionsCorrect,
-      authoredCount: domain.questionsAnswered,
-      iconKey: domain.iconKey,
-      territoryType: domain.territoryType,
-    }))
-    .sort((a, b) => {
-      const tierDiff = TIER_ORDER.indexOf(b.currentTier ?? 'establishing') - TIER_ORDER.indexOf(a.currentTier ?? 'establishing');
-      if (tierDiff !== 0) return tierDiff;
-      return b.correctAnswerCount - a.correctAnswerCount || a.canonicalSubcategory.localeCompare(b.canonicalSubcategory);
-    });
+  const aggregates = await loadDomainAggregates(userId, expansionWindowStart());
+  return deriveExpandingDomains(aggregates);
 }
 
 export async function getDomainDetail(userId: string, domain: string): Promise<DomainDetail | null> {
@@ -1040,69 +1036,3 @@ export async function removeKnowledgeDomain(userId: string, domain: string): Pro
   return { removed };
 }
 
-function calendarDay(value: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: STREAK_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(value);
-}
-
-function addDays(day: string, amount: number): string {
-  const [year, month, date] = day.split('-').map(Number);
-  const current = new Date(Date.UTC(year, month - 1, date));
-  current.setUTCDate(current.getUTCDate() + amount);
-  return current.toISOString().slice(0, 10);
-}
-
-export async function getUserAnswerStreak(userId: string): Promise<StreakData> {
-  const [dailyRows, gameRows] = await Promise.all([
-    db
-      .select({ answeredAt: masteryEvents.createdAt })
-      .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, userId),
-        eq(masteryEvents.sessionContext, 'daily'),
-        isNotNull(masteryEvents.answerState),
-      )),
-    db
-      .select({ answeredAt: joshingGameResponses.answeredAt })
-      .from(joshingGameResponses)
-      .where(and(
-        eq(joshingGameResponses.userId, userId),
-        isNotNull(joshingGameResponses.answeredAt),
-      )),
-  ]);
-
-  const days = new Set<string>();
-  for (const row of [...dailyRows, ...gameRows]) {
-    if (!row.answeredAt) continue;
-    days.add(calendarDay(row.answeredAt));
-  }
-
-  const sortedDays = [...days].sort();
-  if (sortedDays.length === 0) {
-    return { currentStreak: 0, longestStreak: 0, lastActivityDate: null };
-  }
-
-  let currentStreak = 0;
-  let cursor = calendarDay(new Date());
-  while (days.has(cursor)) {
-    currentStreak += 1;
-    cursor = addDays(cursor, -1);
-  }
-
-  let longestStreak = 1;
-  let run = 1;
-  for (let index = 1; index < sortedDays.length; index += 1) {
-    run = addDays(sortedDays[index - 1], 1) === sortedDays[index] ? run + 1 : 1;
-    longestStreak = Math.max(longestStreak, run);
-  }
-
-  return {
-    currentStreak,
-    longestStreak,
-    lastActivityDate: sortedDays.at(-1) ?? null,
-  };
-}
