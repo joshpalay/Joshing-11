@@ -51,7 +51,7 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 | ID | Item | Priority | Status | Disposition |
 |---|---|---|---|---|
-| CONS-7 | Shadow / elevation drift | — | `NEEDS DECISION` | Option A (uniform flat) vs B (two registers) |
+| CONS-7 | Shadow / elevation drift | — | `OPEN` (decided: B) | Two registers chosen → token-snap; fold into `B-VISUAL-TOKEN-BUDGET-01` |
 | PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` — copy decision (may be deliberate) |
 
 **Clean cheap-and-safe cluster (mostly already done):** PLR-5 ✅, PLR-6 ✅, PLR-7 ✅, PLR-9 ✅, PLR-13, PLR-21.
@@ -104,7 +104,7 @@ Source: dispositioned in `D-CONSISTENCY-AUDIT-DISPOSITION-01.md` (code-verified 
 | CONS-4 | Duplicate modals & bottom sheets | `WON'T DO` | Canon — same as CONS-2 |
 | CONS-5 | Multiple spacing systems | `TRACKED ELSEWHERE` | Folds into token-budget inventory |
 | CONS-6 | Varying corner radii | `TRACKED ELSEWHERE` | Covered by token-budget |
-| CONS-7 | Inconsistent elevation / shadows | `NEEDS DECISION` | **Real (low)** per 2026-06-13 live-code check: blurred drop shadows (`0 4px 12px`, `0 8px 32px`, `0 12px 28px` — ActivityStreamItem, modals, ceremony, knowledge cards) coexist with flat `Npx Npx 0` offsets; nothing uses `1px 1px 0`. Offline pass against the prototype read this as intentional flat letterpress — that prototype evidence is the case **for Option A** (uniform flat letterpress = intended; blurred shadows = drift to remove). Decide A vs B (two registers) before any prompt. |
+| CONS-7 | Inconsistent elevation / shadows | `OPEN` (decided: B) | **Decision (2026-06-14): Option B — two intentional registers.** Live inventory: (A) flat letterpress `N N 0` on inline/printed artifacts — `ShareCard:134` (4px), `SharePortraitCard:245` (3px), `OverlapMap:34,298` (6/4px), `KnowledgeOverviewClient:310` (2px), `knowledge/page:641`, feed-card border accent `2px 2px 0 var(--brand-ink)`; (B) blurred elevation on floating surfaces — feed cards / `KnowledgeCard` / `RecentlyExploring`/`Expanding` / `ActivityStreamItem` (`0 4px 12px`), `GameplayChat:418` (`0 8px 20px`), `TerritorySetupClient` (`0 8px 22px`/`0 10px 30px`/`0 12px 28px`), `QuickAddQuestionModal:131` (`0 8px 32px`), `knowledge/page` (`0 8px 24px`/`0 18px 48px`), `PortraitCircles:309` (`0 1px 3px`), token `--shadow-paper-rest` (`0 1px 2px`). Feed cards intentionally combine both. **Plan:** define ~3 tokens — `--shadow-press` (flat), `--shadow-card` (`0 4px 12px`), `--shadow-overlay` (one heavy blur for modals/dialogs) — and snap the ~4 offsets + ~11 blur values to them. Folds into `B-VISUAL-TOKEN-BUDGET-01` (also reduces off-system rgba count). |
 | CONS-8 | Non-standard typography hierarchy | `WON'T DO` | Generic — font tokens defined |
 | CONS-9 | Mixed illustration styles | `WON'T DO` | Generic — no screens cited |
 | CONS-10 | Inconsistent form controls | `WON'T DO` | Generic — no surface cited |
