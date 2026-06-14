@@ -62,11 +62,9 @@
     --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
     --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
     --brand-link:        #4a5d75;  /* Link — inline links                      */
-    /* Fill behind primary buttons (.btn-primary + the login submit). Defaults to
-       the slate link color; the dev PaletteToggle bar flips it to --brand-navy so
-       both surfaces can be compared/unified. Both buttons read this one token, so
-       page and login CTAs always match. */
-    --btn-primary-bg:    var(--brand-link);
+    /* Unified fill behind primary buttons — both .btn-primary and the login submit
+       read this one token, so page and login CTAs always match. */
+    --btn-primary-bg:    var(--brand-navy);
     --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
     --brand-cream:       #f8e6c7;  /* triangle/cream                           */
     --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
