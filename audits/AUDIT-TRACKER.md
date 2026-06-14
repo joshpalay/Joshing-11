@@ -101,7 +101,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 
 ## Audit #1 — Design Consistency Audit (15 items)
 
-Source: dispositioned in `D-CONSISTENCY-AUDIT-DISPOSITION-01.md` (code-verified 2026-06-13). Template-style audit run against screenshots, not the live tree — only **CONS-7** is a live finding.
+Source: dispositioned in `D-CONSISTENCY-AUDIT-DISPOSITION-01.md` (code-verified 2026-06-13). Template-style audit run against screenshots, not the live tree — only **CONS-7** is a live finding. A second offline pass (against PRDs/prototype/screenshots) corroborated this disposition on 14 of 15 items; it diverged only on CONS-7, which the live-code check had already flipped from "intentional flat" to a real low finding.
 
 | ID | Item | Status | Notes |
 |---|---|---|---|
@@ -111,7 +111,7 @@ Source: dispositioned in `D-CONSISTENCY-AUDIT-DISPOSITION-01.md` (code-verified 
 | CONS-4 | Duplicate modals & bottom sheets | `WON'T DO` | Canon — same as CONS-2 |
 | CONS-5 | Multiple spacing systems | `TRACKED ELSEWHERE` | Folds into token-budget inventory |
 | CONS-6 | Varying corner radii | `TRACKED ELSEWHERE` | Covered by token-budget |
-| CONS-7 | Inconsistent elevation / shadows | `NEEDS DECISION` | **Real (low).** Option A (uniform flat letterpress) vs B (two intentional registers) before any prompt |
+| CONS-7 | Inconsistent elevation / shadows | `NEEDS DECISION` | **Real (low)** per 2026-06-13 live-code check: blurred drop shadows (`0 4px 12px`, `0 8px 32px`, `0 12px 28px` — ActivityStreamItem, modals, ceremony, knowledge cards) coexist with flat `Npx Npx 0` offsets; nothing uses `1px 1px 0`. Offline pass against the prototype read this as intentional flat letterpress — that prototype evidence is the case **for Option A** (uniform flat letterpress = intended; blurred shadows = drift to remove). Decide A vs B (two registers) before any prompt. |
 | CONS-8 | Non-standard typography hierarchy | `WON'T DO` | Generic — font tokens defined |
 | CONS-9 | Mixed illustration styles | `WON'T DO` | Generic — no screens cited |
 | CONS-10 | Inconsistent form controls | `WON'T DO` | Generic — no surface cited |
