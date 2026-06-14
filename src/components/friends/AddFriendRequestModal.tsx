@@ -147,7 +147,7 @@ export function AddFriendRequestModal({
           background: 'var(--bg)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-paper-rest)',
+          boxShadow: 'var(--shadow-modal)',
           padding: '24px',
         }}
       >

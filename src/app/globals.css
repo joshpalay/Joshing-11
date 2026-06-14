@@ -281,6 +281,15 @@
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
+    /* Elevation registers (CONS-7 / Option B, D-CONSISTENCY-AUDIT-DISPOSITION-01 #7).
+       Two intentional registers: a flat hard-offset "letterpress" register
+       (OverlapMap, ShareCard, SharePortraitCard, KnowledgeOverviewClient) that
+       stays as literal `Npx Npx 0 <ink>` offsets, and this soft elevation
+       register for surfaces that float above the page. Focus/selection rings
+       (`0 0 0 2px`) and bespoke tinted glows (GameplayChat navy, the ceremony
+       gem) are separate idioms and intentionally NOT tokenized here. */
+    --shadow-card: 0 4px 12px rgb(40 32 30 / 0.04);   /* resting card lift */
+    --shadow-modal: 0 8px 32px rgb(0 0 0 / 0.18);     /* centered modals / popovers */
 }
 
 .dark {

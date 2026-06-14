@@ -195,7 +195,7 @@ const boxStyle: CSSProperties = {
   background: 'var(--brand-cream-card)',
   border: '1px solid var(--brand-border)',
   borderRadius: 12,
-  boxShadow: '0 4px 12px rgba(40, 32, 30, 0.04)',
+  boxShadow: 'var(--shadow-card)',
   padding: '1.05rem 0.95rem 0.65rem',
   display: 'grid',
   gap: '0.75rem',

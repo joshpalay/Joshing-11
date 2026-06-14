@@ -48,7 +48,7 @@ This doc was originally written without live-code access (see provenance caveat)
 |4 |Duplicate modals & bottom sheets     |**NOT-APPLICABLE (canon)**            |Same as #2 — a global overlay sweep overrides deferred card/primitive decisions. Real subset, if any, lives in the deferred card-tiers prompt.                                                                                                                                                                                                                                                              |
 |5 |Multiple spacing systems             |**ALREADY-TRACKED**                   |Plausible low-grade drift; overlaps the hardcoded-literal problem already inventoried under the token-budget work. Fold in there, don’t open a separate track.                                                                                                                                                                                                                                              |
 |6 |Varying corner radii                 |**ALREADY-TRACKED**                   |Same as #5 — same files re-literalize values; covered by token-budget inventory.                                                                                                                                                                                                                                                                                                                            |
-|7 |Inconsistent elevation/shadows       |**REAL — LOW (per code verification)**|Originally marked NOT-APPLICABLE on the assumption of a uniform flat letterpress treatment. Live CSS disproves that: flat offsets (OverlapMap, ShareCard, etc.) coexist with widespread blurred drop shadows (`0 4px 12px`, `0 8px 32px`, `0 12px 28px`), and nothing uses `1px 1px 0`. Genuine shadow drift exists. **Needs a product decision before any prompt** — see open fork below.                  |
+|7 |Inconsistent elevation/shadows       |**REAL — LOW (per code verification)**|Originally marked NOT-APPLICABLE on the assumption of a uniform flat letterpress treatment. Live CSS disproves that: flat offsets (OverlapMap, ShareCard, etc.) coexist with widespread blurred drop shadows (`0 4px 12px`, `0 8px 32px`, `0 12px 28px`), and nothing uses `1px 1px 0`. Genuine shadow drift exists. **Resolved 2026-06-14: Option B (two registers) chosen and partially implemented** — see resolution below.                  |
 |8 |Non-standard typography hierarchy    |**NOT-APPLICABLE (generic)**          |Font tokens are defined (Montserrat body, Caveat handwriting-only; `FF`/`FM` in prototype). The “14px/1.2 vs 16px/1.5” complaint isn’t grounded in the actual system.                                                                                                                                                                                                                                       |
 |9 |Mixed illustration styles            |**NOT-APPLICABLE (generic)**          |No specific screens cited. Boilerplate.                                                                                                                                                                                                                                                                                                                                                                     |
 |10|Inconsistent form controls           |**NOT-APPLICABLE (generic)**          |No Joshing form surface cited. Boilerplate.                                                                                                                                                                                                                                                                                                                                                                 |
@@ -98,11 +98,31 @@ Do **not** convert this audit into tickets. Mark it reviewed-and-closed via this
 
 -----
 
-## Open fork — #7 shadow/elevation (needs decision before any prompt)
+## Resolved — #7 shadow/elevation: **Option B chosen** (2026-06-14)
 
-Code verification turned #7 into a real low-severity finding. Before writing any build prompt, one product/visual decision is required (governed by “no new tokens without an explicit decision,” not copy-before-pixels):
+Code verification turned #7 into a real low-severity finding. The product/visual call (governed by “no new tokens without an explicit decision”) is now made: **Option B — two intentional registers.**
 
-- **Option A — Uniform flat letterpress.** The flat `Npx Npx 0` offset is the intended system everywhere; the blurred drop shadows (modals, ceremony, activity items, knowledge cards) are drift to be removed/converted. Heavier change; touches many surfaces.
-- **Option B — Two intentional registers.** Blurred shadows belong on specific elevated surfaces (modals, ceremony, transient overlays) by design; flat offsets belong on inline/card surfaces. The fix is then only to define which register each surface uses and remove off-pattern outliers — not to flatten everything.
+- ~~**Option A — Uniform flat letterpress.**~~ Rejected. It contradicts the design system, which already documents a soft-elevation scale (`DESIGN-SYSTEM.md` §5.1: `--shadow-paper-rest`, `shadow-sm/lg/xl/2xl`) and a “5%-alpha 1px lift” as the standard shadow. Flattening modals and the ceremony gem glow would remove depth those surfaces are meant to read. Also the heavier, higher-risk change.
+- **Option B — Two intentional registers.** *(chosen)* A flat hard-offset “letterpress” register coexists with a soft elevation register; each surface is assigned one. Off-pattern outliers are corrected; bespoke tinted glows are exempt.
 
-No prompt should be written until A or B is chosen. Either way the work is flag-gated and separate from the token-budget/literal-to-token sequence.
+### Register assignment (canon)
+
+| Register | Tokens / form | Surfaces |
+|---|---|---|
+| **Flat letterpress** | literal `Npx Npx 0 <ink>` (not tokenized) | OverlapMap, ShareCard, SharePortraitCard, KnowledgeOverviewClient |
+| **Soft elevation — rest** | `--shadow-paper-rest` | input fields, inline paper lift |
+| **Soft elevation — card** | `--shadow-card` (`0 4px 12px rgb(40 32 30 / 0.04)`) | KnowledgeCard, RecentlyExpanding, RecentlyExploringSection, ActivityStreamItem(elevated) |
+| **Soft elevation — modal** | `--shadow-modal` (`0 8px 32px rgb(0 0 0 / 0.18)`) | QuickAddQuestionModal, AddFriendRequestModal |
+| **Focus / selection ring** | `0 0 0 2px <color>` (separate idiom, untouched) | AnsweredByYouCard, daily/catchup, daily/summary, DomainCircle |
+| **Bespoke tinted glow** | surface-specific, **exempt** | GameplayChat (navy), ceremony gem (radial glow + inset) |
+
+### Done in this pass (commit on `claude/shadow-elevation-drift-labuxa`)
+
+- Added `--shadow-card` and `--shadow-modal` next to `--shadow-paper-rest` in `globals.css`.
+- Routed the four card-rest surfaces through `--shadow-card`, which **fixes the real drift**: `ActivityStreamItem` was `…/0.1` while the three knowledge/profile cards were `…/0.04`; all now share `--shadow-card` (`/0.04`).
+- Routed both centered modals through `--shadow-modal`, **fixing the second drift**: `AddFriendRequestModal` was on `--shadow-paper-rest` (a 1px lift) while `QuickAddQuestionModal` floated at `0 8px 32px`; both now read as proper modals.
+- Net effect on the color ratchet is favorable (five inline `rgba()` tuples → `var(--shadow-*)`; token defs live in the exempt `globals.css`).
+
+### Deferred (raised register, not yet converted)
+
+`TerritorySetupClient` (`0 12px 28px /0.16`, `0 8px 22px /0.08`, `drop-shadow-lg`) and `PortraitCircles` (`0 1px 3px /0.18`) form a mid “raised” register. Left as literals this pass to avoid per-surface visual regressions; convert under a `--shadow-raised` token in a follow-up if the register proves worth a token. Separate from the token-budget/literal-to-token sequence.

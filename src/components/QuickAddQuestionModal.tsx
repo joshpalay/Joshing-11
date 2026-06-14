@@ -128,7 +128,7 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           background: 'var(--bg-card, var(--bg))',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          boxShadow: 'var(--shadow-modal)',
           padding: '24px 24px 20px',
         }}
       >
