@@ -53,7 +53,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 | ID | Item | Priority | Status | Disposition |
 |---|---|---|---|---|
 | PLR-8 | Catch-up reveal consumes a question, no confirmation | P1 | `OPEN` | `FIX VIA CANON` — the important half of #3/#8; aligns with fail-toward-player |
-| PLR-11 | "Card Color" PaletteToggle dev tool still shipped to all | — | `OPEN` | — (ship gate; pull before launch, like PLR-1) |
 | PLR-15 | No onboarding/tour for the Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` — tie to B-FirstRecap-1 / B-HomeSeed-1; explanation must match the mastery model |
 | PLR-16 | Overwhelming home feed | P1 | `PARTIAL` | `FIX VIA CANON` — stagger CTAs; **do not** reintroduce grouping |
 | PLR-24 | Categories skew Western | P3 | `NEEDS DECISION` | `PRODUCT CONVERSATION` — audit seed bank + interest taxonomy, not a content drive |
@@ -79,7 +78,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-8 | Catch-up reveal, no confirmation | P1 | `OPEN` | `FIX VIA CANON` | The more important of #3/#8. `onGiveUp={() => skipCurrent()}` `catchup/page.tsx:138`. Add a confirm before a reveal burns a question (fail-toward-player). |
 | PLR-9 | Privacy toggles lack context | P2 | `DONE` | `CLEAN WIN` | `419201a`; `SECTION_VISIBILITY_HELP` `users/[id]/page.tsx:546–565`. |
 | PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` | Treat as a **copy decision** (copy before pixels); "Establishing" may be deliberate vocabulary. Rename ideas ("In review") are direction, not a quick relabel. No tooltip today `TodaysFiveCard.tsx:49,58`. |
-| PLR-11 | Card-colour switcher confusing | — | `OPEN` | — | Dev `PaletteToggle` live for all `layout.tsx:7,72` ("remove before shipping"). Ship gate alongside PLR-1. |
+| PLR-11 | Card-colour switcher confusing | — | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: dev `PaletteToggle` live for all `layout.tsx:7,72`.) |
 | PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
 | PLR-13 | Explanation field is a small scrolling textarea | — | `OPEN` | `CLEAN WIN` | Low-stakes. `rows={4}`, no resize `QuestionForm.tsx:666`. |
 | PLR-14 | Friend list lacks quick actions | P2 | `OPEN` | `FIX VIA CANON` | Richer friend actions are fine — but **no** streak count, leaderboards, "Challenge," or competition language. `FriendCard` is just a `<Link>` `FriendsList.tsx:108–122`. |
