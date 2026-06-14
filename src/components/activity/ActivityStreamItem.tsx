@@ -701,8 +701,11 @@ function AnsweredHistory({
           // sits in this answered list); treat anything but 'incorrect' as right.
           const isCorrect = r ? r.isCorrect : q.priorResult !== 'incorrect';
           // Result reads in the app's semantic answer colors: green for correct,
-          // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
-          const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
+          // red for "not this time". This is the *quiet* answered-history line, so
+          // it uses the calm grading registers — base green --game-correct paired
+          // with the muted brick red --game-wrong (text/wrong), not the loud
+          // --game-wrong-strong SIGNAL reserved for the live in-play verdict.
+          const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong)';
           return (
             // Hollow triangle = already answered (spent), matching the bundle
             // mark's hollow state, so the viewer sees which ones they've done.
