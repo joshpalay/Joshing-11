@@ -8,6 +8,7 @@ import {
   follows,
   joshingGameResponses,
   masteryEvents,
+  questions,
   users,
 } from '@/server/db';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
@@ -26,6 +27,12 @@ export type HubPerson = {
   lastActiveAt: Date | null
   youFollow: boolean
   followsYou: boolean
+  // Two warm activity facts for the friend row (PLR-14): how many questions this
+  // person has authored, and how many of THEIR authored questions the viewer has
+  // answered (from their feed, right or wrong). Not a ranking — never sort/compare
+  // friends by these (anti-leaderboard, PRODUCT-CANON.md).
+  authoredCount: number
+  answeredByViewerCount: number
 }
 
 export type IncomingFollowRequest = {
@@ -230,6 +237,60 @@ async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Dat
   return lastActive
 }
 
+// Two per-friend question counts for the friends-list rows (PLR-14), both as
+// single bulk aggregates over the friend-id set (no per-friend N+1):
+//   • authored        — questions this person wrote (source 'authored', live)
+//   • answeredByViewer — of THIS person's authored questions, how many the viewer
+//     has answered. Sourced from feedItems (carries answerResult for correct OR
+//     incorrect, and joins the question's creatorId) so "answered" means engaged,
+//     not "got right" (mastery events are correct-only).
+async function getFriendQuestionCounts(
+  viewerId: string,
+  friendIds: string[],
+): Promise<Map<string, { authored: number; answeredByViewer: number }>> {
+  if (friendIds.length === 0) return new Map()
+
+  const [authoredRows, answeredRows] = await Promise.all([
+    db
+      .select({
+        creatorId: questions.creatorId,
+        count: sql<number>`count(*)::int`.as('count'),
+      })
+      .from(questions)
+      .where(and(
+        inArray(questions.creatorId, friendIds),
+        eq(questions.source, 'authored'),
+        sql`${questions.deletedAt} is null`,
+      ))
+      .groupBy(questions.creatorId),
+    db
+      .select({
+        creatorId: questions.creatorId,
+        count: sql<number>`count(distinct ${feedItems.questionId})::int`.as('count'),
+      })
+      .from(feedItems)
+      .innerJoin(questions, eq(questions.id, feedItems.questionId))
+      .where(and(
+        eq(feedItems.recipientUserId, viewerId),
+        inArray(questions.creatorId, friendIds),
+        sql`${feedItems.answerResult} is not null`,
+        sql`${questions.deletedAt} is null`,
+      ))
+      .groupBy(questions.creatorId),
+  ])
+
+  const counts = new Map<string, { authored: number; answeredByViewer: number }>()
+  const bump = (id: string | null, key: 'authored' | 'answeredByViewer', n: number) => {
+    if (!id) return
+    const current = counts.get(id) ?? { authored: 0, answeredByViewer: 0 }
+    current[key] = Number(n) || 0
+    counts.set(id, current)
+  }
+  for (const row of authoredRows) bump(row.creatorId, 'authored', row.count)
+  for (const row of answeredRows) bump(row.creatorId, 'answeredByViewer', row.count)
+  return counts
+}
+
 export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   // All follow edges touching me, in either direction.
   const edges = await db
@@ -304,9 +365,12 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   }
   const viewerInterests = new Set(interestsByUser.get(userId) ?? [])
 
-  const lastActiveByUser = personIds.length === 0
-    ? new Map<string, Date>()
-    : await getLastActiveByUserId(personIds)
+  const [lastActiveByUser, questionCountsByUser] = personIds.length === 0
+    ? [new Map<string, Date>(), new Map<string, { authored: number; answeredByViewer: number }>()]
+    : await Promise.all([
+        getLastActiveByUserId(personIds),
+        getFriendQuestionCounts(userId, personIds),
+      ])
 
   const [me] = await db
     .select({ followPrivacy: users.followPrivacy })
@@ -326,6 +390,8 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
       lastActiveAt: lastActiveByUser.get(id) ?? null,
       youFollow: followingIds.has(id),
       followsYou: followerIds.has(id),
+      authoredCount: questionCountsByUser.get(id)?.authored ?? 0,
+      answeredByViewerCount: questionCountsByUser.get(id)?.answeredByViewer ?? 0,
     }
   }
 
