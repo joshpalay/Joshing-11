@@ -90,9 +90,7 @@ export function CommonGroundFeature({
   const friendHref = activeFriend?.friendHref ?? embed.friendHref;
   return (
     <EditorialFeature
-      // Sage tone (the green accent + soft green wash) — "shared ground" reads
-      // as earthy/green, and it moves the eyebrow + CTA off the brand orange.
-      tone="sage"
+      tone="parchment"
       eyebrow="Shared Ground"
       headline={
         onInviteSlide ? (
