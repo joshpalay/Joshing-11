@@ -547,6 +547,13 @@
       "when": 1783209600000,
       "tag": "0077_email_verification_opt_in_intent",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1783296000000,
+      "tag": "0078_perf_lookup_indexes",
+      "breakpoints": true
     }
   ]
 }
