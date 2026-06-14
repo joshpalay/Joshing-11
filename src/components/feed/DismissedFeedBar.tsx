@@ -34,7 +34,7 @@ export function DismissedFeedBar({
     <div
       role="status"
       aria-live="polite"
-      className="relative overflow-hidden rounded-[4px] border border-[var(--brand-rule)] bg-[var(--game-card-question)] px-4 py-3 shadow-[0_4px_12px_rgba(40,32,30,0.04)]"
+      className="relative overflow-hidden rounded-[4px] border border-[var(--brand-rule)] bg-[var(--game-card-question)] px-4 py-3 shadow-[var(--shadow-card)]"
     >
       <div className="flex items-center justify-between gap-3">
         <span className="text-muted-foreground text-sm italic">Dismissed</span>

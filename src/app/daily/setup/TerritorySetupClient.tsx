@@ -786,7 +786,7 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
         diameter={58}
         tint={color.primary}
         border={`1px solid color-mix(in srgb, ${color.primary} 33%, transparent)`}
-        style={{ boxShadow: '0 12px 28px rgba(26,18,8,0.16)' }}
+        style={{ boxShadow: 'var(--shadow-overlay)' }}
       >
         {domain.correctAnswerCount > 0 ? (
           <span
@@ -854,7 +854,7 @@ function TerritoryZone({
   return (
     <section
       ref={setRef}
-      className={`rounded-[2rem] border bg-white/40 p-4 transition ${highlighted ? 'border-[var(--ink)] shadow-[0_10px_30px_rgba(26,18,8,0.12)]' : 'border-[var(--border-warm)]'}`}
+      className={`rounded-[2rem] border bg-white/40 p-4 transition ${highlighted ? 'border-[var(--ink)] shadow-[var(--shadow-overlay)]' : 'border-[var(--border-warm)]'}`}
     >
       <div className="mb-4">
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
@@ -971,7 +971,7 @@ function TerritoryCircle({
         diameter={size}
         tint={color.primary}
         border={`1px solid color-mix(in srgb, ${color.primary} 27%, transparent)`}
-        style={{ boxShadow: '0 8px 22px rgba(26,18,8,0.08)' }}
+        style={{ boxShadow: 'var(--shadow-overlay)' }}
       >
         {correctCount > 0 ? (
           <span
