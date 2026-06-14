@@ -51,8 +51,7 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 **No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
 
-- **PLR-14** (`FIX VIA CANON`) — richer friend actions (no competition mechanics). A real P2 feature.
-- **PLR-3** — needs a live repro to confirm the "double-tap" exists.
+- **PLR-3** — needs a live repro to confirm the "double-tap" exists (may be a no-op).
 - **Partials (judgment, low urgency):** PLR-12, PLR-17, PLR-19, PLR-20, PLR-25.
 
 ---
@@ -76,7 +75,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-11 | Card-colour switcher confusing | — | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: dev `PaletteToggle` live for all `layout.tsx:7,72`.) |
 | PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
 | PLR-13 | Explanation field is a small scrolling textarea | — | `DONE` | `CLEAN WIN` | Shipped #934: explanation `<textarea>` is now `resize-y` with a taller default (`rows={5}`, `min-h-[7.5rem]`) — `QuestionForm.tsx:666`. |
-| PLR-14 | Friend list lacks quick actions | P2 | `OPEN` | `FIX VIA CANON` | Richer friend actions are fine — but **no** streak count, leaderboards, "Challenge," or competition language. `FriendCard` is just a `<Link>` `FriendsList.tsx:108–122`. |
+| PLR-14 | Friend list lacks quick actions | P2 | `DONE` | `FIX VIA CANON` | Shipped #945. Each friend row now carries two warm activity facts (not action buttons, per owner): **Questions created** (their authored count) and **You've answered** (of those, how many the viewer answered across all surfaces — feed/mastery/game union). Single bulk aggregate in `getFriendsHub` (no N+1); rendered as a label/count ledger, never a ranking (anti-leaderboard). |
 | PLR-15 | No onboarding/tour for Knowledge Map | P1 | `DONE` | `FIX VIA CANON` | Reworked the post-first-five recap (`FirstSessionRecap.tsx`): Beat 2 now points to the **Knowledge** tab; new Beat 3 points to the **Questions** tab (write-questions); new Beat 4 carries the daily rhythm + the reminder email opt-in. Removed the invite beat (per owner). Copy avoids the mastery-size misstatement. Also moved the reminder opt-in **off onboarding** (`OnboardingFlow.tsx` — `reminders` step deleted; finishes straight to /daily). Typecheck/lint/tests green. |
 | PLR-16 | Overwhelming home feed | P1 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Budgeted "edition" already caps arrival volume (`build-edition.ts`, `page.tsx:118–161`); not tracking further. (Collapsible grouping remains banned regardless — see traps.) |
 | PLR-17 | Catch-up lacks closure/celebration | — | `PARTIAL` | `DO NOT DO` (confetti) | `RoundSummary` closing state exists `catchup/page.tsx:173–311`. A closure beat is OK in the quiet-warmth voice; **no** game-win celebration/confetti. |
