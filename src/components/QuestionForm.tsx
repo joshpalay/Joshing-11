@@ -663,7 +663,7 @@ export function QuestionForm({
 
           <div>
             <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</label>
-            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={4} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
+            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={5} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full resize-y min-h-[7.5rem] rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
           </div>
 
