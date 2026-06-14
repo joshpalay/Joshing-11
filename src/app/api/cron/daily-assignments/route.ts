@@ -14,6 +14,9 @@ import { isCronAuthorized } from '@/server/auth/cron';
 import { sendSms } from '@/server/sms';
 import { sendEmail } from '@/server/email/client';
 import { buildDailyReminderTemplate } from '@/server/email/templates/daily-reminder';
+import { formatActivityForEmail, topicsForReminder } from '@/server/email/daily-reminder-data';
+import { getRecentActivityForHome } from '@/server/db/queries/activity';
+import { createUnsubscribeToken } from '@/server/email/unsubscribe-token';
 
 export const dynamic = 'force-dynamic';
 // Scheduled at 17:05 UTC by GitHub Actions (.github/workflows/external-crons.yml)
@@ -124,21 +127,40 @@ export async function GET(request: NextRequest) {
       // already finished today is skipped. sendEmail never throws (returns a
       // discriminated union), so a provider failure counts as a skipped email.
       if (queue && user.emailOptIn === 'opted_in' && user.emailVerified && user.email) {
-        const teaserSlot = asQueueSlots(queue.slots).find(
+        const slots = asQueueSlots(queue.slots);
+        const teaserSlot = slots.find(
           (slot) => !slot.answered && !slot.skipped && slot.question_text,
         );
         // Claim before send so concurrent retries race on the DB, not the
         // provider; a losing claim (already sent today) skips silently.
         if (teaserSlot && (await claimDailyEmailReminder(queue.id))) {
+          // Quiet, people-first "Meanwhile" lines from the same home-eligible
+          // activity Home surfaces; empty → the section is omitted downstream.
+          const activity = formatActivityForEmail(await getRecentActivityForHome(user.id, 3));
+          // Session-less unsubscribe: the footer link points at the friendly
+          // /unsubscribe page; the List-Unsubscribe header at the RFC 8058
+          // one-click POST endpoint. Both verify the same signed token. Gmail/
+          // Yahoo bulk-sender rules expect this header on reminder mail.
+          const unsubToken = createUnsubscribeToken(user.id);
+          const unsubscribeUrl = `${baseUrl}/unsubscribe?token=${unsubToken}`;
+          const oneClickUrl = `${baseUrl}/api/email/unsubscribe?token=${unsubToken}`;
           const template = buildDailyReminderTemplate({
             dailyUrl: `${baseUrl}/daily`,
+            interestsUrl: `${baseUrl}/daily/setup`,
+            topics: topicsForReminder(slots),
+            activity,
             teaser: { questionText: teaserSlot.question_text, domain: teaserSlot.domain },
+            unsubscribeUrl,
           });
           const emailResult = await sendEmail({
             to: user.email,
             subject: template.subject,
             html: template.html,
             text: template.text,
+            headers: {
+              'List-Unsubscribe': `<${oneClickUrl}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            },
           });
           if (emailResult.ok) {
             results.emailSent += 1;

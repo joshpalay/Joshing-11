@@ -61,7 +61,7 @@ export function InviteSomeoneNew() {
         <button
           type="button"
           onClick={openPersonalInvite}
-          className="btn-primary min-h-11 rounded-full px-4 text-sm"
+          className="btn-primary px-4"
         >
           Send a personal invite
         </button>
@@ -69,7 +69,7 @@ export function InviteSomeoneNew() {
           type="button"
           onClick={() => void copyInviteLink()}
           disabled={copying}
-          className="btn-ghost min-h-11 rounded-full px-4 text-sm"
+          className="btn-ghost px-4"
         >
           {copying ? 'Loading…' : 'Copy invite link'}
         </button>

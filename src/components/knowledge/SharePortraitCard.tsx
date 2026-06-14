@@ -21,10 +21,15 @@ const RULE = '#e0dbd0';
 const FM = "'Courier New', monospace";
 const FP = "'Playfair Display', Georgia, serif";
 
-// Domain color palette — every domain must have a distinct color, no grey fallback
+// Domain color palette — every domain must have a distinct color, no grey fallback.
+//
+// LOCKSTEP: these literals MUST mirror the `--cat-*` tokens in globals.css
+// value-for-value. html2canvas can't read CSS variables, so this raster path
+// hardcodes the scale; if the tokens change, change these in the SAME edit or
+// the share image silently drifts to the old (collision-prone) colors.
 const DOMAIN_COLORS: Record<string, string> = {
   // Slug keys (from portrait API broad_category)
-  Literature: '#c0392b',
+  Literature: '#7d2c3f', // --cat-literature (bordeaux; de-collided from grading red)
   Music: '#1a6b8a',
   'Film & Television': '#6b3fa0',
   'Film & TV': '#6b3fa0',
@@ -37,7 +42,7 @@ const DOMAIN_COLORS: Record<string, string> = {
   Science: '#5a7a2e',
   Philosophy: '#7a5a8a',
   'Pop Culture': '#8a2a4a',
-  Language: '#4a7a5a',
+  Language: '#2e6e7e', // --cat-language (teal; de-collided from CORRECT green)
 };
 
 function hashColor(str: string): string {

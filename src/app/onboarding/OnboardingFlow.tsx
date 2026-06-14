@@ -8,6 +8,10 @@ import { AddTopicField, type AddTopicError } from '@/components/interests/AddTop
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
 // optional expander there; the cultural-anchor/background step was removed).
+// Picking areas marks onboarding complete, kicks off question generation, and
+// lands the player straight in /daily. The daily-reminder email opt-in moved
+// off this flow into the post-first-five recap (FirstSessionRecap), so the ask
+// arrives once the player has actually felt the loop.
 type CurrentStep = 'display-name' | 'handle' | 'review'
 
 export type WarmupAnswers = {
@@ -629,11 +633,10 @@ export default function OnboardingFlow({
       }
 
       // Kick off first-round generation in the background so it's ready (or
-      // nearly) when the player lands in /daily, then take them straight into
-      // gameplay instead of the homepage. keepalive lets the POST survive the
-      // client navigation; the queue route is idempotent, so /daily's own load
-      // won't double-generate. A freshly-declared interest list guarantees a
-      // knowledge base, so /daily won't bounce to setup.
+      // nearly) when the player lands in /daily. keepalive lets the POST survive
+      // the client navigation; the queue route is idempotent, so /daily's own
+      // load won't double-generate. A freshly-declared interest list guarantees
+      // a knowledge base, so /daily won't bounce to setup.
       void fetch('/api/daily/queue', {
         method: 'POST',
         credentials: 'include',
@@ -641,6 +644,9 @@ export default function OnboardingFlow({
         keepalive: true,
       }).catch(() => {})
 
+      // Onboarding is now complete (save-interests set the flag) and the queue
+      // is generating in the background — land the player straight in /daily.
+      // The daily-reminder opt-in now lives in the post-first-five recap.
       router.push('/daily')
     } catch {
       setError('Unable to save interests.')
@@ -711,7 +717,7 @@ export default function OnboardingFlow({
 
                 <button
                   type="submit"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary w-full"
                   disabled={
                     isSavingDisplayName ||
                     displayName.trim().length < DISPLAY_NAME_MIN
@@ -795,7 +801,7 @@ export default function OnboardingFlow({
 
                 <button
                   type="submit"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary w-full"
                   disabled={
                     isSavingHandle ||
                     handle.length < HANDLE_MIN ||
@@ -873,7 +879,7 @@ export default function OnboardingFlow({
                 {!showWarmup ? (
                   <button
                     type="button"
-                    className="btn-ghost h-11 w-full"
+                    className="btn-ghost w-full"
                     onClick={() => setShowWarmup(true)}
                   >
                     Need ideas? Answer a couple quick questions
@@ -903,7 +909,7 @@ export default function OnboardingFlow({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        className="btn-primary h-11 flex-1"
+                        className="btn-primary flex-1"
                         onClick={generateProposals}
                         disabled={!canGenerate || isGenerating}
                       >
@@ -911,7 +917,7 @@ export default function OnboardingFlow({
                       </button>
                       <button
                         type="button"
-                        className="btn-ghost h-11 px-4"
+                        className="btn-ghost px-4"
                         onClick={() => setShowWarmup(false)}
                       >
                         Hide
@@ -932,7 +938,7 @@ export default function OnboardingFlow({
                 </p>
                 <button
                   type="button"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary w-full"
                   onClick={() => saveInterests()}
                   disabled={selectedInterests.length < MIN_INTERESTS || isLoading}
                 >

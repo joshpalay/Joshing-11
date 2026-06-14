@@ -29,11 +29,14 @@ function appBaseUrl(): string {
 // Best-effort: mints a verification token for the user's current
 // pendingEmail and sends the confirm-link email. Never throws — returns
 // a discriminated union so the caller can decide whether to surface the
-// failure. Used by both:
+// failure. Used by:
 //   - POST /api/account/email/verify/send (explicit resend)
 //   - PATCH /api/account/reminders (auto-trigger on pendingEmail change)
+//   - POST /api/onboarding/email-reminder (passes optInOnConfirm so confirming
+//     the link also flips emailOptIn on — the onboarding beat's single action)
 export async function sendVerificationEmail(
   userId: string,
+  options: { optInOnConfirm?: boolean } = {},
 ): Promise<SendVerificationEmailResult> {
   const [row] = await db
     .select({ pendingEmail: users.pendingEmail })
@@ -45,7 +48,9 @@ export async function sendVerificationEmail(
     return { ok: false, reason: 'no_pending_email' };
   }
 
-  const tokenResult = await createVerificationToken(userId, row.pendingEmail);
+  const tokenResult = await createVerificationToken(userId, row.pendingEmail, {
+    optInOnConfirm: options.optInOnConfirm,
+  });
   if (!tokenResult.ok) {
     return { ok: false, reason: 'rate_limited', retryAfterMs: tokenResult.retryAfterMs };
   }

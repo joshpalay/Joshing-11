@@ -272,6 +272,24 @@ export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): str
   }
 }
 
+// A single critique reformulation option. The "Use this" affordance label and
+// the reformulated question are rendered as two discrete block elements so the
+// label can never share a text node with — and run together into — the
+// suggestion value (the "Use this Which American city…" artifact,
+// B-COMPOSER-SUGGESTION-ARTIFACT-01). The reformulation value owns its own node.
+export function ReformulationOption({ text, onUse }: { text: string; onUse: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onUse}
+      className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
+    >
+      <span className="block font-medium">Use this</span>
+      <span className="block">{text}</span>
+    </button>
+  );
+}
+
 export function QuestionForm({
   mode = 'create',
   initialValues,
@@ -514,6 +532,22 @@ export function QuestionForm({
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
   const canShowAnswering = state.stage === 'ANSWERING' || state.stage === 'SUBMITTING' || mode === 'edit';
+
+  // Save-success confirmation. The save lands, the form flips to DONE, and this
+  // panel replaces the fields so the writer gets an unmistakable in-form
+  // confirmation (the host page also fires its destination-aware toast as it
+  // closes the drawer a beat later). `Save to bank` is always forced on, so the
+  // create-mode baseline is always literally true regardless of sharing choices.
+  if (state.stage === 'DONE') {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col items-center justify-center gap-2 py-12 text-center" role="status" aria-live="polite">
+          <span className="text-3xl leading-none text-[var(--success)]" aria-hidden="true">✓</span>
+          <p className="m-0 text-base font-medium text-[var(--success)]">{mode === 'edit' ? 'Question updated.' : 'Saved to your bank.'}</p>
+        </div>
+      </div>
+    );
+  }
   // The form lives inside a scrollable drawer/modal (questions + knowledge
   // pages). Keep the action buttons pinned to the bottom on an opaque,
   // composited footer: the backdrop-blur layer prevents the iOS Safari
@@ -574,14 +608,12 @@ export function QuestionForm({
           <p className="mt-3 font-medium">Try one of these instead:</p>
           <div className="mt-2 space-y-2">
             {critique.reformulations.map((text) => (
-              <button key={text} type="button" onClick={() => dispatch({ type: 'USE_REFORMULATION', text })} className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted">
-                <span className="font-medium">Use this</span> {text}
-              </button>
+              <ReformulationOption key={text} text={text} onUse={() => dispatch({ type: 'USE_REFORMULATION', text })} />
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => dispatch({ type: 'KEEP_VERSION' })}>Keep my version anyway</button>
-            <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => dispatch({ type: 'EDIT_RECHECK' })}>Edit and recheck</button>
+            <button type="button" className="btn-ghost" onClick={() => dispatch({ type: 'KEEP_VERSION' })}>Keep my version anyway</button>
+            <button type="button" className="btn-ghost" onClick={() => dispatch({ type: 'EDIT_RECHECK' })}>Edit and recheck</button>
           </div>
         </div>
       ) : null}
@@ -631,7 +663,7 @@ export function QuestionForm({
 
           <div>
             <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</label>
-            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={4} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
+            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={5} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full resize-y min-h-[7.5rem] rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
           </div>
 
@@ -796,7 +828,18 @@ export function QuestionForm({
           ) : null}
 
           <div className={actionBarClass}>
-            <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">{submitDisabled ? loadingLabel : resolvedSubmitLabel}</button>
+            <button type="button" disabled={submitDisabled} onClick={() => void finalSave()} className="btn-primary">
+              {submitDisabled ? (
+                <span className="inline-flex items-center">
+                  {loadingLabel.replace(/[.…]+$/, '')}
+                  <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+                    <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0s infinite' }}>.</span>
+                    <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.2s infinite' }}>.</span>
+                    <span className="triangle-loader-dot inline-block" style={{ animation: 'loading-dot 1.2s ease-in-out 0.4s infinite' }}>.</span>
+                  </span>
+                </span>
+              ) : resolvedSubmitLabel}
+            </button>
             {onCancel ? <button type="button" onClick={onCancel} className="btn-ghost" disabled={submitDisabled}>Cancel</button> : null}
           </div>
         </>

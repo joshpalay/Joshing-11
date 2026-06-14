@@ -1,0 +1,21 @@
+-- Migration: add EmailVerificationToken.opt_in_on_confirm — carries the
+-- "turn email reminders on the moment this link is confirmed" intent across
+-- the async verification gap.
+--
+-- The onboarding "Daily reminders" beat captures opt-in intent the instant the
+-- user submits their email, but emailOptIn can only ever be 'opted_in' once
+-- emailVerified = true (enforced in updateReminderPreferences). Rather than
+-- relax that invariant, the intent rides on the verification token: when the
+-- token was minted with opt_in_on_confirm = true, consumeVerificationToken
+-- promotes pendingEmail → email AND sets emailOptIn = 'opted_in' in the same
+-- transaction. Sending stays double-gated on emailVerified, so nothing goes
+-- out before the user confirms. Profile-originated tokens default to false, so
+-- their verify-then-toggle flow is unchanged.
+--
+-- Additive column with a non-null default — safe. Mirrored by a defensive
+-- guard in src/instrumentation.ts (precedent: 0075's email_reminder_sent_at
+-- guard) so a preview/production database that records this migration without
+-- the column present still boots.
+--
+-- Rollback: ALTER TABLE "EmailVerificationToken" DROP COLUMN IF EXISTS "opt_in_on_confirm";
+ALTER TABLE "EmailVerificationToken" ADD COLUMN IF NOT EXISTS "opt_in_on_confirm" boolean DEFAULT false NOT NULL;

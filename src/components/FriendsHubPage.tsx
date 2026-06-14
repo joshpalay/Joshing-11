@@ -32,7 +32,7 @@ export default function FriendsHubPage() {
             </p>
             <button
               type="button"
-              className="btn-primary mt-5 min-h-12 w-full rounded-full px-5 text-base sm:w-auto"
+              className="btn-primary mt-5 w-full sm:w-auto"
               onClick={openInviteFlow}
             >
               Invite Someone

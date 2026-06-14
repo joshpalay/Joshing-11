@@ -495,6 +495,18 @@ export const masteryEvents = pgTable(
       table.answeredByUserId,
       table.questionId,
     ),
+    // Covers the "Lately" convergence lookback at
+    // src/server/db/queries/lately.ts (getLatelyConvergences): equality on
+    // user_id + IN on source_type + IN on answer_state, then a created_at
+    // range over the 60-day window. The single-column user_id index forced a
+    // full scan of the viewer's history filtered in the heap; this composite
+    // narrows to the matching prefix and orders by created_at.
+    index('MASTERY_EVENTS_user_id_source_type_answer_state_created_at_idx').on(
+      table.userId,
+      table.sourceType,
+      table.answerState,
+      table.createdAt,
+    ),
   ],
 );
 
@@ -575,6 +587,10 @@ export const emailVerificationTokens = pgTable(
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    // When true, confirming this token also flips emailOptIn → 'opted_in'
+    // (the onboarding beat captures the user's intent up front). Profile-issued
+    // tokens leave this false: verifying only confirms the address there.
+    optInOnConfirm: boolean('opt_in_on_confirm').notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [
@@ -990,6 +1006,17 @@ export const follows = pgTable(
     // "who I follow" + outbound pending; "my followers" + inbound pending.
     index('Follow_followerId_state_idx').on(table.followerId, table.state),
     index('Follow_followeeId_state_idx').on(table.followeeId, table.state),
+    // Covering index for the friends-visibility EXISTS subquery on the
+    // read-hot feed path (questionVisibilityPredicate, src/server/db/
+    // queries/feed.ts): "does viewer follow this author with state=approved?".
+    // The unique (followerId, followeeId) index above already pinpoints the
+    // single row; adding state lets the approved check be answered index-only
+    // (no heap visit) on every feed render.
+    index('Follow_followerId_followeeId_state_idx').on(
+      table.followerId,
+      table.followeeId,
+      table.state,
+    ),
     check('Follow_distinct_users', sql`${table.followerId} <> ${table.followeeId}`),
   ],
 );

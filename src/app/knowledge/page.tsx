@@ -79,6 +79,10 @@ type ActiveModal =
   | { type: 'write-question' }
   | { type: 'tidy' };
 
+// How long the write-question modal stays open after a successful save so the
+// QuestionForm's in-form success confirmation registers before we close it.
+const SUCCESS_HOLD_MS = 1100;
+
 function asTier(value: string): MasteryTier {
   if (value === 'familiar' || value === 'solid' || value === 'mastery') return value;
   return 'establishing';
@@ -479,7 +483,6 @@ function KnowledgePageContent() {
     });
     const body = await response.json().catch(() => null) as CreateQuestionResponse | null;
     if (!response.ok) throw new Error(body?.message ?? 'Could not save that question.');
-    setActiveModal(null);
     if (values.sendToFriendIds.length > 0) {
       const n = values.sendToFriendIds.length;
       setQuestionToast(`Sent to ${n} ${n === 1 ? 'friend' : 'friends'}.`);
@@ -492,6 +495,9 @@ function KnowledgePageContent() {
       setQuestionToast('Saved to your bank.');
     }
     window.setTimeout(() => setQuestionToast(null), 2500);
+    // Hold the modal open briefly so the form's in-form success state shows
+    // before it closes; the toast above carries the destination detail.
+    window.setTimeout(() => setActiveModal(null), SUCCESS_HOLD_MS);
   };
 
   const reinstateDomain = async (domain: string) => {
@@ -630,13 +636,6 @@ function KnowledgePageContent() {
             {hideError ? (
               <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
             ) : null}
-            {!editMode ? (
-              <div className="mt-5 flex justify-center">
-                <button type="button" className="px-8 py-[11px] border-[1.5px] border-[var(--warm-ink)] bg-[var(--warm-ink)] text-[var(--warm-paper)] font-mono text-xs tracking-[0.12em] uppercase cursor-pointer shadow-[2px_2px_0_#3a3a3a]" onClick={() => setShareModalOpen(true)}>
-                  Share portrait
-                </button>
-              </div>
-            ) : null}
           </div>
         </section>
       )}
@@ -656,18 +655,6 @@ function KnowledgePageContent() {
           </div>
         </section>
       ) : null}
-
-      <section className="bg-[var(--cream)] border border-[var(--border-warm)] px-[0.95rem] py-5">
-        <h2 className="m-0 text-[1.1rem] font-[var(--font-serif)] text-[var(--ink)]">Grow your map</h2>
-        <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
-          Answer a friend&apos;s question correctly, or write your own — writing opens new territory; a friend&apos;s correct answer proves it.
-        </p>
-        <div className="flex flex-wrap gap-[10px] mt-5">
-          <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
-            Ask a question
-          </button>
-        </div>
-      </section>
 
       {dismissedDomains.length > 0 && (
         <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">

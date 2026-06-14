@@ -62,6 +62,9 @@
     --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
     --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
     --brand-link:        #4a5d75;  /* Link — inline links                      */
+    /* Unified fill behind primary buttons — both .btn-primary and the login submit
+       read this one token, so page and login CTAs always match. */
+    --btn-primary-bg:    var(--brand-navy);
     --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
     --brand-cream:       #f8e6c7;  /* triangle/cream                           */
     --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
@@ -105,8 +108,16 @@
     --feed-card-elevated: var(--game-card-question);
     --game-correct:       #366045;  /* Correct — forest green result accent      */
     --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
-    --game-wrong:         #c96b4a;  /* text/wrong — terracotta result accent     */
-    --game-wrong-strong:  #c33d14;  /* game/wrong/in-question — strong terracotta */
+    /* WRONG leaves the terracotta family for a true red (de-collides from the
+       brand/link orange #d15e36, the "still to play" triangle, and the
+       Literature category mark). Two registers, mirroring how they're consumed:
+       • --game-wrong is the WASH/FILL base (result-card backgrounds at 8–12%
+         mixes) — a muted brick red, still clearly red, not orange.
+       • --game-wrong-strong is the SIGNAL (rail + label text) — the clear,
+         saturated red that says "wrong" at a glance.
+       (Promoted from the former data-palette="proposed" block; see STYLE-GUIDE-COLOR §1.) */
+    --game-wrong:         #a93b3b;  /* text/wrong — muted brick red               */
+    --game-wrong-strong:  #c1121f;  /* game/wrong/in-question — clear true red    */
     /* ── Category scale (STYLE-GUIDE-COLOR §3) ──────────────────────────────
        One color per top-level domain; leaf categories inherit the parent hue.
        Values = the knowledge map's DOMAIN_COLORS (the only true per-category
@@ -116,8 +127,8 @@
        (domainBubbleGradient). The other category systems (feed hash palette,
        expanding accents, ceremony gradients) are still hardcoded — collapsing
        them onto this scale is color fix-list step 3, in progress. */
-    --cat-literature:       #c0392b;
-    --cat-literature-text:  #8b1a0e;
+    --cat-literature:       #7d2c3f;  /* bordeaux — moved off the grading red    */
+    --cat-literature-text:  #571f2c;
     --cat-music:            #1a6b8a;
     --cat-music-text:       #0e4060;
     --cat-film-tv:          #6b3fa0;
@@ -138,8 +149,8 @@
     --cat-philosophy-text:  #4a2a5c;
     --cat-pop-culture:      #8a2a4a;
     --cat-pop-culture-text: #5c0e2a;
-    --cat-language:         #4a7a5a;
-    --cat-language-text:    #1e4e30;
+    --cat-language:         #2e6e7e;  /* teal — moved off the CORRECT green       */
+    --cat-language-text:    #173f4a;
     /* Shared width for every left-aligned card in the play thread (question,
        bonus, result, reflection, session-close) so the column reads as one
        coherent conversation with a consistent left + right edge. A percentage of
@@ -273,44 +284,14 @@
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
-}
-
-/* ───────────────────────────────────────────────────────────────────────────
-   TESTING ONLY — proposed color palette preview (see _docs/STYLE-GUIDE-COLOR.md).
-   Toggled by <PaletteToggle> via the `data-palette` attribute on <html>. This
-   block repoints color *tokens* to their proposed values, so flipping the
-   attribute re-colors every surface that reads a token — no per-page edits. Any
-   surface still on hardcoded hex (the five category systems, some golds) will
-   NOT flip here; routing those onto tokens is the actual color build (color
-   fix-list steps 3–4). First-pass values — tune them in place.
-   Remove this block and the component before merging to a shipping branch.
-   ─────────────────────────────────────────────────────────────────────────── */
-:root[data-palette="proposed"] {
-    /* §1 GRADING — WRONG leaves the terracotta family for a true red. This is the
-       thesis change: it de-collides wrong from the brand/link orange (#d15e36)
-       and from the solid "still to play" triangle, in one move.
-       Two registers, mirroring how the tokens are consumed:
-       • --game-wrong is the WASH/FILL base (result-card backgrounds at 8–12%
-         mixes) — a MUTED brick red, per feedback that the vivid red made the
-         incorrect-answer background too harsh. Still clearly red, not orange.
-       • --game-wrong-strong is the SIGNAL (rail + label text) — the clear,
-         saturated red that says "wrong" at a glance. */
-    --game-wrong:        #a93b3b;  /* was #c96b4a terracotta; muted brick red */
-    --game-wrong-strong: #c1121f;  /* was #c33d14; clear true red             */
-    /* CORRECT stays forest green; kept here as the single tuning point and to
-       confirm by eye that it clears the knowledge greens. */
-    --game-correct:      #366045;
-
-    /* §3 CATEGORY — shift the two hues the guide flags as grading collisions.
-       Literature's strong red sat next to the NEW WRONG-red; it moves to a
-       darker bordeaux. Language was the green closest to CORRECT (#366045); it
-       moves to a teal, leaving the green family to Science/Food (judge those
-       by eye with the toggle — the guide says category greens move if they
-       crowd CORRECT, never the grading green). First-pass values — tune here. */
-    --cat-literature:      #7d2c3f;  /* was #c0392b */
-    --cat-literature-text: #571f2c;
-    --cat-language:        #2e6e7e;  /* was #4a7a5a */
-    --cat-language-text:   #173f4a;
+    /* Elevation registers (CONS-7, Option B — two intentional registers).
+       card / card-strong = the soft rest/raised lift for cards;
+       overlay = the single heavy blur for modals, dialogs, and overlays.
+       (The flat "press" register's only live usages are two #3a3a3a buttons —
+       a color-drift item left to B-VISUAL-TOKEN-BUDGET-01, not a shadow snap.) */
+    --shadow-card: 0 4px 12px rgba(40, 32, 30, 0.04);
+    --shadow-card-strong: 0 4px 12px rgba(40, 32, 30, 0.1);
+    --shadow-overlay: 0 12px 28px rgba(26, 18, 8, 0.16);
 }
 
 .dark {
@@ -372,23 +353,27 @@
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
-     icon), all 44px-tall (min-h-11) for touch, all with a focus-visible ring.
+     icon), all sharing the 4px corner radius and a focus-visible ring.
+     `.btn-primary` is the daily-five call-to-action: 48px-tall (min-h-12),
+     brand-link fill, bold base type with 0.04em tracking — the single standard
+     for prominent primary CTAs. Ghost / danger / icon stay 44px-tall (min-h-11)
+     with text-sm so they read as secondary next to a primary CTA.
      The shadcn ui/button was removed in favor of these — see the 2026-05-30
      design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--btn-primary-bg)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-ghost {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-danger {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-icon {
-    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-md text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 }
 

@@ -539,6 +539,31 @@ function ProfileHeaderCard({
   )
 }
 
+// Per-scope helper micro-copy shown beneath each section's visibility toggle,
+// so the owner can see exactly what each choice exposes. "Public" stays
+// link-scoped ("with your profile link") rather than "indexed/searchable":
+// profiles are never publicly indexed (PRD §8.6.1), only reachable by link.
+const SECTION_VISIBILITY_HELP: Record<
+  'knowledge_base' | 'authored_questions' | 'friends_list',
+  Record<'public' | 'friends' | 'private', string>
+> = {
+  knowledge_base: {
+    private: 'Only you can see your knowledge base.',
+    friends: "Friends you've added on Joshing can see it.",
+    public: 'Anyone with your profile link can see it.',
+  },
+  authored_questions: {
+    private: "Only you can see the questions you've written.",
+    friends: "Friends you've added on Joshing can see them.",
+    public: 'Anyone with your profile link can see them.',
+  },
+  friends_list: {
+    private: 'Only you can see your friends list.',
+    friends: "Friends you've added on Joshing can see it.",
+    public: 'Anyone with your profile link can see it.',
+  },
+}
+
 // Settings-style row that renders a 3-level visibility toggle on the
 // right instead of a chevron. Reused for each toggle in the Privacy
 // section of the owner self-view.
@@ -578,6 +603,7 @@ function PrivacyRow({
           initialVisibility={visibility}
           size="compact"
           fullWidth
+          help={SECTION_VISIBILITY_HELP[section]}
         />
       </div>
     </div>

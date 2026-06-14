@@ -252,7 +252,7 @@ export default function DailySummaryPage() {
             Tomorrow’s five arrive at noon.
           </p>
           <div className="mt-5 flex flex-col items-center gap-3">
-            <Link className="btn-primary w-full rounded-full sm:w-auto sm:min-w-56" href="/">
+            <Link className="btn-primary w-full sm:w-auto sm:min-w-56" href="/">
               Back home
             </Link>
             <Link

@@ -164,7 +164,7 @@ function PendingInviteCard({
       {canMessage ? (
         <div className="mt-4 space-y-2">
           <a
-            className="btn-primary flex min-h-11 w-full items-center justify-center rounded-full"
+            className="btn-primary flex w-full items-center justify-center"
             href={buildSmsHref(invite.inviteePhoneForActions!, invite.message!)}
           >
             Send message
@@ -242,7 +242,7 @@ function IncomingRequestCard({
       <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
-          className="btn-primary flex min-h-11 flex-1 items-center justify-center rounded-full"
+          className="btn-primary flex flex-1 items-center justify-center"
           onClick={() => onApprove(request)}
           disabled={busy}
         >

@@ -26,6 +26,7 @@ export type CreateVerificationTokenResult =
 export async function createVerificationToken(
   userId: string,
   email: string,
+  options: { optInOnConfirm?: boolean } = {},
 ): Promise<CreateVerificationTokenResult> {
   const now = Date.now();
 
@@ -54,6 +55,7 @@ export async function createVerificationToken(
     email,
     tokenHash,
     expiresAt,
+    optInOnConfirm: options.optInOnConfirm ?? false,
   });
 
   return { ok: true, token, expiresAt };
@@ -75,7 +77,7 @@ export async function invalidateUserTokens(userId: string): Promise<void> {
 }
 
 export type ConsumeVerificationTokenResult =
-  | { ok: true; email: string; userId: string }
+  | { ok: true; email: string; userId: string; optedIn: boolean }
   | { ok: false; reason: 'invalid_or_expired' | 'email_already_in_use' };
 
 // Consumes a token in a single transaction with the User row promotion:
@@ -101,6 +103,7 @@ export async function consumeVerificationToken(
         email: emailVerificationTokens.email,
         expiresAt: emailVerificationTokens.expiresAt,
         consumedAt: emailVerificationTokens.consumedAt,
+        optInOnConfirm: emailVerificationTokens.optInOnConfirm,
       })
       .from(emailVerificationTokens)
       .where(eq(emailVerificationTokens.tokenHash, tokenHash))
@@ -122,6 +125,11 @@ export async function consumeVerificationToken(
       return { ok: false, reason: 'invalid_or_expired' };
     }
 
+    // The onboarding beat captures opt-in intent up front (the user typed their
+    // email to *get* reminders), so a token minted with opt_in_on_confirm flips
+    // emailOptIn on in the same transaction that verifies the address — no
+    // second trip to the profile toggle. Sending is still gated on
+    // emailVerified (which we set here), so nothing went out before this point.
     try {
       await tx
         .update(users)
@@ -129,6 +137,7 @@ export async function consumeVerificationToken(
           email: row.email,
           emailVerified: true,
           pendingEmail: null,
+          ...(row.optInOnConfirm ? { emailOptIn: 'opted_in' as const } : {}),
           updatedAt: new Date(),
         })
         .where(eq(users.id, row.userId));
@@ -144,6 +153,6 @@ export async function consumeVerificationToken(
       .set({ consumedAt: new Date() })
       .where(eq(emailVerificationTokens.id, row.id));
 
-    return { ok: true, email: row.email, userId: row.userId };
+    return { ok: true, email: row.email, userId: row.userId, optedIn: row.optInOnConfirm };
   });
 }

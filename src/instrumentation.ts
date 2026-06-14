@@ -281,6 +281,20 @@ export async function register() {
       // DailyQueue table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0077 adds EmailVerificationToken.opt_in_on_confirm — the
+    // "turn reminders on when this link is confirmed" intent the onboarding
+    // beat sets and consumeVerificationToken reads. A preview/production DB
+    // that records 0077 without the column present would break token consume;
+    // pre-apply it idempotently (precedent: 0075's guard above).
+    try {
+      await db.execute(sql`
+        ALTER TABLE "EmailVerificationToken"
+          ADD COLUMN IF NOT EXISTS "opt_in_on_confirm" boolean NOT NULL DEFAULT false
+      `);
+    } catch {
+      // EmailVerificationToken may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value
@@ -1409,6 +1423,32 @@ export async function register() {
     } catch {
       // User, Question, or GeneratedQuestion may not exist yet on a fresh
       // database — migrate() creates them before this migration runs.
+    }
+
+    // Migration 0078 adds two composite lookup indexes on hot read paths: the
+    // "Lately" convergence lookback (MASTERY_EVENTS user_id+source_type+
+    // answer_state+created_at) and the friends-visibility EXISTS on the feed
+    // path (Follow followerId+followeeId+state). Pure index additions — a
+    // preview/production database that records the migration without the
+    // indexes present must still get them (precedent: 0074's domain_key index
+    // guard). CREATE INDEX IF NOT EXISTS is idempotent; re-running is a no-op.
+    try {
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "MASTERY_EVENTS_user_id_source_type_answer_state_created_at_idx"
+          ON "MASTERY_EVENTS" ("user_id", "source_type", "answer_state", "created_at")
+      `);
+    } catch {
+      // MASTERY_EVENTS may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+    try {
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Follow_followerId_followeeId_state_idx"
+          ON "Follow" ("followerId", "followeeId", "state")
+      `);
+    } catch {
+      // Follow may not exist yet on a fresh database — migrate() creates it
+      // before this migration runs.
     }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;

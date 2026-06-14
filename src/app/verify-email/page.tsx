@@ -24,6 +24,7 @@ export default async function VerifyEmailPage({
     : ({ ok: false, reason: 'invalid_or_expired' } as const);
 
   const success = result.ok;
+  const optedIn = result.ok && result.optedIn;
   const alreadyInUse = !result.ok && result.reason === 'email_already_in_use';
 
   return (
@@ -31,10 +32,13 @@ export default async function VerifyEmailPage({
       <div className="w-full rounded-xl border bg-card p-8 text-card-foreground">
         {success ? (
           <>
-            <h1 className="font-serif text-2xl font-semibold">Email confirmed</h1>
+            <h1 className="font-serif text-2xl font-semibold">
+              {optedIn ? 'Daily reminders are on' : 'Email confirmed'}
+            </h1>
             <p className="mt-3 text-sm text-muted-foreground">
-              {result.email} is now your reminder address. Head to your profile to
-              turn on email reminders whenever you&apos;re ready.
+              {optedIn
+                ? `We'll email ${result.email} each day when your five are ready. You can turn this off any time in your profile.`
+                : `${result.email} is now your reminder address. Head to your profile to turn on email reminders whenever you're ready.`}
             </p>
           </>
         ) : alreadyInUse ? (
@@ -57,7 +61,7 @@ export default async function VerifyEmailPage({
 
         <Link
           href="/users/me"
-          className="btn-primary mt-6 inline-flex w-full items-center justify-center text-sm"
+          className="btn-primary mt-6 inline-flex w-full items-center justify-center"
         >
           Return to profile
         </Link>

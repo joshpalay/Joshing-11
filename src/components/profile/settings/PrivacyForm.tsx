@@ -211,7 +211,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
             <button
               type="button"
               onClick={() => void copyInviteUrl()}
-              className="btn-primary min-h-9 rounded-full px-4 text-sm"
+              className="btn-primary px-4"
             >
               Copy
             </button>
@@ -221,7 +221,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
                   type="button"
                   onClick={() => void rotateInviteUrl()}
                   disabled={rotating}
-                  className="btn-danger min-h-9 rounded-full px-4 text-sm"
+                  className="btn-danger px-4"
                 >
                   {rotating ? 'Rotating…' : 'Rotate — old link stops working'}
                 </button>
@@ -229,7 +229,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
                   type="button"
                   onClick={() => setConfirmingRotate(false)}
                   disabled={rotating}
-                  className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+                  className="btn-ghost px-4"
                 >
                   Cancel
                 </button>
@@ -238,7 +238,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
               <button
                 type="button"
                 onClick={() => setConfirmingRotate(true)}
-                className="btn-ghost min-h-9 rounded-full px-4 text-sm"
+                className="btn-ghost px-4"
               >
                 Rotate link
               </button>

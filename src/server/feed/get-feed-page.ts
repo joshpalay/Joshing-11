@@ -7,13 +7,12 @@
  * to hydrate <FeedList /> with the first page (no client round-trip).
  */
 
-import { and, count, eq, inArray, isNull, ne, notExists, or } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
   feedItemVisibilityPredicate,
-  getDismissedDomains,
   getFeedForUser,
   type CollapsedFeedItem,
   type FeedCursor,
@@ -132,20 +131,30 @@ export type FeedPageOptions = {
   filter: FeedFilter;
 };
 
-// Count of items the viewer can still act on in a given surface, mirroring the
-// visibility rules getFeedForUser applies (active/skipped state, source-type
-// visibility, question visibility, not-self-authored, and the already-answered
-// hide for non-direct_sent). Used for the per-tab badge counts and the active
-// filter's pre_filter_active_count.
-function surfaceActionableCount(viewerUserId: string, filter: FeedFilter): Promise<number> {
-  return db
-    .select({ value: count() })
+// Counts of items the viewer can still act on, mirroring the visibility rules
+// getFeedForUser applies (active/skipped state, source-type visibility, question
+// visibility, not-self-authored, and the already-answered hide for
+// non-direct_sent). The three surfaces share one identical base predicate and
+// differ only by source-type, so a single query with conditional FILTER
+// aggregates yields all three in one round-trip instead of three near-identical
+// queries (each carrying the heavy NOT EXISTS already-answered subquery).
+//   all          — no source filter (feedFilterSourcePredicate('all') is a no-op)
+//   broadcasts    — the 'from-friends' surface (authored_shared + thumbs_upped)
+//   sent          — the 'sent-to-me' surface (direct_sent)
+type SurfaceActionableCounts = { all: number; broadcasts: number; sent: number };
+
+async function surfaceActionableCounts(viewerUserId: string): Promise<SurfaceActionableCounts> {
+  const rows = await db
+    .select({
+      all: sql<number>`count(*)::int`,
+      broadcasts: sql<number>`(count(*) filter (where ${feedItems.sourceType} in ('authored_shared', 'thumbs_upped')))::int`,
+      sent: sql<number>`(count(*) filter (where ${feedItems.sourceType} = 'direct_sent'))::int`,
+    })
     .from(feedItems)
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .where(and(
       eq(feedItems.recipientUserId, viewerUserId),
       visibleSourcePredicate,
-      feedFilterSourcePredicate(filter),
       inArray(feedItems.state, ['active', 'skipped']),
       feedItemVisibilityPredicate(viewerUserId),
       or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
@@ -162,8 +171,17 @@ function surfaceActionableCount(viewerUserId: string, filter: FeedFilter): Promi
             )),
         ),
       ),
-    ))
-    .then((rows) => rows[0]?.value ?? 0);
+    ));
+  const row = rows[0];
+  return { all: row?.all ?? 0, broadcasts: row?.broadcasts ?? 0, sent: row?.sent ?? 0 };
+}
+
+// The active filter's actionable count is one of the three surface counts above
+// (feedFilterSourcePredicate maps each filter to the matching source subset).
+function actionableCountForFilter(counts: SurfaceActionableCounts, filter: FeedFilter): number {
+  if (filter === 'from-friends') return counts.broadcasts;
+  if (filter === 'sent-to-me') return counts.sent;
+  return counts.all;
 }
 
 export type FeedPagePayload = Awaited<ReturnType<typeof getFeedPagePayload>>;
@@ -174,11 +192,8 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
   const [
     feedPage,
     friendCount,
-    dismissedDomains,
     totalItemCount,
-    preFilterActiveCount,
-    broadcastsItemCount,
-    sentItemCount,
+    actionableCounts,
   ] = await Promise.all([
     getFeedForUser(viewerUserId, { limit, cursor, filter }),
     // "has_friends" empty-state signal: people I follow are exactly the
@@ -192,7 +207,9 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         eq(follows.state, 'approved'),
       ))
       .then((rows) => rows[0]?.value ?? 0),
-    getDismissedDomains(viewerUserId),
+    // dismissedDomains is no longer fetched here — getFeedForUser already
+    // queries it (to filter the page) and now returns it, so we reuse that
+    // result rather than firing a second identical query on the same request.
     db
       .select({ value: count() })
       .from(feedItems)
@@ -205,13 +222,15 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         or(isNull(questions.creatorId), ne(questions.creatorId, viewerUserId)),
       ))
       .then((rows) => rows[0]?.value ?? 0),
-    // Active filter's actionable count (drives the focused-feed empty state).
-    surfaceActionableCount(viewerUserId, filter),
-    // D-1 Stage 5: both tab badges must be live on every response, regardless of
-    // which surface is active.
-    surfaceActionableCount(viewerUserId, 'from-friends'),
-    surfaceActionableCount(viewerUserId, 'sent-to-me'),
+    // The active filter's count plus both tab badges (from-friends / sent-to-me)
+    // in one query — D-1 Stage 5 requires both badges live on every response.
+    surfaceActionableCounts(viewerUserId),
   ]);
+
+  // Active filter's actionable count (drives the focused-feed empty state).
+  const preFilterActiveCount = actionableCountForFilter(actionableCounts, filter);
+  const broadcastsItemCount = actionableCounts.broadcasts;
+  const sentItemCount = actionableCounts.sent;
 
   const activeItemCount = feedPage.totalCount;
   const feed = feedPage.items;
@@ -238,7 +257,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
     viewer_user_id: viewerUserId,
     meta: {
       has_friends: friendCount > 0,
-      has_dismissed_domains: dismissedDomains.length > 0,
+      has_dismissed_domains: feedPage.dismissedDomains.length > 0,
       total_item_count: totalItemCount,
       active_item_count: activeItemCount,
       pre_filter_active_count: preFilterActiveCount,
