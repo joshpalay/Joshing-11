@@ -87,7 +87,7 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
                 className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
                   isCorrect
                     ? 'border-[color-mix(in_srgb,var(--game-correct)_30%,var(--border))] bg-[color-mix(in_srgb,var(--game-correct)_10%,var(--card))] text-[var(--game-correct)]'
-                    : 'border-[color-mix(in_srgb,var(--game-wrong)_28%,var(--border))] bg-[color-mix(in_srgb,var(--game-wrong)_8%,var(--card))] text-[var(--game-wrong-strong)]'
+                    : 'border-[color-mix(in_srgb,var(--game-wrong)_28%,var(--border))] bg-[color-mix(in_srgb,var(--game-wrong)_8%,var(--card))] text-[var(--game-wrong)]'
                 }`}
               >
                 {isCorrect ? 'CORRECT' : 'WRONG'}
