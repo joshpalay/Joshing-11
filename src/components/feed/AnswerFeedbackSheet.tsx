@@ -288,7 +288,17 @@ export function AnswerFeedbackSheet({
           ) : null}
 
           {insideJoke ? (
-            <div>
+            // The inside-joke wink renders as an inset panel — matching the
+            // daily-5 game's "Between us!" card (bordered slate box), not the
+            // de-boxed plain text it had drifted to on this surface.
+            <div
+              style={{
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid color-mix(in srgb, var(--brand-link) 22%, var(--border))',
+                background: 'var(--editorial-slate)',
+                padding: '10px 12px',
+              }}
+            >
               <p
                 className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
                 style={{ color: GOLD_INK }}
