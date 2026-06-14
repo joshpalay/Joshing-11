@@ -140,6 +140,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
   });
 
@@ -190,6 +191,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
 
     const response = await GET(new NextRequest('https://joshing.example/api/feed?filter=sent-to-me'));
@@ -241,6 +243,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
 
     const response = await GET(new NextRequest('https://joshing.example/api/feed'));
@@ -307,6 +310,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
 
     const response = await GET(new NextRequest('https://joshing.example/api/feed'));

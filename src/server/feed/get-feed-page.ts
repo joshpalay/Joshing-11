@@ -13,7 +13,6 @@ import { db, feedItems, follows, masteryEvents, questions, users } from '@/serve
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import {
   feedItemVisibilityPredicate,
-  getDismissedDomains,
   getFeedForUser,
   type CollapsedFeedItem,
   type FeedCursor,
@@ -174,7 +173,6 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
   const [
     feedPage,
     friendCount,
-    dismissedDomains,
     totalItemCount,
     preFilterActiveCount,
     broadcastsItemCount,
@@ -192,7 +190,9 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         eq(follows.state, 'approved'),
       ))
       .then((rows) => rows[0]?.value ?? 0),
-    getDismissedDomains(viewerUserId),
+    // dismissedDomains is no longer fetched here — getFeedForUser already
+    // queries it (to filter the page) and now returns it, so we reuse that
+    // result rather than firing a second identical query on the same request.
     db
       .select({ value: count() })
       .from(feedItems)
@@ -238,7 +238,7 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
     viewer_user_id: viewerUserId,
     meta: {
       has_friends: friendCount > 0,
-      has_dismissed_domains: dismissedDomains.length > 0,
+      has_dismissed_domains: feedPage.dismissedDomains.length > 0,
       total_item_count: totalItemCount,
       active_item_count: activeItemCount,
       pre_filter_active_count: preFilterActiveCount,
