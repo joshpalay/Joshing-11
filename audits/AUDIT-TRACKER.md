@@ -53,7 +53,7 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 |---|---|---|---|---|
 | PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` — copy decision (may be deliberate) |
 
-**Clean cheap-and-safe cluster (mostly already done):** PLR-5 ✅, PLR-6 ✅, PLR-7 ✅, PLR-9 ✅, PLR-13, PLR-21.
+**Clean cheap-and-safe cluster (mostly already done):** PLR-5 ✅, PLR-6 ✅, PLR-7 ✅, PLR-9 ✅, PLR-13 ✅, PLR-21.
 
 ---
 
@@ -75,7 +75,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` | Treat as a **copy decision** (copy before pixels); "Establishing" may be deliberate vocabulary. Rename ideas ("In review") are direction, not a quick relabel. No tooltip today `TodaysFiveCard.tsx:49,58`. |
 | PLR-11 | Card-colour switcher confusing | — | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: dev `PaletteToggle` live for all `layout.tsx:7,72`.) |
 | PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
-| PLR-13 | Explanation field is a small scrolling textarea | — | `OPEN` | `CLEAN WIN` | Low-stakes. `rows={4}`, no resize `QuestionForm.tsx:666`. |
+| PLR-13 | Explanation field is a small scrolling textarea | — | `DONE` | `CLEAN WIN` | Shipped #934: explanation `<textarea>` is now `resize-y` with a taller default (`rows={5}`, `min-h-[7.5rem]`) — `QuestionForm.tsx:666`. |
 | PLR-14 | Friend list lacks quick actions | P2 | `OPEN` | `FIX VIA CANON` | Richer friend actions are fine — but **no** streak count, leaderboards, "Challenge," or competition language. `FriendCard` is just a `<Link>` `FriendsList.tsx:108–122`. |
 | PLR-15 | No onboarding/tour for Knowledge Map | P1 | `DONE` | `FIX VIA CANON` | Reworked the post-first-five recap (`FirstSessionRecap.tsx`): Beat 2 now points to the **Knowledge** tab; new Beat 3 points to the **Questions** tab (write-questions); new Beat 4 carries the daily rhythm + the reminder email opt-in. Removed the invite beat (per owner). Copy avoids the mastery-size misstatement. Also moved the reminder opt-in **off onboarding** (`OnboardingFlow.tsx` — `reminders` step deleted; finishes straight to /daily). Typecheck/lint/tests green. |
 | PLR-16 | Overwhelming home feed | P1 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Budgeted "edition" already caps arrival volume (`build-edition.ts`, `page.tsx:118–161`); not tracking further. (Collapsible grouping remains banned regardless — see traps.) |
