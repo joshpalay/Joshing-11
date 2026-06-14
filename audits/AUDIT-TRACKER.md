@@ -2,7 +2,7 @@
 
 One living ledger for the two audits currently being worked down. Edit the **Status** column as you take items off the board.
 
-**Last code-verification pass:** 2026-06-13 (against branch `claude/audit-items-tracking-kp59my`).
+**Last code-verification pass:** 2026-06-14 (re-verified against `origin/dev2`). Delta since 2026-06-13: **PLR-2 (root 404) → DONE** (fix `304215b8` merged via #922).
 **Canon disposition pass (audit #2):** 2026-06-13 — every Pre-Launch item sorted against product canon (see Disposition column + guardrails).
 
 ## How to use this file
@@ -52,8 +52,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 | ID | Item | Priority | Status | Disposition |
 |---|---|---|---|---|
-| PLR-1 | Dev tools visible to all users | P0 | `OPEN` | `CLEAN WIN` — gate behind `ADMIN_USER_IDS` (same allowlist as content reporting) |
-| PLR-2 | Intermittent 404 on root during sign-in | P0 | `OPEN` | `CLEAN WIN` — trace root-route redirect race in `src/proxy.ts` |
 | PLR-8 | Catch-up reveal consumes a question, no confirmation | P1 | `OPEN` | `FIX VIA CANON` — the important half of #3/#8; aligns with fail-toward-player |
 | PLR-11 | "Card Color" PaletteToggle dev tool still shipped to all | — | `OPEN` | — (ship gate; pull before launch, like PLR-1) |
 | PLR-15 | No onboarding/tour for the Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` — tie to B-FirstRecap-1 / B-HomeSeed-1; explanation must match the mastery model |
@@ -71,13 +69,13 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 
 | ID | Item | Priority | Status | Disposition | Notes |
 |---|---|---|---|---|---|
-| PLR-1 | Dev tools visible to all users | P0 | `OPEN` | `CLEAN WIN` | Unconditional in `AccountActions.tsx:102–135`. Gate behind `ADMIN_USER_IDS` allowlist (reuse the content-reporting gate). |
-| PLR-2 | Intermittent 404 on root during sign-in | P0 | `OPEN` | `CLEAN WIN` | Real instability. Likely a root-route redirect race; auth routes via `src/proxy.ts`. Trace before launch. |
+| PLR-1 | Dev tools visible to all users | P0 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: unconditional in `AccountActions.tsx:102–135`.) |
+| PLR-2 | Intermittent 404 on root during sign-in | P0 | `DONE` | `CLEAN WIN` | Fixed `304215b8` (#922): re-login now mints the real `onb` claim (`verify-otp/route.ts:50,213`), removing the `refresh-onboarding-claim` redirect hop that opened the 404 window. Regression test added. Diagnosed root cause; a live smoke confirms. |
 | PLR-3 | "Show me the answer" duplication | P1 | `OPEN` | `FIX VIA CANON` | Text reveal `GameplayChat.tsx:541`. **Resolve only in light of PLR-8** — do NOT make reveal faster/more accidental. |
 | PLR-4 | Auto-generated tagline misrepresents new users | P1 | `DONE` | `FIX VIA CANON` | Portrait must be *earned by play*, not auto-assigned. Canon-correct fix shipped: `buildMindStatement()` `users/[id]/page.tsx:78–91` derives from real mastery + neutral placeholder for new users. |
 | PLR-5 | "Use this" artefact in rewrite suggestions | P1 | `DONE` | `CLEAN WIN` | `75eb625`; separate block spans `QuestionForm.tsx:280–291`. (Generation prompt is the biggest quality lever — good it's clean.) |
 | PLR-6 | No success feedback after saving a question | — | `DONE` | `CLEAN WIN` | `419201a`; "✓ Saved" panel `QuestionForm.tsx:541–549` + host toast. |
-| PLR-7 | Gear icon on Today's Five does nothing | P2 | `OPEN` (verify) | `CLEAN WIN` | **Discrepancy:** code shows a working `<Link href="/daily/setup">` `TodaysFiveCard.tsx:209–215`, but the live-app reviewer read it as a dead control. Re-verify on live: is the destination non-obvious, or a different build? Remove/clarify accordingly. |
+| PLR-7 | Gear icon on Today's Five does nothing | P2 | `OPEN` (verify) | `CLEAN WIN` | **Discrepancy:** code shows a working `<Link href="/daily/setup">` `TodaysFiveCard.tsx:209–215`, but the live-app reviewer read it as a dead control. Re-verify on live: is the destination non-obvious, or a different build? Remove/clarify accordingly. **Fix in flight:** branch `claude/fix-gear-icon-LZCOK` (not yet merged to dev2). |
 | PLR-8 | Catch-up reveal, no confirmation | P1 | `OPEN` | `FIX VIA CANON` | The more important of #3/#8. `onGiveUp={() => skipCurrent()}` `catchup/page.tsx:138`. Add a confirm before a reveal burns a question (fail-toward-player). |
 | PLR-9 | Privacy toggles lack context | P2 | `DONE` | `CLEAN WIN` | `419201a`; `SECTION_VISIBILITY_HELP` `users/[id]/page.tsx:546–565`. |
 | PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` | Treat as a **copy decision** (copy before pixels); "Establishing" may be deliberate vocabulary. Rename ideas ("In review") are direction, not a quick relabel. No tooltip today `TodaysFiveCard.tsx:49,58`. |
