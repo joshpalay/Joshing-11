@@ -51,38 +51,38 @@ export default function DailyCatchupPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] px-0">
       <header
-        className="sticky top-0 z-20 border-b px-4 py-3"
+        className="sticky top-0 z-20 border-b px-4 py-2"
         style={{
           borderColor: 'var(--border)',
           background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
           backdropFilter: 'blur(8px)',
         }}
       >
-        <div className="flex items-center justify-end gap-3">
-          <Link
-            href="/"
-            aria-label="Close"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
-          >
-            <X className="size-5" strokeWidth={1.9} />
-          </Link>
-        </div>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs font-medium tracking-[0.12em] text-[var(--text-muted)] uppercase">
               Catch up
             </p>
-            <h1 className="font-serif text-xl font-semibold text-[var(--text)]">
+            <h1 className="font-serif text-lg font-semibold text-[var(--text)]">
               {loading
                 ? 'Missed questions'
                 : `${initialTotal} missed ${initialTotal === 1 ? 'question' : 'questions'} from the past week`}
             </h1>
           </div>
-          {!loading && hasItems && !showSummary ? (
-            <p className="shrink-0 text-right text-[0.65rem] font-medium tracking-[0.1em] text-[var(--text-muted)] uppercase">
-              {remainingLabel}
-            </p>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {!loading && hasItems && !showSummary ? (
+              <p className="text-right text-[0.65rem] font-medium tracking-[0.1em] text-[var(--text-muted)] uppercase">
+                {remainingLabel}
+              </p>
+            ) : null}
+            <Link
+              href="/"
+              aria-label="Close"
+              className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
+            >
+              <X className="size-5" strokeWidth={1.9} />
+            </Link>
+          </div>
         </div>
       </header>
 
