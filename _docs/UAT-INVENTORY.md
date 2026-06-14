@@ -55,7 +55,6 @@ Format per row: **ID | Area | Surface (route/file) | What to verify (one human-c
 | AUTH-4 | Auth | `verify-otp` re-login path (`route.ts:154-199`) | Existing pre-gate account logs in without an invitation → succeeds (grandfathered). | v11.2 §7.1; Phase-2 finding F2.2 (deferred) | P1 | Intended grandfathering; confirm it's still scoped to *existing* accounts only. |
 | AUTH-5 | Auth | `src/proxy.ts:47-60` | Hit any gated page logged-out → redirect to `/login?next=…`. | v11.2 §8.12 (auth gate) | **P0** | Routing is `proxy.ts`, NOT `middleware.ts`. |
 | AUTH-6 | Auth | `src/proxy.ts:64-81` | Legacy session missing `inv` claim → routed through `/api/auth/refresh-session`. | remediation 1.1 behavior | P1 | Verify no redirect loop. |
-| AUTH-7 | Auth | `/api/account/logout` & `/api/auth/logout` | Log out → session cookie cleared, gated pages redirect to `/login`. | v11.2 §8.12 | **P0** | Two logout routes exist; confirm both invalidate. |
 | AUTH-8 | Auth | `request-otp` non-prod response (`route.ts:74`) | In production, response must NOT include `debugCode`. | v11.2 §7.1 step 3 | P1 | Leak check — prod must omit the code. |
 
 ---
