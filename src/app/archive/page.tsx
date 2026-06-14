@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { cn } from '@/lib/utils';
 
@@ -426,6 +427,7 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
               className="inline-flex size-9 items-center justify-center rounded-md border px-0"
               onChange={setInBank}
             />
+            <AnsweredRowActions target={{ questionId: item.questionId }} />
           </>
         ) : (
           <div className="flex items-center gap-2 text-muted-foreground">
