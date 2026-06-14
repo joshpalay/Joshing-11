@@ -715,7 +715,7 @@ export default function DailyPage() {
   }, [queue, currentSlot, submitting]);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
+    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] px-0">
       <header
         className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b px-4 py-3"
         style={{
