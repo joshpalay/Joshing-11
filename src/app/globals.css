@@ -64,7 +64,7 @@
     --brand-link:        #4a5d75;  /* Link — inline links                      */
     --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
     --brand-cream:       #f8e6c7;  /* triangle/cream                           */
-    --brand-cream-page:  #ffffff;  /* Color/Game/Background — app page surface  */
+    --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
     --brand-card:        #fdfcfb;  /* cream/50 — content card surface          */
     --brand-cream-card:  #fbf5e9;  /* warm cream card (login screens only)     */
     --brand-border:      #e9e2d2;  /* warm hairline border                     */
@@ -158,7 +158,7 @@
     --play-thread-card-width: 88%;
     /* ──────────────────────────────────────────────────────────────────────
        Conventions:
-       • Cream tones — `--brand-cream-page` (#ffffff) is the app background;
+       • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
          `--brand-card` (#fdfcfb, near-white) is the default CONTENT card;
          `--brand-cream-card` (#fbf5e9, warmer) is reserved for ENTRY/branded
          surfaces (login, knowledge portrait, sparkle envelope).
