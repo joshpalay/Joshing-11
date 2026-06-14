@@ -201,7 +201,7 @@ export default function TodaysFiveCard({
       : 'Ready when you are!'
 
   return (
-    <div className="text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
+    <div className="text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five

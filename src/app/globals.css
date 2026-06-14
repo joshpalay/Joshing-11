@@ -281,6 +281,14 @@
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
+    /* Elevation registers (CONS-7, Option B — two intentional registers).
+       card / card-strong = the soft rest/raised lift for cards;
+       overlay = the single heavy blur for modals, dialogs, and overlays.
+       (The flat "press" register's only live usages are two #3a3a3a buttons —
+       a color-drift item left to B-VISUAL-TOKEN-BUDGET-01, not a shadow snap.) */
+    --shadow-card: 0 4px 12px rgba(40, 32, 30, 0.04);
+    --shadow-card-strong: 0 4px 12px rgba(40, 32, 30, 0.1);
+    --shadow-overlay: 0 12px 28px rgba(26, 18, 8, 0.16);
 }
 
 .dark {
