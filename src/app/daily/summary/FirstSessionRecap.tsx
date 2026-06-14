@@ -52,7 +52,7 @@ function Beat1({ firstName }: { firstName: string }) {
   );
 }
 
-function Beat2({ beat }: { beat: FirstSessionRecapBeat2 }) {
+export function Beat2({ beat }: { beat: FirstSessionRecapBeat2 }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
       <p className="text-sm tracking-[0.16em] text-stone-400 uppercase">
@@ -74,7 +74,7 @@ function Beat2({ beat }: { beat: FirstSessionRecapBeat2 }) {
 
 // Beat 3 — mirrors Beat 2's eyebrow → serif headline → supporting line shape,
 // pointing at the Questions tab.
-function Beat3() {
+export function Beat3() {
   return (
     <div className="mx-auto max-w-2xl text-center">
       <p className="text-sm tracking-[0.16em] text-stone-400 uppercase">Your turn</p>
@@ -97,7 +97,7 @@ function Beat3() {
 // Self-contained state; the form controls stopPropagation so taps don't advance
 // the overlay while the player is typing. "Maybe later" / the post-send button
 // close straight to the summary; a backdrop tap advances to the end card.
-function Beat4({ onClose }: { onClose: () => void }) {
+export function Beat4({ onClose }: { onClose: () => void }) {
   const resetDayTime = useSyncExternalStore(
     subscribeNoop,
     getResetTimeSnapshot,
