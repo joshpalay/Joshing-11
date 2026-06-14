@@ -94,7 +94,7 @@ export function ContactMatchBlock({
         </p>
         <Link
           href="/users/me#privacy-discovery"
-          className="btn-primary mt-3 inline-flex h-11 items-center rounded-full px-4 text-sm"
+          className="btn-primary mt-3 inline-flex items-center px-4"
         >
           Open privacy settings
         </Link>
@@ -201,7 +201,7 @@ export function ContactMatchBlock({
             type="button"
             onClick={() => void matchContacts()}
             disabled={matching}
-            className="btn-primary mt-3 inline-flex h-11 items-center rounded-full px-4 text-sm"
+            className="btn-primary mt-3 inline-flex items-center px-4"
           >
             {matching ? 'Matching…' : 'Match my contacts'}
           </button>

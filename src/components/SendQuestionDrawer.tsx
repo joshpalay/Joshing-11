@@ -231,7 +231,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
           <footer className="border-t p-5">
             <button
-              className="btn-primary inline-flex h-11 w-full items-center justify-center gap-2"
+              className="btn-primary inline-flex w-full items-center justify-center gap-2"
               type="button"
               disabled={selectedIds.length === 0 || sending}
               onClick={() => void sendQuestion()}

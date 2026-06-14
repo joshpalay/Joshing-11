@@ -61,7 +61,7 @@ export default async function VerifyEmailPage({
 
         <Link
           href="/users/me"
-          className="btn-primary mt-6 inline-flex w-full items-center justify-center text-sm"
+          className="btn-primary mt-6 inline-flex w-full items-center justify-center"
         >
           Return to profile
         </Link>

@@ -688,12 +688,12 @@ export function TerritorySetupClient({
 
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Link href="/" className="btn-ghost min-h-11 px-5">
+          <Link href="/" className="btn-ghost">
             Home
           </Link>
           <button
             type="button"
-            className="btn-primary min-h-11 flex-1 justify-center"
+            className="btn-primary flex-1 justify-center"
             disabled={!canSave}
             onClick={() => void saveForNextRound()}
           >
@@ -760,12 +760,12 @@ export function TerritorySetupClient({
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
                 type="button"
-                className="btn-ghost min-h-11 px-5"
+                className="btn-ghost"
                 onClick={() => setPendingRemoval(null)}
               >
                 Keep it
               </button>
-              <button type="button" className="btn-danger px-5" onClick={confirmRemoval}>
+              <button type="button" className="btn-danger" onClick={confirmRemoval}>
                 Throw out
               </button>
             </div>

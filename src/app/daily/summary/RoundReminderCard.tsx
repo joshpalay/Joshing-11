@@ -106,14 +106,14 @@ export function RoundReminderCard() {
           <div className="flex gap-2">
             <button
               type="submit"
-              className="btn-primary text-sm"
+              className="btn-primary"
               disabled={state.saving}
             >
               {state.saving ? 'Saving…' : 'Save'}
             </button>
             <button
               type="button"
-              className="btn-ghost text-sm"
+              className="btn-ghost"
               disabled={state.saving}
               onClick={() => setState({ kind: 'idle' })}
             >
@@ -144,7 +144,7 @@ export function RoundReminderCard() {
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
-          className="btn-primary text-sm sm:flex-1"
+          className="btn-primary sm:flex-1"
           disabled={busy}
           onClick={async () => {
             setState({ kind: 'sms-saving' })
@@ -156,7 +156,7 @@ export function RoundReminderCard() {
         </button>
         <button
           type="button"
-          className="btn-ghost text-sm sm:flex-1"
+          className="btn-ghost sm:flex-1"
           disabled={busy}
           onClick={() =>
             setState({ kind: 'email-form', value: '', error: null, saving: false })
@@ -166,7 +166,7 @@ export function RoundReminderCard() {
         </button>
         <button
           type="button"
-          className="btn-ghost text-sm sm:flex-1"
+          className="btn-ghost sm:flex-1"
           disabled={busy}
           onClick={async () => {
             setState({ kind: 'dismissing' })

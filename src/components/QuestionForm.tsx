@@ -612,8 +612,8 @@ export function QuestionForm({
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => dispatch({ type: 'KEEP_VERSION' })}>Keep my version anyway</button>
-            <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => dispatch({ type: 'EDIT_RECHECK' })}>Edit and recheck</button>
+            <button type="button" className="btn-ghost" onClick={() => dispatch({ type: 'KEEP_VERSION' })}>Keep my version anyway</button>
+            <button type="button" className="btn-ghost" onClick={() => dispatch({ type: 'EDIT_RECHECK' })}>Edit and recheck</button>
           </div>
         </div>
       ) : null}

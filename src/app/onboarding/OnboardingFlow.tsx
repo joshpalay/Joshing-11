@@ -766,7 +766,7 @@ export default function OnboardingFlow({
 
                 <button
                   type="submit"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary w-full"
                   disabled={
                     isSavingDisplayName ||
                     displayName.trim().length < DISPLAY_NAME_MIN
@@ -850,7 +850,7 @@ export default function OnboardingFlow({
 
                 <button
                   type="submit"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary w-full"
                   disabled={
                     isSavingHandle ||
                     handle.length < HANDLE_MIN ||
@@ -928,7 +928,7 @@ export default function OnboardingFlow({
                 {!showWarmup ? (
                   <button
                     type="button"
-                    className="btn-ghost h-11 w-full"
+                    className="btn-ghost w-full"
                     onClick={() => setShowWarmup(true)}
                   >
                     Need ideas? Answer a couple quick questions
@@ -958,7 +958,7 @@ export default function OnboardingFlow({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        className="btn-primary h-11 flex-1"
+                        className="btn-primary flex-1"
                         onClick={generateProposals}
                         disabled={!canGenerate || isGenerating}
                       >
@@ -966,7 +966,7 @@ export default function OnboardingFlow({
                       </button>
                       <button
                         type="button"
-                        className="btn-ghost h-11 px-4"
+                        className="btn-ghost px-4"
                         onClick={() => setShowWarmup(false)}
                       >
                         Hide
@@ -987,7 +987,7 @@ export default function OnboardingFlow({
                 </p>
                 <button
                   type="button"
-                  className="btn-primary h-12 w-full"
+                  className="btn-primary w-full"
                   onClick={() => saveInterests()}
                   disabled={selectedInterests.length < MIN_INTERESTS || isLoading}
                 >
@@ -1042,7 +1042,7 @@ export default function OnboardingFlow({
 
                     <button
                       type="submit"
-                      className="btn-primary h-12 w-full"
+                      className="btn-primary w-full"
                       disabled={
                         savingReminderEmail ||
                         !REMINDER_EMAIL_FORMAT.test(reminderEmail.trim())
@@ -1052,7 +1052,7 @@ export default function OnboardingFlow({
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost h-12 w-full"
+                      className="btn-ghost w-full"
                       onClick={finishOnboarding}
                       disabled={savingReminderEmail}
                     >
@@ -1072,7 +1072,7 @@ export default function OnboardingFlow({
                   />
                   <button
                     type="button"
-                    className="btn-primary h-12 w-full"
+                    className="btn-primary w-full"
                     onClick={finishOnboarding}
                   >
                     Start today&apos;s five

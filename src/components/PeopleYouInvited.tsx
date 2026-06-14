@@ -292,7 +292,7 @@ export default function PeopleYouInvited() {
                   <div className="mt-3">
                     <button
                       type="button"
-                      className="btn-ghost min-h-11 w-full rounded-full"
+                      className="btn-ghost w-full"
                       onClick={() => createNewInvite(invite)}
                     >
                       Write a fresh note
@@ -316,7 +316,7 @@ export default function PeopleYouInvited() {
                 {canMessage ? (
                   <div className="mt-3 space-y-2">
                     <a
-                      className="btn-primary flex min-h-11 w-full items-center justify-center rounded-full"
+                      className="btn-primary flex w-full items-center justify-center"
                       href={buildSmsHref(
                         invite.inviteePhoneForActions!,
                         invite.message!

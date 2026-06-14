@@ -238,7 +238,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
             />
             <button
               type="button"
-              className="btn-primary text-sm"
+              className="btn-primary"
               onClick={() => void saveEmail()}
               disabled={savingEmail}
             >
