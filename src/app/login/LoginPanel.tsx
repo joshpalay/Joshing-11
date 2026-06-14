@@ -24,7 +24,7 @@ const CARD_CLASS =
 const INPUT_CLASS =
   'h-11 w-full rounded-[4px] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
 const SUBMIT_CLASS =
-  'h-11 w-full rounded-[4px] bg-[var(--brand-navy)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+  'h-11 w-full rounded-[4px] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {

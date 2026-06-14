@@ -38,6 +38,18 @@ const CARD_BGS: CardBg[] = [
 const STORAGE_KEY = 'joshing-card-bg';
 const CARD_BG_EVENT = 'joshing-card-bg-change';
 
+// The two primary-button fill candidates. Both .btn-primary and the login submit
+// read --btn-primary-bg, so flipping this recolors page CTAs and the login button
+// together — letting a tester compare the two and pick one. Slate (index 0) is the
+// globals.css default, so selecting it clears the override.
+const BTN_COLORS: CardBg[] = [
+  { label: 'Slate', value: 'var(--brand-link)', swatch: 'var(--brand-link)' },
+  { label: 'Navy', value: 'var(--brand-navy)', swatch: 'var(--brand-navy)' },
+];
+
+const BTN_STORAGE_KEY = 'joshing-btn-color';
+const BTN_COLOR_EVENT = 'joshing-btn-color-change';
+
 // Read the live choice straight off the <html> attribute (the source of truth,
 // also set by the boot script before paint). useSyncExternalStore keeps the
 // control in sync without an effect-setState and without a hydration mismatch —
@@ -55,8 +67,38 @@ function serverSnapshot(): number {
   return 0;
 }
 
+function subscribeBtn(onChange: () => void) {
+  window.addEventListener(BTN_COLOR_EVENT, onChange);
+  return () => window.removeEventListener(BTN_COLOR_EVENT, onChange);
+}
+function readBtnSnapshot(): number {
+  const raw = document.documentElement.getAttribute('data-btn-color');
+  const i = raw ? Number(raw) : 0;
+  return Number.isInteger(i) && i >= 0 && i < BTN_COLORS.length ? i : 0;
+}
+
 export function PaletteToggle() {
   const index = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
+  const btnIndex = useSyncExternalStore(subscribeBtn, readBtnSnapshot, serverSnapshot);
+
+  function applyBtn(next: number) {
+    const i = ((next % BTN_COLORS.length) + BTN_COLORS.length) % BTN_COLORS.length;
+    const { value } = BTN_COLORS[i];
+    const root = document.documentElement;
+    // Slate (index 0) is the globals.css default — clear the override; else set it.
+    if (i === 0) {
+      root.style.removeProperty('--btn-primary-bg');
+    } else {
+      root.style.setProperty('--btn-primary-bg', value);
+    }
+    root.setAttribute('data-btn-color', String(i));
+    try {
+      localStorage.setItem(BTN_STORAGE_KEY, String(i));
+    } catch {
+      /* private mode / disabled storage — non-fatal */
+    }
+    window.dispatchEvent(new Event(BTN_COLOR_EVENT));
+  }
 
   function apply(next: number) {
     const i = ((next % CARD_BGS.length) + CARD_BGS.length) % CARD_BGS.length;
@@ -83,6 +125,7 @@ export function PaletteToggle() {
   }
 
   const current = CARD_BGS[index];
+  const currentBtn = BTN_COLORS[btnIndex];
 
   return (
     <div
@@ -114,6 +157,22 @@ export function PaletteToggle() {
       >
         <Swatch color={current.swatch} active />
         {current.label}
+        <span aria-hidden style={{ opacity: 0.6 }}>→</span>
+      </button>
+
+      {/* BUTTON COLOR — flip the primary-button fill between the two candidates so
+          page CTAs and the login submit recolor together for a side-by-side call. */}
+      <span style={{ fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+        BUTTON
+      </span>
+      <button
+        type="button"
+        onClick={() => applyBtn(btnIndex + 1)}
+        aria-label={`Button color: ${currentBtn.label}. Tap to toggle.`}
+        style={cycleStyle}
+      >
+        <Swatch color={currentBtn.swatch} active />
+        {currentBtn.label}
         <span aria-hidden style={{ opacity: 0.6 }}>→</span>
       </button>
 
