@@ -50,6 +50,7 @@ vi.mock('drizzle-orm', () => ({
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
   notExists: vi.fn((query) => ({ op: 'notExists', query })),
   or: vi.fn((...parts) => ({ op: 'or', parts })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', strings, values })),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
