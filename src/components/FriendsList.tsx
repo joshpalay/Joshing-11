@@ -124,7 +124,7 @@ function FriendCard({ person }: { person: Person }) {
           ledger, never a ranking — friends are not sorted or compared by these. */}
       <dl className="mt-2 space-y-0.5 text-xs">
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-muted-foreground">Questions added</dt>
+          <dt className="text-muted-foreground">Questions created</dt>
           <dd className="text-foreground font-medium tabular-nums">{person.authoredCount}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-3">

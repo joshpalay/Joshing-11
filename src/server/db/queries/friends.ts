@@ -28,9 +28,9 @@ export type HubPerson = {
   youFollow: boolean
   followsYou: boolean
   // Two warm activity facts for the friend row (PLR-14): how many questions this
-  // person has authored, and how many of THEIR authored questions the viewer has
-  // answered (from their feed, right or wrong). Not a ranking — never sort/compare
-  // friends by these (anti-leaderboard, PRODUCT-CANON.md).
+  // person has created, and — of those — how many the viewer has answered (across
+  // every surface). Not a ranking — never sort/compare friends by these
+  // (anti-leaderboard, PRODUCT-CANON.md).
   authoredCount: number
   answeredByViewerCount: number
 }
@@ -239,16 +239,30 @@ async function getLastActiveByUserId(userIds: string[]): Promise<Map<string, Dat
 
 // Two per-friend question counts for the friends-list rows (PLR-14), both as
 // single bulk aggregates over the friend-id set (no per-friend N+1):
-//   • authored        — questions this person wrote (source 'authored', live)
-//   • answeredByViewer — of THIS person's authored questions, how many the viewer
-//     has answered. Sourced from feedItems (carries answerResult for correct OR
-//     incorrect, and joins the question's creatorId) so "answered" means engaged,
-//     not "got right" (mastery events are correct-only).
+//   • authored        — questions this person created (source 'authored', live)
+//   • answeredByViewer — of THIS person's created questions, how many the viewer
+//     has answered, across every surface. "Answered" = the viewer interacted
+//     with it as an answer anywhere: a feed item they answered (correct OR
+//     incorrect), a mastery event they earned (daily / catch-up / feed), or a
+//     game response. The viewer's answered-question id set is unioned once and
+//     intersected with each friend's authored set.
 async function getFriendQuestionCounts(
   viewerId: string,
   friendIds: string[],
 ): Promise<Map<string, { authored: number; answeredByViewer: number }>> {
   if (friendIds.length === 0) return new Map()
+
+  // Every question id the viewer has answered, from all answer-bearing surfaces.
+  const viewerAnsweredQuestionIds = sql`
+    select ${feedItems.questionId} from ${feedItems}
+      where ${feedItems.recipientUserId} = ${viewerId} and ${feedItems.answerResult} is not null
+    union
+    select ${masteryEvents.questionId} from ${masteryEvents}
+      where ${masteryEvents.answeredByUserId} = ${viewerId}
+    union
+    select ${joshingGameResponses.questionId} from ${joshingGameResponses}
+      where ${joshingGameResponses.userId} = ${viewerId}
+  `
 
   const [authoredRows, answeredRows] = await Promise.all([
     db
@@ -266,15 +280,14 @@ async function getFriendQuestionCounts(
     db
       .select({
         creatorId: questions.creatorId,
-        count: sql<number>`count(distinct ${feedItems.questionId})::int`.as('count'),
+        count: sql<number>`count(distinct ${questions.id})::int`.as('count'),
       })
-      .from(feedItems)
-      .innerJoin(questions, eq(questions.id, feedItems.questionId))
+      .from(questions)
       .where(and(
-        eq(feedItems.recipientUserId, viewerId),
         inArray(questions.creatorId, friendIds),
-        sql`${feedItems.answerResult} is not null`,
+        eq(questions.source, 'authored'),
         sql`${questions.deletedAt} is null`,
+        sql`${questions.id} in (${viewerAnsweredQuestionIds})`,
       ))
       .groupBy(questions.creatorId),
   ])
