@@ -181,6 +181,10 @@ export type PaginatedFeedResult = {
   nextCursor: FeedCursor | null;
   hasMore: boolean;
   totalCount: number;
+  // The viewer's dismissed domains, surfaced so callers (getFeedPagePayload)
+  // can reuse them for the `has_dismissed_domains` flag instead of issuing a
+  // second identical getDismissedDomains query on the same request.
+  dismissedDomains: string[];
 };
 
 const DEFAULT_FEED_LIMIT = 20;
@@ -436,6 +440,7 @@ export async function getFeedForUser(userId: string, options: FeedForUserOptions
       : null,
     hasMore: nonPinnedRaw.length > limit,
     totalCount: countRows[0]?.value ?? 0,
+    dismissedDomains,
   };
 }
 

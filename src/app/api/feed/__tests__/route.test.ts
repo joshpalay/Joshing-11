@@ -50,6 +50,7 @@ vi.mock('drizzle-orm', () => ({
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
   notExists: vi.fn((query) => ({ op: 'notExists', query })),
   or: vi.fn((...parts) => ({ op: 'or', parts })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', strings, values })),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
@@ -140,6 +141,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
   });
 
@@ -190,6 +192,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
 
     const response = await GET(new NextRequest('https://joshing.example/api/feed?filter=sent-to-me'));
@@ -241,6 +244,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
 
     const response = await GET(new NextRequest('https://joshing.example/api/feed'));
@@ -307,6 +311,7 @@ describe('GET /api/feed', () => {
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
+      dismissedDomains: [],
     });
 
     const response = await GET(new NextRequest('https://joshing.example/api/feed'));
