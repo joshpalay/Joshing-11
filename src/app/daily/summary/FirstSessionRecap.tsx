@@ -9,12 +9,15 @@
  * server-computed FirstSessionRecapView with the same null-omit discipline the
  * ceremony uses: a beat with no content is simply not pushed.
  *
+ * Beats: 1) nice start  2) Knowledge tab  3) Questions tab  4) daily rhythm +
+ * reminder opt-in. The reminder email opt-in lives here (moved off the
+ * onboarding flow) so the ask lands once the player has actually felt the loop.
+ *
  * Fires once: the seen-signal is persisted as soon as the overlay mounts, so
  * re-entry/refresh/catch-up never re-trigger it.
  */
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 
 import { formatNextResetDayTimeLocal } from '@/lib/games/timezone';
@@ -22,16 +25,17 @@ import { formatNextResetDayTimeLocal } from '@/lib/games/timezone';
 // useSyncExternalStore inputs for the client-only reset-time label, mirroring
 // the daily summary page: null during SSR keeps hydration stable, and the
 // snapshot is read on the client without a setState-in-effect. The label is
-// day-aware ("today at 1 PM" / "tomorrow at 1 PM") so the close copy stays
+// day-aware ("today at 1 PM" / "tomorrow at 1 PM") so the rhythm copy stays
 // correct when the next reset falls later on the current local day.
 const subscribeNoop = () => () => {};
 const getResetTimeSnapshot = () => formatNextResetDayTimeLocal();
 const getResetTimeServerSnapshot = (): string | null => null;
 import type {
   FirstSessionRecapBeat2,
-  FirstSessionRecapBeat3,
   FirstSessionRecapView,
 } from '@/server/daily/first-session-recap';
+
+const REMINDER_EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type BeatNode = { key: string; content: ReactNode };
 
@@ -60,58 +64,155 @@ function Beat2({ beat }: { beat: FirstSessionRecapBeat2 }) {
       <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
         Your knowledge map has its first marks.
       </p>
-      {beat.offTheGroundDomain ? (
-        <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          {beat.offTheGroundDomain} is already off the ground.
-        </p>
-      ) : null}
-      {beat.newTerritoryDomain ? (
-        <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-stone-300 sm:text-xl">
-          {beat.newTerritoryDomain} is new territory &mdash; that&rsquo;s where the map grows.
-        </p>
-      ) : null}
+      <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-stone-300 sm:text-xl">
+        Find your full map any time on the{' '}
+        <span className="font-medium text-stone-100">Knowledge</span> tab.
+      </p>
     </div>
   );
 }
 
-function Beat3({ beat, onInvite }: { beat: FirstSessionRecapBeat3; onInvite: () => void }) {
-  if (beat.kind === 'no_inviter') {
+// Beat 3 — mirrors Beat 2's eyebrow → serif headline → supporting line shape,
+// pointing at the Questions tab.
+function Beat3() {
+  return (
+    <div className="mx-auto max-w-2xl text-center">
+      <p className="text-sm tracking-[0.16em] text-stone-400 uppercase">Your turn</p>
+      <h1 className="mt-4 font-serif text-4xl leading-tight font-semibold tracking-normal sm:text-6xl">
+        Ask something only you would ask.
+      </h1>
+      <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+        Write a question for the friends you choose &mdash; that&rsquo;s how the map fills in for
+        both of you.
+      </p>
+      <p className="mx-auto mt-3 max-w-2xl text-lg leading-8 text-stone-300 sm:text-xl">
+        Everything you write lives on the{' '}
+        <span className="font-medium text-stone-100">Questions</span> tab.
+      </p>
+    </div>
+  );
+}
+
+// Beat 4 — daily rhythm + the reminder email opt-in (moved here from onboarding).
+// Self-contained state; the form controls stopPropagation so taps don't advance
+// the overlay while the player is typing. "Maybe later" / the post-send button
+// close straight to the summary; a backdrop tap advances to the end card.
+function Beat4({ onClose }: { onClose: () => void }) {
+  const resetDayTime = useSyncExternalStore(
+    subscribeNoop,
+    getResetTimeSnapshot,
+    getResetTimeServerSnapshot,
+  );
+  const [email, setEmail] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<boolean | null>(null);
+
+  async function submit() {
+    const trimmed = email.trim();
+    if (!REMINDER_EMAIL_FORMAT.test(trimmed)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const response = await fetch('/api/onboarding/email-reminder', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok !== true) {
+        setError(
+          typeof data?.message === 'string' ? data.message : "We couldn't save that email. Try again.",
+        );
+        return;
+      }
+      setSent(data.sent === true);
+    } catch {
+      setError("We couldn't save that email. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (sent !== null) {
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-4xl leading-tight font-semibold tracking-normal sm:text-6xl">
-          Invite someone whose questions you&rsquo;d want to see.
+          {sent ? 'Check your inbox.' : "You're all set."}
         </h1>
-        <button
-          type="button"
-          className="mt-10 inline-flex h-12 items-center justify-center rounded-md bg-stone-100 px-6 text-sm font-medium text-stone-950 transition hover:bg-white"
-          onClick={(event) => {
-            event.stopPropagation();
-            onInvite();
-          }}
-        >
-          Invite a friend →
-        </button>
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          {sent
+            ? 'Tap the confirmation link and your daily reminders switch on automatically.'
+            : 'We saved your email but couldn’t send the confirmation just now — you can resend it any time from your profile.'}
+        </p>
+        <div className="mt-10 flex justify-center" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            className="inline-flex h-12 items-center justify-center rounded-md bg-stone-100 px-8 text-sm font-medium text-stone-950 transition hover:bg-white"
+            onClick={onClose}
+          >
+            View summary →
+          </button>
+        </div>
       </div>
     );
   }
 
-  const { inviterName } = beat;
   return (
     <div className="mx-auto max-w-2xl text-center">
-      <h1 className="font-serif text-4xl leading-tight font-semibold tracking-normal sm:text-6xl">
-        {inviterName} invited you here.
+      <p className="text-sm tracking-[0.16em] text-stone-400 uppercase">Every day</p>
+      <h1 className="mt-4 font-serif text-4xl leading-tight font-semibold tracking-normal sm:text-6xl">
+        Five new questions, every day.
       </h1>
-      {beat.kind === 'inviter_present' ? (
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          {inviterName}&rsquo;s been playing &mdash; their last few questions are already waiting
-          for you on your home screen. You&rsquo;ll start to see where your maps overlap.
+      <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+        Your next five land {resetDayTime ?? 'tomorrow'} &mdash; then a fresh five every day.
+      </p>
+
+      <form
+        className="mx-auto mt-8 max-w-sm space-y-3 text-left"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!saving) void submit();
+        }}
+      >
+        <p className="text-center text-sm text-stone-400">
+          Want a nudge? Drop your email for a daily reminder &mdash; with a no-spoiler peek at your
+          next question.
         </p>
-      ) : (
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          As {inviterName} plays, their questions show up on your home screen, and you&rsquo;ll see
-          where your maps overlap.
-        </p>
-      )}
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          className="h-12 w-full rounded-md border border-white/20 bg-white/10 px-3 text-base text-stone-50 placeholder:text-stone-400 transition outline-none focus:ring-2 focus:ring-white/40"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (error) setError(null);
+          }}
+        />
+        {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+        <button
+          type="submit"
+          className="inline-flex h-12 w-full items-center justify-center rounded-md bg-stone-100 px-6 text-sm font-medium text-stone-950 transition hover:bg-white disabled:opacity-50"
+          disabled={saving || !REMINDER_EMAIL_FORMAT.test(email.trim())}
+        >
+          {saving ? 'Sending…' : 'Turn on reminders'}
+        </button>
+        <button
+          type="button"
+          className="h-11 w-full text-sm text-stone-400 transition hover:text-stone-200"
+          onClick={onClose}
+          disabled={saving}
+        >
+          Maybe later
+        </button>
+      </form>
     </div>
   );
 }
@@ -123,14 +224,7 @@ export function FirstSessionRecap({
   recap: FirstSessionRecapView;
   onDismiss: () => void;
 }) {
-  const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Client-only day-aware reset label for the close copy; null during SSR.
-  const resetDayTime = useSyncExternalStore(
-    subscribeNoop,
-    getResetTimeSnapshot,
-    getResetTimeServerSnapshot,
-  );
 
   // Persist the seen-signal the moment the recap is shown — re-entry, refresh,
   // and replaying catch-up must never re-trigger it. Fire-and-forget.
@@ -141,29 +235,19 @@ export function FirstSessionRecap({
     }).catch(() => undefined);
   }, []);
 
-  const invite = () => {
-    onDismiss();
-    router.push('/friends');
-  };
-
   const beats = useMemo<BeatNode[]>(() => {
     const nodes: BeatNode[] = [];
     // Beat 1 always renders.
     nodes.push({ key: 'beat1', content: <Beat1 firstName={recap.firstName} /> });
     // Beat 2 omitted only in the defensive empty-session case.
     if (recap.beat2) {
-      nodes.push({
-        key: 'beat2',
-        content: <Beat2 beat={recap.beat2} />,
-      });
+      nodes.push({ key: 'beat2', content: <Beat2 beat={recap.beat2} /> });
     }
-    // Beat 3 always renders (no-inviter variant when there is no inviter).
-    nodes.push({
-      key: 'beat3',
-      content: <Beat3 beat={recap.beat3} onInvite={invite} />,
-    });
+    // Beat 3 (Questions tab) and Beat 4 (rhythm + reminders) always render.
+    nodes.push({ key: 'beat3', content: <Beat3 /> });
+    nodes.push({ key: 'beat4', content: <Beat4 onClose={onDismiss} /> });
     return nodes;
-    // openMap/invite are stable enough for this short-lived overlay.
+    // onDismiss is stable; recap is the only meaningful input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recap]);
 
@@ -180,8 +264,8 @@ export function FirstSessionRecap({
   }
 
   // Story-style tap navigation: a tap on the left third steps back, anywhere
-  // else advances. Buttons inside beats stopPropagation, so this only fires on
-  // the backdrop.
+  // else advances. Buttons/forms inside beats stopPropagation, so this only
+  // fires on the backdrop.
   function handleTap(event: React.MouseEvent<HTMLElement>) {
     const width = event.currentTarget.clientWidth;
     if (width > 0 && event.clientX < width * 0.3) {
@@ -212,18 +296,13 @@ export function FirstSessionRecap({
 
       <div key={currentIndex} className="relative z-10 w-full animate-[fadeIn_0.4s_ease]">
         {isEnd ? (
-          <div className="mx-auto max-w-2xl text-center">
-            <h1 className="font-serif text-4xl leading-tight font-semibold tracking-normal sm:text-6xl">
-              Come back {resetDayTime ?? 'tomorrow'} for five new questions.
-            </h1>
-            <div className="mt-10 flex justify-center">
+          <div className="mx-auto max-w-2xl text-center" onClick={(event) => event.stopPropagation()}>
+            <p className="text-lg text-stone-300">You&rsquo;re all set.</p>
+            <div className="mt-8 flex justify-center">
               <button
                 type="button"
                 className="inline-flex h-12 items-center justify-center rounded-md bg-stone-100 px-8 text-sm font-medium text-stone-950 transition hover:bg-white"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  done();
-                }}
+                onClick={done}
               >
                 View summary →
               </button>
