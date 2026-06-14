@@ -49,11 +49,12 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 ## ⭐ Start here — open & important
 
-| ID | Item | Priority | Status | Disposition |
-|---|---|---|---|---|
-| PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` — copy decision (may be deliberate) |
+**No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
 
-**Clean cheap-and-safe cluster (mostly already done):** PLR-5 ✅, PLR-6 ✅, PLR-7 ✅, PLR-9 ✅, PLR-13 ✅, PLR-21.
+- **PLR-21** (`CLEAN WIN`) — link styling on the summary page; code looks already-consistent, so this likely just needs a 30-sec live look.
+- **PLR-14** (`FIX VIA CANON`) — richer friend actions (no competition mechanics). A real P2 feature.
+- **PLR-3** — needs a live repro to confirm the "double-tap" exists.
+- **Partials (judgment, low urgency):** PLR-12, PLR-17, PLR-19, PLR-20, PLR-25.
 
 ---
 
@@ -72,7 +73,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-7 | Gear icon on Today's Five does nothing | P2 | `DONE` | `CLEAN WIN` | **Confirmed functional (2026-06-14):** the gear is a working `<Link href="/daily/setup">` with `aria-label="Set up daily round"` (`TodaysFiveCard.tsx:209–215`) — it opens the daily setup page, not a dead control. The reviewer's live "dead control" read doesn't hold against current code (older build / non-obvious destination). The `claude/fix-gear-icon-LZCOK` branch is unnecessary and can be closed. |
 | PLR-8 | Catch-up reveal, no confirmation | P1 | `WON'T DO` | — | **Not a bug per owner (2026-06-14), code-confirmed.** Premise ("reveal consumes a missed question") is false: `skipCurrent()` `useCatchupFlow.ts:424–463` makes **no server call** — purely a client-session `outcome:'revealed'`. The slot stays `answered:false`/`dismissed_at:null`, so `isCatchUpSlotEligible` (`catch-up-eligibility.ts:28–37`) keeps it eligible; it resurfaces in catch-up until answered correctly, dismissed, or it ages out (7-day window). Nothing is burned. |
 | PLR-9 | Privacy toggles lack context | P2 | `DONE` | `CLEAN WIN` | `419201a`; `SECTION_VISIBILITY_HELP` `users/[id]/page.tsx:546–565`. |
-| PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` | Treat as a **copy decision** (copy before pixels); "Establishing" may be deliberate vocabulary. Rename ideas ("In review") are direction, not a quick relabel. No tooltip today `TodaysFiveCard.tsx:49,58`. |
+| PLR-10 | "Establishing" label unclear | — | `WON'T DO` | — | **Owner: deliberate (2026-06-14).** "Establishing" is intentional vocabulary (the tier name) — no rename, no tooltip. |
 | PLR-11 | Card-colour switcher confusing | — | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: dev `PaletteToggle` live for all `layout.tsx:7,72`.) |
 | PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
 | PLR-13 | Explanation field is a small scrolling textarea | — | `DONE` | `CLEAN WIN` | Shipped #934: explanation `<textarea>` is now `resize-y` with a taller default (`rows={5}`, `min-h-[7.5rem]`) — `QuestionForm.tsx:666`. |
