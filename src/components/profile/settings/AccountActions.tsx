@@ -14,6 +14,31 @@ import { useState } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 
+/**
+ * Log out, then redirect. `destroySession()` clears the `joshing_session`
+ * cookie server-side; the redirect MUST be a hard navigation so the cleared
+ * cookie takes effect and no stale authenticated client tree (App Router
+ * cache) survives. A soft `router.push` left the user looking signed-in until
+ * they manually navigated (B-LOGOUT-CONFIRM-FIX-01). 401 means the session was
+ * already gone, which is still a successful logout.
+ *
+ * `navigate` is injected so the chain is testable without a DOM.
+ */
+export async function logoutAndRedirect(
+  navigate: (url: string) => void,
+): Promise<void> {
+  const response = await fetch('/api/account/logout', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok && response.status !== 401) {
+    throw new Error('Could not log out.');
+  }
+
+  navigate('/login');
+}
+
 export function AccountActions() {
   const router = useRouter();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
@@ -56,16 +81,10 @@ export function AccountActions() {
     setLogoutError(null);
 
     try {
-      const response = await fetch('/api/account/logout', {
-        method: 'POST',
-        credentials: 'include',
+      // Hard navigation (not router.push): see logoutAndRedirect above.
+      await logoutAndRedirect((url) => {
+        window.location.assign(url);
       });
-
-      if (!response.ok && response.status !== 401) {
-        throw new Error('Could not log out.');
-      }
-
-      router.push('/login');
     } catch (caught) {
       setLogoutError(caught instanceof Error ? caught.message : 'Could not log out.');
       setLoggingOut(false);
