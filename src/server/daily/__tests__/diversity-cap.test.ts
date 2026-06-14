@@ -15,10 +15,7 @@ const mocks = vi.hoisted(() => ({
   getKnowledgeBase: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
-  createDailyQueueItem: vi.fn(),
-  createDailyQueueItemFromAuthored: vi.fn(),
-  createDailyQueueItemFromHouse: vi.fn(),
-  createDailyQueueItemFromPresence: vi.fn(),
+  persistDailyQueue: vi.fn(),
   getDailyPreferences: vi.fn(),
   getFriendAndFoFUserIds: vi.fn(),
   getFriendDomainsForBonus: vi.fn(),
@@ -27,6 +24,9 @@ const mocks = vi.hoisted(() => ({
   isGenericSubcategory: vi.fn(),
 }));
 
+// The orchestrator assembles the queue in memory via pure slot builders, then
+// persists it once via persistDailyQueue (atomic write). Provide faithful pure
+// builders so the slots handed to persistDailyQueue carry the asserted fields.
 vi.mock('@/server/db/queries/daily', () => ({
   getTodaysDailyQueue: mocks.getTodaysDailyQueue,
   carryForwardUntouchedDailyQueue: mocks.carryForwardUntouchedDailyQueue,
@@ -35,10 +35,19 @@ vi.mock('@/server/db/queries/daily', () => ({
   getKnowledgeBase: mocks.getKnowledgeBase,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
-  createDailyQueueItem: mocks.createDailyQueueItem,
-  createDailyQueueItemFromAuthored: mocks.createDailyQueueItemFromAuthored,
-  createDailyQueueItemFromHouse: mocks.createDailyQueueItemFromHouse,
-  createDailyQueueItemFromPresence: mocks.createDailyQueueItemFromPresence,
+  persistDailyQueue: mocks.persistDailyQueue,
+  buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
+  }),
+  buildHouseSlot: (h: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'house', question_id: h.id, domain: h.canonicalSubcategory, question_text: h.questionText, answered: false,
+  }),
+  buildBotSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'bot', generated_question_id: q.id, domain: q.canonicalSubcategory, question_text: q.questionText, answered: false,
+  }),
+  buildPresenceSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, presence: { sourceId: string }, position: number) => ({
+    slot_index: position, source: 'bot', generated_question_id: q.id, domain: q.canonicalSubcategory, question_text: q.questionText, presence_source_id: presence?.sourceId, answered: false,
+  }),
 }));
 
 vi.mock('@/server/db/queries/daily-preferences', () => ({
@@ -87,15 +96,18 @@ function authoredPick(id: string, subcategory: string) {
   } as never;
 }
 
+// The single atomic persist call's slots argument.
+function persistedSlots(): Array<Record<string, unknown>> {
+  expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
+  return mocks.persistDailyQueue.mock.calls[0][1] as Array<Record<string, unknown>>;
+}
+/** Generated (bot) core slots only — excludes authored, house, and +2 bonus. */
+function persistedBotSlots(): Array<Record<string, unknown>> {
+  return persistedSlots().filter((slot) => slot.source === 'bot' && !slot.presence_source_id);
+}
 /** The canonicalSubcategory each generated slot was persisted under, in slot order. */
-function persistedGeneratedDomains(generatedRows: ReturnType<typeof genq>[]): string[] {
-  const byId = new Map(
-    generatedRows.map((row) => {
-      const q = row as unknown as { id: string; canonicalSubcategory: string };
-      return [q.id, q.canonicalSubcategory] as const;
-    }),
-  );
-  return mocks.createDailyQueueItem.mock.calls.map((call) => byId.get(call[1] as string) ?? '?');
+function persistedGeneratedDomains(): string[] {
+  return persistedBotSlots().map((slot) => (slot.domain as string) ?? '?');
 }
 
 beforeEach(() => {
@@ -131,10 +143,7 @@ beforeEach(() => {
 
   mocks.isGenericSubcategory.mockReturnValue(false);
 
-  mocks.createDailyQueueItem.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromAuthored.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromHouse.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromPresence.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue(undefined);
 });
 
 describe('fillDailyQueueForUser — intra-day diversity cap', () => {
@@ -157,8 +166,8 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
 
     await fillDailyQueueForUser(USER);
 
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
-    const domains = persistedGeneratedDomains(rows);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+    const domains = persistedGeneratedDomains();
     // Exactly the cap of botany; b3 was deflected and never needed (the round
     // brought diverse material), so it does not appear.
     expect(domains.filter((d) => d === 'Botany').length).toBe(DAILY_QUEUE_MAX_PER_SUBCATEGORY);
@@ -181,11 +190,8 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
 
     await fillDailyQueueForUser(USER);
 
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
-    const domains = mocks.createDailyQueueItem.mock.calls.map((call) => {
-      const id = call[1] as string;
-      return id.startsWith('b') ? 'Botany' : id;
-    });
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+    const domains = persistedGeneratedDomains();
     const botanyCount = domains.filter((d) => d === 'Botany').length;
     // No more than the cap, and the freed slots are filled by other subcategories.
     expect(botanyCount).toBe(DAILY_QUEUE_MAX_PER_SUBCATEGORY);
@@ -209,13 +215,10 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     await fillDailyQueueForUser(USER);
 
     // Only two Hamlet authored slots persisted (cap), not three.
-    expect(mocks.createDailyQueueItemFromAuthored).toHaveBeenCalledTimes(
-      DAILY_QUEUE_MAX_PER_SUBCATEGORY,
-    );
+    const authoredSlots = persistedSlots().filter((slot) => slot.source === 'friend');
+    expect(authoredSlots).toHaveLength(DAILY_QUEUE_MAX_PER_SUBCATEGORY);
     // Generation backfilled the slot the cap freed, so the queue is still full.
-    const totalSlots =
-      mocks.createDailyQueueItemFromAuthored.mock.calls.length +
-      mocks.createDailyQueueItem.mock.calls.length;
+    const totalSlots = authoredSlots.length + persistedBotSlots().length;
     expect(totalSlots).toBe(DAILY_QUEUE_SIZE);
   });
 
@@ -240,7 +243,7 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     await fillDailyQueueForUser(USER);
 
     // All five botany slots persisted — not capped at DAILY_QUEUE_MAX_PER_SUBCATEGORY.
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
   });
 
   it('still caps OTHER subcategories while an "often" one runs free', async () => {
@@ -264,11 +267,8 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
 
     await fillDailyQueueForUser(USER);
 
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
-    const domains = mocks.createDailyQueueItem.mock.calls.map((call) => {
-      const id = call[1] as string;
-      return id.startsWith('b') ? 'Botany' : 'Jazz';
-    });
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+    const domains = persistedGeneratedDomains();
     // Botany (often) exceeds the base cap; Jazz (unset) is held at it.
     expect(domains.filter((d) => d === 'Botany').length).toBeGreaterThan(
       DAILY_QUEUE_MAX_PER_SUBCATEGORY,
@@ -294,6 +294,6 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
 
     // A full five-question queue still builds — the cap degraded gracefully.
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
   });
 });
