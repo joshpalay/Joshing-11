@@ -129,6 +129,13 @@ export default function DailySummaryPage() {
     () => (summary ? interpretiveLine(summary) : null),
     [summary]
   )
+  // The next Daily Five arrives at noon tomorrow; name the weekday (e.g. "Monday")
+  // rather than saying "Tomorrow" so the copy reads concretely.
+  const tomorrowWeekday = useMemo(() => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return tomorrow.toLocaleDateString(undefined, { weekday: 'long' })
+  }, [])
 
   if (loading) {
     return <LoadingScreen fullScreen label="Loading summary" />
@@ -249,7 +256,7 @@ export default function DailySummaryPage() {
 
         <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
           <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
-            Tomorrow’s five arrive at noon.
+            {tomorrowWeekday}’s five arrive at noon.
           </p>
           <div className="mt-5 flex flex-col items-center gap-3">
             <Link className="btn-primary w-full sm:w-auto sm:min-w-56" href="/">
