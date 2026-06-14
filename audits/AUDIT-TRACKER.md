@@ -51,7 +51,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 **No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
 
-- **PLR-21** (`CLEAN WIN`) — link styling on the summary page; code looks already-consistent, so this likely just needs a 30-sec live look.
 - **PLR-14** (`FIX VIA CANON`) — richer friend actions (no competition mechanics). A real P2 feature.
 - **PLR-3** — needs a live repro to confirm the "double-tap" exists.
 - **Partials (judgment, low urgency):** PLR-12, PLR-17, PLR-19, PLR-20, PLR-25.
@@ -84,7 +83,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
 | PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `PARTIAL` | — | Personal invite + copy link `InviteSomeoneNew.tsx:54–84`; no explicit SMS/email labelling. |
 | PLR-20 | Avatars initials-only; no photo upload | — | `OPEN` | — | `AvatarChip` initials-only; no upload anywhere. |
-| PLR-21 | Inconsistent link styling on summary page | — | `OPEN` | `CLEAN WIN` | Low-stakes. Underlined + button links coexist `summary/page.tsx:242,255,259,635,663`. |
+| PLR-21 | Inconsistent link styling on summary page | — | `DONE` | `CLEAN WIN` | **Resolved (2026-06-14).** Code is already consistent: every text link uses `underline underline-offset-4` (`summary/page.tsx:242,259,635,663`); `btn-primary`/`btn-ghost` are buttons (correctly not underlined). No color-only link exists. No change needed. |
 | PLR-22 | No dark mode | P3 | `DEFERRED` | `DO NOT DO` (for launch) | Not canon-violating, but reworks the cream/serif/illustration brand — large effort. Park post-launch. |
 | PLR-23 | Audio/haptic feedback on answers | P3 | `WON'T DO` | `DO NOT DO` | Wrong answer = discovery, not failure; an "incorrect" tone betrays the thesis. Skip. |
 | PLR-24 | Categories skew Western | P3 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not applicable: categories follow each person's declared interests — content is interest-matched by design, not a fixed seed corpus. No "skew" to correct. |
