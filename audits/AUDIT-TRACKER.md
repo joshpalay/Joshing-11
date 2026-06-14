@@ -43,7 +43,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 | #14 + "Opportunities" | Leaderboards, streak-as-pressure, "Challenge Blake," competition-register words ("beat," "called," "challenge") | Anti-competition is foundational. Friend actions can be richer **without** any of this. |
 | #23 | Audio/haptic chime on correct **and a tone on "incorrect"** | A wrong answer is a connection/discovery event, not a failure — a sad tone betrays the thesis. |
 | #16 | Collapsible grouping of the home feed | Clustering was tried on Group 3, rejected (fragment-copy), and `B-FEED-GROUP3-FIX-01` enforces a straight chronological stream. Real fix = sequencing/staggering CTAs, not grouping. |
-| #3 | "Simplify reveal to one tap" / make revealing faster | Reveal in catch-up **consumes** a question; grading must fail toward the player. Resolve via PLR-8 (add confirmation), don't make reveal more accidental. |
 | #17 | Confetti / game-win celebration on catch-up close | A closure state is fine, but in the quiet-warmth ("knows it down cold") voice — not a celebration-of-correctness register. |
 
 ---
@@ -52,7 +51,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 | ID | Item | Priority | Status | Disposition |
 |---|---|---|---|---|
-| PLR-8 | Catch-up reveal consumes a question, no confirmation | P1 | `OPEN` | `FIX VIA CANON` — the important half of #3/#8; aligns with fail-toward-player |
 | PLR-15 | No onboarding/tour for the Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` — tie to B-FirstRecap-1 / B-HomeSeed-1; explanation must match the mastery model |
 | PLR-16 | Overwhelming home feed | P1 | `PARTIAL` | `FIX VIA CANON` — stagger CTAs; **do not** reintroduce grouping |
 | PLR-24 | Categories skew Western | P3 | `NEEDS DECISION` | `PRODUCT CONVERSATION` — audit seed bank + interest taxonomy, not a content drive |
@@ -70,12 +68,12 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 |---|---|---|---|---|---|
 | PLR-1 | Dev tools visible to all users | P0 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: unconditional in `AccountActions.tsx:102–135`.) |
 | PLR-2 | Intermittent 404 on root during sign-in | P0 | `DONE` | `CLEAN WIN` | Fixed `304215b8` (#922): re-login now mints the real `onb` claim (`verify-otp/route.ts:50,213`), removing the `refresh-onboarding-claim` redirect hop that opened the 404 window. Regression test added. Diagnosed root cause; a live smoke confirms. |
-| PLR-3 | "Show me the answer" duplication | P1 | `OPEN` | `FIX VIA CANON` | Text reveal `GameplayChat.tsx:541`. **Resolve only in light of PLR-8** — do NOT make reveal faster/more accidental. |
+| PLR-3 | "Show me the answer" duplication | P1 | `OPEN` | `CLEAN WIN` | Text reveal `GameplayChat.tsx:541`. The "double action" wasn't found in code — needs a live repro. Cost concern removed: reveal is non-destructive (see PLR-8), so simplifying it is low-risk. |
 | PLR-4 | Auto-generated tagline misrepresents new users | P1 | `DONE` | `FIX VIA CANON` | Portrait must be *earned by play*, not auto-assigned. Canon-correct fix shipped: `buildMindStatement()` `users/[id]/page.tsx:78–91` derives from real mastery + neutral placeholder for new users. |
 | PLR-5 | "Use this" artefact in rewrite suggestions | P1 | `DONE` | `CLEAN WIN` | `75eb625`; separate block spans `QuestionForm.tsx:280–291`. (Generation prompt is the biggest quality lever — good it's clean.) |
 | PLR-6 | No success feedback after saving a question | — | `DONE` | `CLEAN WIN` | `419201a`; "✓ Saved" panel `QuestionForm.tsx:541–549` + host toast. |
 | PLR-7 | Gear icon on Today's Five does nothing | P2 | `OPEN` (verify) | `CLEAN WIN` | **Discrepancy:** code shows a working `<Link href="/daily/setup">` `TodaysFiveCard.tsx:209–215`, but the live-app reviewer read it as a dead control. Re-verify on live: is the destination non-obvious, or a different build? Remove/clarify accordingly. **Fix in flight:** branch `claude/fix-gear-icon-LZCOK` (not yet merged to dev2). |
-| PLR-8 | Catch-up reveal, no confirmation | P1 | `OPEN` | `FIX VIA CANON` | The more important of #3/#8. `onGiveUp={() => skipCurrent()}` `catchup/page.tsx:138`. Add a confirm before a reveal burns a question (fail-toward-player). |
+| PLR-8 | Catch-up reveal, no confirmation | P1 | `WON'T DO` | — | **Not a bug per owner (2026-06-14), code-confirmed.** Premise ("reveal consumes a missed question") is false: `skipCurrent()` `useCatchupFlow.ts:424–463` makes **no server call** — purely a client-session `outcome:'revealed'`. The slot stays `answered:false`/`dismissed_at:null`, so `isCatchUpSlotEligible` (`catch-up-eligibility.ts:28–37`) keeps it eligible; it resurfaces in catch-up until answered correctly, dismissed, or it ages out (7-day window). Nothing is burned. |
 | PLR-9 | Privacy toggles lack context | P2 | `DONE` | `CLEAN WIN` | `419201a`; `SECTION_VISIBILITY_HELP` `users/[id]/page.tsx:546–565`. |
 | PLR-10 | "Establishing" label unclear | — | `NEEDS DECISION` | `FIX VIA CANON` | Treat as a **copy decision** (copy before pixels); "Establishing" may be deliberate vocabulary. Rename ideas ("In review") are direction, not a quick relabel. No tooltip today `TodaysFiveCard.tsx:49,58`. |
 | PLR-11 | Card-colour switcher confusing | — | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: dev `PaletteToggle` live for all `layout.tsx:7,72`.) |
