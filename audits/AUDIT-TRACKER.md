@@ -2,7 +2,7 @@
 
 One living ledger for the two audits currently being worked down. Edit the **Status** column as you take items off the board.
 
-**Last code-verification pass:** 2026-06-14 (re-verified against `origin/dev2`). Delta since 2026-06-13: **PLR-2 (root 404) → DONE** (fix `304215b8` merged via #922).
+**Last code-verification pass:** 2026-06-14 (re-verified against `origin/dev2`). Delta since 2026-06-13: **PLR-2 (root 404) → DONE** (fix `304215b8` merged via #922). Also triaged a third audit (2026-06-14 product launch-readiness eval) — ~90% a re-run of Audit #2; its launch-blockers map to existing PLR items or are invalid against current code (logout, friend "Answer →", double-reveal, "Use this" all checked out clean). Four genuinely new valid findings filed as `MISC-1`…`MISC-4` below.
 **Canon disposition pass (audit #2):** 2026-06-13 — every Pre-Launch item sorted against product canon (see Disposition column + guardrails).
 
 ## How to use this file
@@ -121,4 +121,7 @@ Add anything that isn't from the two audits here.
 
 | ID | Item | Status | Notes |
 |---|---|---|---|
-| _(none yet)_ | | | |
+| MISC-1 | Knowledge-map nodes inert in normal view | `NEEDS DECISION` | Portrait circles only respond when `editMode` is true (`PortraitCircles.tsx:200–201`); default render passes no `editMode`/`onToggleHidden` (`KnowledgeOverviewClient.tsx:187`), so tapping a topic in view mode does nothing. "Interactive mind garden" is a real (High-effort) opportunity, not a bug. From 2026-06-14 audit. |
+| MISC-2 | "Explore your overlap" Venn is non-interactive | `OPEN` | `OverlapMap.tsx` has zero click/tap handlers — pure render component. Tapping the overlap diagram does nothing. Medium effort. From 2026-06-14 audit. |
+| MISC-3 | OTP screen lacks resend button + expiry timer | `OPEN` | `LoginPanel.tsx:677–750` shows only code entry + "Change number"; code expires silently at 10 min (`otp-store.ts:16`) with no resend affordance or countdown. Most clearly shippable of the new items (Low–Medium effort). From 2026-06-14 audit. |
+| MISC-4 | No auto-scroll to feedback after a daily answer | `PARTIAL` | Feedback sheet is a fixed-position modal so it *is* visible, but there's no `scrollIntoView` (`daily/page.tsx`, `GameplayChat.tsx`). Audit's "card scrolls out of view" is plausible on some viewports — verify with a live repro before acting. Low effort. From 2026-06-14 audit. |
