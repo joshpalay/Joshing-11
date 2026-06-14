@@ -288,7 +288,7 @@ function RoundSummary({
           {hasMore ? (
             <button
               type="button"
-              className="btn-primary w-full rounded-full sm:w-auto sm:min-w-56"
+              className="btn-primary w-full sm:w-auto sm:min-w-56"
               onClick={onPlayNext}
             >
               Play the next {nextBatchSize}
@@ -299,7 +299,7 @@ function RoundSummary({
             className={
               hasMore
                 ? 'text-muted-foreground hover:text-foreground text-sm font-medium underline underline-offset-4 transition'
-                : 'btn-primary w-full rounded-full sm:w-auto sm:min-w-56'
+                : 'btn-primary w-full sm:w-auto sm:min-w-56'
             }
             onClick={onHome}
           >

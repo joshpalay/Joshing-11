@@ -350,23 +350,27 @@
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
-     icon), all 44px-tall (min-h-11) for touch, all with a focus-visible ring.
+     icon), all sharing the 4px corner radius and a focus-visible ring.
+     `.btn-primary` is the daily-five call-to-action: 48px-tall (min-h-12),
+     brand-link fill, bold base type with 0.04em tracking — the single standard
+     for prominent primary CTAs. Ghost / danger / icon stay 44px-tall (min-h-11)
+     with text-sm so they read as secondary next to a primary CTA.
      The shadcn ui/button was removed in favor of these — see the 2026-05-30
      design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--brand-link)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-ghost {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-danger {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-icon {
-    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-md text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 }
 

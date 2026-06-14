@@ -309,7 +309,7 @@ export default function TodaysFiveCard({
             <>
               <Link
                 href="/questions?create=1&intent=specific"
-                className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+                className="btn-primary w-full"
               >
                 Send a friend a question →
               </Link>
@@ -335,7 +335,7 @@ export default function TodaysFiveCard({
         <>
           <Link
             href={playHref}
-            className="btn-primary mt-4 min-h-12 w-full justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+            className="btn-primary mt-4 w-full"
           >
             {actionLabel}
           </Link>

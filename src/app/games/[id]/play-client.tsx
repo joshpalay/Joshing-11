@@ -371,7 +371,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
             />
             <button
               type="submit"
-              className="btn-primary font-serif text-base font-semibold"
+              className="btn-primary"
               disabled={pending || pausingAfterAnswer || !answer.trim()}
             >
               {pending ? '...' : 'Answer'}

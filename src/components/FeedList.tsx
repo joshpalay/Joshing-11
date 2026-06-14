@@ -772,7 +772,7 @@ function FeedContributeFooter() {
           </div>
           <button
             type="submit"
-            className="text-primary-foreground flex min-h-11 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] transition hover:opacity-90"
+            className="btn-primary w-full"
           >
             Write a Question
           </button>

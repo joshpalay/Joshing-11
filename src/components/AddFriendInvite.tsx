@@ -296,7 +296,7 @@ export default function AddFriendInvite({
             <button
               type="button"
               onClick={pickContact}
-              className="btn-ghost min-h-11 w-full rounded-full text-sm"
+              className="btn-ghost w-full"
             >
               Pick from contacts
             </button>
@@ -345,7 +345,7 @@ export default function AddFriendInvite({
           {error ? <p className="text-destructive text-sm font-medium">{error}</p> : null}
 
           <div className="space-y-3">
-            <button type="submit" className="btn-primary min-h-12 w-full rounded-full">
+            <button type="submit" className="btn-primary w-full">
               Next
             </button>
             <button
@@ -395,7 +395,7 @@ export default function AddFriendInvite({
           <div className="space-y-3">
             <button
               type="submit"
-              className="btn-primary min-h-12 w-full rounded-full"
+              className="btn-primary w-full"
               disabled={submitting}
             >
               {submitting ? 'Warming it up…' : 'Make the note'}
@@ -463,14 +463,14 @@ export default function AddFriendInvite({
           <div className="space-y-3">
             <button
               type="button"
-              className="btn-primary min-h-12 w-full rounded-full"
+              className="btn-primary w-full"
               onClick={copyMessage}
             >
               {copyLabel}
             </button>
             {smsHref ? (
               <a
-                className="btn-ghost min-h-12 w-full rounded-full"
+                className="btn-ghost w-full"
                 href={smsHref}
                 onClick={() =>
                   sendTelemetry('add_friend_sms_handoff_opened', {

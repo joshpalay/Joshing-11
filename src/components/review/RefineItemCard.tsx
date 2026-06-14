@@ -83,7 +83,7 @@ export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: s
             onClick={resolve}
             disabled={busy}
             style={actionStyle}
-            className="inline-flex min-h-11 items-center justify-center self-start rounded-full border px-4 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60 sm:self-auto"
+            className="inline-flex min-h-11 items-center justify-center self-start rounded-[4px] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60 sm:self-auto"
           >
             {item.actionVerb}
           </button>
