@@ -259,14 +259,14 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                className="btn-primary min-h-12 flex-1 rounded-full"
+                className="btn-primary flex-1"
                 onClick={() => void copyMessage()}
               >
                 {copyLabel}
               </button>
               {smsHref ? (
                 <a
-                  className="btn-ghost min-h-12 flex-1 rounded-full"
+                  className="btn-ghost flex-1"
                   href={smsHref}
                 >
                   Open Messages
@@ -397,7 +397,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 <div className="flex items-center gap-3">
                   <button
                     type="submit"
-                    className="btn-primary min-h-12 flex-1 rounded-full"
+                    className="btn-primary flex-1"
                     disabled={submitting}
                   >
                     {submitting ? 'Warming it up…' : 'Make the note'}

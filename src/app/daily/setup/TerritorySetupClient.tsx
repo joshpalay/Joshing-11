@@ -617,7 +617,7 @@ export function TerritorySetupClient({
           ) : (
             <button
               type="button"
-              className="mb-5 flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
+              className="mb-5 flex w-full items-center justify-center gap-2 rounded-[4px] border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
               disabled={addingTopic}
               onClick={openCreateTopic}
             >
@@ -688,12 +688,12 @@ export function TerritorySetupClient({
 
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Link href="/" className="btn-ghost min-h-11 px-5">
+          <Link href="/" className="btn-ghost">
             Home
           </Link>
           <button
             type="button"
-            className="btn-primary min-h-11 flex-1 justify-center"
+            className="btn-primary flex-1 justify-center"
             disabled={!canSave}
             onClick={() => void saveForNextRound()}
           >
@@ -760,12 +760,12 @@ export function TerritorySetupClient({
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
                 type="button"
-                className="btn-ghost min-h-11 px-5"
+                className="btn-ghost"
                 onClick={() => setPendingRemoval(null)}
               >
                 Keep it
               </button>
-              <button type="button" className="btn-danger px-5" onClick={confirmRemoval}>
+              <button type="button" className="btn-danger" onClick={confirmRemoval}>
                 Throw out
               </button>
             </div>
@@ -786,7 +786,7 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
         diameter={58}
         tint={color.primary}
         border={`1px solid color-mix(in srgb, ${color.primary} 33%, transparent)`}
-        style={{ boxShadow: '0 12px 28px rgba(26,18,8,0.16)' }}
+        style={{ boxShadow: 'var(--shadow-overlay)' }}
       >
         {domain.correctAnswerCount > 0 ? (
           <span
@@ -854,7 +854,7 @@ function TerritoryZone({
   return (
     <section
       ref={setRef}
-      className={`rounded-[2rem] border bg-white/40 p-4 transition ${highlighted ? 'border-[var(--ink)] shadow-[0_10px_30px_rgba(26,18,8,0.12)]' : 'border-[var(--border-warm)]'}`}
+      className={`rounded-[2rem] border bg-white/40 p-4 transition ${highlighted ? 'border-[var(--ink)] shadow-[var(--shadow-overlay)]' : 'border-[var(--border-warm)]'}`}
     >
       <div className="mb-4">
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
@@ -971,7 +971,7 @@ function TerritoryCircle({
         diameter={size}
         tint={color.primary}
         border={`1px solid color-mix(in srgb, ${color.primary} 27%, transparent)`}
-        style={{ boxShadow: '0 8px 22px rgba(26,18,8,0.08)' }}
+        style={{ boxShadow: 'var(--shadow-overlay)' }}
       >
         {correctCount > 0 ? (
           <span

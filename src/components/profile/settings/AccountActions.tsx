@@ -156,7 +156,7 @@ export function AccountActions() {
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
             <div className="mt-3 flex gap-2">
               <button
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-destructive px-3 text-sm font-medium text-destructive hover:bg-destructive/10"
+                className="btn-danger gap-2"
                 type="button"
                 onClick={() => void confirmLogout()}
                 disabled={loggingOut}
@@ -165,7 +165,7 @@ export function AccountActions() {
                 Log out
               </button>
               <button
-                className="rounded-md border px-3 text-sm"
+                className="btn-ghost"
                 type="button"
                 onClick={() => setConfirmingLogout(false)}
                 disabled={loggingOut}
@@ -200,7 +200,7 @@ export function AccountActions() {
               />
               <div className="mt-3 flex gap-2">
                 <button
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="btn-danger gap-2"
                   type="button"
                   onClick={() => void confirmDeleteAccount()}
                   disabled={!canDeleteAccount || deletingAccount}
@@ -209,7 +209,7 @@ export function AccountActions() {
                   Permanently delete account
                 </button>
                 <button
-                  className="rounded-md border px-3 text-sm"
+                  className="btn-ghost"
                   type="button"
                   onClick={() => {
                     setConfirmingDelete(false);

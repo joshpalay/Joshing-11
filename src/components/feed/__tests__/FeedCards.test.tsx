@@ -497,12 +497,12 @@ describe('FeedCardShell (shared C7 shell)', () => {
       </FeedCardShell>
     )
     expect(rendered).toContain('bg-[var(--warm-cream)]')
-    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).toContain('shadow-[var(--shadow-card)]')
     expect(rendered).toContain('border-[var(--brand-rule)]')
     expect(rendered).not.toContain('bg-[var(--game-card-question)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     // No elevated lift on the resting card.
-    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
+    expect(rendered).not.toContain('shadow-[var(--shadow-card-strong)]')
     expect(rendered).not.toContain('border-[rgba(40,32,30,0.22)]')
   })
 
@@ -514,8 +514,8 @@ describe('FeedCardShell (shared C7 shell)', () => {
     )
     expect(rendered).toContain('bg-[var(--feed-card-elevated)]')
     // Deeper drop shadow (10% ink) than the ambient cards' 4%.
-    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
-    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).toContain('shadow-[var(--shadow-card-strong)]')
+    expect(rendered).not.toContain('shadow-[var(--shadow-card)]')
     // Hairline stroke matching the Today's 5 card replaces the faint rule
     // (no gold accent border on the elevated card).
     expect(rendered).toContain('border-[var(--brand-border)]')
@@ -533,8 +533,8 @@ describe('FeedCardShell (shared C7 shell)', () => {
     )
     // Mat image intact; the matted card carries the deeper drop shadow.
     expect(rendered).toContain('/images/Variant4.png')
-    expect(rendered).toContain('shadow-[0_4px_12px_rgba(40,32,30,0.10)]')
-    expect(rendered).not.toContain('shadow-[0_4px_12px_rgba(40,32,30,0.04)]')
+    expect(rendered).toContain('shadow-[var(--shadow-card-strong)]')
+    expect(rendered).not.toContain('shadow-[var(--shadow-card)]')
     expect(rendered).not.toContain('shadow-[2px_2px_0_var(--brand-ink)]')
     // Inner panel carries the elevated fill instead of the resting fill.
     expect(rendered).toContain('bg-[var(--feed-card-elevated)]')

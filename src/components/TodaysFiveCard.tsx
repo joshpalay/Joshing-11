@@ -201,7 +201,7 @@ export default function TodaysFiveCard({
       : 'Ready when you are!'
 
   return (
-    <div className="text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[0_4px_12px_rgba(40,32,30,0.04)]">
+    <div className="text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
@@ -309,7 +309,7 @@ export default function TodaysFiveCard({
             <>
               <Link
                 href="/questions?create=1&intent=specific"
-                className="btn-primary flex min-h-12 w-full items-center justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+                className="btn-primary w-full"
               >
                 Send a friend a question →
               </Link>
@@ -335,7 +335,7 @@ export default function TodaysFiveCard({
         <>
           <Link
             href={playHref}
-            className="btn-primary mt-4 min-h-12 w-full justify-center rounded-[4px] bg-[var(--brand-link)] text-base font-bold tracking-[0.04em] text-white"
+            className="btn-primary mt-4 w-full"
           >
             {actionLabel}
           </Link>

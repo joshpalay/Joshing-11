@@ -341,7 +341,7 @@ export function ActivityStreamItem({
           background: 'var(--feed-card-elevated)',
           border: '1px solid var(--brand-border)',
           borderRadius: 4,
-          boxShadow: 'var(--shadow-card)',
+          boxShadow: 'var(--shadow-card-strong)',
         }
       : opened
         ? // Opened reveal: a soft paper wash defines the expanded cluster, with

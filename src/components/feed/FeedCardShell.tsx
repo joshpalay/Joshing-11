@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 // 'triangle' variant for the envelope motif.
 
 const FEED_CARD_RADIUS = 'rounded-[4px]'
-const FEED_CARD_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.04)]'
+const FEED_CARD_SHADOW = 'shadow-[var(--shadow-card)]'
 
 // Resting (non-elevated) home-feed card fill. Warm cream (--warm-cream #f5f0e8)
 // chosen over the near-white --brand-card for the feed surface — a product call
@@ -34,7 +34,7 @@ const FEED_CARD_RESTING_FILL = 'bg-[var(--warm-cream)]'
 // --brand-border (not the editorial accent gold).
 const FEED_CARD_ELEVATED_FILL = 'bg-[var(--feed-card-elevated)]'
 const FEED_CARD_ELEVATED_STROKE = 'border-[var(--brand-border)]'
-const FEED_CARD_ELEVATED_SHADOW = 'shadow-[0_4px_12px_rgba(40,32,30,0.10)]'
+const FEED_CARD_ELEVATED_SHADOW = 'shadow-[var(--shadow-card-strong)]'
 
 export type FeedCardShellProps = {
   children: ReactNode

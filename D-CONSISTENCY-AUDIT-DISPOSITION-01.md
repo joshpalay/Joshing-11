@@ -107,21 +107,24 @@ Code verification turned #7 into a real low-severity finding. The product/visual
 
 ### Register assignment (canon)
 
+> **Reconciliation note (2026-06-14):** `dev2` independently shipped the same Option B with the token names used below — `--shadow-card`, `--shadow-card-strong`, `--shadow-overlay`. This branch was reconciled onto that scheme: the `…/0.1` card shadow is kept as an intentional **`--shadow-card-strong`** tier (not flattened into `--shadow-card`), and modals route through **`--shadow-overlay`** rather than a separate `--shadow-modal`.
+
 | Register | Tokens / form | Surfaces |
 |---|---|---|
 | **Flat letterpress** | literal `Npx Npx 0 <ink>` (not tokenized) | OverlapMap, ShareCard, SharePortraitCard, KnowledgeOverviewClient |
 | **Soft elevation — rest** | `--shadow-paper-rest` | input fields, inline paper lift |
-| **Soft elevation — card** | `--shadow-card` (`0 4px 12px rgb(40 32 30 / 0.04)`) | KnowledgeCard, RecentlyExpanding, RecentlyExploringSection, ActivityStreamItem(elevated) |
-| **Soft elevation — modal** | `--shadow-modal` (`0 8px 32px rgb(0 0 0 / 0.18)`) | QuickAddQuestionModal, AddFriendRequestModal |
+| **Soft elevation — card** | `--shadow-card` (`0 4px 12px rgba(40, 32, 30, 0.04)`) | KnowledgeCard, RecentlyExpanding, RecentlyExploringSection |
+| **Soft elevation — card-strong** | `--shadow-card-strong` (`0 4px 12px rgba(40, 32, 30, 0.1)`) | ActivityStreamItem (elevated playable rows) |
+| **Soft elevation — overlay** | `--shadow-overlay` (`0 12px 28px rgba(26, 18, 8, 0.16)`) | QuickAddQuestionModal, AddFriendRequestModal |
 | **Focus / selection ring** | `0 0 0 2px <color>` (separate idiom, untouched) | AnsweredByYouCard, daily/catchup, daily/summary, DomainCircle |
 | **Bespoke tinted glow** | surface-specific, **exempt** | GameplayChat (navy), ceremony gem (radial glow + inset) |
 
-### Done in this pass (commit on `claude/shadow-elevation-drift-labuxa`)
+### Done (commit on `claude/shadow-elevation-drift-labuxa`, reconciled with `dev2`)
 
-- Added `--shadow-card` and `--shadow-modal` next to `--shadow-paper-rest` in `globals.css`.
-- Routed the four card-rest surfaces through `--shadow-card`, which **fixes the real drift**: `ActivityStreamItem` was `…/0.1` while the three knowledge/profile cards were `…/0.04`; all now share `--shadow-card` (`/0.04`).
-- Routed both centered modals through `--shadow-modal`, **fixing the second drift**: `AddFriendRequestModal` was on `--shadow-paper-rest` (a 1px lift) while `QuickAddQuestionModal` floated at `0 8px 32px`; both now read as proper modals.
-- Net effect on the color ratchet is favorable (five inline `rgba()` tuples → `var(--shadow-*)`; token defs live in the exempt `globals.css`).
+- `--shadow-card` / `--shadow-card-strong` / `--shadow-overlay` tokens live in `globals.css` (defined on `dev2`; this branch merges them).
+- The four card surfaces route through the card tokens (`KnowledgeCard`, `RecentlyExpanding`, `RecentlyExploringSection` → `--shadow-card`; `ActivityStreamItem` elevated rows → `--shadow-card-strong`). The `…/0.1` vs `…/0.04` split is now an explicit two-tier scale, not literal drift.
+- **Unique to this branch:** both centered modals route through `--shadow-overlay`, fixing the drift where `AddFriendRequestModal` sat on `--shadow-paper-rest` (a 1px lift) while `QuickAddQuestionModal` floated heavier — `dev2` left the modals untouched.
+- Net effect on the color ratchet is favorable (inline `rgba()` tuples → `var(--shadow-*)`; token defs live in the exempt `globals.css`).
 
 ### Deferred (raised register, not yet converted)
 

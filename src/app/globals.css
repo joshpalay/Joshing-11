@@ -281,15 +281,14 @@
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
-    /* Elevation registers (CONS-7 / Option B, D-CONSISTENCY-AUDIT-DISPOSITION-01 #7).
-       Two intentional registers: a flat hard-offset "letterpress" register
-       (OverlapMap, ShareCard, SharePortraitCard, KnowledgeOverviewClient) that
-       stays as literal `Npx Npx 0 <ink>` offsets, and this soft elevation
-       register for surfaces that float above the page. Focus/selection rings
-       (`0 0 0 2px`) and bespoke tinted glows (GameplayChat navy, the ceremony
-       gem) are separate idioms and intentionally NOT tokenized here. */
-    --shadow-card: 0 4px 12px rgb(40 32 30 / 0.04);   /* resting card lift */
-    --shadow-modal: 0 8px 32px rgb(0 0 0 / 0.18);     /* centered modals / popovers */
+    /* Elevation registers (CONS-7, Option B — two intentional registers).
+       card / card-strong = the soft rest/raised lift for cards;
+       overlay = the single heavy blur for modals, dialogs, and overlays.
+       (The flat "press" register's only live usages are two #3a3a3a buttons —
+       a color-drift item left to B-VISUAL-TOKEN-BUDGET-01, not a shadow snap.) */
+    --shadow-card: 0 4px 12px rgba(40, 32, 30, 0.04);
+    --shadow-card-strong: 0 4px 12px rgba(40, 32, 30, 0.1);
+    --shadow-overlay: 0 12px 28px rgba(26, 18, 8, 0.16);
 }
 
 .dark {
@@ -351,23 +350,27 @@
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
-     icon), all 44px-tall (min-h-11) for touch, all with a focus-visible ring.
+     icon), all sharing the 4px corner radius and a focus-visible ring.
+     `.btn-primary` is the daily-five call-to-action: 48px-tall (min-h-12),
+     brand-link fill, bold base type with 0.04em tracking — the single standard
+     for prominent primary CTAs. Ghost / danger / icon stay 44px-tall (min-h-11)
+     with text-sm so they read as secondary next to a primary CTA.
      The shadcn ui/button was removed in favor of these — see the 2026-05-30
      design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--brand-link)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-ghost {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-danger {
-    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-icon {
-    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-md text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 }
 
