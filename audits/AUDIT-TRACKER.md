@@ -53,7 +53,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 |---|---|---|---|---|
 | PLR-15 | No onboarding/tour for the Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` — tie to B-FirstRecap-1 / B-HomeSeed-1; explanation must match the mastery model |
 | PLR-16 | Overwhelming home feed | P1 | `PARTIAL` | `FIX VIA CANON` — stagger CTAs; **do not** reintroduce grouping |
-| PLR-24 | Categories skew Western | P3 | `NEEDS DECISION` | `PRODUCT CONVERSATION` — audit seed bank + interest taxonomy, not a content drive |
 | CONS-7 | Shadow / elevation drift | — | `NEEDS DECISION` | Option A (uniform flat) vs B (two registers) |
 
 **Clean cheap-and-safe cluster (mostly already done):** PLR-5 ✅, PLR-6 ✅, PLR-7 (re-verify), PLR-9 ✅, PLR-13, PLR-21.
@@ -80,7 +79,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
 | PLR-13 | Explanation field is a small scrolling textarea | — | `OPEN` | `CLEAN WIN` | Low-stakes. `rows={4}`, no resize `QuestionForm.tsx:666`. |
 | PLR-14 | Friend list lacks quick actions | P2 | `OPEN` | `FIX VIA CANON` | Richer friend actions are fine — but **no** streak count, leaderboards, "Challenge," or competition language. `FriendCard` is just a `<Link>` `FriendsList.tsx:108–122`. |
-| PLR-15 | No onboarding/tour for Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` | Real gap; B-FirstRecap-1 / B-HomeSeed-1 exist. **Tooltip must not misstate mastery** (author 0.5× / catch-up 0.25× / live full) — "bigger = more answered" is wrong. |
+| PLR-15 | No onboarding/tour for Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` | **Planned approach (owner):** add a beat to the post-first-five recap ceremony (`src/app/daily/summary/FirstSessionRecap.tsx`, B-FirstRecap-1) explaining knowledge is recorded on the Knowledge tab (and possibly a beat for writing questions). Beat 2 already says "your knowledge map has its first marks." **Copy must not misstate mastery** (author 0.5× / catch-up 0.25× / live full) — "bigger = more answered" is wrong. |
 | PLR-16 | Overwhelming home feed | P1 | `PARTIAL` | `FIX VIA CANON` | Budgeted "edition" caps volume (`build-edition.ts`, `page.tsx:118–161`). Real signal = too many CTAs at arrival → **stagger/sequence**, NOT collapsible grouping (banned, see traps). |
 | PLR-17 | Catch-up lacks closure/celebration | — | `PARTIAL` | `DO NOT DO` (confetti) | `RoundSummary` closing state exists `catchup/page.tsx:173–311`. A closure beat is OK in the quiet-warmth voice; **no** game-win celebration/confetti. |
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
@@ -89,7 +88,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-21 | Inconsistent link styling on summary page | — | `OPEN` | `CLEAN WIN` | Low-stakes. Underlined + button links coexist `summary/page.tsx:242,255,259,635,663`. |
 | PLR-22 | No dark mode | P3 | `DEFERRED` | `DO NOT DO` (for launch) | Not canon-violating, but reworks the cream/serif/illustration brand — large effort. Park post-launch. |
 | PLR-23 | Audio/haptic feedback on answers | P3 | `WON'T DO` | `DO NOT DO` | Wrong answer = discovery, not failure; an "incorrect" tone betrays the thesis. Skip. |
-| PLR-24 | Categories skew Western | P3 | `NEEDS DECISION` | `PRODUCT CONVERSATION` | Genuine strategic question. Skew (if real) lives in seed/bank content + declared-interest taxonomy. Fix = **audit those for skew**, NOT a diversity content drive (content is friend-authored/declared, `interests.ts:219,269`). |
+| PLR-24 | Categories skew Western | P3 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not applicable: categories follow each person's declared interests — content is interest-matched by design, not a fixed seed corpus. No "skew" to correct. |
 | PLR-25 | Missing first-run micro-copy (streaks/points/ritual) | P3 | `PARTIAL` | — | Intro exists `daily/page.tsx:807–855`; omits those concepts. (Note: "streaks/points" framing — keep it ritual/warmth, not pressure.) |
 
 ---
