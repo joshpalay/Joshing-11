@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 
 import {
   activityItems,
@@ -365,20 +365,47 @@ async function hydrateMasteryEvents(items: ActivityItemRow[]) {
     .from(masteryEvents)
     .where(inArray(masteryEvents.id, masteryEventIds));
 
-  const tierRows = await Promise.all(rows.map(async (row) => {
-    const [mastery] = await db
-      .select({ tier: playerMastery.tier })
-      .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, row.userId),
-        eq(playerMastery.canonicalSubcategory, row.domain),
-      ))
-      .limit(1);
+  if (rows.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['masteryEvent']>>();
+  }
 
-    return [row.id, { domain: row.domain, tier: mastery?.tier ?? null }] as const;
-  }));
+  // Resolve each mastery event's current tier from PlayerMastery. PlayerMastery
+  // has a UNIQUE (user_id, canonical_subcategory), so one row per pair. Fetch
+  // every distinct (user, domain) pair these events reference in a single query
+  // rather than one round-trip per event (the old N+1 fired up to one query per
+  // activity item against PlayerMastery on the home-page render path).
+  const pairKey = (userId: string, domain: string) => `${userId} ${domain}`;
+  const distinctPairs = new Map<string, { userId: string; domain: string }>();
+  for (const row of rows) {
+    distinctPairs.set(pairKey(row.userId, row.domain), { userId: row.userId, domain: row.domain });
+  }
 
-  return new Map(tierRows);
+  const masteryRows = await db
+    .select({
+      userId: playerMastery.userId,
+      domain: playerMastery.canonicalSubcategory,
+      tier: playerMastery.tier,
+    })
+    .from(playerMastery)
+    .where(
+      or(
+        ...[...distinctPairs.values()].map((pair) =>
+          and(
+            eq(playerMastery.userId, pair.userId),
+            eq(playerMastery.canonicalSubcategory, pair.domain),
+          ),
+        ),
+      ),
+    );
+
+  const tierByPair = new Map(masteryRows.map((m) => [pairKey(m.userId, m.domain), m.tier]));
+
+  return new Map(
+    rows.map(
+      (row) =>
+        [row.id, { domain: row.domain, tier: tierByPair.get(pairKey(row.userId, row.domain)) ?? null }] as const,
+    ),
+  );
 }
 
 async function hydrateReactions(items: ActivityItemRow[]) {
