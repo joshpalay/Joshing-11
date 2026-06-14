@@ -16,10 +16,7 @@ const mocks = vi.hoisted(() => ({
   getKnowledgeBase: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
-  createDailyQueueItem: vi.fn(),
-  createDailyQueueItemFromAuthored: vi.fn(),
-  createDailyQueueItemFromHouse: vi.fn(),
-  createDailyQueueItemFromPresence: vi.fn(),
+  persistDailyQueue: vi.fn(),
   getDailyPreferences: vi.fn(),
   getFriendAndFoFUserIds: vi.fn(),
   getFriendDomainsForBonus: vi.fn(),
@@ -28,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   isGenericSubcategory: vi.fn(),
 }));
 
+// The orchestrator assembles the queue in memory via pure slot builders, then
+// persists it once via persistDailyQueue (atomic write). Provide faithful pure
+// builders so the slots handed to persistDailyQueue carry the asserted fields.
 vi.mock('@/server/db/queries/daily', () => ({
   getTodaysDailyQueue: mocks.getTodaysDailyQueue,
   carryForwardUntouchedDailyQueue: mocks.carryForwardUntouchedDailyQueue,
@@ -36,10 +36,19 @@ vi.mock('@/server/db/queries/daily', () => ({
   getKnowledgeBase: mocks.getKnowledgeBase,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
-  createDailyQueueItem: mocks.createDailyQueueItem,
-  createDailyQueueItemFromAuthored: mocks.createDailyQueueItemFromAuthored,
-  createDailyQueueItemFromHouse: mocks.createDailyQueueItemFromHouse,
-  createDailyQueueItemFromPresence: mocks.createDailyQueueItemFromPresence,
+  persistDailyQueue: mocks.persistDailyQueue,
+  buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
+  }),
+  buildHouseSlot: (h: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'house', question_id: h.id, domain: h.canonicalSubcategory, question_text: h.questionText, answered: false,
+  }),
+  buildBotSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'bot', generated_question_id: q.id, domain: q.canonicalSubcategory, question_text: q.questionText, answered: false,
+  }),
+  buildPresenceSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, presence: { sourceId: string }, position: number) => ({
+    slot_index: position, source: 'bot', generated_question_id: q.id, domain: q.canonicalSubcategory, question_text: q.questionText, presence_source_id: presence?.sourceId, answered: false,
+  }),
 }));
 
 vi.mock('@/server/db/queries/daily-preferences', () => ({
@@ -104,11 +113,19 @@ beforeEach(() => {
 
   mocks.isGenericSubcategory.mockReturnValue(false);
 
-  mocks.createDailyQueueItem.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromAuthored.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromHouse.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromPresence.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue(undefined);
 });
+
+// The single atomic persist call's slots argument, with the generated (bot) core
+// slots in slot order — the post-refactor equivalent of the old per-slot
+// createDailyQueueItem call list.
+function persistedSlots(): Array<Record<string, unknown>> {
+  expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
+  return mocks.persistDailyQueue.mock.calls[0][1] as Array<Record<string, unknown>>;
+}
+function persistedBotSlots(): Array<Record<string, unknown>> {
+  return persistedSlots().filter((slot) => slot.source === 'bot' && !slot.presence_source_id);
+}
 
 describe('fillDailyQueueForUser — minimum-size floor', () => {
   it('fails retryably (and persists nothing) when only one question survives the gates', async () => {
@@ -122,7 +139,7 @@ describe('fillDailyQueueForUser — minimum-size floor', () => {
     await expect(fillDailyQueueForUser(USER)).rejects.toBeInstanceOf(DailyQueueFillError);
 
     // A degenerate one-question queue must never be persisted.
-    expect(mocks.createDailyQueueItem).not.toHaveBeenCalled();
+    expect(mocks.persistDailyQueue).not.toHaveBeenCalled();
   });
 
   it('stops topping up once a round recovers nothing (tapped-out pool)', async () => {
@@ -143,10 +160,15 @@ describe('fillDailyQueueForUser — minimum-size floor', () => {
 
     await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
 
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_MIN_SIZE);
-    expect(mocks.createDailyQueueItem).toHaveBeenNthCalledWith(1, USER, 'q1', 0);
-    expect(mocks.createDailyQueueItem).toHaveBeenNthCalledWith(2, USER, 'q2', 1);
-    expect(mocks.createDailyQueueItem).toHaveBeenNthCalledWith(3, USER, 'q3', 2);
+    // Persisted once, atomically, with exactly the floor's worth of bot slots in
+    // order — the equivalent of the old three createDailyQueueItem(USER, id, pos).
+    const bots = persistedBotSlots();
+    expect(bots).toHaveLength(DAILY_QUEUE_MIN_SIZE);
+    expect(bots.map((slot) => [slot.generated_question_id, slot.slot_index])).toEqual([
+      ['q1', 0],
+      ['q2', 1],
+      ['q3', 2],
+    ]);
   });
 
   it('loops top-up rounds until it reaches the full five', async () => {
@@ -160,6 +182,6 @@ describe('fillDailyQueueForUser — minimum-size floor', () => {
 
     // One initial generation + two top-up rounds reaching the target.
     expect(mocks.generateDailyQuestionsFromKnowledgeBase).toHaveBeenCalledTimes(3);
-    expect(mocks.createDailyQueueItem).toHaveBeenCalledTimes(DAILY_QUEUE_SIZE);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
   });
 });

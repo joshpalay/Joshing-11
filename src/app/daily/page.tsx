@@ -195,6 +195,8 @@ export default function DailyPage() {
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
   const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
   const answerInputRef = useRef<HTMLInputElement>(null);
+  // Guards the one-shot end-of-round revalidation below (B-DAILY-PARTIAL-QUEUE-01).
+  const revalidatedEndRef = useRef(false);
 
   // Show the first-run intro once, only for the server-flagged first untouched
   // queue and only if this device hasn't already dismissed it.
@@ -336,6 +338,45 @@ export default function DailyPage() {
   // match the real number of questions rather than always showing five.
   const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
+
+  // Defense-in-depth against a partial queue snapshot (B-DAILY-PARTIAL-QUEUE-01).
+  // If the round looks complete, re-fetch once to confirm the server agrees. A
+  // queue read mid-build could have handed us fewer slots than were ultimately
+  // persisted; without this the player hits "Tomorrow's another five" with
+  // unanswered questions still sitting in the queue. If the server now has more
+  // slots with something still pending, adopt them and the round continues.
+  useEffect(() => {
+    if (!allDone || loading || error || !queue) return;
+    if (revalidatedEndRef.current) return;
+    revalidatedEndRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/daily/queue', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        const body = await response.json().catch(() => null);
+        if (cancelled || !response.ok || !body?.queue_id) return;
+        const serverSlots: QueueSlot[] = Array.isArray(body.slots) ? body.slots : [];
+        if (serverSlots.length > queue.slots.length && hasPendingSlot(serverSlots)) {
+          setQueue({
+            queue_id: body.queue_id,
+            queue_date: body.queue_date,
+            slots: serverSlots,
+          });
+          // Re-arm so the next end-of-round (after the newly-revealed slots are
+          // played) revalidates again; convergence is bounded by the server count.
+          revalidatedEndRef.current = false;
+        }
+      } catch {
+        // Best-effort — a failed revalidation just leaves the session-close as-is.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [allDone, loading, error, queue]);
 
   const requestRecheck = useCallback(
     async (slotIndex: number): Promise<RecheckActionResult> => {

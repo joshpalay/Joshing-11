@@ -754,6 +754,36 @@ async function getFeedCatchupItems(
     .filter((item): item is CatchupQuestion => Boolean(item));
 }
 
+/**
+ * Pure QueueSlot builder for a bot (LLM-generated) core slot. Extracted so the
+ * orchestrator can assemble the whole queue in memory and persist it atomically
+ * (persistDailyQueue) instead of one transaction per slot. The structural param
+ * type accepts a full GeneratedQuestionRow.
+ */
+export function buildBotSlot(
+  question: {
+    id: string;
+    questionText: string;
+    canonicalSubcategory: string;
+    broadCategory: string | null;
+    difficultyEstimate: string | null;
+  },
+  position: number,
+): QueueSlot {
+  return {
+    slot_index: position,
+    source: 'bot',
+    generated_question_id: question.id,
+    domain: question.canonicalSubcategory,
+    broad_category: question.broadCategory,
+    category: null,
+    question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+}
+
 export async function createDailyQueueItem(
   userId: string,
   generatedQuestionId: string,
@@ -774,18 +804,7 @@ export async function createDailyQueueItem(
     throw new Error('Generated question not found for user.');
   }
 
-  const slot: QueueSlot = {
-    slot_index: position,
-    source: 'bot',
-    generated_question_id: question.id,
-    domain: question.canonicalSubcategory,
-    broad_category: question.broadCategory,
-    category: null,
-    question_text: question.questionText,
-    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
-    answered: false,
-    difficulty_stepped_up: false,
-  };
+  const slot = buildBotSlot(question, position);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -829,6 +848,64 @@ export async function createDailyQueueItem(
   });
 }
 
+/**
+ * Atomically persist a freshly-built Daily Five (core + bonus) as a SINGLE write.
+ *
+ * Why this exists (B-DAILY-PARTIAL-QUEUE-01): the per-slot createDailyQueueItem*
+ * helpers each commit in their own transaction, and the +2 bonus is generated in
+ * a separate later pass — so during a build the DailyQueue.slots JSONB is
+ * observable in partial states. A concurrent GET /api/daily/queue could read 2 of
+ * 6 slots and the player would play that partial set to "completion." Writing the
+ * complete slots array in one statement closes that window: a reader sees either
+ * the pre-build state or the whole queue, never an intermediate prefix.
+ *
+ * Concurrency guard: ON CONFLICT only overwrites an UNTOUCHED row (no answered or
+ * skipped slot). A second builder that raced the first therefore can't clobber a
+ * session the player has already started — the started queue stands.
+ */
+export async function persistDailyQueue(
+  userId: string,
+  slots: QueueSlot[],
+  generatedQuestionIds: string[],
+): Promise<DailyQueueRow | null> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  return db.transaction(async (tx) => {
+    // True only when the EXISTING conflicting row has no answered/skipped slot.
+    // Referencing the table name (not EXCLUDED) reads the pre-update row.
+    const untouched = sql`not exists (
+      select 1 from jsonb_array_elements(${dailyQueues.slots}) as elem
+      where (elem->>'answered')::boolean is true or (elem->>'skipped')::boolean is true
+    )`;
+    const [row] = await tx
+      .insert(dailyQueues)
+      .values({ userId, queueDate: assignmentDateStr, slots })
+      .onConflictDoUpdate({
+        target: [dailyQueues.userId, dailyQueues.queueDate],
+        set: { slots },
+        setWhere: untouched,
+      })
+      .returning();
+
+    if (row && generatedQuestionIds.length > 0) {
+      await tx
+        .update(generatedQuestions)
+        .set({ usedInQueue: true })
+        .where(inArray(generatedQuestions.id, generatedQuestionIds));
+    }
+
+    if (row) return row;
+
+    // Conflict hit a started (touched) row, so DO UPDATE was a no-op and
+    // RETURNING produced nothing. Hand back the existing started queue unchanged.
+    const [existing] = await tx
+      .select()
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+    return existing ?? null;
+  });
+}
+
 /** Presence attribution for a Daily Five +2 bonus slot (D-4 §B). */
 export type BonusPresence = {
   sourceId: string;
@@ -843,6 +920,35 @@ export type BonusPresence = {
  * carrying presence_* attribution ("from {Name}'s world") instead of a literal
  * answerer. Replaces createDailyQueueItemFromAnswerer.
  */
+/** Pure QueueSlot builder for a Daily Five +2 bonus slot (presence-attributed). */
+export function buildPresenceSlot(
+  question: {
+    id: string;
+    questionText: string;
+    canonicalSubcategory: string;
+    broadCategory: string | null;
+    difficultyEstimate: string | null;
+  },
+  presence: BonusPresence,
+  position: number,
+): QueueSlot {
+  return {
+    slot_index: position,
+    source: 'bot',
+    generated_question_id: question.id,
+    domain: question.canonicalSubcategory,
+    broad_category: question.broadCategory,
+    category: null,
+    question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
+    presence_source_id: presence.sourceId,
+    presence_source_name: presence.sourceName,
+    presence_source_extra_count: presence.extraCount > 0 ? presence.extraCount : undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+}
+
 export async function createDailyQueueItemFromPresence(
   userId: string,
   generatedQuestionId: string,
@@ -864,21 +970,7 @@ export async function createDailyQueueItemFromPresence(
     throw new Error('Generated bonus question not found for user.');
   }
 
-  const slot: QueueSlot = {
-    slot_index: position,
-    source: 'bot',
-    generated_question_id: question.id,
-    domain: question.canonicalSubcategory,
-    broad_category: question.broadCategory,
-    category: null,
-    question_text: question.questionText,
-    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate),
-    presence_source_id: presence.sourceId,
-    presence_source_name: presence.sourceName,
-    presence_source_extra_count: presence.extraCount > 0 ? presence.extraCount : undefined,
-    answered: false,
-    difficulty_stepped_up: false,
-  };
+  const slot = buildPresenceSlot(question, presence, position);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -1131,14 +1223,9 @@ export async function pickEligibleAuthoredQuestions(
  * which only handles bot-generated questions. The QueueSlot schema
  * already supports both shapes (src/server/daily/types.ts).
  */
-export async function createDailyQueueItemFromAuthored(
-  userId: string,
-  authored: AuthoredPick,
-  position: number,
-): Promise<DailyQueueRow> {
-  const { assignmentDateStr } = getDailyAssignmentBounds();
-
-  const slot: QueueSlot = {
+/** Pure QueueSlot builder for a vetted user-authored ('friend') core slot. */
+export function buildAuthoredSlot(authored: AuthoredPick, position: number): QueueSlot {
+  return {
     slot_index: position,
     source: 'friend',
     question_id: authored.id,
@@ -1153,6 +1240,16 @@ export async function createDailyQueueItemFromAuthored(
     answered: false,
     difficulty_stepped_up: false,
   };
+}
+
+export async function createDailyQueueItemFromAuthored(
+  userId: string,
+  authored: AuthoredPick,
+  position: number,
+): Promise<DailyQueueRow> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+
+  const slot = buildAuthoredSlot(authored, position);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx

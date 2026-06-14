@@ -1,13 +1,14 @@
 import {
+  buildAuthoredSlot,
+  buildBotSlot,
+  buildHouseSlot,
+  buildPresenceSlot,
   carryForwardUntouchedDailyQueue,
   clearStaleShortTodayQueue,
   countDailyQueues,
-  createDailyQueueItem,
-  createDailyQueueItemFromAuthored,
-  createDailyQueueItemFromHouse,
-  createDailyQueueItemFromPresence,
   getKnowledgeBase,
   getTodaysDailyQueue,
+  persistDailyQueue,
   pickEligibleAuthoredQuestions,
   pickHouseQuestions,
   type BonusPresence,
@@ -519,20 +520,29 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
     });
   }
 
-  // Persist in source order (authored → house → generated), each group already
-  // diversity-capped and reserve-backfilled above. Slice defensively so the core
-  // never exceeds DAILY_QUEUE_SIZE even if a source over-supplied.
+  // Assemble the COMPLETE queue (core + bonus) in memory, then persist it as a
+  // SINGLE atomic write (persistDailyQueue). The prior approach persisted each
+  // slot in its own transaction and the +2 bonus in a separate later pass, which
+  // left DailyQueue.slots observable in partial states for the whole build — a
+  // concurrent GET could read 2 of 6 slots and the player would play that partial
+  // set to "completion" (B-DAILY-PARTIAL-QUEUE-01). Building the full array first
+  // means a reader sees either the pre-build state or the whole queue, never a
+  // prefix. Source order (authored → house → generated) and the defensive slices
+  // (core never exceeds DAILY_QUEUE_SIZE) are unchanged.
+  const slots: QueueSlot[] = [];
+  const generatedQuestionIds: string[] = [];
   let position = 0;
   for (const pick of coreAuthored.slice(0, DAILY_QUEUE_SIZE - position)) {
-    await createDailyQueueItemFromAuthored(userId, pick, position);
+    slots.push(buildAuthoredSlot(pick, position));
     position += 1;
   }
   for (const pick of coreHouse.slice(0, DAILY_QUEUE_SIZE - position)) {
-    await createDailyQueueItemFromHouse(userId, pick, position);
+    slots.push(buildHouseSlot(pick, position));
     position += 1;
   }
   for (const question of coreGenerated.slice(0, DAILY_QUEUE_SIZE - position)) {
-    await createDailyQueueItem(userId, question.id, position);
+    slots.push(buildBotSlot(question, position));
+    generatedQuestionIds.push(question.id);
     position += 1;
   }
 
@@ -549,26 +559,39 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   // Resting domains are excluded from the +2 pool too, so "This is {Name}'s bag
   // but not mine" (which parks the domain in Resting) stops it surfacing as a
   // bonus, not just in the core five.
-  const bonusDomains = await getFriendDomainsForBonus(userId, DAILY_BONUS_SLOT_MAX, restingDomains);
-  if (bonusDomains.length > 0) {
-    const presenceByDomain = new Map(
-      bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
-    );
-    const generatedBonus = await generateBonusQuestionsForDomains(
+  //
+  // Generated BEFORE the single persist so the whole queue (core + bonus) lands
+  // atomically. Wrapped so a bonus-generation failure degrades to a core-only
+  // queue instead of losing the entire build.
+  try {
+    const bonusDomains = await getFriendDomainsForBonus(
       userId,
-      bonusDomains.map((candidate) => candidate.domain),
+      DAILY_BONUS_SLOT_MAX,
+      restingDomains,
     );
-    for (const { domain, question } of generatedBonus) {
-      const candidate = presenceByDomain.get(domain.toLowerCase());
-      await createDailyQueueItemFromPresence(
-        userId,
-        question.id,
-        toBonusPresence(candidate),
-        position,
+    if (bonusDomains.length > 0) {
+      const presenceByDomain = new Map(
+        bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
       );
-      position += 1;
+      const generatedBonus = await generateBonusQuestionsForDomains(
+        userId,
+        bonusDomains.map((candidate) => candidate.domain),
+      );
+      for (const { domain, question } of generatedBonus) {
+        const candidate = presenceByDomain.get(domain.toLowerCase());
+        slots.push(buildPresenceSlot(question, toBonusPresence(candidate), position));
+        generatedQuestionIds.push(question.id);
+        position += 1;
+      }
     }
+  } catch (error) {
+    console.warn('[daily/queue-orchestrator] +2 bonus generation failed; serving core only', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
+
+  await persistDailyQueue(userId, slots, generatedQuestionIds);
 }
 
 // Map a ranked friend-domain candidate to the slot's presence attribution: the
