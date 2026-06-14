@@ -62,6 +62,11 @@
     --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
     --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
     --brand-link:        #4a5d75;  /* Link — inline links                      */
+    /* Fill behind primary buttons (.btn-primary + the login submit). Defaults to
+       the slate link color; the dev PaletteToggle bar flips it to --brand-navy so
+       both surfaces can be compared/unified. Both buttons read this one token, so
+       page and login CTAs always match. */
+    --btn-primary-bg:    var(--brand-link);
     --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
     --brand-cream:       #f8e6c7;  /* triangle/cream                           */
     --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
@@ -358,7 +363,7 @@
      The shadcn ui/button was removed in favor of these — see the 2026-05-30
      design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--brand-link)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--btn-primary-bg)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-ghost {

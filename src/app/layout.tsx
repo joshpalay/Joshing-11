@@ -69,6 +69,14 @@ export default async function RootLayout({
             __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}}catch(e){}`,
           }}
         />
+        {/* TESTING ONLY — apply the saved primary-button color before paint, in
+            step with the PaletteToggle BUTTON toggle (index 1 = navy; 0 = the
+            slate default, no override). Remove with <PaletteToggle/>. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var b=+localStorage.getItem('joshing-btn-color')||0;var c=['','var(--brand-navy)'];if(b>0&&c[b]){document.documentElement.style.setProperty('--btn-primary-bg',c[b]);document.documentElement.setAttribute('data-btn-color',String(b));}}catch(e){}`,
+          }}
+        />
         <PaletteToggle />
         <Nav initialUserId={claims?.userId ?? null} />
         {children}
