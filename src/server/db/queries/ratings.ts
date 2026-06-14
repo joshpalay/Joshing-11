@@ -1,6 +1,6 @@
-import { and, count, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 
-import { db, feedItems, questionFeedback, questionRatings, questions } from '@/server/db';
+import { db, questionFeedback, questionRatings, questions } from '@/server/db';
 
 export type QuestionRatingValue = 'up' | 'down';
 
@@ -28,10 +28,13 @@ export async function recordFeedThumbsUp(userId: string, questionId: string): Pr
     .where(eq(questions.id, questionId));
 }
 
+// Writes are up-only: the thumbs-down UI was retired in favour of the structured
+// content-report flow, so the API no longer accepts 'down' (see the rating route).
+// Reads (getRatingForUser / getRatingCounts) still surface historical 'down' rows.
 export async function setRating(
   userId: string,
   questionId: string,
-  rating: QuestionRatingValue | null,
+  rating: 'up' | null,
 ): Promise<void> {
   const [existing] = await db
     .select({ rating: questionRatings.rating })
@@ -65,52 +68,12 @@ export async function setRating(
       },
     });
 
-  if (rating === 'up' && previousRating !== 'up') {
+  // rating is 'up' here (null returned above); only a newly-recorded up bumps the score.
+  if (previousRating !== 'up') {
     await db
       .update(questions)
       .set({ surfacePriorityScore: sql`${questions.surfacePriorityScore} + 1` })
       .where(eq(questions.id, questionId));
-  } else if (rating !== 'up' && previousRating === 'up') {
-    await db
-      .update(questions)
-      .set({ surfacePriorityScore: sql`${questions.surfacePriorityScore} - 1` })
-      .where(eq(questions.id, questionId));
-  }
-
-  if (rating === 'down') {
-    // Soft-delete all FeedItems this user propagated from their answer (rolls them off friends' feeds)
-    const propagated = await db
-      .select({ id: feedItems.id })
-      .from(feedItems)
-      .where(and(
-        eq(feedItems.sourceUserId, userId),
-        eq(feedItems.questionId, questionId),
-        inArray(feedItems.state, ['active', 'skipped']),
-      ));
-
-    if (propagated.length > 0) {
-      await db
-        .update(feedItems)
-        .set({ state: 'rolled_off' })
-        .where(inArray(feedItems.id, propagated.map((r) => r.id)));
-    }
-
-    // Also soft-delete the user's own FeedItem for this question
-    const ownItems = await db
-      .select({ id: feedItems.id })
-      .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.questionId, questionId),
-        inArray(feedItems.state, ['active', 'skipped']),
-      ));
-
-    if (ownItems.length > 0) {
-      await db
-        .update(feedItems)
-        .set({ state: 'rolled_off' })
-        .where(inArray(feedItems.id, ownItems.map((r) => r.id)));
-    }
   }
 }
 

@@ -10,8 +10,10 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// Up-only: the thumbs-down UI was retired for the structured content-report flow.
+// 'down' is no longer an accepted write (historical 'down' rows are still read).
 const bodySchema = z.object({
-  rating: z.union([z.literal('up'), z.literal('down'), z.null()]),
+  rating: z.union([z.literal('up'), z.null()]),
 });
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'rating must be up, down, or null' }, { status: 400 });
+    return NextResponse.json({ error: 'rating must be up or null' }, { status: 400 });
   }
 
   const { id } = await context.params;
