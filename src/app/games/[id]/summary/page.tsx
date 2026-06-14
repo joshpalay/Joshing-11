@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { answerHeadingStyle } from '@/components/answer-heading';
 import { FirstGameRecapGate } from '@/components/games/FirstGameRecapGate';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { OverlapMap } from '@/components/OverlapMap';
@@ -385,6 +386,10 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       contextId={id}
                       label=""
                       className="inline-flex size-9 items-center justify-center rounded-md border px-0"
+                    />
+                    <AnsweredRowActions
+                      target={{ questionId: gameQuestion.questionId }}
+                      surface="round_recap"
                     />
                   </div>
                 </article>

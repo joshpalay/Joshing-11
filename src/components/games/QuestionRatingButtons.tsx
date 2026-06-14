@@ -1,6 +1,6 @@
 'use client';
 
-import { ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ThumbsUp } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -84,22 +84,6 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
       >
         <ThumbsUp className="size-4" />
         <span className="sr-only">{counts.up}</span>
-      </button>
-      <button
-        aria-label="Thumbs down"
-        aria-pressed={myRating === 'down'}
-        className={cn(
-          'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
-          myRating === 'down'
-            ? 'border-[var(--warm-ink-400)] bg-[var(--warm-border)] text-[var(--warm-ink)]'
-            : 'border-border bg-background hover:bg-muted hover:text-foreground',
-        )}
-        disabled={isPending}
-        type="button"
-        onClick={() => updateRating('down')}
-      >
-        <ThumbsDown className="size-4" />
-        <span className="sr-only">{counts.down}</span>
       </button>
     </div>
   );
