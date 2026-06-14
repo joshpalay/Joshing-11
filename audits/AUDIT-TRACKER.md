@@ -51,7 +51,6 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 | ID | Item | Priority | Status | Disposition |
 |---|---|---|---|---|
-| PLR-15 | No onboarding/tour for the Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` — tie to B-FirstRecap-1 / B-HomeSeed-1; explanation must match the mastery model |
 | PLR-16 | Overwhelming home feed | P1 | `PARTIAL` | `FIX VIA CANON` — stagger CTAs; **do not** reintroduce grouping |
 | CONS-7 | Shadow / elevation drift | — | `NEEDS DECISION` | Option A (uniform flat) vs B (two registers) |
 
@@ -79,7 +78,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
 | PLR-13 | Explanation field is a small scrolling textarea | — | `OPEN` | `CLEAN WIN` | Low-stakes. `rows={4}`, no resize `QuestionForm.tsx:666`. |
 | PLR-14 | Friend list lacks quick actions | P2 | `OPEN` | `FIX VIA CANON` | Richer friend actions are fine — but **no** streak count, leaderboards, "Challenge," or competition language. `FriendCard` is just a `<Link>` `FriendsList.tsx:108–122`. |
-| PLR-15 | No onboarding/tour for Knowledge Map | P1 | `OPEN` | `FIX VIA CANON` | **Planned approach (owner):** add a beat to the post-first-five recap ceremony (`src/app/daily/summary/FirstSessionRecap.tsx`, B-FirstRecap-1) explaining knowledge is recorded on the Knowledge tab (and possibly a beat for writing questions). Beat 2 already says "your knowledge map has its first marks." **Copy must not misstate mastery** (author 0.5× / catch-up 0.25× / live full) — "bigger = more answered" is wrong. |
+| PLR-15 | No onboarding/tour for Knowledge Map | P1 | `DONE` | `FIX VIA CANON` | Reworked the post-first-five recap (`FirstSessionRecap.tsx`): Beat 2 now points to the **Knowledge** tab; new Beat 3 points to the **Questions** tab (write-questions); new Beat 4 carries the daily rhythm + the reminder email opt-in. Removed the invite beat (per owner). Copy avoids the mastery-size misstatement. Also moved the reminder opt-in **off onboarding** (`OnboardingFlow.tsx` — `reminders` step deleted; finishes straight to /daily). Typecheck/lint/tests green. |
 | PLR-16 | Overwhelming home feed | P1 | `PARTIAL` | `FIX VIA CANON` | Budgeted "edition" caps volume (`build-edition.ts`, `page.tsx:118–161`). Real signal = too many CTAs at arrival → **stagger/sequence**, NOT collapsible grouping (banned, see traps). |
 | PLR-17 | Catch-up lacks closure/celebration | — | `PARTIAL` | `DO NOT DO` (confetti) | `RoundSummary` closing state exists `catchup/page.tsx:173–311`. A closure beat is OK in the quiet-warmth voice; **no** game-win celebration/confetti. |
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
