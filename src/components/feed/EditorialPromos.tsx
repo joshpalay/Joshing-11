@@ -116,20 +116,25 @@ export function CommonGroundFeature({
             ...embed.friends.map((f) => (
               <div key={f.friendId} className="flex flex-col gap-4">
                 {/* One or two shared areas side by side — each circle motif with
-                    its area label underneath, bottom-aligned so the labels share
-                    a baseline whatever the circle heights. */}
-                <div className="flex items-end gap-10">
+                    its area label underneath. The circles sit on a shared
+                    fixed-height baseline row and the columns top-align, so both
+                    the circles and the labels line up horizontally whatever the
+                    circle heights or the label line counts (h-[76px] = the max
+                    scaled circle diameter, MAX_DIAMETER * SHARED_GROUND_CIRCLE_SCALE). */}
+                <div className="flex items-start gap-10">
                   {f.domains.map((d) => (
                     <span key={d.label} className="flex flex-col gap-2">
-                      <DomainCircleSvg
-                        viewerPoints={d.viewer.points}
-                        friendPoints={d.friend.points}
-                        viewerTier={d.viewer.tier}
-                        friendTier={d.friend.tier}
-                        datasetMax={datasetMax}
-                        scale={SHARED_GROUND_CIRCLE_SCALE}
-                        ariaLabel={`${d.label}: shared with ${f.friendFirstName}, still untested`}
-                      />
+                      <span className="flex h-[76px] items-end">
+                        <DomainCircleSvg
+                          viewerPoints={d.viewer.points}
+                          friendPoints={d.friend.points}
+                          viewerTier={d.viewer.tier}
+                          friendTier={d.friend.tier}
+                          datasetMax={datasetMax}
+                          scale={SHARED_GROUND_CIRCLE_SCALE}
+                          ariaLabel={`${d.label}: shared with ${f.friendFirstName}, still untested`}
+                        />
+                      </span>
                       <span className="max-w-[150px] font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
                         {d.label}
                       </span>
