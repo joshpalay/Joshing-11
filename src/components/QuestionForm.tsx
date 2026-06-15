@@ -121,7 +121,10 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     suggestionError: null,
     suggesting: false,
     specificMode: initialSpecificMode,
-    shareToFeed: initialValues?.shareToFeed ?? !initialSpecificMode,
+    // Sharing with all friends is opt-in: default the broadcast off unless a
+    // caller explicitly seeds it on (e.g. the "followers" create intent). The
+    // author turns it on deliberately rather than having it pre-checked.
+    shareToFeed: initialValues?.shareToFeed ?? false,
     visibility: initialValues?.visibility ?? 'public',
     friends: [],
     friendsLoading: false,
@@ -243,7 +246,7 @@ function validate(state: State): string | null {
   if (alternateAnswers.length > 5) return 'Use at most 5 alternate answers.';
   if (alternateAnswers.some((answer) => answer.length > 200)) return 'Alternate answers must be 200 characters or fewer.';
   if (state.explanation.length > 500) return 'Explanation must be 500 characters or fewer.';
-  if (state.creatorNote.length > 200) return 'Creator note must be 200 characters or fewer.';
+  if (state.creatorNote.length > 200) return 'Between us text must be 200 characters or fewer.';
   if (state.sendToFriendIds.length > 20) return 'You can send to at most 20 friends at once.';
   return null;
 }
@@ -272,11 +275,12 @@ export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): str
   }
 }
 
-// A single critique reformulation option. The "Use this" affordance label and
-// the reformulated question are rendered as two discrete block elements so the
-// label can never share a text node with — and run together into — the
-// suggestion value (the "Use this Which American city…" artifact,
-// B-COMPOSER-SUGGESTION-ARTIFACT-01). The reformulation value owns its own node.
+// A single critique reformulation option. The whole button is the "use this"
+// affordance — the shared "Try one of these instead:" header already states the
+// intent, so the per-option "Use this" label was redundant and is no longer
+// rendered. The reformulation value still owns its own element node so it can
+// never run together with surrounding text into a single run-on string (the
+// "Use this Which American city…" artifact, B-COMPOSER-SUGGESTION-ARTIFACT-01).
 export function ReformulationOption({ text, onUse }: { text: string; onUse: () => void }) {
   return (
     <button
@@ -284,7 +288,6 @@ export function ReformulationOption({ text, onUse }: { text: string; onUse: () =
       onClick={onUse}
       className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
     >
-      <span className="block font-medium">Use this</span>
       <span className="block">{text}</span>
     </button>
   );
@@ -661,16 +664,25 @@ export function QuestionForm({
             <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/5 alternates</p>
           </div>
 
-          <div>
-            <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</label>
-            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={5} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full resize-y min-h-[7.5rem] rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="A short note that helps someone learn if they miss it." />
-            <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
-          </div>
+          {/* The explanation is written by Joshing's answer suggestion and is
+              shown read-only — the author confirms it rather than editing it.
+              Hidden until there's something to show (e.g. before the
+              suggestion lands). */}
+          {state.explanation.trim() ? (
+            <div>
+              <p className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</p>
+              <div className="w-full whitespace-pre-wrap rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2">{state.explanation}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Written by Joshing.</p>
+            </div>
+          ) : null}
 
           <div>
-            <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Creator note</label>
-            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Optional context for recipients" />
-            <p className="mt-1 text-right text-xs text-muted-foreground">{state.creatorNote.length}/200</p>
+            <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Between us text</label>
+            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="A note just for your friends" />
+            <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>Only friends see this.</span>
+              <span>{state.creatorNote.length}/200</span>
+            </div>
           </div>
 
           {state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (

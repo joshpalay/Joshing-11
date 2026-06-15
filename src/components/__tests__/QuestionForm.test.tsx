@@ -38,27 +38,23 @@ describe('scopeSignpost (D9 authoring signpost)', () => {
   });
 });
 
-// B-COMPOSER-SUGGESTION-ARTIFACT-01: the "Use this" affordance label must never
-// concatenate with the reformulation value into a single run-on string
-// ("Use this Which American city…"). The label and value are discrete elements;
-// the value owns its own node and is never a bare sibling text node of the label.
+// B-COMPOSER-SUGGESTION-ARTIFACT-01: the per-option "Use this" label is no
+// longer rendered (the shared "Try one of these instead:" header carries the
+// intent). The reformulation value still owns its own element node so it can
+// never run together with surrounding text into a single run-on string.
 describe('ReformulationOption (B-COMPOSER-SUGGESTION-ARTIFACT-01)', () => {
   const value = 'Which American city is the capital of New York State?';
 
-  it('renders the reformulation value intact alongside the "Use this" label', () => {
+  it('renders the reformulation value without a redundant per-option label', () => {
     const html = renderToStaticMarkup(<ReformulationOption text={value} onUse={() => {}} />);
-    expect(html).toContain('Use this');
     expect(html).toContain(value);
+    expect(html).not.toContain('Use this');
   });
 
-  it('wraps the value in its own element so the label can never run into it', () => {
+  it('wraps the value in its own element so it never runs into surrounding text', () => {
     const html = renderToStaticMarkup(<ReformulationOption text={value} onUse={() => {}} />);
     const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // The value must begin a fresh element's content (e.g. `<span ...>Which…`),
-    // never trail the label as a bare text node (`Use this</span> Which…`).
+    // The value must begin a fresh element's content (e.g. `<span ...>Which…`).
     expect(html).toMatch(new RegExp(`<[a-z]+[^>]*>${escaped}`));
-    // And the two must never collapse into one literal run-on string.
-    expect(html).not.toContain(`Use this ${value}`);
-    expect(html).not.toContain(`Use this${value}`);
   });
 });
