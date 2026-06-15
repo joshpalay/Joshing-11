@@ -86,12 +86,6 @@ const LOADING_COPY = [
   'Turning these into question areas…',
 ]
 
-const STEP_DOTS: Array<{ step: CurrentStep; label: string }> = [
-  { step: 'display-name', label: 'Name' },
-  { step: 'handle', label: 'Handle' },
-  { step: 'review', label: 'Areas' },
-]
-
 const MIN_INTERESTS = 3
 // Onboarding caps the starting-areas selection at 12 (per product spec). The cap
 // also bounds the save path's per-interest LLM fan-out. Inviter-suggested topics
@@ -156,38 +150,6 @@ function Spinner({ small = false }: { small?: boolean }) {
       className={`${small ? 'size-4' : 'size-7'} animate-spin`}
       aria-hidden="true"
     />
-  )
-}
-
-function ProgressDots({ currentStep }: { currentStep: CurrentStep }) {
-  const activeIndex = Math.max(
-    0,
-    STEP_DOTS.findIndex((item) => item.step === currentStep)
-  )
-
-  return (
-    <div
-      className="flex items-center justify-center gap-3"
-      aria-label="Onboarding progress"
-    >
-      {STEP_DOTS.map((item, index) => {
-        const active = index <= activeIndex
-        const current = item.step === currentStep
-
-        return (
-          <div key={item.step} className="flex items-center gap-2">
-            <span
-              className={[
-                'block size-2.5 rounded-full transition',
-                active ? 'bg-foreground' : 'bg-border',
-                current ? 'ring-foreground/10 ring-4' : '',
-              ].join(' ')}
-            />
-            <span className="sr-only">{item.label}</span>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -673,9 +635,7 @@ export default function OnboardingFlow({
   return (
     <main className="bg-background text-foreground min-h-screen px-4 pt-8 pb-10 sm:px-6 sm:pt-12">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-2xl flex-col">
-        <ProgressDots currentStep={currentStep} />
-
-        <div className="mt-9 flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col">
           {currentStep === 'display-name' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
               <StepHeader
@@ -879,7 +839,7 @@ export default function OnboardingFlow({
                 {!showWarmup ? (
                   <button
                     type="button"
-                    className="btn-ghost w-full"
+                    className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition"
                     onClick={() => setShowWarmup(true)}
                   >
                     Need ideas? Answer a couple quick questions
@@ -927,7 +887,7 @@ export default function OnboardingFlow({
                 )}
               </div>
 
-              <div className="bg-background/95 sticky bottom-0 mt-auto border-t py-4 backdrop-blur">
+              <div className="bg-background/95 sticky bottom-0 border-t py-4 backdrop-blur">
                 {error ? (
                   <div className="mb-3">
                     <ErrorPanel message={error} />
