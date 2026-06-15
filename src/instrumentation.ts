@@ -295,6 +295,26 @@ export async function register() {
       // EmailVerificationToken may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0080 adds Question.author_deleted — the account-deletion
+    // tombstone marker (D-ACCOUNT-DELETION-TERRITORY-01). A preview/production DB
+    // that records 0080 without the column present would break the deletion path
+    // (deleteUserAccount sets author_deleted = true when tombstoning an author's
+    // questions) and any tombstone-aware read; pre-apply it idempotently
+    // (precedent: 0077's opt_in_on_confirm guard above).
+    try {
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "author_deleted" boolean NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "Question_author_deleted_idx"
+          ON "Question" ("author_deleted")
+          WHERE "author_deleted" = true
+      `);
+    } catch {
+      // Question table may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value
