@@ -20,7 +20,7 @@ function formatPhoneForDisplay(e164: string): string {
 }
 
 const CARD_CLASS =
-  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
+  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
   'h-11 w-full rounded-[4px] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
 const SUBMIT_CLASS =

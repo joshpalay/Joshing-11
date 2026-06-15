@@ -132,7 +132,7 @@ function emptyDomain(domain: string): DomainMastery {
 
 function LoadingSkeleton() {
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
+    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
       <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
         <p className="m-0 text-[var(--text-muted-warm)]">Loading...</p>
       </section>
@@ -541,10 +541,10 @@ function KnowledgePageContent() {
 
   if (error || !data) {
     return (
-      <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
+      <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
-          <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
+          <h1 className="mt-1.5 text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
           <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
         </section>
       </main>
@@ -552,13 +552,13 @@ function KnowledgePageContent() {
   }
 
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-      <h1 className="m-0 px-[0.2rem] font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+      <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
         Knowledge
       </h1>
 
       {tierCrossed && highlightedDomainSlug && (
-        <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-[0.95rem] py-3 text-base">
+        <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-4 py-3 text-base">
           You reached {tierCrossed} in this domain this session.
         </section>
       )}
@@ -595,7 +595,7 @@ function KnowledgePageContent() {
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
               <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
-              <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
+              <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
                 {editMode ? 'TAP A CIRCLE TO HIDE OR SHOW IT' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
               </p>
             </div>
@@ -641,9 +641,9 @@ function KnowledgePageContent() {
       )}
 
       {emptyQuestionDomain ? (
-        <section className="bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--brand-card))] border border-[color-mix(in_srgb,var(--accent-gold)_55%,var(--brand-border))] px-[0.95rem] py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
+        <section className="bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--brand-card))] border border-[color-mix(in_srgb,var(--accent-gold)_55%,var(--brand-border))] px-4 py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
-          <h2 className="mt-[0.4rem] text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
+          <h2 className="mt-1.5 text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-2.5 mt-5">
             <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
@@ -659,7 +659,7 @@ function KnowledgePageContent() {
       {dismissedDomains.length > 0 && (
         <section id="focused-feed" className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
-          <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
+          <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
           <div className="mt-3 flex flex-col gap-2">
             {dismissedDomains.map((domain) => (
               <div key={domain} className="flex items-center justify-between gap-2">
@@ -679,7 +679,7 @@ function KnowledgePageContent() {
         </section>
       )}
 
-      <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-[0.85rem] px-[0.2rem]">
+      <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-3.5 px-1">
         <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
         <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
           <Combine className="size-3.5" />
@@ -702,7 +702,7 @@ function KnowledgePageContent() {
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
                 {activeModal.currentDomain ? (
-                  <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
+                  <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
                 ) : null}
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={closeInterestModal} aria-label="Close">
@@ -768,7 +768,7 @@ function KnowledgePageContent() {
                 {selectedInterest ? (
                   <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
-                    {selectedInterest.description ? <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
+                    {selectedInterest.description ? <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
                     <button type="button" className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
                       Use my wording
                     </button>
@@ -795,7 +795,7 @@ function KnowledgePageContent() {
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Tidy up your map?</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
+                <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
                 <X className="size-4" />
@@ -811,11 +811,11 @@ function KnowledgePageContent() {
         </div>
       ) : null}
 
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
+      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
       {questionToast ? (
         <div
           style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
+          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
         >
           {questionToast}
         </div>
@@ -827,13 +827,13 @@ function KnowledgePageContent() {
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Manage interests</h2>
-                <p className="mt-[0.45rem] text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
+                <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
               </button>
             </div>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-[0.6rem] mt-5">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-2.5 mt-5">
               {declaredSlots.map((slot, index) => (
                 <div key={slot.domain} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
                   <div className="min-w-0">

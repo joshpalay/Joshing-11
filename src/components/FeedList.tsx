@@ -744,7 +744,7 @@ function FeedContributeFooter() {
           eyebrow, the serif prompt, and the composer. The box stays an input:
           the reader's typed idea rides to the writer via ?text=
           (buildQuestionWriterHref). */}
-      <div className="-mx-4 bg-[var(--editorial-parchment)] px-[30px] py-12 md:py-14">
+      <div className="-mx-4 bg-[var(--editorial-parchment)] px-8 py-12 md:py-14">
         <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--brand-orange)] uppercase">
           Your Turn
         </p>

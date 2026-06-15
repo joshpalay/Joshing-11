@@ -26,8 +26,11 @@ import { join, relative } from 'node:path';
 // Baseline recorded 2026-06-15 (CONS-5). Freezes arbitrary spacing at today's
 // count so no new drift can land; burn down by snapping arbitraries to scale
 // steps (start with the ones already equal to a step — 14px→3.5, 6px→1.5,
-// 10px→2.5 — which move zero pixels) and lowering this number.
-const CEILING = 34;
+// 10px→2.5 — which move zero pixels) and lowering this number. Burned down to
+// 0 on 2026-06-15: all box-model spacing now uses the scale (env() safe-area
+// insets are exempt; h-/w- sizing is out of scope). Stay at 0 — use a scale
+// step.
+const CEILING = 0;
 
 // ── Exemptions (mirrors the color/font ratchets; keep this list short) ───────
 const EXEMPT = [
