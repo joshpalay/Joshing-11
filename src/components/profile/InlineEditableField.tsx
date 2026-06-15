@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Generic in-place text editor for the unified profile header card.
@@ -224,7 +224,7 @@ export function InlineEditableField({
       <button
         type="button"
         aria-label={`Edit ${label.toLowerCase()}`}
-        className="block w-full rounded-md px-1 py-0.5 text-left hover:bg-muted/40"
+        className="group/edit flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-muted/40"
         onClick={beginEdit}
       >
         {trimmed.length > 0 ? (
@@ -232,6 +232,10 @@ export function InlineEditableField({
         ) : (
           <span className="text-muted-foreground">{placeholder}</span>
         )}
+        <Pencil
+          className="size-4 shrink-0 text-muted-foreground transition-opacity group-hover/edit:opacity-100"
+          aria-hidden="true"
+        />
       </button>
       {variant === 'plain' && status !== 'idle' ? (
         <div className="mt-1">
