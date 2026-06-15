@@ -529,6 +529,18 @@ export type HomeBudget = {
   panel: StreamItem | null
   /** True when all three content zones are empty — drives the empty switch. */
   isAllEmpty: boolean
+  /**
+   * D-HOME-DASHBOARD-MODEL-01 point 4 — per-section "this Zone-2 section is
+   * empty in-window" signal (emitted by `selectHomeEdition`). Drives the honest
+   * per-section empty states under the "Past 7 days" band instead of silently
+   * hiding a section. Optional so off-budget/legacy callers (and tests that
+   * don't exercise empties) keep the prior hide-when-empty behavior.
+   */
+  emptySections?: {
+    fromFriends: boolean
+    texture: boolean
+    sharedGround: boolean
+  }
 }
 
 type QuestionCardState = 'unanswered' | 'answered'
@@ -795,14 +807,24 @@ const FROM_FRIENDS_STEP = 10
 // first sit flush to the top of the feed.
 function FeedSectionHeading({
   unifiedHome,
+  subdued = false,
   children,
 }: {
   unifiedHome: boolean
+  // D-HOME-DASHBOARD-MODEL-01 point 2 — under the single "Past 7 days" band
+  // label the per-zone headings (From Friends / Recent activity) are demoted to
+  // quiet sub-labels: a notch quieter and tighter to the band label above them,
+  // reusing the same small-caps token family rather than a new visual system.
+  subdued?: boolean
   children: ReactNode
 }) {
   return (
     <h2
-      className={`text-muted-foreground/70 pt-4 text-[11px] font-medium tracking-[0.12em] uppercase first:pt-0 ${
+      className={`font-medium uppercase ${
+        subdued
+          ? 'text-muted-foreground/50 pt-1 text-[10px] tracking-[0.14em]'
+          : 'text-muted-foreground/70 pt-4 text-[11px] tracking-[0.12em] first:pt-0'
+      } ${
         // On the unified-home feed, the label sits flush left on the feed's left
         // gutter — the same 2px the activity rows pad in (where the shape column
         // begins) — rather than indenting past the icon column to the row copy.
@@ -811,6 +833,34 @@ function FeedSectionHeading({
     >
       {children}
     </h2>
+  )
+}
+
+// D-HOME-DASHBOARD-MODEL-01 point 4 — a Zone-2 section with nothing in the 7-day
+// window says so plainly rather than vanishing or back-filling from history. It
+// keeps its (subdued) sub-label so the band still reads as the same set of
+// zones, pairs the existing speech-bubble art with one calm "quiet this week"-
+// register line, and carries NO invite CTA — that belongs only to the whole-page
+// friends-empty state, not to every empty section.
+function SectionEmptyState({
+  unifiedHome,
+  sublabel,
+  copy,
+}: {
+  unifiedHome: boolean
+  sublabel: string
+  copy: string
+}) {
+  return (
+    <Fragment>
+      <FeedSectionHeading unifiedHome={unifiedHome} subdued>
+        {sublabel}
+      </FeedSectionHeading>
+      <div className={`flex items-center gap-3 py-2 ${unifiedHome ? 'pl-[2px]' : ''}`}>
+        <SpeechBubbleIllustration className="h-10 w-auto opacity-70" />
+        <p className="font-serif text-base text-[var(--brand-ink-400)]">{copy}</p>
+      </div>
+    </Fragment>
   )
 }
 
@@ -1139,6 +1189,13 @@ function FeedListContent({
   const fromFriendsHiddenCount =
     fromFriendsRows.length - visibleFromFriendsRows.length
   const fromFriendsNextBatch = Math.min(fromFriendsHiddenCount, FROM_FRIENDS_STEP)
+
+  // D-HOME-DASHBOARD-MODEL-01 point 2 — the band-level "Past 7 days" label is
+  // shown whenever the budget home renders the windowed ambient band. This is
+  // the seam B-HOME-COLDSTART-06 hooks: for a cold-start user (friend count ≤ 1)
+  // the window is relaxed and this flag flips false, so the label never asserts
+  // a 7-day promise the page isn't keeping.
+  const bandLabelVisible = Boolean(budget)
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -1957,100 +2014,119 @@ function FeedListContent({
               ) : null}
             </Fragment>
           ) : null}
-          {/* Home-only: friends' milestone bundles (the up-to-5-triangle cards
-              you can answer inline) are pinned into a "From Friends" section
-              below "For You". Under the budget the server has already capped the
-              served slice (Playables 4), so we render all of it and surface the
-              remainder as a quiet "N more →" overflow; off the budget the legacy
-              client "View more" batching still applies. groupActivityByFriend is
-              a pass-through here (milestone rows never group). */}
-          {fromFriendsRows.length > 0 ? (
-            <Fragment key="from-friends">
-              <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
-              {groupActivityByFriend(budget ? fromFriendsRows : visibleFromFriendsRows).map(renderRow)}
-              {budget ? (
-                budget.playablesOverflowCount > 0 ? (
-                  <OverflowRow
-                    unifiedHome={unifiedHome}
-                    label={`${budget.playablesOverflowCount} more →`}
-                    href="/from-friends"
-                  />
-                ) : null
-              ) : fromFriendsHiddenCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
-                  }
-                  className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
-                    unifiedHome ? 'pl-[2px]' : ''
-                  }`}
-                >
-                  View {fromFriendsNextBatch} more
-                </button>
+          {/* Zone 2 — the ambient band, bounded to the rolling 7-day window
+              (D-HOME-DASHBOARD-MODEL-01). On the budget home a single band-level
+              "Past 7 days" label states the boundary once; From Friends and
+              Recent activity are demoted to quiet sub-labels beneath it, and a
+              section with nothing in-window shows an honest empty rather than
+              vanishing (model point 4). The pendingQueue subpages and the
+              off-budget standalone Feed keep their own (un-banded) treatments. */}
+          {budget ? (
+            <Fragment key="past-7-days">
+              {/* The stated boundary, once. bandLabelVisible is the seam
+                  B-HOME-COLDSTART-06 hooks to suppress it when the window is
+                  relaxed for a cold-start user, so it never asserts a false
+                  7-day promise. */}
+              {bandLabelVisible ? (
+                <FeedSectionHeading unifiedHome={unifiedHome}>Past 7 days</FeedSectionHeading>
               ) : null}
-            </Fragment>
-          ) : null}
-          {/* Texture — relationship events and other social moments, rendered as
-              full-sentence LONE events (D-FEED-GROUP3-01 §2 styling). Per-person
-              clustering (PersonActivityCard) stays dropped: the cluster form was
-              the source of the subject-stripped copy, and density comes from
-              visual quiet. Under the budget the temporal recency buckets are
-              removed (§4) — the set is already bounded to today-and-yesterday —
-              so it renders as one calm flat stream; off the budget the standalone
-              Feed keeps its recency grouping. */}
-          {budget || pendingQueue ? (
-            // The overflow subpage renders the full pending queue flat, in the
-            // server's zone order (sender rotation) — no recency buckets, no
-            // section headings; the page header carries the one title.
-            restRows.length > 0 ? (
-              <Fragment key="texture">
-                {/* Quiet eyebrow over the ambient texture stream so it reads as
-                    its own zone under "From Friends" (and its "N more →"
-                    overflow), not a continuation of it. Budget-only: the
-                    pendingQueue subpages carry no texture and let their page
-                    header hold the one title. */}
-                {budget ? (
-                  <FeedSectionHeading unifiedHome={unifiedHome}>
+              {/* From Friends — friends' playable milestone bundles. The server
+                  capped the served slice (Playables 4); render it and surface the
+                  remainder as a quiet "N more →". Honest empty when nothing landed
+                  in-window. groupActivityByFriend is a pass-through (milestone
+                  rows never group). */}
+              {fromFriendsRows.length > 0 ? (
+                <Fragment key="from-friends">
+                  <FeedSectionHeading unifiedHome={unifiedHome} subdued>
+                    From Friends
+                  </FeedSectionHeading>
+                  {groupActivityByFriend(fromFriendsRows).map(renderRow)}
+                  {budget.playablesOverflowCount > 0 ? (
+                    <OverflowRow
+                      unifiedHome={unifiedHome}
+                      label={`${budget.playablesOverflowCount} more →`}
+                      href="/from-friends"
+                    />
+                  ) : null}
+                </Fragment>
+              ) : budget.emptySections?.fromFriends ? (
+                <SectionEmptyState
+                  unifiedHome={unifiedHome}
+                  sublabel="From Friends"
+                  copy="No friend activity this week."
+                />
+              ) : null}
+              {/* Recent activity — the ambient texture stream (relationship
+                  events, convergence, social moments) as full-sentence LONE
+                  events (D-FEED-GROUP3-01 §2). The one rotating panel splices
+                  after the lead rows (§2 slot 5); the "See all activity →" row
+                  closes the zone. Honest empty when nothing in-window. */}
+              {restRows.length > 0 ? (
+                <Fragment key="texture">
+                  <FeedSectionHeading unifiedHome={unifiedHome} subdued>
                     Recent activity
                   </FeedSectionHeading>
-                ) : null}
-                {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
-                {/* §2 slot 5 (tuned 2026-06-12) — the one rotating panel per
-                    load now runs as a mid-zone interlude after the lead texture
-                    rows, with the remaining rows continuing below it. Budget-
-                    only: the pendingQueue subpages carry no panel. */}
-                {budget?.panel ? renderRow(panelRow(budget.panel)) : null}
-                {restRows.slice(TEXTURE_LEAD_COUNT).map(renderRow)}
-                {/* §4: texture gets NO third subpage — older moments belong to
-                    Lately (/activities), the archive of this same stream. Revive
-                    the retired "See all activity →" affordance as the zone's
-                    quiet see-more row, in the same voice as the overflow rows.
-                    Texture-anchored: hidden with the zone (§9), and never on
-                    the pendingQueue subpages (no texture there). */}
-                {budget ? (
+                  {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
+                  {budget.panel ? renderRow(panelRow(budget.panel)) : null}
+                  {restRows.slice(TEXTURE_LEAD_COUNT).map(renderRow)}
                   <OverflowRow
                     unifiedHome={unifiedHome}
                     label="See all activity →"
                     href="/activities"
                   />
-                ) : null}
-              </Fragment>
+                </Fragment>
+              ) : budget.emptySections?.texture ? (
+                <SectionEmptyState
+                  unifiedHome={unifiedHome}
+                  sublabel="Recent activity"
+                  copy="Nothing else this week."
+                />
+              ) : null}
+              {/* Quiet-week foot fallback — when the texture zone is empty the
+                  single rotating panel still renders once, here, instead of
+                  mid-zone (suppressed on the all-empty page, where the server
+                  sends panel: null). */}
+              {budget.panel && restRows.length === 0 ? renderRow(panelRow(budget.panel)) : null}
+            </Fragment>
+          ) : pendingQueue ? (
+            // Overflow subpage — the full pending queue flat, in the server's
+            // zone order, with no headings / panel / band (the page header
+            // carries the one title).
+            restRows.length > 0 ? (
+              <Fragment key="texture">{restRows.map(renderRow)}</Fragment>
             ) : null
           ) : (
-            groupItemsByRecency(restRows).map((group) => (
-              <Fragment key={group.key}>
-                <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
-                {group.items.map(renderRow)}
-              </Fragment>
-            ))
+            // Off-budget standalone Feed — From Friends with the client "View
+            // more" batching, then the legacy recency-grouped stream. This
+            // surface is unwindowed, so it carries no "Past 7 days" band.
+            <Fragment key="off-budget">
+              {fromFriendsRows.length > 0 ? (
+                <Fragment key="from-friends">
+                  <FeedSectionHeading unifiedHome={unifiedHome}>From Friends</FeedSectionHeading>
+                  {groupActivityByFriend(visibleFromFriendsRows).map(renderRow)}
+                  {fromFriendsHiddenCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
+                      }
+                      className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
+                        unifiedHome ? 'pl-[2px]' : ''
+                      }`}
+                    >
+                      View {fromFriendsNextBatch} more
+                    </button>
+                  ) : null}
+                </Fragment>
+              ) : null}
+              {groupItemsByRecency(restRows).map((group) => (
+                <Fragment key={group.key}>
+                  <FeedSectionHeading unifiedHome={unifiedHome}>{group.label}</FeedSectionHeading>
+                  {group.items.map(renderRow)}
+                </Fragment>
+              ))}
+            </Fragment>
           )}
-          {/* D-HOME-PACING-01 §2 slot 5 fallback — when the texture zone is
-              empty the single rotating panel still renders once, here at the
-              foot of the page (suppressed on the all-empty page, where the
-              server sends panel: null). With texture present it renders mid-
-              zone above instead. */}
-          {budget?.panel && restRows.length === 0 ? renderRow(panelRow(budget.panel)) : null}
         </section>
       )}
 

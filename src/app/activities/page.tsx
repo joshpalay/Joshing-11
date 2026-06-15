@@ -6,17 +6,24 @@ import { CREAM, FS, HILITE, INK, INK2 } from '@/components/lately/tokens';
 import { buildActivityStream } from '@/server/activity/build-stream';
 import { getSession } from '@/server/auth/session';
 import { getUserById } from '@/server/db/queries/users';
+import { HOME_WINDOW_DAYS } from '@/server/home/select-edition';
 
 // Lately / "What's Happening" FULL view (D-4 CORRECTION 2). One unified stream of
 // quiet one-liners — the same items, same source, same rendering as the homepage
 // head (see buildActivityStream + ActivityStream). Question-backed items expand
 // in place; the homepage shows the curated head of this exact list.
+//
+// This is also Home's "See all activity →" overflow portal, so it is bounded to
+// the same rolling home window as the edition (D-HOME-DASHBOARD-MODEL-01 point 5)
+// — "the rest of this week," not the 90-day archive. The standalone Activities
+// tab (PRD §8.15, /api/activities → getActivitiesForUser) keeps its own 90-day
+// cutoff and is deliberately untouched.
 export default async function ActivitiesPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
   const [items, viewer] = await Promise.all([
-    buildActivityStream(session.userId),
+    buildActivityStream(session.userId, { windowDays: HOME_WINDOW_DAYS }),
     getUserById(session.userId),
   ]);
   const tz = viewer?.timezone ?? 'America/New_York';

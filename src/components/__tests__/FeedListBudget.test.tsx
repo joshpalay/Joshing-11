@@ -165,6 +165,16 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('From Friends')
     expect(html).toContain('4 more from friends →')
     expect(html).toContain('3 more →')
+    // B-HOME-BAND-LABEL-04 — one "Past 7 days" band label governs the ambient
+    // zones, stated once, and Zone 1 (the directed "For you" eyebrow) sits ABOVE
+    // it, outside the windowed band. The per-zone labels are demoted beneath it.
+    expect(html).toContain('Past 7 days')
+    expect(html.match(/Past 7 days/g) ?? []).toHaveLength(1)
+    expect(html).toContain('Recent activity')
+    expect(html.indexOf('questions your friends created or sent directly to you')).toBeLessThan(
+      html.indexOf('Past 7 days'),
+    )
+    expect(html.indexOf('Past 7 days')).toBeLessThan(html.indexOf('From Friends'))
     expect(html).toContain('href="/for-you"')
     expect(html).toContain('href="/from-friends"')
     // Served direct cards and playables both rendered.
@@ -201,9 +211,14 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).not.toContain('PANEL')
     expect(html).not.toContain('questions your friends created or sent directly to you')
     expect(html).not.toContain('From Friends')
+    // The whole-page promo WINS when everything is empty: no band label and no
+    // per-section honest empties stacked underneath it (B-HOME-BAND-LABEL-04).
+    expect(html).not.toContain('Past 7 days')
+    expect(html).not.toContain('No friend activity this week')
+    expect(html).not.toContain('Nothing else this week')
   })
 
-  it('partial-empty → empty zones omitted, populated zones shown (§9)', () => {
+  it('partial-empty → ambient sections show honest empties, not silent hiding (model point 4)', () => {
     const html = render({
       unifiedHome: true,
       initialPage: {
@@ -219,17 +234,51 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
         playablesOverflowCount: 0,
         panel: { id: 'sg', friendId: null, sortAt: new Date('2026-06-11T12:00:00Z'), expand: null, embed: { kind: 'common_ground' } },
         isAllEmpty: false,
+        emptySections: { fromFriends: true, texture: true, sharedGround: true },
       },
     })
 
     expect(html).toContain('questions your friends created or sent directly to you')
     expect(html).toContain('direct:robyn')
-    // The empty playable zone is omitted entirely — no heading, no placeholder.
-    expect(html).not.toContain('From Friends')
+    // The band still labels the windowed zones, and each empty ambient section
+    // renders an honest empty (with its sub-label) rather than vanishing.
+    expect(html).toContain('Past 7 days')
+    expect(html).toContain('From Friends')
+    expect(html).toContain('No friend activity this week.')
+    expect(html).toContain('Recent activity')
+    expect(html).toContain('Nothing else this week.')
+    // NOT the whole-page promo (that is for total emptiness only), and the
+    // per-section empties carry no invite CTA (that belongs to the all-empty case).
     expect(html).not.toContain('Quiet today')
-    // Empty texture zone → its see-more row is hidden with it (§9).
+    expect(html).not.toContain('add friends →')
+    // The texture see-more is hidden with its (empty) zone.
     expect(html).not.toContain('See all activity')
-    // The populated page still gets its one panel.
+    // The populated page still gets its one panel (quiet-week foot fallback).
     expect(html).toContain('PANEL:common_ground')
+  })
+
+  it('asymmetric partial-empty → From Friends renders, Recent activity shows an honest empty', () => {
+    const html = render({
+      unifiedHome: true,
+      initialPage: { viewer_user_id: 'me', meta: META, items: [], has_more: false, next_cursor: null },
+      activityItems: [playable('p0', 'josh'), playable('p1', 'rob')], // playables present, no texture
+      budget: {
+        directOverflowCount: 0,
+        playablesOverflowCount: 0,
+        panel: { id: 'gc', friendId: null, sortAt: new Date('2026-06-11T12:00:00Z'), expand: null, embed: { kind: 'add_friends' } },
+        isAllEmpty: false,
+        emptySections: { fromFriends: false, texture: true, sharedGround: true },
+      },
+    })
+
+    expect(html).toContain('Past 7 days')
+    // From Friends has content → real rows, no honest empty there.
+    expect(html).toContain('From Friends')
+    expect(html).toContain('activity:p0:josh')
+    expect(html).not.toContain('No friend activity this week')
+    // Recent activity is empty-in-window → honest empty, not hidden.
+    expect(html).toContain('Recent activity')
+    expect(html).toContain('Nothing else this week.')
+    expect(html).not.toContain('Quiet today')
   })
 })

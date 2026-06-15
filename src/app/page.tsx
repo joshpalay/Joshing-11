@@ -155,6 +155,9 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
           playablesOverflowCount: edition.playables.overflowCount,
           panel: edition.panel,
           isAllEmpty: edition.isAllEmpty,
+          // D-HOME-DASHBOARD-MODEL-01 point 4 — per-section empty signal drives
+          // the honest per-section empty states under the "Past 7 days" band.
+          emptySections: edition.emptySections,
         }}
       />
     </>

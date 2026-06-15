@@ -86,8 +86,9 @@ export type StreamExpand =
       strangerName: string;
     }
   // Convergence (B-Convergence-1): you and a friend independently answered the
-  // SAME shared questions correctly. READ-ONLY — both already answered, so the
-  // reveal just shows the cluster's questions (no answer, no send, no reaction).
+  // SAME shared questions correctly. Both already answered, so the reveal shows
+  // the cluster's questions as clean quotes with a quiet per-quote share glyph
+  // (the streamlined reveal, commit 151b5a1) — no answer or reaction affordance.
   | {
       kind: 'same_correct';
       friendId: string;
@@ -940,12 +941,13 @@ function breadthTail(domains: string[], leadCopy: string): StreamLinePart[] {
 // independently got the same shared questions right. The headline is
 // PERSON-FIRST and names no domain — the caption template (assigned
 // deterministically by moment id) carries a `{Name}` token that becomes the
-// friend's first name as an actor link. It is the read-only counterpart to the
-// milestone triangle: the triangle row carries questions you have NOT answered
+// friend's first name as an actor link. It is the counterpart to the milestone
+// triangle: the triangle row carries questions you have NOT answered
 // (answerable), while this row carries the ones you and the friend BOTH already
 // got right. Home-eligible so both rows surface together on Home, not just in
-// Lately. READ-ONLY: expanding reveals the cluster's questions (domains may
-// appear there as texture) with no answer, send, or reaction affordance.
+// Lately. Expanding reveals the cluster's questions as clean quotes, each with a
+// quiet per-quote share glyph (the streamlined reveal); no answer or reaction.
+// The domains are named in the headline, not repeated in the reveal.
 export function convergenceToStreamItem(
   convergence: Convergence,
   questions: StreamQuestion[],

@@ -19,6 +19,7 @@ import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
 import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import {
+  HOME_WINDOW_DAYS,
   orderDirectPending,
   orderFriendActivity,
   selectHomeEdition,
@@ -53,7 +54,9 @@ export async function buildHomeEdition(userId: string): Promise<HomeEditionResul
   const [feedPage, activityItems, commonGroundPromo, expandingPromo, addFriendsPromo] =
     await Promise.all([
       getFeedPagePayload(userId, { limit: HOME_FEED_FETCH_LIMIT, cursor: null, filter: 'all' }),
-      buildActivityStream(userId),
+      // Zone 2 (the ambient band) is bounded to the rolling home window; Zone 1
+      // (the direct feed above) stays all-time pending (D-HOME-DASHBOARD-MODEL-01).
+      buildActivityStream(userId, { windowDays: HOME_WINDOW_DAYS }),
       getCommonGroundPromo(userId),
       getRecentlyExpandingPromo(userId),
       getAddFriendsPromo(userId),
@@ -97,13 +100,16 @@ export async function buildPendingDirectQueue(userId: string): Promise<{
 }
 
 /**
- * The full From Friends activity log, newest-first, in the same order the home
+ * The From Friends activity log, newest-first, in the same order the home
  * edition windows. Home shows the top 4; the /from-friends subpage renders all
- * of it. Every milestone bundle is retained — an answered bundle stays as a
- * spent card and drifts down by recency rather than leaving the surface
- * (D-FEED-FRIEND-ACTIVITY-01 §Q4).
+ * the IN-WINDOW bundles. Bounded to the same rolling home window as the edition
+ * (D-HOME-DASHBOARD-MODEL-01 point 5) — the "view more" portal is "the rest of
+ * this week," not a 35-day archive — so boundedness comes from the window, not
+ * a served cap. Every in-window milestone bundle is retained: an answered
+ * bundle stays as a spent card and drifts down by recency rather than leaving
+ * the surface (D-FEED-FRIEND-ACTIVITY-01 §Q4).
  */
 export async function buildFriendActivityQueue(userId: string): Promise<StreamItem[]> {
-  const activityItems = await buildActivityStream(userId)
+  const activityItems = await buildActivityStream(userId, { windowDays: HOME_WINDOW_DAYS })
   return orderFriendActivity(activityItems.filter(isHomeActivityItem))
 }
