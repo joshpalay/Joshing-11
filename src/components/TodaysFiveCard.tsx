@@ -45,6 +45,16 @@ type TodaysFiveCardProps = {
   initialMissedCount?: number
 }
 
+const CUSTOMIZE_DAILY_LINK_CLASS = [
+  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full',
+  'border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-2',
+  'text-[13px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)]',
+  'shadow-[var(--shadow-card)] transition-[background-color,border-color,box-shadow,transform]',
+  'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-cream-page)]',
+  'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
+  'active:translate-y-px sm:px-5 sm:text-sm',
+].join(' ')
+
 const DIFFICULTY_LABELS: Record<string, string> = {
   normal: 'Establishing',
   moderate: 'Familiar',
@@ -216,11 +226,15 @@ export default function TodaysFiveCard({
             from being squeezed by the eyebrow on narrow widths. */}
         <Link
           href="/daily/setup"
-          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-3 text-[13px] font-semibold text-[var(--brand-ink)] shadow-[var(--shadow-card)] transition-colors hover:bg-[color-mix(in_srgb,var(--brand-ink)_6%,var(--feed-card-elevated))]"
+          className={CUSTOMIZE_DAILY_LINK_CLASS}
           aria-label="Customize your Daily Five"
         >
-          <SlidersHorizontal className="size-4" aria-hidden="true" />
-          Customize
+          <SlidersHorizontal
+            className="size-5 sm:size-[22px]"
+            strokeWidth={2.4}
+            aria-hidden="true"
+          />
+          <span>Customize</span>
         </Link>
       </div>
 
