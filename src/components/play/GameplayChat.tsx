@@ -1205,8 +1205,8 @@ function ResultRow({
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
         ) : null}
+        {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
       </ThreadCard>
-      {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
