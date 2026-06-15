@@ -31,7 +31,16 @@ async function patchReminders(body: Record<string, unknown>): Promise<boolean> {
   return response.ok
 }
 
-export function RoundReminderCard() {
+const DEFAULT_TITLE = "Want a reminder when tomorrow's round opens?"
+const DEFAULT_DESCRIPTION = 'One message a day, max. You can turn it off any time.'
+
+export function RoundReminderCard({
+  title = DEFAULT_TITLE,
+  description = DEFAULT_DESCRIPTION,
+}: {
+  title?: string
+  description?: string
+} = {}) {
   const [state, setState] = useState<CardState>({ kind: 'idle' })
 
   if (state.kind === 'hidden') return null
@@ -137,10 +146,8 @@ export function RoundReminderCard() {
 
   return (
     <section className="card mt-5 px-5 py-4">
-      <h2 style={titleStyle}>Want a reminder when tomorrow&apos;s round opens?</h2>
-      <p className="text-foreground mt-2 text-sm leading-6">
-        One message a day, max. You can turn it off any time.
-      </p>
+      <h2 style={titleStyle}>{title}</h2>
+      <p className="text-foreground mt-2 text-sm leading-6">{description}</p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
