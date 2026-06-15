@@ -327,7 +327,10 @@ export default function LoginPanel({
   const swapStep = useCallback((next: Step, nextError: string | null = null) => {
     // Return to the top so the title card is back in view after the button
     // press — on mobile the focused input scrolls the page down, and landing
-    // mid-page on the next step looks unpolished.
+    // mid-page on the next step looks unpolished. Blur first so the keyboard
+    // closes and the browser stops anchoring the viewport to the focused field,
+    // which otherwise fights the scroll-to-top and leaves the page mid-screen.
+    (document.activeElement as HTMLElement | null)?.blur();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setEntering(false); // exit: fade + slide down
     window.setTimeout(() => {
