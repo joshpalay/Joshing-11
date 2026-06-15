@@ -51,7 +51,7 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 **No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
 
-- **Partials (judgment, low urgency):** PLR-17, PLR-19.
+- **Partials (judgment, low urgency):** PLR-19.
 
 ---
 
@@ -77,7 +77,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-14 | Friend list lacks quick actions | P2 | `DONE` | `FIX VIA CANON` | Shipped #945. Each friend row now carries two warm activity facts (not action buttons, per owner): **Questions created** (their authored count) and **You've answered** (of those, how many the viewer answered across all surfaces — feed/mastery/game union). Single bulk aggregate in `getFriendsHub` (no N+1); rendered as a label/count ledger, never a ranking (anti-leaderboard). |
 | PLR-15 | No onboarding/tour for Knowledge Map | P1 | `DONE` | `FIX VIA CANON` | Reworked the post-first-five recap (`FirstSessionRecap.tsx`): Beat 2 now points to the **Knowledge** tab; new Beat 3 points to the **Questions** tab (write-questions); new Beat 4 carries the daily rhythm + the reminder email opt-in. Removed the invite beat (per owner). Copy avoids the mastery-size misstatement. Also moved the reminder opt-in **off onboarding** (`OnboardingFlow.tsx` — `reminders` step deleted; finishes straight to /daily). Typecheck/lint/tests green. |
 | PLR-16 | Overwhelming home feed | P1 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Budgeted "edition" already caps arrival volume (`build-edition.ts`, `page.tsx:118–161`); not tracking further. (Collapsible grouping remains banned regardless — see traps.) |
-| PLR-17 | Catch-up lacks closure/celebration | — | `PARTIAL` | `DO NOT DO` (confetti) | `RoundSummary` closing state exists `catchup/page.tsx:173–311`. A closure beat is OK in the quiet-warmth voice; **no** game-win celebration/confetti. |
+| PLR-17 | Catch-up lacks closure/celebration | — | `DONE` | `DO NOT DO` (confetti) | Shipped #961. The closer (`RoundCloseCard` + `RoundSummary`) already existed for the answer path; the gap was the **dismiss** path — dismissing the last missed question dead-ended the thread (no closer/input). `dismissCurrent` now closes the round (mirroring `dropStaleItem`); Undo restores it. Reuses the existing quiet "You're all caught up" card — no confetti (canon). |
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
 | PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `PARTIAL` | — | Personal invite + copy link `InviteSomeoneNew.tsx:54–84`; no explicit SMS/email labelling. |
 | PLR-20 | Avatars initials-only; no photo upload | — | `WON'T DO` | — | **Ignored per owner (2026-06-15).** Not doing photo uploads. |
