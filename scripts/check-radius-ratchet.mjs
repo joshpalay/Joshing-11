@@ -23,8 +23,9 @@ import { join, relative } from 'node:path';
 // today's count. Burn down by routing them through the scale/tokens
 // (`rounded-md`, `rounded-[var(--radius-*)]`) and lowering this number. Note the
 // pervasive `rounded-[4px]` is the button/card corner — a candidate for a
-// `--radius-xs` token (globals.css starts the scale at --radius-sm = 6px).
-const CEILING = 25;
+// `--radius-xs` token (added 2026-06-15) — burn-down 1 snapped the nine
+// `rounded-[4px]` to `rounded-[var(--radius-xs)]`, lowering this 25 → 16.
+const CEILING = 16;
 
 // ── Exemptions (mirrors the color/font/spacing ratchets) ────────────────────
 const EXEMPT = [
