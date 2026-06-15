@@ -7,8 +7,9 @@ import { z } from 'zod';
 // plus this route's milestone_missed catch-up write on a wrong answer).
 import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
 import { getSession } from '@/server/auth/session';
-import { db, feedItems, playerMastery, questions } from '@/server/db';
+import { db, feedItems, playerMastery, questions, users } from '@/server/db';
 import { getSeededPlayQuestions } from '@/server/db/queries/lately';
+import { parseQuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { gradeAnswer } from '@/server/grading';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
@@ -240,6 +241,23 @@ export async function POST(request: NextRequest) {
 
   const insideJoke = await selectInsideJokeForViewer(question.insideJoke, question.creatorId, session.userId);
 
+  // Resolve the creator so the unified creator-note surface picks its treatment
+  // by provenance (human → inverted block; house/LLM → bronze aside).
+  let creatorDisplayName: string | null = null;
+  if (question.creatorId) {
+    const [creatorRow] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, question.creatorId))
+      .limit(1);
+    creatorDisplayName = creatorRow?.displayName ?? null;
+  }
+  const { authorName, authorIsHouse } = resolveAuthorDisplay(
+    question.creatorId,
+    parseQuestionSource(question.source),
+    creatorDisplayName,
+  );
+
   return NextResponse.json({
     isCorrect,
     explanation,
@@ -251,5 +269,7 @@ export async function POST(request: NextRequest) {
     creatorNote: question.creatorNote ?? null,
     insideJoke: insideJoke?.text ?? null,
     insideJokeKind: insideJoke?.kind ?? null,
+    authorName,
+    authorIsHouse,
   });
 }

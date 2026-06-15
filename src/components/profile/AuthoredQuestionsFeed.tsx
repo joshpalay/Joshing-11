@@ -347,6 +347,10 @@ export function AuthoredQuestionsFeed({
                 awardedPoints: localResult?.awardedPoints ?? null,
                 explanation: localResult?.explanation ?? null,
                 creatorNote: localResult?.creatorNote ?? null,
+                // These are the profile user's own authored questions, so the
+                // note author is always that human → inverted block.
+                authorName: friendDisplayName,
+                authorIsHouse: false,
                 unverifiedAnswer: false,
               }
 

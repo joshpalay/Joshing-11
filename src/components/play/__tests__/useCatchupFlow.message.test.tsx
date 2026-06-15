@@ -81,7 +81,7 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
     expect(message.insideJokeKind).toBe('relational');
   });
 
-  it('shows only the lighter relational aside in the live thread and defers the creator note to review when both exist', () => {
+  it('renders a human author\'s note as the inverted block — the human voice wins over any generated aside', () => {
     const rendered = html([
       buildCatchupResultMessage({
         id: 'r-1',
@@ -97,17 +97,16 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    // The "Between us!" wink is preferred in the live thread (D-5): one reflection.
-    expect(rendered).toContain('You still owe me a coffee.');
-    expect(rendered).toContain(INSIDE_JOKE_LABELS.relational);
+    // Unified note: a human author speaks in the inverted block ("Between you and
+    // {Name}"). A machine-generated aside never renders for a human question.
+    expect(rendered).toContain('I lost a bet over this in 2019.');
+    expect(rendered).toContain('Between you and Dana');
+    expect(rendered).not.toContain('You still owe me a coffee.');
+    expect(rendered).not.toContain(INSIDE_JOKE_LABELS.relational);
     expect(rendered).not.toContain(INSIDE_JOKE_LABELS.editorial);
-    // The fuller creator note is deferred to the End of Session Review, so it
-    // never appears (or repeats) alongside the aside in the live thread.
-    expect(rendered).not.toContain('I lost a bet over this in 2019.');
-    expect(rendered).not.toContain('Why Dana asked');
   });
 
-  it('prefers the editorial aside in the live thread and defers the editor\'s note to review when both exist', () => {
+  it('renders a house note as the bronze editorial aside — the creator note is preferred over the generated line', () => {
     const rendered = html([
       buildCatchupResultMessage({
         id: 'r-1',
@@ -123,17 +122,16 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    // The editorial wink shows; the longer editor's note is deferred to review.
-    expect(rendered).toContain('One for the archive.');
+    // House = machine voice → bronze aside, labelled editorially. Never the human
+    // inverted block, never "Why {name} asked". creator_note wins over the aside.
+    expect(rendered).toContain('A favourite of the editorial desk.');
     expect(rendered).toContain(INSIDE_JOKE_LABELS.editorial);
-    expect(rendered).not.toContain('A favourite of the editorial desk.');
-    // House commentary is editorial, never relational — no "Why {name} asked".
+    expect(rendered).not.toContain('One for the archive.');
+    expect(rendered).not.toContain('Between you and');
     expect(rendered).not.toContain('Why Joshing asked');
-    // The editor's-note card is deferred to review, so its label is absent too.
-    expect(rendered).not.toContain('Editor');
   });
 
-  it('still surfaces the creator note in the live thread when there is no aside to prefer', () => {
+  it('renders the human inverted block when only a creator note exists', () => {
     const rendered = html([
       buildCatchupResultMessage({
         id: 'r-1',
@@ -145,9 +143,9 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    // With no lighter wink available, the single reflection falls back to the note.
     expect(rendered).toContain('I lost a bet over this in 2019.');
-    expect(rendered).toContain('Why Dana asked');
+    expect(rendered).toContain('Between you and Dana');
+    expect(rendered).not.toContain('Why Dana asked');
   });
 
   it('renders the recheck button on a wrong daily-slot answer when a recheckAction is wired', () => {

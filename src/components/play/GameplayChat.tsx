@@ -17,7 +17,8 @@ import {
   isWrongAnswerReactionKey,
   type ReactionKey,
 } from '@/lib/reactions';
-import { isLlmAttribution, INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types';
+import { isLlmAttribution, type InsideJokeKind } from '@/lib/questions-types';
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -839,55 +840,6 @@ export function QuestionReactionPrompt({ prompt }: { prompt: ReactionPromptData 
   );
 }
 
-function AuthorNoteCard({
-  text,
-  creatorName,
-  creatorIsHouse = false,
-}: {
-  text: string;
-  creatorName: string | null;
-  creatorIsHouse?: boolean;
-}) {
-  return (
-    <ThreadCard border="var(--border)" fill="var(--surface-2)" style={{ marginTop: '8px' }}>
-      <p
-        style={{
-          ...monoStyle,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          fontSize: '0.55rem',
-          color: 'var(--text-muted)',
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-        }}
-      >
-        {/* House notes are editorial, never relational — no "Why {name} asked". */}
-        {creatorIsHouse ? (
-          <>
-            <span>Editor&rsquo;s note</span>
-            <EditorialBadge />
-          </>
-        ) : (
-          <span>{creatorName ? `Why ${creatorName} asked` : 'Why they asked'}</span>
-        )}
-      </p>
-      <p
-        style={{
-          marginTop: '4px',
-          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
-          // Reflection/creator-note body bumped ~14% for readability (D-5);
-          // the eyebrow label above stays small and secondary.
-          fontSize: '1.05rem',
-          lineHeight: 1.5,
-        }}
-      >
-        {text}
-      </p>
-    </ThreadCard>
-  );
-}
-
 function TypingRow() {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -938,7 +890,6 @@ function ResultRow({
   correctAnswer,
   consolation,
   insideJoke,
-  insideJokeKind,
   authorNote,
   explanation,
   copyVariant,
@@ -988,12 +939,15 @@ function ResultRow({
   // Correct keeps its explainer inline within the verdict block (before the
   // "common ground" beat); the other reveals render it after the discovery copy.
   const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
-  // One reflection beneath the verdict: the lighter "Between us!" wink is
-  // preferred over the creator note, which otherwise falls back in on correct
-  // answers. The wink renders as an inset panel INSIDE the result card (one
-  // item, not a second card); the fuller creator note lives in the review.
-  const showJokeCard = Boolean(insideJoke);
-  const showNoteCard = correct && !insideJoke && Boolean(authorNote);
+  // One unified note beneath the verdict, chosen by PROVENANCE (never answer-
+  // state): a human author → their own note as the inverted block; house/LLM →
+  // the bronze editorial aside. Shown identically on correct and wrong reveals.
+  const note = pickCreatorNote({
+    isHuman: Boolean(creatorName) && !creatorIsHouse,
+    authorName: creatorName,
+    creatorNote: authorNote,
+    insideJoke,
+  });
   const requestRecheck = useCallback(async () => {
     if (!recheckAction || recheckState === 'submitting') return;
     setRecheckState('submitting');
@@ -1238,41 +1192,6 @@ function ResultRow({
         {showDiscoveryExplainer && explainerSentence ? (
           <ExplainerLine text={explainerSentence} />
         ) : null}
-        {showJokeCard && insideJoke ? (
-          <div
-            style={{
-              marginTop: '12px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid color-mix(in srgb, var(--brand-link) 22%, var(--border))',
-              background: 'var(--editorial-slate)',
-              padding: '10px 12px',
-            }}
-          >
-            <p
-              style={{
-                ...monoStyle,
-                fontSize: '0.55rem',
-                color: GOLD_INK,
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
-            </p>
-            <p
-              style={{
-                marginTop: '4px',
-                fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
-                // Reflection body bumped ~14% for readability (D-5); the small,
-                // letter-spaced label above stays secondary.
-                fontSize: '1.05rem',
-                lineHeight: 1.5,
-              }}
-            >
-              {insideJoke}
-            </p>
-          </div>
-        ) : null}
         {typeof pointsAwarded === 'number' ? (
           <p
             style={{
@@ -1287,13 +1206,7 @@ function ResultRow({
           </p>
         ) : null}
       </ThreadCard>
-      {showNoteCard && authorNote ? (
-        <AuthorNoteCard
-          text={authorNote}
-          creatorName={creatorName}
-          creatorIsHouse={creatorIsHouse}
-        />
-      ) : null}
+      {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
