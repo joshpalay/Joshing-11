@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Settings } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { formatNextResetDayTimeLocal } from '@/lib/games/timezone'
@@ -208,10 +208,15 @@ export default function TodaysFiveCard({
         </p>
         <Link
           href="/daily/setup"
-          className="text-[var(--brand-ink-400)] transition-colors hover:text-[var(--brand-ink)]"
-          aria-label="Set up daily round"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--brand-ink)_16%,transparent)] bg-[color-mix(in_srgb,var(--brand-cream)_88%,white)] px-4 py-2 text-[13px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)] shadow-[0_2px_8px_color-mix(in_srgb,var(--brand-ink)_14%,transparent),inset_0_1px_0_rgba(255,255,255,0.72)] transition-[background-color,border-color,box-shadow,transform] hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,transparent)] hover:bg-[color-mix(in_srgb,var(--brand-cream)_96%,white)] focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none active:translate-y-px sm:px-5 sm:text-sm"
+          aria-label="Customize your Daily Five"
         >
-          <Settings className="size-4" aria-hidden="true" />
+          <SlidersHorizontal
+            className="size-5 sm:size-[22px]"
+            strokeWidth={2.4}
+            aria-hidden="true"
+          />
+          <span>Customize</span>
         </Link>
       </div>
 
