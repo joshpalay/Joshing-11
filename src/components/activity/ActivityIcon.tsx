@@ -241,6 +241,29 @@ export function QuestionTriangle({ solid, seed }: { solid: boolean; seed: string
   );
 }
 
+// A small hourglass — an orange triangle over a teal one, apex-to-apex. In the
+// "From Your Friends" mark vocabulary this is the "someone sends you a Q" sign
+// (StreamIconKind 'hourglass', activity-stream.ts). The activity stream itself
+// collapses it into the calm inward triangle, but the feed's direct-send card
+// uses the literal hourglass — flanking its eyebrow with a pair — since that IS
+// a question sent to you. Decorative (aria-hidden); the eyebrow copy carries it.
+export function HourglassMark({ size = 13 }: { size?: number }) {
+  const w = (size * 12) / 16; // viewBox is 12 wide × 16 tall
+  return (
+    <svg
+      width={w}
+      height={size}
+      viewBox="0 0 12 16"
+      fill="none"
+      aria-hidden="true"
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      <path d="M0,0 L12,0 L6,8 Z" fill="var(--tri-orange)" fillOpacity={FILL_OPACITY} />
+      <path d="M0,16 L12,16 L6,8 Z" fill="var(--tri-darkteal)" fillOpacity={FILL_OPACITY} />
+    </svg>
+  );
+}
+
 // Five-point star, each point its own palette triangle — one triangle per
 // question in the "first five" milestone. The five inner vertices meet at a
 // pentagon core that's left as background, so the mark reads as a star BUILT
