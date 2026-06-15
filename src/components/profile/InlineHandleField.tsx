@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
 // Handle editing has its own endpoint (PATCH /api/account/handle owns the
@@ -99,7 +99,7 @@ export function InlineHandleField({
         <span className="text-muted-foreground">@</span>
         <input
           autoFocus
-          className="flex-1 rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+          className="flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
           value={draft}
           maxLength={20}
           placeholder="handle"
@@ -177,10 +177,11 @@ export function InlineHandleField({
       <button
         type="button"
         aria-label="Edit handle"
-        className="block w-full rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-muted/40"
+        className="group/edit flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-muted/40"
         onClick={beginEdit}
       >
-        {trimmed.length > 0 ? `@${trimmed}` : <span>Pick a handle</span>}
+        <span>{trimmed.length > 0 ? `@${trimmed}` : 'Pick a handle'}</span>
+        <Pencil className="size-3.5 shrink-0" aria-hidden="true" />
       </button>
       {variant === 'plain' && status !== 'idle' ? (
         <div className="mt-1">

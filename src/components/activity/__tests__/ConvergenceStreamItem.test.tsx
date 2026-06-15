@@ -126,8 +126,8 @@ describe('ActivityStreamItem — collapsed convergence one-liner', () => {
   });
 });
 
-describe('ConvergenceExpansion — the expanded reveal', () => {
-  it('shows the 3 co-correct questions with domains as quiet texture, no actions', () => {
+describe('ConvergenceExpansion — the streamlined reveal (commit 151b5a1)', () => {
+  it('shows the 3 co-correct questions as clean quotes, each with a per-quote share glyph', () => {
     const item = build();
     if (item.expand?.kind !== 'same_correct') throw new Error('expected same_correct');
     const expand = item.expand as Extract<StreamExpand, { kind: 'same_correct' }>;
@@ -137,33 +137,42 @@ describe('ConvergenceExpansion — the expanded reveal', () => {
     expect(html).toContain('Who painted Guernica?');
     expect(html).toContain('What is the capital of Mongolia?');
     expect(html).toContain('Who composed The Rite of Spring?');
-    // Domains appear here as texture (uppercased), never in the headline.
-    expect(html).toContain('CUBISM');
+    // The streamline reads the quotes clean: domains are named in the headline,
+    // not repeated as texture in the reveal.
+    expect(html).not.toContain('CUBISM');
 
-    // Read-only: no answer / send / reaction affordances.
+    // The only affordance is the quiet per-quote share (paper-plane glyph) —
+    // there is no full-label answer / discover action and no reaction.
+    expect(html).toContain('Send to a friend');
     expect(html).not.toContain('SEND IT ONWARD');
     expect(html).not.toContain('DISCOVER');
-    expect(html.toLowerCase()).not.toContain('<button');
   });
 
-  it('marks house/LLM questions honestly and leaves human questions unmarked (§4)', () => {
+  it('omits authorship labels entirely — no author is claimed, so nothing is mis-attributed (§4)', () => {
     const expand: Extract<StreamExpand, { kind: 'same_correct' }> = {
       kind: 'same_correct',
       friendId: 'friend-1',
       friendName: 'Robyn Fielding',
       questions: [
-        // House/editorial question — must be marked, never read as person-written.
+        // House/editorial question.
         { questionId: 'h1', text: 'A house question', domain: 'History', priorResult: 'correct', authorName: 'Joshing', authorIsHouse: true },
-        // LLM-origin question — marked with the LLM attribution label.
+        // LLM-origin question.
         { questionId: 'g1', text: 'A generated question', domain: 'Science', priorResult: 'correct', authorName: null, authorIsHouse: false },
-        // Human-authored — no machine-honesty marker needed.
+        // Human-authored question.
         { questionId: 'p1', text: 'A human question', domain: 'Music', priorResult: 'correct', authorName: 'Sadie', authorIsHouse: false },
       ],
     };
     const html = renderToStaticMarkup(<ConvergenceExpansion expand={expand} />);
-    expect(html).toContain('JOSHING · EDITORIAL');
-    expect(html).toContain(LLM_QUESTION_ATTRIBUTION.toUpperCase());
-    // The human author is not surfaced as a provenance marker.
-    expect(html).not.toContain('SADIE');
+    // The streamlined reveal carries no authorship at all (the comment in
+    // ConvergenceExpansion documents this), so the §4 honesty invariant holds
+    // vacuously: a house/LLM question is never rendered AS IF a person wrote it
+    // because no author is shown. The LLM attribution label is not used here…
+    expect(html).not.toContain('JOSHING · EDITORIAL');
+    expect(html).not.toContain(LLM_QUESTION_ATTRIBUTION.toUpperCase());
+    // …and the human author is likewise not surfaced.
+    expect(html).not.toContain('Sadie');
+    // The questions themselves still render.
+    expect(html).toContain('A house question');
+    expect(html).toContain('A human question');
   });
 });

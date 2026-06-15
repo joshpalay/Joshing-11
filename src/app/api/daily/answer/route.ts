@@ -20,6 +20,7 @@ import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/serve
 import { suggestAnswer } from '@/lib/llm';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
+import { createServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,16 @@ function logStepTimings(marks: StepMarks) {
   } catch {
     // telemetry only — swallow
   }
+}
+
+// Build a Server-Timing header value from the step marks already captured on
+// the grading path (B-PERF-04). Reuses the same stamps logStepTimings reads —
+// `grade` is the grader span (deterministic or LLM), `total` is end-to-end.
+function serverTimingFromMarks(marks: StepMarks): string {
+  const timing = createServerTiming();
+  if (marks.grade != null && marks.load != null) timing.add('grade', marks.grade - marks.load);
+  timing.add('total', Date.now() - marks.start);
+  return timing.toHeader();
 }
 
 type DailyAnswerErrorCode =
@@ -498,7 +509,7 @@ export async function POST(request: NextRequest) {
     });
     marks.mastery = Date.now();
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       isCorrect,
       gaveUp: parsed.gaveUp,
       explanation: question.explainer,
@@ -516,6 +527,12 @@ export async function POST(request: NextRequest) {
       insideJoke: insideJokeForViewer?.text ?? null,
       insideJokeKind: insideJokeForViewer?.kind ?? null,
     });
+    // Server-Timing (B-PERF-04): surface the grade duration (deterministic vs
+    // LLM is already split by the [daily/answer timings] log's cold/grade_ms)
+    // and end-to-end total, derived from the marks already captured above — no
+    // new timing work. Header-only; response body is unchanged.
+    response.headers.set('Server-Timing', serverTimingFromMarks(marks));
+    return response;
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');

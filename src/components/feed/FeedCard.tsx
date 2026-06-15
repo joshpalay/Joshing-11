@@ -77,7 +77,7 @@ export function FeedCard({
   if (item.viewerIsAuthor) {
     return (
       <FeedCardShell accentColor={categoryColor} className={className}>
-        <div className="p-[14px]">
+        <div className="p-3.5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               {headerContent ? (
@@ -110,7 +110,7 @@ export function FeedCard({
 
   return (
     <FeedCardShell accentColor={categoryColor} className={className} elevated={elevated}>
-      <div className="p-[14px]">
+      <div className="p-3.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             {headerContent ? (

@@ -19,7 +19,7 @@ export default async function FromFriendsPage() {
   const items = await buildFriendActivityQueue(session.userId)
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-[18px] px-4 py-6 pb-32 md:py-10">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       <OverflowSubpageHeader
         eyebrow="From Friends"
         title={items.length > 0 ? `${items.length} from friends` : 'From friends'}

@@ -482,6 +482,11 @@ export function useCatchupFlow() {
       }
       setStats((existing) => ({ ...existing, dismissed: Math.max(0, existing.dismissed - 1) }));
       setItems((existing) => [item, ...existing.filter((entry) => entry.dailyQueueItemId !== itemId)]);
+      // Undo returns this question to the answerable round, so restore the round
+      // target and re-enter 'playing' (a dismissal of the last item may have
+      // closed the round — see dismissCurrent / PLR-17).
+      batchStartRemainingRef.current += 1;
+      setPhase('playing');
       setMessages((existing) => {
         const questionId = `catchup-q-${itemId}`;
         const index = existing.findIndex((message) => message.id === questionId);
@@ -533,13 +538,24 @@ export function useCatchupFlow() {
           { id: newMessageId(), kind: 'dismiss_notice', onUndo: () => undismissItem(item) },
         ];
       });
+      // A dismissed item leaves the answerable round (it won't be answered), so
+      // mirror dropStaleItem: shrink the round target and, if dismissing empties
+      // the queue (or meets the shrunken target), close the round. Without this
+      // the thread dead-ends with no current question and no input after the last
+      // missed question is dismissed (PLR-17).
+      const emptiesQueue = items.length <= 1;
       advancePast(itemId);
+      batchStartRemainingRef.current = Math.max(0, batchStartRemainingRef.current - 1);
+      const roundSize = Math.min(CATCH_UP_BATCH_SIZE, batchStartRemainingRef.current);
+      if (emptiesQueue || answeredInBatchRef.current >= roundSize) {
+        setPhase('round_complete');
+      }
     } catch {
       applyCatchupSubmitFailure(item, parseCatchUpAnswerErrorBody({ code: 'network' }));
     } finally {
       setSubmitting(false);
     }
-  }, [advancePast, applyCatchupSubmitFailure, currentItem, isResolvingTurn, submitting, undismissItem]);
+  }, [advancePast, applyCatchupSubmitFailure, currentItem, isResolvingTurn, items.length, submitting, undismissItem]);
 
   // Re-grade a wrong daily-slot answer via the shared /api/daily/recheck route.
   // On accept we flip this turn's tally + recap entry to correct; GameplayChat's

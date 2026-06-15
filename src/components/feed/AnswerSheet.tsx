@@ -93,7 +93,7 @@ export function AnswerSheet({
             placeholder="Your answer…"
             disabled={loading}
             autoComplete="off"
-            className="bg-background focus:border-primary focus-visible:ring-ring min-h-11 w-full rounded-xl border px-4 text-base outline-none focus-visible:ring-2 disabled:opacity-60"
+            className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] min-h-11 w-full rounded-xl border border-[var(--accent-gold)] px-4 text-base outline-none disabled:opacity-60"
           />
           {statusMessage ? (
             <p

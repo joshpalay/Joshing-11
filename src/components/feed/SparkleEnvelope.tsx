@@ -60,7 +60,7 @@ export function SparkleEnvelope({
 }: SparkleEnvelopeProps) {
   return (
     <FeedCardShell variant={variant} className={className} elevated={elevated}>
-      <div className="flex flex-col items-center gap-5 p-[14px]">
+      <div className="flex flex-col items-center gap-5 p-3.5">
         <div className="flex w-full items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {eyebrow ? (

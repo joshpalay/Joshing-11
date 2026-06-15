@@ -22,6 +22,7 @@ import MasteryMoment from '@/components/review/MasteryMoment'
 import { RefineYourGame } from '@/components/review/RefineYourGame'
 import { cn } from '@/lib/utils'
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types'
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote'
 import type {
   DailySummaryView,
   QuestionRecap,
@@ -129,6 +130,13 @@ export default function DailySummaryPage() {
     () => (summary ? interpretiveLine(summary) : null),
     [summary]
   )
+  // The next Daily Five arrives at noon tomorrow; name the weekday (e.g. "Monday")
+  // rather than saying "Tomorrow" so the copy reads concretely.
+  const tomorrowWeekday = useMemo(() => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return tomorrow.toLocaleDateString(undefined, { weekday: 'long' })
+  }, [])
 
   if (loading) {
     return <LoadingScreen fullScreen label="Loading summary" />
@@ -249,7 +257,7 @@ export default function DailySummaryPage() {
 
         <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
           <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
-            Tomorrow’s five arrive at noon.
+            {tomorrowWeekday}’s five arrive at noon.
           </p>
           <div className="mt-5 flex flex-col items-center gap-3">
             <Link className="btn-primary w-full sm:w-auto sm:min-w-56" href="/">
@@ -518,11 +526,11 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
       ? 'Correct'
       : 'Not this time'
   const authorLabel = question.authorName ?? LLM_QUESTION_ATTRIBUTION
-  const creatorNoteLabel = question.authorName
-    ? `${question.authorName.split(/\s+/)[0]}’s note`
-    : question.authorIsHouse
-      ? 'Editor’s note'
-      : 'Creator’s note'
+  const note = pickCreatorNote({
+    isHuman: Boolean(question.authorName) && !question.authorIsHouse,
+    authorName: question.authorName,
+    creatorNote: question.authorNote,
+  })
 
   return (
     <article className="relative overflow-hidden rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
@@ -640,16 +648,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         </section>
       ) : null}
 
-      {question.authorNote ? (
-        <section className="mt-5 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] px-4 py-3">
-          <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-            {creatorNoteLabel}
-          </h3>
-          <p className="mt-1 text-sm leading-6 text-[var(--brand-ink-700)]">
-            {question.authorNote}
-          </p>
-        </section>
-      ) : null}
+      {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
 
       {exclusionState.kind === 'confirmed' ? (
         <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">

@@ -62,16 +62,82 @@ function joinList(values: string[]) {
   return `${values.slice(0, -1).join(', ')}, and ${values[values.length - 1]}`;
 }
 
+// Beat D (Demonstrated): name up to two domains, then tuck the rest behind
+// "and {n} more" per D-REFLECTION-COPY-01 Beat D.
+function provedList(values: string[]) {
+  if (values.length <= 2) return joinList(values);
+  return `${values[0]}, ${values[1]}, and ${values.length - 2} more`;
+}
+
 function questionLabel(count: number) {
   return count === 1 ? 'question' : 'questions';
 }
 
-const TIER_SCALE: Record<MasteryTier, number> = {
-  establishing: 0.28,
-  familiar: 0.48,
-  solid: 0.72,
-  mastery: 1,
-};
+// Beat B quiet hierarchy: question count rendered as dots (•, ••), capped so a
+// busy domain doesn't run off the line.
+function dots(count: number) {
+  return '•'.repeat(Math.min(Math.max(count, 1), 5));
+}
+
+// "+{n} more" disclosure (Phase 2 hierarchy): show the first `initial` items,
+// tuck the rest behind a tappable reveal. stopPropagation keeps the tap from
+// advancing the story.
+function MoreReveal<T>({
+  items,
+  initial,
+  className,
+  renderItem,
+}: {
+  items: T[];
+  initial: number;
+  className?: string;
+  renderItem: (item: T, index: number) => React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, initial);
+  const remainder = items.length - visible.length;
+  return (
+    <>
+      {visible.length > 0 ? <div className={className}>{visible.map(renderItem)}</div> : null}
+      {remainder > 0 ? (
+        <button
+          type="button"
+          className="mt-3 text-sm text-stone-400 underline underline-offset-4 transition hover:text-stone-200"
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded(true);
+          }}
+        >
+          +{remainder} more
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+// Beat C inline list: middle-dot-separated domain names, overflow tucked.
+function InlineDomains({ domains, initial }: { domains: string[]; initial: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? domains : domains.slice(0, initial);
+  const remainder = domains.length - visible.length;
+  return (
+    <p className="font-serif text-xl text-stone-100 sm:text-2xl">
+      {visible.join('  ·  ')}
+      {remainder > 0 ? (
+        <button
+          type="button"
+          className="ml-3 align-middle text-sm text-stone-400 underline underline-offset-4 transition hover:text-stone-200"
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded(true);
+          }}
+        >
+          +{remainder} more
+        </button>
+      ) : null}
+    </p>
+  );
+}
 
 type CeremonyCircleColor = {
   core: string;
@@ -176,28 +242,38 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
   }
 
   if (beat.id === 1) {
+    const grewCount = beat.content.length;
+    const [lead, ...rest] = beat.content;
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
           You leveled up.
         </h1>
-        <div className="mx-auto mt-10 grid max-w-xl gap-4 text-left">
-          {beat.content.map((crossing) => (
-            <div key={`${crossing.domain}-${crossing.toTier}`} className="flex items-center gap-4">
-              <CeremonyCircle
-                domain={crossing.domain}
-                size={74}
-                scale={TIER_SCALE[crossing.toTier]}
-              />
-              <div>
-                <p className="font-serif text-xl font-semibold text-stone-50">{crossing.domain}</p>
-                <p className="mt-1 text-xs tracking-[0.16em] text-stone-400 uppercase">
-                  {KNOWLEDGE_TIER_LABEL[crossing.fromTier]} {'->'}{' '}
-                  {KNOWLEDGE_TIER_LABEL[crossing.toTier]}
-                </p>
-              </div>
-            </div>
-          ))}
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          {grewCount} {grewCount === 1 ? 'territory' : 'territories'} grew this week.
+        </p>
+        <div className="mx-auto mt-10 max-w-md text-left">
+          {lead ? (
+            <p className="font-serif text-2xl font-semibold text-stone-50 sm:text-3xl">
+              {lead.domain}{' '}
+              <span className="text-stone-400">
+                — now {KNOWLEDGE_TIER_LABEL[lead.toTier].toLowerCase()}
+              </span>
+            </p>
+          ) : null}
+          <MoreReveal
+            items={rest}
+            initial={2}
+            className="mt-3 space-y-1.5"
+            renderItem={(crossing) => (
+              <p key={`${crossing.domain}-${crossing.toTier}`} className="text-base text-stone-300">
+                {crossing.domain}{' '}
+                <span className="text-stone-500">
+                  — now {KNOWLEDGE_TIER_LABEL[crossing.toTier].toLowerCase()}
+                </span>
+              </p>
+            )}
+          />
         </div>
       </div>
     );
@@ -205,62 +281,49 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
 
   if (beat.id === 2) {
     const { friendMediated, authored, promoted } = beat.content;
-    const friendTotal = friendMediated.reduce((sum, item) => sum + item.questionCount, 0);
     return (
       <div className="mx-auto max-w-3xl space-y-16 text-center">
         {friendMediated.length > 0 && (
           <div>
             <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
-              You went somewhere new.
+              Your friends took you somewhere new.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              Through your friends, you picked up {friendTotal} {questionLabel(friendTotal)} in{' '}
-              {joinList(friendMediated.map((item) => item.domain))}.
+              {friendMediated.length} {friendMediated.length === 1 ? 'place' : 'places'} this week —
+              starting with {friendMediated[0]!.domain}.
             </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-5">
-              {friendMediated.map((item) => (
-                <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
-                  <CeremonyCircle
-                    domain={item.domain}
-                    size={88}
-                    scale={Math.min(
-                      1,
-                      0.45 + (item.correctCount / Math.max(item.questionCount, 1)) * 0.45,
-                    )}
-                  />
-                  <div>
-                    <p className="font-serif text-base font-semibold text-stone-50">
-                      {item.domain}
-                    </p>
-                    <p className="mt-1 text-xs tracking-[0.14em] text-stone-400 uppercase">
-                      {item.correctCount}/{item.questionCount}
-                    </p>
-                  </div>
-                </div>
-              ))}
+            <div className="mx-auto mt-10 max-w-md text-left">
+              <p className="font-serif text-2xl font-semibold text-stone-50 sm:text-3xl">
+                {friendMediated[0]!.domain}{' '}
+                <span className="ml-1 align-middle text-base text-stone-400">
+                  {dots(friendMediated[0]!.questionCount)}
+                </span>
+              </p>
+              <MoreReveal
+                items={friendMediated.slice(1)}
+                initial={2}
+                className="mt-3 space-y-1.5"
+                renderItem={(item) => (
+                  <p key={item.domain} className="text-base text-stone-300">
+                    {item.domain}{' '}
+                    <span className="ml-1 text-sm text-stone-500">{dots(item.questionCount)}</span>
+                  </p>
+                )}
+              />
             </div>
           </div>
         )}
         {authored.length > 0 && (
           <div>
             <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
-              You staked new territory.
+              You declared new territory.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              You wrote questions that opened{' '}
-              {authored.length === 1 ? 'a new domain' : `${authored.length} new domains`}:{' '}
-              {joinList(authored.map((item) => item.domain))}.
+              {authored.length} {authored.length === 1 ? 'place' : 'places'} opened from questions you
+              wrote.
             </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-5">
-              {authored.map((item) => (
-                <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
-                  <CeremonyCircle domain={item.domain} size={88} scale={0.35} />
-                  <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
-                  <p className="mt-1 text-xs tracking-[0.14em] text-stone-400 uppercase">
-                    Declared
-                  </p>
-                </div>
-              ))}
+            <div className="mx-auto mt-8 max-w-xl">
+              <InlineDomains domains={authored.map((item) => item.domain)} initial={4} />
             </div>
           </div>
         )}
@@ -270,20 +333,9 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
               Your territory came to life.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              A friend answered your questions and proved your knowledge in{' '}
-              {joinList(promoted.map((item) => item.domain))}.
+              A friend answered questions you wrote and proved you knew{' '}
+              {provedList(promoted.map((item) => item.domain))}.
             </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-5">
-              {promoted.map((item) => (
-                <div key={item.domain} className="flex flex-col items-center gap-3 text-center">
-                  <CeremonyCircle domain={item.domain} size={88} scale={0.7} />
-                  <p className="font-serif text-base font-semibold text-stone-50">{item.domain}</p>
-                  <p className="mt-1 text-xs tracking-[0.14em] text-stone-400 uppercase">
-                    Demonstrated
-                  </p>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>
@@ -294,25 +346,28 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
     return (
       <div className="mx-auto max-w-3xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
-          Something you learned this week.
+          What you discovered this week.
         </h1>
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          You missed {beat.content.length === 1 ? 'this' : 'these'}, came back, and got{' '}
-          {beat.content.length === 1 ? 'it' : 'them'} right.
-        </p>
-        <div className="mx-auto mt-10 grid max-w-2xl gap-5 text-left">
+        <div className="mx-auto mt-12 grid max-w-2xl gap-8 text-left">
           {beat.content.map((item, index) => (
-            <div key={`${item.domain}-${index}`} className="flex items-start gap-4">
-              <CeremonyCircle domain={item.domain} size={56} scale={0.85} />
+            <div key={`${item.domain}-${index}`} className="flex items-start gap-5">
+              <CeremonyCircle domain={item.domain} size={64} scale={0.85} />
               <div className="min-w-0">
-                <p className="font-serif text-lg leading-7 font-semibold text-stone-50">
+                <p className="font-serif text-xl leading-8 font-semibold text-stone-50">
                   {item.questionText}
                 </p>
-                <p className="mt-1 text-base text-stone-300">{item.correctAnswer}</p>
+                <p className="mt-2 text-base text-stone-300">{item.correctAnswer}</p>
               </div>
             </div>
           ))}
         </div>
+        <a
+          href="/replay"
+          onClick={(event) => event.stopPropagation()}
+          className="mt-12 inline-block text-sm text-stone-300 underline underline-offset-4 transition hover:text-stone-50"
+        >
+          View all discoveries &rarr;
+        </a>
       </div>
     );
   }

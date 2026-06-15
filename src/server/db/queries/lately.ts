@@ -89,8 +89,16 @@ const CORRECT_ANSWER_STATES = [
 ] as const;
 const LIVE_SOURCE_TYPES = ['live_correct', 'catchup_correct'] as const;
 
-export async function getLatelyMoments(userId: string): Promise<LatelyMoment[]> {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+// The Lately/`/activities` full list scans the default 30-day moment horizon;
+// the home edition passes HOME_WINDOW_DAYS to bound the ambient band (D-HOME-
+// DASHBOARD-MODEL-01). Defaulted so non-home callers are unchanged.
+const MOMENTS_WINDOW_DAYS = 30;
+
+export async function getLatelyMoments(
+  userId: string,
+  windowDays = MOMENTS_WINDOW_DAYS,
+): Promise<LatelyMoment[]> {
+  const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
   const friendIdExpr = sql<string>`CASE WHEN ${questions.creatorId} = ${userId} THEN ${masteryEvents.userId} ELSE ${questions.creatorId} END`;
 
@@ -115,7 +123,7 @@ export async function getLatelyMoments(userId: string): Promise<LatelyMoment[]> 
         inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
         inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
         isNotNull(masteryEvents.questionId),
-        gte(masteryEvents.createdAt, thirtyDaysAgo),
+        gte(masteryEvents.createdAt, windowStart),
         or(
           and(eq(questions.creatorId, userId), ne(masteryEvents.userId, userId)),
           and(eq(masteryEvents.userId, userId), ne(questions.creatorId, userId)),
@@ -176,8 +184,11 @@ function resolveMilestoneDomain(
  * within the 30-day Lately horizon, joined to the canonical question. The deep
  * vs. breadth split (A-1) lives in the pure `deriveLatelyMilestones`.
  */
-export async function getLatelyMilestones(userId: string): Promise<LatelyMilestone[]> {
-  const windowStart = new Date(Date.now() - MILESTONE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+export async function getLatelyMilestones(
+  userId: string,
+  windowDays = MILESTONE_WINDOW_DAYS,
+): Promise<LatelyMilestone[]> {
+  const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
   const rows = await db
     .select({
@@ -309,9 +320,15 @@ function batchKeyFor(
  * pre-answered questions and freezing card membership both need persistence and
  * are the documented follow-up (see the spec's Open section).
  */
-export async function getFriendActivity(userId: string): Promise<FriendActivityCard[]> {
+export async function getFriendActivity(
+  userId: string,
+  // Defaulted to the 35-day scan for the /from-friends overflow page and any
+  // other non-home caller; the home edition passes HOME_WINDOW_DAYS to bound
+  // the ambient band (D-HOME-DASHBOARD-MODEL-01).
+  windowDays = FRIEND_ACTIVITY_WINDOW_DAYS,
+): Promise<FriendActivityCard[]> {
   const windowStart = new Date(
-    Date.now() - FRIEND_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    Date.now() - windowDays * 24 * 60 * 60 * 1000,
   );
 
   const rows = await db
@@ -549,9 +566,10 @@ const PAIR_SEP = '\u0000';
 // firing / reset / single-owner rules live in `@/lib/convergence`.
 export async function getLatelyConvergences(
   userId: string,
+  windowDays = CONVERGENCE_LOOKBACK_DAYS,
 ): Promise<Convergence[]> {
   const lookbackStart = new Date(
-    Date.now() - CONVERGENCE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+    Date.now() - windowDays * 24 * 60 * 60 * 1000,
   );
 
   // 1. The viewer's correct answers, with each question's author so we can drop

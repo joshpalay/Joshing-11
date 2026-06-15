@@ -617,7 +617,7 @@ export function TerritorySetupClient({
           ) : (
             <button
               type="button"
-              className="mb-5 flex w-full items-center justify-center gap-2 rounded-[4px] border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
+              className="mb-5 flex w-full items-center justify-center gap-2 rounded-[var(--radius-xs)] border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
               disabled={addingTopic}
               onClick={openCreateTopic}
             >

@@ -102,8 +102,7 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
           value={reviewReason}
           onChange={(e) => setReviewReason(e.target.value)}
           placeholder="Reason (optional)"
-          className="min-w-0 flex-1 rounded-md border px-2 py-1 text-sm"
-          style={{ borderColor: 'var(--border)' }}
+          className="min-w-0 flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]"
         />
         <button
           type="button"

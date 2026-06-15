@@ -30,7 +30,7 @@ type ConvergeApiCandidate = {
 // Cream / Ink-on-Cream defaults (the daily-setup surface). Overridable so the
 // same field matches differently-themed surfaces (e.g. the top-up modal).
 const DEFAULT_INPUT_CLASS =
-  'min-h-12 flex-1 rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60';
+  'min-h-12 flex-1 rounded-full border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] focus-visible:outline-none disabled:opacity-60';
 const DEFAULT_BUTTON_CLASS = 'btn-ghost';
 const DEFAULT_CHIP_CLASS =
   'rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-3 py-1.5 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--cream-warm)] disabled:opacity-50';

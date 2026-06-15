@@ -14,6 +14,7 @@ import {
 } from '@/server/db';
 import { getFriends } from '@/server/db/queries/friends';
 import { ceremonyModeFromAnsweringCount, type CeremonyMode } from '@/lib/ceremony/mode';
+import { djb2 } from '@/lib/lately';
 import type { MasteryTier } from '@/types/db';
 
 // F3.5: runtime validation of the beats payload. Strict at write time
@@ -552,21 +553,70 @@ async function computeBeat5FriendFallback(
   };
 }
 
-// Cap the "something you learned" beat so the ceremony stays a quick read.
-const BEAT6_MAX_ITEMS = 5;
+// Curate the discovery beat (Beat E) to a tight, breathing set — the copy doc
+// says 2–3, never a dump.
+const BEAT_E_MAX_ITEMS = 3;
+
+export type DiscoveryCandidate = {
+  questionId: string;
+  domain: string;
+  questionText: string;
+  correctAnswer: string;
+  createdAt: Date;
+};
 
 /**
- * Beat 6 (Learned) — questions the user got WRONG earlier and got RIGHT this
- * cycle. "Wrong then right" is exactly answer_state = 'first_correct_after_wrong'
- * (computeAnswerState in src/server/answer-state.ts only stamps it when a
- * correct answer lands after a prior wrong attempt on the same user+question).
- * masteryEvents.userId is the answerer for these surface rows, mirroring
- * how lately.ts reads correctness off the same column.
+ * Pure selection signal for Beat E (the blocker), resolved per
+ * REFLECTION-AUDIT-01 Q5 + D-REFLECTION-COPY-01 §3 preference order:
+ *   1. "most friends also missed it" (friendMissCount) — most relational, best
+ *      fits the "my people and I" thesis.
+ *   2. most-recent (createdAt) — tiebreak.
+ *   3. hash-stable (djb2 of questionId) — deterministic final tiebreak so a
+ *      given week always curates the same cards.
+ * Extracted as a pure function so the ranking is unit-testable without the DB.
+ */
+export function selectDiscoveries(
+  candidates: DiscoveryCandidate[],
+  friendMissCount: Map<string, number>,
+  max: number,
+): Beat6Learned {
+  return [...candidates]
+    .sort((a, b) => {
+      const byFriends =
+        (friendMissCount.get(b.questionId) ?? 0) - (friendMissCount.get(a.questionId) ?? 0);
+      if (byFriends !== 0) return byFriends;
+      const byRecency = b.createdAt.getTime() - a.createdAt.getTime();
+      if (byRecency !== 0) return byRecency;
+      return djb2(a.questionId) - djb2(b.questionId);
+    })
+    .slice(0, max)
+    .map((candidate) => ({
+      domain: candidate.domain,
+      questionText: candidate.questionText,
+      correctAnswer: candidate.correctAnswer,
+    }));
+}
+
+/**
+ * Beat E (Discovered) — questions the user got WRONG this cycle. A wrong or
+ * expired answer is recorded as answer_state = 'incorrect' (schema
+ * answerStateEnum has no separate 'expired'); a miss is a *discovery*, never a
+ * failure, and this is the emotional peak of the weekly Reflection.
  *
- * Scope note: masteryEvents.questionId references the canonical questions table,
- * so this covers house- and friend-authored questions. Pure bot slots that never
- * minted a canonical question row don't carry the corrected state, so they're
- * out of scope here.
+ * Scope: canonical questions only (masteryEvents.questionId references the
+ * questions table). Pure bot daily slots generate a per-user question with no
+ * shared id, so (a) there is no canonical row to render their text from and
+ * (b) the "most friends also missed it" signal is undefined for them. Those
+ * misses live behind the "View all discoveries →" deep-link to /replay
+ * (getReplayWrongQuestions), which covers bot + friend slots.
+ *
+ * Selection: selectDiscoveries() — friend-co-miss → most-recent → hash-stable.
+ * The friend-co-miss query mirrors getLatelyConvergences (co-correct overlap),
+ * flipped to 'incorrect'.
+ *
+ * NOTE: the payload field / type are still named `beat6` / Beat6Learned for
+ * backward compatibility with stored ceremonies; the semantics are now Beat E
+ * (discovery), not the old redemption beat.
  */
 async function computeBeat6(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Beat6Learned | null> {
   const rows = await db
@@ -578,32 +628,66 @@ async function computeBeat6(userId: string, cycleStart: Date, cycleEndExclusive:
       broadCategory: questions.broadCategory,
       category: questions.category,
       deletedAt: questions.deletedAt,
+      createdAt: masteryEvents.createdAt,
     })
     .from(masteryEvents)
     .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
     .where(and(
       eq(masteryEvents.userId, userId),
-      eq(masteryEvents.answerState, 'first_correct_after_wrong'),
+      eq(masteryEvents.answerState, 'incorrect'),
       isNotNull(masteryEvents.questionId),
       gte(masteryEvents.createdAt, cycleStart),
       lt(masteryEvents.createdAt, cycleEndExclusive),
     ))
     .orderBy(desc(masteryEvents.createdAt));
 
-  // One card per question, keeping the most recent correction (rows are
-  // already newest-first).
+  // One candidate per question (keep the most recent miss), drop deleted.
   const seen = new Set<string>();
-  const items: Beat6Learned = [];
+  const candidates: DiscoveryCandidate[] = [];
   for (const row of rows) {
     if (row.deletedAt) continue;
     if (seen.has(row.questionId)) continue;
     seen.add(row.questionId);
     const domain = domainFor(row);
     if (!domain) continue;
-    items.push({ domain, questionText: row.questionText, correctAnswer: row.answerText });
-    if (items.length >= BEAT6_MAX_ITEMS) break;
+    candidates.push({
+      questionId: row.questionId,
+      domain,
+      questionText: row.questionText,
+      correctAnswer: row.answerText,
+      createdAt: row.createdAt,
+    });
   }
-  return items.length > 0 ? items : null;
+  if (candidates.length === 0) return null;
+
+  // Relational signal: how many of the user's friends also missed each of these
+  // canonical questions (all-time — "this is hard for your people too"). Mirrors
+  // getLatelyConvergences, flipped from correct to incorrect.
+  const friendMissCount = new Map<string, number>();
+  const friends = await getFriends(userId);
+  const friendIds = friends.map((friend) => friend.id);
+  if (friendIds.length > 0) {
+    const candidateIds = candidates.map((candidate) => candidate.questionId);
+    const friendRows = await db
+      .selectDistinct({
+        friendId: masteryEvents.userId,
+        questionId: masteryEvents.questionId,
+      })
+      .from(masteryEvents)
+      .where(and(
+        inArray(masteryEvents.userId, friendIds),
+        inArray(masteryEvents.questionId, candidateIds),
+        eq(masteryEvents.answerState, 'incorrect'),
+        isNotNull(masteryEvents.questionId),
+      ));
+    for (const row of friendRows) {
+      if (!row.questionId) continue;
+      friendMissCount.set(row.questionId, (friendMissCount.get(row.questionId) ?? 0) + 1);
+    }
+  }
+
+  const selected = selectDiscoveries(candidates, friendMissCount, BEAT_E_MAX_ITEMS);
+  return selected.length > 0 ? selected : null;
 }
 
 /**

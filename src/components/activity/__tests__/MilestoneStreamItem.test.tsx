@@ -92,7 +92,7 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     expect(html).toContain('var(--feed-card-elevated)'); // shared elevated fill token
     expect(html).toContain('var(--brand-border)'); // neutral hairline stroke (matches Today's 5)
     expect(html).not.toContain('var(--accent-gold)'); // no gold accent stroke
-    expect(html).toContain('rgba(40, 32, 30, 0.1)'); // the soft drop shadow
+    expect(html).toContain('var(--shadow-card-strong)'); // the soft drop shadow (tokenized)
   });
 
   it('keeps the row flat when not elevated (the full /activities log)', () => {
@@ -101,6 +101,17 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     );
     expect(html).not.toContain('var(--game-card-question)');
     expect(html).not.toContain('rgba(40, 32, 30, 0.22)');
+  });
+
+  it('shows the REMAINING (unplayed) count, not the played count (B-HOME-EXHAUST-05)', () => {
+    // EXPAND carries 3 questions: q-correct + q-wrong are played, q-fresh is not,
+    // so 1 of 3 is still answerable. The label is the remaining count ("1 of 3"),
+    // matching the solid bundle triangles — not the played count ("2 of 3").
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" elevated showTimestamp={false} />,
+    );
+    expect(html).toContain('1 of 3 questions');
+    expect(html).not.toContain('2 of 3 questions');
   });
 });
 

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 import { Nav } from "@/components/Nav";
 // TESTING ONLY — card-background cycler bar (see PaletteToggle).
@@ -72,6 +74,11 @@ export default async function RootLayout({
         <PaletteToggle />
         <Nav initialUserId={claims?.userId ?? null} />
         {children}
+        {/* Field RUM (B-PERF-04): Core Web Vitals (LCP/INP/CLS/FCP/TTFB) and
+            page views, route-attributed across all §12.6 surfaces. Beacon-only
+            — no render or handler behaviour change. */}
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   )

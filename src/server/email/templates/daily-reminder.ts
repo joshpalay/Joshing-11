@@ -29,16 +29,33 @@ export type DailyReminderTemplateParams = {
   unsubscribeUrl?: string | null;
 };
 
-// Ink-on-Cream palette (mirrors verify-email.ts and the in-app design system).
-const CREAM = '#f7f5f0';
-const INK = '#1f1d1a';
-const INK_SOFT = '#6b6760';
-const INK_FAINT = '#8a857b';
-const RULE = '#e5e1d8';
-const BUTTON = '#111111';
+// Brand palette — mirrors the design-system tokens in src/app/globals.css.
+// Email HTML can't read CSS custom properties (no :root in mail clients), so
+// the token values are inlined here. Keep these in lockstep with globals.css:
+//   CREAM      → --brand-cream-page (#fcf8f2)   app page surface
+//   CARD       → --brand-card       (#fdfcfb)   content card surface
+//   INK        → --brand-ink        (#0a1f3d)   primary text / headings (navy)
+//   INK_SOFT   → --brand-ink-700    (#3a4a5f)   secondary text
+//   INK_FAINT  → --brand-ink-400    (#8a8a8a)   muted / fine print
+//   RULE       → --brand-border     (#e9e2d2)   warm hairline border/divider
+//   NAVY       → --brand-navy       (#1f3a5a)   primary button (== --btn-primary-bg)
+//   ORANGE     → --brand-orange     (#d15e36)   accent links
+const CREAM = '#fcf8f2';
+const CARD = '#fdfcfb';
+const INK = '#0a1f3d';
+const INK_SOFT = '#3a4a5f';
+const INK_FAINT = '#8a8a8a';
+const RULE = '#e9e2d2';
+const NAVY = '#1f3a5a';
+const ORANGE = '#d15e36';
 
 const SERIF = "Georgia,'Times New Roman',serif";
-const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+const SANS = "'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+
+// The brand triangle motif (public/images/Variant4.png) is a tileable pattern;
+// rendered as a repeating banner band atop the card, it echoes the login
+// screens' TriangleBackground without relying on a full-bleed cover crop.
+const TRIANGLE_IMAGE_PATH = '/images/Variant4.png';
 
 // Rotated daily so a recipient doesn't read the same subject line every morning,
 // but deterministic on the UTC date so a single send (the cron may replay) is
@@ -136,6 +153,8 @@ function buildHtml(params: {
 }): string {
   const { dailyUrl, interestsUrl, topics, activity, teaserText, unsubUrl } = params;
 
+  const triangleImageUrl = resolveTriangleImageUrl(dailyUrl);
+
   const topicsBlock =
     topics.length > 0
       ? topics
@@ -172,38 +191,45 @@ function buildHtml(params: {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${CREAM};padding:40px 16px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:480px;background:${CREAM};">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:480px;background:${CARD};border:1px solid ${RULE};border-radius:12px;">
+            ${bannerRow(triangleImageUrl)}
             <tr>
-              <td style="font-family:${SANS};font-size:13px;letter-spacing:0.04em;color:${INK_SOFT};padding-bottom:20px;">Joshing</td>
-            </tr>
-            <tr>
-              <td style="font-family:${SERIF};font-size:30px;line-height:1.25;font-weight:700;padding-bottom:10px;">Your Daily Five</td>
-            </tr>
-            <tr>
-              <td style="font-family:${SERIF};font-size:17px;line-height:1.5;color:${INK_SOFT};padding-bottom:26px;">Five questions from the knowledge you share.</td>
-            </tr>
-            ${ctaRow(dailyUrl)}
-            ${divider()}
-            ${eyebrow('Today')}
-            ${topicsBlock}
-            <tr>
-              <td style="padding-top:16px;">
-                <a href="${interestsUrl}" style="font-family:${SANS};font-size:13px;color:${INK_SOFT};text-decoration:underline;">Not quite your mix? Update your interests →</a>
+              <td style="padding:32px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="font-family:${SANS};font-size:13px;letter-spacing:0.04em;color:${INK_SOFT};padding-bottom:20px;">Joshing</td>
+                  </tr>
+                  <tr>
+                    <td style="font-family:${SERIF};font-size:30px;line-height:1.25;font-weight:700;color:${INK};padding-bottom:10px;">Your Daily Five</td>
+                  </tr>
+                  <tr>
+                    <td style="font-family:${SERIF};font-size:17px;line-height:1.5;color:${INK_SOFT};padding-bottom:26px;">Five questions from the knowledge you share.</td>
+                  </tr>
+                  ${ctaRow(dailyUrl)}
+                  ${divider()}
+                  ${eyebrow('Today')}
+                  ${topicsBlock}
+                  <tr>
+                    <td style="padding-top:16px;">
+                      <a href="${interestsUrl}" style="font-family:${SANS};font-size:13px;font-weight:600;letter-spacing:0.02em;color:${ORANGE};text-decoration:underline;">Not quite your mix? Update your interests →</a>
+                    </td>
+                  </tr>
+                  ${meanwhileSection}
+                  ${glimpseSection}
+                  ${divider()}
+                  ${ctaRow(dailyUrl)}
+                  <tr>
+                    <td style="font-family:${SERIF};font-size:14px;line-height:1.6;color:${INK_SOFT};padding-top:8px;padding-bottom:10px;">${FOOTER_LINE}</td>
+                  </tr>
+                  <tr>
+                    <td style="font-family:${SANS};font-size:12px;line-height:1.55;color:${INK_FAINT};">${
+                      unsubUrl
+                        ? `Don’t want these emails? <a href="${unsubUrl}" style="color:${INK_FAINT};text-decoration:underline;">Unsubscribe</a> — or manage reminders in your profile settings.`
+                        : 'You can turn these reminders off any time from your profile settings.'
+                    }</td>
+                  </tr>
+                </table>
               </td>
-            </tr>
-            ${meanwhileSection}
-            ${glimpseSection}
-            ${divider()}
-            ${ctaRow(dailyUrl)}
-            <tr>
-              <td style="font-family:${SERIF};font-size:14px;line-height:1.6;color:${INK_SOFT};padding-top:8px;padding-bottom:10px;">${FOOTER_LINE}</td>
-            </tr>
-            <tr>
-              <td style="font-family:${SANS};font-size:12px;line-height:1.55;color:${INK_FAINT};">${
-                unsubUrl
-                  ? `Don’t want these emails? <a href="${unsubUrl}" style="color:${INK_FAINT};text-decoration:underline;">Unsubscribe</a> — or manage reminders in your profile settings.`
-                  : 'You can turn these reminders off any time from your profile settings.'
-              }</td>
             </tr>
           </table>
         </td>
@@ -213,16 +239,40 @@ function buildHtml(params: {
 </html>`;
 }
 
+// Mirrors the login screens' primary button (SUBMIT_CLASS in LoginPanel.tsx):
+// brand-navy fill, 4px radius, bold, 0.04em tracking, white label.
 function ctaRow(dailyUrl: string): string {
   return `<tr>
               <td style="padding-bottom:28px;">
-                <a href="${dailyUrl}" style="display:inline-block;background:${BUTTON};color:#ffffff;text-decoration:none;padding:13px 22px;border-radius:8px;font-family:${SANS};font-size:14px;font-weight:600;">Play today’s five</a>
+                <a href="${dailyUrl}" style="display:inline-block;background:${NAVY};color:#ffffff;text-decoration:none;padding:13px 24px;border-radius:4px;font-family:${SANS};font-size:15px;font-weight:700;letter-spacing:0.04em;">Play today’s five</a>
               </td>
+            </tr>`;
+}
+
+// The triangle-motif header band. The artwork is tileable, so a repeating
+// background on a fixed-height cell reads as a clean strip across the card top.
+// Clients that drop background images (notably Outlook desktop) fall back to a
+// solid brand-navy band — still on-brand. Omitted when no absolute URL resolves.
+function bannerRow(imageUrl: string | null): string {
+  if (!imageUrl) return '';
+  return `<tr>
+              <td height="96" style="height:96px;background-color:${NAVY};background-image:url('${imageUrl}');background-repeat:repeat;background-position:center top;border-radius:12px 12px 0 0;font-size:0;line-height:0;mso-line-height-rule:exactly;" aria-hidden="true">&nbsp;</td>
             </tr>`;
 }
 
 function divider(): string {
   return `<tr><td style="padding:24px 0;"><div style="height:1px;line-height:1px;font-size:0;background:${RULE};">&nbsp;</div></td></tr>`;
+}
+
+// Build an absolute URL for the triangle artwork from the (absolute) dailyUrl's
+// origin. Email clients require absolute asset URLs; if dailyUrl isn't a valid
+// absolute URL the banner is skipped rather than emitting a broken image.
+function resolveTriangleImageUrl(dailyUrl: string): string | null {
+  try {
+    return new URL(TRIANGLE_IMAGE_PATH, dailyUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 function eyebrow(label: string): string {

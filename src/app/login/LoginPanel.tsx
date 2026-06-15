@@ -20,11 +20,11 @@ function formatPhoneForDisplay(e164: string): string {
 }
 
 const CARD_CLASS =
-  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-[46px] py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
+  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
-  'h-11 w-full rounded-[4px] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
+  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
 const SUBMIT_CLASS =
-  'h-11 w-full rounded-[4px] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+  'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -327,7 +327,10 @@ export default function LoginPanel({
   const swapStep = useCallback((next: Step, nextError: string | null = null) => {
     // Return to the top so the title card is back in view after the button
     // press — on mobile the focused input scrolls the page down, and landing
-    // mid-page on the next step looks unpolished.
+    // mid-page on the next step looks unpolished. Blur first so the keyboard
+    // closes and the browser stops anchoring the viewport to the focused field,
+    // which otherwise fights the scroll-to-top and leaves the page mid-screen.
+    (document.activeElement as HTMLElement | null)?.blur();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setEntering(false); // exit: fade + slide down
     window.setTimeout(() => {
@@ -584,7 +587,7 @@ export default function LoginPanel({
       }}
     >
       {step === 'invite' ? (
-        <form className="space-y-[14px]" onSubmit={sendCodeToInvitePhone}>
+        <form className="space-y-3.5" onSubmit={sendCodeToInvitePhone}>
           {/* Texting glyph (the two-tone speech bubble) — this step is about us
               sending a code by text, so it mirrors the OTP step's mark. */}
           <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
@@ -643,7 +646,7 @@ export default function LoginPanel({
           </div>
         </form>
       ) : step === 'phone' ? (
-        <form className="space-y-[14px]" onSubmit={continueWithPhone}>
+        <form className="space-y-3.5" onSubmit={continueWithPhone}>
           {/* Solid filled handset, matching the Figma black phone glyph
               (and the filled treatment of the OTP step's bubble icon).
               Hand-drawn as a fill-only glyph rather than a force-filled
@@ -675,7 +678,7 @@ export default function LoginPanel({
           </button>
         </form>
       ) : step === 'code' ? (
-        <form className="space-y-[14px]" onSubmit={verifyCode}>
+        <form className="space-y-3.5" onSubmit={verifyCode}>
           {/* Two overlapping oval speech bubbles — navy behind, orange in front
               — recreating the Figma two-tone mark. The front bubble is drawn
               twice: first as a slightly larger cream copy (the page background
@@ -749,7 +752,7 @@ export default function LoginPanel({
           </div>
         </form>
       ) : (
-        <form className="space-y-[14px]" onSubmit={completeProfile}>
+        <form className="space-y-3.5" onSubmit={completeProfile}>
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
             @
           </div>

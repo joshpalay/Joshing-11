@@ -259,9 +259,12 @@ export function ActivityStreamItem({
 
   const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
 
-  // The plain "{answered} of {total} questions" progress label that rides under a
-  // milestone line, in lockstep with the bundle triangle mark — so the viewer can
-  // read their progress at a glance whether or not the card is open.
+  // The "{remaining} of {total} questions" count under a milestone line — how
+  // many are still answerable (D-HOME-DASHBOARD-MODEL-01 point 3), in lockstep
+  // with the SOLID bundle triangles (one per unplayed question). A fully-played
+  // bundle never reaches the home card: it is filtered out server-side as
+  // exhausted (build-stream.ts). `answered` is retained for the play affordance
+  // (Play vs Revisit) and updates live as questions resolve in session.
   const milestoneProgress =
     milestoneQuestions && milestoneQuestions.length > 0
       ? { answered: answeredCount, total: milestoneQuestions.length }
@@ -424,7 +427,8 @@ export function ActivityStreamItem({
                       color: INK3,
                     }}
                   >
-                    {milestoneProgress.answered} of {milestoneProgress.total} questions
+                    {milestoneProgress.total - milestoneProgress.answered} of{' '}
+                    {milestoneProgress.total} questions
                   </p>
                 ) : null}
               </div>
@@ -446,11 +450,12 @@ export function ActivityStreamItem({
                   alignItems: 'center',
                   gap: 5,
                   // Same text treatment as the "Answer →" feed action: the
-                  // Editorial serif at 18px in the link slate, underlined.
-                  fontFamily: 'var(--font-serif)',
-                  fontSize: 18,
-                  fontWeight: 600,
-                  letterSpacing: '0.05em',
+                  // sans (Interface voice) at 14px in the link slate, underlined,
+                  // matching the Today's Five card link. A tappable affordance
+                  // never takes the Editorial serif.
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14,
+                  fontWeight: 500,
                   color: 'var(--brand-link)',
                   textDecoration: 'underline',
                   textUnderlineOffset: 4,
@@ -701,8 +706,11 @@ function AnsweredHistory({
           // sits in this answered list); treat anything but 'incorrect' as right.
           const isCorrect = r ? r.isCorrect : q.priorResult !== 'incorrect';
           // Result reads in the app's semantic answer colors: green for correct,
-          // red for "not this time" — same tokens the AnswerFeedbackSheet uses.
-          const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong-strong)';
+          // red for "not this time". This is the *quiet* answered-history line, so
+          // it uses the calm grading registers — base green --game-correct paired
+          // with the muted brick red --game-wrong (text/wrong), not the loud
+          // --game-wrong-strong SIGNAL reserved for the live in-play verdict.
+          const resultColor = isCorrect ? 'var(--game-correct)' : 'var(--game-wrong)';
           return (
             // Hollow triangle = already answered (spent), matching the bundle
             // mark's hollow state, so the viewer sees which ones they've done.

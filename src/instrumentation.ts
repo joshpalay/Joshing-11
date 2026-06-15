@@ -1450,6 +1450,22 @@ export async function register() {
       // Follow may not exist yet on a fresh database — migrate() creates it
       // before this migration runs.
     }
+
+    // Migration 0079 adds covering indexes for four hot-path foreign keys
+    // (FeedItem.questionId / sourceUserId / joshingGameId, ActivityItem
+    // .actorUserId) on the Feed-load and From-Friends read paths. Pure index
+    // additions — a preview/production database that records the migration
+    // without the indexes present must still get them (precedent: 0078).
+    // CREATE INDEX IF NOT EXISTS is idempotent; re-running is a no-op.
+    try {
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "FeedItem_questionId_idx" ON "FeedItem" ("questionId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "FeedItem_sourceUserId_idx" ON "FeedItem" ("sourceUserId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "FeedItem_joshingGameId_idx" ON "FeedItem" ("joshingGameId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "ActivityItem_actorUserId_idx" ON "ActivityItem" ("actorUserId")`);
+    } catch {
+      // FeedItem / ActivityItem may not exist yet on a fresh database —
+      // migrate() creates them before this migration runs.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

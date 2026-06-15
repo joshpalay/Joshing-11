@@ -625,7 +625,7 @@ export default function FriendsList() {
                     value={friendSearch}
                     onChange={(event) => setFriendSearch(event.target.value)}
                     placeholder="Search friends..."
-                    className="focus-visible:border-primary focus-visible:ring-primary h-10 w-full rounded-md border bg-background pr-3 pl-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className="focus:border-[var(--brand-navy)] h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pr-3 pl-10 text-sm outline-none"
                   />
                 </label>
               </div>

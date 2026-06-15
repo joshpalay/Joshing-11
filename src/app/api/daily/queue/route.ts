@@ -6,6 +6,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { createServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 // The POST path can fall through to synchronous LLM generation when the cron
@@ -84,8 +85,19 @@ async function requireUserId() {
 }
 
 export async function GET() {
+  const startedAt = Date.now();
   const userId = await requireUserId();
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  // Server-Timing (B-PERF-04): tags the queue-read duration on every served
+  // response so the Daily reveal / Daily-page hot path is observable in logs and
+  // the Network panel. Header-only — no change to status or body.
+  const withTiming = (response: NextResponse): NextResponse => {
+    const timing = createServerTiming();
+    timing.measure('queue', startedAt);
+    response.headers.set('Server-Timing', timing.toHeader());
+    return response;
+  };
 
   const [queue, prefs, totalQueues] = await Promise.all([
     getTodaysDailyQueue(userId),
@@ -94,7 +106,7 @@ export async function GET() {
   ]);
 
   if (!queue) {
-    return NextResponse.json({ queue: null, slots: [] });
+    return withTiming(NextResponse.json({ queue: null, slots: [] }));
   }
 
   // Read floor (B-DAILY-PARTIAL-QUEUE-01). A queue below the minimum servable
@@ -116,10 +128,10 @@ export async function GET() {
       kept: keptSlots.length,
       persistedSlots: rawSlots.length,
     });
-    return NextResponse.json({ queue: null, slots: [], building: true });
+    return withTiming(NextResponse.json({ queue: null, slots: [], building: true }));
   }
 
-  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues));
+  return withTiming(NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues)));
 }
 
 export async function POST() {
