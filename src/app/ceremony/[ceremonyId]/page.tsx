@@ -62,6 +62,13 @@ function joinList(values: string[]) {
   return `${values.slice(0, -1).join(', ')}, and ${values[values.length - 1]}`;
 }
 
+// Beat D (Demonstrated): name up to two domains, then tuck the rest behind
+// "and {n} more" per D-REFLECTION-COPY-01 Beat D.
+function provedList(values: string[]) {
+  if (values.length <= 2) return joinList(values);
+  return `${values[0]}, ${values[1]}, and ${values.length - 2} more`;
+}
+
 function questionLabel(count: number) {
   return count === 1 ? 'question' : 'questions';
 }
@@ -177,11 +184,15 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
   }
 
   if (beat.id === 1) {
+    const grewCount = beat.content.length;
     return (
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
           You leveled up.
         </h1>
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
+          {grewCount} {grewCount === 1 ? 'territory' : 'territories'} grew this week.
+        </p>
         <div className="mx-auto mt-10 grid max-w-xl gap-4 text-left">
           {beat.content.map((crossing) => (
             <div key={`${crossing.domain}-${crossing.toTier}`} className="flex items-center gap-4">
@@ -192,9 +203,8 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
               />
               <div>
                 <p className="font-serif text-xl font-semibold text-stone-50">{crossing.domain}</p>
-                <p className="mt-1 text-xs tracking-[0.16em] text-stone-400 uppercase">
-                  {KNOWLEDGE_TIER_LABEL[crossing.fromTier]} {'->'}{' '}
-                  {KNOWLEDGE_TIER_LABEL[crossing.toTier]}
+                <p className="mt-1 text-xs text-stone-400">
+                  now {KNOWLEDGE_TIER_LABEL[crossing.toTier].toLowerCase()}
                 </p>
               </div>
             </div>
@@ -206,17 +216,16 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
 
   if (beat.id === 2) {
     const { friendMediated, authored, promoted } = beat.content;
-    const friendTotal = friendMediated.reduce((sum, item) => sum + item.questionCount, 0);
     return (
       <div className="mx-auto max-w-3xl space-y-16 text-center">
         {friendMediated.length > 0 && (
           <div>
             <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
-              You went somewhere new.
+              Your friends took you somewhere new.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              Through your friends, you picked up {friendTotal} {questionLabel(friendTotal)} in{' '}
-              {joinList(friendMediated.map((item) => item.domain))}.
+              {friendMediated.length} {friendMediated.length === 1 ? 'place' : 'places'} this week —
+              starting with {friendMediated[0]!.domain}.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-5">
               {friendMediated.map((item) => (
@@ -245,12 +254,11 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
         {authored.length > 0 && (
           <div>
             <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
-              You staked new territory.
+              You declared new territory.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              You wrote questions that opened{' '}
-              {authored.length === 1 ? 'a new domain' : `${authored.length} new domains`}:{' '}
-              {joinList(authored.map((item) => item.domain))}.
+              {authored.length} {authored.length === 1 ? 'place' : 'places'} opened from questions you
+              wrote.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-5">
               {authored.map((item) => (
@@ -271,8 +279,8 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
               Your territory came to life.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-              A friend answered your questions and proved your knowledge in{' '}
-              {joinList(promoted.map((item) => item.domain))}.
+              A friend answered questions you wrote and proved you knew{' '}
+              {provedList(promoted.map((item) => item.domain))}.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-5">
               {promoted.map((item) => (
@@ -295,12 +303,8 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
     return (
       <div className="mx-auto max-w-3xl text-center">
         <h1 className="font-serif text-5xl font-semibold tracking-normal sm:text-7xl">
-          Something you learned this week.
+          What you discovered this week.
         </h1>
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-stone-200 sm:text-xl">
-          You missed {beat.content.length === 1 ? 'this' : 'these'}, came back, and got{' '}
-          {beat.content.length === 1 ? 'it' : 'them'} right.
-        </p>
         <div className="mx-auto mt-10 grid max-w-2xl gap-5 text-left">
           {beat.content.map((item, index) => (
             <div key={`${item.domain}-${index}`} className="flex items-start gap-4">
