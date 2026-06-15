@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Settings } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { formatNextResetDayTimeLocal } from '@/lib/games/timezone'
@@ -206,12 +206,21 @@ export default function TodaysFiveCard({
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
         </p>
+        {/* Customize pill — the entry point for tuning the Daily Five. A warm-
+            cream utility pill (sliders icon + label) replacing the easy-to-miss
+            gear: prominent enough to notice, clearly secondary to the Play now
+            CTA (rounded-full utility shape, not the primary button's radius;
+            navy --brand-ink on the elevated cream + hairline border + subtle
+            card shadow). Same destination as before (/daily/setup). The 44px
+            min height keeps the tap target accessible; `shrink-0` protects it
+            from being squeezed by the eyebrow on narrow widths. */}
         <Link
           href="/daily/setup"
-          className="text-[var(--brand-ink-400)] transition-colors hover:text-[var(--brand-ink)]"
-          aria-label="Set up daily round"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-3 text-[13px] font-semibold text-[var(--brand-ink)] shadow-[var(--shadow-card)] transition-colors hover:bg-[color-mix(in_srgb,var(--brand-ink)_6%,var(--feed-card-elevated))]"
+          aria-label="Customize your Daily Five"
         >
-          <Settings className="size-4" aria-hidden="true" />
+          <SlidersHorizontal className="size-4" aria-hidden="true" />
+          Customize
         </Link>
       </div>
 
