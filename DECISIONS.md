@@ -34,6 +34,7 @@ Last updated: 2026-06-13 (post-conformance-audit).
 |`PRD-D-4-LATELY-MILESTONES-AND-PLUS2-REFRAME-SPEC.md`|Spec — Lately skill milestones + the +2 reframe.                                                                                                                                      |
 |`PRD-D-5-QUESTION-QUALITY-FLOOR-VERIFICATION-SPEC.md`|Synthesis spec — question quality, difficulty floor, verification stack.                                                                                                              |
 |`D-HOME-PACING-01.md`                                |Spec — Home pacing & budget model. **Header says “not yet sequenced” but the code is built (cut-1) and live** — header is stale; see Settled.                                         |
+|`D-REFLECTION-COPY-01.md`                            |Copy spec — Weekly Reflection ceremony, warm-register words-before-pixels gate. **Copy register decided; pixels NOT briefed.** Two open flags (discovery selection rule, name-vs-feel).|
 |`_docs/D-FEED-FRIEND-ACTIVITY-01.md`                 |Spec — “From Friends” chronological activity log. **Built (cut-1) and live** despite the “SKETCH/not yet wired” header in `src/lib/friend-activity.ts` — header is stale; see Settled.|
 
 Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
@@ -73,6 +74,7 @@ Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
 - **Option B: should the aside amplify a human’s `creatorNote` when one exists?** Aside and creator note are independent surfaces today; no code merges them. (`PRD-D-0` §5.)
 - **Niche-match production default.** Ships `false`, test-phase `true`; production default open, revisit after the test. (`PRD-D-2`.)
 - **Feed verb `'wrote this'` on broadcast.** The `authored_shared` branch claims authorship unconditionally; resolve. (Conformance audit §3.2.)
+- **Weekly Reflection — Beat E discovery selection rule.** Beat E copy promises curated top-2–3 discoveries but no semantic “most interesting missed question” signal exists yet; pick a proxy (preference order: “most friends also missed it” → most recent → stable hash) before Beat E ships. Until decided, Beat E copy is provisional. (`D-REFLECTION-COPY-01.md` §3 Flag 1.)
 
 ## Known-stale source claims
 
