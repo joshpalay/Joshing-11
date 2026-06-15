@@ -91,14 +91,16 @@ Advisor link: <https://supabase.com/docs/guides/database/database-linter?lint=00
 
 The advisor also lists ~12 **unused** indexes (`Question_embedding_hnsw_idx`, `ContactHash_phoneHash_idx`, `idx_users_phone_hash`, several `Friendship`/`SkippedDailyQuestion` partials, …). "Unused" here means "no traffic yet," not "useless" — several back features that haven't launched (B-Friends contact-hash, pgvector dedup at volume). Do **not** drop these pre-launch; revisit post-traffic.
 
-### 1e. Region colocation — the prompt's #1 suspect — **UNVERIFIED**
+### 1e. Region colocation — the prompt's #1 suspect — **RESOLVED (regions colocated, 2026-06-15)**
 
-Cross-region Function↔DB round-trips are the most common Vercel latency cause, and I could **not** confirm colocation from the available tools:
+Cross-region Function↔DB round-trips are the most common Vercel latency cause. At diagnosis time this could **not** be confirmed from the available tools:
 
 - Supabase project: `grixooyecvnugpxvcbct.supabase.co` (region not exposed via the URL or MCP).
-- Vercel `get_project` returned no region pin; per `CLAUDE.md` functions intentionally rely on the **Vercel project default region** (not pinned).
+- Vercel `get_project` returned no region pin; functions relied on the **Vercel project default region** (not pinned), which did not necessarily match Supabase.
 
-If the default function region and the Supabase region differ, a 30–80 ms cross-region RTT lands on *every* query — and the home/daily paths issue several per render. **This must be checked manually before launch** (see B-PERF-01). It is the single cheapest large win if currently mismatched.
+A cross-region default would land a 30–80 ms RTT on *every* query — and the home/daily paths issue several per render.
+
+**Resolution (B-PERF-01, 2026-06-15):** Supabase confirmed in **`us-west-2`**. The Vercel functions region — previously unpinned (relying on the project default, which was not colocated with `us-west-2`) — was **explicitly pinned to `us-west-2`** so Function↔DB requests stay in-region. Functions and DB are now colocated and the cross-region RTT this section warned about is eliminated. Because this changes a platform default `CLAUDE.md` documented as intentionally unpinned, the corresponding `CLAUDE.md` line was updated in the same change so doc and reality agree.
 
 ---
 

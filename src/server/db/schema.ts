@@ -1074,6 +1074,10 @@ export const feedItems = pgTable(
     index('FeedItem_recipientUserId_state_idx').on(table.recipientUserId, table.state, table.sourceEventAt.desc()),
     index('FeedItem_recipientUserId_pinned_idx').on(table.recipientUserId, table.isPinned).where(sql`"isPinned" = TRUE`),
     uniqueIndex('FeedItem_recipientUserId_sourceAnswerId_key').on(table.recipientUserId, table.sourceAnswerId).where(sql`"sourceAnswerId" IS NOT NULL`),
+    // Covering indexes for hot-path foreign keys (B-PERF-03, migration 0079).
+    index('FeedItem_questionId_idx').on(table.questionId),
+    index('FeedItem_sourceUserId_idx').on(table.sourceUserId),
+    index('FeedItem_joshingGameId_idx').on(table.joshingGameId),
   ],
 );
 
@@ -1163,6 +1167,8 @@ export const activityItems = pgTable(
   (table) => [
     index('ActivityItem_userId_read_idx').on(table.userId, table.read, table.createdAt.desc()),
     index('ActivityItem_userId_createdAt_idx').on(table.userId, table.createdAt.desc()),
+    // Covering index for hot-path foreign key (B-PERF-03, migration 0079).
+    index('ActivityItem_actorUserId_idx').on(table.actorUserId),
   ],
 );
 

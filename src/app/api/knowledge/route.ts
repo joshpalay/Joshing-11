@@ -7,10 +7,13 @@ import {
   loadKnowledgeInputs,
 } from '@/server/db/queries/knowledge';
 import { ensureAuthoredDomainsOpened } from '@/server/knowledge/open-domain';
+import { createServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const timing = createServerTiming();
+  const startedAt = Date.now();
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -35,6 +38,9 @@ export async function GET() {
     getKnowledgePageData(session.userId, inputs),
   ]);
   await ensureOpened;
+  timing.measure('knowledge', startedAt);
 
-  return NextResponse.json({ mastery, pageData });
+  const response = NextResponse.json({ mastery, pageData });
+  response.headers.set('Server-Timing', timing.toHeader());
+  return response;
 }
