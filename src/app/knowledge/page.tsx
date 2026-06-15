@@ -133,7 +133,7 @@ function emptyDomain(domain: string): DomainMastery {
 function LoadingSkeleton() {
   return (
     <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-      <section className="bg-white border border-[var(--border-warm)] p-4">
+      <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
         <p className="m-0 text-[var(--text-muted-warm)]">Loading...</p>
       </section>
     </main>
@@ -542,7 +542,7 @@ function KnowledgePageContent() {
   if (error || !data) {
     return (
       <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-[0.9rem]">
-        <section className="bg-white border border-[var(--border-warm)] p-4">
+        <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
           <h1 className="mt-[0.35rem] text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
           <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
@@ -591,7 +591,7 @@ function KnowledgePageContent() {
       <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
 
       {hasAnything && (
-        <section className="bg-white border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
+        <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
               <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
@@ -602,7 +602,7 @@ function KnowledgePageContent() {
             <button
               type="button"
               onClick={() => setEditMode((current) => !current)}
-              className="shrink-0 min-h-8 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer"
+              className="shrink-0 min-h-8 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer"
               aria-pressed={editMode}
             >
               {editMode ? 'Done' : 'Edit'}
@@ -649,7 +649,7 @@ function KnowledgePageContent() {
             <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
               Ask a friend
             </button>
-            <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+            <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
               Write one myself
             </button>
           </div>
@@ -657,7 +657,7 @@ function KnowledgePageContent() {
       ) : null}
 
       {dismissedDomains.length > 0 && (
-        <section id="focused-feed" className="bg-white border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
+        <section id="focused-feed" className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
           <p className="mt-[0.15rem] text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
           <div className="mt-3 flex flex-col gap-2">
@@ -681,7 +681,7 @@ function KnowledgePageContent() {
 
       <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-[0.85rem] px-[0.2rem]">
         <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
-        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-white text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
+        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
           <Combine className="size-3.5" />
           Tidy up my map
         </button>
@@ -697,7 +697,7 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'interests' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
@@ -721,7 +721,7 @@ function KnowledgePageContent() {
                       <button
                         key={domain.domain}
                         type="button"
-                        className={`w-full min-h-[38px] border-0 border-b border-b-[var(--border-light)] flex justify-between gap-3 px-3 cursor-pointer ${selectedInterest?.label === domain.domain ? 'bg-[var(--cream-warm)] text-[var(--ink)]' : 'bg-white text-[var(--text-muted-warm)]'}`}
+                        className={`w-full min-h-[38px] border-0 border-b border-b-[var(--border-light)] flex justify-between gap-3 px-3 cursor-pointer ${selectedInterest?.label === domain.domain ? 'bg-[var(--cream-warm)] text-[var(--ink)]' : 'bg-[var(--brand-card)] text-[var(--text-muted-warm)]'}`}
                         onClick={() => setSelectedInterest({ label: domain.domain, broadCategory: domain.broadCategory ?? undefined })}
                       >
                         <span>{domain.displayName}</span>
@@ -753,7 +753,7 @@ function KnowledgePageContent() {
                         <button
                           key={choice.label}
                           type="button"
-                          className="border border-[var(--border-warm)] bg-white text-[var(--ink)] px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
+                          className="border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
                           onClick={() => {
                             setSelectedInterest({ label: choice.label, broadCategory: choice.broadCategory ?? undefined });
                             setInterestChoices(null);
@@ -780,7 +780,7 @@ function KnowledgePageContent() {
             {interestError ? <p className="mt-4 border border-[var(--cat-literature)]/40 text-[var(--cat-literature-text)] p-3 text-[0.88rem]">{interestError}</p> : null}
 
             <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
+              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
               <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmInterestChange()} disabled={!selectedInterest?.label || savingInterests}>
                 {savingInterests ? 'Saving...' : activeModal.currentDomain ? 'Confirm swap' : 'Confirm add'}
               </button>
@@ -791,7 +791,7 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'tidy' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Tidy up your map?</h2>
@@ -802,7 +802,7 @@ function KnowledgePageContent() {
               </button>
             </div>
             <div className="flex justify-end gap-2 mt-5">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)} disabled={tidying}>Cancel</button>
+              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)} disabled={tidying}>Cancel</button>
               <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" onClick={() => void confirmTidy()} disabled={tidying}>
                 {tidying ? 'Tidying...' : 'Confirm tidy'}
               </button>
@@ -811,11 +811,11 @@ function KnowledgePageContent() {
         </div>
       ) : null}
 
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
+      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
       {questionToast ? (
         <div
           style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-white text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
+          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-[9px] shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
         >
           {questionToast}
         </div>
@@ -823,7 +823,7 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'manage-interests' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-white border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Manage interests</h2>
@@ -841,11 +841,11 @@ function KnowledgePageContent() {
                     <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
                   </div>
                   <div className="flex gap-[6px] mt-2">
-                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
                       <Repeat2 className="size-3.5" />
                       Swap
                     </button>
-                    <button type="button" className="min-h-[34px] w-[34px] border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] inline-flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => void removeDeclaredInterest(slot.domain)} disabled={savingInterests || declaredSlots.length <= 1} aria-label={`Remove ${slot.displayName}`} title={declaredSlots.length <= 1 ? 'Keep at least one interest' : `Remove ${slot.displayName}`}>
+                    <button type="button" className="min-h-[34px] w-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => void removeDeclaredInterest(slot.domain)} disabled={savingInterests || declaredSlots.length <= 1} aria-label={`Remove ${slot.displayName}`} title={declaredSlots.length <= 1 ? 'Keep at least one interest' : `Remove ${slot.displayName}`}>
                       <Trash2 className="size-3.5" />
                     </button>
                   </div>
@@ -859,7 +859,7 @@ function KnowledgePageContent() {
               </div>
             </div>
             <div className="flex justify-start gap-2 mt-4">
-              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-white text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
+              <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={() => setActiveModal(null)}>Done</button>
             </div>
           </div>
         </div>
@@ -867,7 +867,7 @@ function KnowledgePageContent() {
 
       {activeModal?.type === 'write-question' ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-white border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
             <div className="flex justify-between gap-4">
               <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
