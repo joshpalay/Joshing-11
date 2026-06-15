@@ -897,14 +897,24 @@ async function hydrateActivityRows(
     }));
 }
 
-export async function getActivitiesForUser(userId: string): Promise<ActivityItemView[]> {
+export async function getActivitiesForUser(
+  userId: string,
+  // The full Lately / `/activities` list scans the default 90-day cutoff; the
+  // home edition passes HOME_WINDOW_DAYS to bound the ambient texture path
+  // (D-HOME-DASHBOARD-MODEL-01). Undefined keeps the historical 90-day cutoff.
+  windowDays?: number,
+): Promise<ActivityItemView[]> {
+  const cutoff =
+    windowDays === undefined
+      ? activityCutoff()
+      : new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
   const rows = await db
     .select()
     .from(activityItems)
     .where(and(
       eq(activityItems.userId, userId),
       isNull(activityItems.deletedAt),
-      gt(activityItems.createdAt, activityCutoff()),
+      gt(activityItems.createdAt, cutoff),
     ))
     .orderBy(desc(activityItems.createdAt))
     .limit(100);

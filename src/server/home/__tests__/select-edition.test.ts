@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { StreamItem } from '@/lib/activity-stream'
 import {
   DIRECT_SERVE_CAP,
+  HOME_WINDOW_DAYS,
   PLAYABLE_SERVE_CAP,
   TEXTURE_SOFT_CAP,
+  boundTexture,
   interleaveByActor,
   orderBySenderRotation,
   orderFriendActivity,
@@ -263,11 +265,12 @@ describe('selectHomeEdition — texture', () => {
     expect(edition.texture.map((t) => t.id)).not.toContain('t-old')
   })
 
-  it('backfills older moments (newest-first) when the fresh window is under the cap', () => {
+  it('recent-or-nothing: renders fewer than the cap rather than backfilling past the window', () => {
+    // now = 2026-06-11T18:00Z, 7-day floor = 2026-06-04T18:00Z.
     const activityItems = [
-      textureItem('t-old-newer', '2026-06-05T12:00:00Z'),
-      textureItem('t-fresh', '2026-06-11T17:00:00Z'),
-      textureItem('t-old-older', '2026-06-02T12:00:00Z'),
+      textureItem('t-in-newer', '2026-06-05T12:00:00Z'), // in window
+      textureItem('t-fresh', '2026-06-11T17:00:00Z'), // in window
+      textureItem('t-out', '2026-06-02T12:00:00Z'), // 9 days old → out of window, NOT backfilled
     ]
     const edition = selectHomeEdition({
       feedItems: [],
@@ -275,8 +278,47 @@ describe('selectHomeEdition — texture', () => {
       promos: { sharedGround: null, expanding: null, growCircle: null },
       now: NOW,
     })
-    // Fresh leads; the quiet window no longer starves the zone at one row.
-    expect(edition.texture.map((t) => t.id)).toEqual(['t-fresh', 't-old-newer', 't-old-older'])
+    // Only the two in-window rows, newest-first; the out-of-window row is gone —
+    // the backfill branch no longer reaches past the window (audit 4.6).
+    expect(edition.texture.map((t) => t.id)).toEqual(['t-fresh', 't-in-newer'])
+  })
+
+  it('windows Zone 2: an 8-day-old item is excluded, a 6-day-old item is kept', () => {
+    const eightDaysAgo = new Date(NOW - 8 * 24 * 60 * 60 * 1000).toISOString()
+    const sixDaysAgo = new Date(NOW - 6 * 24 * 60 * 60 * 1000).toISOString()
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems: [textureItem('t-8d', eightDaysAgo), textureItem('t-6d', sixDaysAgo)],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(edition.texture.map((t) => t.id)).toEqual(['t-6d'])
+  })
+})
+
+// --- boundTexture (recent-or-nothing within the home window) -----------------
+
+describe('boundTexture', () => {
+  it('caps the output and keeps all rows in-window when more than the cap exist', () => {
+    const items = Array.from({ length: TEXTURE_SOFT_CAP + 4 }, (_, i) =>
+      textureItem(`t${i}`, new Date(NOW - i * 60 * 60 * 1000).toISOString()),
+    )
+    const out = boundTexture(items, NOW)
+    expect(out).toHaveLength(TEXTURE_SOFT_CAP)
+    const floor = NOW - HOME_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    expect(out.every((t) => t.sortAt.getTime() >= floor)).toBe(true)
+  })
+
+  it('returns exactly the in-window count when fewer than the cap exist (no older backfill)', () => {
+    const items = [
+      textureItem('in-1', new Date(NOW - 1 * 24 * 60 * 60 * 1000).toISOString()),
+      textureItem('in-2', new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString()),
+      // Two well-aged rows that the old backfill branch would have appended.
+      textureItem('old-1', new Date(NOW - 20 * 24 * 60 * 60 * 1000).toISOString()),
+      textureItem('old-2', new Date(NOW - 40 * 24 * 60 * 60 * 1000).toISOString()),
+    ]
+    const out = boundTexture(items, NOW)
+    expect(out.map((t) => t.id)).toEqual(['in-1', 'in-2'])
   })
 })
 
@@ -313,6 +355,76 @@ describe('selectHomeEdition — empty switch', () => {
     expect(edition.direct.served).toHaveLength(0)
     expect(edition.playables.served).toHaveLength(2)
     expect(edition.panel).not.toBeNull()
+  })
+})
+
+// --- Zone 1 (direct) stays all-time / unwindowed -----------------------------
+
+describe('selectHomeEdition — Zone 1 is not windowed', () => {
+  it('serves a direct question older than the home window (unwindowed guarantee)', () => {
+    // 20 days old — well past HOME_WINDOW_DAYS. Zone 2 would drop this; Zone 1
+    // must still serve it (a question a friend sent you never ages out).
+    const old = new Date(NOW - 20 * 24 * 60 * 60 * 1000).toISOString()
+    const edition = selectHomeEdition({
+      feedItems: [feedItem('d-old', 'sender', old)],
+      activityItems: [],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(edition.direct.served.map((d) => d.id)).toEqual(['d-old'])
+  })
+})
+
+// --- Per-section empty signal (model point 4) --------------------------------
+
+function convergenceItem(id: string, sortAtIso: string): StreamItem {
+  return {
+    id,
+    friendId: 'f-conv',
+    relationship: 'convergence',
+    sortAt: new Date(sortAtIso),
+    expand: { kind: 'same_correct', questions: [] },
+  } as unknown as StreamItem
+}
+
+describe('selectHomeEdition — per-section empty signal', () => {
+  it('emits an explicit empty flag for each Zone-2 section with nothing in-window', () => {
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems: [],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(edition.emptySections).toEqual({
+      fromFriends: true,
+      texture: true,
+      sharedGround: true,
+    })
+  })
+
+  it('clears the per-section flag only for the sections that have in-window items', () => {
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems: [
+        playable('p0', 'f0'), // From Friends bundle
+        convergenceItem('c0', '2026-06-11T15:00:00Z'), // Shared Ground (in window)
+      ],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(edition.emptySections.fromFriends).toBe(false)
+    expect(edition.emptySections.sharedGround).toBe(false)
+  })
+
+  it('treats an out-of-window section as empty', () => {
+    const old = new Date(NOW - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems: [convergenceItem('c-old', old)],
+      promos: { sharedGround: null, expanding: null, growCircle: null },
+      now: NOW,
+    })
+    expect(edition.emptySections.sharedGround).toBe(true)
   })
 })
 

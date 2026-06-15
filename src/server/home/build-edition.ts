@@ -19,6 +19,7 @@ import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
 import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import {
+  HOME_WINDOW_DAYS,
   orderDirectPending,
   orderFriendActivity,
   selectHomeEdition,
@@ -53,7 +54,9 @@ export async function buildHomeEdition(userId: string): Promise<HomeEditionResul
   const [feedPage, activityItems, commonGroundPromo, expandingPromo, addFriendsPromo] =
     await Promise.all([
       getFeedPagePayload(userId, { limit: HOME_FEED_FETCH_LIMIT, cursor: null, filter: 'all' }),
-      buildActivityStream(userId),
+      // Zone 2 (the ambient band) is bounded to the rolling home window; Zone 1
+      // (the direct feed above) stays all-time pending (D-HOME-DASHBOARD-MODEL-01).
+      buildActivityStream(userId, { windowDays: HOME_WINDOW_DAYS }),
       getCommonGroundPromo(userId),
       getRecentlyExpandingPromo(userId),
       getAddFriendsPromo(userId),

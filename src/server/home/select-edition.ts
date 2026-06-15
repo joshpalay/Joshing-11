@@ -33,6 +33,15 @@ export const PLAYABLE_SERVE_CAP = 4
 // placement; this layer just bounds the set).
 export const TEXTURE_SOFT_CAP = 8
 
+// D-HOME-DASHBOARD-MODEL-01: Home is a bounded 7-day dashboard. Zone 2 (the
+// ambient band — From Friends, Recent Activity/texture, Shared Ground) shows
+// only what landed in the rolling now − HOME_WINDOW_DAYS window; Zone 1
+// (direct / For You) is deliberately NOT windowed (a question a friend sent you
+// never ages out). One source of truth: the Zone-2 source queries each take a
+// window parameter defaulted to their own wider historical value, and the home
+// caller passes THIS constant. Never hardcode `7` at a call site.
+export const HOME_WINDOW_DAYS = 7
+
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** A served zone: the top-N window plus the count still pending behind it. */
@@ -59,8 +68,9 @@ export type HomeEdition = {
   playables: ServedZone<StreamItem>
   /**
    * Texture — chronological full-sentence lone social events (locked Group 3),
-   * newest-first, today-and-yesterday preferred with older backfill, soft-
-   * capped (~8). No overflow subpage.
+   * newest-first, bounded to the rolling home window (now − HOME_WINDOW_DAYS),
+   * soft-capped (~8). Recent-or-nothing: no history backfill, so a quiet stretch
+   * renders fewer rows rather than reaching past the window. No overflow subpage.
    */
   texture: StreamItem[]
   /** Exactly one rotating panel per load; null on the all-empty page (§9). */
@@ -71,6 +81,22 @@ export type HomeEdition = {
    * the existing empty state inline and suppresses the panel.
    */
   isAllEmpty: boolean
+  /**
+   * Per-section "this Zone-2 section has nothing in-window" signal (model
+   * point 4). Emitted EXPLICITLY — rather than silently omitting the section —
+   * so the band restructure (B-HOME-BAND-LABEL-04) can render an honest
+   * per-section empty state instead of hiding or back-filling it. Each flag is
+   * true when that section has zero items inside the rolling home window.
+   * Zone 1 (direct) is never windowed and is intentionally absent here.
+   */
+  emptySections: {
+    /** From Friends bundles (the `playables` zone). */
+    fromFriends: boolean
+    /** Recent Activity / texture rows. */
+    texture: boolean
+    /** Shared Ground / convergence rows (currently folded into texture; -04 splits them out). */
+    sharedGround: boolean
+  }
 }
 
 function ms(value: string | Date): number {
@@ -168,22 +194,24 @@ export function interleaveByActor<T>(
 }
 
 /**
- * §2 slot 4 / §4 — texture prefers today-and-yesterday (a rolling 48-hour
- * window from `now` is the timezone-agnostic proxy). Tuned 2026-06-12: when
- * the fresh window can't fill the soft cap, older moments backfill —
- * newest-first — so a quiet stretch doesn't leave the zone threadbare. The
- * cap, not the window, bounds the page.
+ * §2 slot 4 / D-HOME-DASHBOARD-MODEL-01 — texture is bounded to the rolling
+ * home window (now − HOME_WINDOW_DAYS) and soft-capped, newest-first.
+ * Recent-or-nothing (audit 4.6): take what exists IN-WINDOW up to the cap; if
+ * fewer than the cap exist, render fewer. The old 48h-preferred-then-backfill
+ * branch is gone — a quiet stretch leaves the zone short rather than reaching
+ * past the window for older items. Both the window and the cap bound the page.
  */
 export function boundTexture(
   items: readonly StreamItem[],
   now: number,
   cap = TEXTURE_SOFT_CAP,
+  windowDays = HOME_WINDOW_DAYS,
 ): StreamItem[] {
-  const floor = now - 2 * DAY_MS
-  const sorted = [...items].sort((a, b) => ms(b.sortAt) - ms(a.sortAt))
-  const fresh = sorted.filter((item) => ms(item.sortAt) >= floor)
-  if (fresh.length >= cap) return fresh.slice(0, cap)
-  return [...fresh, ...sorted.filter((item) => ms(item.sortAt) < floor)].slice(0, cap)
+  const floor = now - windowDays * DAY_MS
+  return [...items]
+    .filter((item) => ms(item.sortAt) >= floor)
+    .sort((a, b) => ms(b.sortAt) - ms(a.sortAt))
+    .slice(0, cap)
 }
 
 /**
@@ -297,6 +325,21 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
 
   const texture = boundTexture(texturePool, now)
 
+  // Per-section "empty this section" signal (model point 4). A Zone-2 section
+  // is empty when it has zero items inside the rolling home window. The source
+  // queries already window the pools to HOME_WINDOW_DAYS for the home caller;
+  // we re-apply the in-window check here so the pure layer is self-consistent
+  // (and so a non-windowed caller still gets an honest signal). Convergence
+  // ("Shared Ground") rows currently flow through the texture pool — the band
+  // restructure (-04) splits them out — so we detect them here by relationship.
+  const windowFloor = now - HOME_WINDOW_DAYS * DAY_MS
+  const inWindow = (item: StreamItem): boolean => ms(item.sortAt) >= windowFloor
+  const emptySections = {
+    fromFriends: !friendActivityPool.some(inWindow),
+    texture: texture.length === 0,
+    sharedGround: !texturePool.some((item) => item.relationship === 'convergence' && inWindow(item)),
+  }
+
   // The two-state empty switch operates on the three CONTENT zones only.
   // Direct uses the full pending pool (not the served slice) so a page that is
   // merely over-budget never reads as empty.
@@ -308,5 +351,5 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
   const isQuiet = friendActivityPool.length + texturePool.length <= 2
   const panel = isAllEmpty ? null : selectPanel(input.promos, isQuiet)
 
-  return { direct, playables, texture, panel, isAllEmpty }
+  return { direct, playables, texture, panel, isAllEmpty, emptySections }
 }

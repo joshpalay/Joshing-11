@@ -31,18 +31,33 @@ import {
   getViewerPriorAnswerResults,
 } from '@/server/db/queries/lately';
 
-export async function buildActivityStream(userId: string): Promise<StreamItem[]> {
+export type BuildActivityStreamOptions = {
+  /**
+   * Rolling lower-bound window (in days) for the Zone-2 source scans (From
+   * Friends, moments, convergence, activity texture). Omitted for the full
+   * Lately / `/activities` list, where each query keeps its own wider
+   * historical default; the home edition passes HOME_WINDOW_DAYS so the ambient
+   * band is bounded to the dashboard window (D-HOME-DASHBOARD-MODEL-01).
+   */
+  windowDays?: number;
+};
+
+export async function buildActivityStream(
+  userId: string,
+  options: BuildActivityStreamOptions = {},
+): Promise<StreamItem[]> {
+  const { windowDays } = options;
   // The dependent question-resolution batch below only needs friendCards +
   // convergences (to know which question IDs to resolve). Activities and moments
   // are independent, so let them resolve alongside that batch instead of gating
   // it behind all four upstream queries — the critical path becomes
   // max(friendCards, convergences) + the dependent batch, with items/moments
   // overlapping rather than adding to it.
-  const itemsPromise = getActivitiesForUser(userId);
-  const momentsPromise = getLatelyMoments(userId);
+  const itemsPromise = getActivitiesForUser(userId, windowDays);
+  const momentsPromise = getLatelyMoments(userId, windowDays);
   const [friendCards, convergences] = await Promise.all([
-    getFriendActivity(userId),
-    getLatelyConvergences(userId),
+    getFriendActivity(userId, windowDays),
+    getLatelyConvergences(userId, windowDays),
   ]);
 
   // Resolve every From Friends card's first ≤5 literal questions (most-recent
