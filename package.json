@@ -13,6 +13,7 @@
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 16",
     "check:fonts": "node scripts/check-font-ratchet.mjs",
     "check:colors": "node scripts/check-color-ratchet.mjs",
+    "check:spacing": "node scripts/check-spacing-ratchet.mjs",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",
     "smoke:invite-first-five": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/invite-first-five.smoke.mjs",
