@@ -7,10 +7,17 @@ import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/
 
 // B-Report-2: the per-row ⋯ menu on the Answered list. Mirrors the daily-summary
 // recap card — open the menu, pick "This is incorrect" / "This is inappropriate",
-// then land in the shared ReportReasonSheet (surface 'answered_list'). The target
-// is the row's reportTarget; rows with no reportable row (synthetic daily slots)
-// don't render this menu at all.
-export function AnsweredRowActions({ target }: { target: ReportReasonTarget }) {
+// then land in the shared ReportReasonSheet. The target is the row's reportTarget;
+// rows with no reportable row (synthetic daily slots) don't render this menu at all.
+// `surface` defaults to 'answered_list' but is overridable so the same control can
+// sit on the round-recap and archive surfaces (round_recap / answered_list).
+export function AnsweredRowActions({
+  target,
+  surface = 'answered_list',
+}: {
+  target: ReportReasonTarget;
+  surface?: 'round_recap' | 'lately_result' | 'answered_list';
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -94,7 +101,7 @@ export function AnsweredRowActions({ target }: { target: ReportReasonTarget }) {
         <ReportReasonSheet
           category={reportCategory}
           target={target}
-          surface="answered_list"
+          surface={surface}
           onClose={() => setReportCategory(null)}
           onSubmitted={() => setReportCategory(null)}
         />

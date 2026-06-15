@@ -122,9 +122,8 @@ function CeremonyCircle({
         style={{
           width: circleSize,
           height: circleSize,
-          background: `radial-gradient(circle at 34% 28%, ${color.core} 0%, ${color.mid} 44%, ${color.rim} 100%)`,
-          border: `1px solid color-mix(in srgb, ${color.core} 62%, ${fallbackColor.primary} 38%)`,
-          boxShadow: `0 0 ${Math.max(42, Math.round(circleSize * 0.95))}px ${color.glow}88, 0 0 ${Math.max(68, Math.round(circleSize * 1.45))}px ${color.glow}44, inset -10px -12px 22px rgba(0,0,0,0.22), inset 7px 7px 18px rgba(255,255,255,0.3)`,
+          background: color.mid,
+          border: `1px solid color-mix(in srgb, ${color.mid} 62%, ${fallbackColor.primary} 38%)`,
         }}
       />
     </span>

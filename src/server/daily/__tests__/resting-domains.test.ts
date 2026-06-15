@@ -17,10 +17,7 @@ const mocks = vi.hoisted(() => ({
   getKnowledgeBase: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
-  createDailyQueueItem: vi.fn(),
-  createDailyQueueItemFromAuthored: vi.fn(),
-  createDailyQueueItemFromHouse: vi.fn(),
-  createDailyQueueItemFromPresence: vi.fn(),
+  persistDailyQueue: vi.fn(),
   getDailyPreferences: vi.fn(),
   getFriendAndFoFUserIds: vi.fn(),
   getFriendDomainsForBonus: vi.fn(),
@@ -29,6 +26,10 @@ const mocks = vi.hoisted(() => ({
   isGenericSubcategory: vi.fn(),
 }));
 
+// Pure slot builders are unmocked-in-spirit: the orchestrator assembles the
+// queue in memory via these, then persists it once via persistDailyQueue. Provide
+// faithful-enough pure impls so the slots handed to persistDailyQueue carry the
+// fields the assertions read (source, ids, domain, slot_index).
 vi.mock('@/server/db/queries/daily', () => ({
   getTodaysDailyQueue: mocks.getTodaysDailyQueue,
   carryForwardUntouchedDailyQueue: mocks.carryForwardUntouchedDailyQueue,
@@ -37,10 +38,19 @@ vi.mock('@/server/db/queries/daily', () => ({
   getKnowledgeBase: mocks.getKnowledgeBase,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
-  createDailyQueueItem: mocks.createDailyQueueItem,
-  createDailyQueueItemFromAuthored: mocks.createDailyQueueItemFromAuthored,
-  createDailyQueueItemFromHouse: mocks.createDailyQueueItemFromHouse,
-  createDailyQueueItemFromPresence: mocks.createDailyQueueItemFromPresence,
+  persistDailyQueue: mocks.persistDailyQueue,
+  buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
+  }),
+  buildHouseSlot: (h: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'house', question_id: h.id, domain: h.canonicalSubcategory, question_text: h.questionText, answered: false,
+  }),
+  buildBotSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
+    slot_index: position, source: 'bot', generated_question_id: q.id, domain: q.canonicalSubcategory, question_text: q.questionText, answered: false,
+  }),
+  buildPresenceSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, presence: { sourceId: string }, position: number) => ({
+    slot_index: position, source: 'bot', generated_question_id: q.id, domain: q.canonicalSubcategory, question_text: q.questionText, presence_source_id: presence?.sourceId, answered: false,
+  }),
 }));
 
 vi.mock('@/server/db/queries/daily-preferences', () => ({
@@ -98,10 +108,7 @@ beforeEach(() => {
     Array.from({ length: DAILY_QUEUE_SIZE }, (_, i) => genq(`q${i}`)),
   );
 
-  mocks.createDailyQueueItem.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromAuthored.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromHouse.mockResolvedValue(undefined);
-  mocks.createDailyQueueItemFromPresence.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue(undefined);
 });
 
 describe('fillDailyQueueForUser — Game settings categories drive selection', () => {

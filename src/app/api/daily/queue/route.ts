@@ -4,7 +4,7 @@ import { getSession } from '@/server/auth/session';
 import { countDailyQueues, getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
-import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 export const dynamic = 'force-dynamic';
@@ -95,6 +95,28 @@ export async function GET() {
 
   if (!queue) {
     return NextResponse.json({ queue: null, slots: [] });
+  }
+
+  // Read floor (B-DAILY-PARTIAL-QUEUE-01). A queue below the minimum servable
+  // size that the player hasn't started yet is treated as "still building"
+  // rather than served as a degenerate 1–2 question round. The client's
+  // null-handling re-POSTs, which awaits a full synchronous build (and, with
+  // atomic persistence, observes the completed queue). The orchestrator never
+  // PERSISTS below the floor, so in practice this only catches a transient read
+  // that raced a build, or legacy partial data. Only applied on GET — POST has
+  // just awaited a full build and a genuinely short (≥ floor) low-yield queue
+  // there is valid and should be served.
+  const rawSlots = asQueueSlots(queue.slots);
+  const { kept: keptSlots } = partitionGenericSlots(rawSlots);
+  const untouched = rawSlots.every((slot) => !slot.answered && !slot.skipped);
+  if (untouched && keptSlots.length < DAILY_QUEUE_MIN_SIZE) {
+    console.warn('[daily/queue] withholding sub-floor untouched queue (treating as building)', {
+      userId,
+      queueDate: queue.queueDate,
+      kept: keptSlots.length,
+      persistedSlots: rawSlots.length,
+    });
+    return NextResponse.json({ queue: null, slots: [], building: true });
   }
 
   return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues));

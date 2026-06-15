@@ -2,7 +2,7 @@
 
 One living ledger for the two audits currently being worked down. Edit the **Status** column as you take items off the board.
 
-**Last code-verification pass:** 2026-06-14 (re-verified against `origin/dev2`). Delta since 2026-06-13: **PLR-2 (root 404) → DONE** (fix `304215b8` merged via #922).
+**Last code-verification pass:** 2026-06-14 (re-verified against `origin/dev2`). Delta since 2026-06-13: **PLR-2 (root 404) → DONE** (fix `304215b8` merged via #922). Also triaged a third audit (2026-06-14 product launch-readiness eval) — ~90% a re-run of Audit #2; its launch-blockers map to existing PLR items or are invalid against current code (logout, friend "Answer →", double-reveal, "Use this" all checked out clean). Four genuinely new valid findings filed as `MISC-1`…`MISC-4` below.
 **Canon disposition pass (audit #2):** 2026-06-13 — every Pre-Launch item sorted against product canon (see Disposition column + guardrails).
 
 ## How to use this file
@@ -97,7 +97,7 @@ Source: dispositioned in `D-CONSISTENCY-AUDIT-DISPOSITION-01.md` (code-verified 
 
 | ID | Item | Status | Notes |
 |---|---|---|---|
-| CONS-1 | Inconsistent button styling | `TRACKED ELSEWHERE` | Real sub-point owned by `B-VISUAL-TOKEN-BUDGET-01` |
+| CONS-1 | Inconsistent button styling | `DONE` | **Closed (2026-06-14).** The "blue vs green" complaint was a canon misread (navy reserved for CTAs). The real sub-point — hardcoded literals vs tokens on buttons — was owned by `B-VISUAL-TOKEN-BUDGET-01`, whose bucket-B inventory (`B-VISUAL-TOKEN-BUDGET-01-bucket-B.md`) is now **stale**: a `--warning`/`--warning-surface`/`--warning-border` family was invented (`globals.css:230–232`) and applied, and the flagged button/control surfaces (`QuestionForm`, `AddToBankAction`, `CeremonyPin`, `InlineHandleField`, `InlineEditableField`, `PreviewBanner`, `NotificationsForm`, `AuthoredQuestionsFeed`, `ReplaySummary`) are all token-clean. Last residual button literal — `QuestionRatingButtons:94` thumbs-down pressed state `border-stone-400 bg-stone-200` → `--warm-ink-400`/`--warm-border` — fixed this pass. Color ratchet 145 (under 180). Remaining repo-wide `stone-*` literals are on the ceremony-share dark page and `FirstSessionRecap`, never classified as bucket-B button rows. |
 | CONS-2 | Duplicate card patterns | `WON'T DO` | Canon — card tiers deferred; bespoke primitives intentional |
 | CONS-3 | Inconsistent iconography | `WON'T DO` | Generic — no surface cited |
 | CONS-4 | Duplicate modals & bottom sheets | `WON'T DO` | Canon — same as CONS-2 |
@@ -121,4 +121,8 @@ Add anything that isn't from the two audits here.
 
 | ID | Item | Status | Notes |
 |---|---|---|---|
-| _(none yet)_ | | | |
+| MISC-1 | Knowledge-map nodes inert in normal view | `NEEDS DECISION` | Portrait circles only respond when `editMode` is true (`PortraitCircles.tsx:200–201`); default render passes no `editMode`/`onToggleHidden` (`KnowledgeOverviewClient.tsx:187`), so tapping a topic in view mode does nothing. "Interactive mind garden" is a real (High-effort) opportunity, not a bug. From 2026-06-14 audit. |
+| MISC-2 | "Explore your overlap" Venn is non-interactive | `OPEN` | `OverlapMap.tsx` has zero click/tap handlers — pure render component. Tapping the overlap diagram does nothing. Medium effort. From 2026-06-14 audit. |
+| MISC-3 | OTP screen lacks resend button + expiry timer | `OPEN` | `LoginPanel.tsx:677–750` shows only code entry + "Change number"; code expires silently at 10 min (`otp-store.ts:16`) with no resend affordance or countdown. Most clearly shippable of the new items (Low–Medium effort). From 2026-06-14 audit. |
+| MISC-4 | No auto-scroll to feedback after a daily answer | `PARTIAL` | Feedback sheet is a fixed-position modal so it *is* visible, but there's no `scrollIntoView` (`daily/page.tsx`, `GameplayChat.tsx`). Audit's "card scrolls out of view" is plausible on some viewports — verify with a live repro before acting. Low effort. From 2026-06-14 audit. |
+| MISC-5 | Thumbs-down redundant with the "criticize" report flow | `DONE` | **Shipped (2026-06-14).** The thumbs-down on `/games/[id]/summary` and `/archive` overlapped the structured report (`ReportReasonSheet`, B-Report/PRD-D-6) but those two pages had no report affordance. Brought the shared ⋯ → report control (`AnsweredRowActions`, now `surface`-parameterized: `round_recap` on summary, `answered_list` on archive) onto both pages, then removed the thumbs-**down** button (kept thumbs-**up**, which drives `surfacePriorityScore`). Negative feedback is now one structured mechanism everywhere. Typecheck/lint/tests green; color ratchet 145. **Follow-up (not done):** `rating='down'` now has no writer, so the propagation-rolloff branch (`ratings.ts:80–114`) and the `ratingDown` probe (`create-feed-items-for-answer.ts:55–65`) are dead-but-harmless — leave for a later server cleanup. |
