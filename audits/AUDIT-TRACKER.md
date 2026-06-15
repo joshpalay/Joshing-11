@@ -49,9 +49,10 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 ## ⭐ Start here — open & important
 
-**No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
+**Both audits fully cleared.** Every Pre-Launch item is `DONE`, `WON'T DO`, or `DEFERRED`; the Consistency audit is closed. Nothing open.
 
-- **Partials (judgment, low urgency):** PLR-17, PLR-19, PLR-25.
+- **Deferred:** PLR-22 (dark mode, post-launch).
+- **Still tracked separately:** the `MISC-1…4` findings from the third-audit triage (see *Other / ad-hoc*).
 
 ---
 
@@ -77,15 +78,15 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-14 | Friend list lacks quick actions | P2 | `DONE` | `FIX VIA CANON` | Shipped #945. Each friend row now carries two warm activity facts (not action buttons, per owner): **Questions created** (their authored count) and **You've answered** (of those, how many the viewer answered across all surfaces — feed/mastery/game union). Single bulk aggregate in `getFriendsHub` (no N+1); rendered as a label/count ledger, never a ranking (anti-leaderboard). |
 | PLR-15 | No onboarding/tour for Knowledge Map | P1 | `DONE` | `FIX VIA CANON` | Reworked the post-first-five recap (`FirstSessionRecap.tsx`): Beat 2 now points to the **Knowledge** tab; new Beat 3 points to the **Questions** tab (write-questions); new Beat 4 carries the daily rhythm + the reminder email opt-in. Removed the invite beat (per owner). Copy avoids the mastery-size misstatement. Also moved the reminder opt-in **off onboarding** (`OnboardingFlow.tsx` — `reminders` step deleted; finishes straight to /daily). Typecheck/lint/tests green. |
 | PLR-16 | Overwhelming home feed | P1 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Budgeted "edition" already caps arrival volume (`build-edition.ts`, `page.tsx:118–161`); not tracking further. (Collapsible grouping remains banned regardless — see traps.) |
-| PLR-17 | Catch-up lacks closure/celebration | — | `PARTIAL` | `DO NOT DO` (confetti) | `RoundSummary` closing state exists `catchup/page.tsx:173–311`. A closure beat is OK in the quiet-warmth voice; **no** game-win celebration/confetti. |
+| PLR-17 | Catch-up lacks closure/celebration | — | `DONE` | `DO NOT DO` (confetti) | Shipped #961. The closer (`RoundCloseCard` + `RoundSummary`) already existed for the answer path; the gap was the **dismiss** path — dismissing the last missed question dead-ended the thread (no closer/input). `dismissCurrent` now closes the round (mirroring `dropStaleItem`); Undo restores it. Reuses the existing quiet "You're all caught up" card — no confetti (canon). |
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
-| PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `PARTIAL` | — | Personal invite + copy link `InviteSomeoneNew.tsx:54–84`; no explicit SMS/email labelling. |
+| PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `DONE` | — | Shipped #962: invite card now names the two methods — "Text a personal invite" (SMS to a phone) vs "Copy invite link" (share anywhere). No email path exists, so none is implied. |
 | PLR-20 | Avatars initials-only; no photo upload | — | `WON'T DO` | — | **Ignored per owner (2026-06-15).** Not doing photo uploads. |
 | PLR-21 | Inconsistent link styling on summary page | — | `DONE` | `CLEAN WIN` | **Resolved (2026-06-14).** Code is already consistent: every text link uses `underline underline-offset-4` (`summary/page.tsx:242,259,635,663`); `btn-primary`/`btn-ghost` are buttons (correctly not underlined). No color-only link exists. No change needed. |
 | PLR-22 | No dark mode | P3 | `DEFERRED` | `DO NOT DO` (for launch) | Not canon-violating, but reworks the cream/serif/illustration brand — large effort. Park post-launch. |
 | PLR-23 | Audio/haptic feedback on answers | P3 | `WON'T DO` | `DO NOT DO` | Wrong answer = discovery, not failure; an "incorrect" tone betrays the thesis. Skip. |
 | PLR-24 | Categories skew Western | P3 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not applicable: categories follow each person's declared interests — content is interest-matched by design, not a fixed seed corpus. No "skew" to correct. |
-| PLR-25 | Missing first-run micro-copy (streaks/points/ritual) | P3 | `PARTIAL` | — | Intro exists `daily/page.tsx:807–855`; omits those concepts. (Note: "streaks/points" framing — keep it ritual/warmth, not pressure.) |
+| PLR-25 | Missing first-run micro-copy (streaks/points/ritual) | P3 | `DONE` | — | **Closed (2026-06-15):** covered by the first-session ceremony (`FirstSessionRecap.tsx`). It conveys the ritual completed (Beat 1), the daily rhythm "five new questions, every day" + commitment via reminder opt-in (Beat 4), and what play builds (Beats 2–3) — earned after the first play rather than front-loaded. The streaks/points part of the audit is canon-excluded (anti-competition). |
 
 ---
 
@@ -119,8 +120,8 @@ Add anything that isn't from the two audits here.
 
 | ID | Item | Status | Notes |
 |---|---|---|---|
-| MISC-1 | Knowledge-map nodes inert in normal view | `NEEDS DECISION` | Portrait circles only respond when `editMode` is true (`PortraitCircles.tsx:200–201`); default render passes no `editMode`/`onToggleHidden` (`KnowledgeOverviewClient.tsx:187`), so tapping a topic in view mode does nothing. "Interactive mind garden" is a real (High-effort) opportunity, not a bug. From 2026-06-14 audit. |
-| MISC-2 | "Explore your overlap" Venn is non-interactive | `OPEN` | `OverlapMap.tsx` has zero click/tap handlers — pure render component. Tapping the overlap diagram does nothing. Medium effort. From 2026-06-14 audit. |
-| MISC-3 | OTP screen lacks resend button + expiry timer | `OPEN` | `LoginPanel.tsx:677–750` shows only code entry + "Change number"; code expires silently at 10 min (`otp-store.ts:16`) with no resend affordance or countdown. Most clearly shippable of the new items (Low–Medium effort). From 2026-06-14 audit. |
+| MISC-1 | Knowledge-map nodes inert in normal view | `WON'T DO` | **Ignored per owner (2026-06-15).** The interactive "mind garden" is a large opportunity, not being pursued. (Was: nodes only respond in `editMode` — `PortraitCircles.tsx:200–201`.) |
+| MISC-2 | "Explore your overlap" Venn is non-interactive | `WON'T DO` | **Ignored per owner (2026-06-15).** The overlap diagram stays a pure render (`OverlapMap.tsx`); interactivity not pursued. |
+| MISC-3 | OTP screen lacks resend button + expiry timer | `DEFERRED` | **Deferred per owner (2026-06-15) until SMS sending is enabled** — a resend affordance is moot while OTP delivery isn't wired to actually send. Revisit when SMS is on. (`LoginPanel.tsx:677–750`; expiry `otp-store.ts:16`.) |
 | MISC-4 | No auto-scroll to feedback after a daily answer | `PARTIAL` | Feedback sheet is a fixed-position modal so it *is* visible, but there's no `scrollIntoView` (`daily/page.tsx`, `GameplayChat.tsx`). Audit's "card scrolls out of view" is plausible on some viewports — verify with a live repro before acting. Low effort. From 2026-06-14 audit. |
 | MISC-5 | Thumbs-down redundant with the "criticize" report flow | `DONE` | **Shipped (2026-06-14).** The thumbs-down on `/games/[id]/summary` and `/archive` overlapped the structured report (`ReportReasonSheet`, B-Report/PRD-D-6) but those two pages had no report affordance. Brought the shared ⋯ → report control (`AnsweredRowActions`, now `surface`-parameterized: `round_recap` on summary, `answered_list` on archive) onto both pages, then removed the thumbs-**down** button (kept thumbs-**up**, which drives `surfacePriorityScore`). Negative feedback is now one structured mechanism everywhere. Typecheck/lint/tests green; color ratchet 145. **Follow-up (not done):** `rating='down'` now has no writer, so the propagation-rolloff branch (`ratings.ts:80–114`) and the `ratingDown` probe (`create-feed-items-for-answer.ts:55–65`) are dead-but-harmless — leave for a later server cleanup. |
