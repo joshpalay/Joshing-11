@@ -23,6 +23,7 @@
     "smoke:house-authorship": "tsx scripts/house-authorship.smoke.ts",
     "smoke:lately-milestones": "tsx scripts/lately-milestones.smoke.ts",
     "smoke:niche-match-dedup": "tsx scripts/niche-match-dedup.smoke.ts",
+    "verify:account-deletion": "tsx scripts/account-deletion-territory.verify.ts",
     "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
     "pool:health": "tsx scripts/pool-health.ts",
     "pool:embed-backfill": "tsx scripts/backfill-pool-embeddings.ts",
