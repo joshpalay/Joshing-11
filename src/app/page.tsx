@@ -22,7 +22,7 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-[18px] px-4 py-6 pb-32 md:py-10">
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {/* Triangle banner (Figma Mask group): the SAME Variant4 pattern as the
           login background, rendered at the same full-viewport-cover scale and
           clipped to a band so the triangles match login in size. No gradient —
@@ -140,8 +140,8 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
       {/* Sit the header on the feed's left gutter — the same 2px the activity
           rows pad in (where the fixed icon column / shape marks begin), so the
           header and the shapes share one left edge. The day labels indent
-          further (pl-[34px], past the icon column) to meet the row copy. */}
-      <p className="mb-2 pl-[2px] text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+          further (pl-9, past the icon column) to meet the row copy. */}
+      <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         For you
       </p>
       <FeedList

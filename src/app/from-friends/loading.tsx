@@ -3,12 +3,12 @@
 // layout holds steady while buildFriendActivityQueue resolves.
 export default function Loading() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-[18px] px-4 py-6 pb-32 md:py-10">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       <div className="animate-pulse" aria-hidden="true">
         <div className="h-3 w-24 rounded bg-black/[0.06]" />
         <div className="mt-3 h-8 w-52 rounded bg-black/[0.08]" />
       </div>
-      <div className="flex flex-col gap-[18px]" aria-hidden="true">
+      <div className="flex flex-col gap-5" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}

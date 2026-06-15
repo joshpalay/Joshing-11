@@ -585,7 +585,7 @@ function OverflowRow({
     <Link
       href={href}
       className={`flex min-h-11 items-center pt-1 text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] ${
-        unifiedHome ? 'pl-[2px]' : ''
+        unifiedHome ? 'pl-0.5' : ''
       }`}
     >
       {label}
@@ -744,7 +744,7 @@ function FeedContributeFooter() {
           eyebrow, the serif prompt, and the composer. The box stays an input:
           the reader's typed idea rides to the writer via ?text=
           (buildQuestionWriterHref). */}
-      <div className="-mx-4 bg-[var(--editorial-parchment)] px-[30px] py-12 md:py-14">
+      <div className="-mx-4 bg-[var(--editorial-parchment)] px-8 py-12 md:py-14">
         <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--brand-orange)] uppercase">
           Your Turn
         </p>
@@ -828,7 +828,7 @@ function FeedSectionHeading({
         // On the unified-home feed, the label sits flush left on the feed's left
         // gutter — the same 2px the activity rows pad in (where the shape column
         // begins) — rather than indenting past the icon column to the row copy.
-        unifiedHome ? 'pl-[2px]' : ''
+        unifiedHome ? 'pl-0.5' : ''
       }`}
     >
       {children}
@@ -856,7 +856,7 @@ function SectionEmptyState({
       <FeedSectionHeading unifiedHome={unifiedHome} subdued>
         {sublabel}
       </FeedSectionHeading>
-      <div className={`flex items-center gap-3 py-2 ${unifiedHome ? 'pl-[2px]' : ''}`}>
+      <div className={`flex items-center gap-3 py-2 ${unifiedHome ? 'pl-0.5' : ''}`}>
         <SpeechBubbleIllustration className="h-10 w-auto opacity-70" />
         <p className="font-serif text-base text-[var(--brand-ink-400)]">{copy}</p>
       </div>
@@ -2111,7 +2111,7 @@ function FeedListContent({
                         setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
                       }
                       className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
-                        unifiedHome ? 'pl-[2px]' : ''
+                        unifiedHome ? 'pl-0.5' : ''
                       }`}
                     >
                       View {fromFriendsNextBatch} more

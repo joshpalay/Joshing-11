@@ -53,7 +53,7 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, elevated }
       // (reserved per STYLE-GUIDE-COLOR §4). Text stays in the quiet ink register
       // (opacity on the text span only, so the marks keep their 80% fill).
       eyebrow={
-        <span className="inline-flex items-center gap-[11px]">
+        <span className="inline-flex items-center gap-3">
           <HourglassMark />
           <span className="opacity-70">Sent directly to you</span>
           <HourglassMark />

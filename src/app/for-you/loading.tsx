@@ -3,12 +3,12 @@
 // while buildPendingDirectQueue resolves, instead of a blank screen.
 export default function Loading() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-[18px] px-4 py-6 pb-32 md:py-10">
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       <div className="animate-pulse" aria-hidden="true">
         <div className="h-3 w-20 rounded bg-black/[0.06]" />
         <div className="mt-3 h-8 w-56 rounded bg-black/[0.08]" />
       </div>
-      <section className="flex flex-col gap-[18px]" aria-hidden="true">
+      <section className="flex flex-col gap-5" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}

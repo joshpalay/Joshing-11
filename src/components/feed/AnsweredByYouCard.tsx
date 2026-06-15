@@ -241,7 +241,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
   return (
     <FeedCardShell accentColor={categoryColor} accentPlacement="left">
       <div
-        className="px-[14px] pt-[14px] pb-[12px]"
+        className="px-3.5 pt-3.5 pb-3"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--ink) 5%, var(--cream))',
         }}
@@ -311,7 +311,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
         ) : null}
       </div>
 
-      <div className="px-[14px] py-[12px]">
+      <div className="px-3.5 py-3">
         <AnsweredResult item={item} recheckAction={recheckAction} onRetry={onRetry} />
       </div>
     </FeedCardShell>
