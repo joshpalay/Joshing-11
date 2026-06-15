@@ -344,7 +344,7 @@ describe('Feed answered states', () => {
       />
     )
     expect(rendered).toContain('Recheck →')
-    // Brand action-link treatment (matches "Answer →"): serif, slate, underlined — no offset-shadow box.
+    // Brand action-link treatment (matches "Answer →"): sans, slate, underlined — no offset-shadow box.
     expect(rendered).toContain('text-[var(--brand-link)]')
     expect(rendered).not.toContain('3px 3px 0 var(--ink)')
   })
@@ -372,7 +372,7 @@ describe('Answer feedback sheet recheck affordance', () => {
       />
     )
     expect(rendered).toContain('Recheck →')
-    // Reuses the shared serif slate action link, not a hand-rolled button.
+    // Reuses the shared sans slate action link, not a hand-rolled button.
     expect(rendered).toContain('text-[var(--brand-link)]')
   })
 
