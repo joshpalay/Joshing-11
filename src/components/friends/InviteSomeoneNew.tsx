@@ -55,7 +55,7 @@ export function InviteSomeoneNew() {
     <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
       <h2 className="font-serif text-lg font-semibold">Invite someone new</h2>
       <p className="text-muted-foreground mt-1 text-sm">
-        A personal note for someone specific, or a casual link you can share anywhere.
+        Text a personal note to someone&rsquo;s phone, or copy a link you can share anywhere.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
@@ -63,7 +63,7 @@ export function InviteSomeoneNew() {
           onClick={openPersonalInvite}
           className="btn-primary px-4"
         >
-          Send a personal invite
+          Text a personal invite
         </button>
         <button
           type="button"
