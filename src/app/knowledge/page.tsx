@@ -645,7 +645,7 @@ function KnowledgePageContent() {
           <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
           <h2 className="mt-[0.4rem] text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
-          <div className="flex flex-wrap gap-[10px] mt-5">
+          <div className="flex flex-wrap gap-2.5 mt-5">
             <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
               Ask a friend
             </button>
@@ -739,7 +739,7 @@ function KnowledgePageContent() {
                     value={customInterest}
                     onChange={(event) => setCustomInterest(event.target.value)}
                     placeholder="Late-period Bowie, Weimar cinema..."
-                    className="min-h-10 flex-1 border border-[var(--accent-gold)] focus:border-[var(--brand-navy)] outline-none px-[10px] bg-[var(--brand-field)] text-[var(--ink)]"
+                    className="min-h-10 flex-1 border border-[var(--accent-gold)] focus:border-[var(--brand-navy)] outline-none px-2.5 bg-[var(--brand-field)] text-[var(--ink)]"
                   />
                   <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" disabled={!customInterest.trim() || canonicalizing} onClick={() => void proposeCustomInterest()}>
                     {canonicalizing ? 'Refining...' : 'Refine'}
@@ -840,8 +840,8 @@ function KnowledgePageContent() {
                     <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
                     <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
                   </div>
-                  <div className="flex gap-[6px] mt-2">
-                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-[6px] text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
+                  <div className="flex gap-1.5 mt-2">
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
                       <Repeat2 className="size-3.5" />
                       Swap
                     </button>

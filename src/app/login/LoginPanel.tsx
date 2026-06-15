@@ -587,7 +587,7 @@ export default function LoginPanel({
       }}
     >
       {step === 'invite' ? (
-        <form className="space-y-[14px]" onSubmit={sendCodeToInvitePhone}>
+        <form className="space-y-3.5" onSubmit={sendCodeToInvitePhone}>
           {/* Texting glyph (the two-tone speech bubble) — this step is about us
               sending a code by text, so it mirrors the OTP step's mark. */}
           <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
@@ -646,7 +646,7 @@ export default function LoginPanel({
           </div>
         </form>
       ) : step === 'phone' ? (
-        <form className="space-y-[14px]" onSubmit={continueWithPhone}>
+        <form className="space-y-3.5" onSubmit={continueWithPhone}>
           {/* Solid filled handset, matching the Figma black phone glyph
               (and the filled treatment of the OTP step's bubble icon).
               Hand-drawn as a fill-only glyph rather than a force-filled
@@ -678,7 +678,7 @@ export default function LoginPanel({
           </button>
         </form>
       ) : step === 'code' ? (
-        <form className="space-y-[14px]" onSubmit={verifyCode}>
+        <form className="space-y-3.5" onSubmit={verifyCode}>
           {/* Two overlapping oval speech bubbles — navy behind, orange in front
               — recreating the Figma two-tone mark. The front bubble is drawn
               twice: first as a slightly larger cream copy (the page background
@@ -752,7 +752,7 @@ export default function LoginPanel({
           </div>
         </form>
       ) : (
-        <form className="space-y-[14px]" onSubmit={completeProfile}>
+        <form className="space-y-3.5" onSubmit={completeProfile}>
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
             @
           </div>

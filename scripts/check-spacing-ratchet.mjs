@@ -27,7 +27,7 @@ import { join, relative } from 'node:path';
 // count so no new drift can land; burn down by snapping arbitraries to scale
 // steps (start with the ones already equal to a step — 14px→3.5, 6px→1.5,
 // 10px→2.5 — which move zero pixels) and lowering this number.
-const CEILING = 59;
+const CEILING = 44;
 
 // ── Exemptions (mirrors the color/font ratchets; keep this list short) ───────
 const EXEMPT = [
