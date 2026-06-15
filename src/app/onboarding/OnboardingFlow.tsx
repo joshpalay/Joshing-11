@@ -698,7 +698,7 @@ export default function OnboardingFlow({
                   <span className="text-sm font-medium">Your name</span>
                   <input
                     type="text"
-                    className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                    className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
                     placeholder="Your name"
                     autoFocus
                     autoComplete="name"
@@ -749,7 +749,7 @@ export default function OnboardingFlow({
                     <span className="text-muted-foreground text-base">@</span>
                     <input
                       type="text"
-                      className="bg-card placeholder:text-muted-foreground/70 focus:ring-ring h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                      className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
                       placeholder="yourhandle"
                       autoFocus
                       autoCapitalize="none"
@@ -897,7 +897,7 @@ export default function OnboardingFlow({
                             ) : null}
                           </span>
                           <input
-                            className="bg-background placeholder:text-muted-foreground/70 focus:ring-ring mt-2 h-12 w-full rounded-md border px-3 text-base transition outline-none focus:ring-2"
+                            className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
                             maxLength={200}
                             placeholder={placeholder}
                             value={value}

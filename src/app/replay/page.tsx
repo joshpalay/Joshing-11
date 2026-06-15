@@ -239,8 +239,7 @@ export default function ReplayPage() {
               onChange={(event) => setAnswer(event.target.value)}
               disabled={submitting}
               placeholder="Your answer..."
-              className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none"
-              style={{ borderColor: 'var(--border)' }}
+              className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-base text-[var(--text)] outline-none focus:border-[var(--brand-navy)]"
             />
             <button type="submit" className="btn-primary shrink-0" disabled={submitting || !answer.trim()}>
               {submitting ? '...' : 'Answer'}

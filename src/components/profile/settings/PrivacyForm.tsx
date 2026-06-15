@@ -205,7 +205,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
             readOnly
             value={inviteUrl}
             onFocus={(event) => event.currentTarget.select()}
-            className="border-border bg-background text-foreground mt-3 h-11 w-full rounded-md border px-3 text-sm outline-none"
+            className="border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground mt-3 h-11 w-full rounded-md border px-3 text-sm outline-none focus:border-[var(--brand-navy)]"
           />
           <div className="mt-2 flex flex-wrap gap-2">
             <button

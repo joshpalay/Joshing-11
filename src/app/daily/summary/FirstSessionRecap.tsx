@@ -188,7 +188,7 @@ export function Beat4({ onClose }: { onClose: () => void }) {
           type="email"
           inputMode="email"
           autoComplete="email"
-          className="h-12 w-full rounded-md border border-white/20 bg-white/10 px-3 text-base text-stone-50 placeholder:text-stone-400 transition outline-none focus:ring-2 focus:ring-white/40"
+          className="h-12 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-base text-[var(--brand-navy)] placeholder:text-stone-400 transition outline-none focus:border-[var(--brand-navy)]"
           placeholder="you@example.com"
           value={email}
           onChange={(event) => {

@@ -99,7 +99,7 @@ export function InlineHandleField({
         <span className="text-muted-foreground">@</span>
         <input
           autoFocus
-          className="flex-1 rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+          className="flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
           value={draft}
           maxLength={20}
           placeholder="handle"

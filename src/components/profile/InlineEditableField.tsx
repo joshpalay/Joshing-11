@@ -146,7 +146,7 @@ export function InlineEditableField({
       ref={(el) => {
         inputRef.current = el;
       }}
-      className="min-h-20 w-full resize-y rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+      className="min-h-20 w-full resize-y rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
       value={draft}
       maxLength={maxLength}
       placeholder={placeholder}
@@ -167,7 +167,7 @@ export function InlineEditableField({
       ref={(el) => {
         inputRef.current = el;
       }}
-      className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-foreground"
+      className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
       value={draft}
       maxLength={maxLength}
       placeholder={placeholder}

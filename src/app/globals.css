@@ -70,6 +70,7 @@
     --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
     --brand-card:        #fdfcfb;  /* cream/50 — content card surface          */
     --brand-cream-card:  #fbf5e9;  /* warm cream card (login screens only)     */
+    --brand-field:       #ffffff;  /* pure white — text-entry field surface, pops against cream (matches login fields) */
     --brand-border:      #e9e2d2;  /* warm hairline border                     */
     --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
     --domain-language:   #7a9eaa;
