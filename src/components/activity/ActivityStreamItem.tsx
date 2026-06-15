@@ -446,8 +446,9 @@ export function ActivityStreamItem({
                   alignItems: 'center',
                   gap: 5,
                   // Same text treatment as the "Answer →" feed action: the
-                  // Editorial serif at 18px in the link slate, underlined.
-                  fontFamily: 'var(--font-serif)',
+                  // sans (Interface voice) at 18px in the link slate, underlined.
+                  // A tappable affordance never takes the Editorial serif.
+                  fontFamily: 'var(--font-sans)',
                   fontSize: 18,
                   fontWeight: 600,
                   letterSpacing: '0.05em',
