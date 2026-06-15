@@ -47,10 +47,10 @@ type TodaysFiveCardProps = {
 
 const CUSTOMIZE_DAILY_LINK_CLASS = [
   'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full',
-  'border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-2',
+  'border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-4 py-2',
   'text-[13px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)]',
-  'shadow-[var(--shadow-card)] transition-[background-color,border-color,box-shadow,transform]',
-  'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-cream-page)]',
+  'transition-[background-color,border-color,transform]',
+  'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-card)]',
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
   'active:translate-y-px sm:px-5 sm:text-sm',
 ].join(' ')
@@ -212,18 +212,20 @@ export default function TodaysFiveCard({
 
   return (
     <div className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[var(--shadow-card)]">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
         </p>
-        {/* Customize pill — the entry point for tuning the Daily Five. A warm-
+        {/* Customize pill — the entry point for tuning the Daily Five. A quiet
             cream utility pill (sliders icon + label) replacing the easy-to-miss
-            gear: prominent enough to notice, clearly secondary to the Play now
-            CTA (rounded-full utility shape, not the primary button's radius;
-            navy --brand-ink on the elevated cream + hairline border + subtle
-            card shadow). Same destination as before (/daily/setup). The 44px
-            min height keeps the tap target accessible; `shrink-0` protects it
-            from being squeezed by the eyebrow on narrow widths. */}
+            gear: noticeable but clearly secondary to the Play now CTA (rounded-
+            full utility shape, not the primary button's radius; navy --brand-ink
+            on a near-card cream fill + softened hairline border, no shadow so it
+            reads as part of the header rather than a floating chip). The row is
+            items-center so the pill sits on the "Today's Five" eyebrow baseline.
+            Same destination as before (/daily/setup). The 44px min height keeps
+            the tap target accessible; `shrink-0` protects it from being squeezed
+            by the eyebrow on narrow widths. */}
         <Link
           href="/daily/setup"
           className={CUSTOMIZE_DAILY_LINK_CLASS}
