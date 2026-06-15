@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { type FeedCursor, type FeedFilter } from '@/server/db/queries/feed';
 import { decodeFeedCursor, getFeedPagePayload } from '@/server/feed/get-feed-page';
+import { createServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,8 @@ function parsePagination(request: NextRequest): ParsedPagination {
 }
 
 export async function GET(request: NextRequest) {
+  const timing = createServerTiming();
+  const startedAt = Date.now();
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -40,6 +43,7 @@ export async function GET(request: NextRequest) {
   if ('error' in pagination) return NextResponse.json({ error: pagination.error }, { status: 400 });
 
   const payload = await getFeedPagePayload(session.userId, pagination);
+  timing.measure('feed', startedAt);
 
   const verboseFeedDebug = process.env.FEED_DEBUG_VERBOSE === 'true';
   console.info('[feed/get]', {
@@ -64,5 +68,7 @@ export async function GET(request: NextRequest) {
       : {}),
   });
 
-  return NextResponse.json(payload);
+  const response = NextResponse.json(payload);
+  response.headers.set('Server-Timing', timing.toHeader());
+  return response;
 }
