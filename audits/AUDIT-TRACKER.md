@@ -49,9 +49,10 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 ## ⭐ Start here — open & important
 
-**No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
+**Both audits fully cleared.** Every Pre-Launch item is `DONE`, `WON'T DO`, or `DEFERRED`; the Consistency audit is closed. Nothing open.
 
-- **Partials (judgment, low urgency):** PLR-19.
+- **Deferred:** PLR-22 (dark mode, post-launch).
+- **Still tracked separately:** the `MISC-1…4` findings from the third-audit triage (see *Other / ad-hoc*).
 
 ---
 
@@ -79,7 +80,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-16 | Overwhelming home feed | P1 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Budgeted "edition" already caps arrival volume (`build-edition.ts`, `page.tsx:118–161`); not tracking further. (Collapsible grouping remains banned regardless — see traps.) |
 | PLR-17 | Catch-up lacks closure/celebration | — | `DONE` | `DO NOT DO` (confetti) | Shipped #961. The closer (`RoundCloseCard` + `RoundSummary`) already existed for the answer path; the gap was the **dismiss** path — dismissing the last missed question dead-ended the thread (no closer/input). `dismissCurrent` now closes the round (mirroring `dropStaleItem`); Undo restores it. Reuses the existing quiet "You're all caught up" card — no confetti (canon). |
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
-| PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `PARTIAL` | — | Personal invite + copy link `InviteSomeoneNew.tsx:54–84`; no explicit SMS/email labelling. |
+| PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `DONE` | — | Shipped #962: invite card now names the two methods — "Text a personal invite" (SMS to a phone) vs "Copy invite link" (share anywhere). No email path exists, so none is implied. |
 | PLR-20 | Avatars initials-only; no photo upload | — | `WON'T DO` | — | **Ignored per owner (2026-06-15).** Not doing photo uploads. |
 | PLR-21 | Inconsistent link styling on summary page | — | `DONE` | `CLEAN WIN` | **Resolved (2026-06-14).** Code is already consistent: every text link uses `underline underline-offset-4` (`summary/page.tsx:242,259,635,663`); `btn-primary`/`btn-ghost` are buttons (correctly not underlined). No color-only link exists. No change needed. |
 | PLR-22 | No dark mode | P3 | `DEFERRED` | `DO NOT DO` (for launch) | Not canon-violating, but reworks the cream/serif/illustration brand — large effort. Park post-launch. |
