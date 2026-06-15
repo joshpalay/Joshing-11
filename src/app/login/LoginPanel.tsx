@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { AvatarChip } from '@/components/AvatarChip';
 import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
@@ -154,21 +153,19 @@ export function shouldCollectProfileIdentity(identity: VerifiedIdentity): boolea
   return !identity.displayName || !identity.handle;
 }
 
+function inviterFirstName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return 'A friend';
+  // Handle-style names (e.g. "@craig") have no spaces — keep them whole.
+  return trimmed.split(/\s+/)[0];
+}
+
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
     <div className="space-y-3 rounded-[8px] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-      <div className="flex items-center justify-center gap-3">
-        <AvatarChip
-          displayName={invite.inviterName}
-          userId={invite.inviterUserId}
-          color={invite.inviterAvatarColor}
-          size="lg"
-        />
-        <span className="text-[17px] leading-6 font-semibold text-black">{invite.inviterName}</span>
-      </div>
       <p className="text-[15px] leading-6 text-black/75">
-        {invite.inviterName} invited you to Joshing. Enter your phone number to join and start
-        answering their questions.
+        {inviterFirstName(invite.inviterName)} invited you to Joshing, a new trivia game. We just
+        need to verify your phone number and then you can start playing.
       </p>
     </div>
   );
