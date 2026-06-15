@@ -16,7 +16,6 @@ import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
-import { AvatarChip } from '@/components/AvatarChip'
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
 import { getSession } from '@/server/auth/session'
 import { getRelationship } from '@/server/db/queries/friend-requests'
@@ -24,23 +23,6 @@ import { resolveInviteLink } from '@/server/friends/user-invite-token'
 
 type InvitePageProps = {
   params: Promise<{ handle: string; token: string }>
-}
-
-function InviterIdentity({
-  name,
-  userId,
-  avatarColor,
-}: {
-  name: string
-  userId: string
-  avatarColor: string | null
-}) {
-  return (
-    <div className="mb-4 flex items-center gap-3">
-      <AvatarChip displayName={name} userId={userId} color={avatarColor} size="lg" />
-      <span className="text-sm font-semibold">{name}</span>
-    </div>
-  )
 }
 
 function InviteShell({ children }: { children: ReactNode }) {
@@ -127,33 +109,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
     )
   }
 
-  // Logged-out — landing card → /login with the invite params attached.
-  return (
-    <InviteShell>
-      <div className="space-y-5">
-        <div>
-          <InviterIdentity
-            name={displayName}
-            userId={inviter.inviterUserId}
-            avatarColor={inviter.inviterAvatarColor}
-          />
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-            A note from a friend
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-normal">
-            {displayName} invited you to Joshing.
-          </h1>
-          <p className="text-muted-foreground mt-3 text-sm leading-6">
-            Pick up your phone — we&rsquo;ll text you a code to get started.
-          </p>
-        </div>
-        <Link
-          href={loginHref(inviter.inviterHandle, token)}
-          className="bg-primary text-primary-foreground inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium"
-        >
-          Continue
-        </Link>
-      </div>
-    </InviteShell>
-  )
+  // Logged-out — skip the interstitial and drop the invitee straight onto the
+  // login screen, with the invite params attached so it shows the invite card.
+  redirect(loginHref(inviter.inviterHandle, token))
 }
