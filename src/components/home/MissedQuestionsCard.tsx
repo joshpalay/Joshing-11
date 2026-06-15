@@ -11,7 +11,7 @@ export function MissedQuestionsCard({
   const missedLabel = count === 1 ? '1 missed question' : `${count} missed questions`
   return (
     <div
-      className="bg-card text-card-foreground flex items-center justify-between gap-3 rounded-[4px] border border-[var(--brand-border)] px-3 py-4"
+      className="bg-card text-card-foreground flex items-center justify-between gap-3 rounded-[var(--radius-xs)] border border-[var(--brand-border)] px-3 py-4"
       style={
         expiringCount > 0
           ? { borderColor: 'color-mix(in srgb, var(--brand-orange) 40%, var(--brand-border))' }
