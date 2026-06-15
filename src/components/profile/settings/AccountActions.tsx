@@ -213,7 +213,7 @@ export function AccountActions() {
                   setDeleteConfirmation(event.target.value);
                   setDeleteError(null);
                 }}
-                className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-destructive"
+                className="mt-1 h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-sm outline-none focus:border-destructive"
                 autoComplete="off"
                 disabled={deletingAccount}
               />

@@ -275,7 +275,7 @@ export default function ArchivePage() {
         <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
-            className="h-11 w-full rounded-md border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary"
+            className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm outline-none focus:border-[var(--brand-navy)]"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search questions..."

@@ -22,9 +22,9 @@ const monoStyle: CSSProperties = {
 
 const inputStyle: CSSProperties = {
   width: '100%',
-  border: '1px solid var(--border)',
+  border: '1px solid var(--accent-gold)',
   borderRadius: 'var(--radius-md)',
-  background: 'var(--bg)',
+  background: 'var(--brand-field)',
   boxShadow: 'var(--shadow-paper-rest)',
   padding: '10px 14px',
   fontFamily: 'var(--font-sans)',

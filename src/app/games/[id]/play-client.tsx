@@ -367,7 +367,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
               autoComplete="off"
               autoCapitalize="sentences"
               enterKeyHint="send"
-              className="min-h-11 flex-1 rounded-md border bg-background px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1"
+              className="min-h-11 flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-base outline-none focus:border-[var(--brand-navy)]"
             />
             <button
               type="submit"

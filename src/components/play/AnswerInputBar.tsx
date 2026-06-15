@@ -75,8 +75,7 @@ export function AnswerInputBar({
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-[var(--bg)] px-4 text-base text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ borderColor: 'var(--border)' }}
+          className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-base text-[var(--text)] outline-none focus:border-[var(--brand-navy)] disabled:cursor-not-allowed disabled:opacity-60"
         />
         <button
           type="submit"

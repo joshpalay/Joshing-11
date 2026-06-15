@@ -255,7 +255,7 @@ export function AuthoredQuestionsFeed({
             <label className="relative block">
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <input
-                className="bg-background focus:border-primary h-11 w-full rounded-md border pr-3 pl-10 text-sm outline-none"
+                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-md border border-[var(--accent-gold)] pr-3 pl-10 text-sm outline-none"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search questions..."

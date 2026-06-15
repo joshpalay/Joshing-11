@@ -751,7 +751,7 @@ function FeedContributeFooter() {
               onChange={(event) => setIdea(event.target.value)}
               aria-label="What question would you like to be asked?"
               rows={5}
-              className="min-h-[180px] w-full resize-none rounded-[8px] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-link)]"
+              className="min-h-[180px] w-full resize-none rounded-[8px] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
             />
             {idea.trim() === '' ? (
               <span

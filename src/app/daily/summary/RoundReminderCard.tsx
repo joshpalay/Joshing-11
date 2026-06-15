@@ -101,7 +101,7 @@ export function RoundReminderCard() {
             onChange={(event) =>
               setState({ ...state, value: event.target.value, error: null })
             }
-            className="bg-background flex-1 rounded-lg border px-3 py-2 text-sm"
+            className="bg-[var(--brand-field)] flex-1 rounded-lg border border-[var(--accent-gold)] px-3 py-2 text-sm focus:border-[var(--brand-navy)]"
           />
           <div className="flex gap-2">
             <button

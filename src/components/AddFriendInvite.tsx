@@ -306,7 +306,7 @@ export default function AddFriendInvite({
             <label className="text-foreground block text-sm font-medium">
               Name
               <input
-                className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-xl border px-3 text-base transition outline-none focus:ring-2"
+                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
                 value={name}
                 onChange={(event) => {
                   setName(event.target.value);
@@ -321,7 +321,7 @@ export default function AddFriendInvite({
             <label className="text-foreground block text-sm font-medium">
               Phone number
               <input
-                className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-xl border px-3 text-base transition outline-none focus:ring-2"
+                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
                 value={phone}
                 onChange={(event) => {
                   setPhone(formatUsPhoneInput(event.target.value));
@@ -379,7 +379,7 @@ export default function AddFriendInvite({
               <label key={placeholder} className="text-foreground block text-sm font-medium">
                 Idea {index + 1}
                 <input
-                  className="bg-background focus:border-foreground focus:ring-ring mt-2 h-12 w-full rounded-full border px-4 text-base transition outline-none focus:ring-2"
+                  className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-full border border-[var(--accent-gold)] px-4 text-base transition outline-none"
                   value={interests[index] ?? ''}
                   onChange={(event) => updateInterest(index, event.target.value)}
                   placeholder={placeholder}
@@ -448,7 +448,7 @@ export default function AddFriendInvite({
             Message you can send
             <textarea
               ref={messageRef}
-              className="bg-background focus:border-foreground focus:ring-ring mt-2 min-h-36 w-full rounded-xl border p-3 text-base leading-6 transition outline-none focus:ring-2"
+              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 min-h-36 w-full rounded-xl border border-[var(--accent-gold)] p-3 text-base leading-6 transition outline-none"
               value={messageText}
               onChange={(event) => setMessageText(event.target.value)}
             />

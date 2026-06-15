@@ -739,7 +739,7 @@ function KnowledgePageContent() {
                     value={customInterest}
                     onChange={(event) => setCustomInterest(event.target.value)}
                     placeholder="Late-period Bowie, Weimar cinema..."
-                    className="min-h-10 flex-1 border border-[var(--border-warm)] px-[10px] bg-white text-[var(--ink)]"
+                    className="min-h-10 flex-1 border border-[var(--accent-gold)] focus:border-[var(--brand-navy)] outline-none px-[10px] bg-[var(--brand-field)] text-[var(--ink)]"
                   />
                   <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer" disabled={!customInterest.trim() || canonicalizing} onClick={() => void proposeCustomInterest()}>
                     {canonicalizing ? 'Refining...' : 'Refine'}

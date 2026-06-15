@@ -176,7 +176,7 @@ export function AddFriendRequestModal({
           rows={4}
           placeholder="Hey — I keep meaning to ask you about that thing…"
           disabled={sending}
-          className="border-border bg-card text-foreground placeholder:text-muted-foreground w-full resize-none rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground placeholder:text-muted-foreground w-full resize-none rounded-lg border p-3 text-sm focus:outline-none focus:border-[var(--brand-navy)]"
         />
         <div className="mt-1 flex h-5 items-center justify-end">
           {counterVisible ? (

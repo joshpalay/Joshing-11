@@ -589,7 +589,7 @@ export function QuestionForm({
           rows={4}
           maxLength={300}
           required
-          className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus:border-primary"
+          className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
           placeholder="What is the name of Alexander the Great's horse?"
           readOnly={state.stage === 'SUBMITTING'}
         />
@@ -650,26 +650,26 @@ export function QuestionForm({
               maxLength={200}
               required
               readOnly={state.stage === 'SUBMITTING'}
-              className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary"
+              className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]"
               placeholder="Bucephalus"
             />
           </div>
 
           <div>
             <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
-            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Accepted variations, separated by commas" />
+            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Accepted variations, separated by commas" />
             <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/5 alternates</p>
           </div>
 
           <div>
             <label htmlFor="explanation" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</label>
-            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={5} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full resize-y min-h-[7.5rem] rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="A short note that helps someone learn if they miss it." />
+            <textarea id="explanation" value={state.explanation} onChange={(event) => dispatch({ type: 'FIELD', field: 'explanation', value: event.target.value.slice(0, 500) })} rows={5} maxLength={500} readOnly={state.stage === 'SUBMITTING'} className="w-full resize-y min-h-[7.5rem] rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="A short note that helps someone learn if they miss it." />
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.explanation.length}/500</p>
           </div>
 
           <div>
             <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Creator note</label>
-            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:border-primary" placeholder="Optional context for recipients" />
+            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Optional context for recipients" />
             <p className="mt-1 text-right text-xs text-muted-foreground">{state.creatorNote.length}/200</p>
           </div>
 
@@ -791,7 +791,7 @@ export function QuestionForm({
                           value={state.friendSearch}
                           onChange={(event) => dispatch({ type: 'FRIEND_SEARCH', value: event.target.value })}
                           placeholder="Search friends..."
-                          className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary"
+                          className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-9 pr-3 text-sm outline-none focus:border-[var(--brand-navy)]"
                           disabled={state.stage === 'SUBMITTING'}
                         />
                       </label>
