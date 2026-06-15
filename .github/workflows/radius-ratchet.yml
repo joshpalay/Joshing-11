@@ -1,0 +1,22 @@
+# Radius ratchet (CONS-6): fail the PR if literal arbitrary corner-radius usage
+# (Tailwind rounded-[Npx]/[Nrem] arbitraries) in src/ rises above the recorded
+# ceiling. The ceiling and the exemption list live in
+# scripts/check-radius-ratchet.mjs. Independent of the color/font/spacing
+# ratchets by design. rounded-[var(--radius-*)] consumers are on-system and not
+# counted (see the script header).
+name: Radius ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  radius-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-radius-ratchet.mjs
