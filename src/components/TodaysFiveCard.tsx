@@ -46,13 +46,13 @@ type TodaysFiveCardProps = {
 }
 
 const CUSTOMIZE_DAILY_LINK_CLASS = [
-  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full',
-  'border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-4 py-2',
-  'text-[13px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)]',
+  'inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full',
+  'border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-3 py-2',
+  'text-[12px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)]',
   'transition-[background-color,border-color,transform]',
   'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-card)]',
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
-  'active:translate-y-px sm:px-5 sm:text-sm',
+  'active:translate-y-px sm:px-3.5 sm:text-[13px]',
 ].join(' ')
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -232,7 +232,7 @@ export default function TodaysFiveCard({
           aria-label="Customize your Daily Five"
         >
           <SlidersHorizontal
-            className="size-5 sm:size-[22px]"
+            className="size-4 sm:size-[18px]"
             strokeWidth={2.4}
             aria-hidden="true"
           />
