@@ -24,6 +24,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - `npm run check:fonts` — font ratchet (off-system font-family count must stay ≤ the ceiling in `scripts/check-font-ratchet.mjs`; runs in CI)
 - `npm run check:colors` — color ratchet (off-system hex/rgb/hsl count must stay ≤ the ceiling in `scripts/check-color-ratchet.mjs`; runs in CI)
 - `npm run check:spacing` — spacing ratchet (arbitrary `p-[…]`/`m-[…]`/`gap-[…]`/`space-[…]` count must stay ≤ the ceiling in `scripts/check-spacing-ratchet.mjs`; runs in CI. Sizing `h-/w-` is out of scope — see the script header)
+- `npm run check:radius` — radius ratchet (literal arbitrary `rounded-[Npx]`/`[Nrem]` count must stay ≤ the ceiling in `scripts/check-radius-ratchet.mjs`; runs in CI. `rounded-[var(--radius-*)]` consumers are on-system and not counted)
 - `npm run format` — Prettier write
 - `npm run db:migrate` — Drizzle migrations
 - `npm run smoke:daily-catchup` — daily catchup smoke test

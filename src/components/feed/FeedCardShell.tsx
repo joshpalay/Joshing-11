@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 // with the accent bar configurable to the top (default) or left edge, and a
 // 'triangle' variant for the envelope motif.
 
-const FEED_CARD_RADIUS = 'rounded-[4px]'
+const FEED_CARD_RADIUS = 'rounded-[var(--radius-xs)]'
 const FEED_CARD_SHADOW = 'shadow-[var(--shadow-card)]'
 
 // Resting (non-elevated) home-feed card fill. Warm cream (--warm-cream #f5f0e8)

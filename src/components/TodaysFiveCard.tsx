@@ -211,7 +211,7 @@ export default function TodaysFiveCard({
       : 'Ready when you are!'
 
   return (
-    <div className="text-card-foreground w-full rounded-[4px] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[var(--shadow-card)]">
+    <div className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
@@ -321,7 +321,7 @@ export default function TodaysFiveCard({
             // day's primary Play. Built from --domain-science / --game-correct.
             <Link
               href="/daily/catchup"
-              className="flex min-h-12 w-full items-center justify-center rounded-[4px] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
+              className="flex min-h-12 w-full items-center justify-center rounded-[var(--radius-xs)] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
             >
               {`Play (${missedCount}) Missed Question${missedCount === 1 ? '' : 's'}`}
             </Link>
