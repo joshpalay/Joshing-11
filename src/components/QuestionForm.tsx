@@ -272,11 +272,12 @@ export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): str
   }
 }
 
-// A single critique reformulation option. The "Use this" affordance label and
-// the reformulated question are rendered as two discrete block elements so the
-// label can never share a text node with — and run together into — the
-// suggestion value (the "Use this Which American city…" artifact,
-// B-COMPOSER-SUGGESTION-ARTIFACT-01). The reformulation value owns its own node.
+// A single critique reformulation option. The whole button is the "use this"
+// affordance — the shared "Try one of these instead:" header already states the
+// intent, so the per-option "Use this" label was redundant and is no longer
+// rendered. The reformulation value still owns its own element node so it can
+// never run together with surrounding text into a single run-on string (the
+// "Use this Which American city…" artifact, B-COMPOSER-SUGGESTION-ARTIFACT-01).
 export function ReformulationOption({ text, onUse }: { text: string; onUse: () => void }) {
   return (
     <button
@@ -284,7 +285,6 @@ export function ReformulationOption({ text, onUse }: { text: string; onUse: () =
       onClick={onUse}
       className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
     >
-      <span className="block font-medium">Use this</span>
       <span className="block">{text}</span>
     </button>
   );
