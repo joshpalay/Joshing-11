@@ -95,11 +95,10 @@ export async function buildActivityStream(
         .map((id) => textById.get(id))
         .filter((q): q is NonNullable<typeof q> => Boolean(q))
         .filter((q) => !hiddenIds.has(q.questionId))
-        // Keep EVERY question in the bundle — including the ones the viewer
-        // already answered. Each carries its prior result, so the answered ones
-        // render as spent (hollow) triangles in the expansion and the card stays
-        // put after you play it (Q4), drifting down by recency rather than
-        // vanishing.
+        // Keep every still-answerable question in the bundle alongside the ones
+        // the viewer already played — each carries its viewer-relative prior
+        // result, so the played ones render as spent (hollow) triangles in the
+        // expansion while the unplayed ones stay answerable.
         .map((q) => ({
           questionId: q.questionId,
           text: q.text,
@@ -108,9 +107,18 @@ export async function buildActivityStream(
           authorName: q.authorName,
           authorIsHouse: q.authorIsHouse,
         }));
-      // A card whose questions all collapse out (deleted / hidden) is contentless
-      // — suppress it rather than render an empty triangle.
-      return questions.length > 0 ? friendActivityToStreamItem(card, questions) : null;
+      // D-HOME-DASHBOARD-MODEL-01 point 3 — a From Friends bundle is a dashboard
+      // item, not an archive entry. Once the viewer has played EVERY answerable
+      // question in it (remaining === 0) it is exhausted and disappears; this also
+      // drops a contentless card whose questions all collapsed out. Partially-
+      // played bundles stay, surfacing their remaining count. This OVERRIDES
+      // D-FEED-FRIEND-ACTIVITY-01 §Q4 ("spent cards stay 30 days") for the fully-
+      // exhausted case only. `priorResult` is per-viewer (getViewerPriorAnswer
+      // Results(userId, …)), so the filter is viewer-relative and never shared
+      // across users; the 30-day spent-card roll-off is now moot for exhausted
+      // cards (they leave on exhaustion, not on a timer).
+      const remaining = questions.filter((q) => q.priorResult === null).length;
+      return remaining > 0 ? friendActivityToStreamItem(card, questions) : null;
     })
     .filter((item): item is StreamItem => item !== null);
   const convergenceItems = convergences.map((c) => {
