@@ -459,11 +459,61 @@ export async function getNicheMatchDiscoverable(
   return new Set(rows.map((r) => r.id));
 }
 
+// Builds a parenthesized SQL value list for `… in (…)`. Empty → `(null)`, which
+// matches no rows (`x in (null)` is never true), so callers can use it
+// unconditionally without a separate empty-set branch.
+function idInList(ids: string[]) {
+  if (ids.length === 0) return sql`(null)`;
+  return sql`(${sql.join(ids.map((id) => sql`${id}`), sql.raw(', '))})`;
+}
+
+// Production account deletion (D-ACCOUNT-DELETION-TERRITORY-01). Honors the
+// author's exit WITHOUT confiscating third parties' proven territory:
+//
+//   #1 retained answerers' MASTERY_EVENTS earned off this author's questions are
+//      PRESERVED (their evidence of what they know; not contingent on the author).
+//   #2 each authored Question a retained user still has territory on is TOMBSTONED
+//      (creator_id NULL, source 'house_authored', author_deleted true) so the
+//      content/difficulty/asked+correct counts survive for the answerers' math and
+//      §8.27 retroactive reclassification — never rendered as a person (H-1).
+//   #3 the windowed author-credit (MASTERY_EVENTS user_id = this author) is REMOVED.
+//   #4 this user's own declared+proven territory, portrait, profile HARD-DELETE.
+//
+// Questions with NO retained dependency hard-delete with the account (Decision B).
+// Convergence/activity attribution naming this user degrades to anonymized
+// (Decision C). Feed actor cards they sourced onto retained feeds are stripped
+// (Decision D — 'house' cannot be a real FK, Invariant H-1).
 export async function deleteUserAccount(userId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.execute(sql`delete from "FeedItem" where "recipientUserId" = ${userId} or "sourceUserId" = ${userId} or "joshingGameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    // Decision D — strip this user's own feed and the actor cards they sourced
+    // onto retained feeds. Deliberately NOT keyed by questionId: a card on a
+    // RETAINED user's feed pointing at a question this user authored must survive
+    // (the question is tombstoned below and re-sources to house). Stripping
+    // source-actor cards first also lets a question whose only retained tie was
+    // such a card fall through to hard-delete.
+    await tx.execute(sql`delete from "FeedItem" where "recipientUserId" = ${userId} or "sourceUserId" = ${userId} or "joshingGameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`);
     await tx.execute(sql`delete from "ActivityItem" where "userId" = ${userId}`);
     await tx.execute(sql`update "ActivityItem" set "actorUserId" = null where "actorUserId" = ${userId}`);
+
+    // Partition this author's questions: TOMBSTONE (A1) when a RETAINED user still
+    // has proven territory or a save tied to it, else hard-delete (Decision B).
+    // Materialize both id sets ONCE, here — before any retained-side dependency
+    // rows are removed below — so the partition stays stable for the rest of the tx.
+    const retainedDependency = sql`(
+      exists (select 1 from "MASTERY_EVENTS" me where me."question_id" = "Question".id and me."user_id" <> ${userId})
+      or exists (select 1 from "UserQuestionBank" uqb where uqb."question_id" = "Question".id and uqb."user_id" <> ${userId})
+      or exists (select 1 from "JoshingGameResponse" jgr where jgr."questionId" = "Question".id and jgr."userId" <> ${userId})
+      or exists (select 1 from "FeedItem" fi where fi."questionId" = "Question".id and fi."recipientUserId" <> ${userId})
+    )`;
+    const tombstoneResult = await tx.execute<{ id: string }>(
+      sql`select id from "Question" where "creator_id" = ${userId} and ${retainedDependency}`,
+    );
+    const orphanResult = await tx.execute<{ id: string }>(
+      sql`select id from "Question" where "creator_id" = ${userId} and not ${retainedDependency}`,
+    );
+    const tombstoneIds = tombstoneResult.rows.map((row) => row.id);
+    const orphanIds = orphanResult.rows.map((row) => row.id);
+    const orphanList = idInList(orphanIds);
 
     const questionReactionColumnsResult = await tx.execute<{ column_name: string }>(sql`
       select column_name
@@ -481,19 +531,19 @@ export async function deleteUserAccount(userId: string): Promise<void> {
       && questionReactionColumnNames.has('recipientUserId')
       && questionReactionColumnNames.has('questionId')
     ) {
-      await tx.execute(sql`delete from "QuestionReaction" where "senderUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+      await tx.execute(sql`delete from "QuestionReaction" where "senderUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in ${orphanList}`);
     } else if (
       questionReactionColumnNames.has('answerer_id')
       && questionReactionColumnNames.has('creator_id')
       && questionReactionColumnNames.has('question_id')
     ) {
-      await tx.execute(sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
+      await tx.execute(sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in ${orphanList}`);
     }
-    await tx.execute(sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
+    await tx.execute(sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in ${orphanList}`);
 
-    await tx.execute(sql`delete from "JoshingGameResponse" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    await tx.execute(sql`delete from "JoshingGameResponse" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in ${orphanList}`);
     await tx.execute(sql`delete from "JoshingGameRecipient" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`);
-    await tx.execute(sql`delete from "JoshingGameQuestion" where "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in (select id from "Question" where "creator_id" = ${userId})`);
+    await tx.execute(sql`delete from "JoshingGameQuestion" where "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in ${orphanList}`);
     await tx.execute(sql`delete from "JoshingGame" where "creatorId" = ${userId}`);
 
     await tx.execute(sql`delete from "Friendship" where "userAId" = ${userId} or "userBId" = ${userId} or "requestedByUserId" = ${userId} or "removedByUserId" = ${userId}`);
@@ -501,17 +551,39 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     await tx.execute(sql`update "FriendInvitation" set "inviteeUserId" = null where "inviteeUserId" = ${userId}`);
     await tx.execute(sql`update "DailyPreference" set "friend_ids" = array_remove("friend_ids", ${userId}) where ${userId} = any("friend_ids")`);
 
-    await tx.execute(sql`delete from "SkippedDailyQuestion" where "user_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId}) or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    await tx.execute(sql`delete from "SkippedDailyQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
     await tx.execute(sql`delete from "DailyQueue" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "DailyPreference" where "user_id" = ${userId}`);
 
-    await tx.execute(sql`delete from "QuestionFeedback" where "user_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId}) or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
-    await tx.execute(sql`delete from "QuestionRating" where "user_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
-    await tx.execute(sql`delete from "UserQuestionBank" where "user_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
-    await tx.execute(sql`delete from "QuestionAudienceTag" where "creator_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
-    await tx.execute(sql`delete from "MASTERY_EVENTS" where "user_id" = ${userId} or "answered_by_user_id" = ${userId} or "question_id" in (select id from "Question" where "creator_id" = ${userId})`);
+    await tx.execute(sql`delete from "QuestionFeedback" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    await tx.execute(sql`delete from "QuestionRating" where "user_id" = ${userId} or "question_id" in ${orphanList}`);
+    // Decision B: a friend's bank save IS a retained dependency, so a banked
+    // question is a tombstone — only THIS user's own bank rows are removed (their
+    // saves of a tombstoned question are preserved by the orphan-only question key).
+    await tx.execute(sql`delete from "UserQuestionBank" where "user_id" = ${userId} or "question_id" in ${orphanList}`);
+    await tx.execute(sql`delete from "QuestionAudienceTag" where "creator_id" = ${userId} or "question_id" in ${orphanList}`);
 
-    await tx.execute(sql`delete from "Question" where "creator_id" = ${userId}`);
+    // THE territory-preservation core (#1/#3/#4): delete ONLY this user's own
+    // mastery rows (their proven territory + their author-credit). Retained users'
+    // events tied to this author's questions are PRESERVED — never deleted by
+    // question_id, which is what the old hard-cascade did (the confiscation bug).
+    await tx.execute(sql`delete from "MASTERY_EVENTS" where "user_id" = ${userId}`);
+    // Decision C — degrade convergence/Lately attribution: a retained user's event
+    // that named THIS user as the answerer keeps the fact, loses the name.
+    // answered_by_user_id is plain text (not an FK); convergence reads it.
+    await tx.execute(sql`update "MASTERY_EVENTS" set "answered_by_user_id" = null where "answered_by_user_id" = ${userId}`);
+
+    // A1 tombstone: retained-dependency questions persist, re-sourced to house.
+    if (tombstoneIds.length > 0) {
+      await tx.execute(sql`update "Question" set "creator_id" = null, "source" = 'house_authored', "author_deleted" = true, "updated_at" = now() where id in ${idInList(tombstoneIds)}`);
+    }
+    // Decision B: questions with no retained dependency hard-delete with the user.
+    // Their FeedItems were stripped above and their other referencers removed by
+    // the orphan-keyed deletes, so no FK blocks this.
+    if (orphanIds.length > 0) {
+      await tx.execute(sql`delete from "Question" where id in ${idInList(orphanIds)}`);
+    }
+
     await tx.execute(sql`update "Question" set "generated_question_id" = null where "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
     await tx.execute(sql`delete from "GeneratedQuestion" where "user_id" = ${userId}`);
 

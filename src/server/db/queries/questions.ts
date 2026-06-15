@@ -147,7 +147,8 @@ export const bankQuestionSelectColumns = questionViewColumns;
 // (e.g. bankQuestionSelectColumns) need not fetch them.
 type QuestionViewNonViewKey =
   | 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
-  | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding';
+  | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding'
+  | 'authorDeleted';
 type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
   & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 

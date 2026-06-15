@@ -214,3 +214,42 @@ This audit closes Done-when item 2 (FK inventory captured, each marked
 preserve / null / cascade / tombstone) and resolves the code-answerable
 sub-questions. Items 1, 3 (re-audit after ratification) and 4 (pre-launch
 checklist) remain pending the A–E product forks below.
+
+---
+
+## Build addendum (2026-06-15)
+
+A–E ratified (recommended defaults; see `DECISIONS.md`) and **built**:
+
+- **Migration `0080_question_author_deleted`** — adds `Question.author_deleted`
+  (boolean, default false) + partial index, mirrored by an `instrumentation.ts`
+  guard. Journaled at idx 80.
+- **`deleteUserAccount` rewritten** (`src/server/db/queries/account.ts`) from the
+  hard-cascade to the tombstone model:
+  - Partitions the departed author's questions into **tombstone** (any retained
+    `MASTERY_EVENTS` / `UserQuestionBank` / `JoshingGameResponse` / retained-feed
+    `FeedItem` dependency) vs. **orphan** (none), materialized once.
+  - Tombstone: `creator_id` → NULL, `source` → `'house_authored'`,
+    `author_deleted` → true (renders house via `resolveQuestionAuthor`, H-1 intact).
+    Orphan: hard-deleted.
+  - **`MASTERY_EVENTS`: deletes only `user_id = departed`** (their proven territory
+    #4 + author_credit #3); retained users' events are never deleted by
+    `question_id` — this removes the old confiscation cascade. `answered_by_user_id
+    = departed` is nulled on retained rows (Decision C degrade).
+  - All other question-keyed deletes (`UserQuestionBank`, `QuestionRating`,
+    `QuestionFeedback`, `SkippedDailyQuestion`, `QuestionReaction`, `GradeDispute`,
+    `JoshingGameQuestion`/`Response`, `QuestionAudienceTag`) restricted to the
+    **orphan** set, so retained users' rows on tombstoned questions survive.
+  - **Decision D realized as actor-strip**: `FeedItem.sourceUserId = departed`
+    cards are deleted (a real `users.id='house'` is forbidden by H-1); the
+    question half still re-sources to house via the tombstone.
+
+**As-built deviations / open tails:**
+- `ContentReport` (`reporter_user_id` RESTRICT) is **not handled** by the routine
+  (pre-existing gap, unchanged). The rewrite deletes strictly fewer questions than
+  before, so it does not worsen the latent `ContentReport.question_id` RESTRICT
+  risk — but the 🔁 live re-audit should close it.
+- **No live integration test**: the query test suite is DB-mocked and cannot
+  exercise the raw-SQL transaction. Verified by typecheck + lint + the mocked
+  suite (134 query tests green). The pre-launch checkbox needs a real-DB
+  conformance run.
