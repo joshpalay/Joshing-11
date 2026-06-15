@@ -3,6 +3,7 @@
 import { useCallback, useState, type ReactNode } from 'react'
 
 import { answerHeadingStyle } from '@/components/answer-heading'
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote'
 import { KnowledgeCircle } from '@/components/knowledge/CategoryCircles'
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
@@ -173,19 +174,16 @@ function AnsweredResult({
           {item.correctAnswer}
         </p>
       ) : null}
-      {item.creatorNote ? (
-        <div className="mt-1.5 rounded-md border bg-muted/40 px-3 py-2">
-          <p className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-muted-foreground">
-            Why they asked
-          </p>
-          <p
-            className="mt-1 text-[13px] leading-6"
-            style={{ fontFamily: 'var(--font-serif)', color: 'var(--ink)' }}
-          >
-            {item.creatorNote}
-          </p>
-        </div>
-      ) : null}
+      {(() => {
+        const note = pickCreatorNote({
+          isHuman: Boolean(item.authorName) && !item.authorIsHouse,
+          authorName: item.authorName,
+          creatorNote: item.creatorNote,
+        })
+        return note ? (
+          <CreatorNote text={note.text} provenance={note.provenance} style={{ marginTop: 6 }} />
+        ) : null
+      })()}
       {(onRetry || (recheckAction && recheckState !== 'done')) ? (
         <div className="flex items-center justify-end gap-4 pt-2">
           {onRetry ? (

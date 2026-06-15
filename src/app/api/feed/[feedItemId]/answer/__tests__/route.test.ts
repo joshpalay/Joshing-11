@@ -77,6 +77,7 @@ const FEED_ROW = {
     acceptedAlternatives: [],
     questionType: 'factual',
     creatorId: 'author-1',
+    source: 'authored',
     canonicalSubcategory: 'history',
     broadCategory: 'humanities',
     category: 'humanities',

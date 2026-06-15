@@ -139,6 +139,8 @@ type AnswerResponse = {
   creatorNote?: string | null
   insideJoke?: string | null
   insideJokeKind?: InsideJokeKind | null
+  authorName?: string | null
+  authorIsHouse?: boolean
   pointsAwarded?: number | null
   masteryDelta?: unknown | null
   unverified?: boolean
@@ -152,6 +154,8 @@ type ResultState = {
   creatorNote: string | null
   insideJoke: string | null
   insideJokeKind: InsideJokeKind | null
+  authorName: string | null
+  authorIsHouse: boolean
   awardedPoints: number | null
   masteryDelta: unknown | null
   unverified: boolean
@@ -443,6 +447,8 @@ function toAnsweredByYouItem(
     awardedPoints: result?.awardedPoints ?? item.awarded_points,
     explanation: result?.explanation ?? item.explanation,
     creatorNote: result?.creatorNote ?? null,
+    authorName: result?.authorName ?? null,
+    authorIsHouse: result?.authorIsHouse ?? false,
     broadCategory: pickBroadCategory(masteryDeltaRaw, item),
     masteryDelta: normalizeMasteryDelta(masteryDeltaRaw),
     pairedFriend: pickPairedFriend(item),
@@ -1582,6 +1588,8 @@ function FeedListContent({
             creatorNote: body.creatorNote ?? null,
             insideJoke: body.insideJoke ?? null,
             insideJokeKind: body.insideJokeKind ?? null,
+            authorName: body.authorName ?? null,
+            authorIsHouse: Boolean(body.authorIsHouse),
             awardedPoints: body.pointsAwarded ?? null,
             masteryDelta: body.masteryDelta ?? null,
             unverified: Boolean(body.unverified),
@@ -2177,6 +2185,8 @@ function FeedListContent({
             creatorNote={result.creatorNote}
             insideJoke={result.insideJoke}
             insideJokeKind={result.insideJokeKind}
+            authorName={result.authorName}
+            authorIsHouse={result.authorIsHouse}
             openedNewTerritory={pickOpenedNewTerritory(result.masteryDelta)}
             openedTerritoryDomain={pickOpenedTerritoryDomain(result.masteryDelta)}
             questionId={sheetItem.question_id}

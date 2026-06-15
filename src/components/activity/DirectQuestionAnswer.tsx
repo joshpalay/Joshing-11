@@ -17,6 +17,8 @@ type Feedback = {
   creatorNote: string | null;
   insideJoke: string | null;
   insideJokeKind: InsideJokeKind | null;
+  authorName: string | null;
+  authorIsHouse: boolean;
   openedNewTerritory: boolean;
   openedTerritoryDomain: string | null;
   unverified: boolean;
@@ -64,6 +66,8 @@ export function DirectQuestionAnswer({
         creatorNote: body.creatorNote,
         insideJoke: body.insideJoke,
         insideJokeKind: body.insideJokeKind,
+        authorName: body.authorName,
+        authorIsHouse: body.authorIsHouse,
         openedNewTerritory: Boolean(body.masteryDelta?.openedNewTerritory),
         openedTerritoryDomain: body.masteryDelta?.openedNewTerritory
           ? body.masteryDelta?.domain ?? null
@@ -133,6 +137,8 @@ export function DirectQuestionAnswer({
           creatorNote={feedback.creatorNote}
           insideJoke={feedback.insideJoke}
           insideJokeKind={feedback.insideJokeKind}
+          authorName={feedback.authorName}
+          authorIsHouse={feedback.authorIsHouse}
           openedNewTerritory={feedback.openedNewTerritory}
           openedTerritoryDomain={feedback.openedTerritoryDomain}
           questionId={action.questionId}

@@ -11,6 +11,7 @@ import { ThreadCard } from '@/components/play/ThreadCard';
 import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCatchupFlow';
 import { AuthorName } from '@/components/AuthorName';
 import { EditorialBadge } from '@/components/EditorialBadge';
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
 import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
 
 export default function DailyCatchupPage() {
@@ -355,11 +356,11 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
   const yourAnswer = isRevealed
     ? 'You asked to see the answer'
     : record.submittedAnswer?.trim() || 'No answer submitted';
-  const creatorNoteLabel = record.authorName
-    ? `${record.authorName.split(/\s+/)[0]}’s note`
-    : record.authorIsHouse
-      ? 'Editor’s note'
-      : 'Creator’s note';
+  const note = pickCreatorNote({
+    isHuman: Boolean(record.authorName) && !record.authorIsHouse,
+    authorName: record.authorName,
+    creatorNote: record.authorNote,
+  });
 
   return (
     <article className="relative overflow-hidden rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
@@ -451,12 +452,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
 
       {/* The fuller creator note the live thread defers to keep its momentum —
           surfaced here in the recap so it is never lost. */}
-      {record.authorNote ? (
-        <section className="mt-5 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] px-4 py-3">
-          <h3 className="text-sm font-semibold text-[var(--brand-ink)]">{creatorNoteLabel}</h3>
-          <p className="mt-1 text-sm leading-6 text-[var(--brand-ink-700)]">{record.authorNote}</p>
-        </section>
-      ) : null}
+      {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
     </article>
   );
 }

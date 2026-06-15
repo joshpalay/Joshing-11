@@ -19,6 +19,7 @@ import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { getFeedItemAnswerForRecipient } from '@/server/db/queries/feed';
+import { parseQuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -261,6 +262,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const insideJoke = await selectInsideJokeForViewer(question.insideJoke, question.creatorId, session.userId);
 
+  // Resolve the CREATOR (not the feed-item source) so the unified creator-note
+  // surface can pick its treatment by provenance: human → inverted block labeled
+  // "Between you and {Name}"; house/LLM → bronze aside.
+  let creatorDisplayName: string | null = null;
+  if (question.creatorId) {
+    const [creatorRow] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, question.creatorId))
+      .limit(1);
+    creatorDisplayName = creatorRow?.displayName ?? null;
+  }
+  const { authorName, authorIsHouse } = resolveAuthorDisplay(
+    question.creatorId,
+    parseQuestionSource(question.source),
+    creatorDisplayName,
+  );
+
   return NextResponse.json({
     isCorrect,
     explanation,
@@ -276,5 +295,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     creatorNote: question.creatorNote ?? null,
     insideJoke: insideJoke?.text ?? null,
     insideJokeKind: insideJoke?.kind ?? null,
+    authorName,
+    authorIsHouse,
   });
 }

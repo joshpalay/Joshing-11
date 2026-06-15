@@ -3,6 +3,7 @@
 import { type CSSProperties, type ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { KnowledgeCircle, getDomainColor } from '@/components/knowledge/CategoryCircles';
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
 
 const monoStyle: CSSProperties = {
   fontFamily: 'var(--font-mono)',
@@ -267,11 +268,16 @@ export function DiscoverySection({ rows, emptyCopy }: { rows: DiscoveryRow[]; em
               {row.factualExplanation ? (
                 <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: '7px', lineHeight: 1.45 }}>{row.factualExplanation}</p>
               ) : null}
-              {row.creatorNote ? (
-                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: '7px', fontStyle: 'italic', lineHeight: 1.45 }}>
-                  {row.creatorName ? `${row.creatorName}: ` : ''}{row.creatorNote}
-                </p>
-              ) : null}
+              {(() => {
+                const note = pickCreatorNote({
+                  isHuman: Boolean(row.creatorName),
+                  authorName: row.creatorName,
+                  creatorNote: row.creatorNote,
+                })
+                return note ? (
+                  <CreatorNote text={note.text} provenance={note.provenance} style={{ marginTop: 12 }} />
+                ) : null
+              })()}
             </article>
           ))}
         </div>

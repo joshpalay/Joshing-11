@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { answerHeadingStyle } from '@/components/answer-heading';
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
 import { FirstGameRecapGate } from '@/components/games/FirstGameRecapGate';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
@@ -362,12 +363,14 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                       )}
                     </div>
                   ) : null}
-                  {authorNote ? (
-                    <p className="mt-3 rounded-md border bg-muted/50 p-3 text-sm leading-6 text-foreground">
-                      <span className="font-medium">{authorName ? `${authorName}’s note` : 'Their note'}</span>{' '}
-                      {authorNote}
-                    </p>
-                  ) : null}
+                  {(() => {
+                    const note = pickCreatorNote({
+                      isHuman: Boolean(authorName),
+                      authorName,
+                      creatorNote: authorNote,
+                    })
+                    return note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null
+                  })()}
                   <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                     <QuestionRatingButtons questionId={gameQuestion.questionId} />
                     <SendQuestionAction

@@ -57,6 +57,10 @@ export type AnsweredByYouFeedItem = FeedCardBaseItem & {
   awardedPoints?: number | null
   explanation?: string | null
   creatorNote?: string | null
+  // Provenance for the unified creator-note treatment (human → inverted block,
+  // house/LLM → bronze aside). Populated from the answer result.
+  authorName?: string | null
+  authorIsHouse?: boolean
   unverifiedAnswer?: boolean
   masteryDelta?: AnsweredByYouMasteryDelta | null
   pairedFriend?: AnsweredByYouPairedFriend | null

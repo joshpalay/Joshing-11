@@ -8,7 +8,8 @@ import { firstSentence } from '@/lib/first-sentence'
 import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
-import { INSIDE_JOKE_LABELS, type InsideJokeKind } from '@/lib/questions-types'
+import { type InsideJokeKind } from '@/lib/questions-types'
+import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
@@ -27,6 +28,10 @@ type AnswerFeedbackSheetProps = {
   creatorNote: string | null
   insideJoke?: string | null
   insideJokeKind?: InsideJokeKind | null
+  // Provenance of the question's author, for the unified creator-note treatment:
+  // a non-null authorName with authorIsHouse=false is a human → inverted block.
+  authorName?: string | null
+  authorIsHouse?: boolean
   openedNewTerritory?: boolean
   openedTerritoryDomain?: string | null
   questionId: string
@@ -59,7 +64,8 @@ export function AnswerFeedbackSheet({
   explanation,
   creatorNote,
   insideJoke = null,
-  insideJokeKind = null,
+  authorName = null,
+  authorIsHouse = false,
   openedNewTerritory = false,
   openedTerritoryDomain = null,
   questionId,
@@ -287,40 +293,20 @@ export function AnswerFeedbackSheet({
             </p>
           ) : null}
 
-          {insideJoke ? (
-            // The inside-joke wink renders as an inset panel — matching the
-            // daily-5 game's "Between us!" card (bordered slate box), not the
-            // de-boxed plain text it had drifted to on this surface.
-            <div
-              style={{
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid color-mix(in srgb, var(--brand-link) 22%, var(--border))',
-                background: 'var(--editorial-slate)',
-                padding: '10px 12px',
-              }}
-            >
-              <p
-                className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase"
-                style={{ color: GOLD_INK }}
-              >
-                {INSIDE_JOKE_LABELS[insideJokeKind ?? 'relational']}
-              </p>
-              <p className="mt-1 font-serif text-[15px] leading-6 text-[var(--brand-ink)]">
-                {insideJoke}
-              </p>
-            </div>
-          ) : null}
-
-          {creatorNote ? (
-            <div>
-              <p className="text-[0.62rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-                Why they asked
-              </p>
-              <p className="mt-1 font-serif text-[15px] leading-6 text-[var(--brand-ink)]">
-                {creatorNote}
-              </p>
-            </div>
-          ) : null}
+          {(() => {
+            // One unified note, treatment chosen by provenance (never answer-state):
+            // human author → inverted block; house/LLM → bronze aside. The gap-4
+            // container rhythm already separates blocks, so don't stack 24px on top.
+            const note = pickCreatorNote({
+              isHuman: Boolean(authorName) && !authorIsHouse,
+              authorName,
+              creatorNote,
+              insideJoke,
+            })
+            return note ? (
+              <CreatorNote text={note.text} provenance={note.provenance} style={{ marginTop: 0 }} />
+            ) : null
+          })()}
 
           {onRecheck ? (
             <div className="space-y-2">

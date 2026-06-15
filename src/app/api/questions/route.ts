@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
-import { categorizeQuestion, generateInsideJoke } from '@/lib/llm';
+import { categorizeQuestion } from '@/lib/llm';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
 // Imported from vet-verdict (not vet-question) so it resolves to the real
 // pure mapper even where vet-question is mocked.
@@ -93,7 +93,6 @@ export async function POST(request: NextRequest) {
 
   let categorization;
   let difficultyAssessment;
-  let insideJoke;
   let verdict;
   try {
     categorization = await categorizeQuestion(
@@ -207,19 +206,17 @@ export async function POST(request: NextRequest) {
   // that one signal instead of rejecting the whole batch and 500ing the save.
   // The structural guarantee lives here, not in each helper's internal
   // try/catch discipline.
-  const [difficultyResult, insideJokeResult, verdictResult] = await Promise.allSettled([
+  // Human-authored questions no longer get an LLM "between us" aside: the unified
+  // creator-note surface shows the author's OWN note (the inverted block) for a
+  // human, and a machine line never renders as a person. The aside stays for the
+  // daily/LLM and house paths (generate-questions.ts), which are untouched.
+  const [difficultyResult, verdictResult] = await Promise.allSettled([
     assessQuestionDifficulty({
       questionText: questionFields.text,
       correctAnswer: questionFields.correctAnswer,
       broadCategory: questionFields.broadCategory,
       canonicalSubcategory: questionFields.canonicalSubcategory,
       explanation: questionFields.explanation,
-    }),
-    generateInsideJoke({
-      questionText: questionFields.text,
-      correctAnswer: questionFields.correctAnswer,
-      broadCategory: questionFields.broadCategory,
-      canonicalSubcategory: questionFields.canonicalSubcategory,
     }),
     vetQuestion({
       questionText: questionFields.text,
@@ -244,13 +241,6 @@ export async function POST(request: NextRequest) {
   } else {
     logEnrichmentFailure('difficulty', difficultyResult.reason);
     difficultyAssessment = fallbackQuestionDifficulty();
-  }
-
-  if (insideJokeResult.status === 'fulfilled') {
-    insideJoke = insideJokeResult.value;
-  } else {
-    logEnrichmentFailure('inside_joke', insideJokeResult.reason);
-    insideJoke = null;
   }
 
   if (verdictResult.status === 'fulfilled') {
@@ -290,7 +280,7 @@ export async function POST(request: NextRequest) {
   const categorizedQuestionFields = {
     ...questionFields,
     difficulty: difficultyAssessment.difficulty,
-    insideJoke,
+    insideJoke: null,
   };
 
   if (sendToFriendIds.length > 0) {

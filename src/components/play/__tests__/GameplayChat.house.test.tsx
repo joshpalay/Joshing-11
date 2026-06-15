@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
-import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
+import { HOUSE_AUTHOR, INSIDE_JOKE_LABELS, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
@@ -92,12 +92,13 @@ function houseResultWithNote(): ChatMessage {
 }
 
 describe('GameplayChat house commentary (D-3 Stage 5)', () => {
-  it('renders a house creator-note in editorial voice with the badge, never relational framing', () => {
+  it('renders a house creator-note as the bronze editorial aside, never relational framing', () => {
     const rendered = html([houseResultWithNote()]);
     expect(rendered).toContain('A favorite from the archives.');
-    // Editorial treatment, not "Why {name} asked".
-    expect(rendered).toContain('Editor');
-    expect(rendered).toContain('editorial-badge');
+    // House = machine voice → the bronze editorial aside, not the human inverted
+    // block and not "Why {name} asked".
+    expect(rendered).toContain(INSIDE_JOKE_LABELS.editorial);
+    expect(rendered).not.toContain('Between you and');
     expect(rendered).not.toContain('Why Joshing asked');
     // No relational copy anywhere on a house result.
     expect(rendered).not.toContain('gave you this');

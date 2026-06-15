@@ -78,6 +78,7 @@ const QUESTION = {
   acceptedAlternatives: [],
   questionType: 'factual',
   creatorId: 'author-1',
+  source: 'authored',
   canonicalSubcategory: 'history',
   broadCategory: 'humanities',
   category: 'humanities',
@@ -107,6 +108,7 @@ vi.mock('@/server/db', () => ({
     askedCount: 'q.askedCount',
     correctCount: 'q.correctCount',
   },
+  users: { id: 'u.id', displayName: 'u.display' },
 }))
 vi.mock('@/server/mastery/scoring', () => ({ getBasePoints: getBasePointsMock }))
 vi.mock('@/server/mastery/write-mastery-event', () => ({ writeMasteryEvent: writeMasteryEventMock }))
