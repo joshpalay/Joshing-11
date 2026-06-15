@@ -29,8 +29,10 @@ The ambient band carries a single band-level label ("Past 7 days" or equivalent)
 **3. Spent cards disappear when exhausted (overrides §Q4).**
 A From Friends milestone bundle is **hidden once all its questions are played**. While answerable, it shows a remaining count ("1 of 4 questions"). This reverses `§Q4`'s "spent cards stay as hollow-triangle bundles for 30 days" — but only for the *fully exhausted* case. A partially-played bundle still appears (with its remaining count), so no answerable content is thrown away. The 30-day roll-off for spent cards is moot under this model because exhausted cards are removed on exhaustion, not on a timer.
 
-**4. Per-section honest empty states replace the all-or-nothing switch.**
+**4. Per-section honest empty states replace the all-or-nothing switch.** *(Treatment reverted 2026-06-15 — see note below.)*
 When a Zone 2 section has nothing in the 7-day window, it shows an honest empty state rather than being silently hidden or backfilled from history. This overrides `D-HOME-PACING-01 §9`'s "hide empty sections; one empty state only when all three are empty." Recent-or-nothing: no section reaches past 7 days to fill a quota.
+
+> **Update (2026-06-15):** the *honest per-section empty-state treatment* of point 4 was reverted. In practice the speech-bubble + "Nothing else this week." block read as orphaned clutter under the "Past 7 days" band. Empty Zone-2 sections (From Friends, Recent activity) are now **hidden outright** again, and the single "Past 7 days" band label is suppressed when the whole band resolves to nothing. The rest of the model is unchanged: recent-or-nothing windowing stands (no back-fill to a quota), and the whole-page empty state still wins only when everything is empty. The server still emits `emptySections` (`selectHomeEdition`); the renderer simply no longer draws a per-section empty, so re-enabling is a renderer-only change.
 
 **5. "View more" portals are bounded to the same 7-day window.**
 The `/from-friends` and `/activities` overflow pages render only the 7-day window, not the 35/90-day data window. They are no longer deep-history portals.
