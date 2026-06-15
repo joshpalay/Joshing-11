@@ -446,12 +446,12 @@ export function ActivityStreamItem({
                   alignItems: 'center',
                   gap: 5,
                   // Same text treatment as the "Answer →" feed action: the
-                  // sans (Interface voice) at 18px in the link slate, underlined.
-                  // A tappable affordance never takes the Editorial serif.
+                  // sans (Interface voice) at 14px in the link slate, underlined,
+                  // matching the Today's Five card link. A tappable affordance
+                  // never takes the Editorial serif.
                   fontFamily: 'var(--font-sans)',
-                  fontSize: 18,
-                  fontWeight: 600,
-                  letterSpacing: '0.05em',
+                  fontSize: 14,
+                  fontWeight: 500,
                   color: 'var(--brand-link)',
                   textDecoration: 'underline',
                   textUnderlineOffset: 4,

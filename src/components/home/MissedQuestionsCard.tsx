@@ -29,7 +29,7 @@ export function MissedQuestionsCard({
       </div>
       <Link
         href="/daily/catchup"
-        className="text-lg leading-[24px] font-semibold tracking-[0.05em] whitespace-nowrap text-[var(--brand-link)] underline underline-offset-4"
+        className="text-sm font-medium whitespace-nowrap text-[var(--brand-link)] underline underline-offset-4"
         aria-label={`Catch up on ${missedLabel}`}
       >
         Play →
