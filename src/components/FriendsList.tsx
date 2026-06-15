@@ -120,18 +120,17 @@ function FriendCard({ person }: { person: Person }) {
       </h3>
       <p className="text-muted-foreground mt-1 text-sm leading-6">{friendSecondary(person)}</p>
       {/* Two warm activity facts (PLR-14): what they've contributed and what
-          you've engaged with. Label-left / count-right reads as a quiet shared
-          ledger, never a ranking — friends are not sorted or compared by these. */}
-      <dl className="mt-2 space-y-0.5 text-xs">
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-muted-foreground">Questions created</dt>
-          <dd className="text-foreground font-medium tabular-nums">{person.authoredCount}</dd>
-        </div>
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-muted-foreground">You&rsquo;ve answered</dt>
-          <dd className="text-foreground font-medium tabular-nums">{person.answeredByViewerCount}</dd>
-        </div>
-      </dl>
+          you've engaged with — kept on one line as a quiet shared ledger,
+          never a ranking. Friends are not sorted or compared by these. */}
+      <p className="text-muted-foreground mt-2 text-xs">
+        Questions created{" "}
+        <span className="text-foreground font-medium tabular-nums">{person.authoredCount}</span> (you
+        answered{" "}
+        <span className="text-foreground font-medium tabular-nums">
+          {person.answeredByViewerCount}
+        </span>
+        )
+      </p>
     </Link>
   );
 }
