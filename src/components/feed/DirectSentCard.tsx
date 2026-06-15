@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 
+import { HourglassMark } from '@/components/activity/ActivityIcon'
+
 import { visibleFeedCategory } from './category'
 import { SparkleEnvelope } from './SparkleEnvelope'
 import type { DirectSentFeedItem } from './types'
@@ -44,9 +46,20 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, elevated }
       // Direct sends share the plain hairline-bordered tile with broadcasts
       // (the triangle mat is retired); the eyebrow is what marks them out.
       variant="bordered"
-      eyebrow="Sent directly to you"
-      // The direct-send marker reads in the brand gold accent.
-      eyebrowClassName="font-semibold text-[var(--accent-gold)]"
+      // Centered flourish mirroring the milestone "star — line — star"
+      // treatment (MilestoneStar): a pair of hourglass marks flanks the eyebrow.
+      // The hourglass is the triangle family's "someone sends you a Q" sign, so
+      // it carries the direct-send meaning without spending the gold accent
+      // (reserved per STYLE-GUIDE-COLOR §4). Text stays in the quiet ink register
+      // (opacity on the text span only, so the marks keep their 80% fill).
+      eyebrow={
+        <span className="inline-flex items-center gap-[11px]">
+          <HourglassMark />
+          <span className="opacity-70">Sent directly to you</span>
+          <HourglassMark />
+        </span>
+      }
+      eyebrowClassName="flex justify-center font-semibold text-[var(--brand-ink)]"
       signal={signal}
       question={item.question}
       overflow={overflow}

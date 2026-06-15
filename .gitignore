@@ -33,3 +33,4 @@ dev-stderr.txt
 .claude/settings.local.json
 audits/
 supabase/
+_scratch/
