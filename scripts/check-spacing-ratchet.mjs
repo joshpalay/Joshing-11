@@ -27,7 +27,7 @@ import { join, relative } from 'node:path';
 // count so no new drift can land; burn down by snapping arbitraries to scale
 // steps (start with the ones already equal to a step — 14px→3.5, 6px→1.5,
 // 10px→2.5 — which move zero pixels) and lowering this number.
-const CEILING = 44;
+const CEILING = 34;
 
 // ── Exemptions (mirrors the color/font ratchets; keep this list short) ───────
 const EXEMPT = [
@@ -63,8 +63,26 @@ function* walk(dir) {
   }
 }
 
+// Exact px for each standard Tailwind spacing step (--spacing 0.25rem × step).
+// A value matching one of these is an on-scale equivalent that can be snapped
+// with zero pixels moved (the rest are off-scale → a design call).
+const STEP_PX = {
+  2: '0.5', 4: '1', 6: '1.5', 8: '2', 10: '2.5', 12: '3', 14: '3.5', 16: '4',
+  20: '5', 24: '6', 28: '7', 32: '8', 36: '9', 40: '10', 44: '11', 48: '12',
+  56: '14', 64: '16',
+};
+function scaleHint(value) {
+  const px = value.endsWith('px') ? parseFloat(value)
+    : value.endsWith('rem') ? parseFloat(value) * 16
+    : NaN;
+  if (Number.isNaN(px)) return 'off-scale';
+  return STEP_PX[px] ? `snap → ${STEP_PX[px]}` : 'off-scale';
+}
+
 const root = process.cwd();
-const offenders = [];
+const LIST = process.argv.includes('--list');
+const offenders = [];          // per-line, for the over-ceiling dump
+const byToken = new Map();     // token -> { count, value }, for --list
 
 for (const file of walk(join(root, 'src'))) {
   const rel = relative(root, file).replaceAll('\\', '/');
@@ -74,12 +92,37 @@ for (const file of walk(join(root, 'src'))) {
     const line = stripComments(raw);
     if (!line) return;
     SPACING.lastIndex = 0;
-    const n = line.match(SPACING)?.length ?? 0;
+    let n = 0;
+    for (const m of line.matchAll(SPACING)) {
+      const token = m[0];
+      // env() values (iOS safe-area insets, e.g. pb-[max(1rem,env(safe-area-
+      // inset-bottom))]) are legitimate — there is no scale step for a notch
+      // inset — so they are not drift and don't count.
+      if (token.includes('env(')) continue;
+      n += 1;
+      const value = token.slice(token.indexOf('[') + 1, -1);
+      const entry = byToken.get(token) ?? { count: 0, value };
+      entry.count += 1;
+      byToken.set(token, entry);
+    }
     if (n > 0) offenders.push({ loc: `${rel}:${i + 1}`, n, text: raw.trim().slice(0, 100) });
   });
 }
 
 const count = offenders.reduce((sum, o) => sum + o.n, 0);
+
+// `--list`: print every current arbitrary grouped by value with a snap/off-scale
+// hint, so a burn-down pass can be reviewed at a glance. Exits 0 (report only).
+if (LIST) {
+  const rows = [...byToken.entries()].sort((a, b) => b[1].count - a[1].count);
+  console.log(`spacing ratchet — ${count} arbitrary occurrence(s), ${rows.length} distinct value(s):\n`);
+  for (const [token, { count: c, value }] of rows) {
+    console.log(`  ${String(c).padStart(3)}  ${token.padEnd(30)} ${scaleHint(value)}`);
+  }
+  console.log('\n"snap → N" = exact scale equivalent (zero pixels move). "off-scale" = design call.');
+  process.exit(0);
+}
+
 if (count > CEILING) {
   console.error(`✖ spacing ratchet: ${count} arbitrary spacing occurrence(s) in src/ (ceiling: ${CEILING})\n`);
   for (const o of offenders.slice(0, 60)) console.error(`  ${o.loc} (${o.n}): ${o.text}`);
