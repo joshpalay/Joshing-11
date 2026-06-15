@@ -1,0 +1,22 @@
+# Spacing ratchet (CONS-5): fail the PR if arbitrary spacing usage (Tailwind
+# p-[…]/m-[…]/gap-[…]/space-[…] arbitraries) in src/ rises above the recorded
+# ceiling. The ceiling and the exemption list live in
+# scripts/check-spacing-ratchet.mjs. Independent of the color/font ratchets by
+# design — each design-system axis enforces separately. Sizing (h-/w-) is out
+# of scope (see the script header).
+name: Spacing ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  spacing-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-spacing-ratchet.mjs

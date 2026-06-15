@@ -23,6 +23,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - `npm run lint` — ESLint over `src/`
 - `npm run check:fonts` — font ratchet (off-system font-family count must stay ≤ the ceiling in `scripts/check-font-ratchet.mjs`; runs in CI)
 - `npm run check:colors` — color ratchet (off-system hex/rgb/hsl count must stay ≤ the ceiling in `scripts/check-color-ratchet.mjs`; runs in CI)
+- `npm run check:spacing` — spacing ratchet (arbitrary `p-[…]`/`m-[…]`/`gap-[…]`/`space-[…]` count must stay ≤ the ceiling in `scripts/check-spacing-ratchet.mjs`; runs in CI. Sizing `h-/w-` is out of scope — see the script header)
 - `npm run format` — Prettier write
 - `npm run db:migrate` — Drizzle migrations
 - `npm run smoke:daily-catchup` — daily catchup smoke test
