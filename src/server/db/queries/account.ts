@@ -563,6 +563,17 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     await tx.execute(sql`delete from "UserQuestionBank" where "user_id" = ${userId} or "question_id" in ${orphanList}`);
     await tx.execute(sql`delete from "QuestionAudienceTag" where "creator_id" = ${userId} or "question_id" in ${orphanList}`);
 
+    // ContentReport: the `ContentReport_one_target` CHECK
+    // ((question_id NOT NULL) + (generated_question_id NOT NULL) = 1) forbids
+    // nulling a report's target, so a report whose target is going away is
+    // deleted, not orphaned. Deleted here: this user's own reports (#4), reports
+    // targeting an orphan question (hard-deleted below), and reports targeting
+    // this user's generated questions (deleted below). Reports targeting a
+    // TOMBSTONE question keep pointing at the surviving row (moderation record
+    // preserved). Runs before the orphan-Question and GeneratedQuestion deletes
+    // so their RESTRICT FKs don't block.
+    await tx.execute(sql`delete from "ContentReport" where "reporter_user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+
     // THE territory-preservation core (#1/#3/#4): delete ONLY this user's own
     // mastery rows (their proven territory + their author-credit). Retained users'
     // events tied to this author's questions are PRESERVED — never deleted by

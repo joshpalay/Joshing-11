@@ -245,10 +245,14 @@ A–E ratified (recommended defaults; see `DECISIONS.md`) and **built**:
     question half still re-sources to house via the tombstone.
 
 **As-built deviations / open tails:**
-- `ContentReport` (`reporter_user_id` RESTRICT) is **not handled** by the routine
-  (pre-existing gap, unchanged). The rewrite deletes strictly fewer questions than
-  before, so it does not worsen the latent `ContentReport.question_id` RESTRICT
-  risk — but the 🔁 live re-audit should close it.
+- `ContentReport` (`reporter_user_id`, `question_id`, `generated_question_id` all
+  RESTRICT) is now **handled**. The `ContentReport_one_target` CHECK
+  (`(question_id NOT NULL) + (generated_question_id NOT NULL) = 1`) forbids nulling
+  a report's target, so the routine **deletes** reports owned by the departed user
+  (#4), reports targeting an orphan question (hard-deleted), and reports targeting
+  the departed user's generated questions — run before those deletes so the
+  RESTRICT FKs don't block. Reports targeting a **tombstone** question keep
+  pointing at the surviving row (moderation record preserved).
 - **No live integration test**: the query test suite is DB-mocked and cannot
   exercise the raw-SQL transaction. Verified by typecheck + lint + the mocked
   suite (134 query tests green). The pre-launch checkbox needs a real-DB
