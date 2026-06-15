@@ -95,7 +95,7 @@ export function EditorialFeature({
       <Link
         href={cta.href}
         className={cn(
-          'mt-5 inline-flex min-h-11 items-center text-lg font-semibold tracking-[0.05em] underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+          'mt-5 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
           TONE_ACCENT[tone],
         )}
       >
