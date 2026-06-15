@@ -253,7 +253,13 @@ A–E ratified (recommended defaults; see `DECISIONS.md`) and **built**:
   the departed user's generated questions — run before those deletes so the
   RESTRICT FKs don't block. Reports targeting a **tombstone** question keep
   pointing at the surviving row (moderation record preserved).
-- **No live integration test**: the query test suite is DB-mocked and cannot
-  exercise the raw-SQL transaction. Verified by typecheck + lint + the mocked
-  suite (134 query tests green). The pre-launch checkbox needs a real-DB
-  conformance run.
+- **Live-DB conformance run is the remaining gate**: the query test suite is
+  DB-mocked and cannot exercise the raw-SQL transaction, so a runnable script
+  ships instead — `npm run verify:account-deletion`
+  (`scripts/account-deletion-territory.verify.ts`) seeds the full scenario
+  (author + retained answerer + friend; tombstone/orphan/banked questions;
+  proven/author-credit/named mastery events; actor + survivor feed cards; three
+  ContentReport cases), deletes the author, and asserts #1–#4/B/C/D + the
+  ContentReport disposition, then self-cleans. Verified so far by typecheck +
+  lint + the mocked suite (134 query tests green); run the script against a real
+  database to close the 🔁 re-audit before launch.
