@@ -51,8 +51,7 @@ One living ledger for the two audits currently being worked down. Edit the **Sta
 
 **No blockers and no open decisions left.** Both audits are burned down: every launch-blocker is `DONE`, ignored, or deferred. What remains is optional, feature-sized, or judgment work:
 
-- **PLR-3** — needs a live repro to confirm the "double-tap" exists (may be a no-op).
-- **Partials (judgment, low urgency):** PLR-12, PLR-17, PLR-19, PLR-20, PLR-25.
+- **Partials (judgment, low urgency):** PLR-17, PLR-19, PLR-25.
 
 ---
 
@@ -64,7 +63,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 |---|---|---|---|---|---|
 | PLR-1 | Dev tools visible to all users | P0 | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: unconditional in `AccountActions.tsx:102–135`.) |
 | PLR-2 | Intermittent 404 on root during sign-in | P0 | `DONE` | `CLEAN WIN` | Fixed `304215b8` (#922): re-login now mints the real `onb` claim (`verify-otp/route.ts:50,213`), removing the `refresh-onboarding-claim` redirect hop that opened the 404 window. Regression test added. Diagnosed root cause; a live smoke confirms. |
-| PLR-3 | "Show me the answer" duplication | P1 | `OPEN` | `CLEAN WIN` | Text reveal `GameplayChat.tsx:541`. The "double action" wasn't found in code — needs a live repro. Cost concern removed: reveal is non-destructive (see PLR-8), so simplifying it is low-risk. |
+| PLR-3 | "Show me the answer" duplication | P1 | `WON'T DO` | — | **Owner: not a real finding (2026-06-15).** The "double action" was never present in code — `GameplayChat.tsx:541` is a single text reveal. Confirmed untrue; no change. |
 | PLR-4 | Auto-generated tagline misrepresents new users | P1 | `DONE` | `FIX VIA CANON` | Portrait must be *earned by play*, not auto-assigned. Canon-correct fix shipped: `buildMindStatement()` `users/[id]/page.tsx:78–91` derives from real mastery + neutral placeholder for new users. |
 | PLR-5 | "Use this" artefact in rewrite suggestions | P1 | `DONE` | `CLEAN WIN` | `75eb625`; separate block spans `QuestionForm.tsx:280–291`. (Generation prompt is the biggest quality lever — good it's clean.) |
 | PLR-6 | No success feedback after saving a question | — | `DONE` | `CLEAN WIN` | `419201a`; "✓ Saved" panel `QuestionForm.tsx:541–549` + host toast. |
@@ -73,7 +72,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-9 | Privacy toggles lack context | P2 | `DONE` | `CLEAN WIN` | `419201a`; `SECTION_VISIBILITY_HELP` `users/[id]/page.tsx:546–565`. |
 | PLR-10 | "Establishing" label unclear | — | `WON'T DO` | — | **Owner: deliberate (2026-06-14).** "Establishing" is intentional vocabulary (the tier name) — no rename, no tooltip. |
 | PLR-11 | Card-colour switcher confusing | — | `WON'T DO` | — | **Ignored per owner (2026-06-14).** Not being tracked as actionable. (Code unchanged: dev `PaletteToggle` live for all `layout.tsx:7,72`.) |
-| PLR-12 | Profile editing hidden behind preview | — | `PARTIAL` | — | Inline click-to-edit fields, no explicit "Edit profile" `users/[id]/page.tsx:492–539`. |
+| PLR-12 | Profile editing hidden behind preview | — | `DONE` | `CLEAN WIN` | Shipped #957: added a visible pencil cue to the inline name + handle fields (`InlineEditableField`/`InlineHandleField`) so they read as editable — lighter than a separate Edit-profile button + modal. |
 | PLR-13 | Explanation field is a small scrolling textarea | — | `DONE` | `CLEAN WIN` | Shipped #934: explanation `<textarea>` is now `resize-y` with a taller default (`rows={5}`, `min-h-[7.5rem]`) — `QuestionForm.tsx:666`. |
 | PLR-14 | Friend list lacks quick actions | P2 | `DONE` | `FIX VIA CANON` | Shipped #945. Each friend row now carries two warm activity facts (not action buttons, per owner): **Questions created** (their authored count) and **You've answered** (of those, how many the viewer answered across all surfaces — feed/mastery/game union). Single bulk aggregate in `getFriendsHub` (no N+1); rendered as a label/count ledger, never a ranking (anti-leaderboard). |
 | PLR-15 | No onboarding/tour for Knowledge Map | P1 | `DONE` | `FIX VIA CANON` | Reworked the post-first-five recap (`FirstSessionRecap.tsx`): Beat 2 now points to the **Knowledge** tab; new Beat 3 points to the **Questions** tab (write-questions); new Beat 4 carries the daily rhythm + the reminder email opt-in. Removed the invite beat (per owner). Copy avoids the mastery-size misstatement. Also moved the reminder opt-in **off onboarding** (`OnboardingFlow.tsx` — `reminders` step deleted; finishes straight to /daily). Typecheck/lint/tests green. |
@@ -81,7 +80,7 @@ Source: `audits/2026-06-13-product-design-prelaunch-review.md`. Priority = the a
 | PLR-17 | Catch-up lacks closure/celebration | — | `PARTIAL` | `DO NOT DO` (confetti) | `RoundSummary` closing state exists `catchup/page.tsx:173–311`. A closure beat is OK in the quiet-warmth voice; **no** game-win celebration/confetti. |
 | PLR-18 | Frequency options lack micro-copy | P2 | `DONE` | `CLEAN WIN` | Per-zone `copy` `TerritorySetupClient.tsx:43–55`. |
 | PLR-19 | Invite flow generic (link/email/SMS unclear) | — | `PARTIAL` | — | Personal invite + copy link `InviteSomeoneNew.tsx:54–84`; no explicit SMS/email labelling. |
-| PLR-20 | Avatars initials-only; no photo upload | — | `OPEN` | — | `AvatarChip` initials-only; no upload anywhere. |
+| PLR-20 | Avatars initials-only; no photo upload | — | `WON'T DO` | — | **Ignored per owner (2026-06-15).** Not doing photo uploads. |
 | PLR-21 | Inconsistent link styling on summary page | — | `DONE` | `CLEAN WIN` | **Resolved (2026-06-14).** Code is already consistent: every text link uses `underline underline-offset-4` (`summary/page.tsx:242,259,635,663`); `btn-primary`/`btn-ghost` are buttons (correctly not underlined). No color-only link exists. No change needed. |
 | PLR-22 | No dark mode | P3 | `DEFERRED` | `DO NOT DO` (for launch) | Not canon-violating, but reworks the cream/serif/illustration brand — large effort. Park post-launch. |
 | PLR-23 | Audio/haptic feedback on answers | P3 | `WON'T DO` | `DO NOT DO` | Wrong answer = discovery, not failure; an "incorrect" tone betrays the thesis. Skip. |
