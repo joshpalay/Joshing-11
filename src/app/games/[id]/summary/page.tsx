@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { answerHeadingStyle } from '@/components/answer-heading';
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
-import { FirstGameRecapGate } from '@/components/games/FirstGameRecapGate';
+import { FirstGamePanel } from '@/components/games/FirstGamePanel';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import { AddToBankAction } from '@/components/AddToBankAction';
@@ -248,6 +248,8 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         <p className="mt-1 text-sm text-muted-foreground">{formatGameDate(view.game.createdAt)}</p>
       </header>
 
+      {viewerHasPlayed ? <FirstGamePanel gameId={id} /> : null}
+
       <section
         className="mt-5 rounded-md border px-5 py-5"
         style={{
@@ -421,8 +423,6 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
       ) : null}
 
       <Link className="btn-ghost mt-4" href="/">Back to Home</Link>
-
-      {viewerHasPlayed ? <FirstGameRecapGate gameId={id} /> : null}
     </main>
   );
 }
