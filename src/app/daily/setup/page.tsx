@@ -70,8 +70,6 @@ export default async function DailySetupPage({
       initialDomains={availableDomains}
       initialDifficulty={preferences.difficulty ?? 'adaptive'}
       initialFrequencyByDomain={initialFrequencyByDomain}
-      hasUnstartedQueue={Boolean(queue)}
-      roundComplete={isComplete}
     />
   );
 }
