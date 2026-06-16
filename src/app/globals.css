@@ -508,3 +508,17 @@ html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::after {
     border-radius: 0 !important;
     box-shadow: none !important;
 }
+
+/* TESTING ONLY — Josefin Sans mode (driven by the dev design bar's "Josefin"
+   toggle; see src/components/dev/PaletteToggle.tsx). When on, <html> carries
+   data-josefin="1": repoint the sans body font at the Josefin Sans variable.
+   Setting --font-sans-body cascades to --font-sans, --font-neutral and
+   --font-mono (all read --font-sans-body); the body rule overrides the literal
+   Montserrat className applied to <body> in layout.tsx so inherited text swaps
+   too. Remove this block with the PaletteToggle bar before shipping. */
+html[data-josefin="1"] {
+    --font-sans-body: var(--font-josefin);
+}
+html[data-josefin="1"] body {
+    font-family: var(--font-josefin), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}

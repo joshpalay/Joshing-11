@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
+import { Cormorant_Garamond, Josefin_Sans, Montserrat, Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
@@ -41,6 +41,17 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 })
 
+// TESTING ONLY — alternate sans register for the design-audit bar's "Josefin"
+// toggle (see PaletteToggle). When data-josefin="1" is set on <html>, globals.css
+// repoints --font-sans-body (and body's own font-family) at this variable so the
+// whole app's sans text swaps to Josefin Sans. Remove with the toggle before
+// shipping.
+const josefin = Josefin_Sans({
+  subsets: ['latin'],
+  variable: '--font-josefin',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
   title: 'Joshing',
   description: 'A daily knowledge game',
@@ -60,7 +71,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
+      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable} ${josefin.variable}`}
     >
       <body className={montserrat.className}>
         {/* TESTING ONLY — apply the saved card-background choice before paint so
@@ -68,7 +79,7 @@ export default async function RootLayout({
             shipping. The token map mirrors CARD_BGS in PaletteToggle. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}if(localStorage.getItem('joshing-flat')==='1'){document.documentElement.setAttribute('data-flat','1');}}catch(e){}`,
+            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}if(localStorage.getItem('joshing-flat')==='1'){document.documentElement.setAttribute('data-flat','1');}if(localStorage.getItem('joshing-josefin')==='1'){document.documentElement.setAttribute('data-josefin','1');}}catch(e){}`,
           }}
         />
         <PaletteToggle />
