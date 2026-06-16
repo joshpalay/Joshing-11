@@ -9,11 +9,23 @@ import { Nav } from "@/components/Nav";
 import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 
-// Intentional product choice (2026-05-16): Montserrat is the body font.
-// PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
-const montserrat = Montserrat({
+// Josefin Sans is the app's body/UI sans font (2026-06-16). It drives
+// --font-sans-body, which cascades to --font-sans, --font-neutral and
+// --font-mono. The one exception is the "Joshing" wordmark, which stays in
+// Montserrat (loaded below as --font-montserrat / surfaced as font-wordmark).
+const josefin = Josefin_Sans({
   subsets: ['latin'],
   variable: '--font-sans-body',
+  display: 'swap',
+})
+
+// Montserrat is now reserved for the "Joshing" brand wordmark only (Nav,
+// LoadingScreen, login title, knowledge-card wordmarks). Exposed via
+// --font-montserrat and surfaced to Tailwind as `font-wordmark` in globals.css.
+// (Previously the app-wide body font; replaced by Josefin Sans 2026-06-16.)
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  variable: '--font-montserrat',
   display: 'swap',
 })
 
@@ -41,17 +53,6 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 })
 
-// TESTING ONLY — alternate sans register for the design-audit bar's "Josefin"
-// toggle (see PaletteToggle). When data-josefin="1" is set on <html>, globals.css
-// repoints --font-sans-body (and body's own font-family) at this variable so the
-// whole app's sans text swaps to Josefin Sans. Remove with the toggle before
-// shipping.
-const josefin = Josefin_Sans({
-  subsets: ['latin'],
-  variable: '--font-josefin',
-  display: 'swap',
-})
-
 export const metadata: Metadata = {
   title: 'Joshing',
   description: 'A daily knowledge game',
@@ -71,15 +72,15 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable} ${josefin.variable}`}
+      className={`font-sans ${josefin.variable} ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
     >
-      <body className={montserrat.className}>
+      <body className={josefin.className}>
         {/* TESTING ONLY — apply the saved card-background choice before paint so
             there's no flash on navigation. Remove with <PaletteToggle/> before
             shipping. The token map mirrors CARD_BGS in PaletteToggle. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}if(localStorage.getItem('joshing-flat')==='1'){document.documentElement.setAttribute('data-flat','1');}if(localStorage.getItem('joshing-josefin')==='1'){document.documentElement.setAttribute('data-josefin','1');}}catch(e){}`,
+            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}if(localStorage.getItem('joshing-flat')==='1'){document.documentElement.setAttribute('data-flat','1');}}catch(e){}`,
           }}
         />
         <PaletteToggle />

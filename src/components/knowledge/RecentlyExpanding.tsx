@@ -210,7 +210,7 @@ const headerStyle: CSSProperties = {
 
 const wordmarkStyle: CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
+  fontFamily: 'var(--font-wordmark), system-ui, sans-serif',
   fontWeight: 700,
   fontSize: '0.92rem',
   color: 'var(--brand-ink)',
