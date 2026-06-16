@@ -115,6 +115,21 @@ describe('/api/auth/request-otp invite gate', () => {
     expect(requestOtpMock).not.toHaveBeenCalled()
   })
 
+  it('returns the warm invite_phone_unclaimed signal when a token rides along but the (edited) phone has no claim', async () => {
+    // Phone-first invite path: the invitee edited the pre-filled number to one
+    // with no claim of its own. The gate still rejects (no OTP), but with a
+    // distinguishable label so the client can render the warm dead-end.
+    const response = await POST(
+      jsonRequest({ phone: NEW_PHONE, invitationToken: 'tok-1' }),
+    )
+
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({
+      error: 'invite_phone_unclaimed',
+    })
+    expect(requestOtpMock).not.toHaveBeenCalled()
+  })
+
   it('does not require an invitation for an existing user', async () => {
     findUserSelectMock.mockResolvedValue([{ id: 'user-1' }])
 

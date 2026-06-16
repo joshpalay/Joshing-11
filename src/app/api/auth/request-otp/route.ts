@@ -98,6 +98,19 @@ export async function POST(request: Request) {
         ? Boolean(await resolveInviteLink(userInvite.handle, userInvite.token))
         : false;
       if (!invitedByPhone && !invitedByLink) {
+        // Phone-first invite path (D-AUTH-INVITE-PHONE-FIRST §6.4): when a
+        // FriendInvitation token rode along, an edited number with no claim of
+        // its own is a benign correction, not an intrusion. Return a
+        // distinguishable signal so the client can render the warm
+        // "use the invited number" dead-end instead of a generic invite-only
+        // error. The gate is NOT loosened — no OTP is sent and the request is
+        // still rejected; only the label differs.
+        if (parsed.data.invitationToken) {
+          return NextResponse.json(
+            { error: 'invite_phone_unclaimed', message: INVITE_REQUIRED_MESSAGE },
+            { status: 403 },
+          );
+        }
         return NextResponse.json(
           { error: 'invite_required', message: INVITE_REQUIRED_MESSAGE },
           { status: 403 },

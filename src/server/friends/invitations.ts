@@ -40,8 +40,12 @@ export type InvitePrefill = {
   inviterName: string
   inviterUserId: string
   inviterAvatarColor: string | null
-  // Server-only: the recipient's E.164 phone resolved from the invite token.
-  // Never expose this to the client — surface `maskedPhone` instead.
+  // Recipient's E.164 phone resolved from the invite token. Default posture is
+  // server-only (surface `maskedPhone` instead). Deliberate exception
+  // (D-AUTH-INVITE-PHONE-FIRST §2.3): the phone-first FriendInvitation login
+  // path pre-fills this full number into an editable field, so `login/page.tsx`
+  // crosses it to the client — but ONLY for that invite-token-gated case. The
+  // invitee's own number is not a secret from them. Do not widen this exposure.
   inviteePhone: string
   maskedPhone: string
 }
