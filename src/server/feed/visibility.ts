@@ -1,8 +1,9 @@
-import { eq, or } from 'drizzle-orm';
+import { eq, ne, or } from 'drizzle-orm';
 
 import { assertNever } from '@/lib/assert-never';
 import type { QuestionSource } from '@/lib/questions-types';
-import type { feedItems, questions } from '@/server/db';
+import { questions } from '@/server/db';
+import type { feedItems } from '@/server/db';
 
 export const SOCIAL_FEED_SOURCE_TYPE = 'friend_answered' as const;
 export const DIRECT_SENT_FEED_SOURCE_TYPE = 'direct_sent' as const;
@@ -37,6 +38,50 @@ const SUPPRESSED_CATEGORY_LABELS = new Set(['other', 'uncategorized', 'unknown',
 
 type QuestionLike = Pick<typeof questions.$inferSelect, 'creatorId' | 'source' | 'visibility' | 'canonicalSubcategory' | 'broadCategory' | 'category' | 'deletedAt'>;
 type FeedItemsVisibilityColumns = Pick<typeof feedItems, 'sourceType'>;
+
+// ─── visibility='blocked' hard-block (authored questions) ────────────────────
+//
+// 'blocked' is the terminal safety removal — set by a vet verdict or an upheld
+// offensive report (content-reports.ts) — and must be honored on EVERY read
+// path, not just the feed. These two predicates are the single source of truth
+// for that filter so reads don't scatter inline `ne(visibility,'blocked')`
+// checks. Both reference the `questions` table directly, so they drop into any
+// query that selects/joins it (including daily.ts's `questions as
+// canonicalQuestions`, which is the same table object).
+//
+// Generated (LLM-origin) questions have no `visibility` column; their terminal
+// block is an upheld-inappropriate ContentReport, handled by a SEPARATE,
+// creator-less predicate in content-reports.ts — do not fold it in here.
+
+// Bare form — no owner exception. For broadcast/feed gates where a blocked
+// question must never surface to ANYONE, including its own author.
+export function notBlocked() {
+  return ne(questions.visibility, 'blocked');
+}
+
+// Owner-aware form — for history / own-content reads. Hides blocked questions
+// EXCEPT from their own author, who must keep seeing their blocked question on
+// author-facing surfaces (the "this was removed" state, their archive, their
+// own Lately moments). The owner exception is NOT centralized on a shared read
+// path (A1: it's enforced per-read by `creatorId = viewer` scoping), so this
+// predicate carries it explicitly. On surfaces that can never contain the
+// viewer's own authored question the creatorId clause is simply never satisfied,
+// so this reduces to notBlocked() and is safe to use uniformly across history.
+export function notBlockedForViewer(viewerUserId: string) {
+  return or(ne(questions.visibility, 'blocked'), eq(questions.creatorId, viewerUserId))!;
+}
+
+// JS mirror of notBlockedForViewer, for read paths that materialize a slot
+// snapshot and so must apply the block in code rather than the query (archive's
+// daily reader renders `slot.question_text` even when the canonical row is
+// filtered out). Returns true when the question is blocked AND the viewer is not
+// its author — i.e. the row must be dropped.
+export function isBlockedForViewer(
+  question: Pick<QuestionLike, 'visibility' | 'creatorId'>,
+  viewerUserId: string,
+): boolean {
+  return question.visibility === 'blocked' && question.creatorId !== viewerUserId;
+}
 
 export type FeedEventEligibilityInput = {
   answerIsCorrect: boolean;

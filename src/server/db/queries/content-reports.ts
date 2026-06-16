@@ -119,6 +119,57 @@ export function notSuppressedByContentReport(
   );
 }
 
+// The generated-question equivalent of visibility='blocked': an upheld
+// inappropriate report is the TERMINAL hard-block for LLM-origin content, which
+// has no `visibility` column to set. Unconditional — there is no owner exception
+// because generated questions carry a null creatorId. Kept DISTINCT from the
+// authored blocked predicate (feed/visibility.ts) and from the reversible
+// open|upheld suppression layer above: this matches only category='inappropriate'
+// AND status='upheld', the irreversible state, so history/replay reads stay
+// untouched by the (reversible, reporter-scoped) suppression machinery.
+export function notBlockedGeneratedByContentReport(generatedIdColumn: AnyPgColumn) {
+  return notExists(
+    db
+      .select({ one: sql`1` })
+      .from(contentReports)
+      .where(
+        and(
+          eq(contentReports.generatedQuestionId, generatedIdColumn),
+          eq(contentReports.category, 'inappropriate'),
+          eq(contentReports.status, 'upheld'),
+        ),
+      ),
+  );
+}
+
+// Set form of the predicate above, for JS read paths that materialize a slot
+// snapshot (archive's daily reader renders `slot.question_text` even when the
+// row is filtered out of the query, so the block must be applied at the slot
+// level). Of the given generated ids, returns those with an upheld-inappropriate
+// report — the terminal hard-block to drop.
+export async function getUpheldInappropriateGeneratedIds(
+  generatedQuestionIds: string[],
+): Promise<Set<string>> {
+  const blocked = new Set<string>();
+  if (generatedQuestionIds.length === 0) return blocked;
+
+  const rows = await db
+    .select({ generatedQuestionId: contentReports.generatedQuestionId })
+    .from(contentReports)
+    .where(
+      and(
+        inArray(contentReports.generatedQuestionId, generatedQuestionIds),
+        eq(contentReports.category, 'inappropriate'),
+        eq(contentReports.status, 'upheld'),
+      ),
+    );
+
+  for (const row of rows) {
+    if (row.generatedQuestionId) blocked.add(row.generatedQuestionId);
+  }
+  return blocked;
+}
+
 // Runtime check for JS paths (feed propagation, direct send) where we hold a raw
 // id whose table may be either. Matches the id against both FK columns so a report
 // on a GeneratedQuestion still blocks a send that would mint it into a curated
