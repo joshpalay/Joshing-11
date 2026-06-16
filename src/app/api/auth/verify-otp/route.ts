@@ -7,6 +7,7 @@ import { colorForUser } from '@/components/feed/visual'
 import { normalizeToE164 } from '@/lib/phone-e164'
 import { verifyOtp } from '@/server/auth'
 import { createSession } from '@/server/auth/session'
+import { prewarmDailyQueue } from '@/server/daily/prewarm'
 import { db, users } from '@/server/db'
 import { hashPhoneNumber } from '@/server/lib/phone-hashing'
 import {
@@ -17,6 +18,13 @@ import {
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations'
 import { acceptUserInviteLink } from '@/server/friends/user-invite-token'
+
+// Headroom for the post-response Daily Five pre-warm (prewarmDailyQueue) on the
+// returning-user path. The background build can take seconds of Sonnet
+// generation, and on Vercel `after()` work counts toward this function's
+// duration budget — the default ceiling would kill the build mid-flight. The
+// login response itself still returns immediately; this is only a ceiling.
+export const maxDuration = 90
 
 type VerifyOtpBody = {
   phone?: unknown
@@ -209,6 +217,17 @@ export async function POST(request: Request) {
         invitationAccepted: true,
         onboardingComplete: existingUser.onboardingComplete,
       })
+
+      // Returning, onboarded users: pre-warm today's Daily Five in the
+      // background so /daily is already built by the time they tap in. Usually a
+      // cheap no-op (the daily cron has built it, so fillDailyQueueForUser
+      // early-returns), but it closes the post-reset window where the cron
+      // hasn't yet covered an evening-US / APAC user. New users (onboardingComplete
+      // false) are skipped here — they have no knowledge base to build from yet,
+      // and are pre-warmed at onboarding completion instead.
+      if (existingUser.onboardingComplete) {
+        prewarmDailyQueue(existingUser.id, 'login')
+      }
 
       return NextResponse.json({
         user: {
