@@ -9,6 +9,7 @@ import { FeedActionLink } from './FeedActionLink'
 import { NewTerritoryUndo } from './NewTerritoryUndo'
 import { visibleFeedCategory } from './category'
 import { type InsideJokeKind } from '@/lib/questions-types'
+import { Chip } from '@/components/ui/Chip'
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
@@ -234,12 +235,12 @@ export function AnswerFeedbackSheet({
               {isCorrect ? 'Correct!' : 'Not quite'}
             </p>
             {isCorrect && points > 0 ? (
-              <span
-                className="ml-auto inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-white"
+              <Chip
+                className="ml-auto px-3 text-sm font-semibold text-white"
                 style={{ backgroundColor: 'var(--game-correct)' }}
               >
                 +{points} {points === 1 ? 'pt' : 'pts'}
-              </span>
+              </Chip>
             ) : null}
           </div>
 
@@ -255,15 +256,17 @@ export function AnswerFeedbackSheet({
               </p>
             ) : null}
             {unverified ? (
-              <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]"
+              <Chip
+                size="sm"
+                uppercase
+                className="px-2 py-0.5 text-[0.62rem] font-semibold tracking-[0.14em]"
                 style={{
                   color: GOLD_INK,
                   backgroundColor: 'color-mix(in srgb, var(--accent-gold) 16%, var(--brand-card))',
                 }}
               >
                 Unverified answer
-              </span>
+              </Chip>
             ) : null}
             {!isCorrect ? (
               <p
