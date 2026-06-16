@@ -203,10 +203,18 @@ export function KnowledgeOverviewClient({
       )}
 
       {/* Share Portrait Modal */}
-      {shareModalOpen && (
+      {shareModalOpen && knowledgeCard && (
         <SharePortraitModal
-          entries={portraitEntries}
-          playerDisplayName={overview.displayName}
+          playerDisplayName={knowledgeCard.player_display_name || overview.displayName}
+          portraitStatement={knowledgeCard.portrait_statement}
+          domains={knowledgeCard.domains.map((d) => ({
+            canonicalSubcategory: d.canonical_subcategory,
+            currentTier: d.current_tier,
+            lifetimePoints: d.lifetime_points,
+            iconKey: d.icon_key,
+          }))}
+          overflowCount={knowledgeCard.overflow_count}
+          tierSignature={knowledgeCard.tier_signature}
           onClose={() => setShareModalOpen(false)}
         />
       )}
