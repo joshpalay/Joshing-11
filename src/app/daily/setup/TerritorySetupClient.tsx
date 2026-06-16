@@ -10,8 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { AddTopicField } from '@/components/interests/AddTopicField';
@@ -96,16 +95,11 @@ export function TerritorySetupClient({
   initialDomains,
   initialDifficulty,
   initialFrequencyByDomain,
-  hasUnstartedQueue,
-  roundComplete,
 }: {
   initialDomains: TerritoryDomain[];
   initialDifficulty: Difficulty;
   initialFrequencyByDomain: DomainPreferenceFrequency;
-  hasUnstartedQueue: boolean;
-  roundComplete: boolean;
 }) {
-  const router = useRouter();
   const zoneRefs = useRef<Record<TerritoryFrequency, HTMLElement | null>>({
     often: null,
     sometimes: null,
@@ -124,7 +118,6 @@ export function TerritorySetupClient({
   const removeTargetRef = useRef<HTMLButtonElement | null>(null);
   const dragPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const difficulty = initialDifficulty;
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [domains, setDomains] = useState<TerritoryDomain[]>(initialDomains);
   const [frequencyByDomain, setFrequencyByDomain] =
@@ -226,8 +219,6 @@ export function TerritorySetupClient({
     () => domains.find((domain) => domain.domain === dragState?.domain) ?? null,
     [domains, dragState?.domain],
   );
-
-  const canSave = !submitting && domains.length > 0;
 
   const persistFrequencyByDomain = useCallback(
     async (nextFrequencyByDomain: DomainPreferenceFrequency) => {
@@ -502,70 +493,28 @@ export function TerritorySetupClient({
     removeTargetRef.current = element;
   }, []);
 
-  const saveForNextRound = useCallback(async () => {
-    if (!canSave) return;
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const preferenceResponse = await fetch('/api/daily/preferences', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(buildSavePayload({ difficulty, frequencyByDomain })),
-      });
-      if (!preferenceResponse.ok) {
-        const body = await preferenceResponse.json().catch(() => null);
-        throw new Error(body?.message ?? 'Could not save your setup.');
-      }
-
-      if (roundComplete) {
-        router.push('/');
-        return;
-      }
-
-      if (hasUnstartedQueue) {
-        const resetResponse = await fetch('/api/daily/reset', {
-          method: 'POST',
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (!resetResponse.ok) {
-          const body = await resetResponse.json().catch(() => null);
-          throw new Error(body?.message ?? 'Could not refresh your setup.');
-        }
-      }
-
-      const queueResponse = await fetch('/api/daily/queue', {
-        method: 'POST',
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const queueBody = await queueResponse.json().catch(() => null);
-      if (!queueResponse.ok) {
-        throw new Error(queueBody?.message ?? 'Could not build your round.');
-      }
-
-      router.push('/daily');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save your setup.');
-      setSubmitting(false);
-    }
-  }, [canSave, difficulty, frequencyByDomain, hasUnstartedQueue, roundComplete, router]);
-
   return (
-    <main className="min-h-dvh bg-[var(--cream)] px-4 py-8 pb-36 text-[var(--ink)]">
+    <main className="min-h-dvh bg-[var(--cream)] px-4 py-8 pb-16 text-[var(--ink)]">
       <div className="mx-auto max-w-3xl">
-        <header className="mb-8">
-          <p className="text-xs font-semibold tracking-[0.2em] text-[var(--text-muted-warm)] uppercase">
-            TODAY’S FIVE
-          </p>
-          <h1 className="mt-3 font-serif text-5xl leading-[0.95] font-semibold text-[var(--ink)]">
-            Shape your next round
-          </h1>
-          <p className="mt-4 max-w-lg text-base leading-7 text-[var(--text-muted-warm)]">
-            Move territories around to decide what Joshing should ask you about next.
-          </p>
+        <header className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.2em] text-[var(--text-muted-warm)] uppercase">
+              TODAY’S FIVE
+            </p>
+            <h1 className="mt-3 font-serif text-5xl leading-[0.95] font-semibold text-[var(--ink)]">
+              Shape your next round
+            </h1>
+            <p className="mt-4 max-w-lg text-base leading-7 text-[var(--text-muted-warm)]">
+              Move territories around to decide what Joshing should ask you about next.
+            </p>
+          </div>
+          <Link
+            href="/"
+            aria-label="Done — changes are saved automatically"
+            className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border-warm)] bg-white/40 text-[var(--ink)] transition hover:bg-white/70"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </Link>
         </header>
 
         {domains.length === 0 ? (
@@ -617,7 +566,7 @@ export function TerritorySetupClient({
           ) : (
             <button
               type="button"
-              className="mb-5 flex w-full items-center justify-center gap-2 rounded-[var(--radius-xs)] border border-dashed border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 font-serif text-base text-[var(--ink)] transition hover:bg-[var(--cream)] disabled:opacity-40"
+              className="btn-primary mb-5 flex w-full items-center justify-center gap-2"
               disabled={addingTopic}
               onClick={openCreateTopic}
             >
@@ -684,22 +633,6 @@ export function TerritorySetupClient({
             {error}
           </p>
         ) : null}
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-warm)] bg-[var(--cream)]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Link href="/" className="btn-ghost">
-            Home
-          </Link>
-          <button
-            type="button"
-            className="btn-primary flex-1 justify-center"
-            disabled={!canSave}
-            onClick={() => void saveForNextRound()}
-          >
-            {submitting ? 'Saving…' : 'Save for next round'}
-          </button>
-        </div>
       </div>
 
       {dragState && draggingDomain ? (
@@ -971,7 +904,7 @@ function TerritoryCircle({
         diameter={size}
         tint={color.primary}
         border={`1px solid color-mix(in srgb, ${color.primary} 27%, transparent)`}
-        style={{ boxShadow: 'var(--shadow-overlay)' }}
+        style={{ boxShadow: 'var(--shadow-card-strong)' }}
       >
         {correctCount > 0 ? (
           <span
