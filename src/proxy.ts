@@ -31,6 +31,15 @@ export async function middleware(request: NextRequest) {
 
   const { pathname, search } = request.nextUrl
   const isApi = pathname.startsWith('/api/')
+
+  // Terms & Disclaimer is a standalone public page: it is linked from the
+  // logged-out /login card (opened in a new tab), so it must resolve without
+  // a session — otherwise the proxy bounces the unauthenticated reader to
+  // /login?next=/terms, a loop back into the very screen they came from. It
+  // is equally readable when authenticated, so allow it through for everyone
+  // before any auth/onboarding routing runs.
+  if (pathname === '/terms') return tagTiming(NextResponse.next(), startedAt)
+
   const isLoginPage = pathname === '/login'
   // Both invite landing surfaces must be reachable logged-out so the invitee
   // can carry their invite into /login: /invite/<token> (FriendInvitation,

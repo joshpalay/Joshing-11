@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { getSession } from '@/server/auth/session';
+
 export const metadata: Metadata = {
   title: 'Terms & Disclaimer · Joshing',
   description: 'The common-sense terms for using Joshing.',
@@ -41,15 +43,23 @@ const CLAUSES: { lead: string; body: string }[] = [
   },
 ];
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  // The page is public (it is linked from the logged-out /login card), so the
+  // back link can't assume a profile: /users/me is auth-gated and would bounce
+  // a logged-out reader to /login. Point signed-out visitors back to sign-in
+  // instead, and only offer the profile link to authenticated readers.
+  const session = await getSession();
+  const backHref = session ? '/users/me' : '/login';
+  const backLabel = session ? '← Back to profile' : '← Back to sign in';
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-10 pb-28">
       <div className="mb-6">
         <Link
-          href="/users/me"
+          href={backHref}
           className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
         >
-          ← Back to profile
+          {backLabel}
         </Link>
       </div>
 
