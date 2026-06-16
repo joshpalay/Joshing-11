@@ -4,7 +4,6 @@ import { Lock, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { visibleFeedCategory } from '@/components/feed/category';
-import { Chip } from '@/components/ui/Chip';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { difficultyCopyFromValue } from '@/lib/questions/difficulty-copy';
 import type { QuestionView } from '@/server/db/queries/questions';
@@ -56,15 +55,13 @@ export function MyQuestionCard({
               {visibleCategory}
             </span>
           ) : null}
-          <Chip
-            size="sm"
-            uppercase
-            className="bg-[rgba(0,0,0,0.06)] tracking-wide"
+          <span
+            className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
             style={{ color: 'var(--ink)', opacity: 0.7 }}
             aria-label={`LLM-rated difficulty: ${difficultyLabel}`}
           >
             {difficultyLabel}
-          </Chip>
+          </span>
         </div>
 
         <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
