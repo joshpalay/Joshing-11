@@ -529,8 +529,8 @@ export function TerritorySetupClient({
           </section>
         ) : null}
 
-        <section className="mb-8 rounded-[2rem] border border-[var(--border-light)] bg-white/35 p-5">
-          <div className="mb-4">
+        <section className="mb-10">
+          <div className="mb-4 border-b border-[var(--border-light)] pb-3">
             <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">Add a Territory</h2>
             <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">
               {nearbyTerritories.length > 0
@@ -785,15 +785,14 @@ function TerritoryZone({
   const categoryGroups = useMemo(() => groupByCategory(domains), [domains]);
 
   return (
-    <section
-      ref={setRef}
-      className={`rounded-[2rem] border bg-white/40 p-4 transition ${highlighted ? 'border-[var(--ink)] shadow-[var(--shadow-overlay)]' : 'border-[var(--border-warm)]'}`}
-    >
-      <div className="mb-4">
+    <section ref={setRef} className="transition">
+      <div className="mb-3">
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
-      <div className="min-h-28 space-y-4 rounded-[1.5rem] border border-dashed border-[var(--border-light)] bg-[var(--cream)]/50 p-3">
+      <div
+        className={`min-h-28 space-y-4 rounded-[1.5rem] border border-dashed p-3 transition ${highlighted ? 'border-[var(--ink)] bg-[var(--cream)]/70 shadow-[var(--shadow-overlay)]' : 'border-[var(--border-light)] bg-[var(--cream)]/50'}`}
+      >
         {categoryGroups.length > 0 ? (
           categoryGroups.map(({ category, domains: groupDomains }) => (
             <div key={category}>
