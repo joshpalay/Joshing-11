@@ -561,7 +561,7 @@ type UnifiedRow = GroupInputRow<FeedApiItem>
 // D-HOME-PACING-01 §2 (tuned 2026-06-12): on the budgeted home, the texture
 // zone runs this many rows, then the rotating panel as a mid-zone interlude,
 // then the remaining rows (the server caps the set at TEXTURE_SOFT_CAP = 8),
-// closed by the "See all activity →" row.
+// closed by the "See more activity →" row.
 const TEXTURE_LEAD_COUNT = 3
 
 // Wrap a promo/panel StreamItem as an activity row so the single rotating panel
@@ -815,6 +815,9 @@ const FROM_FRIENDS_STEP = 10
 function FeedSectionHeading({
   unifiedHome,
   subdued = false,
+  prominent = false,
+  windowLabel,
+  subtitle,
   children,
 }: {
   unifiedHome: boolean
@@ -823,23 +826,54 @@ function FeedSectionHeading({
   // quiet sub-labels: a notch quieter and tighter to the band label above them,
   // reusing the same small-caps token family rather than a new visual system.
   subdued?: boolean
+  // Same register as the page's top-level "For you" eyebrow (bold, ink-toned).
+  // "From Friends" is promoted to this so it reads as a peer of "For you"
+  // rather than a faint sub-label under a separate "Past 7 days" band row.
+  prominent?: boolean
+  // The 7-day boundary, folded onto the heading as a quiet "(Past 7 days)"
+  // qualifier instead of stacking as its own eyebrow row above the section.
+  windowLabel?: string
+  // Optional one-line descriptor rendered tight beneath the eyebrow (the way
+  // "For you" pairs with its descriptor). When present the heading + subtitle
+  // are wrapped together so the wrapper — not the bare h2 — is the feed's
+  // space-y child, and the subtitle's small margin isn't overridden by it.
+  subtitle?: string
   children: ReactNode
 }) {
-  return (
-    <h2
-      className={`font-medium uppercase ${
-        subdued
-          ? 'text-muted-foreground/50 pt-1 text-[10px] tracking-[0.14em]'
-          : 'text-muted-foreground/70 pt-4 text-[11px] tracking-[0.12em] first:pt-0'
-      } ${
-        // On the unified-home feed, the label sits flush left on the feed's left
-        // gutter — the same 2px the activity rows pad in (where the shape column
-        // begins) — rather than indenting past the icon column to the row copy.
-        unifiedHome ? 'pl-0.5' : ''
-      }`}
-    >
+  // On the unified-home feed the label sits flush left on the feed's left
+  // gutter — the same 2px the activity rows pad in (where the shape column
+  // begins) — rather than indenting past the icon column to the row copy.
+  const gutter = unifiedHome ? 'pl-0.5' : ''
+  // Top separation belongs on whichever node is the section's direct child: the
+  // bare h2 normally, or the wrapper div when a subtitle pairs with it.
+  const padClasses = subdued ? 'pt-1' : 'pt-4 first:pt-0'
+  const typeClasses = prominent
+    ? 'text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)]'
+    : subdued
+      ? 'text-muted-foreground/50 text-[10px] font-medium tracking-[0.14em]'
+      : 'text-muted-foreground/70 text-[11px] font-medium tracking-[0.12em]'
+
+  const heading = (
+    <h2 className={`uppercase ${typeClasses} ${subtitle ? '' : padClasses} ${gutter}`}>
       {children}
+      {windowLabel ? (
+        <span className="font-normal opacity-60"> ({windowLabel})</span>
+      ) : null}
     </h2>
+  )
+
+  if (!subtitle) return heading
+
+  return (
+    <div className={padClasses}>
+      {heading}
+      <p
+        className={`text-muted-foreground mt-1 text-[13px] italic ${gutter}`}
+        style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
+      >
+        {subtitle}
+      </p>
+    </div>
   )
 }
 
@@ -2006,21 +2040,16 @@ function FeedListContent({
             </Fragment>
           ) : null}
           {/* Zone 2 — the ambient band, bounded to the rolling 7-day window
-              (D-HOME-DASHBOARD-MODEL-01). On the budget home a single band-level
-              "Past 7 days" label states the boundary once; From Friends and
-              Recent activity are demoted to quiet sub-labels beneath it, and a
-              section with nothing in-window shows an honest empty rather than
-              vanishing (model point 4). The pendingQueue subpages and the
-              off-budget standalone Feed keep their own (un-banded) treatments. */}
+              (D-HOME-DASHBOARD-MODEL-01). The 7-day boundary is no longer its
+              own eyebrow row (that read as a third stacked eyebrow above "From
+              Friends"); it is folded onto the lead section heading as a quiet
+              "(Past 7 days)" qualifier — From Friends when present, else Recent
+              activity. From Friends is promoted to the prominent "For you"
+              register (a peer, not a sub-label); Recent activity stays subdued.
+              The pendingQueue subpages and the off-budget standalone Feed keep
+              their own (un-banded) treatments. */}
           {budget ? (
             <Fragment key="past-7-days">
-              {/* The stated boundary, once. bandLabelVisible is the seam
-                  B-HOME-COLDSTART-06 hooks to suppress it when the window is
-                  relaxed for a cold-start user, so it never asserts a false
-                  7-day promise. */}
-              {bandLabelVisible && bandHasContent ? (
-                <FeedSectionHeading unifiedHome={unifiedHome}>Past 7 days</FeedSectionHeading>
-              ) : null}
               {/* From Friends — friends' playable milestone bundles. The server
                   capped the served slice (Playables 4); render it and surface the
                   remainder as a quiet "N more →". Hidden outright when nothing
@@ -2029,7 +2058,12 @@ function FeedListContent({
                   group). */}
               {fromFriendsRows.length > 0 ? (
                 <Fragment key="from-friends">
-                  <FeedSectionHeading unifiedHome={unifiedHome} subdued>
+                  <FeedSectionHeading
+                    unifiedHome={unifiedHome}
+                    prominent
+                    windowLabel={bandLabelVisible && bandHasContent ? 'Past 7 days' : undefined}
+                    subtitle="Play the questions your friends have aced."
+                  >
                     From Friends
                   </FeedSectionHeading>
                   {groupActivityByFriend(fromFriendsRows).map(renderRow)}
@@ -2045,12 +2079,20 @@ function FeedListContent({
               {/* Recent activity — the ambient texture stream (relationship
                   events, convergence, social moments) as full-sentence LONE
                   events (D-FEED-GROUP3-01 §2). The one rotating panel splices
-                  after the lead rows (§2 slot 5); the "See all activity →" row
+                  after the lead rows (§2 slot 5); the "See more activity →" row
                   closes the zone. Hidden outright when nothing in-window
                   (no per-section empty state, 2026-06-15). */}
               {restRows.length > 0 ? (
                 <Fragment key="texture">
-                  <FeedSectionHeading unifiedHome={unifiedHome} subdued>
+                  <FeedSectionHeading
+                    unifiedHome={unifiedHome}
+                    subdued
+                    windowLabel={
+                      bandLabelVisible && bandHasContent && fromFriendsRows.length === 0
+                        ? 'Past 7 days'
+                        : undefined
+                    }
+                  >
                     Recent activity
                   </FeedSectionHeading>
                   {restRows.slice(0, TEXTURE_LEAD_COUNT).map(renderRow)}
@@ -2058,7 +2100,7 @@ function FeedListContent({
                   {restRows.slice(TEXTURE_LEAD_COUNT).map(renderRow)}
                   <OverflowRow
                     unifiedHome={unifiedHome}
-                    label="See all activity →"
+                    label="See more activity →"
                     href="/activities"
                   />
                 </Fragment>
