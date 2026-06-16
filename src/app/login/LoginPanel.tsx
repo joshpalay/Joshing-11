@@ -22,6 +22,11 @@ const CARD_CLASS =
   'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
+// Confirm-only variant for the invite path: the invited number is shown but not
+// editable, so it reads as a fixed value (muted fill, softened border, no focus
+// affordance) rather than an input the invitee is meant to type into.
+const READONLY_INPUT_CLASS =
+  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)]/40 bg-[var(--brand-cream-card)] px-3 text-center text-base font-medium tracking-wide text-[var(--brand-navy)] outline-none';
 const SUBMIT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 
@@ -82,7 +87,7 @@ type InviteContext = {
 };
 
 // Phone-first invite path: the full invited number crosses to the client so
-// the phone field arrives pre-filled and editable (D-AUTH-INVITE-PHONE-FIRST
+// the phone field arrives pre-filled for confirmation (D-AUTH-INVITE-PHONE-FIRST
 // §2.3). It is the invitee's own number, gated by a valid invitation token.
 type InvitePrefill = InviteContext & { inviteePhone: string };
 
@@ -170,8 +175,8 @@ export default function LoginPanel({
   const invitationToken = readInvitationToken(searchParams);
   const userInvite = readUserInvite(searchParams);
 
-  // Phone-first invite path: pre-fill the editable field with the full invited
-  // number so the invitee can confirm or correct it before continuing
+  // Phone-first invite path: pre-fill the confirm-only field with the full
+  // invited number so the invitee can verify it before continuing
   // (D-AUTH-INVITE-PHONE-FIRST §2.2). Empty on the cold / per-user-link paths.
   const [phone, setPhone] = useState(() =>
     invitePrefill?.inviteePhone ? formatUsPhoneInput(invitePrefill.inviteePhone) : '',
@@ -191,9 +196,10 @@ export default function LoginPanel({
   // with the field pre-filled, rather than a separate masked confirmation card
   // (D-AUTH-INVITE-PHONE-FIRST §4b / §6.1).
   const [step, setStep] = useState<Step>('phone');
-  // Inline warm dead-end (Screen 1b): set when the invitee edits the invited
-  // number to one with no claim of its own. Carried by wording, not an error
-  // banner (D-AUTH-INVITE-PHONE-FIRST §2.6).
+  // Inline warm dead-end (Screen 1b): set when the invitee says the invited
+  // number isn't theirs. The number is confirm-only (not editable), so the way
+  // out is to ask the inviter for a fresh invite — carried by wording, not an
+  // error banner (D-AUTH-INVITE-PHONE-FIRST §2.6).
   const [inviteDeadEnd, setInviteDeadEnd] = useState(previewDeadEnd);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -396,14 +402,6 @@ export default function LoginPanel({
     await requestCodeForPhone(normalizePhone(phone.trim()));
   }
 
-  // Dead-end primary action: restore the field to the invited number and
-  // proceed down the normal Continue path (D-AUTH-INVITE-PHONE-FIRST §1b).
-  function useInvitedNumber() {
-    if (!invitePrefill?.inviteePhone) return;
-    setPhone(formatUsPhoneInput(invitePrefill.inviteePhone));
-    void requestCodeForPhone(normalizePhone(invitePrefill.inviteePhone));
-  }
-
   async function verifyCode(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -578,56 +576,68 @@ export default function LoginPanel({
             className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="phone"
           >
-            What is your phone number?
+            {invitePrefill?.inviteePhone
+              ? 'Confirm your phone number'
+              : 'What is your phone number?'}
           </label>
           <input
             id="phone"
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            className={INPUT_CLASS}
+            // Invite path: the inviter already supplied the number, so it is
+            // confirm-only — shown read-only for the invitee to verify rather
+            // than type (D-AUTH-INVITE-PHONE-FIRST §2.2).
+            className={invitePrefill?.inviteePhone ? READONLY_INPUT_CLASS : INPUT_CLASS}
             placeholder="(555) 123-4567"
             maxLength={14}
             value={phone}
-            onChange={(event) => {
-              // Editing clears any standing dead-end so Continue returns.
-              if (inviteDeadEnd) setInviteDeadEnd(false);
-              setPhone(formatUsPhoneInput(event.target.value));
-            }}
+            onChange={(event) => setPhone(formatUsPhoneInput(event.target.value))}
+            readOnly={Boolean(invitePrefill?.inviteePhone)}
+            aria-readonly={Boolean(invitePrefill?.inviteePhone)}
             disabled={loading}
           />
-          {inviteDeadEnd && invitePrefill?.inviteePhone ? (
-            // Warm dead-end (Screen 1b): the edited number has no claim of its
-            // own. Carried by wording, not an error banner — full number shown
-            // per D-AUTH-INVITE-PHONE-FIRST §2.7.
-            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-              <p className="text-[15px] leading-6 text-black/75">
-                This invite was sent to{' '}
-                <span className="font-medium whitespace-nowrap text-black">
-                  {formatUsPhoneInput(invitePrefill.inviteePhone)}
-                </span>
-                . We can use that number, or you can ask{' '}
-                {inviterFirstName(invitePrefill.inviterName)} for a new invite.
-              </p>
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  className={SUBMIT_CLASS}
-                  onClick={useInvitedNumber}
-                  disabled={loading}
-                >
-                  {loading ? 'Continuing…' : 'Use the invited number'}
-                </button>
+          {invitePrefill?.inviteePhone ? (
+            inviteDeadEnd ? (
+              // Warm dead-end (Screen 1b): the invitee says this isn't their
+              // number. Since the field is confirm-only, the only way forward is
+              // a fresh invite from the inviter — carried by wording, not an
+              // error banner (D-AUTH-INVITE-PHONE-FIRST §2.7).
+              <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+                <p className="text-[15px] leading-6 text-black/75">
+                  This invite was sent to{' '}
+                  <span className="font-medium whitespace-nowrap text-black">
+                    {formatUsPhoneInput(invitePrefill.inviteePhone)}
+                  </span>
+                  . If that isn’t your number, you’ll need to ask{' '}
+                  {inviterFirstName(invitePrefill.inviterName)} to send you a new invite.
+                </p>
                 <button
                   type="button"
                   className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
                   onClick={() => setInviteDeadEnd(false)}
                   disabled={loading}
                 >
-                  Ask {inviterFirstName(invitePrefill.inviterName)} for a new invite
+                  Go back
                 </button>
               </div>
-            </div>
+            ) : (
+              // Button + "not my number" form a tight cluster, separate from the
+              // 14px field rhythm above.
+              <div className="space-y-1.5">
+                <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+                  {loading ? 'Sending…' : 'Confirm and send text'}
+                </button>
+                <button
+                  type="button"
+                  className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
+                  onClick={() => setInviteDeadEnd(true)}
+                  disabled={loading}
+                >
+                  This number is not correct
+                </button>
+              </div>
+            )
           ) : (
             <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
               {loading ? 'Continuing…' : 'Continue'}
