@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>First time player — mock</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Montserrat:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --brand-ink: #0a1f3d;
+        --brand-ink-700: #3a4a5f;
+        --brand-ink-400: #8a8a8a;
+        --brand-navy: #1f3a5a;
+        --brand-link: #4a5d75;
+        --brand-cream-page: #fcf8f2;
+        --brand-card: #fdfcfb;
+        --brand-field: #ffffff;
+        --brand-border: #e9e2d2;
+        --accent-gold: #d9a82e;
+        --game-correct: #366045;
+        --game-wrong: #a93b3b;
+        --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+        --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, sans-serif;
+        --muted: var(--brand-ink-400);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--brand-cream-page);
+        color: var(--brand-ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page { max-width: 768px; margin: 0 auto; padding: 24px 16px 64px; }
+
+      .preview-note {
+        display: flex;
+        gap: 12px;
+        border: 1px solid var(--brand-border);
+        background: var(--brand-card);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 24px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .preview-note strong { color: var(--brand-ink); display: block; margin-bottom: 4px; }
+
+      .card {
+        border: 1px solid var(--brand-border);
+        background: var(--brand-card);
+        border-radius: 12px;
+      }
+
+      /* ---- First-session panel (the very first thing on the page) ---- */
+      .first-session { padding: 24px 20px; }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 0;
+      }
+      .first-session h2 {
+        font-family: var(--font-serif);
+        font-size: 32px;
+        font-weight: 600;
+        line-height: 1.1;
+        margin: 8px 0 0;
+        color: var(--brand-ink);
+      }
+      .cadence {
+        margin: 8px 0 0;
+        font-size: 14px;
+        line-height: 1.7;
+        color: var(--brand-ink-700);
+      }
+      .cadence a { color: var(--brand-link); text-decoration: underline; text-underline-offset: 4px; }
+
+      .reminder { margin-top: 20px; border-top: 1px solid var(--brand-border); padding-top: 20px; }
+      .reminder h3 {
+        font-family: var(--font-sans);
+        font-size: 16.8px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #111111;
+        margin: 0;
+      }
+      .reminder p.lead { margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--brand-ink); }
+      .reminder form { margin-top: 16px; display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+      .reminder input {
+        flex: 1 1 240px;
+        background: var(--brand-field);
+        border: 1px solid var(--accent-gold);
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 14px;
+        font-family: var(--font-sans);
+        color: var(--brand-ink);
+      }
+      .reminder input:focus { outline: none; border-color: var(--brand-navy); }
+      .fineprint { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+      .btn-primary {
+        background: var(--brand-navy);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 22px;
+        font-size: 14px;
+        font-weight: 700;
+        font-family: var(--font-sans);
+        cursor: pointer;
+      }
+      .btn-primary:hover { filter: brightness(1.08); }
+
+      /* ---- Summary header ---- */
+      header.summary { margin-top: 32px; padding-bottom: 8px; }
+      .backlink { font-size: 14px; font-weight: 500; color: var(--muted); }
+      .head-row { margin-top: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      header.summary h1 {
+        font-family: var(--font-serif);
+        font-size: 48px;
+        font-weight: 600;
+        line-height: 0.95;
+        letter-spacing: -0.03em;
+        margin: 0;
+        color: var(--brand-ink);
+      }
+      .lede { margin: 16px 0 0; max-width: 36rem; font-size: 16.3px; line-height: 1.6; color: var(--brand-ink-700); }
+      .score { flex-shrink: 0; padding-top: 8px; font-size: 14px; font-weight: 500; color: var(--brand-ink-400); }
+      .dots-row { margin-top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .dots { display: flex; align-items: center; gap: 8px; }
+      .dot { width: 10px; height: 10px; border-radius: 999px; border: 1px solid var(--brand-border); box-shadow: 0 0 0 2px var(--brand-card); }
+      .dot.correct { background: var(--game-correct); }
+      .dot.wrong { background: var(--game-wrong); }
+      .share {
+        display: inline-flex; align-items: center; gap: 8px;
+        border: 1px solid var(--brand-border); background: var(--brand-card);
+        border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 500; color: var(--brand-ink-700);
+      }
+      .interpretive { margin: 16px 0 0; font-size: 14px; line-height: 1.6; font-style: italic; color: var(--muted); }
+
+      /* ---- Sections ---- */
+      .section { margin-top: 32px; padding: 16px 20px; }
+      .section-title {
+        font-size: 12.8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brand-ink); margin: 0;
+      }
+      .section p { margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--brand-ink-700); }
+      .q-head { margin-top: 32px; margin-bottom: 16px; }
+      .q-head h2 { font-family: var(--font-serif); font-size: 24px; font-weight: 600; line-height: 1.1; margin: 0; }
+      .q-head p { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+
+      .qcard { position: relative; overflow: hidden; padding: 20px; margin-top: 16px; }
+      .rail { position: absolute; top: 0; bottom: 0; left: 0; width: 4px; }
+      .rail.correct { background: var(--game-correct); }
+      .rail.wrong { background: color-mix(in srgb, var(--game-wrong) 76%, var(--brand-card)); }
+      .badge {
+        display: inline-block; border: 1px solid var(--brand-border); border-radius: 999px;
+        padding: 4px 10px; font-size: 10.9px; font-weight: 600; letter-spacing: 0.05em;
+      }
+      .badge.correct { color: var(--game-correct); border-color: color-mix(in srgb, var(--game-correct) 28%, var(--brand-border)); }
+      .badge.wrong { color: var(--brand-ink-700); }
+      .qmeta { font-size: 12px; color: var(--muted); margin-left: 8px; }
+      .qtext { margin: 16px 0 0; font-size: 18px; line-height: 1.5; font-weight: 500; letter-spacing: -0.01em; color: var(--brand-ink); }
+      .answers { margin-top: 20px; display: grid; gap: 12px; grid-template-columns: 1fr 1fr; border: 1px solid var(--brand-border); border-radius: 6px; background: var(--brand-cream-page); padding: 12px; }
+      .answers .label { font-size: 10.9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+      .answers .val { margin: 4px 0 0; font-size: 14px; line-height: 1.6; }
+      .answers .val.correct { color: var(--game-correct); font-weight: 500; }
+      .why { margin-top: 20px; }
+      .why h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--brand-ink); }
+      .why p { margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--brand-ink-700); }
+
+      .closing { margin-top: 32px; padding: 24px 20px; text-align: center; }
+      .closing p { margin: 0; font-size: 16.8px; line-height: 1.7; color: var(--brand-ink-700); }
+      .closing .btn-primary { margin-top: 20px; min-width: 224px; }
+      .closing .secondary { display: block; margin-top: 12px; font-size: 14px; font-weight: 500; color: var(--muted); text-decoration: underline; text-underline-offset: 4px; }
+
+      @media (max-width: 560px) {
+        header.summary h1 { font-size: 40px; }
+        .answers { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="preview-note">
+        <div>
+          <strong>What a brand-new player sees.</strong>
+          The first-session recap renders inline at the very top of the Daily
+          Summary — above the header — on a player's first completed Daily Five.
+          Below it is a made-up completed game for context. (Static mock; the
+          email field doesn't save anything.)
+        </div>
+      </div>
+
+      <!-- First-session panel: the very first thing on the page -->
+      <section class="card first-session">
+        <p class="eyebrow">First five complete</p>
+        <h2>Nice start, Sam.</h2>
+        <p class="cadence">
+          New questions come every day at noon — next up Wednesday at noon. You
+          can update your topics anytime on the
+          <a href="#">Shape your next round</a> page.
+        </p>
+
+        <div class="reminder" id="reminder">
+          <h3>Get notified when the next batch is available</h3>
+          <p class="lead">We can email you when new questions land. One message a day, max.</p>
+          <form onsubmit="return saveEmail(event)">
+            <input id="email" type="email" inputmode="email" placeholder="you@example.com" />
+            <button class="btn-primary" type="submit">Email me</button>
+          </form>
+          <p class="fineprint">We'll send a confirmation email once email reminders launch.</p>
+        </div>
+      </section>
+
+      <!-- Summary header -->
+      <header class="summary">
+        <span class="backlink">Session recap</span>
+        <div class="head-row">
+          <div>
+            <h1>Today&rsquo;s Five</h1>
+            <p class="lede">You found common ground in World Geography and opened a few new edges of the map.</p>
+          </div>
+          <p class="score">4 / 5</p>
+        </div>
+        <div class="dots-row">
+          <div class="dots">
+            <span class="dot correct"></span>
+            <span class="dot correct"></span>
+            <span class="dot wrong"></span>
+            <span class="dot correct"></span>
+            <span class="dot correct"></span>
+          </div>
+          <span class="share">⤴ Share your results</span>
+        </div>
+        <p class="interpretive">You found new ground in World Geography.</p>
+      </header>
+
+      <!-- Growth recap -->
+      <section class="card section">
+        <p class="section-title">Your Growth Recap</p>
+        <p>World Geography and Modern Art both moved up a notch today.</p>
+      </section>
+
+      <!-- Today's questions -->
+      <div class="q-head">
+        <h2>Today&rsquo;s questions</h2>
+        <p>A few were yours. A few were new.</p>
+      </div>
+
+      <article class="card qcard">
+        <div class="rail correct"></div>
+        <div>
+          <span class="badge correct">Correct</span>
+          <span class="qmeta">World Geography · by The House</span>
+        </div>
+        <p class="qtext">Which river flows through the most countries in the world?</p>
+        <div class="answers">
+          <div><p class="label">You said</p><p class="val">The Danube</p></div>
+          <div><p class="label">Answer</p><p class="val correct">The Danube</p></div>
+        </div>
+        <div class="why">
+          <h4>Why this is the answer</h4>
+          <p>The Danube passes through ten countries — more than any other river — from its source in Germany to the Black Sea.</p>
+        </div>
+      </article>
+
+      <article class="card qcard">
+        <div class="rail wrong"></div>
+        <div>
+          <span class="badge wrong">Not this time</span>
+          <span class="qmeta">Modern Art · by The House</span>
+        </div>
+        <p class="qtext">Who painted the 1907 work &ldquo;Les Demoiselles d&rsquo;Avignon&rdquo;?</p>
+        <div class="answers">
+          <div><p class="label">You said</p><p class="val">Henri Matisse</p></div>
+          <div><p class="label">Answer</p><p class="val">Pablo Picasso</p></div>
+        </div>
+        <div class="why">
+          <h4>Why this is the answer</h4>
+          <p>Picasso&rsquo;s &ldquo;Les Demoiselles d&rsquo;Avignon&rdquo; is widely seen as a proto-Cubist breakthrough that broke with traditional perspective.</p>
+        </div>
+      </article>
+
+      <!-- Closing -->
+      <section class="card closing">
+        <p>Wednesday&rsquo;s five arrive at noon.</p>
+        <button class="btn-primary" type="button">Back home</button>
+        <span class="secondary">See your knowledge map</span>
+      </section>
+    </div>
+
+    <script>
+      function saveEmail(e) {
+        e.preventDefault();
+        var email = document.getElementById('email').value.trim();
+        if (!email) return false;
+        document.getElementById('reminder').innerHTML =
+          '<h3>Reminders</h3>' +
+          '<p class="lead">Got it — we\'ll verify ' + email + ' and email you once reminders launch.</p>' +
+          '<p class="fineprint"><a href="#" style="color:var(--brand-link);text-decoration:underline;">Manage in settings</a></p>';
+        return false;
+      }
+    </script>
+  </body>
+</html>
