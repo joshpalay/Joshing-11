@@ -494,3 +494,17 @@
     45% { transform: translate3d(0, -3px, 0) scale(1.02); opacity: 1; }
     100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
 }
+
+/* TESTING ONLY — flat mode (driven by the dev design bar's "Flat" toggle; see
+   src/components/dev/PaletteToggle.tsx). When the toggle is on, <html> carries
+   data-flat="1": strip every corner radius and drop shadow so a tester can read
+   the layout without rounding / elevation. Covers literal radii (rounded-[4px],
+   rounded-full) and inline styles too, which token overrides would miss. The dev
+   bar's own chrome (.palette-bar) is excluded so the controls stay legible.
+   Remove this block with the PaletteToggle bar before shipping. */
+html[data-flat="1"] *:not(.palette-bar, .palette-bar *),
+html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::before,
+html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::after {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}

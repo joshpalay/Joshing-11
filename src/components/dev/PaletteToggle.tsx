@@ -3,21 +3,28 @@
 import { useSyncExternalStore, type CSSProperties } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TESTING ONLY — card-background cycler (repurposed from the palette preview bar).
+// TESTING ONLY — design audit bar (repurposed from the palette preview bar).
 //
-// Cycles the `--brand-card` token — the resting feed-card surface — AND the
-// `--feed-card-elevated` token (the warm fill behind the "For You" home-zone
-// cards) through the SANCTIONED background colors (globals.css), so a tester can
-// audit how the cards read on each cream / wash without per-page edits. Every
-// surface that fills with `var(--brand-card)` or `var(--feed-card-elevated)`
-// recolors automatically.
+// Two controls, both for auditing the design system without per-page edits:
+//
+//  1. Card-background cycler — cycles the `--brand-card` token (the resting
+//     feed-card surface) AND `--feed-card-elevated` (the warm fill behind the
+//     "For You" home-zone cards) through the SANCTIONED background colors
+//     (globals.css). Every surface that fills with `var(--brand-card)` or
+//     `var(--feed-card-elevated)` recolors automatically.
+//
+//  2. Flat toggle — sets `data-flat="1"` on <html>, which the globals.css flat
+//     rule reads to strip every corner radius and drop shadow app-wide, so a
+//     tester can read the layout without rounding / elevation. The bar's own
+//     chrome is excluded (it carries `palette-bar`) so the controls stay legible.
 //
 // Only the system's own background tokens are offered (no off-palette hex), so
 // nothing here introduces an unsanctioned color. Inline styles are on purpose:
 // this is chrome, not app surface, so it sits outside the brand-token lint.
 //
-// Remove this component (and the boot script in layout.tsx) before merging to a
-// shipping branch. The boot script applies the saved choice pre-paint.
+// Remove this component (and the boot script in layout.tsx, plus the
+// `html[data-flat]` rule in globals.css) before merging to a shipping branch.
+// The boot script applies the saved choices pre-paint.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CardBg = { label: string; value: string; swatch: string };
@@ -38,6 +45,9 @@ const CARD_BGS: CardBg[] = [
 const STORAGE_KEY = 'joshing-card-bg';
 const CARD_BG_EVENT = 'joshing-card-bg-change';
 
+const FLAT_KEY = 'joshing-flat';
+const FLAT_EVENT = 'joshing-flat-change';
+
 // Read the live choice straight off the <html> attribute (the source of truth,
 // also set by the boot script before paint). useSyncExternalStore keeps the
 // control in sync without an effect-setState and without a hydration mismatch —
@@ -55,8 +65,35 @@ function serverSnapshot(): number {
   return 0;
 }
 
+// Flat toggle — mirrors the card-bg store, reading the live choice off the
+// <html> `data-flat` attribute (also set pre-paint by the boot script).
+function subscribeFlat(onChange: () => void) {
+  window.addEventListener(FLAT_EVENT, onChange);
+  return () => window.removeEventListener(FLAT_EVENT, onChange);
+}
+function readFlat(): boolean {
+  return document.documentElement.getAttribute('data-flat') === '1';
+}
+function serverFlat(): boolean {
+  return false;
+}
+
 export function PaletteToggle() {
   const index = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
+  const flat = useSyncExternalStore(subscribeFlat, readFlat, serverFlat);
+
+  function toggleFlat() {
+    const next = !flat;
+    const root = document.documentElement;
+    if (next) root.setAttribute('data-flat', '1');
+    else root.removeAttribute('data-flat');
+    try {
+      localStorage.setItem(FLAT_KEY, next ? '1' : '0');
+    } catch {
+      /* private mode / disabled storage — non-fatal */
+    }
+    window.dispatchEvent(new Event(FLAT_EVENT));
+  }
 
   function apply(next: number) {
     const i = ((next % CARD_BGS.length) + CARD_BGS.length) % CARD_BGS.length;
@@ -86,6 +123,7 @@ export function PaletteToggle() {
 
   return (
     <div
+      className="palette-bar"
       style={{
         position: 'sticky',
         top: 0,
@@ -115,6 +153,17 @@ export function PaletteToggle() {
         <Swatch color={current.swatch} active />
         {current.label}
         <span aria-hidden style={{ opacity: 0.6 }}>→</span>
+      </button>
+
+      {/* Flat toggle: strip every corner radius and drop shadow app-wide. */}
+      <button
+        type="button"
+        onClick={toggleFlat}
+        aria-pressed={flat}
+        aria-label={`Flat mode (no rounded corners or shadows): ${flat ? 'on' : 'off'}. Tap to toggle.`}
+        style={{ ...flatStyle, ...(flat ? flatStyleOn : null) }}
+      >
+        {flat ? '▣' : '▢'} Flat
       </button>
 
       {/* Jump straight to any background. */}
@@ -156,6 +205,25 @@ const cycleStyle: CSSProperties = {
   fontWeight: 600,
   background: '#e7e1d4',
   color: '#11161c',
+};
+
+const flatStyle: CSSProperties = {
+  appearance: 'none',
+  cursor: 'pointer',
+  borderRadius: 999,
+  padding: '3px 12px',
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+  border: '1px solid rgba(231, 225, 212, 0.5)',
+  background: 'transparent',
+  color: '#e7e1d4',
+};
+
+const flatStyleOn: CSSProperties = {
+  background: '#e7e1d4',
+  color: '#11161c',
+  borderColor: '#e7e1d4',
 };
 
 function Swatch({ color, active }: { color: string; active: boolean }) {
