@@ -268,7 +268,7 @@ export default function DevFirstTimePlayerPage() {
                 Get notified when the next batch is available
               </h3>
               <p className="text-foreground mt-2 text-sm leading-6">
-                We can email you when new questions land. One message a day, max.
+                We can email you when new questions land.
               </p>
               <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
                 <input
