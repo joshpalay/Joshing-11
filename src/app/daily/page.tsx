@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
@@ -756,13 +757,24 @@ export default function DailyPage() {
   }, [queue, currentSlot, submitting]);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] px-0">
+    <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] px-0">
+      {/* Faded brand triangle motif (same artwork as the login screen) behind the
+          game. Sits below the content via -z-10; the header stays opaque so it
+          reads as plain white. */}
+      <Image
+        src="/images/Variant4.png"
+        alt=""
+        aria-hidden
+        fill
+        priority
+        sizes="(max-width: 32rem) 100vw, 32rem"
+        className="pointer-events-none -z-10 object-cover object-center opacity-[0.10] select-none"
+      />
       <header
         className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b px-4 py-3"
         style={{
           borderColor: 'var(--border)',
-          background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
-          backdropFilter: 'blur(6px)',
+          background: 'var(--surface)',
         }}
       >
         <div className="flex items-center gap-3">
