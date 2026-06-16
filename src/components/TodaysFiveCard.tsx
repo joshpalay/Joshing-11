@@ -178,6 +178,34 @@ export default function TodaysFiveCard({
     }
   }, [])
 
+  // Background pre-build of today's Daily Five from Home (B-PERF prewarm,
+  // option 3). When the server-resolved status shows no queue built yet
+  // (queueId === null) and the round isn't already complete, kick off the
+  // idempotent generation POST so /daily is warm by the time the player taps
+  // "Play now" — turning the long synchronous loading screen into an instant
+  // open. `keepalive` lets the request survive the navigation to /daily.
+  //
+  // Safe and bounded: fillDailyQueueForUser is idempotent and persists through a
+  // (userId, queueDate) upsert, so this racing the daily cron, the login/
+  // onboarding pre-warm, or the /daily POST can't produce a duplicate or partial
+  // queue — the only cost of a lost race is one re-billed build. Fires at most
+  // once per mount.
+  const prefetchedRef = useRef(false)
+  useEffect(() => {
+    if (prefetchedRef.current) return
+    if (!status) return
+    if (status.queueId || status.isComplete || status.questionsRemaining <= 0) return
+    prefetchedRef.current = true
+    void fetch('/api/daily/queue', {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      keepalive: true,
+    }).catch(() => {
+      // Best-effort warm-up — a failure just means /daily builds on open as before.
+    })
+  }, [status])
+
   const effectiveStatus = status ?? FALLBACK_STATUS
   const answered = Math.max(0, Math.min(effectiveStatus.questionsAnswered, 5))
   const isComplete =

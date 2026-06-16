@@ -50,3 +50,27 @@ export function logTelemetry(
     ...sanitizeMetadata(metadata),
   })
 }
+
+// --- Latency / performance telemetry --------------------------------------
+// A separate channel from product events. Emitted as `[latency] <metric>` so
+// production runtime logs can be filtered into a per-metric p50/p95 table —
+// the measurement PERF-FINDINGS-01 §0 / B-PERF-04 flagged as missing (the
+// project had numeric §12.6 latency targets but no way to observe them). Both
+// server timings (queue generation) and client RUM (/daily perceived load)
+// funnel through here so they share one log shape.
+export type LatencyMetric =
+  | 'daily_queue_generated' // server: a full Daily Five build (the slow path)
+  | 'daily_queue_prewarm' // server: background pre-warm after login/onboarding
+  | 'daily_load' // client RUM: /daily mount → first question on screen
+
+export function logLatency(
+  metric: LatencyMetric,
+  ms: number,
+  metadata: TelemetryMetadata = {}
+): void {
+  console.info(`[latency] ${metric}`, {
+    metric,
+    ms: Math.max(0, Math.round(ms)),
+    ...sanitizeMetadata(metadata),
+  })
+}

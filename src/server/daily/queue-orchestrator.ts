@@ -32,6 +32,7 @@ import {
 } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { commitPendingRefineDecisions } from '@/server/refine/commit';
+import { logLatency } from '@/server/telemetry';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
@@ -592,6 +593,17 @@ export async function fillDailyQueueForUser(userId: string): Promise<void> {
   }
 
   await persistDailyQueue(userId, slots, generatedQuestionIds);
+
+  // Server timing for the slow path. Logged only when a full build actually ran
+  // (the existing-queue / carry-forward early returns above never reach here),
+  // so `[latency] daily_queue_generated` measures real generation cost — the
+  // long pole behind the /daily loading screen — across every caller (cron,
+  // synchronous POST, and the post-login/onboarding pre-warm).
+  logLatency('daily_queue_generated', Date.now() - startedAt, {
+    slots: slots.length,
+    top_up_rounds: topUpRounds,
+    first_run: isFirstRun,
+  });
 }
 
 // Map a ranked friend-domain candidate to the slot's presence attribution: the

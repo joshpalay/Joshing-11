@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
@@ -220,9 +221,38 @@ export default function DailyPage() {
     }
   }, []);
 
+  // Client RUM for the perceived Daily Five load (B-PERF measurement). Reports
+  // the wall-clock from loadQueue start to a playable queue on screen, plus
+  // whether this load had to synchronously generate the queue (`generated`) —
+  // the difference between a warm pre-built open and the slow path. Posted to
+  // /api/telemetry as a `daily_load` latency metric; best-effort and never
+  // allowed to affect the player. `keepalive` lets it flush even if the player
+  // immediately starts answering.
+  const reportDailyLoad = useCallback(
+    (ms: number, meta: { generated: boolean; attempts: number }) => {
+      try {
+        void fetch('/api/telemetry', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          keepalive: true,
+          body: JSON.stringify({
+            metric: 'daily_load',
+            ms: Math.round(ms),
+            metadata: { generated: meta.generated, attempts: meta.attempts },
+          }),
+        }).catch(() => {});
+      } catch {
+        // Best-effort RUM only.
+      }
+    },
+    [],
+  );
+
   const loadQueue = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const loadStartedAt = Date.now();
     try {
       const response = await fetch('/api/daily/queue', {
         cache: 'no-store',
@@ -238,7 +268,9 @@ export default function DailyPage() {
         // genuinely has nothing to generate from — that's terminal; send them
         // to setup rather than retrying.
         let createdQueue: QueueResponse | null = null;
+        let createAttempts = 0;
         for (let attempt = 1; attempt <= MAX_QUEUE_CREATE_ATTEMPTS; attempt += 1) {
+          createAttempts = attempt;
           setGeneratingAttempt(attempt);
           const createResponse = await fetch('/api/daily/queue', {
             method: 'POST',
@@ -289,6 +321,7 @@ export default function DailyPage() {
           slots: createdSlots,
         });
         maybeShowFirstRunIntro(createdQueue.is_first_daily);
+        reportDailyLoad(Date.now() - loadStartedAt, { generated: true, attempts: createAttempts });
         setLoading(false);
         return;
       }
@@ -314,13 +347,16 @@ export default function DailyPage() {
         slots,
       });
       maybeShowFirstRunIntro(body.is_first_daily);
+      // Warm open: today's queue already existed (built by the cron or a
+      // post-login/onboarding pre-warm), so no synchronous generation was needed.
+      reportDailyLoad(Date.now() - loadStartedAt, { generated: false, attempts: 0 });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load today.');
     } finally {
       setGeneratingAttempt(null);
       setLoading(false);
     }
-  }, [router, maybeShowFirstRunIntro]);
+  }, [router, maybeShowFirstRunIntro, reportDailyLoad]);
 
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
@@ -756,13 +792,24 @@ export default function DailyPage() {
   }, [queue, currentSlot, submitting]);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] px-0">
+    <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] px-0">
+      {/* Faded brand triangle motif (same artwork as the login screen) behind the
+          game. Sits below the content via -z-10; the header stays opaque so it
+          reads as plain white. */}
+      <Image
+        src="/images/Variant4.png"
+        alt=""
+        aria-hidden
+        fill
+        priority
+        sizes="(max-width: 32rem) 100vw, 32rem"
+        className="pointer-events-none -z-10 object-cover object-center opacity-[0.10] select-none"
+      />
       <header
         className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b px-4 py-3"
         style={{
           borderColor: 'var(--border)',
-          background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
-          backdropFilter: 'blur(6px)',
+          background: 'var(--surface)',
         }}
       >
         <div className="flex items-center gap-3">

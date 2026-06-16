@@ -162,7 +162,7 @@ export function Nav({
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
-            className="font-sans text-[22px] font-semibold leading-none tracking-[0.05em] text-foreground"
+            className="font-wordmark text-[22px] font-semibold leading-none tracking-[0.05em] text-foreground"
           >
             Joshing
           </Link>

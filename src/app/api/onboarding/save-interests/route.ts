@@ -4,6 +4,7 @@ import {
   getSession,
   refreshSessionOnboardingClaim,
 } from '@/server/auth/session';
+import { prewarmDailyQueue } from '@/server/daily/prewarm';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { logTelemetry } from '@/server/telemetry';
 import {
@@ -18,6 +19,12 @@ type SaveInterestsBody = {
   interests?: unknown;
   telemetry?: unknown;
 };
+
+// Headroom for the post-response Daily Five pre-warm (prewarmDailyQueue). The
+// background build can take seconds of Sonnet generation, and on Vercel
+// `after()` work counts toward this function's duration budget — the default
+// ceiling would kill the build mid-flight. Mirrors /api/daily/queue's 90s.
+export const maxDuration = 90;
 
 // Onboarding's build-your-world screen caps the selection at 12 (per product
 // spec); the client mirrors this with MAX_INTERESTS in OnboardingFlow. This is
@@ -117,6 +124,14 @@ export async function POST(request: Request) {
     await saveDeclaredInterests(session.userId, interests);
     await markOnboardingComplete(session.userId);
     await refreshSessionOnboardingClaim();
+
+    // Pre-warm the player's first Daily Five now that their knowledge base
+    // exists. This is the highest-value pre-warm: a brand-new user walks
+    // straight from here into their first round before the daily cron has ever
+    // run for them, so without this they hit the full synchronous generation
+    // (the worst-case loading screen, on their first impression). Fire-and-forget
+    // after the response — they read the welcome/intro screens while it builds.
+    prewarmDailyQueue(session.userId, 'onboarding');
 
     if (telemetry.inviteInterestCount > 0) {
       const event = telemetry.inviteSelectedCount === 0

@@ -189,7 +189,7 @@ export default function LoadingScreen({
       />
 
       <div className="relative z-10 mx-6 w-full max-w-sm px-12 py-7 text-center">
-        <p className="font-sans text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
+        <p className="font-wordmark text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
           JOSHING
         </p>
         <div

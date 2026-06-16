@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Cormorant_Garamond, Montserrat, Playfair_Display } from 'next/font/google'
+import { Cormorant_Garamond, Josefin_Sans, Montserrat, Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
@@ -9,11 +9,23 @@ import { Nav } from "@/components/Nav";
 import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 
-// Intentional product choice (2026-05-16): Montserrat is the body font.
-// PRD §typography spec'd Inter, but Montserrat ships. Update PRD to reflect this.
-const montserrat = Montserrat({
+// Josefin Sans is the app's body/UI sans font (2026-06-16). It drives
+// --font-sans-body, which cascades to --font-sans, --font-neutral and
+// --font-mono. The one exception is the "Joshing" wordmark, which stays in
+// Montserrat (loaded below as --font-montserrat / surfaced as font-wordmark).
+const josefin = Josefin_Sans({
   subsets: ['latin'],
   variable: '--font-sans-body',
+  display: 'swap',
+})
+
+// Montserrat is now reserved for the "Joshing" brand wordmark only (Nav,
+// LoadingScreen, login title, knowledge-card wordmarks). Exposed via
+// --font-montserrat and surfaced to Tailwind as `font-wordmark` in globals.css.
+// (Previously the app-wide body font; replaced by Josefin Sans 2026-06-16.)
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  variable: '--font-montserrat',
   display: 'swap',
 })
 
@@ -60,9 +72,9 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
+      className={`font-sans ${josefin.variable} ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
     >
-      <body className={montserrat.className}>
+      <body className={josefin.className}>
         {/* TESTING ONLY — apply the saved card-background choice before paint so
             there's no flash on navigation. Remove with <PaletteToggle/> before
             shipping. The token map mirrors CARD_BGS in PaletteToggle. */}
