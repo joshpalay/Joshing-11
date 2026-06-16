@@ -55,12 +55,13 @@ export default function DevInviteLoginPage() {
             What an invited friend sees when they tap their invite link.
           </p>
           <p className="mt-1">
-            The phone field arrives pre-filled with the invited number for them
-            to confirm &mdash; it isn&apos;t editable. If it isn&apos;t their
-            number, they get the warm dead-end pointing them back to the inviter
-            for a new invite instead of a hard error. This is a look-only preview
-            with synthetic data &mdash; no invitation is created and no code is
-            sent, so the buttons won&apos;t complete a real login.
+            The invited number is shown as a value to confirm with one tap. It
+            isn&apos;t editable &mdash; the invite is phone-bound, so if it
+            isn&apos;t their number they get the warm dead-end pointing them back
+            to the inviter for a new invite instead of a hard error. This is a
+            look-only preview with synthetic data &mdash; no invitation is
+            created and no code is sent, so the buttons won&apos;t complete a
+            real login.
           </p>
         </div>
       </div>
