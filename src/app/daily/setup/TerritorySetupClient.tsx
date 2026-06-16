@@ -786,7 +786,7 @@ function TerritoryZone({
 
   return (
     <section ref={setRef} className="transition">
-      <div className="mb-3">
+      <div className="mb-4 border-b border-[var(--border-light)] pb-3">
         <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
