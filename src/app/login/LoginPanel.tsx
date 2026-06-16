@@ -29,6 +29,11 @@ const READONLY_INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)]/40 bg-[var(--brand-cream-card)] px-3 text-center text-base font-medium tracking-wide text-[var(--brand-navy)] outline-none';
 const SUBMIT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+// Quiet secondary action (e.g. "this number is not correct" / "go back"): a
+// muted, sentence-case text link. Deliberately understated so it doesn't
+// compete with the primary button or flood the card with orange caps.
+const SUBTLE_LINK_CLASS =
+  'mx-auto block text-sm leading-5 text-black/55 underline underline-offset-4 transition-colors hover:text-black/80 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -614,7 +619,7 @@ export default function LoginPanel({
                 </p>
                 <button
                   type="button"
-                  className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
+                  className={SUBTLE_LINK_CLASS}
                   onClick={() => setInviteDeadEnd(false)}
                   disabled={loading}
                 >
@@ -630,7 +635,7 @@ export default function LoginPanel({
                 </button>
                 <button
                   type="button"
-                  className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
+                  className={SUBTLE_LINK_CLASS}
                   onClick={() => setInviteDeadEnd(true)}
                   disabled={loading}
                 >
@@ -703,7 +708,7 @@ export default function LoginPanel({
 
             <button
               type="button"
-              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
+              className={SUBTLE_LINK_CLASS}
               onClick={() => {
                 setCode('');
                 swapStep('phone');
