@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
 import LoadingScreen from '@/components/LoadingScreen'
+import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, {
   type DailyPreferences,
   type DailyStatus,
@@ -213,13 +214,7 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
 }
 
 function CardSkeleton({ minHeight }: { minHeight: string }) {
-  return (
-    <div
-      className="bg-card rounded-lg border p-4"
-      style={{ minHeight }}
-      aria-hidden="true"
-    />
-  )
+  return <Skeleton className="border" style={{ minHeight }} />
 }
 
 function FeedSkeleton() {

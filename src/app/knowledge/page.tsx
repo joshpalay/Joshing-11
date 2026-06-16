@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
@@ -133,9 +134,16 @@ function emptyDomain(domain: string): DomainMastery {
 function LoadingSkeleton() {
   return (
     <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
-      <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
-        <p className="m-0 text-[var(--text-muted-warm)]">Loading...</p>
-      </section>
+      <div className="grid gap-3.5" aria-hidden="true">
+        <Skeleton className="h-36" />
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <Skeleton className="h-44" />
+          <Skeleton className="h-44" />
+        </div>
+      </div>
+      <span className="sr-only" role="status">
+        Loading your knowledge map…
+      </span>
     </main>
   );
 }

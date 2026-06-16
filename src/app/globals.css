@@ -485,11 +485,33 @@
   animation: feed-card-collapse 200ms ease forwards;
 }
 
+/* Branded skeleton shimmer (D-DESIGN-DEBT-STRUCTURAL-01, Phase 3). One neutral
+   loading treatment for the <Skeleton> primitive: a muted base with a soft light
+   sweep built from existing surface tokens (no new color, no triangle motif, no
+   color-state meaning). Replaces the per-route animate-pulse grey boxes. */
+@keyframes skeleton-shimmer {
+  from { background-position: 150% 0; }
+  to   { background-position: -150% 0; }
+}
+.skeleton {
+  background-color: var(--muted);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--card) 55%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
   .triangle-loader-sweep,
   .triangle-loader-dot,
-  .loading-message {
+  .loading-message,
+  .skeleton {
     animation: none !important;
   }
 
