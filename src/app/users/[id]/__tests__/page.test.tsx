@@ -450,7 +450,8 @@ describe('/users/[id] friend profile page', () => {
 
     expect(html).toContain('Privacy &amp; discovery')
     expect(html).toContain('Notifications')
-    expect(html).toContain('Developer tools')
+    // Developer tools are admin-gated (ADMIN_USER_IDS); a normal owner does not see them.
+    expect(html).not.toContain('Developer tools')
     expect(html).toContain('Log out')
     expect(html).toContain('Delete account')
     expect(html).toContain('id="privacy-discovery"')
@@ -458,6 +459,76 @@ describe('/users/[id] friend profile page', () => {
     expect(html).toContain('Your invite link')
     expect(html).not.toContain('href="/account"')
     expect(html).not.toContain('href="/account/')
+  })
+
+  it('shows Developer tools to an admin owner (ADMIN_USER_IDS)', async () => {
+    const prevAdmins = process.env.ADMIN_USER_IDS
+    process.env.ADMIN_USER_IDS = 'self-1'
+    try {
+      getSessionMock.mockResolvedValueOnce({ userId: 'self-1' })
+      getEditableProfileMock.mockResolvedValueOnce({
+        id: 'self-1',
+        displayName: 'Owner',
+        handle: 'owner',
+        handleLastChangedAt: null,
+        phoneNumber: '+15555550100',
+      })
+      getDiscoverabilityMock.mockResolvedValueOnce({
+        discoverableByContacts: false,
+        discoverableByMutualFriends: true,
+      })
+      getReminderStateMock.mockResolvedValueOnce({
+        phoneNumber: '+15555550100',
+        smsOptIn: 'not_asked',
+        emailOptIn: 'not_asked',
+        email: null,
+        pendingEmail: null,
+        emailVerified: false,
+      })
+      getOrCreateInviteTokenMock.mockResolvedValueOnce({
+        handle: 'owner',
+        token: 'invite-token-abc',
+      })
+      getFriendPortraitDataMock.mockResolvedValueOnce({
+        user: {
+          id: 'self-1',
+          displayName: 'Owner',
+          handle: 'owner',
+          memberSince: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        visibility: 'self',
+        friendship: null,
+        interests: [],
+        sharedInterests: [],
+        viewerSoloInterests: [],
+        friendSoloInterests: [],
+        mutualFriends: [],
+        mutualFriendsOverflow: 0,
+        isOwnerView: true,
+        sectionSettings: {
+          knowledge_base: 'public',
+          friends_list: 'friends',
+          authored_questions: 'public',
+        },
+        sectionVisibleTo: {
+          knowledge_base: true,
+          friends_list: true,
+          authored_questions: true,
+        },
+        previewedAs: null,
+      })
+
+      const element = await UserProfilePage({
+        params: Promise.resolve({ id: 'self-1' }),
+        searchParams: Promise.resolve({}),
+      })
+      const html = renderToStaticMarkup(element)
+
+      expect(html).toContain('Developer tools')
+    } finally {
+      if (prevAdmins === undefined) delete process.env.ADMIN_USER_IDS
+      else process.env.ADMIN_USER_IDS = prevAdmins
+    }
   })
 
   it('ignores invalid previewAs (resolved to null) and renders normally', async () => {
