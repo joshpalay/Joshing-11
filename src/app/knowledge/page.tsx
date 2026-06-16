@@ -271,7 +271,6 @@ function KnowledgePageContent() {
     () => (editMode ? annotatedDomains : visibleDomains).map(toPortraitEntry),
     [annotatedDomains, visibleDomains, editMode],
   );
-  const sharePortraitEntries = useMemo(() => visibleDomains.map(toPortraitEntry), [visibleDomains]);
   // One entry per declared interest — no fixed slot count and no cap. The manage
   // modal renders these plus a trailing "add interest" affordance, so the list
   // grows and shrinks with the player. (MAX_ACTIVE only bounds the write path.)
@@ -688,7 +687,20 @@ function KnowledgePageContent() {
       </section>
 
       {shareModalOpen && (
-        <SharePortraitModal entries={sharePortraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
+        <SharePortraitModal
+          playerDisplayName={displayName}
+          portraitStatement={yourMind}
+          domains={topCardDomains.map((domain) => ({
+            canonicalSubcategory: domain.displayName,
+            currentTier: asTier(domain.tier),
+            lifetimePoints: domain.points,
+            iconKey: domain.iconKey,
+            broadCategory: domain.broadCategory,
+          }))}
+          overflowCount={Math.max(0, visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
+          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`}
+          onClose={() => setShareModalOpen(false)}
+        />
       )}
 
       {askFriendDomain ? (
