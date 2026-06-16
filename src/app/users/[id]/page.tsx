@@ -281,8 +281,16 @@ export default async function UserProfilePage({
         <AccountActions />
 
         <footer className="mt-auto pt-6 text-center text-xs text-muted-foreground">
-          Joshing {APP_VERSION} · On Joshing since{' '}
-          {formatMemberSince(portrait.user.memberSince)}.
+          <Link
+            href="/terms"
+            className="font-medium underline-offset-4 hover:underline"
+          >
+            Terms &amp; Disclaimer
+          </Link>
+          <span className="mt-2 block">
+            Joshing {APP_VERSION} · On Joshing since{' '}
+            {formatMemberSince(portrait.user.memberSince)}.
+          </span>
         </footer>
       </main>
     )

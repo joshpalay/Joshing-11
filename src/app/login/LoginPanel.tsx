@@ -850,6 +850,21 @@ export default function LoginPanel({
           {error}
         </p>
       ) : null}
+
+      {step !== 'profile' ? (
+        <p className="mt-4 text-center text-xs leading-5 text-black/60">
+          By signing in you agree to our{' '}
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-[var(--brand-orange)] underline underline-offset-2"
+          >
+            Terms &amp; Conditions
+          </a>
+          .
+        </p>
+      ) : null}
     </section>
   );
 }
