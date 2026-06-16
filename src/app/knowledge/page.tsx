@@ -133,7 +133,7 @@ function emptyDomain(domain: string): DomainMastery {
 
 function LoadingSkeleton() {
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+    <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
       <div className="grid gap-3.5" aria-hidden="true">
         <Skeleton className="h-36" />
         <div className="grid gap-3.5 sm:grid-cols-2">
@@ -549,7 +549,7 @@ function KnowledgePageContent() {
 
   if (error || !data) {
     return (
-      <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+      <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
           <h1 className="mt-1.5 text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
@@ -560,7 +560,7 @@ function KnowledgePageContent() {
   }
 
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+    <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
       <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
         Knowledge
       </h1>
