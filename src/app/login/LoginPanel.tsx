@@ -22,11 +22,6 @@ const CARD_CLASS =
   'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
-// Confirm-only variant for the invite path: the invited number is shown but not
-// editable, so it reads as a fixed value (muted fill, softened border, no focus
-// affordance) rather than an input the invitee is meant to type into.
-const READONLY_INPUT_CLASS =
-  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)]/40 bg-[var(--brand-cream-card)] px-3 text-center text-base font-medium tracking-wide text-[var(--brand-navy)] outline-none';
 const SUBMIT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
 // Quiet secondary action (e.g. "this number is not correct" / "go back"): a
@@ -203,8 +198,8 @@ export default function LoginPanel({
   const [step, setStep] = useState<Step>('phone');
   // Inline warm dead-end (Screen 1b): set when the invitee says the invited
   // number isn't theirs. The number is confirm-only (not editable), so the way
-  // out is to ask the inviter for a fresh invite — carried by wording, not an
-  // error banner (D-AUTH-INVITE-PHONE-FIRST §2.6).
+  // out is a fresh invite from the inviter — carried by wording, not an error
+  // banner (D-AUTH-INVITE-PHONE-FIRST §2.6).
   const [inviteDeadEnd, setInviteDeadEnd] = useState(previewDeadEnd);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -576,77 +571,102 @@ export default function LoginPanel({
           <svg className="mx-auto h-12 w-12 fill-black" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
           </svg>
-          {inviteContext ? <InviteContextCard invite={inviteContext} /> : null}
-          <label
-            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
-            htmlFor="phone"
-          >
-            {invitePrefill?.inviteePhone
-              ? 'Confirm your phone number'
-              : 'What is your phone number?'}
-          </label>
-          <input
-            id="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            // Invite path: the inviter already supplied the number, so it is
-            // confirm-only — shown read-only for the invitee to verify rather
-            // than type (D-AUTH-INVITE-PHONE-FIRST §2.2).
-            className={invitePrefill?.inviteePhone ? READONLY_INPUT_CLASS : INPUT_CLASS}
-            placeholder="(555) 123-4567"
-            maxLength={14}
-            value={phone}
-            onChange={(event) => setPhone(formatUsPhoneInput(event.target.value))}
-            readOnly={Boolean(invitePrefill?.inviteePhone)}
-            aria-readonly={Boolean(invitePrefill?.inviteePhone)}
-            disabled={loading}
-          />
-          {invitePrefill?.inviteePhone ? (
-            inviteDeadEnd ? (
-              // Warm dead-end (Screen 1b): the invitee says this isn't their
-              // number. Since the field is confirm-only, the only way forward is
-              // a fresh invite from the inviter — carried by wording, not an
-              // error banner (D-AUTH-INVITE-PHONE-FIRST §2.7).
-              <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+          {/* Suppress the generic context card on the confirm view — that view
+              carries its own inviter line + number. */}
+          {inviteContext && !(invitePrefill && !inviteDeadEnd) ? (
+            <InviteContextCard invite={inviteContext} />
+          ) : null}
+
+          {invitePrefill && !inviteDeadEnd ? (
+            // Confirm view: the inviter already supplied the number, so show it
+            // as a value (not a fake input) and offer one-tap send. The number
+            // is not editable — a phone-bound invite belongs to one person, so
+            // "this isn't my number" leads to a fresh invite, not a re-type
+            // (D-AUTH-INVITE-PHONE-FIRST §2.2 / §2.4).
+            <>
+              <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
                 <p className="text-[15px] leading-6 text-black/75">
-                  This invite was sent to{' '}
-                  <span className="font-medium whitespace-nowrap text-black">
-                    {formatUsPhoneInput(invitePrefill.inviteePhone)}
-                  </span>
-                  . If that isn’t your number, you’ll need to ask{' '}
-                  {inviterFirstName(invitePrefill.inviterName)} to send you a new invite.
+                  {inviterFirstName(invitePrefill.inviterName)} invited you to Joshing, a new trivia
+                  game. We just need to send a text to confirm it’s you:
                 </p>
-                <button
-                  type="button"
-                  className={SUBTLE_LINK_CLASS}
-                  onClick={() => setInviteDeadEnd(false)}
-                  disabled={loading}
-                >
-                  Go back
-                </button>
+                <p className="text-[20px] leading-7 font-semibold tracking-wide text-[var(--brand-navy)]">
+                  {formatUsPhoneInput(invitePrefill.inviteePhone)}
+                </p>
               </div>
-            ) : (
-              // Button + "not my number" form a tight cluster, separate from the
-              // 14px field rhythm above.
-              <div className="space-y-1.5">
+              <div>
                 <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-                  {loading ? 'Sending…' : 'Confirm and send text'}
+                  {loading ? 'Sending…' : 'Send text'}
                 </button>
+
+                {/* Divider sets the secondary action apart from the primary:
+                    small, muted "or" with more room below it than above. */}
+                <div className="mt-4 flex items-center gap-3" aria-hidden="true">
+                  <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+                  <span className="text-xs font-medium text-black/45">or</span>
+                  <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
+                </div>
+
                 <button
                   type="button"
-                  className={SUBTLE_LINK_CLASS}
-                  onClick={() => setInviteDeadEnd(true)}
+                  className={`mt-6 ${SUBTLE_LINK_CLASS}`}
+                  onClick={() => {
+                    setError(null);
+                    setInviteDeadEnd(true);
+                  }}
                   disabled={loading}
                 >
-                  This number is not correct
+                  That isn’t my number
                 </button>
               </div>
-            )
+            </>
+          ) : invitePrefill && inviteDeadEnd ? (
+            // Warm dead-end (Screen 1b): the invitee says the number isn't
+            // theirs. The invite is phone-bound, so the only way forward is a
+            // fresh invite from the inviter — carried by wording, not an error
+            // banner (D-AUTH-INVITE-PHONE-FIRST §2.6 / §2.7).
+            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+              <p className="text-[15px] leading-6 text-black/75">
+                This invite was sent to{' '}
+                <span className="font-medium whitespace-nowrap text-black">
+                  {formatUsPhoneInput(invitePrefill.inviteePhone)}
+                </span>
+                . If that isn’t your number, ask {inviterFirstName(invitePrefill.inviterName)} to
+                send you a new invite.
+              </p>
+              <button
+                type="button"
+                className={SUBTLE_LINK_CLASS}
+                onClick={() => setInviteDeadEnd(false)}
+                disabled={loading}
+              >
+                Go back
+              </button>
+            </div>
           ) : (
-            <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-              {loading ? 'Continuing…' : 'Continue'}
-            </button>
+            // Editable entry: cold-visit / per-user-link paths only.
+            <>
+              <label
+                className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
+                htmlFor="phone"
+              >
+                What is your phone number?
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                className={INPUT_CLASS}
+                placeholder="(555) 123-4567"
+                maxLength={14}
+                value={phone}
+                onChange={(event) => setPhone(formatUsPhoneInput(event.target.value))}
+                disabled={loading}
+              />
+              <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+                {loading ? 'Continuing…' : 'Continue'}
+              </button>
+            </>
           )}
         </form>
       ) : step === 'code' ? (
