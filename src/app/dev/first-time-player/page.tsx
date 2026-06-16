@@ -10,12 +10,12 @@ import { ChevronLeft, Heart, Info, MoreHorizontal, Share2 } from 'lucide-react';
  * player sees after completing their very first Daily Five (see
  * `FirstSessionPanel` / `RoundReminderCard` / `first-session-recap.ts`).
  *
- * The live recap is NOT its own page — it renders inline at the top of the
- * Daily Summary (`src/app/daily/summary/page.tsx`). So this preview reproduces
- * that summary around made-up completed-game content: the summary header and
- * score, the first-session panel inline beneath it, the growth recap, a couple
- * of question cards, and the closing card. That way the panel is shown in the
- * context it actually appears in.
+ * The live recap is NOT its own page — it renders inline at the very top of the
+ * Daily Summary (`src/app/daily/summary/page.tsx`), above the summary header.
+ * So this preview reproduces that summary around made-up completed-game content:
+ * the first-session panel first, then the summary header and score, the growth
+ * recap, a couple of question cards, and the closing card. That way the panel is
+ * shown in the context it actually appears in.
  *
  * The real component has side effects — `FirstSessionPanel` fires a "seen"
  * signal on mount and the reminder field PATCHes account settings — so we
@@ -239,7 +239,56 @@ export default function DevFirstTimePlayerPage() {
             Daily Summary · preview
           </p>
 
-          <header className="pb-2">
+          {/* Inline first-session panel — the actual first-time-player surface,
+              and the very first thing on the page (it sits above the summary
+              header, matching the live ordering). Static replica of
+              FirstSessionPanel: a SINGLE card with the congrats + cadence note
+              and the email-only reminder ask merged in (no dismiss). Sample name
+              stands in for the real player's first name. Inert: the live field
+              PATCHes /api/account/reminders, so here it renders but does
+              nothing. */}
+          <section className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
+            <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+              First five complete
+            </p>
+            <h2 className="mt-2 font-serif text-2xl leading-tight text-[var(--brand-ink)]">
+              Nice start, Sam.
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+              New questions come every day at noon — next up Wednesday at noon. You
+              can update your topics anytime on the{' '}
+              <span className="text-[var(--brand-link)] underline underline-offset-4">
+                Shape your next round
+              </span>{' '}
+              page.
+            </p>
+
+            <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+              <h3 style={reminderTitleStyle}>
+                Get notified when the next batch is available
+              </h3>
+              <p className="text-foreground mt-2 text-sm leading-6">
+                We can email you when new questions land.
+              </p>
+              <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+                <input
+                  type="email"
+                  inputMode="email"
+                  placeholder="you@example.com"
+                  readOnly
+                  className="bg-[var(--brand-field)] flex-1 rounded-lg border border-[var(--accent-gold)] px-3 py-2 text-sm focus:border-[var(--brand-navy)]"
+                />
+                <button type="button" className="btn-primary">
+                  Email me
+                </button>
+              </form>
+              <p className="text-muted-foreground mt-3 text-xs leading-5">
+                We&apos;ll send a confirmation email once email reminders launch.
+              </p>
+            </div>
+          </section>
+
+          <header className="mt-8 pb-2">
             <span className="text-muted-foreground inline-flex min-h-9 items-center text-sm font-medium">
               Session recap
             </span>
@@ -268,51 +317,6 @@ export default function DevFirstTimePlayerPage() {
               You found new ground in World Geography.
             </p>
           </header>
-
-          {/* Inline first-session panel — the actual first-time-player surface.
-              Static replica of FirstSessionPanel: a SINGLE card with the congrats
-              + cadence note and the email-only reminder ask merged in (no
-              dismiss). Sample name stands in for the real player's first name.
-              Inert: the live field PATCHes /api/account/reminders, so here it
-              renders but does nothing. */}
-          <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
-            <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-              First five complete
-            </p>
-            <h2 className="mt-2 font-serif text-2xl leading-tight text-[var(--brand-ink)]">
-              Nice start, Sam.
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-              New questions come every day at noon — next up Wednesday at noon.
-              Want different ones?{' '}
-              <span className="text-[var(--brand-link)] underline underline-offset-4">
-                Set your topics here
-              </span>
-              .
-            </p>
-
-            <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
-              <h3 style={reminderTitleStyle}>Want a daily reminder?</h3>
-              <p className="text-foreground mt-2 text-sm leading-6">
-                We can email you when new questions land. One message a day, max.
-              </p>
-              <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
-                <input
-                  type="email"
-                  inputMode="email"
-                  placeholder="you@example.com"
-                  readOnly
-                  className="bg-[var(--brand-field)] flex-1 rounded-lg border border-[var(--accent-gold)] px-3 py-2 text-sm focus:border-[var(--brand-navy)]"
-                />
-                <button type="button" className="btn-primary">
-                  Email me
-                </button>
-              </form>
-              <p className="text-muted-foreground mt-3 text-xs leading-5">
-                We&apos;ll send a confirmation email once email reminders launch.
-              </p>
-            </div>
-          </section>
 
           {/* Growth recap stub — present so the panel reads in its real context. */}
           <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">

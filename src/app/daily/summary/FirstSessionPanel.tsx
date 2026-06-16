@@ -76,15 +76,15 @@ export function FirstSessionPanel({ recap }: { recap: FirstSessionRecapView }) {
         Nice start{recap.firstName ? `, ${recap.firstName}` : ''}.
       </h2>
       <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-        New questions come every day at noon — next up {nextWeekday} at noon. Want
-        different ones?{' '}
+        New questions come every day at noon — next up {nextWeekday} at noon. You
+        can update your topics anytime on the{' '}
         <Link
           href="/daily/setup"
           className="text-[var(--brand-link)] underline underline-offset-4"
         >
-          Set your topics here
-        </Link>
-        .
+          Shape your next round
+        </Link>{' '}
+        page.
       </p>
 
       {/* Reminder opt-in, merged into the same card. Email-only, no dismiss. */}
@@ -107,9 +107,11 @@ export function FirstSessionPanel({ recap }: { recap: FirstSessionRecapView }) {
           </>
         ) : (
           <>
-            <h3 style={reminderTitleStyle}>Want a daily reminder?</h3>
+            <h3 style={reminderTitleStyle}>
+              Get notified when the next batch is available
+            </h3>
             <p className="text-foreground mt-2 text-sm leading-6">
-              We can email you when new questions land. One message a day, max.
+              We can email you when new questions land.
             </p>
             <form
               className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start"
