@@ -8,6 +8,7 @@ import {
   Loader2,
   LogOut,
   RefreshCw,
+  Smartphone,
   Sparkles,
   Sun,
 } from 'lucide-react';
@@ -157,6 +158,12 @@ export function AccountActions() {
             title="Show me the first time player"
             subtitle="Preview the first-session experience a new player sees"
             href="/dev/first-time-player"
+          />
+          <SettingsRow
+            icon={<Smartphone className="size-5" />}
+            title="Phone-first invite login"
+            subtitle="Preview the invite login screens without sending an invite"
+            href="/dev/invite-login"
           />
         </SettingsGroup>
         {resetGameError ? <p className="mt-2 text-sm text-destructive">{resetGameError}</p> : null}
