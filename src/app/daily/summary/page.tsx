@@ -159,7 +159,12 @@ export default function DailySummaryPage() {
   return (
     <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
       <div className="mx-auto max-w-3xl">
-        <header className="pb-2">
+        {/* B-FirstRecap-1: greet first-time players before anything else — the
+            congrats panel is the very first thing on the page on their first
+            completed round. */}
+        {firstSessionRecap ? <FirstSessionPanel recap={firstSessionRecap} /> : null}
+
+        <header className={cn('pb-2', firstSessionRecap && 'mt-8')}>
           <Link
             href="/"
             className="text-muted-foreground inline-flex min-h-9 items-center text-sm font-medium underline-offset-4 transition hover:text-foreground hover:underline"
@@ -189,8 +194,6 @@ export default function DailySummaryPage() {
           </div>
           {line ? <InterpretiveLine text={line} /> : null}
         </header>
-
-        {firstSessionRecap ? <FirstSessionPanel recap={firstSessionRecap} /> : null}
 
         <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
           <h2 style={titleStyle}>Your Growth Recap</h2>
