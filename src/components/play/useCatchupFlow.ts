@@ -194,29 +194,28 @@ function questionMessage(item: CatchupQueueItem): ChatMessage {
   };
 }
 
-// Once the player engages the next turn (answers, skips, or dismisses again),
-// a lingering "Dismissed · Undo" notice is retired to a plain "Dismissed." line
-// so undo can't rewind across a resolved turn.
+// Once the player engages the next turn (answers, skips, or dismisses again), a
+// lingering "Removed from catch up · Undo" notice is retired to a plain
+// "Removed from catch up." line so undo can't rewind across a resolved turn.
 function retireDismissNotices(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((message) =>
     message.kind === 'dismiss_notice'
-      ? { id: message.id, kind: 'system' as const, text: 'Dismissed.' }
+      ? { id: message.id, kind: 'system' as const, text: 'Removed from catch up.' }
       : message,
   );
 }
 
 // Rebuilds the introduced/result-posted sequencing sets from a thread, used
-// after an undo rewinds (truncates) the thread: every shown question is
-// "introduced", and a question is "resolved" once it has a result after it or
-// is a dismissed (faded) card. Anything truncated away drops out of both sets
-// so it gets re-introduced cleanly when the queue reaches it again.
+// after an undo drops the notice: every still-shown question is "introduced",
+// and a question is "resolved" once it has a result after it. A dismissed
+// question's card is removed from the thread entirely, so it appears in neither
+// set and gets re-introduced cleanly when the queue reaches it again.
 function deriveCatchupRefs(messages: ChatMessage[]): { introduced: Set<string>; resultPosted: Set<string> } {
   const introduced = new Set<string>();
   const resultPosted = new Set<string>();
   for (const message of messages) {
     if (message.kind === 'question') {
       introduced.add(message.assignmentId);
-      if (message.faded) resultPosted.add(message.assignmentId);
     } else if (message.kind === 'result') {
       resultPosted.add(message.assignmentId);
     }
@@ -462,10 +461,11 @@ export function useCatchupFlow() {
     }, 1200);
   }, [currentItem, finishTurn, isResolvingTurn, submitting]);
 
-  // Reverses a dismissal: un-dismisses server-side, then rewinds the thread back
-  // to the dismissed question (dropping the notice and the auto-introduced next
-  // card) so it becomes the active question again. Throws on failure so the
-  // notice row can surface a retry without losing the dismissal.
+  // Reverses a dismissal: un-dismisses server-side, then drops the notice and
+  // puts the item back at the front of the queue so the introduce effect re-adds
+  // its card as the active question. (The card was removed from the thread on
+  // dismiss, so there is nothing to un-fade.) Throws on failure so the notice
+  // row can surface a retry without losing the dismissal.
   const undismissItem = useCallback(async (item: CatchupQueueItem) => {
     const itemId = item.dailyQueueItemId;
     setSubmitting(true);
@@ -488,18 +488,15 @@ export function useCatchupFlow() {
       batchStartRemainingRef.current += 1;
       setPhase('playing');
       setMessages((existing) => {
-        const questionId = `catchup-q-${itemId}`;
-        const index = existing.findIndex((message) => message.id === questionId);
-        if (index === -1) return existing;
-        const rewound = existing.slice(0, index + 1).map((message) =>
-          message.id === questionId && message.kind === 'question'
-            ? { ...message, faded: false }
-            : message,
-        );
-        const refs = deriveCatchupRefs(rewound);
+        // Drop the active "Removed from catch up · Undo" notice; the restored
+        // item is back at the front of the queue, so re-deriving the sequencing
+        // sets from the remaining thread leaves it un-introduced and the
+        // introduce effect re-adds its card as the current question.
+        const withoutNotice = existing.filter((message) => message.kind !== 'dismiss_notice');
+        const refs = deriveCatchupRefs(withoutNotice);
         introducedItemIdsRef.current = refs.introduced;
         resultPostedItemIdsRef.current = refs.resultPosted;
-        return rewound;
+        return withoutNotice;
       });
     } finally {
       setSubmitting(false);
@@ -528,10 +525,11 @@ export function useCatchupFlow() {
       resultPostedItemIdsRef.current.add(itemId);
       setStats((existing) => ({ ...existing, dismissed: existing.dismissed + 1 }));
       setMessages((existing) => {
-        const retired = retireDismissNotices(existing).map((message) =>
-          message.kind === 'question' && message.assignmentId === itemId
-            ? { ...message, faded: true }
-            : message,
+        // Remove the dismissed question's card from the thread outright (it must
+        // not linger as a dimmed ghost) and leave a "Removed from catch up ·
+        // Undo" notice in its place. Undo re-introduces the card via the queue.
+        const retired = retireDismissNotices(existing).filter(
+          (message) => !(message.kind === 'question' && message.assignmentId === itemId),
         );
         return [
           ...retired,
