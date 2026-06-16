@@ -52,7 +52,7 @@ export function InviteSomeoneNew() {
   }
 
   return (
-    <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <h2 className="font-serif text-lg font-semibold">Invite someone new</h2>
       <p className="text-muted-foreground mt-1 text-sm">
         Text a personal note to someone&rsquo;s phone, or copy a link you can share anywhere.

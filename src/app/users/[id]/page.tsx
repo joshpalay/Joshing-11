@@ -493,7 +493,7 @@ function ProfileHeaderCard({
   friendButton?: React.ReactNode
 }) {
   return (
-    <section className="bg-card text-card-foreground rounded-3xl border p-5 shadow-sm">
+    <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-5 shadow-[var(--shadow-card)]">
       <div className="flex items-start gap-4">
         <div className="bg-primary/10 text-primary flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl font-serif text-3xl font-semibold">
           {displayName.slice(0, 1).toUpperCase() || 'J'}

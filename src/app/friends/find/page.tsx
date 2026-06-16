@@ -92,7 +92,7 @@ export default async function FindFriendsPage() {
 
         {/* Block 3 — Existing-invite reflection */}
         {reflections.length > 0 ? (
-          <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+          <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
             <h2 className="font-serif text-lg font-semibold">
               People you invited
             </h2>
@@ -140,7 +140,7 @@ export default async function FindFriendsPage() {
 
         {/* Block 5 — Suggested via mutual friends (placeholder; hidden when opted out) */}
         {viewer.discoverableByMutualFriends ? (
-          <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+          <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
             <h2 className="font-serif text-lg font-semibold">
               Suggested via mutual friends
             </h2>

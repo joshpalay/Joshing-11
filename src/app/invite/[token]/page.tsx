@@ -15,7 +15,7 @@ function inviteLoginHref(token: string) {
 function InviteShell({ children }: { children: ReactNode }) {
   return (
     <main className="bg-background text-foreground flex min-h-screen items-center justify-center px-4 py-10">
-      <section className="bg-card w-full max-w-sm rounded-2xl border p-5 shadow-sm">
+      <section className="bg-card w-full max-w-sm rounded-[var(--radius-card)] border p-5 shadow-[var(--shadow-card)]">
         {children}
       </section>
     </main>

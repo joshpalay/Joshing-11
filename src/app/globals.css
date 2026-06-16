@@ -369,7 +369,7 @@
 
 @layer components {
   .card {
-    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+    @apply rounded-[var(--radius-card)] border bg-card text-card-foreground shadow-[var(--shadow-card)];
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
