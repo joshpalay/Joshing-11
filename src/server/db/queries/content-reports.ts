@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, gte, inArray, ne, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 import { contentReports, db, generatedQuestions, questions, users } from '@/server/db';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
+import { type QuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 
 // B-Report-2: write + read helpers for ContentReport. Mirrors the house style in
 // ratings.ts — db + schema imports from '@/server/db', explicit field assignment,
@@ -496,4 +497,218 @@ export async function dismissReport(reportId: string, reviewReason?: string): Pr
     .where(and(eq(contentReports.id, reportId), eq(contentReports.status, 'open')));
 
   return { ok: true, action: 'dismissed', category: report.category, hardRemoved: false };
+}
+
+// ─── B-Report-6: blocked / actioned review + reversal ────────────────────────
+//
+// The review queue above shows only OPEN reports. This pair backs the
+// already-removed view: list currently-blocked content and let an admin REVERSE
+// a decision. Unlike getOpenReportsForReview, this list carries `source` +
+// `creatorId` so the admin surface can badge a real author's question apart from
+// house/LLM content. Reversal is content-only and gated by the same isAdminUser
+// allowlist at the route.
+
+export type BlockedReviewItem = {
+  target: { table: 'question'; id: string } | { table: 'generated'; id: string };
+  questionText: string | null;
+  correctAnswer: string | null;
+  // Provenance for the human-vs-house/LLM badge (the open-report query omits these).
+  // Generated rows are LLM-origin by construction: source/creatorId are null.
+  source: QuestionSource | null;
+  creatorId: string | null;
+  authorName: string | null; // null ⇒ client renders the LLM attribution
+  authorIsHouse: boolean;
+  // The upheld-inappropriate report behind the block. Always present for
+  // generated; may be null for authored (a vet verdict or cron sweep can block
+  // without a report).
+  reportId: string | null;
+  actionedAt: Date | null;
+};
+
+export async function getBlockedQuestionsForReview(): Promise<BlockedReviewItem[]> {
+  const [authoredRows, generatedRows] = await Promise.all([
+    db
+      .select({
+        id: questions.id,
+        questionText: questions.questionText,
+        answer: questions.answerText,
+        source: questions.source,
+        creatorId: questions.creatorId,
+        authorName: users.displayName,
+      })
+      .from(questions)
+      .leftJoin(users, eq(questions.creatorId, users.id))
+      .where(and(eq(questions.visibility, 'blocked'), isNull(questions.deletedAt))),
+    db
+      .select({
+        id: generatedQuestions.id,
+        questionText: generatedQuestions.questionText,
+        answer: generatedQuestions.answer,
+        reportId: contentReports.id,
+        reviewedAt: contentReports.reviewedAt,
+      })
+      .from(generatedQuestions)
+      .innerJoin(
+        contentReports,
+        and(
+          eq(contentReports.generatedQuestionId, generatedQuestions.id),
+          eq(contentReports.category, 'inappropriate'),
+          eq(contentReports.status, 'upheld'),
+        ),
+      ),
+  ]);
+
+  // The upheld-inappropriate report behind each authored block, if any.
+  const authoredIds = authoredRows.map((r) => r.id);
+  const authoredReports = authoredIds.length
+    ? await db
+        .select({
+          questionId: contentReports.questionId,
+          id: contentReports.id,
+          reviewedAt: contentReports.reviewedAt,
+        })
+        .from(contentReports)
+        .where(
+          and(
+            inArray(contentReports.questionId, authoredIds),
+            eq(contentReports.category, 'inappropriate'),
+            eq(contentReports.status, 'upheld'),
+          ),
+        )
+        .orderBy(desc(contentReports.reviewedAt))
+    : [];
+  const authoredReportByQuestion = new Map<string, { id: string; reviewedAt: Date | null }>();
+  for (const r of authoredReports) {
+    if (r.questionId && !authoredReportByQuestion.has(r.questionId)) {
+      authoredReportByQuestion.set(r.questionId, { id: r.id, reviewedAt: r.reviewedAt });
+    }
+  }
+
+  const items: BlockedReviewItem[] = [];
+
+  for (const row of authoredRows) {
+    const rep = authoredReportByQuestion.get(row.id) ?? null;
+    items.push({
+      target: { table: 'question', id: row.id },
+      questionText: row.questionText,
+      correctAnswer: row.answer,
+      source: row.source,
+      creatorId: row.creatorId,
+      ...resolveAuthorDisplay(row.creatorId, row.source, row.authorName),
+      reportId: rep?.id ?? null,
+      actionedAt: rep?.reviewedAt ?? null,
+    });
+  }
+
+  // One generated question can carry more than one upheld report; keep the most
+  // recent as the representative row.
+  const generatedById = new Map<
+    string,
+    { questionText: string; answer: string; reportId: string; reviewedAt: Date | null }
+  >();
+  for (const row of generatedRows) {
+    const prev = generatedById.get(row.id);
+    const newer =
+      !prev ||
+      (row.reviewedAt != null &&
+        (prev.reviewedAt == null || row.reviewedAt > prev.reviewedAt));
+    if (newer) {
+      generatedById.set(row.id, {
+        questionText: row.questionText,
+        answer: row.answer,
+        reportId: row.reportId,
+        reviewedAt: row.reviewedAt,
+      });
+    }
+  }
+  for (const [id, g] of generatedById) {
+    items.push({
+      target: { table: 'generated', id },
+      questionText: g.questionText,
+      correctAnswer: g.answer,
+      source: null,
+      creatorId: null,
+      authorName: null,
+      authorIsHouse: false,
+      reportId: g.reportId,
+      actionedAt: g.reviewedAt,
+    });
+  }
+
+  // Most-recently actioned first; vet/cron blocks (no report ⇒ null) sort last.
+  items.sort((a, b) => (b.actionedAt?.getTime() ?? 0) - (a.actionedAt?.getTime() ?? 0));
+  return items;
+}
+
+export type ReverseActionResult =
+  | { ok: true; action: 'reversed'; table: 'question' | 'generated'; restoredVisibility: 'public' | null }
+  | { ok: false; reason: 'not_found' | 'not_blocked' };
+
+// Reverse a terminal block (content-only; mirrors the uphold/dismiss audit
+// fields: reviewDecision='admin_reversed', reviewReason, reviewedAt).
+//   - authored: visibility 'blocked' → 'public' AND dismiss the upheld
+//     inappropriate report(s), so B-Report-3 suppression (open|upheld) also lifts.
+//     NOTE: the pre-block visibility is not persisted anywhere (the block write
+//     overwrites it), so we restore to the column default 'public'. Re-scoping to
+//     a tighter audience is a manual follow-up.
+//   - generated: there is no visibility column — the upheld report IS the
+//     terminal state, so dismissing it reverses the block.
+export async function reverseBlock(
+  target: { table: 'question' | 'generated'; id: string },
+  reviewReason?: string,
+): Promise<ReverseActionResult> {
+  const reason = reviewReason?.trim() || null;
+
+  if (target.table === 'question') {
+    const [q] = await db
+      .select({ visibility: questions.visibility })
+      .from(questions)
+      .where(eq(questions.id, target.id))
+      .limit(1);
+    if (!q) return { ok: false, reason: 'not_found' };
+    if (q.visibility !== 'blocked') return { ok: false, reason: 'not_blocked' };
+
+    await db
+      .update(questions)
+      .set({ visibility: 'public', updatedAt: new Date() })
+      .where(eq(questions.id, target.id));
+
+    await db
+      .update(contentReports)
+      .set({
+        status: 'dismissed',
+        reviewDecision: 'admin_reversed',
+        reviewReason: reason,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(contentReports.questionId, target.id),
+          eq(contentReports.category, 'inappropriate'),
+          eq(contentReports.status, 'upheld'),
+        ),
+      );
+
+    return { ok: true, action: 'reversed', table: 'question', restoredVisibility: 'public' };
+  }
+
+  const updated = await db
+    .update(contentReports)
+    .set({
+      status: 'dismissed',
+      reviewDecision: 'admin_reversed',
+      reviewReason: reason,
+      reviewedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(contentReports.generatedQuestionId, target.id),
+        eq(contentReports.category, 'inappropriate'),
+        eq(contentReports.status, 'upheld'),
+      ),
+    )
+    .returning({ id: contentReports.id });
+
+  if (updated.length === 0) return { ok: false, reason: 'not_found' };
+  return { ok: true, action: 'reversed', table: 'generated', restoredVisibility: null };
 }
