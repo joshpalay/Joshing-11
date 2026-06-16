@@ -84,7 +84,13 @@ export function refineItemKey(
 /**
  * Tiered pruning threshold — N consecutive misses needed to fire, keyed by the
  * tier of the LATEST miss in the run (spec edge case: latest, not hardest).
+ *
+ * Retuned from 3/4/5 → 2/3/4: at the original thresholds a struggle-pruning
+ * suggestion almost never fired in normal play (a single correct answer resets
+ * the run, and stacking 3+ same-domain misses in a 5-question daily is rare).
+ * The gentler 2/3/4 surfaces a "rest this" nudge after a couple of misses
+ * without becoming nag-y on the harder tiers.
  */
 export function pruningThreshold(latestMissTier: RefineMissTier): number {
-  return { accessible: 3, moderate: 4, specialist: 5 }[latestMissTier];
+  return { accessible: 2, moderate: 3, specialist: 4 }[latestMissTier];
 }
