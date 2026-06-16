@@ -1,17 +1,36 @@
 import Link from 'next/link';
+import { type CSSProperties } from 'react';
 import { ChevronLeft, Info } from 'lucide-react';
 
 /**
  * Dev tool: preview the first-time player experience.
  *
  * Linked from the Developer tools section of the profile page. It shows a
- * static, side-effect-free replica of the first-session recap panel a brand-new
+ * static, side-effect-free replica of the first-session recap a brand-new
  * player sees after completing their very first Daily Five (see
- * `FirstSessionPanel` / `first-session-recap.ts`). The real panel fires a
- * "seen" signal on mount and the reminder card mutates account settings, so we
- * deliberately do NOT mount the live components here — this is a look-only
- * preview, with an explanatory note pinned to the top.
+ * `FirstSessionPanel` / `RoundReminderCard` / `first-session-recap.ts`).
+ *
+ * The full first-session panel is two stacked cards: the "first five complete"
+ * note, then the reminder opt-in (reused from the returning-user prompt with a
+ * first-timer title/description). The real components have side effects — the
+ * panel fires a "seen" signal on mount and the reminder buttons PATCH account
+ * settings — so we deliberately do NOT mount the live components here. This page
+ * mirrors their markup and copy exactly but renders inert: a look-only preview
+ * filled out as if a player had just finished everything.
  */
+
+// Mirrors RoundReminderCard's `titleStyle` so the reminder card reads identically
+// to the live opt-in. Kept inline (rather than imported) to keep this preview
+// fully decoupled from the side-effectful component.
+const reminderTitleStyle: CSSProperties = {
+  fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+  fontSize: '1.05rem',
+  fontWeight: 600,
+  color: '#111111',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+
 export default function DevFirstTimePlayerPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 pt-10 pb-28">
@@ -36,10 +55,12 @@ export default function DevFirstTimePlayerPage() {
             What a brand-new player sees.
           </p>
           <p className="mt-1">
-            This is the first-session recap that shows once, right after a player
-            finishes their very first Daily Five. It&apos;s a look-only preview:
-            unlike the live panel it doesn&apos;t record the &ldquo;seen&rdquo;
-            signal or change any reminder settings.
+            This is the full first-session recap that shows once, right after a
+            player finishes their very first Daily Five — the &ldquo;first five
+            complete&rdquo; note followed by the reminder opt-in. It&apos;s a
+            look-only preview: unlike the live panel it doesn&apos;t record the
+            &ldquo;seen&rdquo; signal, and the reminder buttons don&apos;t change
+            any account settings.
           </p>
         </div>
       </div>
@@ -62,12 +83,28 @@ export default function DevFirstTimePlayerPage() {
         </p>
       </section>
 
-      {/* The live flow follows this with the reminder opt-in card. It mutates
-          account settings, so we describe it rather than render it. */}
-      <div className="mt-4 rounded-lg border border-dashed border-[var(--brand-border)] px-5 py-4 text-sm text-muted-foreground">
-        In the live flow, the reminder opt-in card (&ldquo;Want a reminder when
-        new questions land?&rdquo;) appears here.
-      </div>
+      {/* Static replica of RoundReminderCard's idle state, with the first-timer
+          title/description FirstSessionPanel passes in. Inert: the live buttons
+          PATCH /api/account/reminders, so here they render but do nothing. */}
+      <section className="card mt-5 px-5 py-4">
+        <h2 style={reminderTitleStyle}>
+          Want a reminder when new questions land?
+        </h2>
+        <p className="text-foreground mt-2 text-sm leading-6">
+          One message a day, max. You can turn it off any time.
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <button type="button" className="btn-primary sm:flex-1">
+            Yes, text me
+          </button>
+          <button type="button" className="btn-ghost sm:flex-1">
+            Use email instead
+          </button>
+          <button type="button" className="btn-ghost sm:flex-1">
+            No thanks
+          </button>
+        </div>
+      </section>
     </main>
   );
 }
