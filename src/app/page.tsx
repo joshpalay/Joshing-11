@@ -140,10 +140,15 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
       {/* Sit the header on the feed's left gutter — the same 2px the activity
           rows pad in (where the fixed icon column / shape marks begin), so the
           header and the shapes share one left edge. The day labels indent
-          further (pl-9, past the icon column) to meet the row copy. */}
-      <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
-        For you
-      </p>
+          further (pl-9, past the icon column) to meet the row copy.
+          Only rendered when the directed "For you" zone actually has content —
+          an empty section should not carry a heading (it read as a stranded
+          eyebrow above the "From Friends" band). */}
+      {edition.direct.served.length > 0 ? (
+        <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+          For you
+        </p>
+      ) : null}
       <FeedList
         pageSize={FEED_PAGE_SIZE}
         initialPage={initialPage}

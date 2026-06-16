@@ -165,16 +165,20 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('From Friends')
     expect(html).toContain('4 more from friends →')
     expect(html).toContain('3 more →')
-    // B-HOME-BAND-LABEL-04 — one "Past 7 days" band label governs the ambient
-    // zones, stated once, and Zone 1 (the directed "For you" eyebrow) sits ABOVE
-    // it, outside the windowed band. The per-zone labels are demoted beneath it.
+    // The 7-day boundary is folded onto the "From Friends" heading as a quiet
+    // "(Past 7 days)" qualifier — stated once, only on that heading. Zone 1
+    // (the directed "For you" descriptor) still sits ABOVE it, outside the band.
     expect(html).toContain('Past 7 days')
     expect(html.match(/Past 7 days/g) ?? []).toHaveLength(1)
     expect(html).toContain('Recent activity')
+    // From Friends is promoted to a peer of "For you" and carries a descriptive
+    // subtitle beneath its heading.
+    expect(html).toContain('Play the questions your friends have aced')
     expect(html.indexOf('questions your friends created or sent directly to you')).toBeLessThan(
       html.indexOf('Past 7 days'),
     )
-    expect(html.indexOf('Past 7 days')).toBeLessThan(html.indexOf('From Friends'))
+    // The qualifier trails the "From Friends" label on the same heading.
+    expect(html.indexOf('Past 7 days')).toBeGreaterThan(html.indexOf('From Friends'))
     expect(html).toContain('href="/for-you"')
     expect(html).toContain('href="/from-friends"')
     // Served direct cards and playables both rendered.
@@ -185,15 +189,15 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).not.toContain('Today')
     expect(html).not.toContain('Past two weeks')
     // Texture's see-more goes to Lately (the archive of this stream) — no third
-    // subpage (§4); the revived "See all activity →" row closes the zone.
-    expect(html).toContain('See all activity →')
+    // subpage (§4); the "See more activity →" row closes the zone.
+    expect(html).toContain('See more activity →')
     expect(html).toContain('href="/activities"')
     // Exactly one rotating panel, interleaved after the third texture row
     // (§2 slot 5, tuned 2026-06-12): t0 t1 t2, panel, t3 t4, see-all.
     const panelAt = html.indexOf('PANEL:add_friends')
     expect(panelAt).toBeGreaterThan(html.indexOf('activity:t2:'))
     expect(panelAt).toBeLessThan(html.indexOf('activity:t3:'))
-    expect(html.indexOf('See all activity →')).toBeGreaterThan(html.indexOf('activity:t4:'))
+    expect(html.indexOf('See more activity →')).toBeGreaterThan(html.indexOf('activity:t4:'))
     expect(html.lastIndexOf('PANEL:')).toBe(panelAt) // one panel, not two
   })
 
@@ -241,9 +245,10 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('questions your friends created or sent directly to you')
     expect(html).toContain('direct:robyn')
     // Empty ambient sections are hidden outright — no sub-label, no art, no
-    // "honest empty" copy. The band still labels itself because the quiet-week
-    // foot panel keeps content beneath the boundary.
-    expect(html).toContain('Past 7 days')
+    // "honest empty" copy. With both ambient sections gone, the "(Past 7 days)"
+    // qualifier has no heading to ride on, so the lone quiet-week foot panel
+    // renders without a boundary label.
+    expect(html).not.toContain('Past 7 days')
     expect(html).not.toContain('From Friends')
     expect(html).not.toContain('No friend activity this week')
     expect(html).not.toContain('Recent activity')
@@ -252,7 +257,7 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).not.toContain('Quiet today')
     expect(html).not.toContain('add friends →')
     // The texture see-more is hidden with its (empty) zone.
-    expect(html).not.toContain('See all activity')
+    expect(html).not.toContain('See more activity')
     // The populated page still gets its one panel (quiet-week foot fallback).
     expect(html).toContain('PANEL:common_ground')
   })
