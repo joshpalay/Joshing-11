@@ -328,6 +328,76 @@ Respond in JSON only: { "suggested": "...", "broadCategory": "...", "explanation
   };
 }
 
+export type InterestProofread = {
+  /** The label as typed (trimmed and whitespace-collapsed). */
+  original: string;
+  /**
+   * A spelling correction when the typed label is an obvious misspelling of a
+   * recognizable subject ("Obama-Era poicy" -> "Obama-Era Policy"), else null.
+   * Only fixes typos — never rewrites meaning, scope, specificity, or casing —
+   * so an inviter can confirm before a suggested area ships misspelled.
+   */
+  suggestion: string | null;
+};
+
+/**
+ * Proofread inviter-suggested interest labels for obvious spelling typos before
+ * they are attached to a friend invitation. Returns a correction only when the
+ * model is confident the input is a misspelling of a real, recognizable subject;
+ * otherwise suggestion is null and the typed wording stands. One batched Haiku
+ * call covers all (up to three) labels.
+ *
+ * FAILS OPEN: an absent client, an outage, or a malformed response yields
+ * all-null suggestions, so the invite flow proceeds with the typed labels
+ * unchanged. This is a convenience double-check, never a gate.
+ */
+export async function proofreadInterestLabels(labels: string[]): Promise<InterestProofread[]> {
+  const cleaned = labels
+    .map((label) => label.trim().replace(/\s+/g, ' ').slice(0, 80))
+    .filter((label) => label.length > 0);
+  const base: InterestProofread[] = cleaned.map((original) => ({ original, suggestion: null }));
+  if (cleaned.length === 0) return [];
+
+  const client = getAnthropicClient();
+  if (!client) return base;
+
+  const systemPrompt = `You proofread short trivia-interest labels for spelling typos only.
+For each input label, decide whether it is an obvious misspelling of a real, recognizable subject (a person, place, work, era, field, team, or movement).
+Rules:
+- Only correct clear spelling typos ("poicy" -> "Policy", "Beethovan" -> "Beethoven", "Brutalst" -> "Brutalist").
+- Preserve the rest of the label exactly — never change meaning, scope, specificity, or word order, and never add or remove words beyond fixing the typo.
+- If the label is already spelled correctly, or you are not confident it is a typo, return null for that label.
+- Keep the label's existing capitalization style.
+Respond in JSON array only, no markdown, one object per input label in the same order: [ { "suggestion": "..." | null } ]${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    const numbered = cleaned.map((label, index) => `${index + 1}. ${label}`).join('\n');
+    const response = await loggedMessagesCreate(client, 'interests-proofread', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 300,
+      temperature: 0,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('interest_labels', numbered) }],
+    });
+
+    const parsed = parseJsonArray(extractTextContent(response.content));
+    if (!parsed) return base;
+
+    return base.map((entry, index) => {
+      const item = parsed[index];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return entry;
+      const suggestion = asTrimmedString((item as Record<string, unknown>).suggestion);
+      // Ignore non-corrections: a missing field, or an echo of the typed label.
+      if (!suggestion || suggestion.toLowerCase() === entry.original.toLowerCase()) {
+        return entry;
+      }
+      return { original: entry.original, suggestion: suggestion.slice(0, 80) };
+    });
+  } catch {
+    return base;
+  }
+}
+
 export type ExpandedInterest = {
   label: string;
   // null when categorization is unavailable or the model returns a catch-all;

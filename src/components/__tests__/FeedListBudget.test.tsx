@@ -218,7 +218,7 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).not.toContain('Nothing else this week')
   })
 
-  it('partial-empty → ambient sections show honest empties, not silent hiding (model point 4)', () => {
+  it('partial-empty → empty ambient sections are hidden outright (point 4 reverted 2026-06-15)', () => {
     const html = render({
       unifiedHome: true,
       initialPage: {
@@ -240,15 +240,15 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
 
     expect(html).toContain('questions your friends created or sent directly to you')
     expect(html).toContain('direct:robyn')
-    // The band still labels the windowed zones, and each empty ambient section
-    // renders an honest empty (with its sub-label) rather than vanishing.
+    // Empty ambient sections are hidden outright — no sub-label, no art, no
+    // "honest empty" copy. The band still labels itself because the quiet-week
+    // foot panel keeps content beneath the boundary.
     expect(html).toContain('Past 7 days')
-    expect(html).toContain('From Friends')
-    expect(html).toContain('No friend activity this week.')
-    expect(html).toContain('Recent activity')
-    expect(html).toContain('Nothing else this week.')
-    // NOT the whole-page promo (that is for total emptiness only), and the
-    // per-section empties carry no invite CTA (that belongs to the all-empty case).
+    expect(html).not.toContain('From Friends')
+    expect(html).not.toContain('No friend activity this week')
+    expect(html).not.toContain('Recent activity')
+    expect(html).not.toContain('Nothing else this week')
+    // NOT the whole-page promo (that is for total emptiness only).
     expect(html).not.toContain('Quiet today')
     expect(html).not.toContain('add friends →')
     // The texture see-more is hidden with its (empty) zone.
@@ -257,7 +257,7 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('PANEL:common_ground')
   })
 
-  it('asymmetric partial-empty → From Friends renders, Recent activity shows an honest empty', () => {
+  it('asymmetric partial-empty → From Friends renders, empty Recent activity is hidden', () => {
     const html = render({
       unifiedHome: true,
       initialPage: { viewer_user_id: 'me', meta: META, items: [], has_more: false, next_cursor: null },
@@ -276,9 +276,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('From Friends')
     expect(html).toContain('activity:p0:josh')
     expect(html).not.toContain('No friend activity this week')
-    // Recent activity is empty-in-window → honest empty, not hidden.
-    expect(html).toContain('Recent activity')
-    expect(html).toContain('Nothing else this week.')
+    // Recent activity is empty-in-window → hidden outright, no honest empty.
+    expect(html).not.toContain('Recent activity')
+    expect(html).not.toContain('Nothing else this week')
     expect(html).not.toContain('Quiet today')
   })
 })

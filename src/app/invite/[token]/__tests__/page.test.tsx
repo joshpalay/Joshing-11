@@ -1,12 +1,20 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getFriendInvitationLandingByTokenMock } = vi.hoisted(() => ({
+const { getFriendInvitationLandingByTokenMock, redirectMock } = vi.hoisted(() => ({
   getFriendInvitationLandingByTokenMock: vi.fn(),
+  redirectMock: vi.fn((url: string) => {
+    // Mirror Next's real redirect(): throw to halt rendering.
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
 }));
 
 vi.mock('@/server/friends/invitations', () => ({
   getFriendInvitationLandingByToken: getFriendInvitationLandingByTokenMock,
+}));
+
+vi.mock('next/navigation', () => ({
+  redirect: redirectMock,
 }));
 
 import InvitePage from '@/app/invite/[token]/page';
@@ -21,38 +29,18 @@ describe('/invite/[token] landing QA states', () => {
     vi.clearAllMocks();
   });
 
-  it('opens a valid invite landing with inviter name and auth continuation, but does NOT leak pre-seeded interests (F1.5)', async () => {
+  it('sends a valid invite straight to the login screen with the invite context attached (no interstitial)', async () => {
     getFriendInvitationLandingByTokenMock.mockResolvedValueOnce({
       status: 'valid',
       inviterName: 'Alex Inviter',
     });
 
-    const html = await renderInvite('valid-token');
+    await expect(renderInvite('valid-token')).rejects.toThrow(
+      'NEXT_REDIRECT:/login?invitationToken=valid-token',
+    );
 
     expect(getFriendInvitationLandingByTokenMock).toHaveBeenCalledWith('valid-token');
-    expect(html).toContain('A friend thought of you');
-    expect(html).toContain('Alex Inviter thought of you for Joshing.');
-    expect(html).toContain('Continue to Joshing');
-    expect(html).not.toContain('A note from a friend');
-    expect(html).not.toContain('See the note');
-    expect(html).toContain('href="/login?invitationToken=valid-token"');
-    expect(html).not.toContain('href="/login"');
-    expect(html).not.toMatch(/leaderboard|ranking|score|points?|percent|%/i);
-  });
-
-  it('never renders pre-seeded interest labels even if a stale payload includes them (defensive)', async () => {
-    // Defends against a regression where the type is reverted: even if the
-    // landing query somehow ships labels, the page must not render them.
-    getFriendInvitationLandingByTokenMock.mockResolvedValueOnce({
-      status: 'valid',
-      inviterName: 'Alex Inviter',
-      // @ts-expect-error - field is intentionally not on the type
-      suggestedInterests: [{ label: 'Jazz' }, { label: 'Poetry' }],
-    });
-
-    const html = await renderInvite('valid-token');
-    expect(html).not.toContain('Jazz');
-    expect(html).not.toContain('Poetry');
+    expect(redirectMock).toHaveBeenCalledWith('/login?invitationToken=valid-token');
   });
 
   it.each([

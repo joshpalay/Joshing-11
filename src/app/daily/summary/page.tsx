@@ -28,7 +28,7 @@ import type {
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
 import { RoundReminderCard } from './RoundReminderCard'
-import { FirstSessionRecap } from './FirstSessionRecap'
+import { FirstSessionPanel } from './FirstSessionPanel'
 import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
@@ -51,8 +51,9 @@ export default function DailySummaryPage() {
   const [summary, setSummary] = useState<DailySummaryView | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // B-FirstRecap-1: the one-time cinematic recap that fires AFTER this summary on
-  // the user's first completed Daily Five. Null unless eligible + not yet seen.
+  // B-FirstRecap-1: the one-time first-session panel shown inline at the top of
+  // this summary on the user's first completed Daily Five. Null unless eligible
+  // + not yet seen.
   const [firstSessionRecap, setFirstSessionRecap] =
     useState<FirstSessionRecapView | null>(null)
   // B-Report-2: recap rows the player removed by reporting them as inappropriate.
@@ -189,6 +190,8 @@ export default function DailySummaryPage() {
           {line ? <InterpretiveLine text={line} /> : null}
         </header>
 
+        {firstSessionRecap ? <FirstSessionPanel recap={firstSessionRecap} /> : null}
+
         <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
           <h2 style={titleStyle}>Your Growth Recap</h2>
           <CategoryGainsDisplay
@@ -238,7 +241,9 @@ export default function DailySummaryPage() {
           </div>
         </section>
 
-        {summary.reminderPromptState === 'show' ? <RoundReminderCard /> : null}
+        {summary.reminderPromptState === 'show' && !firstSessionRecap ? (
+          <RoundReminderCard />
+        ) : null}
 
         {summary.recentFriendBridge ? (
           <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
@@ -271,13 +276,6 @@ export default function DailySummaryPage() {
             </Link>
           </div>
         </section>
-
-        {firstSessionRecap ? (
-          <FirstSessionRecap
-            recap={firstSessionRecap}
-            onDismiss={() => setFirstSessionRecap(null)}
-          />
-        ) : null}
       </div>
     </main>
   )

@@ -15,7 +15,14 @@ const ERROR_COPY: Record<string, string> = {
   invite_cooldown: 'Give this invite a little breathing room before trying again.',
 };
 
-type Step = 'identity' | 'interests' | 'handoff';
+type Step = 'identity' | 'interests' | 'review' | 'handoff';
+
+// One proofread outcome from POST /api/friend-invitations/review: the idea as
+// typed plus a spelling correction when one was found (else null).
+type ProofreadResult = {
+  original: string;
+  suggestion: string | null;
+};
 
 type InviteResult = {
   ok: boolean;
@@ -76,6 +83,12 @@ export default function AddFriendInvite({
   const [error, setError] = useState<string | null>(null);
   const [copyLabel, setCopyLabel] = useState('Copy message');
   const [submitting, setSubmitting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  // The normalized ideas being confirmed on the review step, plus the proofread
+  // corrections aligned to them by index. reviewIdeas[i] holds the inviter's
+  // current pick (typed label or accepted suggestion).
+  const [reviewIdeas, setReviewIdeas] = useState<string[]>([]);
+  const [proofread, setProofread] = useState<ProofreadResult[]>([]);
   const [contactsSupported, setContactsSupported] = useState<boolean | null>(null);
   const [isIos, setIsIos] = useState(false);
   const messageRef = useRef<HTMLTextAreaElement | null>(null);
@@ -108,6 +121,8 @@ export default function AddFriendInvite({
       setMessageText('');
       setError(null);
       setCopyLabel('Copy message');
+      setReviewIdeas([]);
+      setProofread([]);
     }
 
     window.addEventListener('friend-invitations:create-new', prefillInvite);
@@ -180,6 +195,9 @@ export default function AddFriendInvite({
     setError(null);
     setCopyLabel('Copy message');
     setSubmitting(false);
+    setChecking(false);
+    setReviewIdeas([]);
+    setProofread([]);
   }
 
   function updateInterest(index: number, value: string) {
@@ -203,10 +221,61 @@ export default function AddFriendInvite({
     setStep('interests');
   }
 
-  async function createInvite(event: FormEvent<HTMLFormElement>) {
+  // Step 2 submit: proofread the typed ideas for spelling typos first. If any
+  // come back with a suggested fix, route to the review step so the inviter can
+  // confirm or correct; otherwise create the invite straight away. Proofreading
+  // is best-effort — any failure falls through to creating the invite as typed.
+  async function reviewAndCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const currentInterests = normalizeInterestList(interests);
 
+    if (currentInterests.length > 3) {
+      setError(ERROR_COPY.too_many_suggested_interests);
+      return;
+    }
+
+    if (currentInterests.length === 0) {
+      await submitInvite([]);
+      return;
+    }
+
+    setChecking(true);
+    setError(null);
+
+    let corrections: ProofreadResult[] = [];
+    try {
+      const response = await fetch('/api/friend-invitations/review', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ interests: currentInterests }),
+      });
+      const body = (await response.json().catch(() => null)) as { results?: ProofreadResult[] } | null;
+      if (response.ok && body && Array.isArray(body.results)) {
+        corrections = body.results;
+      }
+    } catch {
+      corrections = [];
+    } finally {
+      setChecking(false);
+    }
+
+    if (corrections.some((item) => item.suggestion)) {
+      setReviewIdeas(currentInterests);
+      setProofread(corrections);
+      setStep('review');
+      return;
+    }
+
+    await submitInvite(currentInterests);
+  }
+
+  // Apply (or undo) a proofread suggestion for one idea on the review step.
+  function chooseIdea(index: number, value: string) {
+    setReviewIdeas((current) => current.map((idea, i) => (i === index ? value : idea)));
+  }
+
+  async function submitInvite(currentInterests: string[]) {
     if (currentInterests.length > 3) {
       setError(ERROR_COPY.too_many_suggested_interests);
       return;
@@ -360,7 +429,7 @@ export default function AddFriendInvite({
       ) : null}
 
       {step === 'interests' ? (
-        <form className="space-y-5" onSubmit={createInvite}>
+        <form className="space-y-5" onSubmit={reviewAndCreate}>
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
               For {trimmedName}
@@ -396,9 +465,9 @@ export default function AddFriendInvite({
             <button
               type="submit"
               className="btn-primary w-full"
-              disabled={submitting}
+              disabled={submitting || checking}
             >
-              {submitting ? 'Warming it up…' : 'Make the note'}
+              {checking ? 'Double-checking…' : submitting ? 'Warming it up…' : 'Make the note'}
             </button>
             <button
               type="button"
@@ -409,6 +478,93 @@ export default function AddFriendInvite({
             </button>
           </div>
         </form>
+      ) : null}
+
+      {step === 'review' ? (
+        <div className="space-y-5">
+          <div>
+            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+              For {trimmedName}
+            </p>
+            <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
+              Double-check these spellings
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              A couple of these look like typos. Pick the spelling you meant, or keep yours.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {reviewIdeas.map((idea, index) => {
+              const suggestion = proofread[index]?.suggestion ?? null;
+              const original = proofread[index]?.original ?? idea;
+              if (!suggestion) {
+                return (
+                  <div key={`${original}-${index}`} className="text-foreground text-sm">
+                    <span className="bg-primary/5 border-primary/10 inline-block rounded-full border px-3 py-1 shadow-sm">
+                      {idea}
+                    </span>
+                  </div>
+                );
+              }
+              const keptOriginal = idea === original;
+              return (
+                <div key={`${original}-${index}`} className="space-y-2">
+                  <p className="text-muted-foreground text-sm">
+                    Did you mean <span className="text-foreground font-medium">{suggestion}</span>?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => chooseIdea(index, suggestion)}
+                      className={`rounded-full border px-3 py-1 text-sm transition ${
+                        !keptOriginal
+                          ? 'border-[var(--brand-navy)] bg-[var(--brand-navy)] text-[var(--cream)]'
+                          : 'border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground'
+                      }`}
+                    >
+                      {suggestion}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => chooseIdea(index, original)}
+                      className={`rounded-full border px-3 py-1 text-sm transition ${
+                        keptOriginal
+                          ? 'border-[var(--brand-navy)] bg-[var(--brand-navy)] text-[var(--cream)]'
+                          : 'border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground'
+                      }`}
+                    >
+                      Keep “{original}”
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {error ? <p className="text-destructive text-sm font-medium">{error}</p> : null}
+
+          <div className="space-y-3">
+            <button
+              type="button"
+              className="btn-primary w-full"
+              disabled={submitting}
+              onClick={() => void submitInvite(normalizeInterestList(reviewIdeas))}
+            >
+              {submitting ? 'Warming it up…' : 'Looks good — make the note'}
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground w-full text-sm"
+              onClick={() => {
+                setError(null);
+                setStep('interests');
+              }}
+            >
+              Back to edit
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {step === 'handoff' && result ? (

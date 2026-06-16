@@ -63,8 +63,6 @@ export type ChatMessage =
       presenceSourceName?: string | null;
       presenceSourceExtraCount?: number;
       isNew?: boolean;
-      /** When true the card is shown as a dimmed, non-interactive ghost — set when the question is dismissed and the inline "Dismissed · Undo" notice takes over. */
-      faded?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
@@ -235,10 +233,11 @@ function SystemRow({ text }: { text: string }) {
   );
 }
 
-// Inline "Dismissed · Undo" line shown after a question is dropped from
-// catch-up. Mirrors NewTerritoryUndo's self-contained optimistic state: the
-// undo is awaited, "Undoing…" shows while in flight, and a rejection surfaces
-// an inline retry hint without losing the dismissal.
+// Inline "Removed from catch up · Undo" line shown in place of a question that
+// was dropped from catch-up (the card itself is removed from the thread, not
+// dimmed). Mirrors NewTerritoryUndo's self-contained optimistic state: the undo
+// is awaited, "Undoing…" shows while in flight, and a rejection surfaces an
+// inline retry hint without losing the dismissal.
 function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
   const [state, setState] = useState<'idle' | 'undoing' | 'error'>('idle');
 
@@ -264,7 +263,7 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
           textAlign: 'center',
         }}
       >
-        <span>Dismissed</span>
+        <span>Removed from catch up</span>
         <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
         {state === 'undoing' ? (
           <span style={{ opacity: 0.7 }}>Undoing…</span>
@@ -308,7 +307,6 @@ function QuestionRow({
   presenceSourceName = null,
   presenceSourceExtraCount = 0,
   isNew = false,
-  faded = false,
   onGiveUp,
   giveUpDisabled = false,
   onDismiss,
@@ -324,7 +322,6 @@ function QuestionRow({
   presenceSourceName?: string | null;
   presenceSourceExtraCount?: number;
   isNew?: boolean;
-  faded?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
   onDismiss?: () => void;
@@ -350,11 +347,9 @@ function QuestionRow({
     <div
       className="flex flex-col gap-0.5"
       style={
-        faded
-          ? { opacity: 0.35, transition: 'opacity 0.4s ease', pointerEvents: 'none' }
-          : isNew
-            ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }
-            : undefined
+        isNew
+          ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }
+          : undefined
       }
     >
       {subhead ? (
@@ -522,7 +517,7 @@ function QuestionRow({
           ) : null}
         </div>
       </div>
-      {!faded && (onGiveUp || onDismiss || onMutePresence) ? (
+      {onGiveUp || onDismiss || onMutePresence ? (
         <div
           style={{
             display: 'flex',
@@ -1205,8 +1200,8 @@ function ResultRow({
             {pointsLabel ? ` - ${pointsLabel}` : ''}
           </p>
         ) : null}
+        {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
       </ThreadCard>
-      {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
       {correct && openedTerritoryDomain ? (
         <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
       ) : null}
@@ -1429,7 +1424,6 @@ export function GameplayChatThread({
                 presenceSourceName={m.presenceSourceName}
                 presenceSourceExtraCount={m.presenceSourceExtraCount}
                 isNew={m.isNew}
-                faded={m.faded}
                 subhead={m.subhead}
                 badges={m.badges}
                 onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}

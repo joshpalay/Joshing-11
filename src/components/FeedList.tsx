@@ -536,11 +536,12 @@ export type HomeBudget = {
   /** True when all three content zones are empty — drives the empty switch. */
   isAllEmpty: boolean
   /**
-   * D-HOME-DASHBOARD-MODEL-01 point 4 — per-section "this Zone-2 section is
-   * empty in-window" signal (emitted by `selectHomeEdition`). Drives the honest
-   * per-section empty states under the "Past 7 days" band instead of silently
-   * hiding a section. Optional so off-budget/legacy callers (and tests that
-   * don't exercise empties) keep the prior hide-when-empty behavior.
+   * Per-section "this Zone-2 section is empty in-window" signal (emitted by
+   * `selectHomeEdition`). Originally drove the honest per-section empty states
+   * of D-HOME-DASHBOARD-MODEL-01 point 4; that treatment was reverted on
+   * 2026-06-15 — empty Zone-2 sections are now hidden outright — so the
+   * renderer no longer reads this. Retained as part of the server edition
+   * contract (and to make the per-section treatment trivial to re-enable).
    */
   emptySections?: {
     fromFriends: boolean
@@ -839,34 +840,6 @@ function FeedSectionHeading({
     >
       {children}
     </h2>
-  )
-}
-
-// D-HOME-DASHBOARD-MODEL-01 point 4 — a Zone-2 section with nothing in the 7-day
-// window says so plainly rather than vanishing or back-filling from history. It
-// keeps its (subdued) sub-label so the band still reads as the same set of
-// zones, pairs the existing speech-bubble art with one calm "quiet this week"-
-// register line, and carries NO invite CTA — that belongs only to the whole-page
-// friends-empty state, not to every empty section.
-function SectionEmptyState({
-  unifiedHome,
-  sublabel,
-  copy,
-}: {
-  unifiedHome: boolean
-  sublabel: string
-  copy: string
-}) {
-  return (
-    <Fragment>
-      <FeedSectionHeading unifiedHome={unifiedHome} subdued>
-        {sublabel}
-      </FeedSectionHeading>
-      <div className={`flex items-center gap-3 py-2 ${unifiedHome ? 'pl-0.5' : ''}`}>
-        <SpeechBubbleIllustration className="h-10 w-auto opacity-70" />
-        <p className="font-serif text-base text-[var(--brand-ink-400)]">{copy}</p>
-      </div>
-    </Fragment>
   )
 }
 
@@ -1202,6 +1175,16 @@ function FeedListContent({
   // the window is relaxed and this flag flips false, so the label never asserts
   // a 7-day promise the page isn't keeping.
   const bandLabelVisible = Boolean(budget)
+
+  // Empty Zone-2 sub-sections are now hidden outright (treatment chosen
+  // 2026-06-15) rather than carrying an honest per-section empty state — this
+  // reverses D-HOME-DASHBOARD-MODEL-01 point 4. Because of that, the band can
+  // resolve to nothing on a page that still has Zone-1 "For you" content, so
+  // the single "Past 7 days" boundary label is gated on the band actually
+  // having something beneath it (a section's rows, or the quiet-week foot
+  // panel) and never heads an empty band.
+  const bandHasContent =
+    fromFriendsRows.length > 0 || restRows.length > 0 || Boolean(budget?.panel)
 
   const emptyCopy = useMemo(() => {
     if (loadingInitial) return 'Loading your Feed...'
@@ -2035,14 +2018,15 @@ function FeedListContent({
                   B-HOME-COLDSTART-06 hooks to suppress it when the window is
                   relaxed for a cold-start user, so it never asserts a false
                   7-day promise. */}
-              {bandLabelVisible ? (
+              {bandLabelVisible && bandHasContent ? (
                 <FeedSectionHeading unifiedHome={unifiedHome}>Past 7 days</FeedSectionHeading>
               ) : null}
               {/* From Friends — friends' playable milestone bundles. The server
                   capped the served slice (Playables 4); render it and surface the
-                  remainder as a quiet "N more →". Honest empty when nothing landed
-                  in-window. groupActivityByFriend is a pass-through (milestone
-                  rows never group). */}
+                  remainder as a quiet "N more →". Hidden outright when nothing
+                  landed in-window (no per-section empty state, 2026-06-15).
+                  groupActivityByFriend is a pass-through (milestone rows never
+                  group). */}
               {fromFriendsRows.length > 0 ? (
                 <Fragment key="from-friends">
                   <FeedSectionHeading unifiedHome={unifiedHome} subdued>
@@ -2057,18 +2041,13 @@ function FeedListContent({
                     />
                   ) : null}
                 </Fragment>
-              ) : budget.emptySections?.fromFriends ? (
-                <SectionEmptyState
-                  unifiedHome={unifiedHome}
-                  sublabel="From Friends"
-                  copy="No friend activity this week."
-                />
               ) : null}
               {/* Recent activity — the ambient texture stream (relationship
                   events, convergence, social moments) as full-sentence LONE
                   events (D-FEED-GROUP3-01 §2). The one rotating panel splices
                   after the lead rows (§2 slot 5); the "See all activity →" row
-                  closes the zone. Honest empty when nothing in-window. */}
+                  closes the zone. Hidden outright when nothing in-window
+                  (no per-section empty state, 2026-06-15). */}
               {restRows.length > 0 ? (
                 <Fragment key="texture">
                   <FeedSectionHeading unifiedHome={unifiedHome} subdued>
@@ -2083,12 +2062,6 @@ function FeedListContent({
                     href="/activities"
                   />
                 </Fragment>
-              ) : budget.emptySections?.texture ? (
-                <SectionEmptyState
-                  unifiedHome={unifiedHome}
-                  sublabel="Recent activity"
-                  copy="Nothing else this week."
-                />
               ) : null}
               {/* Quiet-week foot fallback — when the texture zone is empty the
                   single rotating panel still renders once, here, instead of

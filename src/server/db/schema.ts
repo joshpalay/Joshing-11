@@ -358,6 +358,13 @@ export const questions = pgTable(
     // question id (may live in either table, so not a hard FK).
     isDuplicate: boolean('is_duplicate').notNull().default(false),
     suppressedBy: text('suppressed_by'),
+    // Account-deletion tombstone marker (D-ACCOUNT-DELETION-TERRITORY-01). True
+    // when the human author deleted their account and this question was retained
+    // (a retained user has proven territory on it) and re-sourced to the house
+    // identity: creator_id NULL + source 'house_authored'. Distinguishes a
+    // tombstone from a born-house question (which is author_deleted = false).
+    // Invariant H-1 still holds — a tombstone never renders as a person.
+    authorDeleted: boolean('author_deleted').notNull().default(false),
     // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
     // Nullable: populated at insert and by the batched backfill (B3).
     embedding: vector('embedding', { dimensions: 1024 }),
@@ -383,6 +390,11 @@ export const questions = pgTable(
     index('Question_nobody_correct_flag_idx')
       .on(table.nobodyCorrectFlag)
       .where(sql`${table.nobodyCorrectFlag} = true`),
+    // Partial index for tombstone-aware render/query paths (the flag is true for
+    // a tiny minority of rows). D-ACCOUNT-DELETION-TERRITORY-01 / migration 0080.
+    index('Question_author_deleted_idx')
+      .on(table.authorDeleted)
+      .where(sql`${table.authorDeleted} = true`),
   ],
 );
 

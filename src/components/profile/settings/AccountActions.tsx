@@ -8,6 +8,7 @@ import {
   Loader2,
   LogOut,
   RefreshCw,
+  Sparkles,
   Sun,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -150,6 +151,12 @@ export function AccountActions() {
             title="Points diagnostic"
             subtitle="Inspect a user's mastery events and where points came from"
             href="/dev/points-diagnostic"
+          />
+          <SettingsRow
+            icon={<Sparkles className="size-5" />}
+            title="Show me the first time player"
+            subtitle="Preview the first-session experience a new player sees"
+            href="/dev/first-time-player"
           />
         </SettingsGroup>
         {resetGameError ? <p className="mt-2 text-sm text-destructive">{resetGameError}</p> : null}
