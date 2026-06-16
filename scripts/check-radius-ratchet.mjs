@@ -25,7 +25,9 @@ import { join, relative } from 'node:path';
 // pervasive `rounded-[4px]` is the button/card corner — a candidate for a
 // `--radius-xs` token (added 2026-06-15) — burn-down 1 snapped the nine
 // `rounded-[4px]` to `rounded-[var(--radius-xs)]`, lowering this 25 → 16.
-const CEILING = 16;
+// Burn-down 2 (2026-06-16) snapped the six `rounded-[8px]` (an exact 0.5rem /
+// --radius-md match) to `rounded-[var(--radius-md)]`, lowering this 16 → 11.
+const CEILING = 11;
 
 // ── Exemptions (mirrors the color/font/spacing ratchets) ────────────────────
 const EXEMPT = [

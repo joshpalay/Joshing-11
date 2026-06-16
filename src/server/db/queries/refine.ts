@@ -196,12 +196,42 @@ export async function deriveSelectedRefineCandidates(
     getMissStreaks(userId, slots),
     getActiveCooldowns(userId),
   ]);
+  const friendExpansion = deriveFriendExpansion(slots, ownedSet);
+  const difficultyEscalation = deriveDifficultyEscalation(slots);
+  const strugglePruning = deriveStrugglePruning(missStreaks);
   const candidates: RefineCandidate[] = [
-    ...deriveFriendExpansion(slots, ownedSet),
-    ...deriveDifficultyEscalation(slots),
-    ...deriveStrugglePruning(missStreaks),
+    ...friendExpansion,
+    ...difficultyEscalation,
+    ...strugglePruning,
   ];
-  return selectRefineCandidates(candidates, cooldowns);
+  const selected = selectRefineCandidates(candidates, cooldowns);
+
+  // REFINE_DEBUG=1 surfaces why the section is (usually) empty: per-rule raw
+  // counts, the miss streaks feeding struggle-pruning, and how many candidates
+  // the active cooldowns suppress. Opt-in so it stays off normal daily loads.
+  if (process.env.REFINE_DEBUG === '1') {
+    console.info('[refine/derive]', {
+      userId,
+      slotCount: slots.length,
+      bonusSlots: slots.filter((s) => s.presence_source_id).length,
+      steppedUpSlots: slots.filter((s) => s.difficulty_stepped_up === true).length,
+      missStreaks: missStreaks.map((s) => ({
+        domain: s.subdomainId,
+        count: s.count,
+        tier: s.latestMissTier,
+      })),
+      raw: {
+        friend_expansion: friendExpansion.length,
+        difficulty_escalation: difficultyEscalation.length,
+        struggle_pruning: strugglePruning.length,
+      },
+      activeCooldowns: cooldowns.size,
+      suppressedByCooldown: candidates.length - selected.length,
+      selected: selected.length,
+    });
+  }
+
+  return selected;
 }
 
 /** Assemble the RefineSectionView for the daily summary. */

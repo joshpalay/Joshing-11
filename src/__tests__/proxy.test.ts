@@ -41,6 +41,31 @@ describe('proxy unauthenticated route preservation', () => {
     expect(response.headers.get('location')).toBeNull()
   })
 
+  it('passes the public /terms page through logged-out instead of looping it back to login', async () => {
+    readSessionClaimsMock.mockResolvedValueOnce(null)
+
+    const response = await proxy(makeRequest('/terms'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-middleware-next')).toBe('1')
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('lets authenticated readers reach /terms without onboarding/login redirects', async () => {
+    readSessionClaimsMock.mockResolvedValueOnce({
+      userId: 'u1',
+      sessionId: 's1',
+      invitationAccepted: true,
+      onboardingComplete: true,
+    })
+
+    const response = await proxy(makeRequest('/terms'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-middleware-next')).toBe('1')
+    expect(response.headers.get('location')).toBeNull()
+  })
+
   it('redirects other unauthenticated pages to login, preserving the original path via next', async () => {
     readSessionClaimsMock.mockResolvedValueOnce(null)
 

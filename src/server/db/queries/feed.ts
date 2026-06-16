@@ -1,7 +1,7 @@
 import { and, count, desc, eq, exists, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
-import { visibleFeedSourcePredicate } from '@/server/feed/visibility';
+import { notBlocked, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
@@ -296,7 +296,7 @@ export function questionVisibilityPredicate(viewerUserId: string) {
 // and stay in sync with what actually renders.
 export function feedItemVisibilityPredicate(viewerUserId: string) {
   return and(
-    ne(questions.visibility, 'blocked'),
+    notBlocked(),
     or(
       eq(feedItems.sourceType, 'direct_sent'),
       questionVisibilityPredicate(viewerUserId),

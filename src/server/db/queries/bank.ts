@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { writeActivity } from '@/server/activity/write-activity';
 import { db, feedItems, joshingGameResponses, questions, userQuestionBank, users } from '@/server/db';
+import { notBlockedForViewer } from '@/server/feed/visibility';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import {
   bankQuestionSelectColumns,
@@ -200,7 +201,14 @@ export async function getBankedQuestions(
   userId: string,
   options?: { onlyAuthored?: boolean },
 ): Promise<BankedQuestion[]> {
-  const filters = [eq(userQuestionBank.userId, userId), isNull(questions.deletedAt)];
+  // Safety hard-block: a banked question that was later blocked must drop out,
+  // except for the author viewing their own (the `onlyAuthored` author surface
+  // backs the "this was removed" state) — the owner exception.
+  const filters = [
+    eq(userQuestionBank.userId, userId),
+    isNull(questions.deletedAt),
+    notBlockedForViewer(userId),
+  ];
   if (options?.onlyAuthored) {
     filters.push(eq(questions.creatorId, userId));
   }

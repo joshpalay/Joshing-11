@@ -82,18 +82,18 @@ describe('deriveDifficultyEscalation', () => {
 });
 
 describe('pruningThreshold + deriveStrugglePruning', () => {
-  it('uses tiered thresholds 3/4/5', () => {
-    expect(pruningThreshold('accessible')).toBe(3);
-    expect(pruningThreshold('moderate')).toBe(4);
-    expect(pruningThreshold('specialist')).toBe(5);
+  it('uses tiered thresholds 2/3/4', () => {
+    expect(pruningThreshold('accessible')).toBe(2);
+    expect(pruningThreshold('moderate')).toBe(3);
+    expect(pruningThreshold('specialist')).toBe(4);
   });
 
   it('fires only when the run reaches the latest-miss tier threshold', () => {
     const streaks: MissStreak[] = [
-      { subdomainId: 'a', subdomainLabel: 'a', count: 3, latestMissTier: 'accessible' }, // 3 >= 3 → fire
-      { subdomainId: 'b', subdomainLabel: 'b', count: 3, latestMissTier: 'moderate' }, // 3 < 4 → no
-      { subdomainId: 'c', subdomainLabel: 'c', count: 5, latestMissTier: 'specialist' }, // 5 >= 5 → fire
-      { subdomainId: 'd', subdomainLabel: 'd', count: 4, latestMissTier: 'specialist' }, // 4 < 5 → no
+      { subdomainId: 'a', subdomainLabel: 'a', count: 2, latestMissTier: 'accessible' }, // 2 >= 2 → fire
+      { subdomainId: 'b', subdomainLabel: 'b', count: 2, latestMissTier: 'moderate' }, // 2 < 3 → no
+      { subdomainId: 'c', subdomainLabel: 'c', count: 4, latestMissTier: 'specialist' }, // 4 >= 4 → fire
+      { subdomainId: 'd', subdomainLabel: 'd', count: 3, latestMissTier: 'specialist' }, // 3 < 4 → no
     ];
     const fired = deriveStrugglePruning(streaks).map((c) => c.subdomainId);
     expect(fired).toEqual(['a', 'c']);

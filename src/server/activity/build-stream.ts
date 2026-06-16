@@ -85,9 +85,26 @@ export async function buildActivityStream(
     getViewerHiddenQuestionIds(userId, allQuestionIds),
   ]);
 
-  const utilityItems = filterUtilityActivities(items, moments).map(
-    activityToStreamItem,
-  );
+  const utilityItems = filterUtilityActivities(items, moments)
+    // Drop dead-end degraded rows. An "{actor} answered your question" card whose
+    // actor is unknown (the friend/stranger deleted their account, so actorUserId
+    // was nulled) AND whose question can't be shown renders as "Someone answered
+    // your question" with nothing to see and nothing to open — remove it rather
+    // than surface the hollow row (product call 2026-06-16). Consistent with
+    // Decision D stripping the equivalent FeedItem actor cards
+    // (D-ACCOUNT-DELETION-TERRITORY-01): a card you can't attribute AND can't
+    // expand is not worth showing.
+    .filter((item) => {
+      if (item.actorUserId) return true;
+      if (item.type === 'friend_answered_your_question') {
+        return Boolean(item.reference.friendAnsweredQuestion?.questionText);
+      }
+      if (item.type === 'niche_match_answered_your_question') {
+        return Boolean(item.reference.nicheMatch?.questionText);
+      }
+      return true;
+    })
+    .map(activityToStreamItem);
   const momentItems = moments.map(momentToStreamItem);
   const friendActivityItems = friendCards
     .map((card, i) => {

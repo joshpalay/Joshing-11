@@ -19,11 +19,21 @@ function formatPhoneForDisplay(e164: string): string {
 }
 
 const CARD_CLASS =
-  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
+  'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
+// Confirm-only variant for the invite path: the invited number is shown but not
+// editable, so it reads as a fixed value (muted fill, softened border, no focus
+// affordance) rather than an input the invitee is meant to type into.
+const READONLY_INPUT_CLASS =
+  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)]/40 bg-[var(--brand-cream-card)] px-3 text-center text-base font-medium tracking-wide text-[var(--brand-navy)] outline-none';
 const SUBMIT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+// Quiet secondary action (e.g. "this number is not correct" / "go back"): a
+// muted, sentence-case text link. Deliberately understated so it doesn't
+// compete with the primary button or flood the card with orange caps.
+const SUBTLE_LINK_CLASS =
+  'mx-auto block text-sm leading-5 text-black/55 underline underline-offset-4 transition-colors hover:text-black/80 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -75,38 +85,27 @@ export function buildVerifyOtpRequestBody(
   };
 }
 
-/**
- * Verify-OTP payload for the invite-prefill flow: no phone is sent — the
- * server resolves the recipient phone from the invitation token. `userInvite`
- * is forwarded so a per-user invite link is still honored if present.
- */
-export function buildInviteVerifyOtpRequestBody(
-  code: string,
-  invitationToken: string,
-  searchParams: URLSearchParams,
-) {
-  return {
-    code,
-    invitationToken,
-    useInvitePhone: true,
-    userInvite: readUserInvite(searchParams),
-  };
-}
-
 type InviteContext = {
   inviterName: string;
   inviterUserId: string;
   inviterAvatarColor: string | null;
 };
 
-type InvitePrefill = InviteContext & { maskedPhone: string };
+// Phone-first invite path: the full invited number crosses to the client so
+// the phone field arrives pre-filled for confirmation (D-AUTH-INVITE-PHONE-FIRST
+// §2.3). It is the invitee's own number, gated by a valid invitation token.
+type InvitePrefill = InviteContext & { inviteePhone: string };
 
 type LoginPanelProps = {
   invitePrefill?: InvitePrefill | null;
   inviteContext?: InviteContext | null;
+  // Dev-preview only (`/dev/invite-login`): seed the warm dead-end (Screen 1b)
+  // so it can be inspected without a real failed gate round-trip. Never passed
+  // by the production login page.
+  previewDeadEnd?: boolean;
 };
 
-type Step = 'invite' | 'phone' | 'code' | 'profile';
+type Step = 'phone' | 'code' | 'profile';
 
 type VerifiedIdentity = {
   displayName: string;
@@ -162,7 +161,7 @@ function inviterFirstName(name: string): string {
 
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
-    <div className="space-y-3 rounded-[8px] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+    <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
       <p className="text-[15px] leading-6 text-black/75">
         {inviterFirstName(invite.inviterName)} invited you to Joshing, a new trivia game. We just
         need to verify your phone number and then you can start playing.
@@ -174,13 +173,19 @@ function InviteContextCard({ invite }: { invite: InviteContext }) {
 export default function LoginPanel({
   invitePrefill = null,
   inviteContext = null,
+  previewDeadEnd = false,
 }: LoginPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationToken = readInvitationToken(searchParams);
   const userInvite = readUserInvite(searchParams);
 
-  const [phone, setPhone] = useState('');
+  // Phone-first invite path: pre-fill the confirm-only field with the full
+  // invited number so the invitee can verify it before continuing
+  // (D-AUTH-INVITE-PHONE-FIRST §2.2). Empty on the cold / per-user-link paths.
+  const [phone, setPhone] = useState(() =>
+    invitePrefill?.inviteePhone ? formatUsPhoneInput(invitePrefill.inviteePhone) : '',
+  );
   const [code, setCode] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [handle, setHandle] = useState('');
@@ -192,14 +197,15 @@ export default function LoginPanel({
     displayName: '',
     handle: '',
   });
-  // Start on the invite confirmation step only when the link resolved to a
-  // recipient phone; otherwise fall straight through to manual entry.
-  const [step, setStep] = useState<Step>(invitePrefill?.maskedPhone ? 'invite' : 'phone');
-  // True once the OTP was sent to the invite's phone (so the code step and
-  // verify call use the masked phone + token instead of a typed number).
-  const [invitePhoneMode, setInvitePhoneMode] = useState(false);
-  // Masked phone to display on the code step while in invite-phone mode.
-  const [maskedPhone, setMaskedPhone] = useState(invitePrefill?.maskedPhone ?? '');
+  // The invite arrival is now phone-first: it collapses into the `phone` step
+  // with the field pre-filled, rather than a separate masked confirmation card
+  // (D-AUTH-INVITE-PHONE-FIRST §4b / §6.1).
+  const [step, setStep] = useState<Step>('phone');
+  // Inline warm dead-end (Screen 1b): set when the invitee says the invited
+  // number isn't theirs. The number is confirm-only (not editable), so the way
+  // out is to ask the inviter for a fresh invite — carried by wording, not an
+  // error banner (D-AUTH-INVITE-PHONE-FIRST §2.6).
+  const [inviteDeadEnd, setInviteDeadEnd] = useState(previewDeadEnd);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Controls the bottom-card transition: the title card (in page.tsx) stays
@@ -348,51 +354,14 @@ export default function LoginPanel({
     }
   }
 
-  async function sendCodeToInvitePhone(event: FormEvent) {
-    event.preventDefault();
+  // Single OTP-request path for every entry (cold, per-user-link, and the
+  // phone-first invite). The submitted phone is authoritative for the gate;
+  // the invitation token rides along as the credential, re-validated against
+  // that phone server-side (D-AUTH-INVITE-PHONE-FIRST §4 default stance).
+  async function requestCodeForPhone(normalized: string) {
     setError(null);
+    setInviteDeadEnd(false);
 
-    if (!invitationToken) {
-      // No token to resolve a phone from — fall back to manual entry.
-      setInvitePhoneMode(false);
-      swapStep('phone');
-      return;
-    }
-
-    sendTelemetry('friend_invite_auth_started');
-
-    setLoading(true);
-    try {
-      const response = await fetch('/api/auth/request-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // No phone: the server resolves the recipient phone from the invite
-        // token and texts the code there. We only ever receive a masked form.
-        body: JSON.stringify({ invitationToken, useInvitePhone: true, userInvite }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        // The invite no longer resolves to a sendable phone — drop to manual
-        // entry so the user isn't stranded, carrying the reason onto the step.
-        setInvitePhoneMode(false);
-        swapStep('phone', data?.message ?? 'Enter your phone number to continue.');
-        return;
-      }
-
-      if (typeof data?.maskedPhone === 'string') setMaskedPhone(data.maskedPhone);
-      setInvitePhoneMode(true);
-      swapStep('code');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function continueWithPhone(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-
-    const normalized = normalizePhone(phone.trim());
     if (!US_E164_REGEX.test(normalized)) {
       setError('Use a US phone number.');
       return;
@@ -405,14 +374,23 @@ export default function LoginPanel({
       const response = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Forward the per-user invite link so request-otp can satisfy the
-        // invite gate for a brand-new phone that arrived via /u/<handle>/<token>
-        // (the invitation isn't phone-targeted, so the gate can't infer it).
-        body: JSON.stringify({ phone: normalized, userInvite }),
+        // Forward the invitation token (so the server can return the warm
+        // dead-end signal for an edited no-claim number) and the per-user
+        // invite link (so request-otp can satisfy the gate for a brand-new
+        // phone that arrived via /u/<handle>/<token>).
+        body: JSON.stringify({ phone: normalized, invitationToken, userInvite }),
       });
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        // Invite path + edited number with no claim of its own: render the
+        // warm dead-end (Screen 1b) instead of a generic error
+        // (D-AUTH-INVITE-PHONE-FIRST §1b / §6.4).
+        if (data?.error === 'invite_phone_unclaimed' && invitePrefill?.inviteePhone) {
+          setPhone(formatUsPhoneInput(normalized));
+          setInviteDeadEnd(true);
+          return;
+        }
         setError(data?.message ?? 'Unable to continue.');
         return;
       }
@@ -422,6 +400,11 @@ export default function LoginPanel({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function continueWithPhone(event: FormEvent) {
+    event.preventDefault();
+    await requestCodeForPhone(normalizePhone(phone.trim()));
   }
 
   async function verifyCode(event: FormEvent) {
@@ -436,10 +419,11 @@ export default function LoginPanel({
 
     setLoading(true);
     try {
-      const body =
-        invitePhoneMode && invitationToken
-          ? buildInviteVerifyOtpRequestBody(trimmedCode, invitationToken, searchParams)
-          : buildVerifyOtpRequestBody(phone, trimmedCode, searchParams);
+      // The field is always pre-filled or typed, so we always have a real
+      // submitted phone — no separate no-phone invite payload is needed. The
+      // server re-validates the token against this phone
+      // (D-AUTH-INVITE-PHONE-FIRST §4).
+      const body = buildVerifyOtpRequestBody(phone, trimmedCode, searchParams);
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -583,66 +567,7 @@ export default function LoginPanel({
         transition: 'opacity 200ms ease, transform 200ms ease',
       }}
     >
-      {step === 'invite' ? (
-        <form className="space-y-3.5" onSubmit={sendCodeToInvitePhone}>
-          {/* Texting glyph (the two-tone speech bubble) — this step is about us
-              sending a code by text, so it mirrors the OTP step's mark. */}
-          <svg className="mx-auto h-14 w-auto" viewBox="-3 -3 54 44" aria-hidden="true">
-            <g fill="var(--brand-navy)">
-              <ellipse cx="15" cy="15" rx="15" ry="12" />
-              <path d="M3 22 L11 26.5 L1 31 Z" />
-            </g>
-            <g
-              fill="var(--brand-cream-card)"
-              transform="translate(32 23) scale(1.14) translate(-32 -23)"
-            >
-              <ellipse cx="32" cy="23" rx="15" ry="12" />
-              <path d="M44 30 L36 34.5 L46.5 39 Z" />
-            </g>
-            <g fill="var(--brand-orange)">
-              <ellipse cx="32" cy="23" rx="15" ry="12" />
-              <path d="M44 30 L36 34.5 L46.5 39 Z" />
-            </g>
-          </svg>
-          {inviteContext ? (
-            <InviteContextCard invite={inviteContext} />
-          ) : (
-            <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
-              {invitePrefill?.inviterName ?? 'A friend'} invited you to Joshing.
-            </p>
-          )}
-          <p className="text-center text-[15px] leading-6 text-black/70">
-            We&rsquo;ll text a code to{' '}
-            <span className="font-medium whitespace-nowrap text-black">{maskedPhone}</span>.
-          </p>
-
-          {/* Button + divider + secondary action form a tight 6px cluster,
-              matching the OTP step's rhythm. */}
-          <div className="space-y-1.5">
-            <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-              {loading ? 'Sending…' : 'Send code'}
-            </button>
-
-            <div className="flex items-center gap-3" aria-hidden="true">
-              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
-              <span className="text-[17px] font-medium text-black">or</span>
-              <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
-            </div>
-
-            <button
-              type="button"
-              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
-              onClick={() => {
-                setInvitePhoneMode(false);
-                swapStep('phone');
-              }}
-              disabled={loading}
-            >
-              Use a different number
-            </button>
-          </div>
-        </form>
-      ) : step === 'phone' ? (
+      {step === 'phone' ? (
         <form className="space-y-3.5" onSubmit={continueWithPhone}>
           {/* Solid filled handset, matching the Figma black phone glyph
               (and the filled treatment of the OTP step's bubble icon).
@@ -656,23 +581,73 @@ export default function LoginPanel({
             className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
             htmlFor="phone"
           >
-            What is your phone number?
+            {invitePrefill?.inviteePhone
+              ? 'Confirm your phone number'
+              : 'What is your phone number?'}
           </label>
           <input
             id="phone"
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            className={INPUT_CLASS}
+            // Invite path: the inviter already supplied the number, so it is
+            // confirm-only — shown read-only for the invitee to verify rather
+            // than type (D-AUTH-INVITE-PHONE-FIRST §2.2).
+            className={invitePrefill?.inviteePhone ? READONLY_INPUT_CLASS : INPUT_CLASS}
             placeholder="(555) 123-4567"
             maxLength={14}
             value={phone}
             onChange={(event) => setPhone(formatUsPhoneInput(event.target.value))}
+            readOnly={Boolean(invitePrefill?.inviteePhone)}
+            aria-readonly={Boolean(invitePrefill?.inviteePhone)}
             disabled={loading}
           />
-          <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-            {loading ? 'Continuing…' : 'Continue'}
-          </button>
+          {invitePrefill?.inviteePhone ? (
+            inviteDeadEnd ? (
+              // Warm dead-end (Screen 1b): the invitee says this isn't their
+              // number. Since the field is confirm-only, the only way forward is
+              // a fresh invite from the inviter — carried by wording, not an
+              // error banner (D-AUTH-INVITE-PHONE-FIRST §2.7).
+              <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+                <p className="text-[15px] leading-6 text-black/75">
+                  This invite was sent to{' '}
+                  <span className="font-medium whitespace-nowrap text-black">
+                    {formatUsPhoneInput(invitePrefill.inviteePhone)}
+                  </span>
+                  . If that isn’t your number, you’ll need to ask{' '}
+                  {inviterFirstName(invitePrefill.inviterName)} to send you a new invite.
+                </p>
+                <button
+                  type="button"
+                  className={SUBTLE_LINK_CLASS}
+                  onClick={() => setInviteDeadEnd(false)}
+                  disabled={loading}
+                >
+                  Go back
+                </button>
+              </div>
+            ) : (
+              // Button + "not my number" form a tight cluster, separate from the
+              // 14px field rhythm above.
+              <div className="space-y-1.5">
+                <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+                  {loading ? 'Sending…' : 'Confirm and send text'}
+                </button>
+                <button
+                  type="button"
+                  className={SUBTLE_LINK_CLASS}
+                  onClick={() => setInviteDeadEnd(true)}
+                  disabled={loading}
+                >
+                  This number is not correct
+                </button>
+              </div>
+            )
+          ) : (
+            <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
+              {loading ? 'Continuing…' : 'Continue'}
+            </button>
+          )}
         </form>
       ) : step === 'code' ? (
         <form className="space-y-3.5" onSubmit={verifyCode}>
@@ -704,9 +679,7 @@ export default function LoginPanel({
             htmlFor="code"
           >
             Enter your code for{' '}
-            <span className="whitespace-nowrap">
-              {invitePhoneMode ? maskedPhone : formatPhoneForDisplay(phone)}
-            </span>
+            <span className="whitespace-nowrap">{formatPhoneForDisplay(phone)}</span>
           </label>
           <input
             id="code"
@@ -735,11 +708,9 @@ export default function LoginPanel({
 
             <button
               type="button"
-              className="mx-auto block text-sm leading-5 font-medium tracking-[0.56px] text-[var(--brand-orange)] uppercase underline underline-offset-4 disabled:opacity-60"
+              className={SUBTLE_LINK_CLASS}
               onClick={() => {
                 setCode('');
-                // Leaving the invite phone behind — collect a number manually.
-                setInvitePhoneMode(false);
                 swapStep('phone');
               }}
               disabled={loading}
@@ -848,6 +819,21 @@ export default function LoginPanel({
       {error ? (
         <p className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-center text-sm">
           {error}
+        </p>
+      ) : null}
+
+      {step !== 'profile' ? (
+        <p className="mt-4 text-center text-xs leading-5 text-black/60">
+          By signing in you agree to our{' '}
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-[var(--brand-orange)] underline underline-offset-2"
+          >
+            Terms &amp; Conditions
+          </a>
+          .
         </p>
       ) : null}
     </section>

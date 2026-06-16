@@ -3,15 +3,24 @@ import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
-import { dismissReport, upholdReport } from '@/server/db/queries/content-reports';
+import { dismissReport, reverseBlock, upholdReport } from '@/server/db/queries/content-reports';
 
 export const dynamic = 'force-dynamic';
 
-const bodySchema = z.object({
-  reportId: z.string().trim().min(1),
-  action: z.enum(['uphold', 'dismiss']),
-  reviewReason: z.string().trim().max(500).optional(),
-});
+const reviewReason = z.string().trim().max(500).optional();
+
+// uphold/dismiss act on an OPEN report (keyed by reportId); reverse un-blocks an
+// already-actioned target (keyed by the question/generated id), so it carries a
+// target instead of a reportId.
+const bodySchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('uphold'), reportId: z.string().trim().min(1), reviewReason }),
+  z.object({ action: z.literal('dismiss'), reportId: z.string().trim().min(1), reviewReason }),
+  z.object({
+    action: z.literal('reverse'),
+    target: z.object({ table: z.enum(['question', 'generated']), id: z.string().trim().min(1) }),
+    reviewReason,
+  }),
+]);
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -25,11 +34,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'validation' }, { status: 400 });
   }
 
-  const { reportId, action, reviewReason } = parsed.data;
+  const data = parsed.data;
   const result =
-    action === 'uphold'
-      ? await upholdReport(reportId, reviewReason)
-      : await dismissReport(reportId, reviewReason);
+    data.action === 'uphold'
+      ? await upholdReport(data.reportId, data.reviewReason)
+      : data.action === 'dismiss'
+        ? await dismissReport(data.reportId, data.reviewReason)
+        : await reverseBlock(data.target, data.reviewReason);
 
   if (!result.ok) {
     return NextResponse.json(
