@@ -28,7 +28,7 @@ export function SessionCloseMessage({
 
   return (
     <>
-      <p className="text-[1.22rem] text-[var(--text)] leading-relaxed">{scoreLine}</p>
+      <p className="font-serif text-[1.22rem] text-[var(--text)] leading-relaxed">{scoreLine}</p>
       {interpretiveLine ? (
         <p
           className="mt-1 text-[1.05rem] text-[var(--text-muted)] leading-relaxed"
