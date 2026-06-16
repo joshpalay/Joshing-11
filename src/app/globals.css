@@ -295,6 +295,14 @@
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
+    /* Canonical CARD radius (D-DESIGN-DEBT-STRUCTURAL-01, Phase 1). One corner for
+       every content card so the feed shell, section cards (friends/profile/
+       settings), and card skeletons stop drifting across rounded-lg/2xl/3xl/[2rem]
+       (audit §1b/§5). Aliased to --radius-xs (4px) — the value the feed already
+       consolidated onto in FeedCardShell (C7). GEOMETRY ONLY; no color. The three
+       elevation tiers it pairs with already exist below: --shadow-card (rest),
+       --shadow-card-strong (raised), --shadow-overlay (modals). */
+    --radius-card: var(--radius-xs);
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
     /* Elevation registers (CONS-7, Option B — two intentional registers).
        card / card-strong = the soft rest/raised lift for cards;
