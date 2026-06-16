@@ -48,6 +48,9 @@ const CARD_BG_EVENT = 'joshing-card-bg-change';
 const FLAT_KEY = 'joshing-flat';
 const FLAT_EVENT = 'joshing-flat-change';
 
+const JOSEFIN_KEY = 'joshing-josefin';
+const JOSEFIN_EVENT = 'joshing-josefin-change';
+
 // Read the live choice straight off the <html> attribute (the source of truth,
 // also set by the boot script before paint). useSyncExternalStore keeps the
 // control in sync without an effect-setState and without a hydration mismatch —
@@ -78,9 +81,24 @@ function serverFlat(): boolean {
   return false;
 }
 
+// Josefin toggle — mirrors the flat store, reading the live choice off the
+// <html> `data-josefin` attribute (also set pre-paint by the boot script). When
+// on, globals.css repoints the sans body font at Josefin Sans app-wide.
+function subscribeJosefin(onChange: () => void) {
+  window.addEventListener(JOSEFIN_EVENT, onChange);
+  return () => window.removeEventListener(JOSEFIN_EVENT, onChange);
+}
+function readJosefin(): boolean {
+  return document.documentElement.getAttribute('data-josefin') === '1';
+}
+function serverJosefin(): boolean {
+  return false;
+}
+
 export function PaletteToggle() {
   const index = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
   const flat = useSyncExternalStore(subscribeFlat, readFlat, serverFlat);
+  const josefin = useSyncExternalStore(subscribeJosefin, readJosefin, serverJosefin);
 
   function toggleFlat() {
     const next = !flat;
@@ -93,6 +111,19 @@ export function PaletteToggle() {
       /* private mode / disabled storage — non-fatal */
     }
     window.dispatchEvent(new Event(FLAT_EVENT));
+  }
+
+  function toggleJosefin() {
+    const next = !josefin;
+    const root = document.documentElement;
+    if (next) root.setAttribute('data-josefin', '1');
+    else root.removeAttribute('data-josefin');
+    try {
+      localStorage.setItem(JOSEFIN_KEY, next ? '1' : '0');
+    } catch {
+      /* private mode / disabled storage — non-fatal */
+    }
+    window.dispatchEvent(new Event(JOSEFIN_EVENT));
   }
 
   function apply(next: number) {
@@ -164,6 +195,17 @@ export function PaletteToggle() {
         style={{ ...flatStyle, ...(flat ? flatStyleOn : null) }}
       >
         {flat ? '▣' : '▢'} Flat
+      </button>
+
+      {/* Josefin toggle: swap the sans-serif body font to Josefin Sans app-wide. */}
+      <button
+        type="button"
+        onClick={toggleJosefin}
+        aria-pressed={josefin}
+        aria-label={`Josefin Sans font: ${josefin ? 'on' : 'off'}. Tap to toggle.`}
+        style={{ ...flatStyle, ...(josefin ? flatStyleOn : null) }}
+      >
+        {josefin ? '▣' : '▢'} Josefin
       </button>
 
       {/* Jump straight to any background. */}
