@@ -44,7 +44,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           </h1>
           <Link
             href="/login"
-            className="inline-flex h-11 w-full items-center justify-center rounded-md border px-4 text-sm font-medium"
+            className="btn-ghost w-full"
           >
             Go to login
           </Link>
@@ -66,10 +66,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-sm leading-6">
             Log in with your phone number to continue to Joshing.
           </p>
-          <Link
-            href="/login"
-            className="bg-primary text-primary-foreground inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium"
-          >
+          <Link href="/login" className="btn-primary w-full">
             Go to login
           </Link>
         </div>
