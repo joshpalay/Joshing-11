@@ -844,7 +844,8 @@ export default function LoginPanel({
 
       {step !== 'profile' ? (
         <p className="mt-4 text-center text-xs leading-5 text-black/60">
-          By signing in you agree to our{' '}
+          By signing in you agree to our
+          <br />
           <a
             href="/terms"
             target="_blank"
