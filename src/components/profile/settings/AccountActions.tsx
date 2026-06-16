@@ -26,9 +26,7 @@ import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
  *
  * `navigate` is injected so the chain is testable without a DOM.
  */
-export async function logoutAndRedirect(
-  navigate: (url: string) => void,
-): Promise<void> {
+export async function logoutAndRedirect(navigate: (url: string) => void): Promise<void> {
   const response = await fetch('/api/account/logout', {
     method: 'POST',
     credentials: 'include',
@@ -41,7 +39,15 @@ export async function logoutAndRedirect(
   navigate('/login');
 }
 
-export function AccountActions() {
+/**
+ * `isAdmin` gates the Developer-tools section (D-DESIGN-DEBT-STRUCTURAL-01,
+ * Phase 3). Before this it rendered for every owner viewing their own profile,
+ * so any normal user could reach /dev/* (reset-session, noon-reset, …). The
+ * caller computes it server-side from `isAdminUser(session.userId)` — the same
+ * ADMIN_USER_IDS allowlist that guards the report queue. Defaults to false:
+ * fail closed, so a caller that forgets to pass it hides the tools.
+ */
+export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -119,55 +125,59 @@ export function AccountActions() {
 
   return (
     <>
-      <section className="mb-8">
-        <h2 className="mb-3 font-serif text-2xl font-semibold">Developer tools</h2>
-        <SettingsGroup>
-          <SettingsRow
-            icon={<FlaskConical className="size-5" />}
-            title={resettingGame ? 'Resetting…' : 'Create test game'}
-            subtitle="Reset today's game and play again"
-            onClick={() => void createTestGame()}
-            disabled={resettingGame}
-          />
-          <SettingsRow
-            icon={<RefreshCw className="size-5" />}
-            title="Reset session"
-            subtitle="Clear current session data"
-            href="/dev/reset-session"
-          />
-          <SettingsRow
-            icon={<Sun className="size-5" />}
-            title="Trigger noon reset"
-            subtitle="Simulate daily reset"
-            href="/dev/noon-reset"
-          />
-          <SettingsRow
-            icon={<Code2 className="size-5" />}
-            title="View staging flags"
-            subtitle="See feature flag status"
-            href="/dev/flags"
-          />
-          <SettingsRow
-            icon={<BarChart3 className="size-5" />}
-            title="Points diagnostic"
-            subtitle="Inspect a user's mastery events and where points came from"
-            href="/dev/points-diagnostic"
-          />
-          <SettingsRow
-            icon={<Sparkles className="size-5" />}
-            title="Show me the first time player"
-            subtitle="Preview the first-session experience a new player sees"
-            href="/dev/first-time-player"
-          />
-          <SettingsRow
-            icon={<Smartphone className="size-5" />}
-            title="Phone-first invite login"
-            subtitle="Preview the invite login screens without sending an invite"
-            href="/dev/invite-login"
-          />
-        </SettingsGroup>
-        {resetGameError ? <p className="mt-2 text-sm text-destructive">{resetGameError}</p> : null}
-      </section>
+      {isAdmin ? (
+        <section className="mb-8">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">Developer tools</h2>
+          <SettingsGroup>
+            <SettingsRow
+              icon={<FlaskConical className="size-5" />}
+              title={resettingGame ? 'Resetting…' : 'Create test game'}
+              subtitle="Reset today's game and play again"
+              onClick={() => void createTestGame()}
+              disabled={resettingGame}
+            />
+            <SettingsRow
+              icon={<RefreshCw className="size-5" />}
+              title="Reset session"
+              subtitle="Clear current session data"
+              href="/dev/reset-session"
+            />
+            <SettingsRow
+              icon={<Sun className="size-5" />}
+              title="Trigger noon reset"
+              subtitle="Simulate daily reset"
+              href="/dev/noon-reset"
+            />
+            <SettingsRow
+              icon={<Code2 className="size-5" />}
+              title="View staging flags"
+              subtitle="See feature flag status"
+              href="/dev/flags"
+            />
+            <SettingsRow
+              icon={<BarChart3 className="size-5" />}
+              title="Points diagnostic"
+              subtitle="Inspect a user's mastery events and where points came from"
+              href="/dev/points-diagnostic"
+            />
+            <SettingsRow
+              icon={<Sparkles className="size-5" />}
+              title="Show me the first time player"
+              subtitle="Preview the first-session experience a new player sees"
+              href="/dev/first-time-player"
+            />
+            <SettingsRow
+              icon={<Smartphone className="size-5" />}
+              title="Phone-first invite login"
+              subtitle="Preview the invite login screens without sending an invite"
+              href="/dev/invite-login"
+            />
+          </SettingsGroup>
+          {resetGameError ? (
+            <p className="text-destructive mt-2 text-sm">{resetGameError}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="mb-8">
         <h2 className="mb-3 font-serif text-2xl font-semibold">Account</h2>
@@ -185,7 +195,7 @@ export function AccountActions() {
           />
         </SettingsGroup>
         {confirmingLogout ? (
-          <div className="mt-3 rounded-xl border border-destructive/30 bg-card p-4 text-card-foreground">
+          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-xl border p-4">
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
             <div className="mt-3 flex gap-2">
               <button
@@ -206,16 +216,19 @@ export function AccountActions() {
                 Cancel
               </button>
             </div>
-            {logoutError ? <p className="mt-2 text-sm text-destructive">{logoutError}</p> : null}
+            {logoutError ? <p className="text-destructive mt-2 text-sm">{logoutError}</p> : null}
           </div>
         ) : null}
 
         <div className="mt-6">
           {confirmingDelete ? (
-            <div className="rounded-xl border border-destructive bg-destructive/5 p-4">
-              <p className="text-sm font-semibold text-destructive">Delete your account permanently?</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                This removes your account, sessions, stats, authored questions, games, and friend connections. This cannot be undone.
+            <div className="border-destructive bg-destructive/5 rounded-xl border p-4">
+              <p className="text-destructive text-sm font-semibold">
+                Delete your account permanently?
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                This removes your account, sessions, stats, authored questions, games, and friend
+                connections. This cannot be undone.
               </p>
               <label className="mt-3 block text-xs font-medium" htmlFor="delete-confirmation">
                 Type DELETE to confirm.
@@ -227,7 +240,7 @@ export function AccountActions() {
                   setDeleteConfirmation(event.target.value);
                   setDeleteError(null);
                 }}
-                className="mt-1 h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-sm outline-none focus:border-destructive"
+                className="focus:border-destructive mt-1 h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-sm outline-none"
                 autoComplete="off"
                 disabled={deletingAccount}
               />
@@ -254,12 +267,12 @@ export function AccountActions() {
                   Cancel
                 </button>
               </div>
-              {deleteError ? <p className="mt-2 text-sm text-destructive">{deleteError}</p> : null}
+              {deleteError ? <p className="text-destructive mt-2 text-sm">{deleteError}</p> : null}
             </div>
           ) : (
             <button
               type="button"
-              className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+              className="text-muted-foreground hover:text-destructive text-xs font-medium underline-offset-2 hover:underline"
               onClick={() => {
                 setConfirmingDelete(true);
                 setConfirmingLogout(false);
