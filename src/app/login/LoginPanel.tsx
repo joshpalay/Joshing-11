@@ -19,7 +19,7 @@ function formatPhoneForDisplay(e164: string): string {
 }
 
 const CARD_CLASS =
-  'w-full max-w-sm rounded-[8px] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
+  'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5';
 const INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
 const SUBMIT_CLASS =
@@ -151,7 +151,7 @@ function inviterFirstName(name: string): string {
 
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
-    <div className="space-y-3 rounded-[8px] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+    <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
       <p className="text-[15px] leading-6 text-black/75">
         {inviterFirstName(invite.inviterName)} invited you to Joshing, a new trivia game. We just
         need to verify your phone number and then you can start playing.
@@ -600,7 +600,7 @@ export default function LoginPanel({
             // Warm dead-end (Screen 1b): the edited number has no claim of its
             // own. Carried by wording, not an error banner — full number shown
             // per D-AUTH-INVITE-PHONE-FIRST §2.7.
-            <div className="space-y-3 rounded-[8px] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
               <p className="text-[15px] leading-6 text-black/75">
                 This invite was sent to{' '}
                 <span className="font-medium whitespace-nowrap text-black">
