@@ -11,7 +11,7 @@ import LoginPanel from '@/app/login/LoginPanel';
  *
  * Linked from the Developer tools section of the profile page. It renders the
  * real `LoginPanel` with synthetic invite data so the two new surfaces — the
- * pre-filled phone screen (Screen 1) and the warm "no claim" dead-end
+ * confirm-your-number screen (Screen 1) and the warm "not my number" dead-end
  * (Screen 1b) — can be inspected WITHOUT minting a real invitation or sending
  * an OTP. It is look-only: the synthetic token doesn't resolve server-side, so
  * the buttons won't complete a login (no account is created). The dead-end is
@@ -55,12 +55,12 @@ export default function DevInviteLoginPage() {
             What an invited friend sees when they tap their invite link.
           </p>
           <p className="mt-1">
-            The phone field arrives pre-filled with the invited number so they
-            can confirm or correct it. If they change it to a number with no
-            invite of its own, they get the warm dead-end instead of a hard
-            error. This is a look-only preview with synthetic data &mdash; no
-            invitation is created and no code is sent, so the buttons won&apos;t
-            complete a real login.
+            The phone field arrives pre-filled with the invited number for them
+            to confirm &mdash; it isn&apos;t editable. If it isn&apos;t their
+            number, they get the warm dead-end pointing them back to the inviter
+            for a new invite instead of a hard error. This is a look-only preview
+            with synthetic data &mdash; no invitation is created and no code is
+            sent, so the buttons won&apos;t complete a real login.
           </p>
         </div>
       </div>
@@ -70,12 +70,12 @@ export default function DevInviteLoginPage() {
         <PreviewTab
           active={screen === 'phone'}
           onClick={() => setScreen('phone')}
-          label="Screen 1 — pre-filled phone"
+          label="Screen 1 — confirm number"
         />
         <PreviewTab
           active={screen === 'deadEnd'}
           onClick={() => setScreen('deadEnd')}
-          label="Screen 1b — warm dead-end"
+          label="Screen 1b — not my number"
         />
       </div>
 
