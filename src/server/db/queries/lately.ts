@@ -24,7 +24,7 @@ import {
   type TrustTier,
 } from '@/server/daily/verification-gating';
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
-import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
+import { SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
 
@@ -124,6 +124,10 @@ export async function getLatelyMoments(
         inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
         isNotNull(masteryEvents.questionId),
         gte(masteryEvents.createdAt, windowStart),
+        // Safety hard-block: a blocked question must not resurface as a moment,
+        // except to its own author (they_got_you rows are the viewer's own
+        // authored question) — the owner exception.
+        notBlockedForViewer(userId),
         or(
           and(eq(questions.creatorId, userId), ne(masteryEvents.userId, userId)),
           and(eq(masteryEvents.userId, userId), ne(questions.creatorId, userId)),
@@ -220,6 +224,9 @@ export async function getLatelyMilestones(
         eq(feedItems.sourceResult, 'correct'),
         isNotNull(feedItems.questionId),
         gte(feedItems.sourceEventAt, windowStart),
+        // Safety hard-block: blocked questions never anchor a milestone (the
+        // owner exception is moot here — viewer-authored is excluded below).
+        notBlockedForViewer(userId),
         // Never surface the viewer's OWN authored questions here. The milestone
         // expansion offers each question to ANSWER (full credit via
         // /api/lately/milestone/answer), but you can't answer your own question —
@@ -359,6 +366,10 @@ export async function getFriendActivity(
         eq(feedItems.sourceResult, 'correct'),
         isNotNull(feedItems.questionId),
         gte(feedItems.sourceEventAt, windowStart),
+        // Safety hard-block: a blocked question must not resurface in the
+        // From-Friends log, except to its own author (a friend answering the
+        // viewer's own question lands here as a spent card) — the owner exception.
+        notBlockedForViewer(userId),
       ),
     )
     .orderBy(desc(feedItems.sourceEventAt))

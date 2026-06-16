@@ -15,6 +15,8 @@ import {
   users,
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
+import { getUpheldInappropriateGeneratedIds } from '@/server/db/queries/content-reports';
+import { isBlockedForViewer, notBlockedForViewer } from '@/server/feed/visibility';
 import { LLM_QUESTION_ATTRIBUTION, resolveAuthorDisplay } from '@/lib/questions-types';
 import { titleCaseDomain } from '@/lib/knowledge/domain-casing';
 
@@ -196,9 +198,27 @@ async function readDailyItems(userId: string): Promise<ArchiveItem[]> {
     : [];
   const creatorById = new Map(creatorRows.map((row) => [row.id, row.displayName]));
 
+  // Safety hard-block applied at the SLOT level: the daily reader renders
+  // `slot.question_text` (a denormalized snapshot) even when the underlying row
+  // is absent, so filtering the queries above would not suppress a blocked
+  // question — the slot itself must be dropped. Authored questions use the
+  // owner-aware check (the author keeps their own); generated questions use the
+  // unconditional upheld-inappropriate terminal block (no owner exception).
+  const blockedQuestionIds = new Set(
+    questionRows.filter((q) => isBlockedForViewer(q, userId)).map((q) => q.id),
+  );
+  const blockedGeneratedIds = await getUpheldInappropriateGeneratedIds([...new Set(generatedIds)]);
+
   return queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
-      .filter((slot) => slot.answered || slot.skipped)
+      .filter((slot) => {
+        if (!(slot.answered || slot.skipped)) return false;
+        if (slot.question_id && blockedQuestionIds.has(slot.question_id)) return false;
+        if (slot.generated_question_id && blockedGeneratedIds.has(slot.generated_question_id)) {
+          return false;
+        }
+        return true;
+      })
       .map((slot) => {
         const generated = slot.generated_question_id ? generatedById.get(slot.generated_question_id) : null;
         const bankQuestion = slot.question_id ? questionById.get(slot.question_id) : null;
@@ -255,7 +275,13 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
     .innerJoin(questions, eq(feedItems.questionId, questions.id))
     .innerJoin(users, eq(feedItems.sourceUserId, users.id))
     .leftJoin(creatorUsers, eq(questions.creatorId, creatorUsers.id))
-    .where(and(eq(feedItems.recipientUserId, userId), eq(feedItems.state, 'answered')))
+    .where(and(
+      eq(feedItems.recipientUserId, userId),
+      eq(feedItems.state, 'answered'),
+      // Safety hard-block: a question blocked after the viewer answered it drops
+      // from their archive, except for the author viewing their own — owner exception.
+      notBlockedForViewer(userId),
+    ))
     .orderBy(desc(feedItems.sourceEventAt));
 
   const relevantRows = rows.filter((row) => {
@@ -332,7 +358,12 @@ async function readJoshingGameItems(userId: string): Promise<ArchiveItem[]> {
     .innerJoin(questions, eq(joshingGameResponses.questionId, questions.id))
     .innerJoin(joshingGames, eq(joshingGameResponses.gameId, joshingGames.id))
     .leftJoin(creatorUsers, eq(questions.creatorId, creatorUsers.id))
-    .where(eq(joshingGameResponses.userId, userId))
+    .where(and(
+      eq(joshingGameResponses.userId, userId),
+      // Safety hard-block: blocked questions drop from the archive, except for
+      // the author viewing their own — owner exception.
+      notBlockedForViewer(userId),
+    ))
     .orderBy(desc(joshingGameResponses.answeredAt));
 
   return rows.map(({ response, question, game, creatorUser }) => {

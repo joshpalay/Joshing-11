@@ -17,7 +17,8 @@ import {
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import type { GradableQuestionType } from '@/server/grading';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
-import { notSuppressedByContentReport } from '@/server/db/queries/content-reports';
+import { notBlockedGeneratedByContentReport, notSuppressedByContentReport } from '@/server/db/queries/content-reports';
+import { notBlocked } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
@@ -568,13 +569,23 @@ async function getDailyCatchupItems(
           .where(and(
             eq(generatedQuestions.userId, userId),
             inArray(generatedQuestions.id, generatedIds),
+            // Terminal hard-block for LLM-origin content: an upheld-inappropriate
+            // report is the generated equivalent of visibility='blocked'.
+            notBlockedGeneratedByContentReport(generatedQuestions.id),
           ))
       : Promise.resolve<typeof generatedQuestions.$inferSelect[]>([]),
     canonicalIds.length > 0
       ? db
           .select()
           .from(canonicalQuestions)
-          .where(inArray(canonicalQuestions.id, canonicalIds))
+          .where(and(
+            inArray(canonicalQuestions.id, canonicalIds),
+            // Safety hard-block: a question blocked after assignment (cron re-vet,
+            // upheld report) must not resurface in catch-up. Bare form — catch-up
+            // is an answer surface and never carries the viewer's own authored
+            // question (you aren't assigned your own questions to answer).
+            notBlocked(),
+          ))
       : Promise.resolve<typeof canonicalQuestions.$inferSelect[]>([]),
   ]);
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
