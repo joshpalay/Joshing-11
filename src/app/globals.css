@@ -361,6 +361,11 @@
     }
   body {
     @apply bg-background text-foreground;
+    /* Defensive guard: never let a stray over-wide element (e.g. a dev tool bar)
+       force the document wider than the device, which makes mobile Safari zoom
+       the whole app out to fit. `clip` (not `hidden`) avoids establishing a
+       scroll container, so position:sticky/fixed chrome is unaffected. */
+    overflow-x: clip;
     }
   html {
     @apply font-sans;

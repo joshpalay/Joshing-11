@@ -130,6 +130,14 @@ export function PaletteToggle() {
         zIndex: 60,
         display: 'flex',
         alignItems: 'center',
+        // Wrap onto a second row on narrow (mobile) viewports instead of
+        // overflowing horizontally. Without this the non-shrinkable row
+        // (label + buttons + 8 swatches) is wider than a phone, which forces
+        // the whole document wider than the device and makes mobile Safari
+        // zoom the entire app out to fit — surfacing as a "narrow page with a
+        // dead zone on the right" on every route.
+        flexWrap: 'wrap',
+        maxWidth: '100%',
         gap: 12,
         padding: '6px 16px',
         fontSize: 12,
