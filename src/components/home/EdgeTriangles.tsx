@@ -55,6 +55,15 @@ const CLIP: Record<Side, string> = {
   right: 'polygon(100% 0, 100% 100%, 0 50%)',
 }
 
+// Procedural grain that mirrors the speckled paper texture on the source
+// triangles. A tileable fractal-noise field, desaturated and compressed into a
+// mostly-light band so that — blended `multiply` over the flat --tri-* color —
+// it only darkens in faint specks rather than muddying the whole fill. Tune the
+// `intercept`/`slope` pair for grain strength: a lower intercept = stronger
+// grain (more darkening); slope sets the speck contrast.
+const GRAIN_SVG = `<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/><feComponentTransfer><feFuncR type='linear' slope='0.18' intercept='0.82'/><feFuncG type='linear' slope='0.18' intercept='0.82'/><feFuncB type='linear' slope='0.18' intercept='0.82'/></feComponentTransfer></filter><rect width='100%' height='100%' filter='url(#g)'/></svg>`
+const GRAIN_URL = `url("data:image/svg+xml,${encodeURIComponent(GRAIN_SVG)}")`
+
 export function EdgeTriangles() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
@@ -65,6 +74,12 @@ export function EdgeTriangles() {
           width: t.size,
           height: t.size,
           backgroundColor: `var(--tri-${t.color})`,
+          // Grain texture multiplied over the flat color, then both clipped to
+          // the triangle — matches the speckled source artwork.
+          backgroundImage: GRAIN_URL,
+          backgroundBlendMode: 'multiply',
+          backgroundRepeat: 'repeat',
+          backgroundSize: '90px 90px',
           clipPath: CLIP[t.side],
           ...(t.side === 'left' ? { left: -protrude } : { right: -protrude }),
         }
