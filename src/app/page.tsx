@@ -22,30 +22,43 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 bg-[url('/images/Variant4.png')] bg-repeat px-4 py-6 pb-32 md:py-10">
-      {session ? (
-        <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
-          <TodaysFiveSection userId={session.userId} />
-        </Suspense>
-      ) : (
-        <TodaysFiveCard />
-      )}
-
-      {session ? (
-        <Suspense fallback={null}>
-          <CeremonyPinSection userId={session.userId} />
-        </Suspense>
-      ) : null}
-
-      <section id="feed">
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col bg-[url('/images/Variant4.png')] bg-repeat px-4 py-6 pb-32 md:py-10">
+      {/* Readability scrim: the tiled login pattern is too busy to read
+          standalone text (the "For you" / "From friends" eyebrows, the activity
+          rows) against. A translucent cream panel sits over the pattern but
+          behind the content, so the content column reads calmly while the
+          pattern still frames it in the side gutter and below the last card.
+          Opacity is one number — raise/lower the color-mix percentage to taste. */}
+      <div
+        className="relative flex flex-col gap-5 rounded-2xl px-3 py-4"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--brand-cream-page) 82%, transparent)',
+        }}
+      >
         {session ? (
-          <Suspense fallback={<FeedSkeleton />}>
-            <FromYourFriendsSection userId={session.userId} />
+          <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
+            <TodaysFiveSection userId={session.userId} />
           </Suspense>
         ) : (
-          <FeedList pageSize={FEED_PAGE_SIZE} infinite />
+          <TodaysFiveCard />
         )}
-      </section>
+
+        {session ? (
+          <Suspense fallback={null}>
+            <CeremonyPinSection userId={session.userId} />
+          </Suspense>
+        ) : null}
+
+        <section id="feed">
+          {session ? (
+            <Suspense fallback={<FeedSkeleton />}>
+              <FromYourFriendsSection userId={session.userId} />
+            </Suspense>
+          ) : (
+            <FeedList pageSize={FEED_PAGE_SIZE} infinite />
+          )}
+        </section>
+      </div>
     </main>
   )
 }
