@@ -1,15 +1,10 @@
 'use client'
 
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 
-import {
-  AnsweredByYouCard,
-  AnswerSheet,
-  DirectSentCard,
-  type AnsweredByYouFeedItem,
-  type DirectSentFeedItem,
-} from '@/components/feed'
+import { AnswerSheet, visibleFeedCategory } from '@/components/feed'
+import { FeedActionLink } from '@/components/feed/FeedActionLink'
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy'
 
 export type AuthoredQuestionDifficulty = 'accessible' | 'moderate' | 'specialist'
@@ -53,54 +48,114 @@ function isAnsweredByViewer(
 type AuthoredQuestionsFeedProps = {
   questions: AuthoredQuestionItem[]
   friendDisplayName: string
-  friendUserId: string
-  friendProfileHref: string
+  // Accepted for call-site compatibility; the list rows no longer render
+  // per-card attribution, so the author's id/href aren't needed here.
+  friendUserId?: string
+  friendProfileHref?: string
 }
 
-function formatDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  const now = new Date()
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
-  }).format(date)
-}
+// A single question rendered as a list row, matching the Questions page
+// (MyQuestionCard): a System-voice category eyebrow, a difficulty pill, and the
+// serif question. The profile is the author's, so questions are NOT framed as
+// "sent directly to you" — the viewer simply answers them in place via the
+// "Answer →" link (in the slot the Questions page uses for its author metrics).
+// Once answered, the link is replaced by a quiet result line.
+function ProfileQuestionRow({
+  item,
+  answered,
+  result,
+  onAnswer,
+}: {
+  item: AuthoredQuestionItem
+  answered: boolean
+  result: AnswerResult | undefined
+  onAnswer: () => void
+}) {
+  const visibleCategory = visibleFeedCategory(item.category)
+  const difficultyLabel = item.difficulty
+    ? difficultyCopyFromEstimate(item.difficulty)
+    : null
+  const isCorrect = result
+    ? result.isCorrect
+    : item.viewerAnswered?.result === 'correct'
 
-function baseFields(
-  item: AuthoredQuestionItem,
-  answered: boolean,
-  friendDisplayName: string,
-  friendUserId: string,
-) {
-  const dateLabel = formatDate(item.createdAt)
-  const metadata: ReactNode = (
-    <span className="text-muted-foreground text-xs">
-      {item.category ? <>{item.category}</> : null}
-      {item.category && dateLabel ? <> · </> : null}
-      {dateLabel ? <>{dateLabel}</> : null}
-      {answered ? <> · You answered</> : null}
-    </span>
+  return (
+    <article className="border-t border-[var(--brand-rule)] py-4 first:border-t-0">
+      {visibleCategory || difficultyLabel ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {visibleCategory ? (
+            <span
+              className="truncate text-[10px] leading-tight uppercase tracking-[0.1em]"
+              style={{
+                // Category label is metadata — System voice (mono), per
+                // STYLE-GUIDE-TYPE §2/§5, matching MyQuestionCard.
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--ink)',
+                opacity: 0.7,
+              }}
+            >
+              {visibleCategory}
+            </span>
+          ) : null}
+          {difficultyLabel ? (
+            <span
+              className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+              style={{ color: 'var(--ink)', opacity: 0.7 }}
+              aria-label={`Difficulty: ${difficultyLabel}`}
+            >
+              {difficultyLabel}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
+        <span aria-hidden className="opacity-60">
+          &ldquo;
+        </span>
+        {item.questionText}
+        <span aria-hidden className="opacity-60">
+          &rdquo;
+        </span>
+      </p>
+
+      {answered ? (
+        <div className="mt-2">
+          <p
+            className="text-[13px] font-medium"
+            style={{ color: 'var(--ink)', opacity: 0.7 }}
+          >
+            {isCorrect ? 'You answered ✓' : 'Reviewed privately'}
+          </p>
+          {result && !result.isCorrect && result.correctAnswer ? (
+            <p
+              className="mt-1 text-[13px]"
+              style={{ color: 'var(--ink)', opacity: 0.65 }}
+            >
+              Answer: {result.correctAnswer}
+            </p>
+          ) : null}
+          {result?.explanation ? (
+            <p
+              className="mt-1 text-[13px] italic leading-snug"
+              style={{ color: 'var(--ink)', opacity: 0.65 }}
+            >
+              {result.explanation}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-1">
+          <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
+        </div>
+      )}
+    </article>
   )
-
-  return {
-    id: item.id,
-    metadata,
-    category: item.category,
-    question: item.questionText,
-    personalMessage: null,
-    isInBank: false,
-    avatarName: friendDisplayName,
-    avatarUserId: friendUserId,
-  }
 }
 
 export function AuthoredQuestionsFeed({
   questions,
   friendDisplayName,
-  friendUserId,
-  friendProfileHref,
 }: AuthoredQuestionsFeedProps) {
   const [results, setResults] = useState<Record<string, AnswerResult>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
@@ -322,56 +377,25 @@ export function AuthoredQuestionsFeed({
             </p>
           ) : null}
 
-          {visibleQuestions.map((item) => {
-            const localResult = results[item.id]
-            const persistedAnswered = item.viewerAnswered !== null
-            const isAnswered = Boolean(localResult) || persistedAnswered
+          {visibleQuestions.length > 0 ? (
+            <div>
+              {visibleQuestions.map((item) => {
+                const localResult = results[item.id]
+                const isAnswered =
+                  Boolean(localResult) || item.viewerAnswered !== null
 
-            if (isAnswered) {
-              const isCorrect = localResult
-                ? localResult.isCorrect
-                : item.viewerAnswered?.result === 'correct'
-
-              const answeredItem: AnsweredByYouFeedItem = {
-                ...baseFields(item, true, friendDisplayName, friendUserId),
-                avatarName: null,
-                avatarUserId: null,
-                type: 'answered_by_you',
-                resultLabel: isCorrect ? 'You answered' : 'Reviewed privately',
-                answerSummary: isCorrect
-                  ? `You and ${friendDisplayName} have that in common.`
-                  : 'You have already answered this question.',
-                correctAnswer: localResult?.correctAnswer ?? null,
-                submittedAnswer: localResult?.submittedAnswer ?? undefined,
-                isCorrect,
-                awardedPoints: localResult?.awardedPoints ?? null,
-                explanation: localResult?.explanation ?? null,
-                creatorNote: localResult?.creatorNote ?? null,
-                // These are the profile user's own authored questions, so the
-                // note author is always that human → inverted block.
-                authorName: friendDisplayName,
-                authorIsHouse: false,
-                unverifiedAnswer: false,
-              }
-
-              return <AnsweredByYouCard key={item.id} item={answeredItem} />
-            }
-
-            const directSent: DirectSentFeedItem = {
-              ...baseFields(item, false, friendDisplayName, friendUserId),
-              type: 'direct_sent',
-              senderName: friendDisplayName,
-              senderHref: friendProfileHref,
-            }
-
-            return (
-              <DirectSentCard
-                key={item.id}
-                item={directSent}
-                onAnswer={() => setAnswerSheetId(item.id)}
-              />
-            )
-          })}
+                return (
+                  <ProfileQuestionRow
+                    key={item.id}
+                    item={item}
+                    answered={isAnswered}
+                    result={localResult}
+                    onAnswer={() => setAnswerSheetId(item.id)}
+                  />
+                )
+              })}
+            </div>
+          ) : null}
         </div>
       )}
 
