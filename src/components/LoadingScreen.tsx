@@ -30,16 +30,22 @@ const MESSAGE_CYCLE_MS = 3200;
 
 const VIEWBOX_W = 400;
 const VIEWBOX_H = 900;
-const SIZE = 56;
-const TRI_H = SIZE * 0.8660254;
+const SIZE = 56; // triangle base
+const TRI_H = SIZE * 0.8660254; // equilateral row height
 
+// The canonical JOSHING triangle palette, sampled directly from the Variant4
+// brand artwork that backs the login + home surfaces (public/images/Variant4*).
+// The loader was previously on a stale teal/tan palette with no sky-blue and a
+// tan field, which made it read as a different design system. These six match
+// the print art exactly. (Note: the shared --tri-* tokens in globals.css are
+// also stale/blue-less — out of scope here, but worth reconciling later.)
 const PALETTE = [
-  "#D15E36", // orange
-  "#6D837F", // darkteal
-  "#ADB19E", // lightteal
-  "#F8E6C7", // cream
-  "#DEAE5C", // darkyellow
-  "#EDD2A3", // lighttan
+  "#F38058", // coral
+  "#FFD07E", // gold
+  "#9BC0CC", // sky blue (Variant4's signature; was missing entirely)
+  "#8EA4A0", // sage
+  "#CFD3C0", // light sage
+  "#FFFFEA", // cream
 ];
 
 function rand(seed: number) {
@@ -60,22 +66,26 @@ type Tri = {
 
 function buildTriangles(): Tri[] {
   const tris: Tri[] = [];
-  const cols = Math.ceil(VIEWBOX_W / TRI_H) + 2;
-  const trisPerCol = Math.ceil((VIEWBOX_H * 2) / SIZE) + 4;
+  // Up/down equilateral grid, matching the Variant4 artwork: rows of height
+  // TRI_H, each row alternating up- and down-pointing triangles that interlock
+  // on a SIZE/2 horizontal step.
+  const cols = Math.ceil(VIEWBOX_W / (SIZE / 2)) + 4;
+  const rows = Math.ceil(VIEWBOX_H / TRI_H) + 2;
 
   let idx = 0;
-  for (let col = -1; col < cols; col++) {
-    for (let i = -2; i < trisPerCol; i++) {
-      // Triangles point left/right (the up/down pattern rotated 90°): columns of
-      // width TRI_H, with triangles offset by SIZE/2 down each column.
-      const x = col * TRI_H;
-      const yBase = (i * SIZE) / 2;
+  for (let row = -1; row < rows; row++) {
+    const yTop = row * TRI_H;
+    const yBot = yTop + TRI_H;
+    for (let col = -1; col < cols; col++) {
+      const cx = (col * SIZE) / 2;
       let points: string;
 
-      if (((i % 2) + 2) % 2 === 0) {
-        points = `${x + TRI_H},${yBase} ${x + TRI_H},${yBase + SIZE} ${x},${yBase + SIZE / 2}`;
+      if ((((row + col) % 2) + 2) % 2 === 0) {
+        // up-pointing: base on the bottom edge, apex at the top
+        points = `${cx - SIZE / 2},${yBot} ${cx + SIZE / 2},${yBot} ${cx},${yTop}`;
       } else {
-        points = `${x},${yBase} ${x},${yBase + SIZE} ${x + TRI_H},${yBase + SIZE / 2}`;
+        // down-pointing: base on the top edge, apex at the bottom
+        points = `${cx - SIZE / 2},${yTop} ${cx + SIZE / 2},${yTop} ${cx},${yBot}`;
       }
 
       const r1 = rand(idx * 7 + 11);
@@ -139,7 +149,7 @@ export default function LoadingScreen({
   const current = rotation[Math.min(index, rotation.length - 1)] ?? rotation[0];
 
   const wrapperClass = [
-    "isolate flex items-center justify-center overflow-hidden bg-[#E8DCC0]",
+    "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
     fullScreen
       ? "fixed inset-0 z-[60]"
       : "relative h-full w-full min-h-[480px]",
@@ -185,6 +195,14 @@ export default function LoadingScreen({
 
       <div
         className="triangle-loader-sweep pointer-events-none absolute -inset-x-1/2 top-1/2 h-[60vh]"
+        aria-hidden="true"
+      />
+
+      {/* Paper-grain overlay (Figma export) — matches the baked grain in the
+          Variant4 artwork so the live SVG field shares its texture. Multiply
+          blend over the triangles; degrades to nothing if the asset is absent. */}
+      <div
+        className="triangle-loader-grain pointer-events-none absolute inset-0"
         aria-hidden="true"
       />
 
