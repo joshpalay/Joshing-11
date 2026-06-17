@@ -158,7 +158,14 @@ export default function DailySummaryPage() {
 
   return (
     <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
-      <div className="mx-auto max-w-3xl">
+      <div className="relative mx-auto max-w-3xl">
+        <Link
+          href="/"
+          aria-label="Close session recap"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring absolute top-0 right-0 z-10 inline-flex size-10 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <X className="size-5" />
+        </Link>
         {/* B-FirstRecap-1: greet first-time players before anything else — the
             congrats panel is the very first thing on the page on their first
             completed round. */}
