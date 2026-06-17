@@ -23,6 +23,19 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
+      {/* Triangle band across the top only (Variant4-TOP, grain baked in). The
+          first card overlaps it — "over the top is fine because it's a card".
+          Deliberately the ONLY triangle treatment on this page: the recent
+          activity below stays clean (it already carries its own row marks). The
+          lower portion of the PNG is transparent, so cream shows through. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-x-clip"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-TOP.png" alt="" className="w-full" />
+      </div>
+
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
           <TodaysFiveSection userId={session.userId} />
