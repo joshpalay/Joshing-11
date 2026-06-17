@@ -22,25 +22,7 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner: the TOP_TRIANGLES strip at its natural size (no
-          stretch/scale), anchored top-right. No fixed-height band — it flows
-          down the page until the artwork ends (the lower portion of the PNG is
-          transparent, so the cream page shows through). overflow-x-clip trims
-          only the horizontal overhang so the wide image can't cause sideways
-          scroll; the vertical axis is unclipped. No gradient. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-x-clip"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/TOP_TRIANGLES.png"
-          alt=""
-          className="absolute top-0 right-0 max-w-none"
-        />
-      </div>
-
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 bg-[url('/images/Variant4.png')] bg-repeat px-4 py-6 pb-32 md:py-10">
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
           <TodaysFiveSection userId={session.userId} />
