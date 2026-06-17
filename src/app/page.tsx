@@ -25,13 +25,13 @@ export default async function Home() {
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {/* Top triangle band (Variant4-TOP, grain baked in; lower portion
-          transparent so cream shows through). Full-bleed and behind everything,
-          rendered at its INTRINSIC size — it does not scale with the viewport or
-          stretch to the content column. Centered and clipped; the first card
-          sits over it ("over the top is fine because it's a card"). */}
+          transparent so cream shows through). Bounded to the content-column
+          width (inset-x-0 inside the max-w-2xl main) — the same width the
+          original banner used — and rendered at its INTRINSIC size (centered &
+          clipped, never scaled). The first card sits over it. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-0 left-1/2 -z-10 w-screen -translate-x-1/2 overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-hidden"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -57,31 +57,30 @@ export default async function Home() {
           the opaque cream rectangle keeps the section headers that sit between
           cards legible. */}
       <div className="relative flex flex-col gap-5">
-        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ), rendered at their
-            native size so the triangles match the top band. They sit fully in
-            the side margins (translated entirely outside the content column) so
-            nothing bleeds over the reading area, and the whole layer is capped
-            to the top region (h-[460px] + overflow-hidden) so no triangles fall
-            beside or below the Recent activity section. Right copies mirrored to
-            point inward. Behind the cream backing (-z-10). */}
+        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ), native size so the
+            triangles match the top band. Bounded to the SAME width as the top
+            band: the layer spans the content-column width (-left-4/-right-4
+            cancels the main's px-4 so its edges line up with the top band's
+            inset-x-0 edges), and the clusters hang from those left/right edges,
+            pointing inward. Capped to the top region (h-[460px] +
+            overflow-hidden) so none fall beside or below Recent activity. Right
+            copy mirrored. Behind the cream backing (-z-10). */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-1/2 -z-10 h-[460px] w-screen -translate-x-1/2 overflow-hidden"
+          className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[460px] overflow-hidden"
         >
-          <div className="relative mx-auto h-full max-w-2xl">
-            <span className="absolute top-[20px] left-0 -translate-x-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
-            </span>
-            <span className="absolute top-[200px] right-0 translate-x-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
-            </span>
-            <span className="absolute top-[380px] left-0 -translate-x-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
-            </span>
-          </div>
+          <span className="absolute top-[20px] left-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
+          </span>
+          <span className="absolute top-[200px] right-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
+          </span>
+          <span className="absolute top-[380px] left-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
+          </span>
         </div>
 
         {/* Opaque cream rectangle behind this block — above the triangles
