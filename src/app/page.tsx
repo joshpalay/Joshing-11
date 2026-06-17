@@ -23,12 +23,15 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner: the TOP_TRIANGLES strip placed at its natural size
-          (no stretch/scale), anchored to the top-right corner. The band clips
-          whatever overflows. No gradient. */}
+      {/* Triangle banner: the TOP_TRIANGLES strip at its natural size (no
+          stretch/scale), anchored top-right. No fixed-height band — it flows
+          down the page until the artwork ends (the lower portion of the PNG is
+          transparent, so the cream page shows through). overflow-x-clip trims
+          only the horizontal overhang so the wide image can't cause sideways
+          scroll; the vertical axis is unclipped. No gradient. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-x-clip"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
