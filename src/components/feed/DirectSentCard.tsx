@@ -64,6 +64,8 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, elevated }
       question={item.question}
       overflow={overflow}
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
+      // Direct sends present Answer as a filled primary button (not the inline link).
+      answerAsButton
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
       elevated={elevated}
     />
