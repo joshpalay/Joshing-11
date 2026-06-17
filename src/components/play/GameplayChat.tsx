@@ -522,8 +522,8 @@ function QuestionRow({
           style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: '14px',
-            marginTop: '4px',
+            gap: '10px',
+            marginTop: '8px',
             paddingLeft: '2px',
           }}
         >
@@ -563,22 +563,25 @@ function QuestionRow({
   );
 }
 
-// Shared style for the muted mono action links beneath a question card
-// ("Show me the answer", "Dismiss").
+// Shared style for the mono action links beneath a question card
+// ("Show me the answer", "Dismiss"). These render OUTSIDE the card, directly on
+// the full-strength triangle pattern (see daily/page.tsx), so they need their
+// own opaque chip — bare muted text is illegible against the multicolor tiles
+// (no single text color clears it). The chip keeps them inside the "everything
+// is an opaque card on top of the pattern" rule the surface relies on.
 const questionActionLinkStyle: CSSProperties = {
   alignSelf: 'flex-start',
-  background: 'none',
-  border: 'none',
-  padding: 0,
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '4px 9px',
   cursor: 'pointer',
   fontFamily: 'var(--font-mono)',
   fontSize: '0.58rem',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
   color: 'var(--text-muted)',
-  textDecoration: 'underline',
-  textUnderlineOffset: '2px',
-  opacity: 0.7,
+  textDecoration: 'none',
 };
 
 function UserRow({ text }: { text: string }) {
