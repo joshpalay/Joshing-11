@@ -69,9 +69,19 @@ export default async function Home() {
           aria-hidden="true"
           className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[460px] overflow-hidden"
         >
+          {/* Each row carries a left cluster and a mirrored right cluster, so the
+              treatment is symmetric on both edges of the column. */}
           <span className="absolute top-[20px] left-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
+          </span>
+          <span className="absolute top-[20px] right-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
+          </span>
+          <span className="absolute top-[200px] left-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
           </span>
           <span className="absolute top-[200px] right-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -81,15 +91,19 @@ export default async function Home() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
           </span>
+          <span className="absolute top-[380px] right-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
+          </span>
         </div>
 
-        {/* Opaque cream rectangle behind this block — above the triangles
-            (-z-[1]) but below the cards, so the headers that sit between cards
-            stay readable. On non-triangle surfaces it is cream-on-cream
-            (invisible). */}
+        {/* Cream rectangle behind this block — above the triangles (-z-[1]) but
+            below the cards, so the headers that sit between cards stay readable.
+            Held at 80% opacity so the triangles beneath show through faintly
+            (~20%). On non-triangle surfaces it is cream-on-cream (invisible). */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-[1] bg-[var(--brand-cream-page)]"
+          className="pointer-events-none absolute inset-0 -z-[1] bg-[var(--brand-cream-page)] opacity-80"
         />
 
         {session ? (
