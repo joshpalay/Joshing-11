@@ -60,12 +60,12 @@ export default async function Home() {
             band: the layer spans the content-column width (-left-4/-right-4
             cancels the main's px-4 so its edges line up with the top band's
             inset-x-0 edges), and the clusters hang from those left/right edges,
-            pointing inward. Capped to the top region (h-[620px] +
+            pointing inward. Capped to the top region (h-[760px] +
             overflow-hidden) so none fall beside or below Recent activity. Right
             copy mirrored. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[620px] overflow-hidden"
+          className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[760px] overflow-hidden"
         >
           {/* One cluster on the left and one on the right, at different heights
               (not mirrored pairs) — a single module per side, sat in the open
@@ -76,7 +76,7 @@ export default async function Home() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
           </span>
-          <span className="absolute top-[440px] right-0">
+          <span className="absolute top-[580px] right-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
           </span>
