@@ -23,7 +23,7 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner: the triangles_only strip placed at its natural size
+      {/* Triangle banner: the TOP_TRIANGLES strip placed at its natural size
           (no stretch/scale), anchored to the top-right corner. The band clips
           whatever overflows. No gradient. */}
       <div
@@ -32,7 +32,7 @@ export default async function Home() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/triangles_only.png"
+          src="/images/TOP_TRIANGLES.png"
           alt=""
           className="absolute top-0 right-0 max-w-none"
         />
