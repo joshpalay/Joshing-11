@@ -23,45 +23,24 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Full-bleed triangle background, behind all content and non-interactive.
-          This layer breaks out of the centered max-w-2xl column (w-screen +
-          left-1/2 + -translate-x-1/2) so the artwork sits at the true screen
-          edges, and scrolls with the page. */}
+      {/* Top triangle band (Variant4-TOP, grain baked in; lower portion
+          transparent so cream shows through). Full-bleed and behind everything,
+          rendered at its INTRINSIC size — it does not scale with the viewport or
+          stretch to the content column. Centered and clipped; the first card
+          sits over it ("over the top is fine because it's a card"). */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-0 left-1/2 -z-10 h-full w-screen -translate-x-1/2 overflow-hidden"
+        className="pointer-events-none absolute top-0 left-1/2 -z-10 w-screen -translate-x-1/2 overflow-hidden"
       >
-        {/* Top band (Variant4-TOP, grain baked in; lower portion transparent so
-            cream shows through). Rendered with the SAME object-cover sizing the
-            login screen uses (TriangleBackground), anchored to the top — so the
-            triangles render at the exact size they do on login rather than being
-            shrunk to fit the content column. The first card overlaps it ("over
-            the top is fine because it's a card"). */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/images/Variant4-TOP.png"
           alt=""
-          className="absolute top-0 left-1/2 h-dvh w-screen max-w-none -translate-x-1/2 object-cover object-top"
+          className="relative left-1/2 block max-w-none -translate-x-1/2"
         />
-        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ) interspersed down the
-            left and right edges. Right-side copies are mirrored (scale-x-[-1])
-            so the triangles point inward. Sized to match the login triangle
-            scale. They sit in the side margins on wide screens and tuck behind
-            the cards on mobile. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-SIDESQ.png" alt="" className="absolute top-[360px] left-0 w-[104px] max-w-none" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-DUO.png" alt="" className="absolute top-[600px] right-0 w-[104px] max-w-none -scale-x-100" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-DUO.png" alt="" className="absolute top-[920px] left-0 w-[104px] max-w-none" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-SIDESQ.png" alt="" className="absolute top-[1180px] right-0 w-[104px] max-w-none -scale-x-100" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-SIDESQ.png" alt="" className="absolute top-[1500px] left-0 w-[104px] max-w-none" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-DUO.png" alt="" className="absolute top-[1780px] right-0 w-[104px] max-w-none -scale-x-100" />
       </div>
 
+      {/* Today's Five — a card, so it can ride over the top triangle band. */}
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
           <TodaysFiveSection userId={session.userId} />
@@ -70,21 +49,74 @@ export default async function Home() {
         <TodaysFiveCard />
       )}
 
-      {session ? (
-        <Suspense fallback={null}>
-          <CeremonyPinSection userId={session.userId} />
-        </Suspense>
-      ) : null}
+      {/* Lower content (the weekly-reflection pin + the From-Friends / For-you
+          feed). Wrapped so the triangle side-clusters and the cream readability
+          backing both scope to it: the clusters are clipped to this block's
+          height (no triangles fall below the last card), and the opaque cream
+          rectangle keeps the section headers that sit between cards legible. */}
+      <div className="relative flex flex-col gap-5">
+        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ) down both edges, pulled
+            in close to the content column. Right-side copies are mirrored so the
+            triangles point inward. The layer is clipped to this block
+            (inset-y-0 + overflow-hidden), so clusters never appear below the
+            cards. Behind the cream backing (-z-10). */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-1/2 -z-10 w-screen -translate-x-1/2 overflow-hidden"
+        >
+          <div className="relative mx-auto h-full max-w-2xl">
+            <span className="absolute top-[40px] left-0 -translate-x-1/2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[104px] max-w-none" />
+            </span>
+            <span className="absolute top-[300px] right-0 translate-x-1/2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/Variant4-DUO.png" alt="" className="block w-[104px] max-w-none -scale-x-100" />
+            </span>
+            <span className="absolute top-[560px] left-0 -translate-x-1/2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/Variant4-DUO.png" alt="" className="block w-[104px] max-w-none" />
+            </span>
+            <span className="absolute top-[820px] right-0 translate-x-1/2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[104px] max-w-none -scale-x-100" />
+            </span>
+            <span className="absolute top-[1080px] left-0 -translate-x-1/2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[104px] max-w-none" />
+            </span>
+            <span className="absolute top-[1340px] right-0 translate-x-1/2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/Variant4-DUO.png" alt="" className="block w-[104px] max-w-none -scale-x-100" />
+            </span>
+          </div>
+        </div>
 
-      <section id="feed">
+        {/* Opaque cream rectangle behind this block — above the triangles
+            (-z-[1]) but below the cards, so the headers that sit between cards
+            stay readable over the art. On non-triangle surfaces it is
+            cream-on-cream (invisible). */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-[1] bg-[var(--brand-cream-page)]"
+        />
+
         {session ? (
-          <Suspense fallback={<FeedSkeleton />}>
-            <FromYourFriendsSection userId={session.userId} />
+          <Suspense fallback={null}>
+            <CeremonyPinSection userId={session.userId} />
           </Suspense>
-        ) : (
-          <FeedList pageSize={FEED_PAGE_SIZE} infinite />
-        )}
-      </section>
+        ) : null}
+
+        <section id="feed">
+          {session ? (
+            <Suspense fallback={<FeedSkeleton />}>
+              <FromYourFriendsSection userId={session.userId} />
+            </Suspense>
+          ) : (
+            <FeedList pageSize={FEED_PAGE_SIZE} infinite />
+          )}
+        </section>
+      </div>
     </main>
   )
 }
