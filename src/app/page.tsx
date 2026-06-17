@@ -52,51 +52,42 @@ export default async function Home() {
 
       {/* Lower content (the weekly-reflection pin + the From-Friends / For-you
           feed). Wrapped so the triangle side-clusters and the cream readability
-          backing both scope to it: the clusters are clipped to this block's
-          height (no triangles fall below the last card), and the opaque cream
-          rectangle keeps the section headers that sit between cards legible. */}
+          backing both scope to it: the clusters are confined to the TOP of this
+          block (beside the From-Friends cards, never below Recent activity), and
+          the opaque cream rectangle keeps the section headers that sit between
+          cards legible. */}
       <div className="relative flex flex-col gap-5">
-        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ) down both edges, pulled
-            in close to the content column. Right-side copies are mirrored so the
-            triangles point inward. The layer is clipped to this block
-            (inset-y-0 + overflow-hidden), so clusters never appear below the
-            cards. Behind the cream backing (-z-10). */}
+        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ), rendered at their
+            native size so the triangles match the top band. They sit fully in
+            the side margins (translated entirely outside the content column) so
+            nothing bleeds over the reading area, and the whole layer is capped
+            to the top region (h-[460px] + overflow-hidden) so no triangles fall
+            beside or below the Recent activity section. Right copies mirrored to
+            point inward. Behind the cream backing (-z-10). */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-1/2 -z-10 w-screen -translate-x-1/2 overflow-hidden"
+          className="pointer-events-none absolute top-0 left-1/2 -z-10 h-[460px] w-screen -translate-x-1/2 overflow-hidden"
         >
           <div className="relative mx-auto h-full max-w-2xl">
-            <span className="absolute top-[40px] left-0 -translate-x-1/2">
+            <span className="absolute top-[20px] left-0 -translate-x-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[104px] max-w-none" />
+              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
             </span>
-            <span className="absolute top-[300px] right-0 translate-x-1/2">
+            <span className="absolute top-[200px] right-0 translate-x-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-DUO.png" alt="" className="block w-[104px] max-w-none -scale-x-100" />
+              <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
             </span>
-            <span className="absolute top-[560px] left-0 -translate-x-1/2">
+            <span className="absolute top-[380px] left-0 -translate-x-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-DUO.png" alt="" className="block w-[104px] max-w-none" />
-            </span>
-            <span className="absolute top-[820px] right-0 translate-x-1/2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[104px] max-w-none -scale-x-100" />
-            </span>
-            <span className="absolute top-[1080px] left-0 -translate-x-1/2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[104px] max-w-none" />
-            </span>
-            <span className="absolute top-[1340px] right-0 translate-x-1/2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/Variant4-DUO.png" alt="" className="block w-[104px] max-w-none -scale-x-100" />
+              <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
             </span>
           </div>
         </div>
 
         {/* Opaque cream rectangle behind this block — above the triangles
             (-z-[1]) but below the cards, so the headers that sit between cards
-            stay readable over the art. On non-triangle surfaces it is
-            cream-on-cream (invisible). */}
+            stay readable. On non-triangle surfaces it is cream-on-cream
+            (invisible). */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-[1] bg-[var(--brand-cream-page)]"
