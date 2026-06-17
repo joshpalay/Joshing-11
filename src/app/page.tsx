@@ -7,7 +7,6 @@ import TodaysFiveCard, {
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
-import { EdgeTriangles } from '@/components/home/EdgeTriangles'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { getSession } from '@/server/auth/session'
 import { buildHomeEdition } from '@/server/home/build-edition'
@@ -23,12 +22,7 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 overflow-x-clip px-4 py-6 pb-32 md:py-10">
-      {/* Sparse brand triangles peeking from the page edges down the feed — a
-          light accent in place of a full background, so the content stays calm
-          and readable. */}
-      <EdgeTriangles />
-
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
           <TodaysFiveSection userId={session.userId} />
