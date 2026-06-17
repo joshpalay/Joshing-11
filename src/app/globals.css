@@ -541,14 +541,44 @@
 
 /* TESTING ONLY — flat mode (driven by the dev design bar's "Flat" toggle; see
    src/components/dev/PaletteToggle.tsx). When the toggle is on, <html> carries
-   data-flat="1": strip every corner radius and drop shadow so a tester can read
-   the layout without rounding / elevation. Covers literal radii (rounded-[4px],
-   rounded-full) and inline styles too, which token overrides would miss. The dev
-   bar's own chrome (.palette-bar) is excluded so the controls stay legible.
+   data-flat="1": strip every corner radius (cards and everything else) so a
+   tester can read the layout without rounding. Covers literal radii
+   (rounded-[4px], rounded-full) and inline styles too, which token overrides
+   would miss. Drop shadow is NO LONGER touched here — it has its own three-state
+   control (data-shadow, below). The dev bar's own chrome (.palette-bar) is
+   excluded so the controls stay legible.
    Remove this block with the PaletteToggle bar before shipping. */
 html[data-flat="1"] *:not(.palette-bar, .palette-bar *),
 html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::before,
 html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::after {
     border-radius: 0 !important;
+}
+
+/* TESTING ONLY — drop-shadow register (driven by the dev design bar's "Shadow"
+   cycler; see src/components/dev/PaletteToggle.tsx). Three states:
+     • current (no attribute) — leave the design-system elevation as shipped.
+     • data-shadow="subtle"   — dial the canonical --shadow-* elevation tokens
+       down so card lift is barely-there. Token-driven surfaces (.card, the feed
+       shell, modals) recolor automatically; stray Tailwind shadow-* utilities
+       keep their own value.
+     • data-shadow="none"     — zero the tokens AND blanket-strip every box-shadow
+       app-wide (matching how flat mode used to), so NOTHING casts a shadow,
+       including inline styles and shadow-* utilities.
+   Remove this block with the PaletteToggle bar before shipping. */
+html[data-shadow="subtle"] {
+    --shadow-paper-rest: 0 1px 1px rgb(0 0 0 / 0.03);
+    --shadow-card: 0 1px 2px rgba(40, 32, 30, 0.03);
+    --shadow-card-strong: 0 1px 3px rgba(40, 32, 30, 0.05);
+    --shadow-overlay: 0 3px 8px rgba(26, 18, 8, 0.08);
+}
+html[data-shadow="none"] {
+    --shadow-paper-rest: none;
+    --shadow-card: none;
+    --shadow-card-strong: none;
+    --shadow-overlay: none;
+}
+html[data-shadow="none"] *:not(.palette-bar, .palette-bar *),
+html[data-shadow="none"] *:not(.palette-bar, .palette-bar *)::before,
+html[data-shadow="none"] *:not(.palette-bar, .palette-bar *)::after {
     box-shadow: none !important;
 }
