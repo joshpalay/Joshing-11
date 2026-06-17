@@ -439,17 +439,17 @@
   will-change: transform, opacity;
 }
 
-/* Paper-grain texture for the loading field. Consumes a seamless, tileable
-   PNG exported from Figma at /images/loading-grain.png. The tile carries the
-   grain as dark specks on transparency; multiply lays it over the triangles
-   the way the grain is baked into the Variant4 print art. Tune intensity via
+/* Paper-grain texture for the loading field, from /images/loading-grain.png
+   (a near-white paper-grain sheet). Multiply lets the light field pass through
+   while the fine speckle darkens the triangles, echoing the baked grain of the
+   Variant4 print art. Tiled to keep the speckle fine; tune intensity via
    --loading-grain-opacity. */
 .triangle-loader-grain {
   background-image: url("/images/loading-grain.png");
   background-repeat: repeat;
   background-size: 512px 512px;
   mix-blend-mode: multiply;
-  opacity: var(--loading-grain-opacity, 0.5);
+  opacity: var(--loading-grain-opacity, 0.15);
 }
 
 @keyframes loading-dot {
