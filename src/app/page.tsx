@@ -51,11 +51,9 @@ export default async function Home() {
       )}
 
       {/* Lower content (the weekly-reflection pin + the From-Friends / For-you
-          feed). Wrapped so the triangle side-clusters and the cream readability
-          backing both scope to it: the clusters are confined to the TOP of this
-          block (beside the From-Friends cards, never below Recent activity), and
-          the opaque cream rectangle keeps the section headers that sit between
-          cards legible. */}
+          feed). Wrapped so the triangle side-clusters scope to it: the clusters
+          are confined to the TOP of this block (beside the From-Friends cards,
+          never below Recent activity). */}
       <div className="relative flex flex-col gap-5">
         {/* Side clusters (Variant4-DUO / Variant4-SIDESQ), native size so the
             triangles match the top band. Bounded to the SAME width as the top
@@ -64,47 +62,22 @@ export default async function Home() {
             inset-x-0 edges), and the clusters hang from those left/right edges,
             pointing inward. Capped to the top region (h-[460px] +
             overflow-hidden) so none fall beside or below Recent activity. Right
-            copy mirrored. Behind the cream backing (-z-10). */}
+            copy mirrored. */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[460px] overflow-hidden"
         >
-          {/* Each row carries a left cluster and a mirrored right cluster, so the
-              treatment is symmetric on both edges of the column. */}
-          <span className="absolute top-[20px] left-0">
+          {/* One cluster on the left and one on the right, at different heights
+              (not mirrored pairs) — a single module per side. */}
+          <span className="absolute top-[40px] left-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
           </span>
-          <span className="absolute top-[20px] right-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
-          </span>
-          <span className="absolute top-[200px] left-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
-          </span>
-          <span className="absolute top-[200px] right-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
-          </span>
-          <span className="absolute top-[380px] left-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none" />
-          </span>
-          <span className="absolute top-[380px] right-0">
+          <span className="absolute top-[280px] right-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
           </span>
         </div>
-
-        {/* Cream rectangle behind this block — above the triangles (-z-[1]) but
-            below the cards, so the headers that sit between cards stay readable.
-            Held at 80% opacity so the triangles beneath show through faintly
-            (~20%). On non-triangle surfaces it is cream-on-cream (invisible). */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-[1] bg-[var(--brand-cream-page)] opacity-80"
-        />
 
         {session ? (
           <Suspense fallback={null}>
