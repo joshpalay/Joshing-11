@@ -1,4 +1,5 @@
 import { CREAM, FS, HILITE, INK } from '@/components/lately/tokens';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 // Route-level fallback for /activities ("Lately"). Mirrors the page shell —
 // cream canvas, the italic "Lately." headline, then a few quiet one-line
@@ -46,14 +47,12 @@ export default function Loading() {
         </div>
 
         <div
-          className="animate-pulse"
           aria-hidden="true"
           style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 24 }}
         >
           {Array.from({ length: 6 }).map((_, i) => (
-            <div
+            <Skeleton
               key={i}
-              className="bg-black/[0.06]"
               style={{
                 height: 16,
                 width: `${85 - i * 6}%`,

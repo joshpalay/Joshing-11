@@ -295,6 +295,14 @@
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.625rem;
+    /* Canonical CARD radius (D-DESIGN-DEBT-STRUCTURAL-01, Phase 1). One corner for
+       every content card so the feed shell, section cards (friends/profile/
+       settings), and card skeletons stop drifting across rounded-lg/2xl/3xl/[2rem]
+       (audit §1b/§5). Aliased to --radius-xs (4px) — the value the feed already
+       consolidated onto in FeedCardShell (C7). GEOMETRY ONLY; no color. The three
+       elevation tiers it pairs with already exist below: --shadow-card (rest),
+       --shadow-card-strong (raised), --shadow-overlay (modals). */
+    --radius-card: var(--radius-xs);
     --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
     /* Elevation registers (CONS-7, Option B — two intentional registers).
        card / card-strong = the soft rest/raised lift for cards;
@@ -353,6 +361,11 @@
     }
   body {
     @apply bg-background text-foreground;
+    /* Defensive guard: never let a stray over-wide element (e.g. a dev tool bar)
+       force the document wider than the device, which makes mobile Safari zoom
+       the whole app out to fit. `clip` (not `hidden`) avoids establishing a
+       scroll container, so position:sticky/fixed chrome is unaffected. */
+    overflow-x: clip;
     }
   html {
     @apply font-sans;
@@ -361,7 +374,7 @@
 
 @layer components {
   .card {
-    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+    @apply rounded-[var(--radius-card)] border bg-card text-card-foreground shadow-[var(--shadow-card)];
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
@@ -477,11 +490,33 @@
   animation: feed-card-collapse 200ms ease forwards;
 }
 
+/* Branded skeleton shimmer (D-DESIGN-DEBT-STRUCTURAL-01, Phase 3). One neutral
+   loading treatment for the <Skeleton> primitive: a muted base with a soft light
+   sweep built from existing surface tokens (no new color, no triangle motif, no
+   color-state meaning). Replaces the per-route animate-pulse grey boxes. */
+@keyframes skeleton-shimmer {
+  from { background-position: 150% 0; }
+  to   { background-position: -150% 0; }
+}
+.skeleton {
+  background-color: var(--muted);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--card) 55%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
   .triangle-loader-sweep,
   .triangle-loader-dot,
-  .loading-message {
+  .loading-message,
+  .skeleton {
     animation: none !important;
   }
 
@@ -506,14 +541,44 @@
 
 /* TESTING ONLY — flat mode (driven by the dev design bar's "Flat" toggle; see
    src/components/dev/PaletteToggle.tsx). When the toggle is on, <html> carries
-   data-flat="1": strip every corner radius and drop shadow so a tester can read
-   the layout without rounding / elevation. Covers literal radii (rounded-[4px],
-   rounded-full) and inline styles too, which token overrides would miss. The dev
-   bar's own chrome (.palette-bar) is excluded so the controls stay legible.
+   data-flat="1": strip every corner radius (cards and everything else) so a
+   tester can read the layout without rounding. Covers literal radii
+   (rounded-[4px], rounded-full) and inline styles too, which token overrides
+   would miss. Drop shadow is NO LONGER touched here — it has its own three-state
+   control (data-shadow, below). The dev bar's own chrome (.palette-bar) is
+   excluded so the controls stay legible.
    Remove this block with the PaletteToggle bar before shipping. */
 html[data-flat="1"] *:not(.palette-bar, .palette-bar *),
 html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::before,
 html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::after {
     border-radius: 0 !important;
+}
+
+/* TESTING ONLY — drop-shadow register (driven by the dev design bar's "Shadow"
+   cycler; see src/components/dev/PaletteToggle.tsx). Three states:
+     • current (no attribute) — leave the design-system elevation as shipped.
+     • data-shadow="subtle"   — dial the canonical --shadow-* elevation tokens
+       down so card lift is barely-there. Token-driven surfaces (.card, the feed
+       shell, modals) recolor automatically; stray Tailwind shadow-* utilities
+       keep their own value.
+     • data-shadow="none"     — zero the tokens AND blanket-strip every box-shadow
+       app-wide (matching how flat mode used to), so NOTHING casts a shadow,
+       including inline styles and shadow-* utilities.
+   Remove this block with the PaletteToggle bar before shipping. */
+html[data-shadow="subtle"] {
+    --shadow-paper-rest: 0 1px 1px rgb(0 0 0 / 0.03);
+    --shadow-card: 0 1px 2px rgba(40, 32, 30, 0.03);
+    --shadow-card-strong: 0 1px 3px rgba(40, 32, 30, 0.05);
+    --shadow-overlay: 0 3px 8px rgba(26, 18, 8, 0.08);
+}
+html[data-shadow="none"] {
+    --shadow-paper-rest: none;
+    --shadow-card: none;
+    --shadow-card-strong: none;
+    --shadow-overlay: none;
+}
+html[data-shadow="none"] *:not(.palette-bar, .palette-bar *),
+html[data-shadow="none"] *:not(.palette-bar, .palette-bar *)::before,
+html[data-shadow="none"] *:not(.palette-bar, .palette-bar *)::after {
     box-shadow: none !important;
 }

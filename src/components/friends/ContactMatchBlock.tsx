@@ -70,7 +70,7 @@ export function ContactMatchBlock({
 
   if (!supportsContactsAPI()) {
     return (
-      <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+      <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
         <h2 className="font-serif text-lg font-semibold">
           Find friends already on Joshing
         </h2>
@@ -84,7 +84,7 @@ export function ContactMatchBlock({
 
   if (!discoverableByContacts) {
     return (
-      <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+      <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
         <h2 className="font-serif text-lg font-semibold">
           Find friends already on Joshing
         </h2>
@@ -174,7 +174,7 @@ export function ContactMatchBlock({
   }
 
   return (
-    <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-serif text-lg font-semibold">
           {matches.length > 0 ? 'Contacts on Joshing' : 'Find friends already on Joshing'}

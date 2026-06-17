@@ -3,6 +3,8 @@
 import { Check, Search, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Chip } from '@/components/ui/Chip';
+
 export type SendableQuestion = {
   id: string;
   text: string;
@@ -169,7 +171,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
           <div className="flex-1 overflow-y-auto p-5">
             <section className="rounded-lg border bg-card p-4">
-              <span className="inline-flex rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">{question.domain}</span>
+              <Chip className="bg-secondary text-secondary-foreground">{question.domain}</Chip>
               <p className="mt-3 text-sm font-medium leading-6 text-card-foreground">{question.text}</p>
             </section>
 

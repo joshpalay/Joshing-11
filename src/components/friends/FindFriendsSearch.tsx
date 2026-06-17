@@ -104,7 +104,7 @@ export function FindFriendsSearch() {
   const swatch = match ? match.avatarColor || colorForUser(match.id) : null
 
   return (
-    <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <h2 className="font-serif text-lg font-semibold">Search</h2>
       <p className="text-muted-foreground mt-1 text-sm">
         By @handle or US phone number. Exact matches only.

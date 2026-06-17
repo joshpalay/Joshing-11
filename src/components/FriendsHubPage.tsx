@@ -18,7 +18,7 @@ export default function FriendsHubPage() {
         <h1 className="text-foreground font-serif text-3xl font-semibold">Friends</h1>
       </header>
 
-      <section className="border-primary/15 bg-primary/5 text-card-foreground mb-5 rounded-[2rem] border p-6 shadow-sm">
+      <section className="border-primary/15 bg-primary/5 text-card-foreground mb-5 rounded-[var(--radius-card)] border p-6 shadow-[var(--shadow-card)]">
         {!inviteOpen ? (
           <>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">

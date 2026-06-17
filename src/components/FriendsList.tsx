@@ -151,7 +151,7 @@ function PendingInviteCard({
   const canMessage = invite.message && invite.inviteePhoneForActions;
 
   return (
-    <article className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <article className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-foreground font-serif text-lg font-semibold leading-tight">{invitationName(invite)}</h3>
@@ -226,7 +226,7 @@ function IncomingRequestCard({
   const busy = pendingRequestId === request.id;
 
   return (
-    <article className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <article className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-foreground font-medium">{request.requesterName}</h3>
@@ -287,7 +287,7 @@ function OutboundRequestCard({
   const busy = pendingRequestId === request.id;
 
   return (
-    <article className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <article className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-foreground font-medium">{request.recipientName}</h3>
@@ -648,11 +648,11 @@ export default function FriendsList() {
               )}
             </>
           ) : pendingInvites.length > 0 ? (
-            <p className="bg-card text-muted-foreground rounded-2xl border p-4 text-sm shadow-sm">
+            <p className="bg-card text-muted-foreground rounded-[var(--radius-card)] border p-4 text-sm shadow-[var(--shadow-card)]">
               Accepted invitations will appear here.
             </p>
           ) : (
-            <div className="bg-card text-card-foreground rounded-2xl border p-5 shadow-sm">
+            <div className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-5 shadow-[var(--shadow-card)]">
               <h3 className="font-serif text-xl font-semibold">You haven’t invited anyone yet.</h3>
               <p className="text-muted-foreground mt-2 text-sm leading-6">
                 Start with someone who shares part of your world.
