@@ -414,10 +414,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
       ) : null}
 
       {portrait.sectionVisibleTo.authored_questions ? (
-        <section className="mt-5" aria-label="Authored questions">
-          <p className="text-muted-foreground mb-3 text-xs font-medium tracking-[0.1em] uppercase">
-            Authored questions
-          </p>
+        <section aria-label="Authored questions">
           <AuthoredQuestionsFeed
             questions={authoredItems}
             friendDisplayName={portrait.user.displayName}

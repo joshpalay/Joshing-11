@@ -286,10 +286,7 @@ export function AuthoredQuestionsFeed({
       aria-label={`Questions ${friendDisplayName} wrote`}
     >
       <div className="mb-4">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-          Questions
-        </p>
-        <h2 className="mt-1 font-serif text-xl font-semibold">
+        <h2 className="font-serif text-xl font-semibold">
           Questions {friendDisplayName} wrote
         </h2>
       </div>
