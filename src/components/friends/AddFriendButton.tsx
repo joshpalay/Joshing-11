@@ -210,9 +210,12 @@ export function AddFriendButton({
               <button type="button" className="btn-ghost" disabled>
                 {relationship.state === 'friends' ? 'Friends ✓' : 'Following ✓'}
               </button>
+              {/* Demoted to a quiet text link so the destructive action recedes
+                  behind the "Friends ✓" status pill rather than reading as a
+                  co-equal CTA. */}
               <button
                 type="button"
-                className="btn-ghost"
+                className="text-muted-foreground hover:text-foreground self-center text-xs underline underline-offset-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45"
                 onClick={handleRemove}
                 disabled={pendingAction !== null}
               >
