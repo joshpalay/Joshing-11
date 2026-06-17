@@ -154,6 +154,30 @@ function inviterFirstName(name: string): string {
   return trimmed.split(/\s+/)[0];
 }
 
+// In-flight label for a pressed primary button: the verb stays put while the
+// trailing "…" is split into three dots that pulse on the shared loading-dot
+// keyframe (see .loading-ellipsis-dot in globals.css), so the wait reads as
+// alive rather than a frozen static ellipsis. The dots are aria-hidden and the
+// verb itself carries the meaning for screen readers.
+function LoadingLabel({ verb }: { verb: string }) {
+  return (
+    <span className="inline-flex items-baseline">
+      {verb}
+      <span aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="loading-ellipsis-dot"
+            style={{ animationDelay: `${i * 0.16}s` }}
+          >
+            .
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
     <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
@@ -664,7 +688,7 @@ export default function LoginPanel({
                 disabled={loading}
               />
               <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-                {loading ? 'Continuing…' : 'Continue'}
+                {loading ? <LoadingLabel verb="Continuing" /> : 'Continue'}
               </button>
             </>
           )}
@@ -717,7 +741,7 @@ export default function LoginPanel({
               Frame 3), separate from the 14px rhythm of the fields above. */}
           <div className="space-y-1.5">
             <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
-              {loading ? 'Verifying…' : 'Continue'}
+              {loading ? <LoadingLabel verb="Verifying" /> : 'Continue'}
             </button>
 
             <div className="flex items-center gap-3" aria-hidden="true">

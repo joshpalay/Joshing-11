@@ -468,6 +468,16 @@
   animation: loading-dot 1.4s ease-in-out infinite;
 }
 
+/* The trailing "…" on a pressed primary button (login "Continuing"/"Verifying")
+   broken into three dots that pulse on the shared loading-dot keyframe, so the
+   submit reads as in-flight rather than frozen. Per-dot delays are set inline.
+   Reuses the grading-dot motion; kept as its own class so its reduced-motion
+   reset and any future tuning stay independent. */
+.loading-ellipsis-dot {
+  display: inline-block;
+  animation: loading-dot 1.4s ease-in-out infinite;
+}
+
 /* B-GRADE-PERCEIVED-1 — the result card eases up as it replaces the grading
    indicator, so the verdict lands as an intentional reveal rather than a
    jump-cut. Kept short to never delay the perceived result. */
@@ -525,6 +535,10 @@
   }
 
   .grading-dot {
+    animation: none !important;
+  }
+
+  .loading-ellipsis-dot {
     animation: none !important;
   }
 
