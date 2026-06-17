@@ -23,19 +23,18 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner (Figma Mask group): the SAME Variant4 pattern as the
-          login background, rendered at the same full-viewport-cover scale and
-          clipped to a band so the triangles match login in size. No gradient —
-          a clean band the cards overlap. */}
+      {/* Triangle banner: the triangles_only strip, rendered at full column
+          width and anchored to the top of the band so the whole pattern reads
+          (no zoom/crop). Clipped to a band the cards overlap. No gradient. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/Variant4.png"
+          src="/images/triangles_only.png"
           alt=""
-          className="absolute inset-x-0 top-0 h-screen w-full object-cover object-center"
+          className="absolute inset-x-0 top-0 w-full"
         />
       </div>
 
