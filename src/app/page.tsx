@@ -23,9 +23,9 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner: the triangles_only strip, rendered at full column
-          width and anchored to the top of the band so the whole pattern reads
-          (no zoom/crop). Clipped to a band the cards overlap. No gradient. */}
+      {/* Triangle banner: the triangles_only strip placed at its natural size
+          (no stretch/scale), anchored to the top-right corner. The band clips
+          whatever overflows. No gradient. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
@@ -34,7 +34,7 @@ export default async function Home() {
         <img
           src="/images/triangles_only.png"
           alt=""
-          className="absolute inset-x-0 top-0 w-full"
+          className="absolute top-0 right-0 max-w-none"
         />
       </div>
 
