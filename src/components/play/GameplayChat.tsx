@@ -255,12 +255,22 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
 
   return (
     <div className="flex flex-col items-center gap-0.5 py-0.5">
+      {/* Like the question action links, this notice renders directly on the
+          full-strength triangle pattern, where bare muted text is illegible. Wrap
+          it in an opaque chip so it reads as a self-contained object on the tiles
+          rather than dissolving into them. */}
       <p
         style={{
           ...monoStyle,
+          display: 'inline-flex',
+          alignItems: 'center',
           fontSize: '0.58rem',
           color: 'var(--text-muted)',
           textAlign: 'center',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '4px 10px',
         }}
       >
         <span>Removed from catch up</span>
@@ -289,7 +299,16 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
       </p>
       {state === 'error' ? (
         <p
-          style={{ ...monoStyle, fontSize: '0.54rem', color: 'var(--danger)', textAlign: 'center' }}
+          style={{
+            ...monoStyle,
+            fontSize: '0.54rem',
+            color: 'var(--danger)',
+            textAlign: 'center',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '3px 9px',
+          }}
         >
           Could not undo. Try again.
         </p>
@@ -352,50 +371,6 @@ function QuestionRow({
           : undefined
       }
     >
-      {subhead ? (
-        <div className="flex flex-wrap items-center gap-1.5 pb-1 pl-0.5">
-          <p
-            style={{
-              ...monoStyle,
-              fontSize: '0.58rem',
-              color: 'var(--text-muted)',
-            }}
-          >
-            {subhead}
-          </p>
-        </div>
-      ) : null}
-      {creatorName ? (
-        <p
-          style={{
-            fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
-            fontSize: '0.86rem',
-            color: 'var(--text)',
-            paddingLeft: '2px',
-            paddingBottom: '2px',
-            opacity: 0.82,
-            lineHeight: 1.3,
-          }}
-        >
-          <span
-            style={{
-              ...monoStyle,
-              fontSize: '0.55rem',
-              color: 'var(--text-muted)',
-              marginRight: '6px',
-            }}
-          >
-            FROM
-          </span>
-          <span style={{ fontWeight: 600 }}>{creatorName}</span>
-          {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
-          {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
-            <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
-              gave you this
-            </span>
-          )}
-        </p>
-      ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
@@ -486,6 +461,78 @@ function QuestionRow({
             lineHeight: 1.3,
           }}
         >
+          {/* Attribution ("FROM YESTERDAY · Maid Acasa") lives INSIDE the cream
+              question card, not above it: on the full-strength triangle surface
+              (daily/page.tsx) bare muted text floated on the pattern was illegible
+              (see the questionActionLinkStyle note). On the cream fill it reads
+              cleanly, sitting as one quiet line above the prompt. */}
+          {subhead || creatorName ? (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'baseline',
+                gap: '6px',
+                marginBottom: '14px',
+              }}
+            >
+              {subhead ? (
+                <span
+                  style={{
+                    ...monoStyle,
+                    fontSize: '0.58rem',
+                    fontWeight: 400,
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {subhead}
+                </span>
+              ) : null}
+              {subhead && creatorName ? (
+                <span
+                  aria-hidden
+                  style={{ fontSize: '0.58rem', color: 'var(--text-muted)', opacity: 0.6 }}
+                >
+                  ·
+                </span>
+              ) : null}
+              {creatorName ? (
+                <span
+                  style={{
+                    fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
+                    fontSize: '0.86rem',
+                    fontWeight: 400,
+                    letterSpacing: 0,
+                    color: 'var(--text)',
+                    opacity: 0.82,
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {/* The timeframe subhead already carries "FROM"; only prefix it
+                      here when the subhead is absent so the line never doubles up. */}
+                  {subhead ? null : (
+                    <span
+                      style={{
+                        ...monoStyle,
+                        fontSize: '0.55rem',
+                        color: 'var(--text-muted)',
+                        marginRight: '6px',
+                      }}
+                    >
+                      FROM
+                    </span>
+                  )}
+                  <span style={{ fontWeight: 600 }}>{creatorName}</span>
+                  {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+                  {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
+                    <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+                      gave you this
+                    </span>
+                  )}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <p style={{ margin: 0 }}>{questionText}</p>
           {badges.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
