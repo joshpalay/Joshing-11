@@ -213,7 +213,7 @@ describe('FeedList — pendingQueue subpage mode (/for-you)', () => {
     // No overflow affordance — nothing is windowed here — and no texture
     // see-more row (the subpage has no texture zone).
     expect(html).not.toContain('more from friends →')
-    expect(html).not.toContain('See all activity')
+    expect(html).not.toContain('See more activity')
   })
 
   it('renders the caught-up empty state when the queue is empty', () => {

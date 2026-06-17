@@ -50,7 +50,7 @@ export default function DailyCatchupPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] px-0">
+    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
       <header
         className="sticky top-0 z-20 border-b px-4 py-2"
         style={{

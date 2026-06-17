@@ -50,6 +50,8 @@ export function FriendAddedCard({
       overflow={overflow}
       // You can't answer your own question — suppress the action on authored cards.
       onAnswer={item.viewerIsAuthor ? undefined : onAnswer}
+      // Present Answer as a filled primary button, matching the direct-send card.
+      answerAsButton
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
       className={className}
       elevated={elevated}

@@ -1,365 +1,331 @@
 import { forwardRef, type CSSProperties } from 'react';
-import type { PortraitEntry } from '@/components/knowledge/PortraitCircles';
+import type { MasteryTier } from '@/types/db';
+import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
+import { DOMAIN_ICON_COMPONENTS } from '@/components/icons/domain-icons';
 
-// ── Palette (intentionally literal — do NOT tokenize) ───────────────────────────
+// ── Palette & fonts (intentionally literal — do NOT tokenize) ────────────────────
 //
 // This card is never rendered as live, re-themeable DOM: SharePortraitModal
 // snapshots it with html2canvas (scale 3) into a PNG for native share / download.
-// The literal hex values and literal font names ('Courier New' / 'Playfair
-// Display') are load-bearing for that raster path — the modal hand-loads Playfair
-// via the FontFace API so the detached canvas render has a concrete font file, and
-// the app's hashed `--font-*` Next-font variables are not reliably available to
-// html2canvas. A snapshot also never re-themes, so var(--brand-*) tokens would buy
-// nothing here. This is the deliberate "receipt" share aesthetic; keep it literal.
-// (See the 2026-05-30 design audit — share-card bucket.)
-
-const INK = '#0e0e0e';
-const INK2 = '#3a3a3a';
-const INK3 = '#8a8a8a';
-const CREAM = '#faf8f2';
-const RULE = '#e0dbd0';
-const FM = "'Courier New', monospace";
-const FP = "'Playfair Display', Georgia, serif";
-
-// Domain color palette — every domain must have a distinct color, no grey fallback.
+// html2canvas can't read CSS custom properties, doesn't understand color-mix(),
+// and the app's hashed Next-font `--font-*` variables aren't reliably available to
+// a detached canvas render — so every value here is a literal that mirrors the
+// live Knowledge Portrait card (KnowledgeCard.tsx + DomainCircle.tsx). The goal is
+// that the shared image looks like the on-screen "Your Knowledge Portrait" card,
+// not a separate aesthetic. The modal hand-loads the three concrete font files
+// (Cormorant Garamond / Montserrat / Josefin Sans) so the snapshot has real fonts.
 //
-// LOCKSTEP: these literals MUST mirror the `--cat-*` tokens in globals.css
-// value-for-value. html2canvas can't read CSS variables, so this raster path
-// hardcodes the scale; if the tokens change, change these in the SAME edit or
-// the share image silently drifts to the old (collision-prone) colors.
-const DOMAIN_COLORS: Record<string, string> = {
-  // Slug keys (from portrait API broad_category)
-  Literature: '#7d2c3f', // --cat-literature (bordeaux; de-collided from grading red)
-  Music: '#1a6b8a',
-  'Film & Television': '#6b3fa0',
-  'Film & TV': '#6b3fa0',
-  'Architecture & Design': '#b07d2e',
-  'Food & Cuisine': '#2e8b57',
-  Technology: '#3a6b8a',
-  Sports: '#c06b1a',
-  Sport: '#c06b1a',
-  History: '#5a6b7a',
-  Science: '#5a7a2e',
-  Philosophy: '#7a5a8a',
-  'Pop Culture': '#8a2a4a',
-  Language: '#2e6e7e', // --cat-language (teal; de-collided from CORRECT green)
+// LOCKSTEP: keep these literals in sync, value-for-value, with the tokens they
+// mirror in globals.css. If a token changes, change it here in the SAME edit or
+// the share image silently drifts.
+//   --brand-ink         #0a1f3d   (primary text)
+//   --brand-ink-400     #8a8a8a   (muted text)
+//   --brand-cream-card  #fbf5e9   (card surface)
+//   --brand-border      #e9e2d2   (hairline)
+//   --cat-*             the per-domain hue scale below
+const INK = '#0a1f3d';
+const INK_MUTED = '#8a8a8a';
+const CREAM_CARD = '#fbf5e9';
+const BORDER = '#e9e2d2';
+
+// Literal font families. The concrete files are loaded by SharePortraitModal via
+// the FontFace API before capture (the live card resolves these through
+// --font-serif / --font-wordmark / --font-sans-body).
+const FF_SERIF = "'Cormorant Garamond', Georgia, 'Times New Roman', serif";
+const FF_WORDMARK = "'Montserrat', system-ui, -apple-system, sans-serif";
+const FF_SANS = "'Josefin Sans', system-ui, -apple-system, sans-serif";
+
+// Per-domain primary/text colors — mirrors the --cat-* token scale in globals.css.
+type DomainColor = { primary: string; text: string };
+const DOMAIN_COLORS: Record<string, DomainColor> = {
+  Literature: { primary: '#7d2c3f', text: '#571f2c' },
+  Music: { primary: '#1a6b8a', text: '#0e4060' },
+  'Film & Television': { primary: '#6b3fa0', text: '#3d1f6b' },
+  'Architecture & Design': { primary: '#b07d2e', text: '#7a5010' },
+  'Food & Cuisine': { primary: '#2e8b57', text: '#0e5c30' },
+  Technology: { primary: '#3a6b8a', text: '#1a3f5c' },
+  Sports: { primary: '#c06b1a', text: '#8b3e0e' },
+  History: { primary: '#5a6b7a', text: '#2a3f50' },
+  Science: { primary: '#5a7a2e', text: '#2a4a0e' },
+  Philosophy: { primary: '#7a5a8a', text: '#4a2a5c' },
+  'Pop Culture': { primary: '#8a2a4a', text: '#5c0e2a' },
+  Language: { primary: '#2e6e7e', text: '#173f4a' },
 };
 
-function hashColor(str: string): string {
+// Deterministic hash hue for domains outside the --cat-* scale. Mirrors the
+// hashColor() in PortraitCircles (hsl 45%/35% primary, 45%/25% text) so an
+// unknown domain keeps the same color it has on the live portrait.
+function hashColor(str: string): DomainColor {
   let h = 0;
   for (let i = 0; i < str.length; i++) {
     h = ((h << 5) - h + str.charCodeAt(i)) | 0;
   }
-  const hue = ((Math.abs(h) % 300) + 30) % 360; // avoid grey range 0–30 and 300–360
-  return `hsl(${hue},55%,35%)`;
+  const hue = Math.abs(h) % 360;
+  return { primary: `hsl(${hue},45%,35%)`, text: `hsl(${hue},45%,25%)` };
 }
 
-function getDomainColor(broadCategory: string): string {
-  return DOMAIN_COLORS[broadCategory] ?? hashColor(broadCategory);
+function getDomainColor(broadCategory: string | null | undefined): DomainColor {
+  const normalized = normalizeBroadCategory(broadCategory) ?? null;
+  if (!normalized) return { primary: '#8a8a8a', text: '#3a4a5f' };
+  return DOMAIN_COLORS[normalized] ?? hashColor(normalized);
 }
 
-function hexToRgb(color: string): { r: number; g: number; b: number } {
-  // Handle hsl() colors from hashColor by approximating via a canvas trick isn't available SSR,
-  // so we'll do a simple hash-based fallback for non-hex colors
-  if (!color.startsWith('#')) {
-    // hsl(hue, 55%, 35%) — extract hue and convert manually (simplified)
-    const m = color.match(/hsl\((\d+)/);
-    const hue = m ? parseInt(m[1]) : 180;
-    const h = hue / 360;
-    const s = 0.55;
-    const l = 0.35;
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    const toRgb = (t: number) => {
-      const tt = ((t % 1) + 1) % 1;
-      if (tt < 1 / 6) return p + (q - p) * 6 * tt;
-      if (tt < 1 / 2) return q;
-      if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
-      return p;
-    };
+// rgb extraction for hex and the hsl() hash fallback — html2canvas can't compute
+// color-mix(), so the soft bubble gradient is built from explicit rgba() stops.
+function toRgb(color: string): { r: number; g: number; b: number } {
+  if (color.startsWith('#')) {
+    let hex = color.slice(1);
+    if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
     return {
-      r: Math.round(toRgb(h + 1 / 3) * 255),
-      g: Math.round(toRgb(h) * 255),
-      b: Math.round(toRgb(h - 1 / 3) * 255),
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
     };
   }
+  const m = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  const hue = m ? parseInt(m[1]) : 200;
+  const s = (m ? parseInt(m[2]) : 45) / 100;
+  const l = (m ? parseInt(m[3]) : 35) / 100;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const channel = (t: number) => {
+    const tt = ((t % 1) + 1) % 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  const hn = hue / 360;
   return {
-    r: parseInt(color.slice(1, 3), 16),
-    g: parseInt(color.slice(3, 5), 16),
-    b: parseInt(color.slice(5, 7), 16),
+    r: Math.round(channel(hn + 1 / 3) * 255),
+    g: Math.round(channel(hn) * 255),
+    b: Math.round(channel(hn - 1 / 3) * 255),
   };
 }
 
-// ── Bubble ─────────────────────────────────────────────────────────────────────
+// Mirrors domainBubbleGradient() (KnowledgeBubble.tsx): a soft radial fill at
+// 22% → 12% opacity. color-mix(in srgb, base X%, transparent) === rgba(base, X/100).
+function bubbleGradient(primary: string): string {
+  const { r, g, b } = toRgb(primary);
+  return `radial-gradient(circle at 38% 38%, rgba(${r},${g},${b},0.22), rgba(${r},${g},${b},0.12))`;
+}
 
-function Bubble({ points, maxPoints, broadCategory, size }: {
-  points: number;
-  maxPoints: number;
-  broadCategory: string;
-  size: number;
-}) {
-  const normalized = points / Math.max(maxPoints, 1);
-  const opacity = 0.25 + normalized * 0.75;
-  const color = getDomainColor(broadCategory);
-  const { r, g, b } = hexToRgb(color);
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: `radial-gradient(circle at 36% 33%, rgba(${r},${g},${b},1), rgba(${r},${g},${b},0.55))`,
-        opacity,
-        flexShrink: 0,
-      }}
-    />
-  );
+// ── Circle sizing — mirrors KnowledgeCard.getCircleDiameter (mobile scale) ───────
+const MIN_DIAMETER = 28;
+const MAX_DIAMETER = 64;
+
+function getDiameter(points: number, maxPoints: number): number {
+  const ratio = maxPoints > 0 ? points / maxPoints : 0;
+  return Math.round(MIN_DIAMETER + ratio * (MAX_DIAMETER - MIN_DIAMETER));
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type SharePortraitCardProps = {
-  entries: PortraitEntry[];
-  playerDisplayName: string;
+export type ShareDomain = {
+  canonicalSubcategory: string;
+  currentTier: MasteryTier;
+  lifetimePoints: number;
+  iconKey: string;
+  broadCategory?: string | null;
 };
+
+export type SharePortraitCardProps = {
+  playerDisplayName: string;
+  portraitStatement: string;
+  domains: ShareDomain[];
+  overflowCount: number;
+  tierSignature: string;
+};
+
+// ── Circle ───────────────────────────────────────────────────────────────────────
+
+function ShareCircle({
+  domain,
+  diameter,
+  slotSize,
+}: {
+  domain: ShareDomain;
+  diameter: number;
+  slotSize: number;
+}) {
+  const color = getDomainColor(domain.broadCategory);
+  const iconSize = Math.round(diameter * 0.4);
+  const Icon = (
+    DOMAIN_ICON_COMPONENTS as Record<
+      string,
+      (typeof DOMAIN_ICON_COMPONENTS)[keyof typeof DOMAIN_ICON_COMPONENTS] | undefined
+    >
+  )[domain.iconKey];
+
+  return (
+    <div style={{ ...circleItemStyle, width: Math.max(80, slotSize + 20) }}>
+      <div style={{ ...circleSlotStyle, width: slotSize, height: slotSize }}>
+        <div
+          style={{
+            width: diameter,
+            height: diameter,
+            borderRadius: '50%',
+            background: bubbleGradient(color.primary),
+            border: `1px solid ${color.primary}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {Icon ? <Icon size={iconSize} color={INK} /> : null}
+        </div>
+      </div>
+      <p style={circleNameStyle}>{domain.canonicalSubcategory}</p>
+      <p style={circleTierStyle}>{KNOWLEDGE_TIER_LABEL[domain.currentTier]}</p>
+    </div>
+  );
+}
 
 // ── Card ───────────────────────────────────────────────────────────────────────
 
 export const SharePortraitCard = forwardRef<HTMLDivElement, SharePortraitCardProps>(
-  function SharePortraitCard({ entries, playerDisplayName }, ref) {
-    const valid = entries
-      .filter((e) => e.totalMasteryPoints > 0 && e.broadCategory && e.broadCategory !== 'General Knowledge' && e.broadCategory !== 'general_knowledge' && e.broadCategory !== 'other')
-      .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints);
-
-    const maxPoints = valid.length > 0 ? valid[0].totalMasteryPoints : 1;
-    const top1 = valid[0];
-    const top2to5 = valid.slice(1, 5);
-    const rest = valid.slice(5);
-
-    // Footer dots: unique domains in order of first appearance
-    const seenDomains = new Set<string>();
-    const footerDomains: string[] = [];
-    for (const e of valid) {
-      if (!seenDomains.has(e.broadCategory)) {
-        seenDomains.add(e.broadCategory);
-        footerDomains.push(e.broadCategory);
-      }
-    }
+  function SharePortraitCard(
+    { playerDisplayName, portraitStatement, domains, overflowCount, tierSignature },
+    ref,
+  ) {
+    const sorted = [...domains].sort((a, b) => b.lifetimePoints - a.lifetimePoints);
+    const visible = sorted.slice(0, 5);
+    const maxPoints = visible[0]?.lifetimePoints ?? 1;
+    const diameters = visible.map((d) => getDiameter(d.lifetimePoints, maxPoints));
+    const slotSize = Math.max(...diameters, 0);
+    const totalOverflow = overflowCount + Math.max(0, sorted.length - visible.length);
 
     return (
-      <div
-        ref={ref}
-        style={cardStyle}
-      >
-        {/* Header */}
-        <div style={headerStyle}>
-          <span style={headerLeftStyle}>{playerDisplayName}</span>
-          <span style={headerRightStyle}>JOSHING</span>
+      <div ref={ref} style={cardStyle}>
+        <p style={wordmarkStyle}>Joshing</p>
+        <p style={titleStyle}>Your Knowledge Portrait</p>
+
+        <p style={statementStyle}>{portraitStatement}</p>
+
+        <div style={circlesWrapStyle}>
+          {visible.map((domain, i) => (
+            <ShareCircle
+              key={domain.canonicalSubcategory}
+              domain={domain}
+              diameter={diameters[i] ?? MIN_DIAMETER}
+              slotSize={slotSize}
+            />
+          ))}
         </div>
 
-        <div style={bodyStyle}>
-          {/* Rank 1 row */}
-          {top1 && (
-            <div style={rank1RowStyle}>
-              <span style={rankLabelStyle}>1</span>
-              <Bubble
-                points={top1.totalMasteryPoints}
-                maxPoints={maxPoints}
-                broadCategory={top1.broadCategory}
-                size={46}
-              />
-              <span style={rank1NameStyle}>{top1.canonicalSubcategory}</span>
-            </div>
-          )}
+        {totalOverflow > 0 && (
+          <p style={overflowStyle}>+{totalOverflow} more territories</p>
+        )}
 
-          {/* Ranks 2–5 */}
-          {top2to5.length > 0 && (
-            <div style={ranks2to5Style}>
-              {top2to5.map((entry, i) => (
-                <div key={entry.canonicalSubcategory} style={rank2to5RowStyle}>
-                  <span style={rankLabelStyle}>{i + 2}</span>
-                  <Bubble
-                    points={entry.totalMasteryPoints}
-                    maxPoints={maxPoints}
-                    broadCategory={entry.broadCategory}
-                    size={28}
-                  />
-                  <span style={rank2to5NameStyle}>{entry.canonicalSubcategory}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Also exploring */}
-          {rest.length > 0 && (
-            <div style={alsoExploringSection}>
-              <div style={alsoExploringLabelStyle}>Also exploring</div>
-              <div style={alsoExploringBubblesStyle}>
-                {rest.map((entry) => {
-                  const size = 11 + (entry.totalMasteryPoints / maxPoints) * 14;
-                  return (
-                    <Bubble
-                      key={entry.canonicalSubcategory}
-                      points={entry.totalMasteryPoints}
-                      maxPoints={maxPoints}
-                      broadCategory={entry.broadCategory}
-                      size={size}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={footerStyle}>
-          <span style={footerLeftStyle}>joshing.app</span>
-          <div style={footerDotsStyle}>
-            {footerDomains.map((domain) => (
-              <div
-                key={domain}
-                style={{
-                  width: 5,
-                  height: 5,
-                  borderRadius: '50%',
-                  backgroundColor: getDomainColor(domain),
-                  opacity: 0.7,
-                  flexShrink: 0,
-                }}
-              />
-            ))}
-          </div>
-        </div>
+        <p style={tierSignatureStyle}>{tierSignature}</p>
+        <p style={attributionStyle}>{playerDisplayName} on Joshing</p>
       </div>
     );
-  }
+  },
 );
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
+// ── Styles (mirror KnowledgeCard.tsx) ────────────────────────────────────────────
 
 const cardStyle: CSSProperties = {
-  width: 340,
-  backgroundColor: CREAM,
-  border: `1.5px solid ${INK}`,
-  boxShadow: `3px 3px 0 ${INK2}`,
-  fontFamily: FM,
-};
-
-const headerStyle: CSSProperties = {
-  padding: '12px 16px',
-  borderBottom: `1px solid ${RULE}`,
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-};
-
-const headerLeftStyle: CSSProperties = {
-  fontSize: 9,
-  fontFamily: FM,
-  letterSpacing: '0.2em',
-  color: INK3,
-  textTransform: 'uppercase',
-};
-
-const headerRightStyle: CSSProperties = {
-  fontSize: 9,
-  fontFamily: FM,
-  letterSpacing: '0.18em',
-  color: INK,
-  textTransform: 'uppercase',
-  fontWeight: 'bold',
-};
-
-const bodyStyle: CSSProperties = {
-  padding: '16px 16px 0',
-};
-
-const rank1RowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  paddingBottom: 13,
-  borderBottom: `1px solid ${RULE}`,
-  marginBottom: 12,
-};
-
-const rankLabelStyle: CSSProperties = {
-  fontSize: 9,
-  fontFamily: FM,
-  color: INK3,
-  width: 10,
-  flexShrink: 0,
-};
-
-const rank1NameStyle: CSSProperties = {
-  fontSize: 16,
-  fontFamily: FP,
-  fontStyle: 'italic',
-  color: INK,
-  lineHeight: 1.25,
-};
-
-const ranks2to5Style: CSSProperties = {
+  width: 360,
+  boxSizing: 'border-box',
+  background: CREAM_CARD,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 12,
+  boxShadow: '0 4px 12px rgba(40, 32, 30, 0.04)',
+  padding: '18px 16px 16px',
   display: 'flex',
   flexDirection: 'column',
-  gap: 9,
-  marginBottom: 14,
+  gap: 14,
 };
 
-const rank2to5RowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
+const wordmarkStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: FF_WORDMARK,
+  fontWeight: 700,
+  fontSize: 15,
+  color: INK,
+  letterSpacing: '0.01em',
+  lineHeight: 1,
 };
 
-const rank2to5NameStyle: CSSProperties = {
-  fontSize: 12,
-  fontFamily: FP,
-  fontStyle: 'italic',
-  color: INK2,
-  lineHeight: 1.3,
-};
-
-const alsoExploringSection: CSSProperties = {
-  borderTop: `1px solid ${RULE}`,
-  paddingTop: 13,
-  paddingBottom: 16,
-};
-
-const alsoExploringLabelStyle: CSSProperties = {
-  fontSize: 8,
-  fontFamily: FM,
-  letterSpacing: '0.15em',
-  color: INK3,
+const titleStyle: CSSProperties = {
+  margin: 0,
+  color: INK,
+  fontFamily: FF_SANS,
+  fontSize: 13,
+  fontWeight: 700,
   textTransform: 'uppercase',
-  marginBottom: 10,
-};
-
-const alsoExploringBubblesStyle: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 6,
-  alignItems: 'center',
-};
-
-const footerStyle: CSSProperties = {
-  borderTop: `1px solid ${RULE}`,
-  padding: '8px 16px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-};
-
-const footerLeftStyle: CSSProperties = {
-  fontSize: 8,
-  fontFamily: FM,
-  color: INK3,
   letterSpacing: '0.1em',
 };
 
-const footerDotsStyle: CSSProperties = {
+const statementStyle: CSSProperties = {
+  margin: 0,
+  fontFamily: FF_SERIF,
+  fontSize: 22,
+  fontWeight: 500,
+  color: INK,
+  lineHeight: 1.3,
+  letterSpacing: '0.01em',
+};
+
+const circlesWrapStyle: CSSProperties = {
   display: 'flex',
-  gap: 3,
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+  alignItems: 'flex-start',
+  columnGap: 16,
+  rowGap: 18,
+  marginTop: 2,
+};
+
+const circleItemStyle: CSSProperties = {
+  textAlign: 'center',
+};
+
+const circleSlotStyle: CSSProperties = {
+  margin: '0 auto',
+  display: 'flex',
   alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const circleNameStyle: CSSProperties = {
+  margin: '8px 0 0',
+  fontSize: 11,
+  fontFamily: FF_SANS,
+  color: INK,
+  lineHeight: 1.25,
+  overflowWrap: 'anywhere',
+};
+
+const circleTierStyle: CSSProperties = {
+  margin: '2px 0 0',
+  fontSize: 10,
+  fontFamily: FF_SANS,
+  color: INK_MUTED,
+};
+
+const overflowStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  fontFamily: FF_SANS,
+  color: INK_MUTED,
+  textAlign: 'center',
+};
+
+const tierSignatureStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  fontFamily: FF_SANS,
+  color: INK,
+};
+
+const attributionStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  fontFamily: FF_SANS,
+  color: INK_MUTED,
 };

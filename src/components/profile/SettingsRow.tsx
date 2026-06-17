@@ -69,7 +69,7 @@ export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
 
 export function SettingsGroup({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div className="divide-y rounded-[var(--radius-card)] border bg-card text-card-foreground shadow-[var(--shadow-card)]">
       {children}
     </div>
   );

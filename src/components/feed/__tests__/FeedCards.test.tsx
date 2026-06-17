@@ -132,7 +132,9 @@ describe('Feed unanswered card actions', () => {
       />
     )
 
-    expect(rendered).toContain('Answer →')
+    // Direct sends render Answer as a filled primary button (not the inline link).
+    expect(rendered).toContain('Answer')
+    expect(rendered).toContain('btn-primary')
     expect(rendered).not.toContain('Skip')
     expect(rendered).not.toContain('Not my focus')
     expect(rendered).not.toContain('Bookmark')
@@ -177,7 +179,7 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
       />
     )
     expect(rendered).toContain('Dismiss')
-    expect(rendered).toContain('Answer →')
+    expect(rendered).toContain('Answer')
     // The Dismiss button must never expose the mute affordance on the card face.
     expect(rendered).not.toContain('Not into')
   })

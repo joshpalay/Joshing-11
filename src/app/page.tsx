@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
 import LoadingScreen from '@/components/LoadingScreen'
+import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, {
   type DailyPreferences,
   type DailyStatus,
@@ -23,22 +24,24 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle banner (Figma Mask group): the SAME Variant4 pattern as the
-          login background, rendered at the same full-viewport-cover scale and
-          clipped to a band so the triangles match login in size. No gradient —
-          a clean band the cards overlap. */}
+      {/* Top triangle band (Variant4-TOP, grain baked in; lower portion
+          transparent so cream shows through). Bounded to the content-column
+          width (inset-x-0 inside the max-w-2xl main) — the same width the
+          original banner used — and rendered at its INTRINSIC size (centered &
+          clipped, never scaled). The first card sits over it. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-hidden"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/Variant4.png"
+          src="/images/Variant4-TOP.png"
           alt=""
-          className="absolute inset-x-0 top-0 h-screen w-full object-cover object-center"
+          className="relative left-1/2 block max-w-none -translate-x-1/2"
         />
       </div>
 
+      {/* Today's Five — a card, so it can ride over the top triangle band. */}
       {session ? (
         <Suspense fallback={<CardSkeleton minHeight="9rem" />}>
           <TodaysFiveSection userId={session.userId} />
@@ -47,21 +50,54 @@ export default async function Home() {
         <TodaysFiveCard />
       )}
 
-      {session ? (
-        <Suspense fallback={null}>
-          <CeremonyPinSection userId={session.userId} />
-        </Suspense>
-      ) : null}
+      {/* Lower content (the weekly-reflection pin + the From-Friends / For-you
+          feed). Wrapped so the triangle side-clusters scope to it: the clusters
+          are confined to the TOP of this block (beside the From-Friends cards,
+          never below Recent activity). */}
+      <div className="relative flex flex-col gap-5">
+        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ), native size so the
+            triangles match the top band. Bounded to the SAME width as the top
+            band: the layer spans the content-column width (-left-4/-right-4
+            cancels the main's px-4 so its edges line up with the top band's
+            inset-x-0 edges), and the clusters hang from those left/right edges,
+            pointing inward. Capped to the top region (h-[760px] +
+            overflow-hidden) so none fall beside or below Recent activity. Right
+            copy mirrored. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[760px] overflow-hidden"
+        >
+          {/* One cluster on the left and one on the right, at different heights
+              (not mirrored pairs) — a single module per side, sat in the open
+              spaces around the card sections rather than behind the card bodies:
+              the left peeks in the space above the first section, the right
+              lower down toward the gap below it. Native size (unchanged). */}
+          <span className="absolute top-0 left-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
+          </span>
+          <span className="absolute top-[580px] right-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
+          </span>
+        </div>
 
-      <section id="feed">
         {session ? (
-          <Suspense fallback={<FeedSkeleton />}>
-            <FromYourFriendsSection userId={session.userId} />
+          <Suspense fallback={null}>
+            <CeremonyPinSection userId={session.userId} />
           </Suspense>
-        ) : (
-          <FeedList pageSize={FEED_PAGE_SIZE} infinite />
-        )}
-      </section>
+        ) : null}
+
+        <section id="feed">
+          {session ? (
+            <Suspense fallback={<FeedSkeleton />}>
+              <FromYourFriendsSection userId={session.userId} />
+            </Suspense>
+          ) : (
+            <FeedList pageSize={FEED_PAGE_SIZE} infinite />
+          )}
+        </section>
+      </div>
     </main>
   )
 }
@@ -140,10 +176,15 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
       {/* Sit the header on the feed's left gutter — the same 2px the activity
           rows pad in (where the fixed icon column / shape marks begin), so the
           header and the shapes share one left edge. The day labels indent
-          further (pl-9, past the icon column) to meet the row copy. */}
-      <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
-        For you
-      </p>
+          further (pl-9, past the icon column) to meet the row copy.
+          Only rendered when the directed "For you" zone actually has content —
+          an empty section should not carry a heading (it read as a stranded
+          eyebrow above the "From Friends" band). */}
+      {edition.direct.served.length > 0 ? (
+        <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+          For you
+        </p>
+      ) : null}
       <FeedList
         pageSize={FEED_PAGE_SIZE}
         initialPage={initialPage}
@@ -213,13 +254,7 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
 }
 
 function CardSkeleton({ minHeight }: { minHeight: string }) {
-  return (
-    <div
-      className="bg-card rounded-lg border p-4"
-      style={{ minHeight }}
-      aria-hidden="true"
-    />
-  )
+  return <Skeleton className="border" style={{ minHeight }} />
 }
 
 function FeedSkeleton() {

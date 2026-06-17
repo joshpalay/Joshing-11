@@ -5,7 +5,7 @@ import { useSyncExternalStore, type CSSProperties } from 'react';
 // ─────────────────────────────────────────────────────────────────────────────
 // TESTING ONLY — design audit bar (repurposed from the palette preview bar).
 //
-// Two controls, both for auditing the design system without per-page edits:
+// Three controls, all for auditing the design system without per-page edits:
 //
 //  1. Card-background cycler — cycles the `--brand-card` token (the resting
 //     feed-card surface) AND `--feed-card-elevated` (the warm fill behind the
@@ -14,17 +14,25 @@ import { useSyncExternalStore, type CSSProperties } from 'react';
 //     `var(--feed-card-elevated)` recolors automatically.
 //
 //  2. Flat toggle — sets `data-flat="1"` on <html>, which the globals.css flat
-//     rule reads to strip every corner radius and drop shadow app-wide, so a
-//     tester can read the layout without rounding / elevation. The bar's own
-//     chrome is excluded (it carries `palette-bar`) so the controls stay legible.
+//     rule reads to strip every corner radius app-wide (cards included), so a
+//     tester can read the layout without rounding. It NO LONGER touches drop
+//     shadow — that moved to its own control (#3). The bar's own chrome is
+//     excluded (it carries `palette-bar`) so the controls stay legible.
+//
+//  3. Shadow cycler — cycles `data-shadow` on <html> through current → subtle →
+//     none, which the globals.css shadow rules read. "Subtle" dials the
+//     canonical --shadow-* elevation tokens down; "none" zeroes them and
+//     blanket-strips every box-shadow app-wide. Lets a tester compare elevation
+//     registers without per-component edits.
 //
 // Only the system's own background tokens are offered (no off-palette hex), so
 // nothing here introduces an unsanctioned color. Inline styles are on purpose:
 // this is chrome, not app surface, so it sits outside the brand-token lint.
 //
 // Remove this component (and the boot script in layout.tsx, plus the
-// `html[data-flat]` rule in globals.css) before merging to a shipping branch.
-// The boot script applies the saved choices pre-paint.
+// `html[data-flat]` and `html[data-shadow]` rules in globals.css) before
+// merging to a shipping branch. The boot script applies the saved choices
+// pre-paint.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CardBg = { label: string; value: string; swatch: string };
@@ -47,6 +55,16 @@ const CARD_BG_EVENT = 'joshing-card-bg-change';
 
 const FLAT_KEY = 'joshing-flat';
 const FLAT_EVENT = 'joshing-flat-change';
+
+// Shadow cycler — three states. Index maps to the `data-shadow` attribute value
+// ('' / index 0 clears the attribute, restoring the shipped elevation).
+const SHADOW_MODES: { label: string; value: string }[] = [
+  { label: 'Current', value: '' },
+  { label: 'Subtle', value: 'subtle' },
+  { label: 'None', value: 'none' },
+];
+const SHADOW_KEY = 'joshing-shadow';
+const SHADOW_EVENT = 'joshing-shadow-change';
 
 // Read the live choice straight off the <html> attribute (the source of truth,
 // also set by the boot script before paint). useSyncExternalStore keeps the
@@ -78,9 +96,39 @@ function serverFlat(): boolean {
   return false;
 }
 
+// Shadow cycler — mirrors the flat store, reading the live mode index off the
+// <html> `data-shadow` attribute (also set pre-paint by the boot script).
+function subscribeShadow(onChange: () => void) {
+  window.addEventListener(SHADOW_EVENT, onChange);
+  return () => window.removeEventListener(SHADOW_EVENT, onChange);
+}
+function readShadow(): number {
+  const raw = document.documentElement.getAttribute('data-shadow');
+  const i = SHADOW_MODES.findIndex((m) => m.value === (raw ?? ''));
+  return i >= 0 ? i : 0;
+}
+function serverShadow(): number {
+  return 0;
+}
+
 export function PaletteToggle() {
   const index = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
   const flat = useSyncExternalStore(subscribeFlat, readFlat, serverFlat);
+  const shadowIndex = useSyncExternalStore(subscribeShadow, readShadow, serverShadow);
+
+  function cycleShadow() {
+    const next = (shadowIndex + 1) % SHADOW_MODES.length;
+    const { value } = SHADOW_MODES[next];
+    const root = document.documentElement;
+    if (value) root.setAttribute('data-shadow', value);
+    else root.removeAttribute('data-shadow');
+    try {
+      localStorage.setItem(SHADOW_KEY, value);
+    } catch {
+      /* private mode / disabled storage — non-fatal */
+    }
+    window.dispatchEvent(new Event(SHADOW_EVENT));
+  }
 
   function toggleFlat() {
     const next = !flat;
@@ -130,6 +178,14 @@ export function PaletteToggle() {
         zIndex: 60,
         display: 'flex',
         alignItems: 'center',
+        // Wrap onto a second row on narrow (mobile) viewports instead of
+        // overflowing horizontally. Without this the non-shrinkable row
+        // (label + buttons + 8 swatches) is wider than a phone, which forces
+        // the whole document wider than the device and makes mobile Safari
+        // zoom the entire app out to fit — surfacing as a "narrow page with a
+        // dead zone on the right" on every route.
+        flexWrap: 'wrap',
+        maxWidth: '100%',
         gap: 12,
         padding: '6px 16px',
         fontSize: 12,
@@ -155,15 +211,26 @@ export function PaletteToggle() {
         <span aria-hidden style={{ opacity: 0.6 }}>→</span>
       </button>
 
-      {/* Flat toggle: strip every corner radius and drop shadow app-wide. */}
+      {/* Flat toggle: strip every corner radius app-wide (cards included). */}
       <button
         type="button"
         onClick={toggleFlat}
         aria-pressed={flat}
-        aria-label={`Flat mode (no rounded corners or shadows): ${flat ? 'on' : 'off'}. Tap to toggle.`}
+        aria-label={`Flat mode (no rounded corners): ${flat ? 'on' : 'off'}. Tap to toggle.`}
         style={{ ...flatStyle, ...(flat ? flatStyleOn : null) }}
       >
         {flat ? '▣' : '▢'} Flat
+      </button>
+
+      {/* Shadow cycler: current → subtle → none. */}
+      <button
+        type="button"
+        onClick={cycleShadow}
+        aria-label={`Drop shadow: ${SHADOW_MODES[shadowIndex].label}. Tap to cycle.`}
+        style={{ ...flatStyle, ...(shadowIndex > 0 ? flatStyleOn : null) }}
+      >
+        Shadow: {SHADOW_MODES[shadowIndex].label}
+        <span aria-hidden style={{ opacity: 0.6, marginLeft: 6 }}>→</span>
       </button>
 
       {/* Jump straight to any background. */}

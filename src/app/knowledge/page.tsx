@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Repeat2, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
@@ -132,10 +133,17 @@ function emptyDomain(domain: string): DomainMastery {
 
 function LoadingSkeleton() {
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
-      <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
-        <p className="m-0 text-[var(--text-muted-warm)]">Loading...</p>
-      </section>
+    <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+      <div className="grid gap-3.5" aria-hidden="true">
+        <Skeleton className="h-36" />
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <Skeleton className="h-44" />
+          <Skeleton className="h-44" />
+        </div>
+      </div>
+      <span className="sr-only" role="status">
+        Loading your knowledge map…
+      </span>
     </main>
   );
 }
@@ -271,7 +279,6 @@ function KnowledgePageContent() {
     () => (editMode ? annotatedDomains : visibleDomains).map(toPortraitEntry),
     [annotatedDomains, visibleDomains, editMode],
   );
-  const sharePortraitEntries = useMemo(() => visibleDomains.map(toPortraitEntry), [visibleDomains]);
   // One entry per declared interest — no fixed slot count and no cap. The manage
   // modal renders these plus a trailing "add interest" affordance, so the list
   // grows and shrinks with the player. (MAX_ACTIVE only bounds the write path.)
@@ -541,7 +548,7 @@ function KnowledgePageContent() {
 
   if (error || !data) {
     return (
-      <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+      <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
           <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
           <h1 className="mt-1.5 text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
@@ -552,7 +559,7 @@ function KnowledgePageContent() {
   }
 
   return (
-    <main className="w-[min(760px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+    <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
       <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
         Knowledge
       </h1>
@@ -688,7 +695,20 @@ function KnowledgePageContent() {
       </section>
 
       {shareModalOpen && (
-        <SharePortraitModal entries={sharePortraitEntries} playerDisplayName={displayName} onClose={() => setShareModalOpen(false)} />
+        <SharePortraitModal
+          playerDisplayName={displayName}
+          portraitStatement={yourMind}
+          domains={topCardDomains.map((domain) => ({
+            canonicalSubcategory: domain.displayName,
+            currentTier: asTier(domain.tier),
+            lifetimePoints: domain.points,
+            iconKey: domain.iconKey,
+            broadCategory: domain.broadCategory,
+          }))}
+          overflowCount={Math.max(0, visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
+          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`}
+          onClose={() => setShareModalOpen(false)}
+        />
       )}
 
       {askFriendDomain ? (

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { DomainVisibilityToggle, type DomainVisibility } from '@/components/knowledge/DomainVisibilityToggle';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -87,10 +88,10 @@ function relativeTime(value: string | null): string {
 function LoadingState() {
   return (
     <main className="mx-auto min-h-dvh max-w-4xl px-4 py-6 pb-24">
-      <div className="mb-6 h-36 animate-pulse rounded-lg border bg-muted" />
+      <Skeleton className="mb-6 h-36 border" />
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="h-44 animate-pulse rounded-lg border bg-muted" />
-        <div className="h-44 animate-pulse rounded-lg border bg-muted" />
+        <Skeleton className="h-44 border" />
+        <Skeleton className="h-44 border" />
       </div>
     </main>
   );

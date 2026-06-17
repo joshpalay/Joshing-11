@@ -80,7 +80,7 @@ export default async function RootLayout({
             shipping. The token map mirrors CARD_BGS in PaletteToggle. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}if(localStorage.getItem('joshing-flat')==='1'){document.documentElement.setAttribute('data-flat','1');}}catch(e){}`,
+            __html: `try{var i=+localStorage.getItem('joshing-card-bg')||0;var m=['','var(--brand-cream-page)','var(--brand-cream-card)','var(--brand-cream)','var(--game-card-question)','var(--editorial-parchment)','var(--editorial-sage)','var(--editorial-slate)'];if(i>0&&m[i]){document.documentElement.style.setProperty('--brand-card',m[i]);document.documentElement.style.setProperty('--feed-card-elevated',m[i]);document.documentElement.setAttribute('data-card-bg',String(i));}if(localStorage.getItem('joshing-flat')==='1'){document.documentElement.setAttribute('data-flat','1');}var s=localStorage.getItem('joshing-shadow');if(s==='subtle'||s==='none'){document.documentElement.setAttribute('data-shadow',s);}}catch(e){}`,
           }}
         />
         <PaletteToggle />

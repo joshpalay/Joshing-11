@@ -23,6 +23,8 @@ type SparkleEnvelopeProps = {
   /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
   onDismiss?: () => void
   answerLabel?: string
+  /** Render the answer action as a filled primary button (used by direct sends) instead of the inline text link. */
+  answerAsButton?: boolean
   className?: string
   /**
    * Card chrome. 'bordered' is the plain hairline-border tile both feed cards
@@ -54,6 +56,7 @@ export function SparkleEnvelope({
   onAnswer,
   onDismiss,
   answerLabel = 'Answer →',
+  answerAsButton = false,
   className,
   variant = 'triangle',
   elevated = false,
@@ -103,7 +106,13 @@ export function SparkleEnvelope({
             >
               {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
               {onAnswer ? (
-                <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink>
+                answerAsButton ? (
+                  <button type="button" onClick={onAnswer} className="btn-primary">
+                    Answer
+                  </button>
+                ) : (
+                  <FeedActionLink onClick={onAnswer}>{answerLabel}</FeedActionLink>
+                )
               ) : null}
             </div>
           ) : null}

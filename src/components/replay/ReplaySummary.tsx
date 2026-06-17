@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
 
+import { Chip } from '@/components/ui/Chip';
 import type { ReplayItem } from '@/server/replay/session';
 
 export type ReplaySessionResult = {
@@ -83,15 +84,17 @@ export function ReplaySummary({ results, hasMore, onPlayNext, loadingNext }: Pro
               <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>
                 {item.domainDisplayName} · originally missed {item.queueDate}
               </p>
-              <span
-                className={`rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${
+              <Chip
+                size="sm"
+                uppercase
+                className={`border px-2 py-1 text-[0.65rem] font-semibold ${
                   isCorrect
                     ? 'border-[color-mix(in_srgb,var(--game-correct)_30%,var(--border))] bg-[color-mix(in_srgb,var(--game-correct)_10%,var(--card))] text-[var(--game-correct)]'
                     : 'border-[color-mix(in_srgb,var(--game-wrong)_28%,var(--border))] bg-[color-mix(in_srgb,var(--game-wrong)_8%,var(--card))] text-[var(--game-wrong)]'
                 }`}
               >
                 {isCorrect ? 'CORRECT' : 'WRONG'}
-              </span>
+              </Chip>
             </div>
             <p className="mt-3 font-medium leading-snug text-[var(--text)]">{item.questionText}</p>
             <div className="mt-3 space-y-1 text-sm">
