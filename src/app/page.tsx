@@ -69,7 +69,7 @@ export default async function Home() {
         >
           {/* One cluster on the left and one on the right, at different heights
               (not mirrored pairs) — a single module per side. */}
-          <span className="absolute top-[40px] left-0">
+          <span className="absolute top-0 left-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
           </span>
