@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
+import { Chip } from '@/components/ui/Chip'
+
 type InviteStatus = 'pending' | 'accepted' | 'expired' | 'cancelled'
 
 type OutgoingInvite = {
@@ -205,7 +207,7 @@ export default function PeopleYouInvited() {
   }
 
   return (
-    <section className="bg-card text-card-foreground rounded-2xl border p-4 shadow-sm">
+    <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       {error ? (
         <p className="text-destructive mb-3 text-sm font-medium">{error}</p>
       ) : null}
@@ -238,9 +240,7 @@ export default function PeopleYouInvited() {
                     {invite.inviteePhoneMasked}
                   </p>
                 </div>
-                <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
-                  {STATUS_COPY[invite.status]}
-                </span>
+                <Chip className="px-3">{STATUS_COPY[invite.status]}</Chip>
               </div>
             )
 
@@ -263,12 +263,12 @@ export default function PeopleYouInvited() {
                 {invite.suggestedInterests.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {invite.suggestedInterests.map((interest) => (
-                      <span
+                      <Chip
                         key={interest}
-                        className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm"
+                        className="bg-primary/5 border border-primary/10 px-3 text-sm"
                       >
                         {interest}
-                      </span>
+                      </Chip>
                     ))}
                   </div>
                 ) : (

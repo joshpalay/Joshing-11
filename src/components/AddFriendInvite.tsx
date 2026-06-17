@@ -2,6 +2,7 @@
 
 import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 
+import { Chip } from '@/components/ui/Chip';
 import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 const INTEREST_PLACEHOLDERS = ['Sondheim', 'Mrs. Dalloway', '1980s Saturday morning cartoons'];
@@ -501,9 +502,9 @@ export default function AddFriendInvite({
               if (!suggestion) {
                 return (
                   <div key={`${original}-${index}`} className="text-foreground text-sm">
-                    <span className="bg-primary/5 border-primary/10 inline-block rounded-full border px-3 py-1 shadow-sm">
+                    <Chip className="bg-primary/5 border border-primary/10 px-3 text-sm shadow-sm">
                       {idea}
-                    </span>
+                    </Chip>
                   </div>
                 );
               }
@@ -586,12 +587,12 @@ export default function AddFriendInvite({
           {result.suggestedInterests.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {result.suggestedInterests.map((interest) => (
-                <span
+                <Chip
                   key={interest}
-                  className="bg-primary/5 text-foreground border-primary/10 rounded-full border px-3 py-1 text-sm shadow-sm"
+                  className="bg-primary/5 border border-primary/10 px-3 text-sm shadow-sm"
                 >
                   {interest}
-                </span>
+                </Chip>
               ))}
             </div>
           ) : (
@@ -657,7 +658,7 @@ export default function AddFriendInvite({
   }
 
   return (
-    <section className="bg-card text-card-foreground mb-5 rounded-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-sm">
+    <section className="bg-card text-card-foreground mb-5 rounded-[var(--radius-card)] border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-card)]">
       {inviteContent}
     </section>
   );
