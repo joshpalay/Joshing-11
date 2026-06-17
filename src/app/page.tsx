@@ -23,17 +23,43 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Triangle band across the top only (Variant4-TOP, grain baked in). The
-          first card overlaps it — "over the top is fine because it's a card".
-          Deliberately the ONLY triangle treatment on this page: the recent
-          activity below stays clean (it already carries its own row marks). The
-          lower portion of the PNG is transparent, so cream shows through. */}
+      {/* Full-bleed triangle background, behind all content and non-interactive.
+          This layer breaks out of the centered max-w-2xl column (w-screen +
+          left-1/2 + -translate-x-1/2) so the artwork sits at the true screen
+          edges, and scrolls with the page. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-x-clip"
+        className="pointer-events-none absolute top-0 left-1/2 -z-10 h-full w-screen -translate-x-1/2 overflow-hidden"
       >
+        {/* Top band (Variant4-TOP, grain baked in; lower portion transparent so
+            cream shows through). Rendered with the SAME object-cover sizing the
+            login screen uses (TriangleBackground), anchored to the top — so the
+            triangles render at the exact size they do on login rather than being
+            shrunk to fit the content column. The first card overlaps it ("over
+            the top is fine because it's a card"). */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/Variant4-TOP.png" alt="" className="w-full" />
+        <img
+          src="/images/Variant4-TOP.png"
+          alt=""
+          className="absolute top-0 left-1/2 h-dvh w-screen max-w-none -translate-x-1/2 object-cover object-top"
+        />
+        {/* Side clusters (Variant4-DUO / Variant4-SIDESQ) interspersed down the
+            left and right edges. Right-side copies are mirrored (scale-x-[-1])
+            so the triangles point inward. Sized to match the login triangle
+            scale. They sit in the side margins on wide screens and tuck behind
+            the cards on mobile. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-SIDESQ.png" alt="" className="absolute top-[360px] left-0 w-[104px] max-w-none" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-DUO.png" alt="" className="absolute top-[600px] right-0 w-[104px] max-w-none -scale-x-100" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-DUO.png" alt="" className="absolute top-[920px] left-0 w-[104px] max-w-none" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-SIDESQ.png" alt="" className="absolute top-[1180px] right-0 w-[104px] max-w-none -scale-x-100" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-SIDESQ.png" alt="" className="absolute top-[1500px] left-0 w-[104px] max-w-none" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/Variant4-DUO.png" alt="" className="absolute top-[1780px] right-0 w-[104px] max-w-none -scale-x-100" />
       </div>
 
       {session ? (
