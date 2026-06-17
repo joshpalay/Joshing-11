@@ -112,11 +112,12 @@
        (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
        differ from the vivid --success/destructive used elsewhere. */
     --game-card-question: #faf4e9;  /* game/card/question — question bubble fill */
-    /* Resting fill for the elevated ("playable") feed cards in the unified home
-       feed (the "For You" zone). Defaults to the warm game-card cream; broken
-       out as its own token so the dev CARD COLOR cycler (PaletteToggle) can
-       repaint the For You cards alongside the --brand-card surfaces. */
-    --feed-card-elevated: var(--game-card-question);
+    /* Fill for the elevated ("playable") cards — the Today's Five card, the
+       unified-home "For You" feed cards, and playable milestone bundles. Set to
+       the cooler content cream (--brand-card) rather than the warm game-card
+       cream, so the home cards read as plain cream. Broken out as its own token
+       so the dev CARD COLOR cycler (PaletteToggle) can repaint them. */
+    --feed-card-elevated: var(--brand-card);
     --game-correct:       #366045;  /* Correct — forest green result accent      */
     --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
     /* WRONG leaves the terracotta family for a true red (de-collides from the

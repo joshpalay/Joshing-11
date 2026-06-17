@@ -68,12 +68,15 @@ export default async function Home() {
           className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[460px] overflow-hidden"
         >
           {/* One cluster on the left and one on the right, at different heights
-              (not mirrored pairs) — a single module per side. */}
+              (not mirrored pairs) — a single module per side, sat in the open
+              spaces around the card sections rather than behind the card bodies:
+              the left peeks in the space above the first section, the right
+              lower down toward the gap below it. Native size (unchanged). */}
           <span className="absolute top-0 left-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-SIDESQ.png" alt="" className="block w-[140px] max-w-none" />
           </span>
-          <span className="absolute top-[280px] right-0">
+          <span className="absolute top-[340px] right-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
           </span>
