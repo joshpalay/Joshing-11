@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
+import {
+  resolveAddSomeoneOutcome,
+  type QueryClassification,
+} from '@/components/friends/add-someone'
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
@@ -17,6 +21,22 @@ type Match = {
 
 type SearchResponse = { match: Match | null }
 
+// Other surfaces can ask the hub lookup to run a term on their behalf (e.g. the
+// FriendsList empty-filter "add <term>" hand-off). The 'add' variant listens.
+export const ADD_SOMEONE_SEED_EVENT = 'add-someone:seed'
+
+type Props = {
+  // 'find' (default): the standalone /friends/find card — header "Search", and a
+  // plain "invite them below" hint on no-match.
+  // 'add': the Friends-hub block — warm framing, an inline Invite CTA on
+  //   no-match, and it listens for ADD_SOMEONE_SEED_EVENT to run a seeded term.
+  variant?: 'find' | 'add'
+  // Only used by the 'add' variant: invoked when the user chooses to invite a
+  // no-match. The classification lets the parent prefill the invite flow
+  // (phone → SMS invite; handle/name → blank/name).
+  onInvite?: (query: string, classification: QueryClassification) => void
+}
+
 const DEBOUNCE_MS = 400
 
 function initialsFor(name: string | null, fallback: string): string {
@@ -27,7 +47,7 @@ function initialsFor(name: string | null, fallback: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
-export function FindFriendsSearch() {
+export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [match, setMatch] = useState<Match | null>(null)
@@ -35,6 +55,7 @@ export function FindFriendsSearch() {
   const [error, setError] = useState<string | null>(null)
   const requestSeq = useRef(0)
   const debounceRef = useRef<number | null>(null)
+  const sectionRef = useRef<HTMLElement>(null)
 
   async function runSearch(value: string) {
     const trimmed = value.trim()
@@ -86,6 +107,22 @@ export function FindFriendsSearch() {
     }
   }, [query])
 
+  // The 'add' variant accepts seeded terms from elsewhere on the page (the
+  // FriendsList empty-filter hand-off). Setting the query lets the debounce
+  // effect run the search; we just scroll the lookup into view so the result
+  // lands where the user can see it.
+  useEffect(() => {
+    if (variant !== 'add') return
+    function onSeed(event: Event) {
+      const seeded = (event as CustomEvent<{ query?: string }>).detail?.query?.trim()
+      if (!seeded) return
+      setQuery(seeded)
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    window.addEventListener(ADD_SOMEONE_SEED_EVENT, onSeed)
+    return () => window.removeEventListener(ADD_SOMEONE_SEED_EVENT, onSeed)
+  }, [variant])
+
   function handleQueryChange(value: string) {
     setQuery(value)
     if (!value.trim()) {
@@ -102,13 +139,47 @@ export function FindFriendsSearch() {
   const matchDisplayName = match ? match.displayName?.trim() || `@${match.handle ?? ''}` : ''
   const initials = match ? initialsFor(match.displayName, match.handle ?? '?') : ''
   const swatch = match ? match.avatarColor || colorForUser(match.id) : null
+  const outcome = resolveAddSomeoneOutcome({
+    query,
+    searching,
+    searched,
+    error: error !== null,
+    match,
+  })
+
+  // The 'add' variant lives inside the hub's card, so it drops the card chrome
+  // and brings its own warm framing; the standalone 'find' page keeps the card.
+  const isAdd = variant === 'add'
 
   return (
-    <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
-      <h2 className="font-serif text-lg font-semibold">Search</h2>
-      <p className="text-muted-foreground mt-1 text-sm">
-        By @handle or US phone number. Exact matches only.
-      </p>
+    <section
+      ref={sectionRef}
+      className={
+        isAdd
+          ? ''
+          : 'bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]'
+      }
+    >
+      {isAdd ? (
+        <>
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
+            Add someone
+          </p>
+          <h2 className="text-foreground mt-3 font-serif text-2xl leading-tight font-semibold">
+            Already here?
+          </h2>
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
+            Find a friend by their @handle or US number — exact matches only.
+          </p>
+        </>
+      ) : (
+        <>
+          <h2 className="font-serif text-lg font-semibold">Search</h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            By @handle or US phone number. Exact matches only.
+          </p>
+        </>
+      )}
       <input
         type="search"
         value={query}
@@ -124,11 +195,11 @@ export function FindFriendsSearch() {
       />
 
       <div className="mt-3 min-h-[44px]">
-        {searching ? (
+        {outcome.kind === 'searching' ? (
           <p className="text-muted-foreground text-sm">Searching…</p>
-        ) : error ? (
+        ) : outcome.kind === 'error' ? (
           <p className="text-destructive text-sm">{error}</p>
-        ) : match ? (
+        ) : outcome.kind === 'match' && match ? (
           <article className="bg-background flex items-start gap-3 rounded-xl border p-3">
             <span
               aria-hidden
@@ -153,10 +224,25 @@ export function FindFriendsSearch() {
               onChange={refreshAfterAction}
             />
           </article>
-        ) : searched ? (
-          <p className="text-muted-foreground text-sm">
-            No one by that name. They may not be on Joshing yet — you can invite them below.
-          </p>
+        ) : outcome.kind === 'no_match' ? (
+          isAdd ? (
+            <div className="bg-background rounded-xl border p-3">
+              <p className="text-muted-foreground text-sm">
+                No one by that call sign or number yet — they may not be on Joshing.
+              </p>
+              <button
+                type="button"
+                className="btn-ghost mt-2"
+                onClick={() => onInvite?.(query.trim(), outcome.classification)}
+              >
+                Invite them
+              </button>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No one by that name. They may not be on Joshing yet — you can invite them below.
+            </p>
+          )
         ) : null}
       </div>
     </section>

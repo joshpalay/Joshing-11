@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 
 import { AddFriendRequestModal } from '@/components/friends/AddFriendRequestModal'
+import { addSuccessToast } from '@/components/friends/add-someone'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
 type Props = {
@@ -66,8 +67,12 @@ export function AddFriendButton({
     setModalOpen(true)
   }
 
-  function handleSent() {
-    setToast('Sent.')
+  function handleSent(_friendshipId: string, sentState?: string) {
+    // Reflect what actually happened: a pending request reads "Request sent",
+    // while a public account that auto-approved reads "You're now following"
+    // (or "friends" if this completed a mutual follow). `relationship.state` is
+    // the pre-send relationship, which disambiguates the auto-approved case.
+    setToast(addSuccessToast(sentState, relationship.state))
     onChange?.()
   }
 
