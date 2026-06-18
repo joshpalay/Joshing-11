@@ -245,9 +245,11 @@ describe('/users/[id] friend profile page', () => {
       'viewer-1',
       null,
     )
+    // The dashboard fetches one past the preview cap (5) so the feed can
+    // decide whether to surface the "view all" link without a count query.
     expect(getAuthoredQuestionsForUserMock).toHaveBeenCalledWith({
       userId: 'friend-1',
-      limit: 25,
+      limit: 6,
       viewerUserId: 'viewer-1',
       viewer: 'friend',
       sectionVisible: true,
@@ -548,63 +550,26 @@ describe('/users/[id] friend profile page', () => {
     expect(html).not.toContain('Previewing your profile')
   })
 
-  describe('Recently exploring section', () => {
-    const daysAgo = (days: number) =>
-      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-
-    // Domain names also appear in the knowledge map / mind statement, so scope
-    // assertions to just the "Recently exploring" section markup.
-    const recentlyExploringMarkup = (html: string): string => {
-      const start = html.indexOf('aria-label="Recently exploring"')
-      if (start === -1) return ''
-      const end = html.indexOf('<section', start + 1)
-      return end === -1 ? html.slice(start) : html.slice(start, end)
-    }
-
-    const makeDomain = (
-      overrides: Partial<{
-        domain: string
-        displayName: string
-        lastActivityAt: string | null
-        isHidden: boolean
-      }>,
-    ) => ({
-      domain: 'french-cinema',
-      displayName: 'French Cinema',
-      points: 10,
-      tier: 'familiar',
-      tierProgress: 0.5,
-      questionsAnswered: 4,
-      questionsCorrect: 3,
-      correctRate: 0.75,
-      lastActivityAt: daysAgo(2),
-      broadCategory: 'Film',
-      iconKey: 'film',
-      isDeclared: false,
-      isDeclaredInterest: false,
-      isDemonstrated: true,
-      territoryType: 'demonstrated' as const,
-      isHidden: false,
-      ...overrides,
+  it('no longer renders the Recently exploring section', async () => {
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'friend-1' }),
+      searchParams: Promise.resolve({}),
     })
+    const html = renderToStaticMarkup(element)
 
-    it('renders recent, visible domains ordered most-recent-first', async () => {
-      getKnowledgePageDataMock.mockResolvedValueOnce({
-        allDomains: [
-          makeDomain({
-            domain: 'norse-myth',
-            displayName: 'Norse Mythology',
-            lastActivityAt: daysAgo(5),
-          }),
-          makeDomain({
-            domain: 'french-cinema',
-            displayName: 'French Cinema',
-            lastActivityAt: daysAgo(1),
-          }),
-        ],
-        declaredInterests: [],
-        expandingDomains: [],
-      })
+    expect(html).not.toContain('Recently exploring')
+  })
+
+  describe('Friends module', () => {
+    it("shows the viewed user's friends with a view-all link when over the cap", async () => {
+      getFriendsMock.mockResolvedValueOnce([
+        { id: 'f1', displayName: 'Ada Lovelace' },
+        { id: 'f2', displayName: 'Grace Hopper' },
+        { id: 'f3', displayName: 'Katherine Johnson' },
+        { id: 'f4', displayName: 'Mary Jackson' },
+        { id: 'f5', displayName: 'Dorothy Vaughan' },
+        { id: 'f6', displayName: 'Annie Easley' },
+      ])
 
       const element = await UserProfilePage({
         params: Promise.resolve({ id: 'friend-1' }),
@@ -612,79 +577,17 @@ describe('/users/[id] friend profile page', () => {
       })
       const html = renderToStaticMarkup(element)
 
-      const section = recentlyExploringMarkup(html)
-      expect(section).toContain('French Cinema')
-      expect(section).toContain('Norse Mythology')
-      // Most recent (French Cinema, 1d) appears before Norse Mythology (5d).
-      expect(section.indexOf('French Cinema')).toBeLessThan(
-        section.indexOf('Norse Mythology'),
-      )
+      // Friends module fetches the viewed user's own friends.
+      expect(getFriendsMock).toHaveBeenCalledWith('friend-1')
+      expect(html).toContain('Ada Lovelace')
+      // Capped at 5, so the 6th name is not shown in the preview.
+      expect(html).not.toContain('Annie Easley')
+      // View-all link points at the full friends page.
+      expect(html).toContain('href="/users/friend-1/friends"')
+      expect(html).toContain('View all 6 friends')
     })
 
-    it('excludes hidden and out-of-window domains', async () => {
-      getKnowledgePageDataMock.mockResolvedValueOnce({
-        allDomains: [
-          makeDomain({
-            domain: 'visible-recent',
-            displayName: 'Visible Recent',
-            lastActivityAt: daysAgo(3),
-          }),
-          makeDomain({
-            domain: 'hidden-domain',
-            displayName: 'Hidden Domain',
-            lastActivityAt: daysAgo(1),
-            isHidden: true,
-          }),
-          makeDomain({
-            domain: 'stale-domain',
-            displayName: 'Stale Domain',
-            lastActivityAt: daysAgo(90),
-          }),
-        ],
-        declaredInterests: [],
-        expandingDomains: [],
-      })
-
-      const element = await UserProfilePage({
-        params: Promise.resolve({ id: 'friend-1' }),
-        searchParams: Promise.resolve({}),
-      })
-      const html = renderToStaticMarkup(element)
-
-      const section = recentlyExploringMarkup(html)
-      expect(section).toContain('Visible Recent')
-      expect(section).not.toContain('Hidden Domain')
-      expect(section).not.toContain('Stale Domain')
-    })
-
-    it('omits the section when there is no recent activity', async () => {
-      getKnowledgePageDataMock.mockResolvedValueOnce({
-        allDomains: [
-          makeDomain({
-            domain: 'stale-domain',
-            displayName: 'Stale Domain',
-            lastActivityAt: daysAgo(120),
-          }),
-          makeDomain({
-            domain: 'declared-no-activity',
-            displayName: 'Declared No Activity',
-            lastActivityAt: null,
-          }),
-        ],
-        declaredInterests: [],
-        expandingDomains: [],
-      })
-
-      const element = await UserProfilePage({
-        params: Promise.resolve({ id: 'friend-1' }),
-        searchParams: Promise.resolve({}),
-      })
-      const html = renderToStaticMarkup(element)
-
-      expect(html).not.toContain('Recently exploring')
-    })
-
-    it('omits the section when the knowledge_base gate is off', async () => {
+    it('hides the Friends module when friends_list visibility is off', async () => {
       getFriendPortraitDataMock.mockResolvedValueOnce({
         user: {
           id: 'friend-1',
@@ -693,10 +596,7 @@ describe('/users/[id] friend profile page', () => {
           memberSince: new Date('2026-01-01T00:00:00.000Z'),
         },
         visibility: 'friend',
-        friendship: {
-          id: 'friendship-1',
-          formedAt: new Date('2026-02-01T00:00:00.000Z'),
-        },
+        relationship: null,
         interests: [],
         sharedInterests: [],
         viewerSoloInterests: [],
@@ -706,23 +606,15 @@ describe('/users/[id] friend profile page', () => {
         isOwnerView: false,
         sectionSettings: null,
         sectionVisibleTo: {
-          knowledge_base: false,
-          friends_list: true,
+          knowledge_base: true,
+          friends_list: false,
           authored_questions: true,
         },
         previewedAs: null,
       })
-      getKnowledgePageDataMock.mockResolvedValueOnce({
-        allDomains: [
-          makeDomain({
-            domain: 'french-cinema',
-            displayName: 'French Cinema',
-            lastActivityAt: daysAgo(1),
-          }),
-        ],
-        declaredInterests: [],
-        expandingDomains: [],
-      })
+      getFriendsMock.mockResolvedValueOnce([
+        { id: 'f1', displayName: 'Ada Lovelace' },
+      ])
 
       const element = await UserProfilePage({
         params: Promise.resolve({ id: 'friend-1' }),
@@ -730,7 +622,9 @@ describe('/users/[id] friend profile page', () => {
       })
       const html = renderToStaticMarkup(element)
 
-      expect(html).not.toContain('Recently exploring')
+      expect(html).not.toContain('href="/users/friend-1/friends"')
+      // Common ground stays visible even though friends_list is off.
+      expect(html).toContain('common-ground')
     })
   })
 })

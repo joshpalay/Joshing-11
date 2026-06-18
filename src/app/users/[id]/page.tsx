@@ -11,7 +11,7 @@ import { InlineHandleField } from '@/components/profile/InlineHandleField';
 import { MutualFriendsSection } from '@/components/profile/MutualFriendsSection';
 import { PreviewBanner } from '@/components/profile/PreviewBanner';
 import { ProfileFriendButton } from '@/components/profile/ProfileFriendButton';
-import { RecentlyExploringSection } from '@/components/profile/RecentlyExploringSection';
+import { ProfileFriendsSection } from '@/components/profile/ProfileFriendsSection';
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle';
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 import { AccountActions } from '@/components/profile/settings/AccountActions';
@@ -27,12 +27,12 @@ import {
   HANDLE_CHANGE_COOLDOWN_DAYS,
 } from '@/server/db/queries/account';
 import { getCommonGround } from '@/server/db/queries/common-ground';
+import { getFriends } from '@/server/db/queries/friends';
 import { getKnowledgePageData, getUserMasteryOverview } from '@/server/db/queries/knowledge';
 import { getAuthoredQuestionsForUser } from '@/server/db/queries/questions';
 import { getFriendPortraitData } from '@/server/profile/friend';
 import { toKnowledgeCardDomain, topPointPositiveDomains } from '@/server/profile/knowledge-view';
 import { resolvePreviewAs } from '@/server/profile/preview';
-import { selectRecentlyExploring } from '@/server/profile/recently-exploring';
 import {
   buildInviteUrl,
   getBaseUrl,
@@ -40,6 +40,12 @@ import {
 } from '@/server/friends/user-invite-token';
 
 const APP_VERSION = 'v1.0.0';
+
+// Dashboard preview caps for a friend's profile. The full lists live behind
+// the "view all" links (/users/[id]/friends and /users/[id]/questions).
+const FRIENDS_PREVIEW_LIMIT = 5;
+const QUESTIONS_PREVIEW_LIMIT = 5;
+const COMMON_GROUND_LIMIT = 10;
 
 export const dynamic = 'force-dynamic';
 
@@ -110,6 +116,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     mastery,
     pageData,
     commonGround,
+    viewedUserFriends,
     authoredQuestions,
     editableProfile,
     discoverability,
@@ -121,9 +128,14 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     // Common ground compares the viewer's full mastery base to this profile's.
     // Never rendered on the owner's own profile, so skip the reads there.
     isOwnerView ? Promise.resolve(null) : getCommonGround(session.userId, portrait.user.id),
+    // The viewed user's own friends, surfaced (capped) in the Friends module.
+    // Gated at render by their friends_list visibility. Skipped on owner view.
+    isOwnerView ? Promise.resolve([]) : getFriends(portrait.user.id),
+    // Fetch one past the preview cap so the feed knows whether to show the
+    // "view all" link without a separate count query.
     getAuthoredQuestionsForUser({
       userId: portrait.user.id,
-      limit: 25,
+      limit: QUESTIONS_PREVIEW_LIMIT + 1,
       viewerUserId: session.userId,
       viewer: portrait.visibility,
       sectionVisible: portrait.sectionVisibleTo.authored_questions,
@@ -154,11 +166,12 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
   );
   const topDomains = topPointPositiveDomains(sortedDomains, 5);
   const totalPointPositiveDomains = sortedDomains.filter((domain) => domain.points > 0).length;
-  // Activity-based presence: which domains the user has been answering in
-  // lately (recent masteryEvents), distinct from the points-sorted knowledge
-  // map above and from declared interests. Per-domain hidden domains are
-  // already filtered out by `isHidden`.
-  const recentlyExploring = selectRecentlyExploring(pageData.allDomains);
+  // The viewed user's friends, surfaced in the Friends module. Prefer a real
+  // display name; never fall back to a phone number as a public label.
+  const viewedFriends = viewedUserFriends.map((friend) => ({
+    id: friend.id,
+    displayName: friend.displayName?.trim() || 'Joshing friend',
+  }));
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains);
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
@@ -362,16 +375,12 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         }
       />
 
-      {!isSelf && portrait.sectionVisibleTo.friends_list ? (
-        <>
-          <CommonGround data={commonGround} friendFirstName={friendFirstName} />
-          <MutualFriendsSection
-            friends={portrait.mutualFriends}
-            overflowCount={portrait.mutualFriendsOverflow}
-            visibility="friend"
-            friendFirstName={friendFirstName}
-          />
-        </>
+      {!isSelf ? (
+        <CommonGround
+          data={commonGround}
+          friendFirstName={friendFirstName}
+          limit={COMMON_GROUND_LIMIT}
+        />
       ) : null}
 
       {portrait.sectionVisibleTo.knowledge_base ? (
@@ -409,8 +418,13 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         </section>
       ) : null}
 
-      {portrait.sectionVisibleTo.knowledge_base && recentlyExploring.length > 0 ? (
-        <RecentlyExploringSection domains={recentlyExploring} friendFirstName={friendFirstName} />
+      {!isSelf && portrait.sectionVisibleTo.friends_list ? (
+        <ProfileFriendsSection
+          friends={viewedFriends}
+          friendFirstName={friendFirstName}
+          viewAllHref={`/users/${portrait.user.id}/friends`}
+          limit={FRIENDS_PREVIEW_LIMIT}
+        />
       ) : null}
 
       {portrait.sectionVisibleTo.authored_questions ? (
@@ -420,6 +434,8 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
             friendDisplayName={portrait.user.displayName}
             friendUserId={portrait.user.id}
             friendProfileHref={`/users/${portrait.user.id}`}
+            viewAllHref={`/users/${portrait.user.id}/questions`}
+            previewLimit={QUESTIONS_PREVIEW_LIMIT}
           />
         </section>
       ) : null}

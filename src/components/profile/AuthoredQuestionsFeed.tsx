@@ -1,11 +1,19 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Search } from 'lucide-react'
 
 import { AnswerSheet, visibleFeedCategory } from '@/components/feed'
 import { FeedActionLink } from '@/components/feed/FeedActionLink'
 import { difficultyCopyFromEstimate } from '@/lib/questions/difficulty-copy'
+
+function firstNameOf(displayName: string): string {
+  const trimmed = displayName.trim()
+  if (!trimmed) return 'They'
+  const [first] = trimmed.split(/\s+/)
+  return first ?? trimmed
+}
 
 export type AuthoredQuestionDifficulty = 'accessible' | 'moderate' | 'specialist'
 
@@ -52,6 +60,13 @@ type AuthoredQuestionsFeedProps = {
   // per-card attribution, so the author's id/href aren't needed here.
   friendUserId?: string
   friendProfileHref?: string
+  // Preview mode for the profile dashboard. When set, the feed renders a
+  // capped, filter-free list (answer-in-place still works) plus a "View all"
+  // link to the full questions page at this href. The full filterable list is
+  // the default mode (no viewAllHref).
+  viewAllHref?: string
+  // Max rows in preview mode. Defaults to 5.
+  previewLimit?: number
 }
 
 // A single question rendered as a list row, matching the Questions page
@@ -156,7 +171,10 @@ function ProfileQuestionRow({
 export function AuthoredQuestionsFeed({
   questions,
   friendDisplayName,
+  viewAllHref,
+  previewLimit = 5,
 }: AuthoredQuestionsFeedProps) {
+  const isPreview = Boolean(viewAllHref)
   const [results, setResults] = useState<Record<string, AnswerResult>>({})
   const [answerSheetId, setAnswerSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -279,6 +297,74 @@ export function AuthoredQuestionsFeed({
   const sheetItem = answerSheetId
     ? questions.find((q) => q.id === answerSheetId) ?? null
     : null
+
+  const friendFirstName = firstNameOf(friendDisplayName)
+
+  // Dashboard preview: a capped, filter-free list with a link to the full
+  // questions page. Answering still works in place via the AnswerSheet.
+  if (isPreview && viewAllHref) {
+    const previewQuestions = questions.slice(0, previewLimit)
+    const hasMore = questions.length > previewQuestions.length
+
+    return (
+      <section className="mt-5" aria-label="Questions">
+        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+          Questions
+        </p>
+        <h2 className="mt-1 font-serif text-2xl font-semibold">
+          {friendFirstName}&rsquo;s questions
+        </h2>
+
+        {error ? (
+          <p className="mt-3 rounded-md border border-[var(--destructive-border)] bg-[var(--destructive-surface)] px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        {previewQuestions.length === 0 ? (
+          <p className="text-muted-foreground mt-2 text-sm">
+            {friendFirstName} hasn&rsquo;t written any questions yet.
+          </p>
+        ) : (
+          <div className="mt-1">
+            {previewQuestions.map((item) => {
+              const localResult = results[item.id]
+              const isAnswered =
+                Boolean(localResult) || item.viewerAnswered !== null
+              return (
+                <ProfileQuestionRow
+                  key={item.id}
+                  item={item}
+                  answered={isAnswered}
+                  result={localResult}
+                  onAnswer={() => setAnswerSheetId(item.id)}
+                />
+              )
+            })}
+          </div>
+        )}
+
+        {hasMore ? (
+          <Link
+            href={viewAllHref}
+            className="mt-3 inline-flex text-sm font-semibold text-[var(--warm-ink)] underline-offset-4 hover:underline"
+          >
+            View all {friendFirstName}&rsquo;s questions &rarr;
+          </Link>
+        ) : null}
+
+        {sheetItem ? (
+          <AnswerSheet
+            question={sheetItem.questionText}
+            category={sheetItem.category}
+            onSubmit={(answer) => void submitAnswer(sheetItem, answer)}
+            onClose={() => setAnswerSheetId(null)}
+            loading={busyId === sheetItem.id}
+          />
+        ) : null}
+      </section>
+    )
+  }
 
   return (
     <section
