@@ -311,37 +311,55 @@ export function ActivityStreamItem({
   const playableCard =
     elevated && !nested && expandable && expand?.kind === 'milestone';
 
-  // Only the playable milestone bundles take the elevated cream-card chrome on
-  // the home feed (the warm fill, light stroke, soft drop shadow) so they step
-  // forward as the thing you can play. The Recent-activity texture one-liners
-  // stay FLAT — a hairline-divided list, never their own cards — so the ambient
-  // band reads as quiet texture beneath the playable From Friends cards.
-  const elevatedCard = playableCard;
+  // Only the playable milestone bundles take the elevated cream-card chrome +
+  // editorial two-line serif headline on the home feed (the warm fill, light
+  // stroke, soft drop shadow, the actor's NAME large with the rest of the
+  // sentence below). The Recent-activity texture one-liners stay FLAT — a
+  // hairline-divided list, never their own cards — so the ambient band reads as
+  // quiet texture beneath the playable From Friends cards. editorialCard is
+  // therefore scoped to playableCard: every downstream branch keyed on it (the
+  // headline render, progress, the disclosure affordance) lights up for
+  // milestones only, and texture rows fall through to the flat one-liner body.
+  const editorialCard = playableCard;
 
-  // On a playable milestone card the headline splits into two serif lines: the
-  // person's NAME (large) and the rest of the sentence (medium) below it. The
-  // milestone line is always built as [actor, ...predicate], so peel the leading
-  // actor part off here and render the remainder as the second line.
+  // On any elevated card the headline splits into two serif lines: the person's
+  // NAME (large) and the rest of the sentence (medium) below it. Both milestone
+  // and texture lines are built as [actor, ...predicate], so peel the leading
+  // actor part off here and render the remainder as the second line. Lines with
+  // no leading actor (e.g. "You and Craig both …") fall back to the whole line in
+  // the large serif (see the headline render below).
   const headlineActor =
-    playableCard && item.line[0]?.t === 'actor' ? item.line[0] : null;
+    editorialCard && item.line[0]?.t === 'actor' ? item.line[0] : null;
   const headlinePredicate = headlineActor
     ? trimLeadingPredicate(item.line.slice(1))
     : null;
   // The lower-right affordance is a bare verb that tracks the card's state. The
   // friend's name already headlines the card directly above it, so the link
-  // doesn't re-state it — it lands on the action instead. "Play" while there are
-  // questions left to answer, "Revisit" once they're all answered (opening then
-  // only reveals the read-only AnsweredHistory — nothing left to play, only to
-  // look back at), and "Close" while the bundle is open (in step with the
-  // chevron flipping up).
+  // doesn't re-state it — it lands on the action instead. On a playable milestone:
+  // "Play" while questions remain, "Revisit" once they're all answered (opening
+  // then only reveals the read-only AnsweredHistory), and "Close" while open. On
+  // an expandable texture card (a convergence / send-onward reveal): a quiet
+  // "See" → "Close". Non-expandable texture cards carry no affordance row at all
+  // (the headline is the whole card).
   const allAnswered =
     !!milestoneProgress && milestoneProgress.answered >= milestoneProgress.total;
-  const playAffordanceLabel = open ? 'Close' : allAnswered ? 'Revisit' : 'Play';
+  const playAffordanceLabel = playableCard
+    ? open
+      ? 'Close'
+      : allAnswered
+        ? 'Revisit'
+        : 'Play'
+    : open
+      ? 'Close'
+      : 'See';
+  // Whether the editorial card shows the lower-right disclosure row: always for a
+  // playable milestone, and for a texture card only when it actually expands.
+  const showCardAffordance = playableCard || (editorialCard && expandable);
 
   const containerStyle: CSSProperties = nested
     ? // Nested under a per-person heading: no border/fill, light padding.
       { padding: opened ? '6px 0' : '4px 0' }
-    : elevatedCard
+    : editorialCard
       ? {
           padding: opened ? '16px 14px' : '14px',
           // The playable "From Friends" milestone cards take the elevated feed
@@ -382,11 +400,13 @@ export function ActivityStreamItem({
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        {playableCard ? (
-          // Playable milestone card (home "What's Happening"): an editorial
-          // two-line headline — the person's NAME in the large serif, the rest
-          // of the sentence in a medium serif below it — with the play
-          // affordance in the lower-right corner (replacing the bare chevron).
+        {editorialCard ? (
+          // Elevated home card (playable From Friends milestones only): an
+          // editorial two-line headline — the person's NAME in the large serif,
+          // the rest of the sentence in a medium serif below it — with the
+          // "X of Y questions" progress + a Play affordance in the lower-right.
+          // Recent-activity texture rows do NOT take this branch; they render as
+          // flat one-liners below.
           <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <ActivityIcon spec={iconSpec} seed={item.id} />
@@ -438,47 +458,81 @@ export function ActivityStreamItem({
                     {milestoneProgress.total} questions
                   </p>
                 ) : null}
+                {/* Texture cards may carry supplementary metadata (a domain, a
+                    quoted question) as a secondLine — kept in its System mono /
+                    serif voice below the headline. Milestones set secondLine
+                    null, so this never renders on a From Friends card. */}
+                {item.secondLine ? (
+                  <p
+                    style={{
+                      margin: '6px 0 0',
+                      ...(item.secondLineVoice === 'system'
+                        ? {
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 11,
+                            textTransform: 'uppercase' as const,
+                            letterSpacing: 1,
+                          }
+                        : {
+                            fontFamily: 'var(--font-serif)',
+                            fontSize: 14,
+                          }),
+                      lineHeight: 1.45,
+                      color: INK2,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {item.secondLine}
+                  </p>
+                ) : null}
               </div>
             </div>
-            {/* Lower-right play affordance. The whole card is the button
+            {/* Lower-right disclosure affordance. The whole card is the button
                 (aria-expanded on the wrapper), so this is a styled label, not a
-                nested button; the disclosure arrow flips as the bundle opens. */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                marginTop: 12,
-              }}
-            >
-              <span
+                nested button; the disclosure arrow flips as the card opens. Only
+                shown when the card actually reveals something (a playable
+                milestone, or an expandable texture card). */}
+            {showCardAffordance ? (
+              <div
                 style={{
-                  display: 'inline-flex',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
                   alignItems: 'center',
-                  gap: 5,
-                  // Same text treatment as the "Answer →" feed action: the
-                  // sans (Interface voice) at 14px in the link slate, underlined,
-                  // matching the Today's Five card link. A tappable affordance
-                  // never takes the Editorial serif.
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: 'var(--brand-link)',
-                  textDecoration: 'underline',
-                  textUnderlineOffset: 4,
+                  marginTop: 12,
                 }}
               >
-                {playAffordanceLabel}
-                <ChevronDown
-                  size={16}
-                  aria-hidden
+                <span
                   style={{
-                    transition: 'transform 150ms ease',
-                    transform: open ? 'rotate(180deg)' : 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    // Same text treatment as the "Answer →" feed action: the
+                    // sans (Interface voice) at 14px in the link slate, underlined,
+                    // matching the Today's Five card link. A tappable affordance
+                    // never takes the Editorial serif.
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: 'var(--brand-link)',
+                    textDecoration: 'underline',
+                    textUnderlineOffset: 4,
                   }}
-                />
-              </span>
-            </div>
+                >
+                  {playAffordanceLabel}
+                  <ChevronDown
+                    size={16}
+                    aria-hidden
+                    style={{
+                      transition: 'transform 150ms ease',
+                      transform: open ? 'rotate(180deg)' : 'none',
+                    }}
+                  />
+                </span>
+              </div>
+            ) : null}
           </div>
         ) : (
           <>
