@@ -663,10 +663,17 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       const request = item.reference.friendshipRequest;
       const pending =
         request && request.status === 'pending' && request.requestedByUserId !== item.userId;
+      // Surface the areas the requester flagged (the same suggestedInterests the
+      // Friends Hub card shows as chips) so the feed row isn't a blind ask. Topic
+      // labels render in the System mono metadata voice, like domain names.
+      const interests = request?.suggestedInterests ?? [];
       return {
         ...base,
-        line: [a, txt(' wants to follow you')],
-        secondLine: null,
+        // Phase 1 frames the follow model as friend requests (the asymmetric
+        // follow vocabulary returns in phase 2).
+        line: [a, txt(' wants to be friends')],
+        secondLine: interests.length > 0 ? interests.join(' · ') : null,
+        secondLineVoice: interests.length > 0 ? 'system' : undefined,
         action: pending ? { kind: 'friend_request', friendshipId: request.id } : null,
         expand: null,
       };
@@ -675,7 +682,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
     case 'follow':
       return {
         ...base,
-        line: [a, txt(' started following you')],
+        line: [a, txt(' added you as a friend')],
         secondLine: null,
         action: null,
         expand: null,
@@ -684,7 +691,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
     case 'follow_approved':
       return {
         ...base,
-        line: [a, txt(' accepted your follow')],
+        line: [a, txt(' accepted your friend request')],
         secondLine: null,
         action: null,
         expand: null,

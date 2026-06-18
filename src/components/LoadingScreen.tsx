@@ -66,26 +66,26 @@ type Tri = {
 
 function buildTriangles(): Tri[] {
   const tris: Tri[] = [];
-  // Up/down equilateral grid, matching the Variant4 artwork: rows of height
-  // TRI_H, each row alternating up- and down-pointing triangles that interlock
-  // on a SIZE/2 horizontal step.
-  const cols = Math.ceil(VIEWBOX_W / (SIZE / 2)) + 4;
-  const rows = Math.ceil(VIEWBOX_H / TRI_H) + 2;
+  // Left/right equilateral grid — the Variant4 up/down tiling rotated 90°:
+  // columns of width TRI_H, each column alternating left- and right-pointing
+  // triangles that interlock on a SIZE/2 vertical step.
+  const cols = Math.ceil(VIEWBOX_W / TRI_H) + 2;
+  const rows = Math.ceil(VIEWBOX_H / (SIZE / 2)) + 4;
 
   let idx = 0;
-  for (let row = -1; row < rows; row++) {
-    const yTop = row * TRI_H;
-    const yBot = yTop + TRI_H;
-    for (let col = -1; col < cols; col++) {
-      const cx = (col * SIZE) / 2;
+  for (let col = -1; col < cols; col++) {
+    const xLeft = col * TRI_H;
+    const xRight = xLeft + TRI_H;
+    for (let row = -1; row < rows; row++) {
+      const cy = (row * SIZE) / 2;
       let points: string;
 
       if ((((row + col) % 2) + 2) % 2 === 0) {
-        // up-pointing: base on the bottom edge, apex at the top
-        points = `${cx - SIZE / 2},${yBot} ${cx + SIZE / 2},${yBot} ${cx},${yTop}`;
+        // right-pointing: base on the left edge, apex at the right
+        points = `${xLeft},${cy - SIZE / 2} ${xLeft},${cy + SIZE / 2} ${xRight},${cy}`;
       } else {
-        // down-pointing: base on the top edge, apex at the bottom
-        points = `${cx - SIZE / 2},${yTop} ${cx + SIZE / 2},${yTop} ${cx},${yBot}`;
+        // left-pointing: base on the right edge, apex at the left
+        points = `${xRight},${cy - SIZE / 2} ${xRight},${cy + SIZE / 2} ${xLeft},${cy}`;
       }
 
       const r1 = rand(idx * 7 + 11);
@@ -152,7 +152,7 @@ export default function LoadingScreen({
     "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
     fullScreen
       ? "fixed inset-0 z-[60]"
-      : "relative h-full w-full min-h-[480px]",
+      : "relative h-full w-full min-h-[80vh]",
     className ?? "",
   ]
     .filter(Boolean)
@@ -193,11 +193,6 @@ export default function LoadingScreen({
         </g>
       </svg>
 
-      <div
-        className="triangle-loader-sweep pointer-events-none absolute -inset-x-1/2 top-1/2 h-[60vh]"
-        aria-hidden="true"
-      />
-
       {/* Paper-grain overlay (Figma export) — matches the baked grain in the
           Variant4 artwork so the live SVG field shares its texture. Multiply
           blend over the triangles; degrades to nothing if the asset is absent. */}
@@ -206,12 +201,12 @@ export default function LoadingScreen({
         aria-hidden="true"
       />
 
-      <div className="relative z-10 mx-6 w-full max-w-sm px-12 py-7 text-center">
+      <div className="relative z-10 mx-6 w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
         <p className="font-wordmark text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
           JOSHING
         </p>
         <div
-          className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--tri-amber)]"
+          className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]"
           aria-hidden="true"
         />
         <p className="relative mx-auto mt-4 flex h-6 items-baseline justify-center font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">

@@ -568,6 +568,13 @@
       "when": 1783468800000,
       "tag": "0080_question_author_deleted",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1783555200000,
+      "tag": "0081_enable_rls_public_tables",
+      "breakpoints": true
     }
   ]
 }

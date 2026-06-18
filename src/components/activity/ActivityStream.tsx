@@ -5,7 +5,7 @@ import { Fragment } from 'react';
 import { DayDivider } from '@/components/lately/DayDivider';
 import { FM, INK3, RULE } from '@/components/lately/tokens';
 import type { StreamItem } from '@/lib/activity-stream';
-import { bucketByDay, formatMomentTime } from '@/lib/lately';
+import { bucketByDay, formatMomentTime, partitionPinnedRequests } from '@/lib/lately';
 
 import { ActivityStreamItem } from './ActivityStreamItem';
 
@@ -52,9 +52,26 @@ export function ActivityStream({
     );
   }
 
-  const buckets = bucketByDay(items, (i) => i.sortAt, tz);
+  // Pending friend requests pin to the very top, above the day buckets, and stay
+  // until approved/declined — no matter how old (so a request never rots in an
+  // EARLIER bucket). The remaining items bucket by day as before.
+  const { pinned, rest } = partitionPinnedRequests(items);
+  const buckets = bucketByDay(rest, (i) => i.sortAt, tz);
   return (
     <>
+      {pinned.length > 0 ? (
+        <>
+          <DayDivider label="FRIEND REQUESTS" />
+          {pinned.map((item) => (
+            <ActivityStreamItem
+              key={item.id}
+              item={item}
+              timestamp={relativeTime(item.sortAt)}
+            />
+          ))}
+        </>
+      ) : null}
+
       {buckets.map((bucket) => (
         <Fragment key={bucket.label}>
           <DayDivider label={bucket.label} />

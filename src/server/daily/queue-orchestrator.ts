@@ -116,7 +116,35 @@ const GENERATION_OVERPROVISION = 2;
 const overRequest = (needed: number) =>
   Math.min(needed * GENERATION_OVERPROVISION, DAILY_QUEUE_SIZE * 2);
 
-export async function fillDailyQueueForUser(userId: string): Promise<void> {
+// In-process single-flight de-dupe (B-DAILY-QUEUE-SWAP-01). The login pre-warm
+// (after()) and the /daily page's synchronous POST routinely fire a build for
+// the SAME user within seconds of each other. Coalescing concurrent same-user
+// builds in this instance means the common race spends ONE generation instead
+// of two — every caller awaits the same promise and observes the same queue.
+//
+// This is a cost optimization, not the correctness boundary: two builds on
+// DIFFERENT instances skip this map entirely, and the real swap-proofing lives
+// in persistDailyQueue's first-writer-wins ON CONFLICT DO NOTHING (so a
+// cross-instance loser still can't overwrite the served queue). We deliberately
+// do NOT use a DB advisory lock held across generation: the daily cron runs
+// USER_CONCURRENCY=4 builds against the max:5 pool, and pinning a connection per
+// build for its whole duration would starve that pool.
+const inFlightFills = new Map<string, Promise<void>>();
+
+export function fillDailyQueueForUser(userId: string): Promise<void> {
+  const inFlight = inFlightFills.get(userId);
+  if (inFlight) return inFlight;
+
+  const promise = buildDailyQueueForUser(userId).finally(() => {
+    // Clear on settle (success OR failure) so the next genuine build for this
+    // user isn't blocked by a stale entry — a rejected build must be retryable.
+    inFlightFills.delete(userId);
+  });
+  inFlightFills.set(userId, promise);
+  return promise;
+}
+
+async function buildDailyQueueForUser(userId: string): Promise<void> {
   const startedAt = Date.now();
 
   // Commit point for Refine Your Game: staged decisions from the prior daily's

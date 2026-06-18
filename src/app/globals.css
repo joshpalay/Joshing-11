@@ -418,27 +418,6 @@
   50.01%, 100% { fill: var(--tri-color-b, currentColor); }
 }
 
-@keyframes triangle-sweep {
-  0%   { transform: translate3d(-110%, -50%, 0) rotate(-22deg); opacity: 0; }
-  20%  { opacity: 0.7; }
-  80%  { opacity: 0.7; }
-  100% { transform: translate3d(110%, -50%, 0) rotate(-22deg); opacity: 0; }
-}
-
-.triangle-loader-sweep {
-  /* Cream highlight (#FFFFEA, Variant4's lightest) so the sweep reads as a
-     warm glint over the field rather than the old tan wash. */
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 234, 0) 0%,
-    rgba(255, 255, 234, 0.45) 50%,
-    rgba(255, 255, 234, 0) 100%
-  );
-  mix-blend-mode: screen;
-  animation: triangle-sweep 12s linear infinite;
-  will-change: transform, opacity;
-}
-
 /* Paper-grain texture for the loading field, from /images/loading-grain.png
    (a near-white paper-grain sheet). Multiply lets the light field pass through
    while the fine speckle darkens the triangles, echoing the baked grain of the
@@ -538,7 +517,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .triangle-loader-tri,
-  .triangle-loader-sweep,
   .triangle-loader-dot,
   .loading-message,
   .skeleton {

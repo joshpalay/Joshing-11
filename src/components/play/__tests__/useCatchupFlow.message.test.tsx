@@ -179,6 +179,25 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
     expect(rendered).not.toContain('Recheck my answer');
   });
 
+  it('names the removed question in the dismiss notice so undo has context', () => {
+    const rendered = html([
+      {
+        id: 'd-1',
+        kind: 'dismiss_notice',
+        questionText:
+          'Under Robert’s Rules of Order, when a motion is on the floor and a member wants to set a future time?',
+        onUndo: async () => {},
+      },
+    ]);
+
+    // The notice should quote a recognisable fragment of the question (clipped on
+    // a word boundary) rather than an anonymous "Removed from catch up", and keep
+    // the Undo affordance.
+    expect(rendered).toContain('Under Robert');
+    expect(rendered).toContain('from catch up');
+    expect(rendered).toContain('Undo');
+  });
+
   it('renders no aside when the server gated it out (selectInsideJokeForViewer returned null)', () => {
     const rendered = html([
       buildCatchupResultMessage({

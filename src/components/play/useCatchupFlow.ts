@@ -533,7 +533,12 @@ export function useCatchupFlow() {
         );
         return [
           ...retired,
-          { id: newMessageId(), kind: 'dismiss_notice', onUndo: () => undismissItem(item) },
+          {
+            id: newMessageId(),
+            kind: 'dismiss_notice',
+            questionText: item.questionText,
+            onUndo: () => undismissItem(item),
+          },
         ];
       });
       // A dismissed item leaves the answerable round (it won't be answered), so

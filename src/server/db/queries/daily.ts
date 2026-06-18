@@ -870,9 +870,23 @@ export async function createDailyQueueItem(
  * complete slots array in one statement closes that window: a reader sees either
  * the pre-build state or the whole queue, never an intermediate prefix.
  *
- * Concurrency guard: ON CONFLICT only overwrites an UNTOUCHED row (no answered or
- * skipped slot). A second builder that raced the first therefore can't clobber a
- * session the player has already started — the started queue stands.
+ * Concurrency guard — FIRST WRITER WINS (B-DAILY-QUEUE-SWAP-01): ON CONFLICT DO
+ * NOTHING. Once a row exists for (user, queueDate), a second builder that raced
+ * the first leaves it untouched and returns the existing queue. This is stronger
+ * than the previous "overwrite an untouched row" rule, which clobbered a queue
+ * that had been SERVED but not yet answered — the exact window the login pre-warm
+ * (commit 09585230) opened: a returning user was served build A, and build B
+ * (the background pre-warm) overwrote it with a different question set while they
+ * were still reading question 1, so their answer 409'd as `slot_changed` and an
+ * entirely new five appeared. Two concurrent builds are non-deterministic and
+ * produce DIFFERENT sets, so the only safe rule is that whichever lands first
+ * stands. The single legitimate "regenerate today" paths (preference change →
+ * invalidateUntouchedDailyQueues, stale-short → clearStaleShortTodayQueue) DELETE
+ * the row first, so they insert cleanly and never reach this conflict.
+ *
+ * The only cost of a lost race is one re-billed build whose questions are
+ * discarded; the loser's generatedQuestionIds are intentionally NOT flagged
+ * usedInQueue, since they never entered the persisted queue.
  */
 export async function persistDailyQueue(
   userId: string,
@@ -881,19 +895,11 @@ export async function persistDailyQueue(
 ): Promise<DailyQueueRow | null> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
   return db.transaction(async (tx) => {
-    // True only when the EXISTING conflicting row has no answered/skipped slot.
-    // Referencing the table name (not EXCLUDED) reads the pre-update row.
-    const untouched = sql`not exists (
-      select 1 from jsonb_array_elements(${dailyQueues.slots}) as elem
-      where (elem->>'answered')::boolean is true or (elem->>'skipped')::boolean is true
-    )`;
     const [row] = await tx
       .insert(dailyQueues)
       .values({ userId, queueDate: assignmentDateStr, slots })
-      .onConflictDoUpdate({
+      .onConflictDoNothing({
         target: [dailyQueues.userId, dailyQueues.queueDate],
-        set: { slots },
-        setWhere: untouched,
       })
       .returning();
 
@@ -906,8 +912,9 @@ export async function persistDailyQueue(
 
     if (row) return row;
 
-    // Conflict hit a started (touched) row, so DO UPDATE was a no-op and
-    // RETURNING produced nothing. Hand back the existing started queue unchanged.
+    // Conflict hit an existing row, so DO NOTHING was a no-op and RETURNING
+    // produced nothing. This build lost the race; hand back the queue that won
+    // (unchanged) so the caller serves the one the player is already on.
     const [existing] = await tx
       .select()
       .from(dailyQueues)

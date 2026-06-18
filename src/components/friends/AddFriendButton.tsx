@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 
 import { AddFriendRequestModal } from '@/components/friends/AddFriendRequestModal'
+import { addSuccessToast } from '@/components/friends/add-someone'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
 type Props = {
@@ -66,8 +67,12 @@ export function AddFriendButton({
     setModalOpen(true)
   }
 
-  function handleSent() {
-    setToast('Sent.')
+  function handleSent(_friendshipId: string, sentState?: string) {
+    // Reflect what actually happened: a pending request reads "Request sent",
+    // while a public account that auto-approved reads "You're now friends".
+    // (Phase 1 frames the underlying follow model as friend requests; the
+    // asymmetric follow vocabulary returns in phase 2.)
+    setToast(addSuccessToast(sentState, relationship.state))
     onChange?.()
   }
 
@@ -128,7 +133,7 @@ export function AddFriendButton({
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
-            Follow
+            Add friend
           </button>
         ) : null}
 
@@ -139,7 +144,7 @@ export function AddFriendButton({
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
-            Follow back
+            Add friend
           </button>
         ) : null}
 
@@ -210,9 +215,12 @@ export function AddFriendButton({
               <button type="button" className="btn-ghost" disabled>
                 {relationship.state === 'friends' ? 'Friends ✓' : 'Following ✓'}
               </button>
+              {/* Demoted to a quiet text link so the destructive action recedes
+                  behind the "Friends ✓" status pill rather than reading as a
+                  co-equal CTA. */}
               <button
                 type="button"
-                className="btn-ghost"
+                className="text-muted-foreground hover:text-foreground self-center text-xs underline underline-offset-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45"
                 onClick={handleRemove}
                 disabled={pendingAction !== null}
               >

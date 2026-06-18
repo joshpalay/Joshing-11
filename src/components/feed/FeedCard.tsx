@@ -21,6 +21,11 @@ type FeedCardProps = {
   headerContent?: ReactNode
   /** Contextual verb shown after the name, e.g. "knows", "sent you this". */
   verb?: string
+  /**
+   * B-VIA-ATTRIBUTION-01: the "Via [friend]" answerer line, rendered above the
+   * Answer action. Distinct from the card's own attribution (who sent/authored).
+   */
+  viaAttribution?: ReactNode
   dimQuestion?: boolean
   /** Tier 1 "playable" lift on the unified home feed. Forwarded to FeedCardShell. */
   elevated?: boolean
@@ -64,6 +69,7 @@ export function FeedCard({
   className,
   headerContent,
   verb,
+  viaAttribution,
   dimQuestion,
   elevated,
 }: FeedCardProps) {
@@ -143,6 +149,8 @@ export function FeedCard({
             {item.personalMessage}
           </p>
         ) : null}
+
+        {viaAttribution ? <div className="mt-3">{viaAttribution}</div> : null}
 
         {onAnswer ? (
           <div

@@ -3,7 +3,6 @@ import FeedList from '@/components/FeedList'
 import LoadingScreen from '@/components/LoadingScreen'
 import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, {
-  type DailyPreferences,
   type DailyStatus,
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
@@ -13,7 +12,6 @@ import { getSession } from '@/server/auth/session'
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
-import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 
@@ -103,18 +101,12 @@ export default async function Home() {
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
-  const [queue, preferences, catchupItems] = await Promise.all([
+  const [queue, catchupItems] = await Promise.all([
     getTodaysDailyQueue(userId),
-    getDailyPreferences(userId),
     getCatchupQuestions(userId),
   ])
 
   const status = buildDailyStatusSnapshot(queue)
-  const cardPreferences: DailyPreferences = {
-    difficulty: preferences.difficulty,
-    domainMode: preferences.domainMode,
-    selectedDomains: preferences.selectedDomains,
-  }
 
   const missedCount = catchupItems.length
   const expiringCount = catchupItems.filter((item) => item.expiresSoon).length
@@ -127,7 +119,6 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
     <>
       <TodaysFiveCard
         initialStatus={status}
-        initialPreferences={cardPreferences}
         initialMissedCount={missedCount}
       />
       {showStandaloneCatchup ? (

@@ -16,12 +16,23 @@ type CommonGroundProps = {
   // Null when the section isn't applicable (e.g. owner self-view); renders nothing.
   data: CommonGroundData | null
   friendFirstName: string
+  // Cap on the total number of domains rendered across both groups (proven
+  // first, then latent fills the remainder). Undefined renders everything.
+  limit?: number
 }
 
-export function CommonGround({ data, friendFirstName }: CommonGroundProps) {
+export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps) {
   if (!data) return null
 
   const { proven, latent, isEmpty } = data
+
+  // Apply the optional display cap, spending the budget on proven domains
+  // first so the strongest overlap always survives the trim.
+  const provenShown = typeof limit === 'number' ? proven.slice(0, limit) : proven
+  const latentBudget =
+    typeof limit === 'number' ? Math.max(0, limit - provenShown.length) : undefined
+  const latentShown =
+    latentBudget === undefined ? latent : latent.slice(0, latentBudget)
 
   let headline: string
   if (proven.length === 1) {
@@ -35,7 +46,7 @@ export function CommonGround({ data, friendFirstName }: CommonGroundProps) {
   }
 
   const datasetMax = circleDatasetMax(
-    [...proven, ...latent].flatMap((d) => [
+    [...provenShown, ...latentShown].flatMap((d) => [
       d.viewer.mastery_points,
       d.friend.mastery_points,
     ]),
@@ -50,20 +61,20 @@ export function CommonGround({ data, friendFirstName }: CommonGroundProps) {
 
       {isEmpty ? null : (
         <>
-          {proven.length > 0 ? (
+          {provenShown.length > 0 ? (
             <DomainGroup
               caption="Proven together"
-              domains={proven}
+              domains={provenShown}
               datasetMax={datasetMax}
               ghosted={false}
               friendFirstName={friendFirstName}
             />
           ) : null}
 
-          {latent.length > 0 ? (
+          {latentShown.length > 0 ? (
             <DomainGroup
               caption="Shared, still untested"
-              domains={latent}
+              domains={latentShown}
               datasetMax={datasetMax}
               ghosted
               friendFirstName={friendFirstName}

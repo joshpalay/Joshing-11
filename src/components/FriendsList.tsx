@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { formatRelativeTime } from '@/components/feed/visual';
+import { buildAddSomeoneHandoff } from '@/components/friends/add-someone';
 
 type FriendSort = 'name_asc' | 'name_desc' | 'recent';
 
@@ -121,16 +122,20 @@ function FriendCard({ person }: { person: Person }) {
       <p className="text-muted-foreground mt-1 text-sm leading-6">{friendSecondary(person)}</p>
       {/* Two warm activity facts (PLR-14): what they've contributed and what
           you've engaged with — kept on one line as a quiet shared ledger,
-          never a ranking. Friends are not sorted or compared by these. */}
-      <p className="text-muted-foreground mt-2 text-xs">
-        Questions created{" "}
-        <span className="text-foreground font-medium tabular-nums">{person.authoredCount}</span> (you
-        answered{" "}
-        <span className="text-foreground font-medium tabular-nums">
-          {person.answeredByViewerCount}
-        </span>
-        )
-      </p>
+          never a ranking. Friends are not sorted or compared by these.
+          Suppressed entirely when the friend hasn't authored anything yet —
+          a zero count reads as a scoreboard, which this line is not. */}
+      {person.authoredCount > 0 && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Questions created{" "}
+          <span className="text-foreground font-medium tabular-nums">{person.authoredCount}</span> (you
+          answered{" "}
+          <span className="text-foreground font-medium tabular-nums">
+            {person.answeredByViewerCount}
+          </span>
+          )
+        </p>
+      )}
     </Link>
   );
 }
@@ -471,6 +476,16 @@ export default function FriendsList() {
     setFriendSearch('');
   }
 
+  // The friends filter is an in-memory substring match over your *existing*
+  // friends. When it finds no one, it's not an add-path — it's a labeled exit to
+  // the "Add someone" block. We deliberately pass NO term: the filter fragment is
+  // a name, and the lookup is exact handle-or-phone only, so carrying it across
+  // would dead-end. Hand the user to the right tool with an empty, focused input.
+  function goToAddSomeone() {
+    const { type, detail } = buildAddSomeoneHandoff();
+    window.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+
   const pendingInvites = useMemo(
     () => invites.filter((invite) => invite.status === 'pending'),
     [invites],
@@ -636,7 +651,21 @@ export default function FriendsList() {
                 </div>
               ) : (
                 <p className="text-muted-foreground py-8 text-center text-sm">
-                  No friends match your filter.{' '}
+                  {friendSearch.trim() ? (
+                    <>
+                      No one in your friends by that. Looking for someone new?{' '}
+                      <button
+                        type="button"
+                        className="text-primary underline"
+                        onClick={goToAddSomeone}
+                      >
+                        Add someone →
+                      </button>{' '}
+                      ·{' '}
+                    </>
+                  ) : (
+                    <>No friends match your filter. </>
+                  )}
                   <button
                     type="button"
                     className="text-primary underline"
