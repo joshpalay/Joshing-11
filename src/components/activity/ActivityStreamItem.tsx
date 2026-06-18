@@ -311,13 +311,12 @@ export function ActivityStreamItem({
   const playableCard =
     elevated && !nested && expandable && expand?.kind === 'milestone';
 
-  // Recent activity (the ambient texture rows) now shares the From Friends card
-  // chrome on the home feed — the same warm cream fill, light stroke, and soft
-  // drop shadow — so the two home zones read as one family of cards rather than
-  // a band of cards sitting above a flat hairline list. The playable milestones
-  // keep their editorial two-line headline + Play affordance (playableCard); the
-  // texture one-liners keep their body but now sit inside the same shell.
-  const elevatedCard = elevated && !nested;
+  // Only the playable milestone bundles take the elevated cream-card chrome on
+  // the home feed (the warm fill, light stroke, soft drop shadow) so they step
+  // forward as the thing you can play. The Recent-activity texture one-liners
+  // stay FLAT — a hairline-divided list, never their own cards — so the ambient
+  // band reads as quiet texture beneath the playable From Friends cards.
+  const elevatedCard = playableCard;
 
   // On a playable milestone card the headline splits into two serif lines: the
   // person's NAME (large) and the rest of the sentence (medium) below it. The
@@ -345,12 +344,10 @@ export function ActivityStreamItem({
     : elevatedCard
       ? {
           padding: opened ? '16px 14px' : '14px',
-          // Every elevated home-feed row — the "From Friends" playable milestone
-          // cards AND the "Recent activity" texture one-liners — shares the
-          // elevated feed fill token (defaults to the warm game-card cream) so
-          // the dev CARD COLOR cycler repaints them alongside the For You cards,
-          // and the same neutral hairline stroke as the Today's 5 card (no gold
-          // accent).
+          // The playable "From Friends" milestone cards take the elevated feed
+          // fill token (defaults to the warm game-card cream) so the dev CARD
+          // COLOR cycler repaints them alongside the For You cards, and the same
+          // neutral hairline stroke as the Today's 5 card (no gold accent).
           background: 'var(--feed-card-elevated)',
           border: '1px solid var(--brand-border)',
           borderRadius: 4,
