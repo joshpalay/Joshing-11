@@ -34,6 +34,12 @@ export function MyQuestionCard({
   const answerersLine = question.isOwnAuthored && question.answerers
     ? formatAnswerersLine(question.answerers)
     : null;
+  // Hide the metrics line entirely for a question that's never been played:
+  // "0 answers · 0% correct · 0 games" is noise, not information.
+  const hasMetrics =
+    question.timesAnswered > 0 ||
+    question.correctRate > 0 ||
+    question.usedInGamesCount > 0;
 
   return (
     <article
@@ -82,13 +88,15 @@ export function MyQuestionCard({
             {answerersLine}
           </p>
         ) : null}
-        <p className={`${answerersLine ? 'mt-1' : 'mt-2'} text-[13px] leading-snug`}>
-          <Stat value={`${question.timesAnswered}`} label="answers" />
-          <StatSeparator />
-          <Stat value={`${question.correctRate}%`} label="correct" />
-          <StatSeparator />
-          <Stat value={`${question.usedInGamesCount}`} label="games" />
-        </p>
+        {hasMetrics ? (
+          <p className={`${answerersLine ? 'mt-1' : 'mt-2'} text-[13px] leading-snug`}>
+            <Stat value={`${question.timesAnswered}`} label="answers" />
+            <StatSeparator />
+            <Stat value={`${question.correctRate}%`} label="correct" />
+            <StatSeparator />
+            <Stat value={`${question.usedInGamesCount}`} label="games" />
+          </p>
+        ) : null}
         {question.reportState ? <ReportStateNotice state={question.reportState} /> : null}
         {cardError ? (
           <p className="mt-2 text-[13px] text-destructive">{cardError}</p>
