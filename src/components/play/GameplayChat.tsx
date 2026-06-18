@@ -66,7 +66,7 @@ export type ChatMessage =
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
     }
-  | { id: string; kind: 'dismiss_notice'; onUndo: () => Promise<void> }
+  | { id: string; kind: 'dismiss_notice'; questionText: string; onUndo: () => Promise<void> }
   | { id: string; kind: 'user'; text: string }
   | { id: string; kind: 'typing' }
   | {
@@ -238,8 +238,29 @@ function SystemRow({ text }: { text: string }) {
 // dimmed). Mirrors NewTerritoryUndo's self-contained optimistic state: the undo
 // is awaited, "Undoing…" shows while in flight, and a rejection surfaces an
 // inline retry hint without losing the dismissal.
-function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
+// Pull a short, recognisable fragment from the removed question so the notice
+// says *which* question left catch-up (e.g. "Removed "Under Robert's Rules
+// of Order…"") rather than an anonymous "Removed from catch up". Collapses
+// whitespace and clips on a word boundary so the snippet never dangles a
+// half-word before the ellipsis.
+function questionSnippet(questionText: string, maxLength = 42): string {
+  const normalized = questionText.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  const clipped = normalized.slice(0, maxLength);
+  const lastSpace = clipped.lastIndexOf(' ');
+  const head = lastSpace > 0 ? clipped.slice(0, lastSpace) : clipped;
+  return `${head.replace(/[.,;:!?'"]+$/, '')}…`;
+}
+
+function DismissNoticeRow({
+  questionText,
+  onUndo,
+}: {
+  questionText: string;
+  onUndo: () => Promise<void>;
+}) {
   const [state, setState] = useState<'idle' | 'undoing' | 'error'>('idle');
+  const snippet = questionSnippet(questionText);
 
   const handleUndo = async () => {
     if (state === 'undoing') return;
@@ -264,7 +285,13 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
           ...monoStyle,
           display: 'inline-flex',
           alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          // The quoted question fragment can push the line past a narrow viewport;
+          // cap the chip and let it wrap to a second row rather than overflow.
+          maxWidth: 'min(20rem, 90%)',
           fontSize: '0.58rem',
+          lineHeight: 1.4,
           color: 'var(--text-muted)',
           textAlign: 'center',
           background: 'var(--surface)',
@@ -273,7 +300,10 @@ function DismissNoticeRow({ onUndo }: { onUndo: () => Promise<void> }) {
           padding: '4px 10px',
         }}
       >
-        <span>Removed from catch up</span>
+        <span>
+          Removed {snippet ? <span style={{ opacity: 0.85 }}>“{snippet}”</span> : null} from
+          catch up
+        </span>
         <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
         {state === 'undoing' ? (
           <span style={{ opacity: 0.7 }}>Undoing…</span>
@@ -1463,7 +1493,7 @@ export function GameplayChatThread({
           case 'system':
             return <SystemRow key={m.id} text={m.text} />;
           case 'dismiss_notice':
-            return <DismissNoticeRow key={m.id} onUndo={m.onUndo} />;
+            return <DismissNoticeRow key={m.id} questionText={m.questionText} onUndo={m.onUndo} />;
           case 'question':
             return (
               <QuestionRow
