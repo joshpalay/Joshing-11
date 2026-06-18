@@ -171,10 +171,11 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
             Add someone
           </p>
           <h2 className="text-foreground mt-3 font-serif text-2xl leading-tight font-semibold">
-            Already here?
+            Add a friend
           </h2>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            Find a friend by their @handle or US number — exact matches only.
+            Search by @handle or US number — exact matches only. Not on Joshing
+            yet? You can invite them.
           </p>
         </>
       ) : (

@@ -119,17 +119,17 @@ describe('buildAddSomeoneHandoff', () => {
   })
 })
 
-describe('addSuccessToast', () => {
+describe('addSuccessToast (phase-1 friend-request framing)', () => {
   it('reads as a pending request for an approval-required account', () => {
     expect(addSuccessToast('created', 'none')).toBe('Request sent.')
     expect(addSuccessToast(undefined, 'none')).toBe('Request sent.')
   })
 
-  it('reads as a one-way follow when auto-approved from a cold start', () => {
-    expect(addSuccessToast('auto_approved', 'none')).toBe("You're now following.")
-  })
-
-  it('reads as a mutual friendship when auto-approved while following back', () => {
+  it('reads as a friendship when auto-approved, regardless of prior state', () => {
+    // Phase 1 frames the follow model as friend requests, so an auto-approved
+    // public account reads "now friends" whether or not they already followed us
+    // (the asymmetric follow vocabulary returns in phase 2).
+    expect(addSuccessToast('auto_approved', 'none')).toBe("You're now friends.")
     expect(addSuccessToast('auto_approved', 'follows_you')).toBe("You're now friends.")
   })
 })
