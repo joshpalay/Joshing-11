@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { formatRelativeTime } from '@/components/feed/visual';
-import { ADD_SOMEONE_SEED_EVENT } from '@/components/friends/FindFriendsSearch';
-import { classifyQuery } from '@/components/friends/add-someone';
+import { buildAddSomeoneHandoff } from '@/components/friends/add-someone';
 
 type FriendSort = 'name_asc' | 'name_desc' | 'recent';
 
@@ -477,23 +476,14 @@ export default function FriendsList() {
     setFriendSearch('');
   }
 
-  // When the local friends filter finds no one, offer to add the typed term as a
-  // friend. A handle/number is handed to the hub's "Add someone" lookup to
-  // find-or-invite; a plain name can't be resolved by lookup (stranger-by-name
-  // search is out of scope), so it opens the invite flow with the name prefilled.
-  function addTypedTermAsFriend() {
-    const term = friendSearch.trim();
-    if (!term) return;
-    const classification = classifyQuery(term);
-    if (classification === 'handle' || classification === 'phone') {
-      window.dispatchEvent(new CustomEvent(ADD_SOMEONE_SEED_EVENT, { detail: { query: term } }));
-    } else {
-      window.dispatchEvent(
-        new CustomEvent('friend-invitations:create-new', {
-          detail: { inviteeDisplayName: term },
-        }),
-      );
-    }
+  // The friends filter is an in-memory substring match over your *existing*
+  // friends. When it finds no one, it's not an add-path — it's a labeled exit to
+  // the "Add someone" block. We deliberately pass NO term: the filter fragment is
+  // a name, and the lookup is exact handle-or-phone only, so carrying it across
+  // would dead-end. Hand the user to the right tool with an empty, focused input.
+  function goToAddSomeone() {
+    const { type, detail } = buildAddSomeoneHandoff();
+    window.dispatchEvent(new CustomEvent(type, { detail }));
   }
 
   const pendingInvites = useMemo(
@@ -661,19 +651,21 @@ export default function FriendsList() {
                 </div>
               ) : (
                 <p className="text-muted-foreground py-8 text-center text-sm">
-                  No friends match your filter.{' '}
                   {friendSearch.trim() ? (
                     <>
+                      No one in your friends by that. Looking for someone new?{' '}
                       <button
                         type="button"
                         className="text-primary underline"
-                        onClick={addTypedTermAsFriend}
+                        onClick={goToAddSomeone}
                       >
-                        Add “{friendSearch.trim()}” as a friend
+                        Add someone →
                       </button>{' '}
                       ·{' '}
                     </>
-                  ) : null}
+                  ) : (
+                    <>No friends match your filter. </>
+                  )}
                   <button
                     type="button"
                     className="text-primary underline"

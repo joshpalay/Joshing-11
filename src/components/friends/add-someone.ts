@@ -4,6 +4,18 @@
 // import from here, so the classification stays in one place).
 import type { RelationshipState } from '@/server/db/queries/friend-requests'
 
+// The friends-filter empty state hands off to the hub's "Add someone" lookup.
+// This is a focus request only: the lookup is exact handle-or-phone, the filter
+// term is a name, so carrying the term across would dead-end. The dispatcher
+// (FriendsList) and the listener (FindFriendsSearch) both read the contract from
+// here so the "no term carried" guarantee lives in one tested place.
+export const ADD_SOMEONE_FOCUS_EVENT = 'add-someone:focus'
+
+export function buildAddSomeoneHandoff(): { type: string; detail: undefined } {
+  // detail is intentionally undefined — no search term, no classification.
+  return { type: ADD_SOMEONE_FOCUS_EVENT, detail: undefined }
+}
+
 export type QueryClassification = 'empty' | 'handle' | 'phone' | 'name'
 
 // Mirrors HANDLE_QUERY_PATTERN in src/server/db/queries/friend-search.ts:20

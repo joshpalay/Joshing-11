@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
 import {
+  ADD_SOMEONE_FOCUS_EVENT,
   resolveAddSomeoneOutcome,
   type QueryClassification,
 } from '@/components/friends/add-someone'
@@ -21,15 +22,16 @@ type Match = {
 
 type SearchResponse = { match: Match | null }
 
-// Other surfaces can ask the hub lookup to run a term on their behalf (e.g. the
-// FriendsList empty-filter "add <term>" hand-off). The 'add' variant listens.
-export const ADD_SOMEONE_SEED_EVENT = 'add-someone:seed'
+// The 'add' variant listens for ADD_SOMEONE_FOCUS_EVENT (defined in
+// ./add-someone) — a focus-only hand-off from the FriendsList empty-filter exit
+// that carries no search term.
 
 type Props = {
   // 'find' (default): the standalone /friends/find card — header "Search", and a
   // plain "invite them below" hint on no-match.
   // 'add': the Friends-hub block — warm framing, an inline Invite CTA on
-  //   no-match, and it listens for ADD_SOMEONE_SEED_EVENT to run a seeded term.
+  //   no-match, and it listens for ADD_SOMEONE_FOCUS_EVENT to take focus (the
+  //   FriendsList empty-filter exit, which carries no term).
   variant?: 'find' | 'add'
   // Only used by the 'add' variant: invoked when the user chooses to invite a
   // no-match. The classification lets the parent prefill the invite flow
@@ -56,6 +58,7 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
   const requestSeq = useRef(0)
   const debounceRef = useRef<number | null>(null)
   const sectionRef = useRef<HTMLElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   async function runSearch(value: string) {
     const trimmed = value.trim()
@@ -107,20 +110,22 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
     }
   }, [query])
 
-  // The 'add' variant accepts seeded terms from elsewhere on the page (the
-  // FriendsList empty-filter hand-off). Setting the query lets the debounce
-  // effect run the search; we just scroll the lookup into view so the result
-  // lands where the user can see it.
+  // The 'add' variant accepts a focus hand-off from elsewhere on the page (the
+  // FriendsList empty-filter exit). It brings the user to a blank lookup and
+  // focuses the input — deliberately carrying NO term, so they're prompted for a
+  // call sign or number instead of being handed a dead name fragment.
   useEffect(() => {
     if (variant !== 'add') return
-    function onSeed(event: Event) {
-      const seeded = (event as CustomEvent<{ query?: string }>).detail?.query?.trim()
-      if (!seeded) return
-      setQuery(seeded)
+    function onFocusRequest() {
+      setQuery('')
+      setMatch(null)
+      setSearched(false)
+      setError(null)
       sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      inputRef.current?.focus({ preventScroll: true })
     }
-    window.addEventListener(ADD_SOMEONE_SEED_EVENT, onSeed)
-    return () => window.removeEventListener(ADD_SOMEONE_SEED_EVENT, onSeed)
+    window.addEventListener(ADD_SOMEONE_FOCUS_EVENT, onFocusRequest)
+    return () => window.removeEventListener(ADD_SOMEONE_FOCUS_EVENT, onFocusRequest)
   }, [variant])
 
   function handleQueryChange(value: string) {
@@ -181,6 +186,7 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
         </>
       )}
       <input
+        ref={inputRef}
         type="search"
         value={query}
         onChange={(event) => handleQueryChange(event.target.value)}
