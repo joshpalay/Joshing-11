@@ -20,7 +20,7 @@
 
 import { and, desc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
 
-import { db, feedItems, follows, users } from '@/server/db';
+import { db, feedItems, follows, questions, users } from '@/server/db';
 import { SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
 
 /** A raw answerer row as read from the DB (one per friend_answered event). */
@@ -136,6 +136,10 @@ export async function getViaAnswerersForQuestions(
       ),
     )
     .innerJoin(users, eq(users.id, feedItems.sourceUserId))
+    // notBlockedForViewer() below references the `questions` table, so it must
+    // be in the FROM clause — without this join Postgres 42P01s ("missing
+    // FROM-clause entry for table Question"). Mirrors lately.ts:218,360.
+    .innerJoin(questions, eq(questions.id, feedItems.questionId))
     .where(
       and(
         eq(feedItems.recipientUserId, viewerUserId),
