@@ -145,7 +145,7 @@ function ProfileQuestionRow({
           ) : null}
         </div>
       ) : (
-        <div className="mt-1">
+        <div className="mt-1 flex justify-end">
           <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
         </div>
       )}
