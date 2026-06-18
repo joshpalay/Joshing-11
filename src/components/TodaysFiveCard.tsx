@@ -25,17 +25,9 @@ export type DailyStatus = {
   slotOutcomes: SlotOutcome[]
 }
 
-export type DailyPreferences = {
-  difficulty: 'normal' | 'moderate' | 'challenging' | 'ridiculous' | 'adaptive'
-  domainMode: 'random' | 'custom'
-  selectedDomains: string[]
-}
-
 type TodaysFiveCardProps = {
   /** When supplied, the initial /api/daily/status fetch is skipped. */
   initialStatus?: DailyStatus | null
-  /** When supplied, the initial /api/daily/preferences fetch is skipped. */
-  initialPreferences?: DailyPreferences | null
   /**
    * Outstanding catch-up questions for this player. Drives the completed-state
    * branch: >0 routes to catch-up (Branch A); 0 nudges toward sending/banking a
@@ -54,23 +46,6 @@ const CUSTOMIZE_DAILY_LINK_CLASS = [
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
   'active:translate-y-px sm:px-3.5 sm:text-[13px]',
 ].join(' ')
-
-const DIFFICULTY_LABELS: Record<string, string> = {
-  normal: 'Establishing',
-  moderate: 'Familiar',
-  challenging: 'Solid',
-  ridiculous: 'Mastery',
-  adaptive: 'Adaptive',
-}
-
-function preferenceSummary(prefs: DailyPreferences): string {
-  const diffLabel = DIFFICULTY_LABELS[prefs.difficulty] ?? 'Adaptive'
-  if (prefs.domainMode === 'random') return `${diffLabel} · Random`
-  if (prefs.selectedDomains.length === 0) return `${diffLabel} · Custom`
-  const domains = prefs.selectedDomains.slice(0, 3).join(', ')
-  const extra = prefs.selectedDomains.length > 3 ? ` +${prefs.selectedDomains.length - 3}` : ''
-  return `${diffLabel} · ${domains}${extra}`
-}
 
 const FALLBACK_STATUS: DailyStatus = {
   questionsRemaining: 5,
@@ -101,19 +76,17 @@ function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
 
 export default function TodaysFiveCard({
   initialStatus = null,
-  initialPreferences = null,
   initialMissedCount = 0,
 }: TodaysFiveCardProps = {}) {
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
-  const [preferences, setPreferences] = useState<DailyPreferences | null>(initialPreferences)
   // Client-only reset-time label; null during SSR to keep hydration stable.
   const resetDayTime = useSyncExternalStore(
     subscribeNoop,
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
   )
-  // Skip the initial /api/daily/* fetch when the server already provided both.
-  const skipInitialFetchRef = useRef(initialStatus !== null && initialPreferences !== null)
+  // Skip the initial /api/daily/status fetch when the server already provided it.
+  const skipInitialFetchRef = useRef(initialStatus !== null)
 
   useEffect(() => {
     if (skipInitialFetchRef.current) {
@@ -124,10 +97,10 @@ export default function TodaysFiveCard({
 
     async function loadStatus() {
       try {
-        const [statusResponse, prefsResponse] = await Promise.all([
-          fetch('/api/daily/status', { cache: 'no-store', credentials: 'include' }),
-          fetch('/api/daily/preferences', { cache: 'no-store', credentials: 'include' }),
-        ])
+        const statusResponse = await fetch('/api/daily/status', {
+          cache: 'no-store',
+          credentials: 'include',
+        })
         if (!statusResponse.ok) throw new Error('daily status unavailable')
         const body = await statusResponse.json()
         if (cancelled) return
@@ -155,17 +128,6 @@ export default function TodaysFiveCard({
           queueId: typeof body.queue_id === 'string' ? body.queue_id : null,
           slotOutcomes: normalizeSlotOutcomes(body.slotOutcomes),
         })
-        if (prefsResponse.ok) {
-          const prefsBody = await prefsResponse.json()
-          const prefs = prefsBody?.preferences
-          if (prefs) {
-            setPreferences({
-              difficulty: prefs.difficulty ?? 'adaptive',
-              domainMode: prefs.domainMode ?? 'random',
-              selectedDomains: Array.isArray(prefs.selectedDomains) ? prefs.selectedDomains : [],
-            })
-          }
-        }
       } catch {
         if (!cancelled) setStatus(FALLBACK_STATUS)
       }
@@ -321,15 +283,13 @@ export default function TodaysFiveCard({
         })}
       </div>
 
-      {/* Active-state context line (progress + preference summary). The
-          completed state replaces this with the forward beat below — its
-          backward-looking "Today done · prefs" is now carried by the reduced
-          "Today, done." headline, so the stack stays forward-pointing. */}
-      {!isComplete && (answered > 0 || preferences) ? (
+      {/* Active-state progress line. The completed state replaces this with the
+          forward beat below — its backward-looking "Today done" is now carried
+          by the reduced "Today, done." headline, so the stack stays
+          forward-pointing. */}
+      {!isComplete && answered > 0 ? (
         <p className="mt-2.5 text-xs leading-5 text-[var(--brand-ink-400)]">
-          {answered > 0 ? subtext : null}
-          {answered > 0 && preferences ? ' · ' : null}
-          {preferences ? preferenceSummary(preferences) : null}
+          {subtext}
         </p>
       ) : null}
 
