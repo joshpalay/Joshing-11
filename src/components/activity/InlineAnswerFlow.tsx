@@ -105,26 +105,29 @@ export function InlineAnswerFlow({
         &ldquo;{question.text}&rdquo;
       </p>
 
-      <button
-        type="button"
-        onClick={() => setPhase('input')}
-        style={{
-          marginTop: 10,
-          display: 'inline-flex',
-          alignItems: 'center',
-          background: 'transparent',
-          border: 'none',
-          borderBottom: `1px solid ${INK}`,
-          color: INK,
-          fontFamily: FM,
-          fontSize: 11,
-          letterSpacing: 1.5,
-          padding: '0 0 2px',
-          cursor: 'pointer',
-        }}
-      >
-        ANSWER →
-      </button>
+      {/* The action sits on the right-hand edge of the question column so it
+          reads as the row's trailing affordance, not a left-aligned caption. */}
+      <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          onClick={() => setPhase('input')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: `1px solid ${INK}`,
+            color: INK,
+            fontFamily: FM,
+            fontSize: 11,
+            letterSpacing: 1.5,
+            padding: '0 0 2px',
+            cursor: 'pointer',
+          }}
+        >
+          ANSWER →
+        </button>
+      </div>
 
       {phase === 'input' ? (
         <AnswerSheet

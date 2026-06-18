@@ -759,7 +759,7 @@ function FeedContributeFooter() {
           the reader's typed idea rides to the writer via ?text=
           (buildQuestionWriterHref). */}
       <div className="-mx-4 bg-[var(--editorial-parchment)] px-8 py-12 md:py-14">
-        <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--brand-orange)] uppercase">
+        <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
           Your Turn
         </p>
         <h2 className="mt-4 max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
@@ -874,9 +874,12 @@ function FeedSectionHeading({
   return (
     <div className={padClasses}>
       {heading}
+      {/* The descriptor shares the same small-caps register as the "For you"
+          zone's descriptor ("questions your friends created or sent directly to
+          you") so the two zones read as peers, rather than the serif italic it
+          used to carry. */}
       <p
-        className={`text-muted-foreground mt-1 text-[13px] italic ${gutter}`}
-        style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
+        className={`text-muted-foreground/70 mt-1 text-[11px] font-medium tracking-[0.12em] uppercase ${gutter}`}
       >
         {subtitle}
       </p>
@@ -2062,8 +2065,8 @@ function FeedListContent({
               own eyebrow row (that read as a third stacked eyebrow above "From
               Friends"); it is folded onto the lead section heading as a quiet
               "(Past 7 days)" qualifier — From Friends when present, else Recent
-              activity. From Friends is promoted to the prominent "For you"
-              register (a peer, not a sub-label); Recent activity stays subdued.
+              activity. Both From Friends and Recent activity sit in the
+              prominent "For you" register so the home zones read as peers.
               The pendingQueue subpages and the off-budget standalone Feed keep
               their own (un-banded) treatments. */}
           {budget ? (
@@ -2104,7 +2107,7 @@ function FeedListContent({
                 <Fragment key="texture">
                   <FeedSectionHeading
                     unifiedHome={unifiedHome}
-                    subdued
+                    prominent
                     windowLabel={
                       bandLabelVisible && bandHasContent && fromFriendsRows.length === 0
                         ? 'Past 7 days'
