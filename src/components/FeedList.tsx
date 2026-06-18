@@ -754,7 +754,7 @@ function FeedContributeFooter() {
   return (
     // Add-a-Question prompt — now composes the shared EditorialFeature so it
     // reads as one family with the feed's other invitation blocks (parchment
-    // wash, eyebrow, serif prompt) instead of re-rolling its own chrome. The
+    // wash, serif prompt) instead of re-rolling its own chrome. The
     // <footer> keeps the feed's bottom spacing; EditorialFeature self-manages
     // its own -mx-4/-my-1.5 bleed, so there's no horizontal margin to double up.
     // The composer is the "artwork" and the submit button rides inside its
@@ -763,7 +763,6 @@ function FeedContributeFooter() {
     <footer className="pb-8">
       <EditorialFeature
         tone="parchment"
-        eyebrow="Ask Someone"
         headline="Sometimes the best way to show you know someone is to ask them a question."
         artwork={
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
