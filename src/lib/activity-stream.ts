@@ -663,10 +663,15 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       const request = item.reference.friendshipRequest;
       const pending =
         request && request.status === 'pending' && request.requestedByUserId !== item.userId;
+      // Surface the areas the requester flagged (the same suggestedInterests the
+      // Friends Hub card shows as chips) so the feed row isn't a blind ask. Topic
+      // labels render in the System mono metadata voice, like domain names.
+      const interests = request?.suggestedInterests ?? [];
       return {
         ...base,
         line: [a, txt(' wants to follow you')],
-        secondLine: null,
+        secondLine: interests.length > 0 ? interests.join(' · ') : null,
+        secondLineVoice: interests.length > 0 ? 'system' : undefined,
         action: pending ? { kind: 'friend_request', friendshipId: request.id } : null,
         expand: null,
       };

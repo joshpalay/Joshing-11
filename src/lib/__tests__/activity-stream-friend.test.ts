@@ -37,6 +37,43 @@ describe('StreamItem.friendId', () => {
     expect(item.friendId).toBeNull()
   })
 
+  it('surfaces a follow request’s suggested interests on the feed row', () => {
+    const item = activityToStreamItem(
+      activity('follow_request', {
+        referenceType: 'follow',
+        reference: {
+          friendshipRequest: {
+            id: 'fr-1',
+            status: 'pending',
+            requestedByUserId: 'friend-1',
+            suggestedInterests: ['Sondheim', 'Mrs. Dalloway'],
+          },
+        },
+      } as unknown as Partial<ActivityItemView>),
+    )
+    expect(item.secondLine).toBe('Sondheim · Mrs. Dalloway')
+    expect(item.secondLineVoice).toBe('system')
+    expect(item.action).toEqual({ kind: 'friend_request', friendshipId: 'fr-1' })
+  })
+
+  it('leaves the follow request row’s second line empty when no interests were flagged', () => {
+    const item = activityToStreamItem(
+      activity('follow_request', {
+        referenceType: 'follow',
+        reference: {
+          friendshipRequest: {
+            id: 'fr-2',
+            status: 'pending',
+            requestedByUserId: 'friend-1',
+            suggestedInterests: [],
+          },
+        },
+      } as unknown as Partial<ActivityItemView>),
+    )
+    expect(item.secondLine).toBeNull()
+    expect(item.secondLineVoice).toBeUndefined()
+  })
+
   it('tags a moment with the moment friend id', () => {
     const moment: LatelyMoment = {
       momentId: 'm-1',
