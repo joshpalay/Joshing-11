@@ -25,4 +25,9 @@ export const FF = 'var(--font-sans-body), -apple-system, system-ui, sans-serif';
 // sans (Montserrat), so the System voice reads as caps + letterspacing in the sans
 // rather than as a separate monospace face (STYLE-GUIDE-TYPE §2).
 export const FM = 'var(--font-mono)';
-export const FS = 'var(--font-display), Georgia, serif';
+// Editorial serif voice (the italic "Lately." headline + empty-state) — routed
+// through the app-wide --font-serif token (Cormorant Garamond, italic loaded).
+// Kept as an alias (rather than inlined at each call site) so the Lately
+// consumers route through one place; --font-display (Playfair) was retired
+// app-wide by B-TYPE-SERIF-CONSOLIDATION-01.
+export const FS = 'var(--font-serif), Georgia, serif';
