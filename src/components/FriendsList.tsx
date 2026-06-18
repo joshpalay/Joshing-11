@@ -121,16 +121,20 @@ function FriendCard({ person }: { person: Person }) {
       <p className="text-muted-foreground mt-1 text-sm leading-6">{friendSecondary(person)}</p>
       {/* Two warm activity facts (PLR-14): what they've contributed and what
           you've engaged with — kept on one line as a quiet shared ledger,
-          never a ranking. Friends are not sorted or compared by these. */}
-      <p className="text-muted-foreground mt-2 text-xs">
-        Questions created{" "}
-        <span className="text-foreground font-medium tabular-nums">{person.authoredCount}</span> (you
-        answered{" "}
-        <span className="text-foreground font-medium tabular-nums">
-          {person.answeredByViewerCount}
-        </span>
-        )
-      </p>
+          never a ranking. Friends are not sorted or compared by these.
+          Suppressed entirely when the friend hasn't authored anything yet —
+          a zero count reads as a scoreboard, which this line is not. */}
+      {person.authoredCount > 0 && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Questions created{" "}
+          <span className="text-foreground font-medium tabular-nums">{person.authoredCount}</span> (you
+          answered{" "}
+          <span className="text-foreground font-medium tabular-nums">
+            {person.answeredByViewerCount}
+          </span>
+          )
+        </p>
+      )}
     </Link>
   );
 }
