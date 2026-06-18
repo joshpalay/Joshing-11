@@ -25,9 +25,20 @@ type ProofreadResult = {
   suggestion: string | null;
 };
 
+// When the invited phone already belongs to a Joshing account, the invite is
+// converted server-side into a follow request. `state` reports what happened so
+// the handoff screen can speak plainly instead of pretending an SMS invite went
+// out (see POST /api/friend-invitations).
+type FriendshipRequestState =
+  | 'created'
+  | 'auto_approved'
+  | 'already_following'
+  | 'pending_existing';
+
 type InviteResult = {
   ok: boolean;
   type: 'friend_invitation' | 'friendship_request';
+  state?: FriendshipRequestState;
   id: string;
   invitationId?: string | null;
   inviteUrl: string | null;
@@ -35,6 +46,41 @@ type InviteResult = {
   inviteeDisplayName: string;
   inviteePhone: string;
   suggestedInterests: string[];
+};
+
+// Per-state copy for the handoff step when we matched an existing account.
+// `needsNudge` decides whether the message/SMS handoff is still meaningful: a
+// pending request can be nudged along, but an auto-approved or already-existing
+// follow is terminal — there's nothing to send.
+const FRIENDSHIP_STATE_COPY: Record<
+  FriendshipRequestState,
+  { eyebrow: string; headline: (name: string) => string; blurb: string; needsNudge: boolean }
+> = {
+  created: {
+    eyebrow: 'Already on Joshing',
+    headline: (name) => `${name} is already on Joshing.`,
+    blurb:
+      'We turned your invite into a follow request. They’ll see it — and the areas you flagged — in their activity. Want to nudge them?',
+    needsNudge: true,
+  },
+  pending_existing: {
+    eyebrow: 'Request still pending',
+    headline: (name) => `You’ve already asked to follow ${name}.`,
+    blurb: 'Your earlier request is still waiting for them. Send a gentle nudge if you’d like.',
+    needsNudge: true,
+  },
+  auto_approved: {
+    eyebrow: 'You’re connected',
+    headline: (name) => `You’re now following ${name}.`,
+    blurb: 'Their profile is open, so you’re already following — nothing to send.',
+    needsNudge: false,
+  },
+  already_following: {
+    eyebrow: 'Already following',
+    headline: (name) => `You already follow ${name}.`,
+    blurb: 'You’re connected — nothing else to do here.',
+    needsNudge: false,
+  },
 };
 
 type ErrorResponse = {
@@ -96,6 +142,14 @@ export default function AddFriendInvite({
 
   const trimmedName = name.trim();
   const smsHref = result?.message ? buildSmsHref(result.inviteePhone, messageText) : null;
+  // Resolve the existing-account handoff copy (null for a brand-new SMS invite).
+  const friendshipCopy =
+    result?.type === 'friendship_request'
+      ? FRIENDSHIP_STATE_COPY[result.state ?? 'created']
+      : null;
+  // The message/SMS handoff only makes sense for a fresh invite or a pending
+  // request that can still be nudged — not for an already-settled follow.
+  const showMessageHandoff = !friendshipCopy || friendshipCopy.needsNudge;
 
   useEffect(() => {
     function prefillInvite(event: Event) {
@@ -572,15 +626,17 @@ export default function AddFriendInvite({
         <div className="space-y-5">
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-              {result.type === 'friendship_request' ? 'Warm note ready' : 'Invite ready'}
+              {friendshipCopy ? friendshipCopy.eyebrow : 'Invite ready'}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
-              {result.type === 'friendship_request'
-                ? `Send this to ${result.inviteeDisplayName}.`
+              {friendshipCopy
+                ? friendshipCopy.headline(result.inviteeDisplayName)
                 : `Send this to ${result.inviteeDisplayName}.`}
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              You’ll send the message yourself — Joshing won’t text them for you.
+              {friendshipCopy
+                ? friendshipCopy.blurb
+                : 'You’ll send the message yourself — Joshing won’t text them for you.'}
             </p>
           </div>
 
@@ -595,54 +651,66 @@ export default function AddFriendInvite({
                 </Chip>
               ))}
             </div>
-          ) : (
+          ) : !friendshipCopy ? (
             <p className="bg-muted text-muted-foreground rounded-xl px-3 py-2 text-sm">
               No ideas attached this time — just a simple invitation.
             </p>
-          )}
+          ) : null}
 
-          <label className="text-foreground block text-sm font-medium">
-            Message you can send
-            <textarea
-              ref={messageRef}
-              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 min-h-36 w-full rounded-xl border border-[var(--accent-gold)] p-3 text-base leading-6 transition outline-none"
-              value={messageText}
-              onChange={(event) => setMessageText(event.target.value)}
-            />
-          </label>
+          {showMessageHandoff ? (
+            <>
+              <label className="text-foreground block text-sm font-medium">
+                Message you can send
+                <textarea
+                  ref={messageRef}
+                  className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 min-h-36 w-full rounded-xl border border-[var(--accent-gold)] p-3 text-base leading-6 transition outline-none"
+                  value={messageText}
+                  onChange={(event) => setMessageText(event.target.value)}
+                />
+              </label>
 
-          {!messageText.includes(result.inviteUrl ?? '') ? (
-            <p className="text-destructive text-sm">
-              Keep the link in your note so they have somewhere to land.
-            </p>
+              {!messageText.includes(result.inviteUrl ?? '') ? (
+                <p className="text-destructive text-sm">
+                  Keep the link in your note so they have somewhere to land.
+                </p>
+              ) : null}
+            </>
           ) : null}
 
           <div className="space-y-3">
-            <button
-              type="button"
-              className="btn-primary w-full"
-              onClick={copyMessage}
-            >
-              {copyLabel}
-            </button>
-            {smsHref ? (
-              <a
-                className="btn-ghost w-full"
-                href={smsHref}
-                onClick={() =>
-                  sendTelemetry('add_friend_sms_handoff_opened', {
-                    invitation_id: result.invitationId ?? result.id,
-                    suggested_interest_count: result.suggestedInterests.length,
-                    invite_type: result.type,
-                  })
-                }
-              >
-                Open Messages
-              </a>
+            {showMessageHandoff ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-primary w-full"
+                  onClick={copyMessage}
+                >
+                  {copyLabel}
+                </button>
+                {smsHref ? (
+                  <a
+                    className="btn-ghost w-full"
+                    href={smsHref}
+                    onClick={() =>
+                      sendTelemetry('add_friend_sms_handoff_opened', {
+                        invitation_id: result.invitationId ?? result.id,
+                        suggested_interest_count: result.suggestedInterests.length,
+                        invite_type: result.type,
+                      })
+                    }
+                  >
+                    Open Messages
+                  </a>
+                ) : null}
+              </>
             ) : null}
             <button
               type="button"
-              className="text-muted-foreground w-full py-2 text-sm"
+              className={
+                showMessageHandoff
+                  ? 'text-muted-foreground w-full py-2 text-sm'
+                  : 'btn-primary w-full'
+              }
               onClick={resetFlow}
             >
               Done
