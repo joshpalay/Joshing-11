@@ -69,10 +69,11 @@ export function EditorialFeature({
       className={cn('-mx-4 -my-1.5 px-8 py-12 md:py-14', TONE_BG[tone])}
     >
       <p
-        className={cn(
-          'flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.14em] uppercase',
-          TONE_ACCENT[tone],
-        )}
+        // The eyebrow uses the same ink register as the home zone headings
+        // ("From Friends" / "For you") rather than the tone accent, so editorial
+        // moments share one quiet small-caps label treatment. The tonal accent
+        // survives on the CTA link below.
+        className="flex items-center gap-1.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase"
       >
         {eyebrowIcon ? (
           <span aria-hidden="true" className="inline-flex">

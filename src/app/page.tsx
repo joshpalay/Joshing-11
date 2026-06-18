@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
-import LoadingScreen from '@/components/LoadingScreen'
 import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, {
   type DailyStatus,
@@ -88,7 +87,7 @@ export default async function Home() {
 
         <section id="feed">
           {session ? (
-            <Suspense fallback={<FeedSkeleton />}>
+            <Suspense fallback={null}>
               <FromYourFriendsSection userId={session.userId} />
             </Suspense>
           ) : (

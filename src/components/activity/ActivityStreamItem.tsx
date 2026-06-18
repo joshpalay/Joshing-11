@@ -702,7 +702,10 @@ export function MilestoneExpansion({
         marginTop: 14,
         display: 'flex',
         flexDirection: 'column',
-        gap: 18,
+        // Each row is a question + its "ANSWER →" action; this gap is the air
+        // between one row's action and the next question, so it needs to clear
+        // the link comfortably rather than smush the two together.
+        gap: 28,
       }}
     >
       {unanswered.map((q) => (
