@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
-import LoadingScreen from '@/components/LoadingScreen'
 import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, {
   type DailyStatus,
@@ -88,7 +87,7 @@ export default async function Home() {
 
         <section id="feed">
           {session ? (
-            <Suspense fallback={<FeedSkeleton />}>
+            <Suspense fallback={null}>
               <FromYourFriendsSection userId={session.userId} />
             </Suspense>
           ) : (
@@ -246,12 +245,4 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
 
 function CardSkeleton({ minHeight }: { minHeight: string }) {
   return <Skeleton className="border" style={{ minHeight }} />
-}
-
-function FeedSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-lg">
-      <LoadingScreen label="Loading feed" />
-    </div>
-  )
 }
