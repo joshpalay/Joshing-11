@@ -152,7 +152,7 @@ export default function LoadingScreen({
     "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
     fullScreen
       ? "fixed inset-0 z-[60]"
-      : "relative h-full w-full min-h-[480px]",
+      : "relative h-full w-full min-h-[70vh]",
     className ?? "",
   ]
     .filter(Boolean)
