@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ADD_SOMEONE_FOCUS_EVENT,
   addSuccessToast,
+  buildAddSomeoneHandoff,
   classifyQuery,
   describeMatchStatus,
   resolveAddSomeoneOutcome,
@@ -101,6 +103,19 @@ describe('resolveAddSomeoneOutcome', () => {
       kind: 'no_match',
       classification: 'handle',
     })
+  })
+})
+
+describe('buildAddSomeoneHandoff', () => {
+  it('targets the Add-someone block', () => {
+    expect(buildAddSomeoneHandoff().type).toBe(ADD_SOMEONE_FOCUS_EVENT)
+  })
+
+  it('carries no search term into the lookup path', () => {
+    // The friends-filter term is a name; the lookup is exact handle-or-phone
+    // only. The exit must hand the user off with an empty input, never seed the
+    // typed fragment — so the event detail stays undefined.
+    expect(buildAddSomeoneHandoff().detail).toBeUndefined()
   })
 })
 
