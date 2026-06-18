@@ -12,7 +12,7 @@ export function Hero({ isComplete }: { isComplete: boolean }) {
         />
         <p
           className="text-muted-foreground text-[13px] italic"
-          style={{ fontFamily: 'var(--font-display), Georgia, serif' }}
+          style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
         >
           What else is around?
         </p>

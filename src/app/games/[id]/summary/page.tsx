@@ -96,7 +96,7 @@ function explainerVariantsFor(
 }
 
 const kickerStyle: CSSProperties = {
-  fontFamily: 'var(--font-display, "Playfair Display"), Georgia, serif',
+  fontFamily: 'var(--font-serif), Georgia, serif',
   fontStyle: 'italic',
   fontSize: '0.78rem',
   letterSpacing: '0.01em',

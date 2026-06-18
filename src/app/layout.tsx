@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Cormorant_Garamond, Josefin_Sans, Montserrat, Playfair_Display } from 'next/font/google'
+import { Cormorant_Garamond, Josefin_Sans, Montserrat } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
@@ -26,16 +26,6 @@ const josefin = Josefin_Sans({
 const montserrat = Montserrat({
   subsets: ['latin'],
   variable: '--font-montserrat',
-  display: 'swap',
-})
-
-// F5.2: editorial italic register for category names (Categories on Portrait,
-// PortraitCircles labels). Loaded with italic style; component CSS picks it
-// up via the --font-display variable.
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  style: ['italic'],
-  variable: '--font-display',
   display: 'swap',
 })
 
@@ -72,7 +62,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`font-sans ${josefin.variable} ${montserrat.variable} ${playfair.variable} ${cormorant.variable}`}
+      className={`font-sans ${josefin.variable} ${montserrat.variable} ${cormorant.variable}`}
     >
       <body className={josefin.className}>
         {/* TESTING ONLY — apply the saved card-background choice before paint so
