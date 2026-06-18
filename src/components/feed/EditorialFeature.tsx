@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 // The three feed "featured moment" treatments. Each maps to a subtle full-bleed
-// background wash (--editorial-* in globals.css) plus an eyebrow accent color
+// background wash (--editorial-* in globals.css) plus a CTA accent color
 // borrowed from the brand palette. Add a tone here (and the matching CSS var +
 // accent) when a new editorial module joins the feed.
 export type EditorialTone = 'parchment' | 'sage' | 'slate'
@@ -23,14 +23,9 @@ const TONE_ACCENT: Record<EditorialTone, string> = {
 
 interface EditorialFeatureProps {
   tone: EditorialTone
-  // Small uppercase label (e.g. "Overlap"). Rendered uppercase; pass it in
-  // natural case.
-  eyebrow: string
-  // Optional mark beside the eyebrow (e.g. a filled bookmark), inheriting the
-  // tone accent color.
-  eyebrowIcon?: ReactNode
   // Large editorial headline. A node, so callers can weave an inline link (e.g.
-  // the friend's name) into it.
+  // the friend's name) into it. The editorial moments lead with the headline —
+  // there is deliberately no small-caps eyebrow above it.
   headline: ReactNode
   // The hero artwork slot (circles, avatar cluster, territory rows…).
   artwork: ReactNode
@@ -59,8 +54,6 @@ interface EditorialFeatureProps {
  */
 export function EditorialFeature({
   tone,
-  eyebrow,
-  eyebrowIcon,
   headline,
   artwork,
   supporting,
@@ -72,26 +65,11 @@ export function EditorialFeature({
       // -mx-4 escapes the home <main>'s px-4 gutter so the wash reaches the feed
       // column edges; -my-1.5 absorbs the feed's space-y-3 so the band meets its
       // neighbors edge to edge. Inner content is re-padded with px-8 (not
-      // px-4) so the eyebrow/headline/artwork line up with the feed cards' text,
+      // px-4) so the headline/artwork line up with the feed cards' text,
       // which sits at the 16px gutter + the card's own 14px padding = 30px.
       className={cn('-mx-4 -my-1.5 px-8 py-12 md:py-14', TONE_BG[tone])}
     >
-      <p
-        // The eyebrow uses the same ink register as the home zone headings
-        // ("From Friends" / "For you") rather than the tone accent, so editorial
-        // moments share one quiet small-caps label treatment. The tonal accent
-        // survives on the CTA link below.
-        className="flex items-center gap-1.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase"
-      >
-        {eyebrowIcon ? (
-          <span aria-hidden="true" className="inline-flex">
-            {eyebrowIcon}
-          </span>
-        ) : null}
-        {eyebrow}
-      </p>
-
-      <h2 className="mt-4 max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
+      <h2 className="max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
         {headline}
       </h2>
 

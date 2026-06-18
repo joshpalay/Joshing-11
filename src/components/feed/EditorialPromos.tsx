@@ -26,7 +26,7 @@ const SHARED_GROUND_CIRCLE_SCALE = 1.35;
 const INVITE_CLUSTER_SEEDS = ['circle-a', 'circle-b', 'circle-c', 'circle-d'];
 
 // Promo HEADLINE pools (D-FEED-GROUP3-01 Pool 4). Only the headline rotates —
-// eyebrow, CTA, and supporting copy stay fixed (functional wayfinding). The
+// the CTA and supporting copy stay fixed (functional wayfinding). The
 // rotation is by the embed's day-seeded `headlineIndex`, not an event hash, so
 // a promo that recurs as the same type still varies day to day. `{friend}` in
 // the common-ground pool is rendered as a link (see CommonGroundFeature).
@@ -91,7 +91,6 @@ export function CommonGroundFeature({
   return (
     <EditorialFeature
       tone="parchment"
-      eyebrow="Overlap"
       headline={
         onInviteSlide ? (
           COMMON_GROUND_INVITE_HEADLINE
@@ -197,7 +196,6 @@ export function GrowYourCircleFeature({
   return (
     <EditorialFeature
       tone="sage"
-      eyebrow="Grow Your Circle"
       headline={rotate(ADD_FRIENDS_HEADLINES, embed.headlineIndex)}
       artwork={
         embed.variant === 'suggestions' ? (
@@ -265,7 +263,6 @@ export function RecentlyExpandingFeature({
   return (
     <EditorialFeature
       tone="slate"
-      eyebrow="Your World Is Expanding"
       headline={rotate(RECENTLY_EXPANDING_HEADLINES, embed.headlineIndex)}
       artwork={
         <div className="flex flex-col gap-3">

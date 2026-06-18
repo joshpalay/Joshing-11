@@ -17,7 +17,6 @@ describe('EditorialFeature', () => {
     return renderToStaticMarkup(
       <EditorialFeature
         tone="parchment"
-        eyebrow="Overlap"
         headline={<>You and Robyn keep finding one another here.</>}
         artwork={<div data-mock="art" />}
         supporting="2 shared interests"
@@ -27,12 +26,18 @@ describe('EditorialFeature', () => {
     )
   }
 
-  it('renders the eyebrow, headline, supporting line, and artwork', () => {
+  it('renders the headline, supporting line, and artwork', () => {
     const html = render()
-    expect(html).toContain('Overlap')
     expect(html).toContain('You and Robyn keep finding one another here.')
     expect(html).toContain('2 shared interests')
     expect(html).toContain('data-mock="art"')
+  })
+
+  it('leads with the headline — no small-caps eyebrow above it', () => {
+    const html = render()
+    // The editorial tiles deliberately dropped their eyebrow labels; the serif
+    // headline is the first thing in the band.
+    expect(html).not.toContain('uppercase')
   })
 
   it('renders the CTA as a single text link (no button) to the given href', () => {
