@@ -17,7 +17,7 @@ describe('EditorialFeature', () => {
     return renderToStaticMarkup(
       <EditorialFeature
         tone="parchment"
-        eyebrow="Shared Ground"
+        eyebrow="Overlap"
         headline={<>You and Robyn keep finding one another here.</>}
         artwork={<div data-mock="art" />}
         supporting="2 shared interests"
@@ -29,7 +29,7 @@ describe('EditorialFeature', () => {
 
   it('renders the eyebrow, headline, supporting line, and artwork', () => {
     const html = render()
-    expect(html).toContain('Shared Ground')
+    expect(html).toContain('Overlap')
     expect(html).toContain('You and Robyn keep finding one another here.')
     expect(html).toContain('2 shared interests')
     expect(html).toContain('data-mock="art"')
@@ -60,5 +60,22 @@ describe('EditorialFeature', () => {
   it('omits the supporting line when not provided', () => {
     const html = render({ supporting: undefined })
     expect(html).not.toContain('2 shared interests')
+  })
+
+  it('renders cleanly with neither a cta nor a footerSlot', () => {
+    // The "Ask Someone" composer passes its own <form> as artwork and omits both
+    // cta and footerSlot — the component must render without a trailing link.
+    const html = render({ cta: undefined })
+    expect(html).not.toContain('<a')
+    expect(html).not.toContain('Explore your overlap →')
+  })
+
+  it('renders a footerSlot in place of the cta link when provided', () => {
+    const html = render({
+      cta: undefined,
+      footerSlot: <button type="submit">Write a Question</button>,
+    })
+    expect(html).toContain('Write a Question')
+    expect(html).toContain('<button')
   })
 })

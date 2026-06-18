@@ -23,7 +23,7 @@ const TONE_ACCENT: Record<EditorialTone, string> = {
 
 interface EditorialFeatureProps {
   tone: EditorialTone
-  // Small uppercase label (e.g. "Shared Ground"). Rendered uppercase; pass it in
+  // Small uppercase label (e.g. "Overlap"). Rendered uppercase; pass it in
   // natural case.
   eyebrow: string
   // Optional mark beside the eyebrow (e.g. a filled bookmark), inheriting the
@@ -36,8 +36,15 @@ interface EditorialFeatureProps {
   artwork: ReactNode
   // One short supporting line under the artwork (e.g. "2 shared interests").
   supporting?: ReactNode
-  // A single text-link call to action. The arrow is part of `label`.
-  cta: { label: string; href: string }
+  // A single text-link call to action. The arrow is part of `label`. Optional so
+  // a module whose action isn't navigation (e.g. a form submit) can pass
+  // `footerSlot` instead, or omit both.
+  cta?: { label: string; href: string }
+  // Escape hatch for a non-link action (e.g. a form submit button), rendered in
+  // the same position the CTA link occupies, INSTEAD of the link when present.
+  // The caller owns the element (and any surrounding <form>). Keep the editorial
+  // register — the three navigation callers should keep using `cta`.
+  footerSlot?: ReactNode
 }
 
 /**
@@ -58,6 +65,7 @@ export function EditorialFeature({
   artwork,
   supporting,
   cta,
+  footerSlot,
 }: EditorialFeatureProps) {
   return (
     <section
@@ -93,15 +101,19 @@ export function EditorialFeature({
         <p className="mt-6 text-[13px] text-[var(--brand-ink-400)]">{supporting}</p>
       ) : null}
 
-      <Link
-        href={cta.href}
-        className={cn(
-          'mt-5 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
-          TONE_ACCENT[tone],
-        )}
-      >
-        {cta.label}
-      </Link>
+      {footerSlot ? (
+        <div className="mt-5">{footerSlot}</div>
+      ) : cta ? (
+        <Link
+          href={cta.href}
+          className={cn(
+            'mt-5 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+            TONE_ACCENT[tone],
+          )}
+        >
+          {cta.label}
+        </Link>
+      ) : null}
     </section>
   )
 }

@@ -83,7 +83,7 @@ export function DomainCircleSvg({
   ariaLabel: string
   // Renders the motif larger (or smaller) without touching the geometry: the
   // viewBox is unchanged, only the rendered width/height scale. The editorial
-  // "Shared Ground" feature uses this to make the circles the hero artwork.
+  // "Overlap" feature uses this to make the circles the hero artwork.
   scale?: number
 }) {
   const { svgWidth, svgHeight, cy, rA, rB, gap, offsetX } = circleGeometry(
