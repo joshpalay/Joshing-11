@@ -28,6 +28,7 @@ import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
+import { EditorialFeature } from '@/components/feed/EditorialFeature'
 import {
   CommonGroundFeature,
   GrowYourCircleFeature,
@@ -492,7 +493,7 @@ type FeedListProps = {
    */
   activityItems?: StreamItem[]
   /**
-   * Home-only "Shared Ground" common-ground promo (the overlapping-circle
+   * Home-only "Overlap" common-ground promo (the overlapping-circle
    * editorial feature). A first-class module: rendered whenever there's latent
    * shared ground to surface, spliced a couple rows down so it's never the very
    * first feed item when there's other activity (it falls to row 0 only on an
@@ -751,59 +752,55 @@ function FeedContributeFooter() {
   }
 
   return (
+    // Add-a-Question prompt — now composes the shared EditorialFeature so it
+    // reads as one family with the feed's other invitation blocks (parchment
+    // wash, serif prompt) instead of re-rolling its own chrome. The
+    // <footer> keeps the feed's bottom spacing; EditorialFeature self-manages
+    // its own -mx-4/-my-1.5 bleed, so there's no horizontal margin to double up.
+    // The composer is the "artwork" and the submit button rides inside its
+    // <form> (so it still submits) — the box stays an input: the reader's typed
+    // idea rides to the writer via ?text= (buildQuestionWriterHref).
     <footer className="pb-8">
-      {/* Add-a-Question prompt — the same full-bleed editorial wash language as
-          the feed's other featured moments (no card, border, or triangle
-          mosaic): a parchment band that bleeds to the feed edges, with an
-          eyebrow, the serif prompt, and the composer. The box stays an input:
-          the reader's typed idea rides to the writer via ?text=
-          (buildQuestionWriterHref). */}
-      <div className="-mx-4 bg-[var(--editorial-parchment)] px-8 py-12 md:py-14">
-        <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
-          Your Turn
-        </p>
-        <h2 className="mt-4 max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
-          Sometimes the best way to show you know someone is to ask them a
-          question.
-        </h2>
-        <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
-          {/* Wrapper lets the fading placeholder overlay sit exactly over
-              the textarea. The overlay (not the native placeholder) is what
-              cycles, so we can crossfade it; it shows only while empty and
-              is hidden from AT (the textarea keeps the aria-label). */}
-          <div className="relative">
-            <textarea
-              value={idea}
-              onChange={(event) => setIdea(event.target.value)}
-              aria-label="What question would you like to be asked?"
-              rows={5}
-              className="min-h-[180px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
-            />
-            {idea.trim() === '' ? (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 px-4 py-3 text-base text-[var(--brand-ink-400)]"
-                style={{
-                  opacity: placeholderVisible ? 1 : 0,
-                  transition: `opacity ${
-                    placeholderVisible
-                      ? CONTRIBUTE_PLACEHOLDER_FADE_IN_MS
-                      : CONTRIBUTE_PLACEHOLDER_FADE_OUT_MS
-                  }ms ease-in-out`,
-                }}
-              >
-                {CONTRIBUTE_PLACEHOLDER_EXAMPLES[placeholderIndex]}
-              </span>
-            ) : null}
-          </div>
-          <button
-            type="submit"
-            className="btn-primary w-full"
-          >
-            Write a Question
-          </button>
-        </form>
-      </div>
+      <EditorialFeature
+        tone="parchment"
+        headline="Sometimes the best way to show you know someone is to ask them a question."
+        artwork={
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {/* Wrapper lets the fading placeholder overlay sit exactly over
+                the textarea. The overlay (not the native placeholder) is what
+                cycles, so we can crossfade it; it shows only while empty and
+                is hidden from AT (the textarea keeps the aria-label). */}
+            <div className="relative">
+              <textarea
+                value={idea}
+                onChange={(event) => setIdea(event.target.value)}
+                aria-label="What question would you like to be asked?"
+                rows={5}
+                className="min-h-[180px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
+              />
+              {idea.trim() === '' ? (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 px-4 py-3 text-base text-[var(--brand-ink-400)]"
+                  style={{
+                    opacity: placeholderVisible ? 1 : 0,
+                    transition: `opacity ${
+                      placeholderVisible
+                        ? CONTRIBUTE_PLACEHOLDER_FADE_IN_MS
+                        : CONTRIBUTE_PLACEHOLDER_FADE_OUT_MS
+                    }ms ease-in-out`,
+                  }}
+                >
+                  {CONTRIBUTE_PLACEHOLDER_EXAMPLES[placeholderIndex]}
+                </span>
+              ) : null}
+            </div>
+            <button type="submit" className="btn-primary w-full">
+              Write a Question
+            </button>
+          </form>
+        }
+      />
     </footer>
   )
 }

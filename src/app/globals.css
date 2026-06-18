@@ -288,8 +288,10 @@
     --font-mono: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     /* Editorial serif — Cormorant Garamond (the brand serif). Mirrors the
        @theme --font-serif above so inline `var(--font-serif)` styles resolve.
-       Playfair Display italic remains available via --font-display for the few
-       editorial labels that intentionally use it (PortraitCircles, Hero). */
+       This is the app's ONLY editorial serif: the former second serif (Playfair
+       Display via --font-display) was retired app-wide by
+       B-TYPE-SERIF-CONSOLIDATION-01 — every italic register (Hero, Lately, the
+       overlap map, the ceremony kicker) now uses Cormorant's loaded italic. */
     --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
     --radius-xs: 0.25rem;
     --radius-sm: 0.375rem;

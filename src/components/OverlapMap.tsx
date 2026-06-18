@@ -59,7 +59,7 @@ const courierHeader: CSSProperties = {
 };
 
 const italicSerif: CSSProperties = {
-  fontFamily: 'var(--font-display, "Playfair Display"), Georgia, serif',
+  fontFamily: 'var(--font-serif), Georgia, serif',
   fontStyle: 'italic',
 };
 
