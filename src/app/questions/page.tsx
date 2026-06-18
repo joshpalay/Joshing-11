@@ -2,7 +2,7 @@
 
 import { ChevronDown, Plus, Search, X } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
@@ -54,8 +54,22 @@ function createFormProps(intent: CreateIntent | null): {
 
 type AnsweredApiResponse = {
   items?: AnsweredQuestionItem[];
+  nextCursor?: string | null;
   error?: string;
   message?: string;
+};
+
+// Stale-while-revalidate cache for the Questions tab. Both endpoints are
+// cache:'no-store', so without this every remount of /questions and every
+// sub-tab switch re-ran the full server load (an unbounded bank join plus the
+// archive scan) before painting anything. Holding the last result at module
+// scope lets a warm tab paint instantly and revalidate in the background;
+// authored mutations (create/edit/delete) write through so it never goes stale
+// behind an edit.
+type AnsweredCache = { items: AnsweredQuestionItem[]; nextCursor: string | null };
+const questionsTabCache: { authored: QuestionView[] | null; answered: AnsweredCache | null } = {
+  authored: null,
+  answered: null,
 };
 
 type QuestionsApiResponse = {
@@ -132,12 +146,17 @@ function QuestionsPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const [tab, setTab] = useState<Tab>('authored');
-  const [questions, setQuestions] = useState<QuestionView[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] = useState<QuestionView[]>(() => questionsTabCache.authored ?? []);
+  const [loading, setLoading] = useState(() => questionsTabCache.authored === null);
   const [error, setError] = useState<string | null>(null);
-  const [answered, setAnswered] = useState<AnsweredQuestionItem[] | null>(null);
+  const [answered, setAnswered] = useState<AnsweredQuestionItem[] | null>(() => questionsTabCache.answered?.items ?? null);
+  const [answeredCursor, setAnsweredCursor] = useState<string | null>(() => questionsTabCache.answered?.nextCursor ?? null);
   const [answeredLoading, setAnsweredLoading] = useState(false);
+  const [answeredLoadingMore, setAnsweredLoadingMore] = useState(false);
   const [answeredError, setAnsweredError] = useState<string | null>(null);
+  // Ensures the answered tab kicks exactly one load per mount (cold → skeleton,
+  // warm → silent background revalidate over the cached paint).
+  const answeredKicked = useRef(false);
   const [orderMode, setOrderMode] = useState<OrderMode>('recency');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [search, setSearch] = useState('');
@@ -167,17 +186,21 @@ function QuestionsPageContent() {
   const [toast, setToast] = useState<string | null>(null);
 
   const loadQuestions = useCallback(async () => {
-    setLoading(true);
+    // Cold load shows the skeleton; a warm cache revalidates silently underneath
+    // the already-painted list.
+    if (questionsTabCache.authored === null) setLoading(true);
     setError(null);
     try {
       const response = await fetch('/api/questions', { cache: 'no-store', credentials: 'include' });
       const body = await response.json().catch(() => null) as QuestionsApiResponse | null;
       if (isNoQuestionsResponse(response, body)) {
         setQuestions([]);
+        questionsTabCache.authored = [];
         return;
       }
       if (!response.ok || !Array.isArray(body?.questions)) throw new Error(body?.message ?? body?.error ?? 'Could not load your questions.');
       setQuestions(body.questions);
+      questionsTabCache.authored = body.questions;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your questions.');
     } finally {
@@ -189,8 +212,16 @@ function QuestionsPageContent() {
     void Promise.resolve().then(loadQuestions);
   }, [loadQuestions]);
 
+  // Write authored mutations (create/edit/delete) through to the cache once it
+  // has been populated, so the next visit reflects them. Guarded on a non-null
+  // cache so the pre-load empty array never clobbers a warm cache.
+  useEffect(() => {
+    if (questionsTabCache.authored !== null) questionsTabCache.authored = questions;
+  }, [questions]);
+
   const loadAnswered = useCallback(async () => {
-    setAnsweredLoading(true);
+    // Cold load shows the skeleton; a warm cache revalidates silently.
+    if (questionsTabCache.answered === null) setAnsweredLoading(true);
     setAnsweredError(null);
     try {
       const response = await fetch('/api/questions/answered', { cache: 'no-store', credentials: 'include' });
@@ -198,7 +229,10 @@ function QuestionsPageContent() {
       if (!response.ok || !Array.isArray(body?.items)) {
         throw new Error(body?.message ?? body?.error ?? 'Could not load your answered questions.');
       }
+      const nextCursor = body.nextCursor ?? null;
       setAnswered(body.items);
+      setAnsweredCursor(nextCursor);
+      questionsTabCache.answered = { items: body.items, nextCursor };
     } catch (caught) {
       setAnsweredError(caught instanceof Error ? caught.message : 'Could not load your answered questions.');
     } finally {
@@ -206,11 +240,35 @@ function QuestionsPageContent() {
     }
   }, []);
 
+  const loadMoreAnswered = useCallback(async () => {
+    if (!answeredCursor || answeredLoadingMore) return;
+    setAnsweredLoadingMore(true);
+    setAnsweredError(null);
+    try {
+      const response = await fetch(`/api/questions/answered?cursor=${encodeURIComponent(answeredCursor)}`, { cache: 'no-store', credentials: 'include' });
+      const body = await response.json().catch(() => null) as AnsweredApiResponse | null;
+      if (!response.ok || !Array.isArray(body?.items)) {
+        throw new Error(body?.message ?? body?.error ?? 'Could not load more answers.');
+      }
+      const nextCursor = body.nextCursor ?? null;
+      setAnswered((current) => {
+        const next = [...(current ?? []), ...body.items!];
+        questionsTabCache.answered = { items: next, nextCursor };
+        return next;
+      });
+      setAnsweredCursor(nextCursor);
+    } catch (caught) {
+      setAnsweredError(caught instanceof Error ? caught.message : 'Could not load more answers.');
+    } finally {
+      setAnsweredLoadingMore(false);
+    }
+  }, [answeredCursor, answeredLoadingMore]);
+
   useEffect(() => {
-    if (tab !== 'answered') return;
-    if (answered !== null || answeredLoading) return;
+    if (tab !== 'answered' || answeredKicked.current) return;
+    answeredKicked.current = true;
     void Promise.resolve().then(loadAnswered);
-  }, [tab, answered, answeredLoading, loadAnswered]);
+  }, [tab, loadAnswered]);
 
   useEffect(() => {
     if (!toast) return;
@@ -340,7 +398,7 @@ function QuestionsPageContent() {
 
   if (loading && tab === 'authored') return <LoadingSkeleton />;
 
-  if (error && tab === 'authored') {
+  if (error && tab === 'authored' && questions.length === 0) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col items-center justify-center px-4 py-10 text-center">
         <h1 className="font-serif text-3xl font-semibold">Could not load your questions</h1>
@@ -470,7 +528,7 @@ function QuestionsPageContent() {
           <header className="mb-5 border-b pb-5">
             <h1 className="font-serif text-3xl font-semibold">Answered</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {answered === null ? 'Loading…' : `${answered.length} answered`}
+              {answered === null ? 'Loading…' : `${answered.length}${answeredCursor ? '+' : ''} answered`}
             </p>
           </header>
 
@@ -489,7 +547,21 @@ function QuestionsPageContent() {
               </button>
             </section>
           ) : (
-            <AnsweredQuestionsList items={answered ?? []} />
+            <>
+              <AnsweredQuestionsList items={answered ?? []} />
+              {answeredCursor ? (
+                <div className="mt-5 flex justify-center">
+                  <button
+                    type="button"
+                    className="btn-ghost inline-flex items-center gap-2"
+                    onClick={() => void loadMoreAnswered()}
+                    disabled={answeredLoadingMore}
+                  >
+                    {answeredLoadingMore ? 'Loading…' : 'Load more'}
+                  </button>
+                </div>
+              ) : null}
+            </>
           )}
         </>
       )}

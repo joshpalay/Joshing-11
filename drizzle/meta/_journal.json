@@ -575,6 +575,13 @@
       "when": 1783555200000,
       "tag": "0081_enable_rls_public_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1783641600000,
+      "tag": "0082_question_bank_added_at_idx",
+      "breakpoints": true
     }
   ]
 }
