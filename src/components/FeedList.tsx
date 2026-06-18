@@ -759,7 +759,7 @@ function FeedContributeFooter() {
           the reader's typed idea rides to the writer via ?text=
           (buildQuestionWriterHref). */}
       <div className="-mx-4 bg-[var(--editorial-parchment)] px-8 py-12 md:py-14">
-        <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--brand-orange)] uppercase">
+        <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
           Your Turn
         </p>
         <h2 className="mt-4 max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
