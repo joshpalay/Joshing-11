@@ -92,15 +92,15 @@ export function resolveAddSomeoneOutcome(input: {
 }
 
 // Toast copy after a successful add, reflecting the state the POST returned.
-// `auto_approved` means the request landed immediately (a public account); if we
-// were following them back it's now a mutual friendship, otherwise a one-way
-// follow. `created` means an approval-required request is now pending.
+// Phase 1 frames the underlying follow model as friend requests (the asymmetric
+// follow vocabulary returns in phase 2): `auto_approved` means a public account
+// connected immediately — "you're now friends" — while `created` means an
+// approval-required request is now pending. `priorState` is unused in phase-1
+// copy but kept on the signature for the phase-2 follow/friend split.
 export function addSuccessToast(
   sentState: string | undefined,
-  priorState: RelationshipState,
+  _priorState: RelationshipState,
 ): string {
-  if (sentState === 'auto_approved') {
-    return priorState === 'follows_you' ? "You're now friends." : "You're now following."
-  }
+  if (sentState === 'auto_approved') return "You're now friends."
   return 'Request sent.'
 }

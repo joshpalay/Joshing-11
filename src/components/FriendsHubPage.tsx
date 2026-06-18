@@ -26,29 +26,14 @@ export default function FriendsHubPage() {
         <h1 className="text-foreground font-serif text-3xl font-semibold">Friends</h1>
       </header>
 
+      {/* One entry point: a single lookup field. An exact @handle/number match
+          offers to send a friend request; no match (or a typed name) drops into
+          the field's own "invite them" state, which expands the invite flow
+          below. The standalone "Invite someone" block is gone — inviting is
+          reachable straight from the field. */}
       <section className="border-primary/15 bg-primary/5 text-card-foreground mb-5 rounded-[var(--radius-card)] border p-6 shadow-[var(--shadow-card)]">
         {!inviteOpen ? (
-          <>
-            <FindFriendsSearch variant="add" onInvite={handleLookupInvite} />
-            <div className="border-primary/15 mt-6 border-t pt-6">
-              <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-                Invite
-              </p>
-              <h2 className="text-foreground mt-3 font-serif text-3xl leading-tight font-semibold">
-                Who shares your world?
-              </h2>
-              <p className="text-muted-foreground mt-3 text-base leading-7">
-                Invite someone who would enjoy the questions and discoveries happening here.
-              </p>
-              <button
-                type="button"
-                className="btn-primary mt-5 w-full sm:w-auto"
-                onClick={() => openInviteFlow()}
-              >
-                Invite Someone
-              </button>
-            </div>
-          </>
+          <FindFriendsSearch variant="add" onInvite={handleLookupInvite} />
         ) : null}
         <AddFriendInvite embedded onExpandedChange={setInviteOpen} />
       </section>

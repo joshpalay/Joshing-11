@@ -31,6 +31,26 @@ export function sortByProminence<T extends { tier: number; sortAt: Date }>(
   });
 }
 
+// Pending friend requests are PINNED above the day buckets in Lately and stay
+// there until acted on, regardless of age — a tier bump alone wouldn't do it,
+// since an older request would still fall into the YESTERDAY/EARLIER day bucket
+// and scroll out of view. A stream row is a pinnable pending request exactly
+// when it carries the inline `friend_request` action (set only for requests
+// awaiting THIS viewer's approval). `rest` keeps its incoming (prominence)
+// order; `pinned` is newest-first.
+export function partitionPinnedRequests<
+  T extends { action?: { kind: string } | null; sortAt: Date },
+>(items: T[]): { pinned: T[]; rest: T[] } {
+  const pinned: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) {
+    if (item.action?.kind === 'friend_request') pinned.push(item);
+    else rest.push(item);
+  }
+  pinned.sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime());
+  return { pinned, rest };
+}
+
 export type LatelyBucket = {
   label: LatelyBucketLabel;
   items: LatelyMoment[];

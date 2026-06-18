@@ -4,6 +4,7 @@ import {
   assignCaption,
   bucketMoments,
   formatMomentTime,
+  partitionPinnedRequests,
   THEY_GOT_YOU_CAPTIONS,
   YOU_GOT_THEM_CAPTIONS,
 } from '@/lib/lately';
@@ -117,5 +118,48 @@ describe('formatMomentTime', () => {
   it('renders weekday + 24-hour time for EARLIER THIS WEEK', () => {
     const out = formatMomentTime(new Date('2026-05-19T13:20:00.000Z'), 'EARLIER THIS WEEK', tz);
     expect(out).toMatch(/^TUE\s+9:20$/);
+  });
+});
+
+describe('partitionPinnedRequests', () => {
+  type Row = { id: string; sortAt: Date; action?: { kind: string } | null };
+  const req = (id: string, sortAt: string): Row => ({
+    id,
+    sortAt: new Date(sortAt),
+    action: { kind: 'friend_request' },
+  });
+  const other = (id: string, sortAt: string, kind?: string): Row => ({
+    id,
+    sortAt: new Date(sortAt),
+    action: kind ? { kind } : null,
+  });
+
+  it('pins only rows carrying the friend_request action', () => {
+    const { pinned, rest } = partitionPinnedRequests([
+      req('r1', '2026-05-20T10:00:00.000Z'),
+      other('m1', '2026-05-23T10:00:00.000Z'),
+      other('l1', '2026-05-22T10:00:00.000Z', 'link'),
+    ]);
+    expect(pinned.map((i) => i.id)).toEqual(['r1']);
+    expect(rest.map((i) => i.id)).toEqual(['m1', 'l1']);
+  });
+
+  it('orders pinned requests newest-first regardless of incoming order', () => {
+    const { pinned } = partitionPinnedRequests([
+      req('old', '2026-05-18T10:00:00.000Z'),
+      req('new', '2026-05-24T10:00:00.000Z'),
+      req('mid', '2026-05-21T10:00:00.000Z'),
+    ]);
+    expect(pinned.map((i) => i.id)).toEqual(['new', 'mid', 'old']);
+  });
+
+  it('keeps the non-pinned rows in their incoming (prominence) order', () => {
+    const incoming = [
+      other('a', '2026-05-20T10:00:00.000Z'),
+      other('b', '2026-05-24T10:00:00.000Z'),
+    ];
+    const { rest } = partitionPinnedRequests(incoming);
+    // Not re-sorted by recency — 'a' stays first even though 'b' is newer.
+    expect(rest.map((i) => i.id)).toEqual(['a', 'b']);
   });
 });

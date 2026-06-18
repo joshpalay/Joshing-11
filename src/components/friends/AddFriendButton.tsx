@@ -69,9 +69,9 @@ export function AddFriendButton({
 
   function handleSent(_friendshipId: string, sentState?: string) {
     // Reflect what actually happened: a pending request reads "Request sent",
-    // while a public account that auto-approved reads "You're now following"
-    // (or "friends" if this completed a mutual follow). `relationship.state` is
-    // the pre-send relationship, which disambiguates the auto-approved case.
+    // while a public account that auto-approved reads "You're now friends".
+    // (Phase 1 frames the underlying follow model as friend requests; the
+    // asymmetric follow vocabulary returns in phase 2.)
     setToast(addSuccessToast(sentState, relationship.state))
     onChange?.()
   }
@@ -133,7 +133,7 @@ export function AddFriendButton({
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
-            Follow
+            Add friend
           </button>
         ) : null}
 
@@ -144,7 +144,7 @@ export function AddFriendButton({
             onClick={handleAddClick}
             disabled={pendingAction !== null}
           >
-            Follow back
+            Add friend
           </button>
         ) : null}
 

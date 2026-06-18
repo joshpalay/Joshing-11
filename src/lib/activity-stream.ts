@@ -669,7 +669,9 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       const interests = request?.suggestedInterests ?? [];
       return {
         ...base,
-        line: [a, txt(' wants to follow you')],
+        // Phase 1 frames the follow model as friend requests (the asymmetric
+        // follow vocabulary returns in phase 2).
+        line: [a, txt(' wants to be friends')],
         secondLine: interests.length > 0 ? interests.join(' · ') : null,
         secondLineVoice: interests.length > 0 ? 'system' : undefined,
         action: pending ? { kind: 'friend_request', friendshipId: request.id } : null,
@@ -680,7 +682,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
     case 'follow':
       return {
         ...base,
-        line: [a, txt(' started following you')],
+        line: [a, txt(' added you as a friend')],
         secondLine: null,
         action: null,
         expand: null,
@@ -689,7 +691,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
     case 'follow_approved':
       return {
         ...base,
-        line: [a, txt(' accepted your follow')],
+        line: [a, txt(' accepted your friend request')],
         secondLine: null,
         action: null,
         expand: null,

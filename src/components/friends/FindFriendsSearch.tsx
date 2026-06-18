@@ -141,7 +141,9 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
     void runSearch(query)
   }
 
-  const matchDisplayName = match ? match.displayName?.trim() || `@${match.handle ?? ''}` : ''
+  const matchDisplayName = match
+    ? match.displayName?.trim() || (match.handle ? `@${match.handle}` : 'Joshing player')
+    : ''
   const initials = match ? initialsFor(match.displayName, match.handle ?? '?') : ''
   const swatch = match ? match.avatarColor || colorForUser(match.id) : null
   const outcome = resolveAddSomeoneOutcome({
@@ -171,10 +173,11 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
             Add someone
           </p>
           <h2 className="text-foreground mt-3 font-serif text-2xl leading-tight font-semibold">
-            Already here?
+            Add a friend
           </h2>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            Find a friend by their @handle or US number — exact matches only.
+            Search by @handle or US number — exact matches only. Not on Joshing
+            yet? You can invite them.
           </p>
         </>
       ) : (
