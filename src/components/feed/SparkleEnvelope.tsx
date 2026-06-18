@@ -25,6 +25,12 @@ type SparkleEnvelopeProps = {
   answerLabel?: string
   /** Render the answer action as a filled primary button (used by direct sends) instead of the inline text link. */
   answerAsButton?: boolean
+  /**
+   * B-VIA-ATTRIBUTION-01: the "Via [friend]" answerer line, rendered above the
+   * Answer action. The answerer fact, distinct from the question's authorship
+   * (the `signal` line) — they coexist on different fields and never collide.
+   */
+  viaAttribution?: ReactNode
   className?: string
   /**
    * Card chrome. 'bordered' is the plain hairline-border tile both feed cards
@@ -57,6 +63,7 @@ export function SparkleEnvelope({
   onDismiss,
   answerLabel = 'Answer →',
   answerAsButton = false,
+  viaAttribution,
   className,
   variant = 'triangle',
   elevated = false,
@@ -96,6 +103,10 @@ export function SparkleEnvelope({
               &rdquo;
             </span>
           </p>
+
+          {viaAttribution ? (
+            <div className="w-full text-left">{viaAttribution}</div>
+          ) : null}
 
           {onAnswer || onDismiss ? (
             <div

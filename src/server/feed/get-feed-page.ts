@@ -23,6 +23,7 @@ import {
   socialFeedDomainLabel,
   visibleFeedSourcePredicate,
 } from '@/server/feed/visibility';
+import { getViaAnswerersForQuestions } from '@/server/feed/via-answerers';
 
 const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
 
@@ -238,9 +239,13 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
   const nextCursor = encodeFeedCursor(feedPage.nextCursor);
   const questionIds = feed.map((item) => item.questionId).filter((id): id is string => Boolean(id));
 
-  const [questionRows, bankedById] = await Promise.all([
+  const [questionRows, bankedById, viaAnswerersByQuestion] = await Promise.all([
     selectFeedQuestions(questionIds),
     checkBankedQuestions(viewerUserId, questionIds),
+    // B-VIA-ATTRIBUTION-01: per-question "Via [friend]" answerer side-channel.
+    // Follow-gated, recency-ordered, self-excluded — see via-answerers.ts. Not
+    // a card; attached to questions already on the feed for other reasons.
+    getViaAnswerersForQuestions(viewerUserId, questionIds),
   ]);
 
   const questionById = new Map(questionRows.map((q) => [q.id, q]));
@@ -333,6 +338,13 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         awarded_points: cardType === 'answered_by_you' ? awardedPoints : null,
         mastery_delta: cardType === 'answered_by_you' ? item.masteryDelta ?? null : null,
         viewer_is_author: question?.creatorId ? question.creatorId === viewerUserId : false,
+        // B-VIA-ATTRIBUTION-01: follow-gated, recency-ordered friend-answerer
+        // set for this question (lead-first). Omitted by compactNulls when the
+        // question has no friend-answerers. Distinct field from the question's
+        // authorship — "Via" (who answered) and "written by" (who authored)
+        // live on different fields and coexist (audit §C9).
+        via_answerers:
+          (item.questionId && viaAnswerersByQuestion.get(item.questionId)) || null,
       });
     }),
   };
