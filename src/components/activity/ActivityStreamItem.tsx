@@ -311,15 +311,16 @@ export function ActivityStreamItem({
   const playableCard =
     elevated && !nested && expandable && expand?.kind === 'milestone';
 
-  // Recent activity (the ambient texture rows) now reads like From Friends on the
-  // home feed: the same warm cream card shell AND the same editorial two-line
-  // serif headline — the actor's NAME large, the rest of the sentence in a medium
-  // serif below it — so the two home zones are one family of cards, not a band of
-  // editorial cards above a flat sans list. The playable milestones keep their
-  // "X of Y questions" progress + Play affordance (playableCard); the texture
-  // rows reuse the headline treatment but carry no milestone progress and only
-  // surface a disclosure affordance when there's actually something to reveal.
-  const editorialCard = elevated && !nested;
+  // Only the playable milestone bundles take the elevated cream-card chrome +
+  // editorial two-line serif headline on the home feed (the warm fill, light
+  // stroke, soft drop shadow, the actor's NAME large with the rest of the
+  // sentence below). The Recent-activity texture one-liners stay FLAT — a
+  // hairline-divided list, never their own cards — so the ambient band reads as
+  // quiet texture beneath the playable From Friends cards. editorialCard is
+  // therefore scoped to playableCard: every downstream branch keyed on it (the
+  // headline render, progress, the disclosure affordance) lights up for
+  // milestones only, and texture rows fall through to the flat one-liner body.
+  const editorialCard = playableCard;
 
   // On any elevated card the headline splits into two serif lines: the person's
   // NAME (large) and the rest of the sentence (medium) below it. Both milestone
@@ -361,12 +362,10 @@ export function ActivityStreamItem({
     : editorialCard
       ? {
           padding: opened ? '16px 14px' : '14px',
-          // Every elevated home-feed row — the "From Friends" playable milestone
-          // cards AND the "Recent activity" texture one-liners — shares the
-          // elevated feed fill token (defaults to the warm game-card cream) so
-          // the dev CARD COLOR cycler repaints them alongside the For You cards,
-          // and the same neutral hairline stroke as the Today's 5 card (no gold
-          // accent).
+          // The playable "From Friends" milestone cards take the elevated feed
+          // fill token (defaults to the warm game-card cream) so the dev CARD
+          // COLOR cycler repaints them alongside the For You cards, and the same
+          // neutral hairline stroke as the Today's 5 card (no gold accent).
           background: 'var(--feed-card-elevated)',
           border: '1px solid var(--brand-border)',
           borderRadius: 4,
@@ -402,12 +401,12 @@ export function ActivityStreamItem({
         }}
       >
         {editorialCard ? (
-          // Elevated home card (From Friends milestones AND Recent activity
-          // texture): an editorial two-line headline — the person's NAME in the
-          // large serif, the rest of the sentence in a medium serif below it.
-          // Milestones add the "X of Y questions" progress + a Play affordance in
-          // the lower-right; texture cards add a quiet disclosure only when they
-          // expand, and otherwise end on the headline.
+          // Elevated home card (playable From Friends milestones only): an
+          // editorial two-line headline — the person's NAME in the large serif,
+          // the rest of the sentence in a medium serif below it — with the
+          // "X of Y questions" progress + a Play affordance in the lower-right.
+          // Recent-activity texture rows do NOT take this branch; they render as
+          // flat one-liners below.
           <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <ActivityIcon spec={iconSpec} seed={item.id} />
