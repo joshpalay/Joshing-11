@@ -12,12 +12,14 @@ import {
   FeedOverflowMenu,
   FriendAddedCard,
   FriendLikedCard,
+  ViaAttribution,
   visibleFeedCategory,
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
   type FeedRecheckAction,
   type FriendAddedFeedItem,
   type FriendLikedFeedItem,
+  type ViaAnswerer,
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
 import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
@@ -79,6 +81,11 @@ type FeedApiItem = {
   // values locally (after answer submit) and sometimes writes null explicitly.
   source_result?: 'correct' | 'incorrect' | null
   friend_results?: FriendResult[] | null
+  // B-VIA-ATTRIBUTION-01: follow-gated, recency-ordered friend-answerer set for
+  // this question (lead-first). Server-emitted; absent when no friend answered.
+  // A distinct field from friend_results (which the answered-card comparison
+  // copy reads) so the two can't collide.
+  via_answerers?: ViaAnswerer[] | null
   viewer_answer_status?: { result: 'correct' | 'incorrect' } | null
   endorsement_count?: number | null
   additional_endorsers?: Array<{ userId: string; displayName: string }> | null
@@ -1856,6 +1863,14 @@ function FeedListContent({
       : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
 
+    // B-VIA-ATTRIBUTION-01: the "Via [friend]" answerer line, rendered above the
+    // Answer action. Only on questions with a non-empty follow-gated answerer
+    // set; the answered-by-you card keeps its existing paired-friend treatment.
+    const viaAttribution =
+      item.via_answerers && item.via_answerers.length > 0 ? (
+        <ViaAttribution answerers={item.via_answerers} />
+      ) : undefined
+
     // On the home "What's Happening" feed these answerable question cards are
     // the playable rows, interleaved with flat activity one-liners — give them
     // the Tier 1 lift (cream fill + stroke + drop shadow) so they step forward.
@@ -1867,6 +1882,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          viaAttribution={viaAttribution}
           elevated={homeZoneCards}
         />
       )
@@ -1877,6 +1893,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          viaAttribution={viaAttribution}
           elevated={homeZoneCards}
         />
       )
@@ -1887,6 +1904,7 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          viaAttribution={viaAttribution}
           elevated={homeZoneCards}
         />
       )

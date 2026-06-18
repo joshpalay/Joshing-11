@@ -10,6 +10,7 @@ export { FeedCardSwipe } from './FeedCardSwipe'
 export { FeedDismissButton } from './FeedDismissButton'
 export { FriendAddedCard } from './FriendAddedCard'
 export { FriendLikedCard } from './FriendLikedCard'
+export { ViaAttribution, type ViaAnswerer } from './ViaAttribution'
 export { feedCardPreviewFixtures, mockTypedFeedItems } from './mock-feed-items'
 export { visibleFeedCategory } from './category'
 export type {

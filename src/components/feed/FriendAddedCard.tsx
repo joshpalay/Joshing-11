@@ -10,6 +10,7 @@ type FriendAddedCardProps = {
   overflow?: ReactNode
   onAnswer?: () => void
   onDismiss?: () => void
+  viaAttribution?: ReactNode
   className?: string
   elevated?: boolean
 }
@@ -19,6 +20,7 @@ export function FriendAddedCard({
   overflow,
   onAnswer,
   onDismiss,
+  viaAttribution,
   className,
   elevated,
 }: FriendAddedCardProps) {
@@ -53,6 +55,7 @@ export function FriendAddedCard({
       // Present Answer as a filled primary button, matching the direct-send card.
       answerAsButton
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
+      viaAttribution={viaAttribution}
       className={className}
       elevated={elevated}
     />
