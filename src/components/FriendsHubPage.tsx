@@ -4,12 +4,20 @@ import { useState } from 'react';
 
 import AddFriendInvite from '@/components/AddFriendInvite';
 import FriendsList from '@/components/FriendsList';
+import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
+import type { QueryClassification } from '@/components/friends/add-someone';
 
 export default function FriendsHubPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  function openInviteFlow() {
-    window.dispatchEvent(new CustomEvent('friend-invitations:create-new', { detail: {} }));
+  function openInviteFlow(detail: Record<string, unknown> = {}) {
+    window.dispatchEvent(new CustomEvent('friend-invitations:create-new', { detail }));
+  }
+
+  // No-match invite from the lookup. A US number can seed the SMS invite; a
+  // handle isn't a phone (or a real name), so it opens the invite flow blank.
+  function handleLookupInvite(query: string, classification: QueryClassification) {
+    openInviteFlow(classification === 'phone' ? { phone: query } : {});
   }
 
   return (
@@ -21,22 +29,25 @@ export default function FriendsHubPage() {
       <section className="border-primary/15 bg-primary/5 text-card-foreground mb-5 rounded-[var(--radius-card)] border p-6 shadow-[var(--shadow-card)]">
         {!inviteOpen ? (
           <>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
-              Invite
-            </p>
-            <h2 className="text-foreground mt-3 font-serif text-3xl leading-tight font-semibold">
-              Who shares your world?
-            </h2>
-            <p className="text-muted-foreground mt-3 text-base leading-7">
-              Invite someone who would enjoy the questions and discoveries happening here.
-            </p>
-            <button
-              type="button"
-              className="btn-primary mt-5 w-full sm:w-auto"
-              onClick={openInviteFlow}
-            >
-              Invite Someone
-            </button>
+            <FindFriendsSearch variant="add" onInvite={handleLookupInvite} />
+            <div className="border-primary/15 mt-6 border-t pt-6">
+              <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
+                Invite
+              </p>
+              <h2 className="text-foreground mt-3 font-serif text-3xl leading-tight font-semibold">
+                Who shares your world?
+              </h2>
+              <p className="text-muted-foreground mt-3 text-base leading-7">
+                Invite someone who would enjoy the questions and discoveries happening here.
+              </p>
+              <button
+                type="button"
+                className="btn-primary mt-5 w-full sm:w-auto"
+                onClick={() => openInviteFlow()}
+              >
+                Invite Someone
+              </button>
+            </div>
           </>
         ) : null}
         <AddFriendInvite embedded onExpandedChange={setInviteOpen} />

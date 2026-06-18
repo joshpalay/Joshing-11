@@ -9,9 +9,12 @@ type Props = {
   onClose: () => void
   targetUserId: string
   targetDisplayName: string
-  // Called with the new friendship id after a successful send. The parent
-  // typically flips its UI to "pending_outbound" and refreshes.
-  onSent: (friendshipId: string) => void
+  // Called with the new friendship id and the state the POST returned after a
+  // successful send. `state` is 'created' (approval required → pending) or
+  // 'auto_approved' (public account → landed immediately); the parent uses it
+  // to speak plainly ("Request sent" vs "You're now following/friends") and to
+  // flip its UI / refresh.
+  onSent: (friendshipId: string, state?: string) => void
 }
 
 type SendErrorKey =
@@ -95,7 +98,7 @@ export function AddFriendRequestModal({
         }),
       })
       const body = (await response.json().catch(() => null)) as
-        | { ok: boolean; friendship?: { id: string } }
+        | { ok: boolean; state?: string; friendship?: { id: string } }
         | { error: SendErrorKey; message?: string }
         | null
 
@@ -106,7 +109,7 @@ export function AddFriendRequestModal({
         )
         return
       }
-      onSent(body.friendship.id)
+      onSent(body.friendship.id, body.state)
       onClose()
     } catch {
       setError(describeError('network'))
