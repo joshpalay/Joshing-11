@@ -249,8 +249,12 @@ function CardSkeleton({ minHeight }: { minHeight: string }) {
 }
 
 function FeedSkeleton() {
+  // Break out of the centered max-w-2xl content column so the loader spans the
+  // full viewport width (it read as too narrow when clipped to the column).
+  // left-1/2 + -translate-x-1/2 on a w-screen block re-centers it on the
+  // viewport regardless of the column's padding.
   return (
-    <div className="overflow-hidden rounded-lg">
+    <div className="relative left-1/2 w-screen -translate-x-1/2 overflow-hidden">
       <LoadingScreen label="Loading feed" />
     </div>
   )
