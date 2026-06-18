@@ -12,7 +12,7 @@ import { expandingTerritoryAccent } from '@/components/knowledge/PortraitCircles
 import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-ground-circles';
 import type { StreamEmbed } from '@/lib/activity-stream';
 
-// The "Shared Ground" circles render larger here than on the profile page — the
+// The "Overlap" circles render larger here than on the profile page — the
 // motif is the hero artwork, so it should catch the eye before the copy.
 const SHARED_GROUND_CIRCLE_SCALE = 1.35;
 
@@ -60,7 +60,7 @@ function rotate<T>(pool: readonly T[], index: number | undefined): T {
 }
 
 /**
- * "Shared Ground" — the overlapping-circle motif as a full-bleed editorial
+ * "Overlap" — the overlapping-circle motif as a full-bleed editorial
  * feature. A carousel with a slide per friend (each showing their one or two
  * strongest shared-but-untested areas), so swiping moves between PEOPLE the
  * viewer shares ground with — never between areas — plus a closing nudge to
@@ -91,7 +91,7 @@ export function CommonGroundFeature({
   return (
     <EditorialFeature
       tone="parchment"
-      eyebrow="Shared Ground"
+      eyebrow="Overlap"
       headline={
         onInviteSlide ? (
           COMMON_GROUND_INVITE_HEADLINE
