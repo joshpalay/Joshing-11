@@ -141,7 +141,9 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
     void runSearch(query)
   }
 
-  const matchDisplayName = match ? match.displayName?.trim() || `@${match.handle ?? ''}` : ''
+  const matchDisplayName = match
+    ? match.displayName?.trim() || (match.handle ? `@${match.handle}` : 'Joshing player')
+    : ''
   const initials = match ? initialsFor(match.displayName, match.handle ?? '?') : ''
   const swatch = match ? match.avatarColor || colorForUser(match.id) : null
   const outcome = resolveAddSomeoneOutcome({
