@@ -201,7 +201,7 @@ export default function TodaysFiveCard({
       : 'Ready when you are!'
 
   return (
-    <div className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-5 shadow-[var(--shadow-card)]">
+    <div className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
@@ -233,8 +233,8 @@ export default function TodaysFiveCard({
       <h2
         className={
           isComplete
-            ? 'mt-3 mb-2 font-serif text-[22px] leading-[28px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
-            : 'mt-3 mb-2 font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
+            ? 'mt-1 mb-2 font-serif text-[22px] leading-[28px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
+            : 'mt-1 mb-2 font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
         }
       >
         {headline}
