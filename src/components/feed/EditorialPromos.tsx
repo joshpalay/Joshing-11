@@ -20,10 +20,20 @@ const SHARED_GROUND_CIRCLE_SCALE = 1.35;
 // the row's domain via expandingTerritoryAccent — shared with the /knowledge
 // "Recently Expanding" module, so a territory carries one hue on both surfaces.
 
-// A faded decorative cluster of overlapping avatar circles for the
-// "Grow Your Circle" invite state — purely decorative (aria-hidden, no
-// initials, no buttons), softened into the sage wash.
-const INVITE_CLUSTER_SEEDS = ['circle-a', 'circle-b', 'circle-c', 'circle-d'];
+// Decorative invite mark — translucent overlapping discs (the brand
+// "shared ground" overlap motif) rather than hard-ringed avatar chips. Soft
+// fills, NO stroke, so it reads the same on both the sage (Overlap) and
+// terracotta (Find friends) grounds and matches the rest of the system's
+// stroke-free language. Purely decorative (aria-hidden).
+function InviteOverlapDiscs() {
+  return (
+    <span aria-hidden="true" className="flex items-center">
+      <span className="size-14 rounded-full bg-[var(--brand-ink)] opacity-50" />
+      <span className="-ml-6 size-14 rounded-full bg-[var(--cream)] opacity-60" />
+      <span className="-ml-6 size-14 rounded-full bg-[var(--brand-link)] opacity-50" />
+    </span>
+  );
+}
 
 // Promo HEADLINE pools (D-FEED-GROUP3-01 Pool 4). Only the headline rotates —
 // the CTA and supporting copy stay fixed (functional wayfinding). The
@@ -156,14 +166,8 @@ export function CommonGroundFeature({
               href={COMMON_GROUND_INVITE_HREF}
               className="flex flex-col gap-4 no-underline"
             >
-              <span aria-hidden="true" className="flex h-[76px] items-center">
-                {INVITE_CLUSTER_SEEDS.map((seed, i) => (
-                  <span
-                    key={seed}
-                    className="size-12 rounded-full ring-4 ring-[var(--editorial-sage)]"
-                    style={{ background: colorForUser(seed), marginLeft: i === 0 ? 0 : -16 }}
-                  />
-                ))}
+              <span className="flex h-[76px] items-center">
+                <InviteOverlapDiscs />
               </span>
               <span className="max-w-[150px] font-serif text-[14px] leading-snug text-[var(--brand-ink-700)]">
                 Invite someone
@@ -235,15 +239,7 @@ export function GrowYourCircleFeature({
             })}
           </div>
         ) : (
-          <div aria-hidden="true" className="flex items-center opacity-80">
-            {INVITE_CLUSTER_SEEDS.map((seed, i) => (
-              <span
-                key={seed}
-                className="size-12 rounded-full ring-4 ring-[var(--cream)]"
-                style={{ background: colorForUser(seed), marginLeft: i === 0 ? 0 : -16 }}
-              />
-            ))}
-          </div>
+          <InviteOverlapDiscs />
         )
       }
       cta={{ label: 'Find friends →', href: embed.href }}
