@@ -795,12 +795,12 @@ function FeedContributeFooter() {
                 </span>
               ) : null}
             </div>
-            {/* On the dark navy interlude ground the button inverts to a cream
-                fill / ink label, and the label takes the Josefin caps system
-                voice (uppercase + letterspacing). */}
+            {/* On the dark navy interlude ground the button is a gold fill /
+                ink label, and the label takes the Josefin caps system voice
+                (uppercase + letterspacing). */}
             <button
               type="submit"
-              className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-card)] bg-[var(--cream)] px-4 py-2 font-sans text-sm font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-card)] bg-[var(--accent-gold)] px-4 py-2 font-sans text-sm font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               Write a Question
             </button>

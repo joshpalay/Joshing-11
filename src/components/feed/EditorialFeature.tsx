@@ -83,7 +83,13 @@ export function EditorialFeature({
       // neighbors edge to edge. Inner content is re-padded with px-8 (not
       // px-4) so the headline/artwork line up with the feed cards' text,
       // which sits at the 16px gutter + the card's own 14px padding = 30px.
-      className={cn('-mx-4 -my-1.5 px-8 py-12 md:py-14', TONE_BG[tone])}
+      // The home interludes carry a slightly condensed vertical rhythm (still
+      // spacious, one notch tighter) than the parchment/sage/slate feed washes.
+      className={cn(
+        '-mx-4 -my-1.5 px-8',
+        isInterlude ? 'py-10 md:py-12' : 'py-12 md:py-14',
+        TONE_BG[tone],
+      )}
     >
       <h2
         className={cn(
@@ -96,12 +102,12 @@ export function EditorialFeature({
         {headline}
       </h2>
 
-      <div className="mt-8">{artwork}</div>
+      <div className={isInterlude ? 'mt-7' : 'mt-8'}>{artwork}</div>
 
       {supporting ? (
         <p
           className={cn(
-            'mt-6 text-[13px]',
+            isInterlude ? 'mt-5 text-[13px]' : 'mt-6 text-[13px]',
             // On the home interludes the supporting line is "system voice":
             // Josefin caps + letterspacing, inverted to cream on the dark ground.
             isInterlude
@@ -122,7 +128,8 @@ export function EditorialFeature({
         <Link
           href={cta.href}
           className={cn(
-            'mt-5 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+            'inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+            isInterlude ? 'mt-4' : 'mt-5',
             // Interlude CTAs carry the same Josefin caps system voice.
             isInterlude && 'font-sans text-[13px] tracking-[0.12em] uppercase',
             TONE_ACCENT[tone],
