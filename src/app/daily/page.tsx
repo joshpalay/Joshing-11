@@ -704,6 +704,19 @@ export default function DailyPage() {
             setSubmitNotice(null);
             return;
           }
+          // Closed slot: this tab is holding a stale snapshot where the slot
+          // still looks open, but the server already answered/skipped it
+          // (another tab/device, an auto-skip, or a daily reset). Unlike
+          // slot_changed, invalid_state carries no fresh slots, so re-tapping
+          // Answer would just loop on the same error forever. Refetch the queue
+          // to reconcile — loadQueue advances to the next open slot or routes to
+          // the summary if the day is done — instead of stranding the player.
+          if (failed?.error === 'invalid_state') {
+            setAnswer('');
+            setSubmitNotice(null);
+            await loadQueue();
+            return;
+          }
         }
         setSubmitNotice({
           tone: 'error',
@@ -713,7 +726,7 @@ export default function DailyPage() {
         setSubmitting(false);
       }
     },
-    [currentSlot, queue, submitting],
+    [currentSlot, queue, submitting, loadQueue],
   );
 
   const submitAnswer = useCallback(async () => {
