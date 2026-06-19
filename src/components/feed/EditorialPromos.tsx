@@ -195,7 +195,7 @@ export function GrowYourCircleFeature({
   const router = useRouter();
   return (
     <EditorialFeature
-      tone="sage"
+      tone="interlude-sage"
       headline={rotate(ADD_FRIENDS_HEADLINES, embed.headlineIndex)}
       artwork={
         embed.variant === 'suggestions' ? (
