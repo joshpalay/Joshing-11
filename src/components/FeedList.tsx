@@ -539,8 +539,13 @@ export type HomeBudget = {
   directOverflowCount: number
   /** Playable friend-activity bundles pending beyond the served slice. */
   playablesOverflowCount: number
-  /** The single rotating panel for this load, or null on the all-empty page. */
+  /** The single mid-feed panel (Overlap) for this load, or null on the all-empty page. */
   panel: StreamItem | null
+  /**
+   * The always-on "Find friends" (Grow Your Circle) interlude, rendered at the
+   * feed tail directly above the Write composer. Independent of `panel`.
+   */
+  growCircle?: StreamItem | null
   /** True when all three content zones are empty — drives the empty switch. */
   isAllEmpty: boolean
   /**
@@ -762,7 +767,7 @@ function FeedContributeFooter() {
     // idea rides to the writer via ?text= (buildQuestionWriterHref).
     <footer className="pb-8">
       <EditorialFeature
-        tone="parchment"
+        tone="interlude-ink"
         headline="Sometimes the best way to show you know someone is to ask them a question."
         artwork={
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -776,7 +781,7 @@ function FeedContributeFooter() {
                 onChange={(event) => setIdea(event.target.value)}
                 aria-label="What question would you like to be asked?"
                 rows={5}
-                className="min-h-[180px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
+                className="min-h-[180px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--cream-accent)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
               />
               {idea.trim() === '' ? (
                 <span
@@ -795,7 +800,13 @@ function FeedContributeFooter() {
                 </span>
               ) : null}
             </div>
-            <button type="submit" className="btn-primary w-full">
+            {/* On the dark navy interlude ground the button is a gold fill /
+                ink label, and the label takes the Josefin caps system voice
+                (uppercase + letterspacing). */}
+            <button
+              type="submit"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-card)] bg-[var(--accent-gold)] px-4 py-2 font-sans text-sm font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+            >
               Write a Question
             </button>
           </form>
@@ -2180,6 +2191,11 @@ function FeedListContent({
           ) : null}
         </div>
       ) : null}
+
+      {/* The always-on "Find friends" interlude sits directly above the Write
+          composer at the feed tail (D-HOME-PACING-01 update: promoted out of the
+          single mid-feed panel slot so it surfaces every load). */}
+      {budget?.growCircle && !loadingInitial ? renderRow(panelRow(budget.growCircle)) : null}
 
       {showContributeFooter && !loadingInitial ? <FeedContributeFooter /> : null}
 

@@ -3,23 +3,51 @@ import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-// The three feed "featured moment" treatments. Each maps to a subtle full-bleed
+// The feed "featured moment" treatments. Each maps to a subtle full-bleed
 // background wash (--editorial-* in globals.css) plus a CTA accent color
 // borrowed from the brand palette. Add a tone here (and the matching CSS var +
 // accent) when a new editorial module joins the feed.
-export type EditorialTone = 'parchment' | 'sage' | 'slate'
+//
+// The three `interlude-*` tones are the home editorial interludes
+// (B-HOME-INTERLUDE-TYPE-01): a solid sage ground (Overlap, navy ink on top), a
+// solid navy ground (Write, cream type inverted), and a deep terracotta ground
+// (Find friends, cream type inverted). On these tones the supporting line + CTA
+// take the Josefin caps "system voice"; the parchment/sage/slate washes are
+// untouched.
+export type EditorialTone =
+  | 'parchment'
+  | 'sage'
+  | 'slate'
+  | 'interlude-sage'
+  | 'interlude-ink'
+  | 'interlude-terracotta'
 
 const TONE_BG: Record<EditorialTone, string> = {
   parchment: 'bg-[var(--editorial-parchment)]',
   sage: 'bg-[var(--editorial-sage)]',
   slate: 'bg-[var(--editorial-slate)]',
+  'interlude-sage': 'bg-[var(--interlude-sage)]',
+  'interlude-ink': 'bg-[var(--ink)]',
+  'interlude-terracotta': 'bg-[var(--interlude-terracotta)]',
 }
 
 const TONE_ACCENT: Record<EditorialTone, string> = {
   parchment: 'text-[var(--brand-orange)]',
   sage: 'text-[var(--success)]',
   slate: 'text-[var(--brand-link)]',
+  // Navy ink reads on the light sage ground; cream reads on the dark navy and
+  // terracotta grounds.
+  'interlude-sage': 'text-[var(--ink)]',
+  'interlude-ink': 'text-[var(--cream)]',
+  'interlude-terracotta': 'text-[var(--cream)]',
 }
+
+const INTERLUDE_TONES = new Set<EditorialTone>([
+  'interlude-sage',
+  'interlude-ink',
+  'interlude-terracotta',
+])
+const DARK_TONES = new Set<EditorialTone>(['interlude-ink', 'interlude-terracotta'])
 
 interface EditorialFeatureProps {
   tone: EditorialTone
@@ -60,6 +88,8 @@ export function EditorialFeature({
   cta,
   footerSlot,
 }: EditorialFeatureProps) {
+  const isInterlude = INTERLUDE_TONES.has(tone)
+  const isDark = DARK_TONES.has(tone)
   return (
     <section
       // -mx-4 escapes the home <main>'s px-4 gutter so the wash reaches the feed
@@ -67,16 +97,43 @@ export function EditorialFeature({
       // neighbors edge to edge. Inner content is re-padded with px-8 (not
       // px-4) so the headline/artwork line up with the feed cards' text,
       // which sits at the 16px gutter + the card's own 14px padding = 30px.
-      className={cn('-mx-4 -my-1.5 px-8 py-12 md:py-14', TONE_BG[tone])}
+      // The home interludes carry a slightly condensed vertical rhythm (still
+      // spacious, one notch tighter) than the parchment/sage/slate feed washes.
+      className={cn(
+        '-mx-4 -my-1.5 px-8',
+        isInterlude ? 'py-10 md:py-12' : 'py-12 md:py-14',
+        TONE_BG[tone],
+      )}
     >
-      <h2 className="max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)] md:text-[32px]">
+      <h2
+        className={cn(
+          'max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium md:text-[32px]',
+          // Cormorant 500 headline; on the dark interlude ground it inverts to
+          // cream, otherwise navy ink.
+          isDark ? 'text-[var(--cream)]' : 'text-[var(--brand-ink)]',
+        )}
+      >
         {headline}
       </h2>
 
-      <div className="mt-8">{artwork}</div>
+      <div className={isInterlude ? 'mt-7' : 'mt-8'}>{artwork}</div>
 
       {supporting ? (
-        <p className="mt-6 text-[13px] text-[var(--brand-ink-400)]">{supporting}</p>
+        <p
+          className={cn(
+            isInterlude ? 'mt-5 text-[13px]' : 'mt-6 text-[13px]',
+            // On the home interludes the supporting line is "system voice":
+            // Josefin caps + letterspacing, inverted to cream on the dark ground.
+            isInterlude
+              ? cn(
+                  'font-sans tracking-[0.12em] uppercase',
+                  isDark ? 'text-[var(--cream)]/70' : 'text-[var(--brand-ink-400)]',
+                )
+              : 'text-[var(--brand-ink-400)]',
+          )}
+        >
+          {supporting}
+        </p>
       ) : null}
 
       {footerSlot ? (
@@ -85,7 +142,10 @@ export function EditorialFeature({
         <Link
           href={cta.href}
           className={cn(
-            'mt-5 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+            'inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
+            isInterlude ? 'mt-4' : 'mt-5',
+            // Interlude CTAs carry the same Josefin caps system voice.
+            isInterlude && 'font-sans text-[13px] tracking-[0.12em] uppercase',
             TONE_ACCENT[tone],
           )}
         >
