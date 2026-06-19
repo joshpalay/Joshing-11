@@ -364,27 +364,81 @@ function interpretiveLine(summary: DailySummaryView): string | null {
   return null
 }
 
-function ResultDots({ questions }: { questions: QuestionRecap[] }) {
+function ResultDot({
+  question,
+  ariaLabel,
+}: {
+  question: QuestionRecap
+  ariaLabel: string
+}) {
   return (
-    <div className="flex items-center gap-2" aria-label="Question results">
-      {questions.map((question, index) => (
+    <span
+      className="size-2.5 rounded-full border"
+      style={{
+        backgroundColor: question.isSkipped
+          ? 'color-mix(in srgb, var(--brand-ink) 24%, transparent)'
+          : question.isCorrect
+            ? 'color-mix(in srgb, var(--game-correct) 88%, var(--brand-card))'
+            : 'color-mix(in srgb, var(--game-wrong) 78%, var(--brand-card))',
+        borderColor: 'color-mix(in srgb, var(--brand-border) 72%, transparent)',
+        boxShadow: '0 0 0 2px var(--brand-card)',
+      }}
+      aria-label={ariaLabel}
+    />
+  )
+}
+
+// D-F1 / D-F1b: one continuous track — core dots, then (only when there are
+// bonus questions) a visible separator, the bonus dots, and the generic
+// "+{N} bonus from friends" label. The bonus signal is the gap + label (real
+// text), never color. Mirrors the live-session GeometricProgress track.
+function ResultDots({ questions }: { questions: QuestionRecap[] }) {
+  const core = questions.filter((q) => !q.isBonus)
+  const bonus = questions.filter((q) => q.isBonus)
+
+  const outcome = (q: QuestionRecap) =>
+    q.isSkipped ? 'skipped' : q.isCorrect ? 'correct' : 'not this time'
+
+  if (bonus.length === 0) {
+    return (
+      <div className="flex items-center gap-2" aria-label="Question results">
+        {core.map((question, index) => (
+          <ResultDot
+            key={question.questionId}
+            question={question}
+            ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <div className="flex items-center gap-2" aria-label="Question results">
+        {core.map((question, index) => (
+          <ResultDot
+            key={question.questionId}
+            question={question}
+            ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
+          />
+        ))}
         <span
-          key={question.questionId}
-          className="size-2.5 rounded-full border"
-          style={{
-            backgroundColor: question.isSkipped
-              ? 'color-mix(in srgb, var(--brand-ink) 24%, transparent)'
-              : question.isCorrect
-                ? 'color-mix(in srgb, var(--game-correct) 88%, var(--brand-card))'
-                : 'color-mix(in srgb, var(--game-wrong) 78%, var(--brand-card))',
-            borderColor: 'color-mix(in srgb, var(--brand-border) 72%, transparent)',
-            boxShadow: '0 0 0 2px var(--brand-card)',
-          }}
-          aria-label={`Question ${index + 1}: ${
-            question.isSkipped ? 'skipped' : question.isCorrect ? 'correct' : 'not this time'
-          }`}
+          aria-hidden
+          className="mx-0.5 h-3 w-px shrink-0"
+          style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
         />
-      ))}
+        {bonus.map((question, index) => (
+          <ResultDot
+            key={question.questionId}
+            question={question}
+            ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
+          />
+        ))}
+      </div>
+      <span className="text-[0.6rem] font-medium text-[var(--brand-ink-400)]">
+        +{bonus.length} bonus from friends
+      </span>
     </div>
   )
 }

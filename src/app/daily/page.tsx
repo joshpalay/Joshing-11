@@ -22,7 +22,7 @@ import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
-import { getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
+import { getBonusCount, getCoreSlots, getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
 import {
   buildSessionCloseLines,
   type SessionSlotSummary,
@@ -373,6 +373,13 @@ export default function DailyPage() {
   // produce a graceful-degraded shorter queue, and the progress dots should
   // match the real number of questions rather than always showing five.
   const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
+  // Track split (D-F1): core dots vs additive bonus dots, derived from the shared
+  // selector rather than index math. Track length stays the real queue length
+  // (graceful-degrade can yield <5 core); the bonus group is set apart by a gap +
+  // label, never counted toward the five.
+  const coreDotCount =
+    queue && queue.slots.length > 0 ? getCoreSlots(queue.slots).length : DAILY_QUEUE_SIZE;
+  const bonusDotCount = queue ? getBonusCount(queue.slots) : 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
   // Defense-in-depth against a partial queue snapshot (B-DAILY-PARTIAL-QUEUE-01).
@@ -829,7 +836,8 @@ export default function DailyPage() {
         </div>
         <div className="flex items-center gap-2">
           <GeometricProgress
-            total={queueLength}
+            coreCount={coreDotCount}
+            bonusCount={bonusDotCount}
             current={Math.min(completedCount + 1, queueLength)}
             results={results}
           />

@@ -17,6 +17,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
+import { isBonusSlot } from '@/server/daily/bonus';
 import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
 
@@ -70,6 +71,13 @@ export type QuestionRecap = {
   authorNote: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
   authorIsHouse: boolean;
+  /**
+   * Daily Five +2: this recap row is an additive bonus question (D-4 §B), set via
+   * the shared bonus selector. Drives the recap dot-track split (core | gap |
+   * bonus). Never enters the spoken X/5 count. The named "from {Name}'s knowledge"
+   * sub-line rides a separate presence field (added in Phase 3), not authorName.
+   */
+  isBonus: boolean;
   /**
    * B-Report-2: which content table this recap row points at, for a ContentReport.
    * Exactly one id is set — curated questions carry `questionId`, LLM-origin questions
@@ -249,6 +257,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       authorId: slot.source === 'friend' ? (slot.author_id ?? null) : null,
       authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
       authorIsHouse: slot.source === 'house',
+      isBonus: isBonusSlot(slot),
       reportTarget: slot.question_id
         ? { questionId: slot.question_id }
         : slot.generated_question_id
