@@ -132,8 +132,16 @@ async function handleDailyCatchupAnswer({
       refresh_required: true,
     });
   }
-  // A slot previously answered correctly is not eligible — only wrong/skipped/
-  // untouched slots show up in catch-up after the expanded eligibility rules.
+  // Already recovered in a prior catch-up attempt — closed for good. Keyed on
+  // catchup_answer_state because recovery leaves the live answer_state intact.
+  if (slot.catchup_answer_state === 'correct') {
+    return catchUpErrorResponse(400, 'catch_up_not_eligible', 'catch-up item is already closed', {
+      refresh_required: true,
+    });
+  }
+  // A slot previously answered correctly IN THE LIVE ROUND is not eligible —
+  // only wrong/skipped/untouched slots show up in catch-up after the expanded
+  // eligibility rules.
   if (slot.answered && slot.answer_state !== 'incorrect') {
     return catchUpErrorResponse(400, 'catch_up_not_eligible', 'catch-up item is already closed', {
       refresh_required: true,
@@ -265,10 +273,17 @@ async function handleDailyCatchupAnswer({
   const nextSlots = replaceQueueSlot(slots, catchupItem.slotIndex, (item) => {
     return {
       ...item,
-      answered: true,
-      answer_state: answerState,
-      submitted_answer: submittedAnswer,
-      awarded_points: pointsAwarded,
+      // Record the catch-up outcome in its OWN fields. We deliberately do NOT
+      // touch `answered`, `answer_state`, `submitted_answer`, or
+      // `awarded_points` — those carry the live daily-five verdict that drives
+      // the progress dots and the summary totals. Re-answering a wrong (or
+      // skipped) slot in catch-up must not retroactively turn the live red dot
+      // green or inflate the live score; the original result stays put. (Mirrors
+      // the feed catch-up path, which preserves the original feed-card history.)
+      catchup_answer_state: answerState,
+      catchup_submitted_answer: submittedAnswer,
+      catchup_awarded_points: pointsAwarded,
+      catchup_answered_at: new Date().toISOString(),
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
       reveal_quip: grade.consolation,
