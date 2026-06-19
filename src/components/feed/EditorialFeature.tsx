@@ -68,6 +68,12 @@ interface EditorialFeatureProps {
   // The caller owns the element (and any surrounding <form>). Keep the editorial
   // register — the three navigation callers should keep using `cta`.
   footerSlot?: ReactNode
+  // For a band that closes the page (the feed-tail "Write a Question" interlude):
+  // run the wash all the way to the bottom of the scroll instead of stopping
+  // short and leaving an orphaned strip of page cream between the band and the
+  // fixed bottom nav. The band's bottom padding then both fills that gap and
+  // keeps its own content clear of the nav. See FeedContributeFooter.
+  bleedBottom?: boolean
 }
 
 /**
@@ -87,6 +93,7 @@ export function EditorialFeature({
   supporting,
   cta,
   footerSlot,
+  bleedBottom = false,
 }: EditorialFeatureProps) {
   const isInterlude = INTERLUDE_TONES.has(tone)
   const isDark = DARK_TONES.has(tone)
@@ -100,8 +107,18 @@ export function EditorialFeature({
       // The home interludes carry a slightly condensed vertical rhythm (still
       // spacious, one notch tighter) than the parchment/sage/slate feed washes.
       className={cn(
-        '-mx-4 -my-1.5 px-8',
-        isInterlude ? 'py-10 md:py-12' : 'py-12 md:py-14',
+        // Top bleed/padding is unchanged across every tone. The bottom is split
+        // out so a closing band (bleedBottom) can run the wash past the page's
+        // bottom padding instead of ending in an orphaned cream strip.
+        '-mx-4 -mt-1.5 px-8',
+        isInterlude ? 'pt-10 md:pt-12' : 'pt-12 md:pt-14',
+        bleedBottom
+          ? // Fill the home <main>'s pb-32 with the wash (-mb-32 cancels that
+            // page padding; pb-32 paints the band over it) so the band closes the
+            // scroll. The deep bottom padding also keeps the content clear of the
+            // fixed bottom nav that floats over the band's tail.
+            'pb-32 -mb-32'
+          : cn('-mb-1.5', isInterlude ? 'pb-10 md:pb-12' : 'pb-12 md:pb-14'),
         TONE_BG[tone],
       )}
     >
