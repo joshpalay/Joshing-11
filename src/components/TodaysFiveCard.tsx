@@ -23,6 +23,12 @@ export type DailyStatus = {
   nextRoundAt: string
   queueId: string | null
   slotOutcomes: SlotOutcome[]
+  /**
+   * Outcomes for the +2 bonus slots (D-4 §B), in order. 0–2 entries. Additive:
+   * these render as the bonus dot-group after the core five, but never enter the
+   * "of 5" count. Empty when there's no queue or no bonus slots.
+   */
+  bonusOutcomes: SlotOutcome[]
 }
 
 type TodaysFiveCardProps = {
@@ -54,6 +60,7 @@ const FALLBACK_STATUS: DailyStatus = {
   nextRoundAt: new Date().toISOString(),
   queueId: null,
   slotOutcomes: ['unanswered', 'unanswered', 'unanswered', 'unanswered', 'unanswered'],
+  bonusOutcomes: [],
 }
 
 const VALID_OUTCOMES: ReadonlySet<SlotOutcome> = new Set<SlotOutcome>([
@@ -72,6 +79,58 @@ function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
       ? (candidate as SlotOutcome)
       : unanswered
   })
+}
+
+// Bonus outcomes are variable-length (0–2) and additive, so unlike the fixed
+// core five they aren't padded — a malformed entry degrades to 'unanswered',
+// and a non-array degrades to no bonus dots.
+function normalizeBonusOutcomes(value: unknown): SlotOutcome[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .slice(0, 2)
+    .map((candidate) =>
+      typeof candidate === 'string' && VALID_OUTCOMES.has(candidate as SlotOutcome)
+        ? (candidate as SlotOutcome)
+        : ('unanswered' as SlotOutcome),
+    )
+}
+
+function outcomeLabel(outcome: SlotOutcome): string {
+  return outcome === 'correct'
+    ? 'Correct'
+    : outcome === 'incorrect'
+      ? 'Wrong'
+      : outcome === 'skipped'
+        ? 'Skipped'
+        : 'Not answered'
+}
+
+function OutcomeDot({ outcome, label }: { outcome: SlotOutcome; label: string }) {
+  const isFilled = outcome !== 'unanswered'
+  const background =
+    outcome === 'correct'
+      ? 'var(--game-correct)'
+      : outcome === 'incorrect'
+        ? 'var(--game-wrong-strong)'
+        : outcome === 'skipped'
+          ? 'color-mix(in srgb, var(--brand-ink) 35%, transparent)'
+          : 'transparent'
+  return (
+    <span
+      className="block rounded-full"
+      aria-label={label}
+      title={label}
+      style={{
+        width: 11,
+        height: 11,
+        background,
+        border: isFilled
+          ? 'none'
+          : '1px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
+        opacity: isFilled ? 0.95 : 0.7,
+      }}
+    />
+  )
 }
 
 export default function TodaysFiveCard({
@@ -127,6 +186,7 @@ export default function TodaysFiveCard({
               : FALLBACK_STATUS.nextRoundAt,
           queueId: typeof body.queue_id === 'string' ? body.queue_id : null,
           slotOutcomes: normalizeSlotOutcomes(body.slotOutcomes),
+          bonusOutcomes: normalizeBonusOutcomes(body.bonusOutcomes),
         })
       } catch {
         if (!cancelled) setStatus(FALLBACK_STATUS)
@@ -240,47 +300,37 @@ export default function TodaysFiveCard({
         {headline}
       </h2>
 
+      {/* One continuous track (D-F1): the core five, then — only when this round
+          carries +2 bonus questions — a visible separator, the bonus dots, and a
+          generic "+{N} friend bonus" label. The bonus group is set apart by
+          the gap + label (real text), never by color, and never enters the "of 5"
+          count. With no bonus this is exactly the original five-dot row. */}
       <div
         className="mt-3 flex items-center gap-2"
         aria-label={`${answered} of 5 answered`}
       >
-        {Array.from({ length: 5 }, (_, index) => {
-          const outcome = effectiveStatus.slotOutcomes[index] ?? 'unanswered'
-          const isFilled = outcome !== 'unanswered'
-          const background =
-            outcome === 'correct'
-              ? 'var(--game-correct)'
-              : outcome === 'incorrect'
-                ? 'var(--game-wrong-strong)'
-                : outcome === 'skipped'
-                  ? 'color-mix(in srgb, var(--brand-ink) 35%, transparent)'
-                  : 'transparent'
-          const label =
-            outcome === 'correct'
-              ? 'Correct'
-              : outcome === 'incorrect'
-                ? 'Wrong'
-                : outcome === 'skipped'
-                  ? 'Skipped'
-                  : 'Not answered'
-          return (
+        {effectiveStatus.slotOutcomes.slice(0, 5).map((outcome, index) => (
+          <OutcomeDot key={`core-${index}`} outcome={outcome} label={outcomeLabel(outcome)} />
+        ))}
+        {effectiveStatus.bonusOutcomes.length > 0 ? (
+          <>
             <span
-              key={index}
-              className="block rounded-full"
-              aria-label={label}
-              title={label}
-              style={{
-                width: 11,
-                height: 11,
-                background,
-                border: isFilled
-                  ? 'none'
-                  : '1px solid color-mix(in srgb, var(--brand-ink) 35%, transparent)',
-                opacity: isFilled ? 0.95 : 0.7,
-              }}
+              aria-hidden
+              className="mx-0.5 h-3 w-px shrink-0"
+              style={{ background: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
             />
-          )
-        })}
+            {effectiveStatus.bonusOutcomes.map((outcome, index) => (
+              <OutcomeDot
+                key={`bonus-${index}`}
+                outcome={outcome}
+                label={`Bonus ${index + 1} of ${effectiveStatus.bonusOutcomes.length}, from friends: ${outcomeLabel(outcome)}`}
+              />
+            ))}
+            <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
+              +{effectiveStatus.bonusOutcomes.length} friend bonus
+            </span>
+          </>
+        ) : null}
       </div>
 
       {/* Active-state progress line. The completed state replaces this with the

@@ -17,6 +17,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
+import { getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
 import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
 
@@ -70,6 +71,20 @@ export type QuestionRecap = {
   authorNote: string | null;
   /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
   authorIsHouse: boolean;
+  /**
+   * Daily Five +2: this recap row is an additive bonus question (D-4 §B), set via
+   * the shared bonus selector. Drives the recap dot-track split (core | gap |
+   * bonus). Never enters the spoken X/5 count.
+   */
+  isBonus: boolean;
+  /**
+   * Presence attribution for a +2 bonus row: the named friend whose knowledge
+   * surfaced this domain, for the quiet "from {Name}'s knowledge" sub-line (D-F4).
+   * Null for core rows and for bonus rows whose friend has no display name (no
+   * name → no sub-line). Deliberately NOT routed through `authorName`: the friend
+   * did not author or answer the question — this names WHERE the domain came from.
+   */
+  bonusPresence: { name: string; extraCount: number } | null;
   /**
    * B-Report-2: which content table this recap row points at, for a ContentReport.
    * Exactly one id is set — curated questions carry `questionId`, LLM-origin questions
@@ -230,6 +245,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
 
   const recaps = slots.map<QuestionRecap>((slot) => {
     const generated = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
+    const presence = getSlotPresence(slot);
     const domain = slot.domain || generated?.canonicalSubcategory || 'General';
     const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue?.id ?? dateString}:${slot.slot_index}`;
     return {
@@ -249,6 +265,11 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       authorId: slot.source === 'friend' ? (slot.author_id ?? null) : null,
       authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
       authorIsHouse: slot.source === 'house',
+      isBonus: isBonusSlot(slot),
+      bonusPresence:
+        presence && presence.name
+          ? { name: presence.name, extraCount: presence.extraCount }
+          : null,
       reportTarget: slot.question_id
         ? { questionId: slot.question_id }
         : slot.generated_question_id
