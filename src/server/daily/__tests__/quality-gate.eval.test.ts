@@ -99,3 +99,39 @@ describe.skipIf(!evalsEnabled)('quality gate GENERIC_AT_TIER (live)', () => {
     EVAL_TIMEOUT_MS,
   );
 });
+
+describe.skipIf(!evalsEnabled)('quality gate FALSE_PREMISE (live)', () => {
+  it(
+    'flags a buried false-count premise even though it reads cleanly',
+    async () => {
+      // Bach wrote six works for solo violin and six for solo cello, not three
+      // of each. The setup's count is false even though the answer is correct.
+      const result = await findQualityFailures([
+        q(
+          'Bach composed six celebrated works for unaccompanied string instrument — three for solo violin and three for solo cello. What collective title is given to the three works written for solo cello?',
+          'Cello Suites',
+          'moderate',
+          "Bach's Cello Suites",
+        ),
+      ]);
+      expect([...result.toDrop]).toEqual([0]);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag the same fact stated with a true premise',
+    async () => {
+      const result = await findQualityFailures([
+        q(
+          'Bach wrote six suites for unaccompanied cello (BWV 1007–1012). What collective title are these works known by?',
+          'Cello Suites',
+          'moderate',
+          "Bach's Cello Suites",
+        ),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+});

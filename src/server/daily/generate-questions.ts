@@ -641,7 +641,7 @@ const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-gene
 
 1. ANSWER_LEAKED — the question setup contains the answer, near-paraphrase, or a tell that gives the answer away. E.g. "Mrs. Lovett bakes meat pies using a secret ingredient from Sweeney's victims. What does she put in the pies?" — the setup tells you it's the victims.
 2. OPINION_OR_VAGUE — asks for a preference, value judgment, or has no single clear answer.
-3. FALSE_PREMISE — the setup contains a factual error or assumes something incorrect.
+3. FALSE_PREMISE — the setup contains a factual error or assumes something incorrect. Verify embedded factual claims, not just the overall framing: counts ("six works"), dates, attributions/authorship, and "N of which M" / "X of Y" relationships must hold up. A false claim of this kind is a defect however fluently it is phrased — it is NOT one of the "subtle wordsmithing" concerns excluded below. E.g. "Bach composed six works for unaccompanied strings — three for solo violin and three for solo cello" is FALSE_PREMISE (he wrote six of each, not three), even though the question reads cleanly and its answer is correct.
 4. SELF_ANSWERING — the question names the answer in its own text ("Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?").
 5. GENERIC_AT_TIER — tier-gated: judge this defect ONLY for items whose tier is moderate or specialist. NEVER flag an accessible-tier item with this defect, and never flag any item merely for resembling a simply-phrased question. At moderate/specialist, a question is defective when it is generic trivia: mentally remove the work/domain title from the question — if what remains could appear in any generic trivia app (name-the-character/title/location roster questions, what-year/what-number lookups with no significance to a fan), it does not clear the tier's bar. E.g. "In Gilmore Girls, what is the name of Rory's first boyfriend?" at specialist is GENERIC_AT_TIER. A question probing a specific scene, running joke, exact wording, object, technique, or second-order fact is NOT generic, however plainly it is phrased — "In American Psycho, what color is Paul Allen's business card?" passes. Flag ONLY clear-cut cases; when uncertain, do not flag — at these tiers a missed generic question is cheaper than suppressing a good one.
 
@@ -724,28 +724,37 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   }
 }
 
-// Factual-correctness gate. The dedup and quality gates above never check
-// whether the *stated answer is actually correct for the question* — they
-// only catch repeats, leaks, vagueness, and false premises in the setup. A
-// generator hallucination that pairs a good question with the wrong answer
-// (e.g. asking who wrote "Rubyfruit Jungle" but answering with a politician)
-// sails straight through. User-authored questions get this check via
-// vetQuestion() on the /api/questions path; bot-generated daily questions
-// had no equivalent until this gate. Like the others it is batch-based,
-// runs in parallel, and fails open.
-const FACTUAL_GATE_SYSTEM_PROMPT = `You are fact-checking a small batch of just-generated trivia questions before they are served to a player. Each item has a question and the stated answer the game will mark as correct. Your only job is to catch questions whose stated answer is WRONG.
+// Factual-correctness gate. The dedup and quality gates above never reliably
+// check whether the *stated answer is actually correct for the question*, nor
+// whether the question's *setup is factually true* — they catch repeats, leaks,
+// and vagueness, and the quality gate's FALSE_PREMISE check is tuned to a "high
+// bar / not subtle" posture that misses buried errors. Two hallucinations sail
+// through without this gate: (1) a good question paired with the wrong answer
+// (e.g. asking who wrote "Rubyfruit Jungle" but answering with a politician),
+// and (2) a correct answer paired with a FALSE PREMISE in the setup (e.g.
+// "Bach wrote six works for solo strings — three for violin and three for
+// cello" — he wrote six of each; the keyed answer is right but the count is a
+// lie). This gate checks BOTH the answer and the premise. User-authored
+// questions get the equivalent via vetQuestion() on the /api/questions path;
+// bot-generated daily questions had no equivalent until this gate. Like the
+// others it is batch-based, runs in parallel, and fails open.
+const FACTUAL_GATE_SYSTEM_PROMPT = `You are fact-checking a small batch of just-generated trivia questions before they are served to a player. Each item has a question and the stated answer the game will mark as correct. Your job is to catch questions whose stated answer is WRONG, OR whose question setup states something factually false.
 
 For each question decide:
-- WRONG — the stated answer is factually incorrect for the question, OR the question's clearly-correct answer is a different thing/person than the stated answer, OR the question and answer come from mismatched subjects (e.g. a literature question answered with an unrelated political figure).
-- OK — the stated answer is correct, or a reasonable equivalent/alternate form of the correct answer.
+- WRONG — any of:
+  - the stated answer is factually incorrect for the question, OR
+  - the question's clearly-correct answer is a different thing/person than the stated answer, OR
+  - the question and answer come from mismatched subjects (e.g. a literature question answered with an unrelated political figure), OR
+  - the question's SETUP asserts a false fact — a wrong count, date, attribution, authorship, or relationship — EVEN WHEN the stated answer is correct. E.g. "Bach composed six works for unaccompanied strings — three for solo violin and three for solo cello — what collective title is given to the cello set?" answered "Cello Suites": the answer is correct, but the premise is false (Bach wrote six of each, not three), so this is WRONG.
+- OK — the stated answer is correct (or a reasonable equivalent/alternate form) AND the setup contains no false factual claim.
 - UNVERIFIABLE — you genuinely cannot verify the fact (extremely niche, recent, or personal). Treat these as OK; do NOT flag them.
 
-Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar applies — when in doubt, leave it. Do not flag for style, difficulty, phrasing, or ambiguity; only for a factually incorrect stated answer.
+Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar applies — when in doubt, leave it. Do not flag for style, difficulty, phrasing, or ambiguity; only for a factually incorrect stated answer or a factually false premise.
 
 Return JSON only:
-{ "drop_indices": [list of zero-based indices whose stated answer is wrong], "reasons": { "<index>": "<short reason naming the correct answer>" } }
+{ "drop_indices": [list of zero-based indices that are WRONG], "reasons": { "<index>": "<short reason naming the correct answer or correcting the false premise>" } }
 
-If no answers are wrong, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
+If nothing is wrong, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 export function parseFactualGateResponse(
   raw: string,
@@ -783,7 +792,10 @@ export function parseFactualGateResponse(
   return { toDrop, reasons };
 }
 
-async function findFactualFailures(generated: LlmQuestion[]): Promise<{
+// Exported for the opt-in live evals (factual-gate.test.ts), mirroring the
+// findQualityFailures precedent. Production callers are generateDailyQuestions
+// and screenGroundedBatch in this module.
+export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
   toDrop: Set<number>;
   reasons: Record<number, string>;
 }> {
@@ -1185,8 +1197,9 @@ export async function generateDailyQuestions(
   //   covered by fact_key dedup at persist time.
   // - findQualityFailures: LLM-generated counterpart to critiqueQuestion() —
   //   catches answer-leakage, opinion/vague, false-premise, self-answering.
-  // - findFactualFailures: verifies the stated answer is actually correct for
-  //   the question — the one defect class the other gates never inspect.
+  // - findFactualFailures: verifies both that the stated answer is correct for
+  //   the question AND that the question's setup contains no false premise — the
+  //   defect classes the other gates never reliably inspect.
   // - findAnswerLeaks (below, synchronous): deterministic fail-closed backstop
   //   for answer leakage when the Haiku quality gate misses or fails open.
   const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);

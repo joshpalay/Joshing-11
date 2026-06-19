@@ -1,13 +1,18 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { getAnthropicClient } from '@/lib/llm';
+import type { LlmQuestion } from '@/server/daily/generate-questions';
 
 // generate-questions.ts imports @/server/db, which throws at module load
 // without a connection string. The parser under test never touches the DB;
 // a dummy URL plus dynamic import (the repo convention) keeps the unit pure.
 let parseFactualGateResponse: typeof import('@/server/daily/generate-questions').parseFactualGateResponse;
+let findFactualFailures: typeof import('@/server/daily/generate-questions').findFactualFailures;
 
 beforeAll(async () => {
   process.env.DATABASE_URL ??= 'postgres://user:pass@localhost:5432/joshing_test';
-  ({ parseFactualGateResponse } = await import('@/server/daily/generate-questions'));
+  ({ parseFactualGateResponse, findFactualFailures } = await import(
+    '@/server/daily/generate-questions'
+  ));
 });
 
 describe('parseFactualGateResponse', () => {
@@ -49,4 +54,78 @@ describe('parseFactualGateResponse', () => {
     );
     expect(result.reasons[0].length).toBe(200);
   });
+});
+
+// Live factual-gate evals — these call the REAL Haiku gate, not a mock.
+//
+// OPT-IN: they hit the Anthropic API, cost tokens, and are non-deterministic.
+// Run explicitly with:
+//
+//   RUN_LLM_EVALS=1 ANTHROPIC_API_KEY=sk-... npx vitest run eval.test
+//
+// (or `npm run test:evals`). Without RUN_LLM_EVALS=1 and a valid key, the whole
+// describe block is skipped. Mirrors quality-gate.eval.test.ts.
+
+const evalsEnabled = process.env.RUN_LLM_EVALS === '1' && getAnthropicClient() !== null;
+
+const EVAL_TIMEOUT_MS = 30_000;
+
+function q(text: string, answer: string, domain: string): LlmQuestion {
+  return {
+    canonical_subcategory: domain,
+    broad_category: 'Music',
+    question_text: text,
+    answer,
+    explainer: 'Context for the answer.',
+    difficulty_estimate: 'moderate',
+    fact_key: null,
+    sub_angles: [],
+    question_shape: null,
+  };
+}
+
+describe.skipIf(!evalsEnabled)('factual gate premise check (live)', () => {
+  it(
+    'flags a question with a correct answer but a FALSE PREMISE in the setup',
+    async () => {
+      // Bach wrote SIX works for solo violin and SIX for solo cello, not three
+      // of each. The keyed answer ("Cello Suites") is correct; the count is a
+      // lie. Pre-fix, the factual gate ignored the premise and waved this in.
+      const result = await findFactualFailures([
+        q(
+          'Bach composed six celebrated works for unaccompanied string instrument — three for solo violin and three for solo cello. What collective title is given to the three works written for solo cello?',
+          'Cello Suites',
+          "Bach's Cello Suites",
+        ),
+      ]);
+      expect([...result.toDrop]).toEqual([0]);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag the same fact stated with a TRUE premise',
+    async () => {
+      const result = await findFactualFailures([
+        q(
+          'Bach wrote six suites for unaccompanied cello (BWV 1007–1012). What collective title are these works known by?',
+          'Cello Suites',
+          "Bach's Cello Suites",
+        ),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag a question whose answer and premise are both correct',
+    async () => {
+      const result = await findFactualFailures([
+        q("What is the title of Beethoven's Third Symphony?", 'Eroica', 'Beethoven Symphonies'),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
 });
