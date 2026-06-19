@@ -76,7 +76,8 @@ describe('Feed card preview fixtures', () => {
 
     const directSent = html(<DirectSentCard item={fixtures.directSentUnanswered} />)
     expect(directSent).toContain('Maya')
-    expect(directSent).toContain('Food &amp; Drink')
+    // The category is intentionally omitted from the direct-send header.
+    expect(directSent).not.toContain('Food &amp; Drink')
     expect(directSent).toContain('SCOBY')
 
     const friendAdded = html(<FriendAddedCard item={fixtures.friendAddedWroteQuestion} />)

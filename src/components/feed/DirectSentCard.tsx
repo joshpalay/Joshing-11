@@ -3,7 +3,6 @@ import Link from 'next/link'
 
 import { HourglassMark } from '@/components/activity/ActivityIcon'
 
-import { visibleFeedCategory } from './category'
 import { SparkleEnvelope } from './SparkleEnvelope'
 import type { DirectSentFeedItem } from './types'
 
@@ -17,12 +16,12 @@ type DirectSentCardProps = {
 }
 
 export function DirectSentCard({ item, overflow, onAnswer, onDismiss, viaAttribution, elevated }: DirectSentCardProps) {
-  const visibleCategory = visibleFeedCategory(item.category)
   const senderName = item.senderName || item.avatarName || 'A friend'
   const senderHref = item.senderHref ?? item.authorHref ?? null
 
   // Figma header line: actor in the link slate, the rest in black, with the
-  // optional personal note in italic serif beneath.
+  // optional personal note in italic serif beneath. The category is
+  // deliberately omitted from this header (B-category-removal-josh).
   const signal = (
     <>
       {senderHref ? (
@@ -32,8 +31,7 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, viaAttribu
       ) : (
         <span className="font-semibold text-[var(--brand-link)]">{senderName}</span>
       )}{' '}
-      thought you&rsquo;d like this
-      {visibleCategory ? <> about {visibleCategory}</> : null}.
+      thought you&rsquo;d like this.
       {item.personalMessage ? (
         <span className="mt-1 block font-serif text-sm italic leading-snug text-[var(--brand-ink-700)]">
           &ldquo;{item.personalMessage}&rdquo;
