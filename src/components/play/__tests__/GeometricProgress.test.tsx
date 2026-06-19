@@ -16,7 +16,7 @@ describe('GeometricProgress dot track', () => {
     // Five dots, nothing else.
     const dotCount = (html.match(/[●○]/gu) ?? []).length;
     expect(dotCount).toBe(5);
-    expect(html).not.toContain('bonus from friends');
+    expect(html).not.toContain('friend bonus');
     // No separator hairline (w-px) in the N=0 case.
     expect(html).not.toContain('w-px');
   });
@@ -30,17 +30,17 @@ describe('GeometricProgress dot track', () => {
     // Visible separator (gap carries signal alongside the label, not color).
     expect(html).toContain('w-px');
     // Real, screen-reader-legible label with the live count.
-    expect(html).toContain('+2 bonus from friends');
+    expect(html).toContain('+2 friend bonus');
     // Bonus dots are distinguished for assistive tech.
     expect(html).toContain('aria-label="bonus question 1 of 2, from friends"');
     expect(html).toContain('aria-label="bonus question 2 of 2, from friends"');
   });
 
-  it('N=1: label reads "+1 bonus from friends"', () => {
+  it('N=1: label reads "+1 friend bonus"', () => {
     const html = renderToStaticMarkup(
       <GeometricProgress coreCount={5} bonusCount={1} current={1} results={noResults} />,
     );
-    expect(html).toContain('+1 bonus from friends');
+    expect(html).toContain('+1 friend bonus');
     expect(html).toContain('aria-label="bonus question 1 of 1, from friends"');
   });
 

@@ -3,7 +3,7 @@
  *
  * D-F1 / D-F1b: one continuous track — the core dots, then (only when there are
  * bonus questions) a visible separator, the bonus dots, and a generic
- * "+{N} bonus from friends" label. The bonus signal is carried by the gap +
+ * "+{N} friend bonus" label. The bonus signal is carried by the gap +
  * label (real text), never by color alone (canon R3); bonus dots reuse the same
  * state ramp as the core dots so answering reads identically.
  *
@@ -109,7 +109,7 @@ export function GeometricProgress({
         <span className="flex items-center gap-1.5">{bonusDots}</span>
       </div>
       <span className="text-[0.6rem] font-medium text-[var(--text-muted)]">
-        +{bonusCount} bonus from friends
+        +{bonusCount} friend bonus
       </span>
     </div>
   );

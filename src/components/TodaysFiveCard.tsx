@@ -302,7 +302,7 @@ export default function TodaysFiveCard({
 
       {/* One continuous track (D-F1): the core five, then — only when this round
           carries +2 bonus questions — a visible separator, the bonus dots, and a
-          generic "+{N} bonus from friends" label. The bonus group is set apart by
+          generic "+{N} friend bonus" label. The bonus group is set apart by
           the gap + label (real text), never by color, and never enters the "of 5"
           count. With no bonus this is exactly the original five-dot row. */}
       <div
@@ -327,7 +327,7 @@ export default function TodaysFiveCard({
               />
             ))}
             <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
-              +{effectiveStatus.bonusOutcomes.length} bonus from friends
+              +{effectiveStatus.bonusOutcomes.length} friend bonus
             </span>
           </>
         ) : null}

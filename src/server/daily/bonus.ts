@@ -45,7 +45,7 @@ export function getBonusSlots(slots: QueueSlot[]): QueueSlot[] {
   return slots.filter(isBonusSlot);
 }
 
-/** Live bonus count — the N in "+N bonus from friends" (0 → no label). */
+/** Live bonus count — the N in "+N friend bonus" (0 → no label). */
 export function getBonusCount(slots: QueueSlot[]): number {
   return getBonusSlots(slots).length;
 }

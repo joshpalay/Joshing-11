@@ -32,7 +32,7 @@ describe('TodaysFiveCard dot track', () => {
     const html = renderToStaticMarkup(<TodaysFiveCard initialStatus={status()} />)
     expect((html.match(DOT) ?? []).length).toBe(5)
     expect(html).not.toContain('w-px')
-    expect(html).not.toContain('bonus from friends')
+    expect(html).not.toContain('friend bonus')
   })
 
   it('with +2 bonus: renders seven dots, a separator, and the inline label', () => {
@@ -41,7 +41,7 @@ describe('TodaysFiveCard dot track', () => {
     )
     expect((html.match(DOT) ?? []).length).toBe(7)
     expect(html).toContain('w-px')
-    expect(html).toContain('+2 bonus from friends')
+    expect(html).toContain('+2 friend bonus')
     // Bonus dots are distinguished for assistive tech.
     expect(html).toContain('Bonus 1 of 2, from friends')
     expect(html).toContain('Bonus 2 of 2, from friends')

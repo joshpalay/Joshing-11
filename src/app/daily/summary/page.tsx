@@ -416,7 +416,7 @@ function ResultDot({
 
 // D-F1 / D-F1b: one continuous track — core dots, then (only when there are
 // bonus questions) a visible separator, the bonus dots, and the generic
-// "+{N} bonus from friends" label. The bonus signal is the gap + label (real
+// "+{N} friend bonus" label. The bonus signal is the gap + label (real
 // text), never color. Mirrors the live-session GeometricProgress track.
 function ResultDots({ questions }: { questions: QuestionRecap[] }) {
   const core = questions.filter((q) => !q.isBonus)
@@ -461,7 +461,7 @@ function ResultDots({ questions }: { questions: QuestionRecap[] }) {
         />
       ))}
       <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
-        +{bonus.length} bonus from friends
+        +{bonus.length} friend bonus
       </span>
     </div>
   )
