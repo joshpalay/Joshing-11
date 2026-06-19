@@ -4,7 +4,7 @@ import { getSession } from '@/server/auth/session';
 import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types';
-import { getCoreSlots } from '@/server/daily/bonus';
+import { getBonusSlots, getCoreSlots } from '@/server/daily/bonus';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,20 @@ function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
   return outcomes;
 }
 
+// Outcomes for the additive +2 bonus slots, in order (0–2). The home card shows
+// these as a set-apart bonus dot-group; they never enter the "of 5" count.
+function buildBonusOutcomes(slots: QueueSlot[]): SlotOutcome[] {
+  return getBonusSlots(slots).map((slot) =>
+    slot.answered
+      ? slot.answer_state === 'incorrect'
+        ? 'incorrect'
+        : 'correct'
+      : slot.skipped
+        ? 'skipped'
+        : 'unanswered',
+  );
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -55,6 +69,7 @@ export async function GET() {
       queue_id: null,
       queue_date: null,
       slotOutcomes: buildSlotOutcomes([]),
+      bonusOutcomes: buildBonusOutcomes([]),
       preferences: {
         selected_domains: preferences.selectedDomains,
         difficulty_preference: preferences.difficulty,
@@ -86,6 +101,7 @@ export async function GET() {
     queue_id: queue.id,
     queue_date: queue.queueDate,
     slotOutcomes: buildSlotOutcomes(slots),
+    bonusOutcomes: buildBonusOutcomes(slots),
     preferences: {
       selected_domains: preferences.selectedDomains,
       difficulty_preference: preferences.difficulty,

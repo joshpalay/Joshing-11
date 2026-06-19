@@ -10,6 +10,7 @@ import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { getSession } from '@/server/auth/session'
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
+import { getBonusSlots } from '@/server/daily/bonus'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
@@ -211,6 +212,21 @@ function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
   return outcomes
 }
 
+// Mirror of /api/daily/status: outcomes for the additive +2 bonus slots, in
+// order (0–2). Rendered as the home card's set-apart bonus dot-group; never
+// counted toward "of 5".
+function buildBonusOutcomes(slots: QueueSlot[]): SlotOutcome[] {
+  return getBonusSlots(slots).map((slot) =>
+    slot.answered
+      ? slot.answer_state === 'incorrect'
+        ? 'incorrect'
+        : 'correct'
+      : slot.skipped
+        ? 'skipped'
+        : 'unanswered',
+  )
+}
+
 function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDailyQueue>>): DailyStatus {
   const nextRoundAt = getNextDailyResetBoundary().toISOString()
   if (!queue) {
@@ -221,6 +237,7 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
       nextRoundAt,
       queueId: null,
       slotOutcomes: buildSlotOutcomes([]),
+      bonusOutcomes: buildBonusOutcomes([]),
     }
   }
 
@@ -242,6 +259,7 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
     nextRoundAt,
     queueId: queue.id,
     slotOutcomes: buildSlotOutcomes(slots),
+    bonusOutcomes: buildBonusOutcomes(slots),
   }
 }
 

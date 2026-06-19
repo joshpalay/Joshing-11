@@ -444,29 +444,27 @@ function ResultDots({ questions }: { questions: QuestionRecap[] }) {
   }
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      <div className="flex items-center gap-2" aria-label="Question results">
-        {core.map((question, index) => (
-          <ResultDot
-            key={question.questionId}
-            question={question}
-            ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
-          />
-        ))}
-        <span
-          aria-hidden
-          className="mx-0.5 h-3 w-px shrink-0"
-          style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
+    <div className="flex items-center gap-2" aria-label="Question results">
+      {core.map((question, index) => (
+        <ResultDot
+          key={question.questionId}
+          question={question}
+          ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
         />
-        {bonus.map((question, index) => (
-          <ResultDot
-            key={question.questionId}
-            question={question}
-            ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
-          />
-        ))}
-      </div>
-      <span className="text-[0.6rem] font-medium text-[var(--brand-ink-400)]">
+      ))}
+      <span
+        aria-hidden
+        className="mx-0.5 h-3 w-px shrink-0"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
+      />
+      {bonus.map((question, index) => (
+        <ResultDot
+          key={question.questionId}
+          question={question}
+          ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
+        />
+      ))}
+      <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
         +{bonus.length} bonus from friends
       </span>
     </div>
