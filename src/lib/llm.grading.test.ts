@@ -149,4 +149,20 @@ describe('gradeAnswerWithLLM', () => {
     expect(systemPrompt).toMatch(/parenthetical generic descriptor/i)
     expect(systemPrompt).toMatch(/thing|thingy|thingamajig/i)
   })
+
+  it('includes the exact-spelling-not-required leniency rule in the system prompt', async () => {
+    // Regression guard: "kwiky mart" for "The Kwik-E-Mart" was marked "close but not
+    // quite" purely on spelling. The rule below says exact spelling is not required when
+    // the submission is recognizably the same name aloud. If it's deleted, that bug returns.
+    createMessageMock.mockResolvedValueOnce(
+      anthropicTextResponse({ result: 'correct', confidence: 0.9, reason: 'ok', consolation: null }),
+    )
+
+    const gradeAnswerWithLLM = await importGrader()
+    await gradeAnswerWithLLM('q', 'The Kwik-E-Mart', 'kwiky mart', 'factual')
+
+    const systemArg = (createMessageMock.mock.calls[0]![0] as { system: string | Array<{ text: string }> }).system
+    const systemPrompt = typeof systemArg === 'string' ? systemArg : systemArg[0]!.text
+    expect(systemPrompt).toMatch(/exact spelling is not required/i)
+  })
 })

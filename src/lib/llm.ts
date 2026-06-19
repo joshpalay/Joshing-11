@@ -597,7 +597,7 @@ Your job is to determine whether a submitted answer is correct, and — when the
 
 LENIENCY RULES — mark as correct if:
 - The answer conveys the same meaning, even if worded differently
-- There are spelling errors that don't change the meaning (e.g. "Bucephelus" for "Bucephalus" is correct)
+- There are spelling errors that don't change the meaning (e.g. "Bucephelus" for "Bucephalus" is correct). Exact spelling is NOT required: if the submission is recognizably the same name when read aloud, accept it regardless of misspellings, dropped or added letters, hyphenation, spacing, or punctuation (e.g. "kwiky mart" or "quick e mart" for "The Kwik-E-Mart" is correct; "Andy Warhall" for "Andy Warhol" is correct). Only reject a misspelling when it actually points to a different, distinguishable thing.
 - The answer is a reasonable abbreviation or shortened form (e.g. "Eroica" for "The Eroica" is correct)
 - For list questions: the answer meets the minimum required count and all included items are correct
 - The answer is phonetically close and contextually plausible (account for voice transcription errors)
