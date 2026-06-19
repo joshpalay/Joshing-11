@@ -12,6 +12,7 @@ import {
   minusUtcDays,
   replaceQueueSlot,
 } from '../src/server/daily/catchup';
+import { isCatchUpSlotEligible } from '../src/server/play/catch-up-eligibility';
 import type { QueueSlot } from '../src/server/daily/types';
 
 assert.equal(minusUtcDays('2026-05-01', 7), '2026-04-24');
@@ -54,6 +55,38 @@ const dismissed = replaceQueueSlot(slots, 3, (slot) => ({
 }));
 
 assert.equal(dismissed[0].dismissed_at, '2026-05-01T12:00:00.000Z');
+
+// Catch-up recovery must NOT rewrite the live daily-five verdict, and a
+// recovered slot must drop out of catch-up. Regression guard for the
+// "wrong-in-daily-5 → right-in-catch-up shows a green dot" bug.
+const wrongLiveSlot: QueueSlot = {
+  slot_index: 4,
+  source: 'bot',
+  generated_question_id: 'generated-4',
+  domain: '1980s Animation',
+  question_text: 'Who composed the Mass in B minor?',
+  answered: true,
+  answer_state: 'incorrect',
+  submitted_answer: 'Mozart',
+};
+assert.equal(isCatchUpSlotEligible(wrongLiveSlot), true);
+
+const recoveredSlot: QueueSlot = {
+  ...wrongLiveSlot,
+  // catch-up wrote only its own fields; the live verdict is untouched.
+  catchup_answer_state: 'correct',
+  catchup_submitted_answer: 'Bach',
+  catchup_awarded_points: 25,
+};
+// The live dot stays red — answer_state is still 'incorrect'.
+assert.equal(recoveredSlot.answer_state, 'incorrect');
+assert.equal(recoveredSlot.submitted_answer, 'Mozart');
+// And the slot no longer surfaces in catch-up.
+assert.equal(isCatchUpSlotEligible(recoveredSlot), false);
+
+// A wrong catch-up attempt leaves the slot re-attemptable.
+const missedAgainSlot: QueueSlot = { ...wrongLiveSlot, catchup_answer_state: 'incorrect' };
+assert.equal(isCatchUpSlotEligible(missedAgainSlot), true);
 
 const duplicateCatchupItems = [
   {
