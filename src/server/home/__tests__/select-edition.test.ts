@@ -152,7 +152,7 @@ describe('selectHomeEdition — serve-and-overflow', () => {
     const edition = selectHomeEdition({
       feedItems,
       activityItems: playables,
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
 
@@ -172,7 +172,7 @@ describe('selectHomeEdition — serve-and-overflow', () => {
       feedItems,
       directPendingTotal: 40,
       activityItems: [],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.direct.served).toHaveLength(DIRECT_SERVE_CAP)
@@ -182,7 +182,7 @@ describe('selectHomeEdition — serve-and-overflow', () => {
       feedItems,
       directPendingTotal: 2,
       activityItems: [],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(clamped.direct.overflowCount).toBe(7 - DIRECT_SERVE_CAP)
@@ -192,7 +192,7 @@ describe('selectHomeEdition — serve-and-overflow', () => {
     const edition = selectHomeEdition({
       feedItems: [feedItem('d0', 's0', '2026-06-11T09:00:00Z')],
       activityItems: [playable('p0', 'f0')],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.direct.overflowCount).toBe(0)
@@ -210,7 +210,7 @@ describe('orderFriendActivity — chronological log keeps answered bundles', () 
         bundleWithResults('b-spent', 'f0', ['correct']),
         ...Array.from({ length: 5 }, (_, i) => playable(`p${i}`, `f${i}`)),
       ],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     // 6 bundles total (1 spent + 5 pending): all retained, served 4 + 2 overflow.
@@ -258,7 +258,7 @@ describe('selectHomeEdition — texture', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems,
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.texture).toHaveLength(TEXTURE_SOFT_CAP)
@@ -275,7 +275,7 @@ describe('selectHomeEdition — texture', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems,
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     // Only the two in-window rows, newest-first; the out-of-window row is gone —
@@ -289,7 +289,7 @@ describe('selectHomeEdition — texture', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems: [textureItem('t-8d', eightDaysAgo), textureItem('t-6d', sixDaysAgo)],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.texture.map((t) => t.id)).toEqual(['t-6d'])
@@ -331,7 +331,6 @@ describe('selectHomeEdition — empty switch', () => {
       activityItems: [],
       promos: {
         sharedGround: promo('sg', 'common_ground'),
-        expanding: promo('ex', 'recently_expanding'),
         growCircle: promo('gc', 'add_friends'),
       },
       now: NOW,
@@ -346,7 +345,6 @@ describe('selectHomeEdition — empty switch', () => {
       activityItems: [playable('p0', 'f0'), playable('p1', 'f1')],
       promos: {
         sharedGround: promo('sg', 'common_ground'),
-        expanding: null,
         growCircle: promo('gc', 'add_friends'),
       },
       now: NOW,
@@ -368,7 +366,7 @@ describe('selectHomeEdition — Zone 1 is not windowed', () => {
     const edition = selectHomeEdition({
       feedItems: [feedItem('d-old', 'sender', old)],
       activityItems: [],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.direct.served.map((d) => d.id)).toEqual(['d-old'])
@@ -392,7 +390,7 @@ describe('selectHomeEdition — per-section empty signal', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems: [],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.emptySections).toEqual({
@@ -409,7 +407,7 @@ describe('selectHomeEdition — per-section empty signal', () => {
         playable('p0', 'f0'), // From Friends bundle
         convergenceItem('c0', '2026-06-11T15:00:00Z'), // Shared Ground (in window)
       ],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.emptySections.fromFriends).toBe(false)
@@ -421,7 +419,7 @@ describe('selectHomeEdition — per-section empty signal', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems: [convergenceItem('c-old', old)],
-      promos: { sharedGround: null, expanding: null, growCircle: null },
+      promos: { sharedGround: null, growCircle: null },
       now: NOW,
     })
     expect(edition.emptySections.sharedGround).toBe(true)
@@ -430,22 +428,8 @@ describe('selectHomeEdition — per-section empty signal', () => {
 
 // --- selectHomeEdition: panel selection (§2 slot 5) --------------------------
 
-describe('selectHomeEdition — panel', () => {
-  it('biases a quiet page to Grow Your Circle', () => {
-    const edition = selectHomeEdition({
-      feedItems: [feedItem('d0', 's0', '2026-06-11T09:00:00Z')],
-      activityItems: [], // quiet: ≤2 activity items
-      promos: {
-        sharedGround: promo('sg', 'common_ground'),
-        expanding: null,
-        growCircle: promo('gc', 'add_friends'),
-      },
-      now: NOW,
-    })
-    expect(edition.panel?.id).toBe('gc')
-  })
-
-  it('prefers Shared Ground on an active page', () => {
+describe('selectHomeEdition — panel + always-on Grow Your Circle', () => {
+  it('dedicates the mid-feed panel to Overlap (Shared Ground)', () => {
     const edition = selectHomeEdition({
       feedItems: [],
       activityItems: [
@@ -455,11 +439,47 @@ describe('selectHomeEdition — panel', () => {
       ],
       promos: {
         sharedGround: promo('sg', 'common_ground'),
-        expanding: null,
         growCircle: promo('gc', 'add_friends'),
       },
       now: NOW,
     })
     expect(edition.panel?.id).toBe('sg')
+  })
+
+  it('surfaces Grow Your Circle as an always-on interlude, independent of the panel', () => {
+    const edition = selectHomeEdition({
+      feedItems: [feedItem('d0', 's0', '2026-06-11T09:00:00Z')],
+      activityItems: [
+        textureItem('t0', '2026-06-11T17:00:00Z'),
+        textureItem('t1', '2026-06-11T16:00:00Z'),
+        textureItem('t2', '2026-06-11T15:00:00Z'),
+      ],
+      promos: {
+        sharedGround: promo('sg', 'common_ground'),
+        growCircle: promo('gc', 'add_friends'),
+      },
+      now: NOW,
+    })
+    // Overlap owns the panel; Find Friends is surfaced separately every load.
+    expect(edition.panel?.id).toBe('sg')
+    expect(edition.growCircle?.id).toBe('gc')
+  })
+
+  it('has no panel when there is no shared ground, but still surfaces Grow Your Circle', () => {
+    const edition = selectHomeEdition({
+      feedItems: [],
+      activityItems: [
+        textureItem('t0', '2026-06-11T17:00:00Z'),
+        textureItem('t1', '2026-06-11T16:00:00Z'),
+        textureItem('t2', '2026-06-11T15:00:00Z'),
+      ],
+      promos: {
+        sharedGround: null,
+        growCircle: promo('gc', 'add_friends'),
+      },
+      now: NOW,
+    })
+    expect(edition.panel).toBeNull()
+    expect(edition.growCircle?.id).toBe('gc')
   })
 })

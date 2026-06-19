@@ -427,6 +427,10 @@ export const userQuestionBank = pgTable(
     unique('UserQuestionBank_user_id_question_id_key').on(table.userId, table.questionId),
     index('UserQuestionBank_user_id_idx').on(table.userId),
     index('UserQuestionBank_question_id_idx').on(table.questionId),
+    // Backs the Questions-tab list (getBankedQuestions): filter on user_id,
+    // ORDER BY added_at DESC. Lets the planner serve both from one index
+    // instead of sorting the whole bank in memory per load (0082).
+    index('UserQuestionBank_user_id_added_at_idx').on(table.userId, table.addedAt),
   ],
 );
 

@@ -1486,6 +1486,21 @@ export async function register() {
       // FeedItem / ActivityItem may not exist yet on a fresh database —
       // migrate() creates them before this migration runs.
     }
+
+    // Migration 0082 adds the composite index backing the Questions-tab list
+    // (getBankedQuestions: filter user_id, ORDER BY added_at DESC). Pure index
+    // addition — a preview/production database that records the migration
+    // without the index present must still get it (precedent: 0079).
+    // CREATE INDEX IF NOT EXISTS is idempotent; re-running is a no-op.
+    try {
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "UserQuestionBank_user_id_added_at_idx"
+          ON "UserQuestionBank" ("user_id", "added_at")
+      `);
+    } catch {
+      // UserQuestionBank may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

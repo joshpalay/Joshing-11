@@ -16,7 +16,9 @@ import type { StreamItem } from '@/lib/activity-stream'
 import { buildActivityStream } from '@/server/activity/build-stream'
 import { getAddFriendsPromo } from '@/server/activity/add-friends-promo'
 import { getCommonGroundPromo } from '@/server/activity/common-ground-promo'
-import { getRecentlyExpandingPromo } from '@/server/activity/recently-expanding-promo'
+// NOTE: getRecentlyExpandingPromo ("World Expanding") is sunset for now — it no
+// longer feeds the home panel. The query + RecentlyExpandingFeature component
+// are kept for easy revival; just re-add it to the promos below to bring it back.
 import { getFeedPagePayload } from '@/server/feed/get-feed-page'
 import {
   HOME_WINDOW_DAYS,
@@ -51,14 +53,13 @@ export type HomeEditionResult = {
 }
 
 export async function buildHomeEdition(userId: string): Promise<HomeEditionResult> {
-  const [feedPage, activityItems, commonGroundPromo, expandingPromo, addFriendsPromo] =
+  const [feedPage, activityItems, commonGroundPromo, addFriendsPromo] =
     await Promise.all([
       getFeedPagePayload(userId, { limit: HOME_FEED_FETCH_LIMIT, cursor: null, filter: 'all' }),
       // Zone 2 (the ambient band) is bounded to the rolling home window; Zone 1
       // (the direct feed above) stays all-time pending (D-HOME-DASHBOARD-MODEL-01).
       buildActivityStream(userId, { windowDays: HOME_WINDOW_DAYS }),
       getCommonGroundPromo(userId),
-      getRecentlyExpandingPromo(userId),
       getAddFriendsPromo(userId),
     ])
 
@@ -72,7 +73,6 @@ export async function buildHomeEdition(userId: string): Promise<HomeEditionResul
     activityItems: homeActivityItems,
     promos: {
       sharedGround: commonGroundPromo,
-      expanding: expandingPromo,
       growCircle: addFriendsPromo,
     },
   })

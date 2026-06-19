@@ -1,0 +1,23 @@
+-- Performance: composite index for the authored / banked question list (the
+-- Questions tab, getBankedQuestions in src/server/db/queries/bank.ts).
+--
+-- The query filters equality on UserQuestionBank.user_id and orders by
+-- added_at DESC (the "most recently banked first" list). Only single-column
+-- indexes existed (user_id, question_id), so Postgres located the user's rows
+-- by the user_id index but then sorted the whole result set by added_at in
+-- memory on every Questions-tab load. The composite (user_id, added_at) lets
+-- the planner satisfy both the filter and the ordering from the index (a
+-- backward scan covers ORDER BY added_at DESC), removing the sort.
+--
+-- Pure index addition — additive, non-destructive, and idempotent
+-- (CREATE INDEX IF NOT EXISTS). No CONCURRENTLY: the runtime migrator wraps
+-- statements in a transaction (CONCURRENTLY is illegal there), matching every
+-- existing CREATE INDEX migration in this repo. Mirrored by a defensive guard
+-- in src/instrumentation.ts (precedent: 0079) so a preview/production database
+-- that records this migration without the index present still gets it on next
+-- boot.
+--
+-- Rollback:
+--   DROP INDEX IF EXISTS "UserQuestionBank_user_id_added_at_idx";
+CREATE INDEX IF NOT EXISTS "UserQuestionBank_user_id_added_at_idx"
+  ON "UserQuestionBank" ("user_id", "added_at");

@@ -73,8 +73,20 @@ export type HomeEdition = {
    * renders fewer rows rather than reaching past the window. No overflow subpage.
    */
   texture: StreamItem[]
-  /** Exactly one rotating panel per load; null on the all-empty page (§9). */
+  /**
+   * The mid-feed panel slot. Now dedicated to the Overlap ("Shared Ground")
+   * interlude; null on the all-empty page (§9) or when the viewer has no shared
+   * ground. (World Expanding was sunset and Grow Your Circle was promoted to its
+   * own always-on slot — see `growCircle`.)
+   */
   panel: StreamItem | null
+  /**
+   * The always-on "Find friends" (Grow Your Circle) interlude. Rendered above
+   * the Write composer at the feed tail — NOT in the mid-feed panel slot — so it
+   * surfaces on every load rather than competing for the single panel. Null only
+   * when the promo itself is absent.
+   */
+  growCircle: StreamItem | null
   /**
    * True when all three CONTENT zones are empty (§9). Hero and composer are
    * never counted. Drives the two-state empty switch: when true, Home renders
@@ -214,26 +226,6 @@ export function boundTexture(
     .slice(0, cap)
 }
 
-/**
- * One panel per load (§2 slot 5). Each promo is already data-gated upstream
- * (null when its data is absent — e.g. no shared ground for a user with no
- * overlap), so this only chooses among the present ones. Quiet pages bias to
- * Grow Your Circle; otherwise Shared Ground > World Expanding > Grow Your
- * Circle. Suppressed entirely on the all-empty page (handled by the caller).
- */
-export function selectPanel(
-  promos: {
-    sharedGround: StreamItem | null
-    expanding: StreamItem | null
-    growCircle: StreamItem | null
-  },
-  isQuiet: boolean,
-): StreamItem | null {
-  const { sharedGround, expanding, growCircle } = promos
-  if (isQuiet && growCircle) return growCircle
-  return sharedGround ?? expanding ?? growCircle ?? null
-}
-
 /** A milestone bundle (≥1 question), pending or fully spent. */
 function isMilestoneBundle(item: StreamItem): boolean {
   return item.expand?.kind === 'milestone' && item.expand.questions.length > 0
@@ -293,10 +285,13 @@ export type SelectHomeEditionInput = {
   directPendingTotal?: number
   /** The full activity/Lately stream for the viewer. */
   activityItems: readonly StreamItem[]
-  /** The three home discovery promos (each already null when data-absent). */
+  /**
+   * The home discovery promos (each already null when data-absent). World
+   * Expanding was sunset, so only two remain: `sharedGround` fills the mid-feed
+   * panel, `growCircle` is the always-on Find Friends interlude at the tail.
+   */
   promos: {
     sharedGround: StreamItem | null
-    expanding: StreamItem | null
     growCircle: StreamItem | null
   }
   /** Injectable clock for deterministic texture bounding in tests. */
@@ -346,10 +341,12 @@ export function selectHomeEdition(input: SelectHomeEditionInput): HomeEdition {
   const isAllEmpty =
     directOrdered.length === 0 && friendActivityPool.length === 0 && texture.length === 0
 
-  // A quiet page biases the panel to Grow Your Circle; the all-empty page gets
-  // no panel (the empty state already carries the one invitation, §9).
-  const isQuiet = friendActivityPool.length + texturePool.length <= 2
-  const panel = isAllEmpty ? null : selectPanel(input.promos, isQuiet)
+  // The mid-feed panel is the Overlap ("Shared Ground") interlude; the all-empty
+  // page gets no panel (the empty state already carries the one invitation, §9).
+  const panel = isAllEmpty ? null : input.promos.sharedGround
+  // Grow Your Circle is always-on (rendered at the feed tail above the Write
+  // composer), so it surfaces every load rather than competing for the panel.
+  const growCircle = input.promos.growCircle
 
-  return { direct, playables, texture, panel, isAllEmpty, emptySections }
+  return { direct, playables, texture, panel, growCircle, isAllEmpty, emptySections }
 }
