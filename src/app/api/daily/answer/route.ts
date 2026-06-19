@@ -472,13 +472,18 @@ export async function POST(request: NextRequest) {
       } satisfies QueueSlot;
     });
 
-    await db
-      .update(dailyQueues)
-      .set({ slots: nextSlots })
-      .where(eq(dailyQueues.id, queue.id));
-
     const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
-    const masteryDelta = await recordAnswerSideEffects({
+    // The slot write (marks the slot answered) and the mastery-event write are
+    // independent — masteryDelta is returned in the response but is never written
+    // into nextSlots — so run them concurrently to shave a DB round-trip off the
+    // user-blocking answer path. Both are still awaited before the verdict returns.
+    // recordAnswerSideEffects swallows its own errors (null masteryDelta on
+    // failure), so the slot update is the only call here that can reject; the
+    // mastery event's sourceId ON CONFLICT dedup keeps a client retry after such a
+    // rejection from double-counting.
+    const [, masteryDelta] = await Promise.all([
+      db.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id)),
+      recordAnswerSideEffects({
       userId: session.userId,
       isCorrect,
       logTag: 'daily/answer',
@@ -506,7 +511,8 @@ export async function POST(request: NextRequest) {
             feedSourceId: `daily:${propagationKey}:${session.userId}`,
           }
         : null,
-    });
+      }),
+    ]);
     marks.mastery = Date.now();
 
     const response = NextResponse.json({
