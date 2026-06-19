@@ -43,9 +43,9 @@ export function MyQuestionCard({
 
   return (
     <article
-      className={`flex items-start gap-3 py-4 transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
+      className={`py-4 transition duration-200 ${deleting ? 'scale-[0.98] opacity-0' : 'opacity-100'}`}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
@@ -70,7 +70,7 @@ export function MyQuestionCard({
           </span>
         </div>
 
-        <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
+        <p className="mt-2 break-words font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
           <span aria-hidden className="opacity-60">
             &ldquo;
           </span>
@@ -125,19 +125,24 @@ export function MyQuestionCard({
             </button>
           </div>
         ) : null}
-      </div>
 
-      <div className="flex shrink-0 flex-col items-center gap-1">
-        <CardOverflowMenu inUse={inUse} onDelete={onDeleteRequest} />
-        <SendQuestionAction
-          question={{
-            id: question.id,
-            text: question.text,
-            domain: question.domainDisplayName,
-          }}
-          label=""
-          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        />
+        {/* Actions live in a footer row inside the card content (not a hung
+            right-hand column), so they always sit within the visible width and
+            never push the card wider than the viewport on narrow screens. */}
+        {!confirming ? (
+          <div className="mt-3 flex items-center justify-end gap-1">
+            <SendQuestionAction
+              question={{
+                id: question.id,
+                text: question.text,
+                domain: question.domainDisplayName,
+              }}
+              label=""
+              className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            />
+            <CardOverflowMenu inUse={inUse} onDelete={onDeleteRequest} />
+          </div>
+        ) : null}
       </div>
     </article>
   );
@@ -236,7 +241,7 @@ function CardOverflowMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <MoreHorizontal className="size-4" />
       </button>
