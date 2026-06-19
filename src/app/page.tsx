@@ -7,7 +7,9 @@ import TodaysFiveCard, {
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
+import { DailyReminderInterlude } from '@/components/home/DailyReminderInterlude'
 import { getSession } from '@/server/auth/session'
+import { getReminderState } from '@/server/db/queries/account'
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
@@ -46,6 +48,15 @@ export default async function Home() {
       ) : (
         <TodaysFiveCard />
       )}
+
+      {/* Daily-reminder prompt — a short full-bleed band directly under the
+          daily-five card. Signed-in only, and self-suppressing once the viewer
+          has opted in or dismissed it (see DailyReminderSection). */}
+      {session ? (
+        <Suspense fallback={null}>
+          <DailyReminderSection userId={session.userId} />
+        </Suspense>
+      ) : null}
 
       {/* Lower content (the weekly-reflection pin + the From-Friends / For-you
           feed). Wrapped so the triangle side-clusters scope to it: the clusters
@@ -124,6 +135,24 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
         <MissedQuestionsCard count={missedCount} expiringCount={expiringCount} />
       ) : null}
     </>
+  )
+}
+
+async function DailyReminderSection({ userId }: { userId: string }) {
+  const state = await getReminderState(userId)
+  // Hide once the viewer has opted in, has a signup already pending verification,
+  // or has dismissed the prompt. Dismissal is permanent (reminderPromptDismissedAt
+  // is set on dismiss and never cleared here), so the band does not return.
+  if (
+    !state ||
+    state.emailOptIn === 'opted_in' ||
+    state.pendingEmail ||
+    state.reminderPromptDismissedAt
+  ) {
+    return null
+  }
+  return (
+    <DailyReminderInterlude hasVerifiedEmail={state.emailVerified && Boolean(state.email)} />
   )
 }
 
