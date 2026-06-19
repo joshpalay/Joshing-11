@@ -4,6 +4,7 @@ import { getSession } from '@/server/auth/session';
 import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types';
+import { getCoreSlots } from '@/server/daily/bonus';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,11 @@ type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered';
 
 function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
   const outcomes: SlotOutcome[] = Array.from({ length: DAILY_QUEUE_SIZE }, () => 'unanswered');
-  for (const slot of slots) {
+  // Home is fixed-5: the outcome array reflects core slots only. Bonus slots
+  // (D-4 §B +2) are additive and never enter the home card's count, so we drive
+  // this off the shared selector rather than the old `idx >= DAILY_QUEUE_SIZE`
+  // index math (same output, intention-revealing — D-F5).
+  for (const slot of getCoreSlots(slots)) {
     const idx = slot.slot_index;
     if (!Number.isInteger(idx) || idx < 0 || idx >= DAILY_QUEUE_SIZE) continue;
     if (slot.answered) {

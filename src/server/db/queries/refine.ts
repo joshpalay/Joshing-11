@@ -10,6 +10,7 @@ import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 
 import { db, dailyRefineDecisions, masteryEvents, userDomainDifficulties } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
+import { getBonusCount } from '@/server/daily/bonus';
 import { getKnowledgeBase } from '@/server/db/queries/daily';
 import {
   deriveDifficultyEscalation,
@@ -213,7 +214,7 @@ export async function deriveSelectedRefineCandidates(
     console.info('[refine/derive]', {
       userId,
       slotCount: slots.length,
-      bonusSlots: slots.filter((s) => s.presence_source_id).length,
+      bonusSlots: getBonusCount(slots),
       steppedUpSlots: slots.filter((s) => s.difficulty_stepped_up === true).length,
       missStreaks: missStreaks.map((s) => ({
         domain: s.subdomainId,

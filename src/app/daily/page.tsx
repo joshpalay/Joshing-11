@@ -22,6 +22,7 @@ import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
+import { getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
 import {
   buildSessionCloseLines,
   type SessionSlotSummary,
@@ -41,7 +42,7 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
   // a deliberate, easier add rather than a generation miss. The "bonus from a
   // friend's knowledge" framing lives in the attribution line GameplayChat
   // renders above the question (see presenceSourceName).
-  if (slot.presence_source_id && slot.difficulty_estimate === 'accessible') {
+  if (isBonusSlot(slot) && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
   return badges;
@@ -492,8 +493,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
-          presenceSourceName: slot.presence_source_name ?? null,
-          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
+          presenceSourceName: getSlotPresence(slot)?.name ?? null,
+          presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -544,7 +545,7 @@ export default function DailyPage() {
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
-          text: slot.presence_source_name
+          text: isBonusSlot(slot)
             ? `Resting ${restedLabel}. You won't see these in your five.`
             : "Skipped. We'll bring it back later.",
         });
@@ -557,8 +558,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
-          presenceSourceName: slot.presence_source_name ?? null,
-          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
+          presenceSourceName: getSlotPresence(slot)?.name ?? null,
+          presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
           isNew: true,
           badges: questionBadges(slot),
         });

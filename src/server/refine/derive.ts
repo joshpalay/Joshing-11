@@ -7,6 +7,7 @@
  */
 
 import type { QueueSlot } from '@/server/daily/types';
+import { getSlotPresence } from '@/server/daily/bonus';
 import { subdomainLabel } from './copy';
 import { pruningThreshold, type RefineCandidate, type RefineMissTier } from './types';
 
@@ -21,12 +22,13 @@ export function deriveFriendExpansion(
 ): RefineCandidate[] {
   const byKey = new Map<string, RefineCandidate>();
   for (const slot of slots) {
-    if (!slot.presence_source_id) continue; // not a bonus slot
+    const presence = getSlotPresence(slot);
+    if (!presence) continue; // not a bonus slot
     if (slot.answer_state !== 'correct') continue;
     const domain = slot.domain?.trim();
     if (!domain) continue;
     if (ownedLowercased.has(domain.toLowerCase())) continue; // already owned
-    const friendId = slot.presence_source_id;
+    const friendId = presence.id;
     const key = `${domain.toLowerCase()}:${friendId}`;
     if (byKey.has(key)) continue;
     byKey.set(key, {
@@ -34,7 +36,7 @@ export function deriveFriendExpansion(
       subdomainId: domain,
       subdomainLabel: subdomainLabel(domain),
       friendId,
-      friendName: slot.presence_source_name ?? undefined,
+      friendName: presence.name ?? undefined,
     });
   }
   return [...byKey.values()];
