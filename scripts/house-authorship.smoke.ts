@@ -47,7 +47,7 @@ assert.throws(() => parseQuestionSource(''), /Unknown Question\.source/);
 // --- House identity is a sentinel, never a users row ------------------------
 assert.equal(HOUSE_AUTHOR.id, 'house');
 assert.equal(HOUSE_AUTHOR.kind, 'house');
-assert.equal(LLM_QUESTION_ATTRIBUTION, 'Generated');
+assert.equal(LLM_QUESTION_ATTRIBUTION, 'Maid Acasa');
 // The house label must NOT collide with the LLM-origin attribution.
 assert.notEqual(HOUSE_AUTHOR.displayName, LLM_QUESTION_ATTRIBUTION);
 
@@ -70,11 +70,11 @@ assert.deepEqual(house, { kind: 'house', displayName: 'Joshing', label: 'Editori
 assert.notEqual(house.kind, 'human');
 
 // LLM origins (and an inconsistent null-creator 'authored') get the non-person
-// 'Generated' treatment, never a person and never the house.
+// LLM_QUESTION_ATTRIBUTION treatment, never a person and never the house.
 for (const source of ['daily_generated', 'curated_sent', 'authored'] as const) {
   assert.deepEqual(
     resolveQuestionAuthor({ creatorId: null, source, user: { name: 'Bob' } }),
-    { kind: 'generated', name: 'Generated' },
+    { kind: 'generated', name: LLM_QUESTION_ATTRIBUTION },
   );
 }
 
@@ -103,12 +103,12 @@ assert.deepEqual(
 // --- Attribution predicates -------------------------------------------------
 assert.equal(isHouseAttribution('Joshing'), true);
 assert.equal(isHouseAttribution('  Joshing  '), true); // trims
-assert.equal(isHouseAttribution('Generated'), false);
+assert.equal(isHouseAttribution(LLM_QUESTION_ATTRIBUTION), false);
 assert.equal(isHouseAttribution(null), false);
 assert.equal(isHouseAttribution(undefined), false);
 
-assert.equal(isLlmAttribution('Generated'), true);
-assert.equal(isLlmAttribution('  Generated '), true);
+assert.equal(isLlmAttribution('Maid Acasa'), true);
+assert.equal(isLlmAttribution('  Maid Acasa '), true);
 assert.equal(isLlmAttribution('Joshing'), false);
 assert.equal(isLlmAttribution(null), false);
 
