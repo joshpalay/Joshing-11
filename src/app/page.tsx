@@ -185,6 +185,8 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
           directOverflowCount: edition.direct.overflowCount,
           playablesOverflowCount: edition.playables.overflowCount,
           panel: edition.panel,
+          // Always-on Find Friends interlude, rendered above the Write composer.
+          growCircle: edition.growCircle,
           isAllEmpty: edition.isAllEmpty,
           // D-HOME-DASHBOARD-MODEL-01 point 4 — per-section empty signal drives
           // the honest per-section empty states under the "Past 7 days" band.

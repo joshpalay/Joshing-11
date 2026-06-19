@@ -539,8 +539,13 @@ export type HomeBudget = {
   directOverflowCount: number
   /** Playable friend-activity bundles pending beyond the served slice. */
   playablesOverflowCount: number
-  /** The single rotating panel for this load, or null on the all-empty page. */
+  /** The single mid-feed panel (Overlap) for this load, or null on the all-empty page. */
   panel: StreamItem | null
+  /**
+   * The always-on "Find friends" (Grow Your Circle) interlude, rendered at the
+   * feed tail directly above the Write composer. Independent of `panel`.
+   */
+  growCircle?: StreamItem | null
   /** True when all three content zones are empty — drives the empty switch. */
   isAllEmpty: boolean
   /**
@@ -2186,6 +2191,11 @@ function FeedListContent({
           ) : null}
         </div>
       ) : null}
+
+      {/* The always-on "Find friends" interlude sits directly above the Write
+          composer at the feed tail (D-HOME-PACING-01 update: promoted out of the
+          single mid-feed panel slot so it surfaces every load). */}
+      {budget?.growCircle && !loadingInitial ? renderRow(panelRow(budget.growCircle)) : null}
 
       {showContributeFooter && !loadingInitial ? <FeedContributeFooter /> : null}
 

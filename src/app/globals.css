@@ -259,6 +259,11 @@
        triangle PNG), distinct from the cream-derived --editorial-sage wash.
        Navy --ink type reads on top. Recorded in DECISIONS.md. */
     --interlude-sage:      #ced2bf;
+    /* Interlude terracotta — the dark warm ground for the home "Find friends"
+       interlude (B-HOME-INTERLUDE-TYPE-01). Derived from the brand terracotta
+       (--brand-orange) deepened with navy so cream type clears AA on top.
+       Recorded in DECISIONS.md. */
+    --interlude-terracotta: color-mix(in srgb, var(--brand-orange) 82%, var(--brand-ink));
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, replay/catch-up) render with navy ink instead of warm

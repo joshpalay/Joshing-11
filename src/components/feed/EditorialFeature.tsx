@@ -8,12 +8,19 @@ import { cn } from '@/lib/utils'
 // borrowed from the brand palette. Add a tone here (and the matching CSS var +
 // accent) when a new editorial module joins the feed.
 //
-// The two `interlude-*` tones are the home editorial interludes
-// (B-HOME-INTERLUDE-TYPE-01): a solid sage ground (Overlap, navy ink on top) and
-// a solid navy ground (Write, cream type inverted). On these two tones the
-// supporting line + CTA take the Josefin caps "system voice"; the parchment/
-// sage/slate washes are untouched.
-export type EditorialTone = 'parchment' | 'sage' | 'slate' | 'interlude-sage' | 'interlude-ink'
+// The three `interlude-*` tones are the home editorial interludes
+// (B-HOME-INTERLUDE-TYPE-01): a solid sage ground (Overlap, navy ink on top), a
+// solid navy ground (Write, cream type inverted), and a deep terracotta ground
+// (Find friends, cream type inverted). On these tones the supporting line + CTA
+// take the Josefin caps "system voice"; the parchment/sage/slate washes are
+// untouched.
+export type EditorialTone =
+  | 'parchment'
+  | 'sage'
+  | 'slate'
+  | 'interlude-sage'
+  | 'interlude-ink'
+  | 'interlude-terracotta'
 
 const TONE_BG: Record<EditorialTone, string> = {
   parchment: 'bg-[var(--editorial-parchment)]',
@@ -21,19 +28,26 @@ const TONE_BG: Record<EditorialTone, string> = {
   slate: 'bg-[var(--editorial-slate)]',
   'interlude-sage': 'bg-[var(--interlude-sage)]',
   'interlude-ink': 'bg-[var(--ink)]',
+  'interlude-terracotta': 'bg-[var(--interlude-terracotta)]',
 }
 
 const TONE_ACCENT: Record<EditorialTone, string> = {
   parchment: 'text-[var(--brand-orange)]',
   sage: 'text-[var(--success)]',
   slate: 'text-[var(--brand-link)]',
-  // Navy ink reads on the light sage ground; cream reads on the navy ground.
+  // Navy ink reads on the light sage ground; cream reads on the dark navy and
+  // terracotta grounds.
   'interlude-sage': 'text-[var(--ink)]',
   'interlude-ink': 'text-[var(--cream)]',
+  'interlude-terracotta': 'text-[var(--cream)]',
 }
 
-const INTERLUDE_TONES = new Set<EditorialTone>(['interlude-sage', 'interlude-ink'])
-const DARK_TONES = new Set<EditorialTone>(['interlude-ink'])
+const INTERLUDE_TONES = new Set<EditorialTone>([
+  'interlude-sage',
+  'interlude-ink',
+  'interlude-terracotta',
+])
+const DARK_TONES = new Set<EditorialTone>(['interlude-ink', 'interlude-terracotta'])
 
 interface EditorialFeatureProps {
   tone: EditorialTone

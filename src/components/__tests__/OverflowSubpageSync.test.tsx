@@ -120,7 +120,7 @@ function renderHome(feedItems: AnyItem[], activityItems: AnyItem[]): string {
   const edition = selectHomeEdition({
     feedItems: feedItems as unknown as FeedEditionItem[],
     activityItems: activityItems as unknown as StreamItem[],
-    promos: { sharedGround: null, expanding: null, growCircle: null },
+    promos: { sharedGround: null, growCircle: null },
     now: NOW,
   })
   return renderToStaticMarkup(

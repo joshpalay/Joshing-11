@@ -195,7 +195,7 @@ export function GrowYourCircleFeature({
   const router = useRouter();
   return (
     <EditorialFeature
-      tone="interlude-sage"
+      tone="interlude-terracotta"
       headline={rotate(ADD_FRIENDS_HEADLINES, embed.headlineIndex)}
       artwork={
         embed.variant === 'suggestions' ? (
@@ -214,12 +214,12 @@ export function GrowYourCircleFeature({
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/users/${p.id}`}
-                      className="text-sm font-semibold text-[var(--brand-ink)] no-underline"
+                      className="text-sm font-semibold text-[var(--cream)] no-underline"
                     >
                       {p.displayName}
                     </Link>
                     {p.handle ? (
-                      <span className="block text-xs leading-tight text-[var(--brand-ink-400)]">
+                      <span className="block text-xs leading-tight text-[var(--cream)]/70">
                         @{p.handle}
                       </span>
                     ) : null}
@@ -235,11 +235,11 @@ export function GrowYourCircleFeature({
             })}
           </div>
         ) : (
-          <div aria-hidden="true" className="flex items-center opacity-50">
+          <div aria-hidden="true" className="flex items-center opacity-80">
             {INVITE_CLUSTER_SEEDS.map((seed, i) => (
               <span
                 key={seed}
-                className="size-12 rounded-full ring-4 ring-[var(--editorial-sage)]"
+                className="size-12 rounded-full ring-4 ring-[var(--cream)]"
                 style={{ background: colorForUser(seed), marginLeft: i === 0 ? 0 : -16 }}
               />
             ))}
