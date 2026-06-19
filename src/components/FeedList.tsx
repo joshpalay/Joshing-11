@@ -762,7 +762,7 @@ function FeedContributeFooter() {
     // idea rides to the writer via ?text= (buildQuestionWriterHref).
     <footer className="pb-8">
       <EditorialFeature
-        tone="parchment"
+        tone="interlude-ink"
         headline="Sometimes the best way to show you know someone is to ask them a question."
         artwork={
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -776,7 +776,7 @@ function FeedContributeFooter() {
                 onChange={(event) => setIdea(event.target.value)}
                 aria-label="What question would you like to be asked?"
                 rows={5}
-                className="min-h-[180px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
+                className="min-h-[180px] w-full resize-none rounded-[var(--radius-md)] border border-[var(--cream-accent)] bg-[var(--brand-field)] px-4 py-3 text-base text-[var(--brand-ink)] outline-none focus:border-[var(--brand-navy)]"
               />
               {idea.trim() === '' ? (
                 <span
@@ -795,7 +795,13 @@ function FeedContributeFooter() {
                 </span>
               ) : null}
             </div>
-            <button type="submit" className="btn-primary w-full">
+            {/* On the dark navy interlude ground the button inverts to a cream
+                fill / ink label, and the label takes the Josefin caps system
+                voice (uppercase + letterspacing). */}
+            <button
+              type="submit"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-card)] bg-[var(--cream)] px-4 py-2 font-sans text-sm font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+            >
               Write a Question
             </button>
           </form>

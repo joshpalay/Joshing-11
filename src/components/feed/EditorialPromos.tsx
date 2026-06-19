@@ -90,7 +90,7 @@ export function CommonGroundFeature({
   const friendHref = activeFriend?.friendHref ?? embed.friendHref;
   return (
     <EditorialFeature
-      tone="parchment"
+      tone="interlude-sage"
       headline={
         onInviteSlide ? (
           COMMON_GROUND_INVITE_HEADLINE

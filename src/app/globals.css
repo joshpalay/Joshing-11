@@ -253,6 +253,12 @@
     --editorial-parchment: color-mix(in srgb, var(--brand-border) 22%, var(--brand-cream-page));
     --editorial-sage:      color-mix(in srgb, var(--success) 8%, var(--brand-cream-page));
     --editorial-slate:     color-mix(in srgb, var(--brand-link) 8%, var(--brand-cream-page));
+    /* Interlude sage — the light ground for the home "Overlap" editorial
+       interlude (B-HOME-INTERLUDE-TYPE-01). A deliberate, interlude-scoped
+       palette addition: a flat muted sage (formerly only inside the retired
+       triangle PNG), distinct from the cream-derived --editorial-sage wash.
+       Navy --ink type reads on top. Recorded in DECISIONS.md. */
+    --interlude-sage:      #ced2bf;
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, replay/catch-up) render with navy ink instead of warm
