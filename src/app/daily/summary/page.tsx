@@ -196,16 +196,12 @@ export default function DailySummaryPage() {
                 edges of the map.
               </p>
             </div>
-            <p
-              className="shrink-0 pt-2 text-sm font-medium text-[var(--brand-ink-400)]"
-              aria-label={`${coreCorrect} out of ${coreTotal} correct`}
-            >
-              {coreCorrect} / {coreTotal}
-            </p>
+            <div className="shrink-0 pt-1">
+              <ShareResultsButton correct={coreCorrect} total={coreTotal} />
+            </div>
           </div>
-          <div className="mt-5 flex items-center justify-between gap-3">
+          <div className="mt-5">
             <ResultDots questions={summary.questions} />
-            <ShareResultsButton correct={coreCorrect} total={coreTotal} />
           </div>
           {line ? <InterpretiveLine text={line} /> : null}
         </header>
