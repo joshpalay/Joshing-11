@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { X } from 'lucide-react';
 
 import {
   GameplayChatThread,
@@ -18,6 +16,8 @@ import {
   submitAnswerWithRetry,
 } from '@/lib/answer-submit';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import { PlayHeader } from '@/components/play/PlayHeader';
+import { useCondensedOnScroll } from '@/components/play/useCondensedOnScroll';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
@@ -198,6 +198,9 @@ export default function DailyPage() {
   const answerInputRef = useRef<HTMLInputElement>(null);
   // Guards the one-shot end-of-round revalidation below (B-DAILY-PARTIAL-QUEUE-01).
   const revalidatedEndRef = useRef(false);
+  // Collapses the header's title block once the player scrolls into the thread,
+  // leaving just the progress dots + close (shared with the Catch-up surface).
+  const { condensed, onScroll } = useCondensedOnScroll();
 
   // Show the first-run intro once, only for the server-flagged first untouched
   // queue and only if this device hasn't already dismissed it.
@@ -817,41 +820,22 @@ export default function DailyPage() {
           tiled full-strength behind the game. No cream scrim — the gameplay
           thread is entirely cards, which sit opaque on top; the sticky header
           stays opaque too. */}
-      <header
-        className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b px-4 py-3"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--surface)',
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <div>
-            <p className="text-xs tracking-[0.1em] text-[var(--text-muted)] uppercase">
-              Daily Five
-            </p>
-            <h1 className="font-serif text-xl font-semibold text-[var(--text)]">
-              Today&apos;s five
-            </h1>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <PlayHeader
+        eyebrow="Daily Five"
+        title={<>Today&apos;s five</>}
+        condensed={condensed}
+        dots={
           <GeometricProgress
             coreCount={coreDotCount}
             bonusCount={bonusDotCount}
             current={Math.min(completedCount + 1, queueLength)}
             results={results}
           />
-          <Link
-            href="/"
-            aria-label="Close"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
-          >
-            <X className="size-5" strokeWidth={1.9} />
-          </Link>
-        </div>
-      </header>
+        }
+      />
 
       <section
+        onScroll={onScroll}
         className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         style={{
           paddingBottom:
