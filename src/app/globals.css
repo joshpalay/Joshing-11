@@ -385,23 +385,6 @@
     }
 }
 
-/* App shell height model — unlayered so it overrides the Tailwind `min-h-dvh`
-   utility that every page's <main> carries.
-
-   The <body> is a single dynamic-viewport-tall flex column (see layout.tsx).
-   Previously each <main> independently claimed `min-h-dvh` (100dvh) while the
-   top header sat in normal flow ABOVE it, so the document was always taller than
-   the viewport by the header's height. That phantom overflow let short pages
-   scroll past their content and, on mobile Safari, stranded the fixed bottom nav
-   mid-screen with dead space below it as the toolbar collapsed.
-
-   Letting <main> grow to fill the remaining column height instead means a short
-   page is exactly one viewport tall (no phantom scroll, nav pinned at the
-   bottom), while a tall page still scrolls naturally. */
-body > main {
-  flex: 1 1 auto;
-  min-height: 0;
-}
 
 @layer components {
   .card {
