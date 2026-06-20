@@ -1694,7 +1694,7 @@ function FeedListContent({
         message?: string
       } | null
       if (!response.ok) {
-        throw new Error(body?.message ?? 'Could not recheck that answer.')
+        throw new Error(body?.message ?? 'Could not challenge that answer.')
       }
       const accepted = Boolean(body?.accepted)
       const pointsAwarded = typeof body?.pointsAwarded === 'number' ? body.pointsAwarded : 0
@@ -1711,12 +1711,12 @@ function FeedListContent({
           if (!existing) return current
           return { ...current, [item.id]: { ...existing, correct: true, awardedPoints: pointsAwarded } }
         })
-        return { accepted: true, message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` }
+        return { accepted: true, message: `Challenge accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` }
       }
       if (body?.status === 'needs_human') {
         return { accepted: false, message: body.reason ?? 'Flagged for a human look.' }
       }
-      return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' }
+      return { accepted: false, message: body?.reason ?? 'Checked and still marked wrong.' }
     },
     []
   )

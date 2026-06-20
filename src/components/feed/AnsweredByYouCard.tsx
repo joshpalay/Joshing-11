@@ -148,7 +148,7 @@ function AnsweredResult({
       setRecheckAccepted(outcome.accepted)
     } catch {
       setRecheckState('error')
-      setRecheckMessage('Could not recheck that answer.')
+      setRecheckMessage('Could not challenge that answer.')
       setRecheckAccepted(false)
     }
   }, [recheckAction, recheckState])
@@ -194,7 +194,7 @@ function AnsweredResult({
               onClick={() => void requestRecheck()}
               disabled={recheckState === 'submitting'}
             >
-              {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
+              {recheckState === 'submitting' ? 'Challenging…' : 'Challenge →'}
             </FeedActionLink>
           ) : null}
         </div>

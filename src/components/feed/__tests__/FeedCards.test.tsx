@@ -359,7 +359,7 @@ describe('Feed answered states', () => {
     expect(rendered).toContain('>You<')
   })
 
-  it('uses the serif slate link recheck action on wrong answers (no boxed button)', () => {
+  it('uses the serif slate link challenge action on wrong answers (no boxed button)', () => {
     const recheckAction = { onSubmit: async () => ({ accepted: false, message: '' }) }
     const rendered = html(
       <AnsweredByYouCard
@@ -367,7 +367,7 @@ describe('Feed answered states', () => {
         recheckAction={recheckAction}
       />
     )
-    expect(rendered).toContain('Recheck →')
+    expect(rendered).toContain('Challenge →')
     // Brand action-link treatment (matches "Answer →"): sans, slate, underlined — no offset-shadow box.
     expect(rendered).toContain('text-[var(--brand-link)]')
     expect(rendered).not.toContain('3px 3px 0 var(--ink)')
@@ -388,24 +388,24 @@ describe('Answer feedback sheet recheck affordance', () => {
     onClose: () => {},
   }
 
-  it('offers a Recheck → link on a wrong answer when onRecheck is provided', () => {
+  it('offers a Challenge → link beside the answer on a wrong answer when onRecheck is provided', () => {
     const rendered = html(
       <AnswerFeedbackSheet
         {...baseProps}
         onRecheck={async () => ({ accepted: false, message: '' })}
       />
     )
-    expect(rendered).toContain('Recheck →')
+    expect(rendered).toContain('Challenge →')
     // Reuses the shared sans slate action link, not a hand-rolled button.
     expect(rendered).toContain('text-[var(--brand-link)]')
   })
 
-  it('hides the recheck link when no onRecheck handler is supplied', () => {
+  it('hides the challenge link when no onRecheck handler is supplied', () => {
     const rendered = html(<AnswerFeedbackSheet {...baseProps} />)
-    expect(rendered).not.toContain('Recheck →')
+    expect(rendered).not.toContain('Challenge →')
   })
 
-  it('does not offer a recheck on a correct answer', () => {
+  it('does not offer a challenge on a correct answer', () => {
     const rendered = html(
       <AnswerFeedbackSheet
         {...baseProps}
@@ -415,7 +415,7 @@ describe('Answer feedback sheet recheck affordance', () => {
         onRecheck={async () => ({ accepted: false, message: '' })}
       />
     )
-    expect(rendered).not.toContain('Recheck →')
+    expect(rendered).not.toContain('Challenge →')
   })
 
   // B-Report-2: the content-reporting ⋯ is opt-in so the shared result sheet does not
