@@ -92,7 +92,7 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     expect(html).toContain('var(--feed-card-elevated)'); // shared elevated fill token
     expect(html).toContain('var(--brand-border)'); // neutral hairline stroke (matches Today's 5)
     expect(html).not.toContain('var(--accent-gold)'); // no gold accent stroke
-    expect(html).toContain('var(--shadow-card-strong)'); // the soft drop shadow (tokenized)
+    expect(html).toContain('var(--shadow-card)'); // matches the Today's 5 card's drop shadow (tokenized)
   });
 
   it('keeps the row flat when not elevated (the full /activities log)', () => {
