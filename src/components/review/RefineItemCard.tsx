@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -12,7 +13,29 @@ const actionStyle: CSSProperties = {
   background: 'color-mix(in srgb, var(--brand-orange) 8%, transparent)',
 };
 
+const ACTION_CLASS =
+  'inline-flex min-h-11 items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60 sm:self-auto';
+
+const ROW_CLASS = 'flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4';
+
 export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: string }) {
+  // Navigational nudge (add_territories): links out instead of staging a
+  // decision, so it skips the resolve/undo round-trip entirely.
+  if (item.href) {
+    return (
+      <div className={ROW_CLASS}>
+        <p className="text-foreground flex-1 text-sm leading-6">{item.openText}</p>
+        <Link href={item.href} style={actionStyle} className={ACTION_CLASS}>
+          {item.actionVerb}
+        </Link>
+      </div>
+    );
+  }
+
+  return <RefineDecisionCard item={item} queueId={queueId} />;
+}
+
+function RefineDecisionCard({ item, queueId }: { item: RefineItem; queueId: string }) {
   const [resolved, setResolved] = useState(item.state === 'resolved');
   const [busy, setBusy] = useState(false);
 
@@ -57,7 +80,7 @@ export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: s
   }
 
   return (
-    <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className={ROW_CLASS}>
       {resolved ? (
         <>
           <p className="text-muted-foreground flex-1 text-sm leading-6">
@@ -83,7 +106,7 @@ export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: s
             onClick={resolve}
             disabled={busy}
             style={actionStyle}
-            className="inline-flex min-h-11 items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60 sm:self-auto"
+            className={ACTION_CLASS}
           >
             {item.actionVerb}
           </button>

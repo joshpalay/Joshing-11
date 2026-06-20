@@ -8,9 +8,13 @@
  * (src/server/refine/select.ts) depend on. Everything here is pure.
  */
 
-export type RefineItemType = 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning';
+export type RefineItemType =
+  | 'friend_expansion'
+  | 'difficulty_escalation'
+  | 'struggle_pruning'
+  | 'add_territories';
 
-export type RefineActionVerb = 'Add' | 'Ease off' | 'Rest';
+export type RefineActionVerb = 'Add' | 'Ease off' | 'Rest' | 'Add categories';
 
 export type RefineItemState = 'open' | 'resolved';
 
@@ -42,6 +46,12 @@ export interface RefineItem {
   resolvedText: string;
   actionVerb: RefineActionVerb;
   state: RefineItemState;
+  /**
+   * Navigational items (the add_territories nudge) link out instead of staging a
+   * decision. When set, the client renders the action verb as a link to this
+   * route and skips the resolve/undo round-trip entirely.
+   */
+  href?: string;
 }
 
 export interface RefineSectionView {
@@ -58,16 +68,35 @@ export const REFINE_PRIORITY: Record<RefineItemType, number> = {
   friend_expansion: 0,
   difficulty_escalation: 1,
   struggle_pruning: 2,
+  // Lowest priority: the inactivity nudge only fills space the evidence-based
+  // items leave open, so on an engaged day it steps aside.
+  add_territories: 3,
 };
 
 export const REFINE_VERB: Record<RefineItemType, RefineActionVerb> = {
   friend_expansion: 'Add',
   difficulty_escalation: 'Ease off',
   struggle_pruning: 'Rest',
+  add_territories: 'Add categories',
 };
 
 /** Max items shown at once. */
 export const REFINE_MAX_ITEMS = 3;
+
+/**
+ * Days of "no new territory added" before the add_territories nudge fires. The
+ * signal is the most recent active DeclaredInterest.declaredAt — adding a
+ * category resets it, so the nudge disappears the moment the player acts.
+ */
+export const ADD_TERRITORIES_INACTIVITY_DAYS = 5;
+
+/**
+ * Whether to surface the "add some categories?" nudge. Fires when the player has
+ * never added a territory (`null`) or hasn't in ADD_TERRITORIES_INACTIVITY_DAYS.
+ */
+export function shouldNudgeAddTerritories(daysSinceLastAdd: number | null): boolean {
+  return daysSinceLastAdd === null || daysSinceLastAdd >= ADD_TERRITORIES_INACTIVITY_DAYS;
+}
 
 /**
  * Stable identity / cooldown key for a candidate or decision row. Subdomain is

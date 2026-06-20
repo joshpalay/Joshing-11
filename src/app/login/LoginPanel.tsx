@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { formatUsPhoneInput } from '@/lib/phone-e164';
@@ -588,13 +589,16 @@ export default function LoginPanel({
     >
       {step === 'phone' ? (
         <form className="space-y-3.5" onSubmit={continueWithPhone}>
-          {/* Solid filled handset, matching the Figma black phone glyph
-              (and the filled treatment of the OTP step's bubble icon).
-              Hand-drawn as a fill-only glyph rather than a force-filled
-              lucide outline, which rendered with a muddy stroked edge. */}
-          <svg className="mx-auto h-12 w-12 fill-black" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-          </svg>
+          {/* Phone artwork for the entry step (uploaded asset). */}
+          <Image
+            src="/images/phone-transparent.png"
+            alt=""
+            aria-hidden
+            width={230}
+            height={305}
+            priority
+            className="mx-auto h-16 w-auto"
+          />
           {/* Suppress the generic context card on the confirm view — that view
               carries its own inviter line + number. */}
           {inviteContext && !(invitePrefill && !inviteDeadEnd) ? (

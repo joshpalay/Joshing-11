@@ -6,9 +6,15 @@
  * decisions) and assembles the RefineSectionView consumed by the daily summary.
  */
 
-import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 
-import { db, dailyRefineDecisions, masteryEvents, userDomainDifficulties } from '@/server/db';
+import {
+  db,
+  dailyRefineDecisions,
+  declaredInterests,
+  masteryEvents,
+  userDomainDifficulties,
+} from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
 import { getBonusCount } from '@/server/daily/bonus';
 import { getKnowledgeBase } from '@/server/db/queries/daily';
@@ -18,17 +24,30 @@ import {
   deriveStrugglePruning,
   type MissStreak,
 } from '@/server/refine/derive';
-import { openText, resolvedText, subdomainLabel } from '@/server/refine/copy';
+import {
+  ADD_TERRITORIES_OPEN_TEXT,
+  ADD_TERRITORIES_RESOLVED_TEXT,
+  openText,
+  resolvedText,
+  subdomainLabel,
+} from '@/server/refine/copy';
 import { selectRefineCandidates } from '@/server/refine/select';
 import {
+  REFINE_MAX_ITEMS,
   REFINE_VERB,
   refineItemKey,
+  shouldNudgeAddTerritories,
   type RefineCandidate,
   type RefineItem,
   type RefineItemType,
   type RefineMissTier,
   type RefineSectionView,
 } from '@/server/refine/types';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Where the add_territories nudge sends the player (same as Customize / Settings). */
+const ADD_TERRITORIES_HREF = '/daily/setup';
 
 /** Lowercased canonical subcategories the player currently owns (knowledge base). */
 export async function getOwnedSubcategories(userId: string): Promise<Set<string>> {
@@ -235,6 +254,38 @@ export async function deriveSelectedRefineCandidates(
   return selected;
 }
 
+/**
+ * Whole-number days since the player last added an active territory, or null if
+ * they've never added one. The signal is the most recent DeclaredInterest the
+ * player still owns — adding a category writes a fresh `declaredAt`, so this
+ * resets the moment they act (which is what retires the nudge).
+ */
+export async function getDaysSinceLastTerritoryAdd(userId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ last: sql<string | null>`max(${declaredInterests.declaredAt})` })
+    .from(declaredInterests)
+    .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
+  if (!row?.last) return null;
+  const lastMs = new Date(row.last).getTime();
+  if (Number.isNaN(lastMs)) return null;
+  return Math.floor((Date.now() - lastMs) / DAY_MS);
+}
+
+/** The navigational "add some categories?" nudge — global, never staged. */
+function buildAddTerritoriesItem(queueId: string): RefineItem {
+  return {
+    id: `${queueId}:add_territories`,
+    type: 'add_territories',
+    subdomainId: '',
+    subdomainLabel: '',
+    openText: ADD_TERRITORIES_OPEN_TEXT,
+    resolvedText: ADD_TERRITORIES_RESOLVED_TEXT,
+    actionVerb: REFINE_VERB.add_territories,
+    state: 'open',
+    href: ADD_TERRITORIES_HREF,
+  };
+}
+
 /** Assemble the RefineSectionView for the daily summary. */
 export async function buildRefineSection(
   userId: string,
@@ -242,12 +293,19 @@ export async function buildRefineSection(
   slots: QueueSlot[],
 ): Promise<RefineSectionView> {
   if (slots.length === 0) return { queueId, items: [] };
-  const [selected, pendingKeys] = await Promise.all([
+  const [selected, pendingKeys, daysSinceLastAdd] = await Promise.all([
     deriveSelectedRefineCandidates(userId, slots),
     getPendingDecisionKeys(userId, queueId),
+    getDaysSinceLastTerritoryAdd(userId),
   ]);
-  return {
-    queueId,
-    items: selected.map((candidate) => candidateToItem(candidate, queueId, pendingKeys)),
-  };
+  const items = selected.map((candidate) => candidateToItem(candidate, queueId, pendingKeys));
+
+  // Inactivity nudge fills any room the evidence-based items leave open: if the
+  // player hasn't added a territory recently, offer to add some. Lowest priority,
+  // so an engaged day with three evidence items crowds it out.
+  if (items.length < REFINE_MAX_ITEMS && shouldNudgeAddTerritories(daysSinceLastAdd)) {
+    items.push(buildAddTerritoriesItem(queueId));
+  }
+
+  return { queueId, items };
 }
