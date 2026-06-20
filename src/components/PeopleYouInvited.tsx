@@ -4,6 +4,19 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Chip } from '@/components/ui/Chip'
+import { formatUsPhoneInput } from '@/lib/phone-e164'
+
+const EDIT_ERROR_COPY: Record<string, string> = {
+  invalid_phone: 'Use a US mobile number.',
+  too_many_suggested_interests: 'Choose up to three ideas.',
+  missing_invitee_display_name: 'Add their name first.',
+  invalid_invitee_display_name: 'Use a shorter, real display name.',
+  invalid_suggested_interests: 'Keep each idea short and friendly.',
+  already_on_joshing:
+    'That number already belongs to someone on Joshing. Set this note aside and send them a friend request instead.',
+  duplicate_pending: 'You already have a pending note out to that number.',
+  self_invite: 'You cannot invite yourself.',
+}
 
 type InviteStatus = 'pending' | 'accepted' | 'expired' | 'cancelled'
 
@@ -79,6 +92,12 @@ export default function PeopleYouInvited() {
   const [copyingId, setCopyingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editInterests, setEditInterests] = useState<string[]>(['', '', ''])
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const loadInvites = useCallback(async () => {
     setError(null)
@@ -193,6 +212,75 @@ export default function PeopleYouInvited() {
     }
   }
 
+  function startEdit(invite: OutgoingInvite) {
+    setEditingId(invite.id)
+    setEditName(invite.inviteeDisplayName)
+    setEditPhone(formatUsPhoneInput(invite.inviteePhoneForActions ?? ''))
+    setEditInterests([
+      invite.suggestedInterests[0] ?? '',
+      invite.suggestedInterests[1] ?? '',
+      invite.suggestedInterests[2] ?? '',
+    ])
+    setEditError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditError(null)
+    setSavingEdit(false)
+  }
+
+  async function saveEdit(invite: OutgoingInvite) {
+    const trimmedName = editName.trim()
+    if (!trimmedName) {
+      setEditError(EDIT_ERROR_COPY.missing_invitee_display_name)
+      return
+    }
+
+    const suggestedInterests = editInterests
+      .map((interest) => interest.trim())
+      .filter(Boolean)
+
+    setSavingEdit(true)
+    setEditError(null)
+
+    try {
+      const response = await fetch('/api/friend-invitations', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invitationId: invite.id,
+          inviteeDisplayName: trimmedName,
+          phone: editPhone,
+          suggestedInterests,
+        }),
+      })
+      const body = (await response.json().catch(() => null)) as {
+        error?: string
+        message?: string
+      } | null
+
+      if (!response.ok) {
+        const apiError = body?.error
+        throw new Error(
+          (apiError && EDIT_ERROR_COPY[apiError]) ??
+            body?.message ??
+            'Could not save your changes.'
+        )
+      }
+
+      setEditingId(null)
+      await loadInvites()
+    } catch (caught) {
+      setEditError(
+        caught instanceof Error ? caught.message : 'Could not save your changes.'
+      )
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   function createNewInvite(invite: OutgoingInvite) {
     window.dispatchEvent(
       new CustomEvent('friend-invitations:create-new', {
@@ -260,6 +348,93 @@ export default function PeopleYouInvited() {
                   header
                 )}
 
+                {editingId === invite.id ? (
+                  <form
+                    className="mt-3 space-y-3"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void saveEdit(invite)
+                    }}
+                  >
+                    <label className="text-foreground block text-sm font-medium">
+                      Name
+                      <input
+                        className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+                        value={editName}
+                        onChange={(event) => {
+                          setEditName(event.target.value)
+                          setEditError(null)
+                        }}
+                        autoComplete="name"
+                        maxLength={60}
+                        placeholder="Their name"
+                      />
+                    </label>
+                    <label className="text-foreground block text-sm font-medium">
+                      Phone number
+                      <input
+                        className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+                        value={editPhone}
+                        onChange={(event) => {
+                          setEditPhone(formatUsPhoneInput(event.target.value))
+                          setEditError(null)
+                        }}
+                        autoComplete="tel"
+                        inputMode="tel"
+                        maxLength={14}
+                        placeholder="(555) 123-4567"
+                      />
+                    </label>
+                    <div className="space-y-2">
+                      <span className="text-foreground block text-sm font-medium">
+                        Ideas (up to three)
+                      </span>
+                      {editInterests.map((interest, index) => (
+                        <input
+                          key={index}
+                          className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-full border border-[var(--accent-gold)] px-4 text-base transition outline-none"
+                          value={interest}
+                          onChange={(event) => {
+                            const next = event.target.value
+                            setEditInterests((current) =>
+                              current.map((value, i) =>
+                                i === index ? next : value
+                              )
+                            )
+                            setEditError(null)
+                          }}
+                          maxLength={60}
+                          placeholder={`Idea ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+
+                    {editError ? (
+                      <p className="text-destructive text-sm font-medium">
+                        {editError}
+                      </p>
+                    ) : null}
+
+                    <div className="flex gap-3">
+                      <button
+                        type="submit"
+                        className="btn-primary flex-1"
+                        disabled={savingEdit}
+                      >
+                        {savingEdit ? 'Saving…' : 'Save changes'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost flex-1"
+                        onClick={cancelEdit}
+                        disabled={savingEdit}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
                 {invite.suggestedInterests.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {invite.suggestedInterests.map((interest) => (
@@ -335,6 +510,13 @@ export default function PeopleYouInvited() {
                       <button
                         type="button"
                         className="text-muted-foreground text-sm"
+                        onClick={() => startEdit(invite)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground text-sm"
                         onClick={() => cancelInvite(invite)}
                         disabled={cancellingId === invite.id}
                       >
@@ -345,6 +527,8 @@ export default function PeopleYouInvited() {
                     </div>
                   </div>
                 ) : null}
+                  </>
+                )}
               </article>
             )
           })}

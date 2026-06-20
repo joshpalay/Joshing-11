@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   cancelFriendInvitationMock,
   createFriendInvitationMock,
+  updateFriendInvitationMock,
+  getPendingInvitationForPhoneMock,
   dbMock,
   getSessionMock,
   sendSmsMock,
@@ -54,6 +56,8 @@ const {
   return {
     cancelFriendInvitationMock: vi.fn(),
     createFriendInvitationMock: vi.fn(),
+    updateFriendInvitationMock: vi.fn(),
+    getPendingInvitationForPhoneMock: vi.fn(),
     dbMock,
     getSessionMock: vi.fn(),
     sendSmsMock: vi.fn(),
@@ -105,6 +109,8 @@ vi.mock('@/server/db', () => ({
 vi.mock('@/server/friends/invitations', () => ({
   cancelFriendInvitation: cancelFriendInvitationMock,
   createFriendInvitation: createFriendInvitationMock,
+  updateFriendInvitation: updateFriendInvitationMock,
+  getPendingInvitationForPhone: getPendingInvitationForPhoneMock,
   listOutgoingFriendInvitations: vi.fn(async () => []),
 }))
 
@@ -113,6 +119,7 @@ vi.mock('@/server/sms', () => ({
 }))
 
 import {
+  PATCH,
   POST,
   buildFriendInvitationMessage,
   validateCreateFriendInvitationBody,
@@ -562,5 +569,184 @@ describe('friend invitation validation and message QA contract', () => {
         error: 'too_many_suggested_interests',
       })
     )
+  })
+})
+
+describe('PATCH /api/friend-invitations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetFriendInvitationRateLimitForTests()
+    getSessionMock.mockResolvedValue({ userId: 'user-inviter' })
+    state.existingUser = null
+    state.updateValues = undefined
+    getPendingInvitationForPhoneMock.mockResolvedValue(null)
+    process.env.NEXT_PUBLIC_APP_URL = 'https://joshing.example'
+  })
+
+  function patchRequest(body: unknown) {
+    return new Request('https://joshing.example/api/friend-invitations', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('edits a pending invite phone, name, and interests and rebuilds the message', async () => {
+    updateFriendInvitationMock.mockResolvedValueOnce({
+      id: 'inv-1',
+      token: 'token-1',
+      inviteeDisplayName: 'Dad',
+      inviteePhone: '+17345559999',
+      personalMessage: null,
+      expiresAt,
+    })
+
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: ' Dad ',
+        phone: '(734) 555-9999',
+        suggestedInterests: [' Sondheim '],
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(updateFriendInvitationMock).toHaveBeenCalledWith({
+      invitationId: 'inv-1',
+      inviterUserId: 'user-inviter',
+      inviteePhone: '+17345559999',
+      inviteeDisplayName: 'Dad',
+      preSeededInterests: ['Sondheim'],
+    })
+    expect(body).toEqual(
+      expect.objectContaining({
+        id: 'inv-1',
+        invitationId: 'inv-1',
+        inviteUrl: 'https://joshing.example/invite/token-1',
+        inviteePhone: '+17345559999',
+        inviteeDisplayName: 'Dad',
+        suggestedInterests: ['Sondheim'],
+      })
+    )
+    expect(body.message).toBe(
+      'Hey — I thought you’d like this corner of Joshing. I added a few ideas that made me think of you — Sondheim. Keep, edit, or ignore them. No app to download — just tap this: https://joshing.example/invite/token-1'
+    )
+  })
+
+  it('rejects editing toward a number already on Joshing', async () => {
+    state.existingUser = { id: 'user-other' }
+
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: 'Dad',
+        phone: '7345559999',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toBe('already_on_joshing')
+    expect(updateFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects editing toward the inviter’s own number', async () => {
+    state.existingUser = { id: 'user-inviter' }
+
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: 'Dad',
+        phone: '7345559999',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('self_invite')
+    expect(updateFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects collapsing onto a different existing pending note for the same number', async () => {
+    getPendingInvitationForPhoneMock.mockResolvedValueOnce({ id: 'inv-other' })
+
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: 'Dad',
+        phone: '7345559999',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toBe('duplicate_pending')
+    expect(updateFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('allows editing when the only pending note for that number is the one being edited', async () => {
+    getPendingInvitationForPhoneMock.mockResolvedValueOnce({ id: 'inv-1' })
+    updateFriendInvitationMock.mockResolvedValueOnce({
+      id: 'inv-1',
+      token: 'token-1',
+      inviteeDisplayName: 'Dad',
+      inviteePhone: '+17345559999',
+      personalMessage: null,
+      expiresAt,
+    })
+
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: 'Dad',
+        phone: '7345559999',
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateFriendInvitationMock).toHaveBeenCalled()
+  })
+
+  it('returns 404 when the invite is no longer pending', async () => {
+    updateFriendInvitationMock.mockResolvedValueOnce(null)
+
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: 'Dad',
+        phone: '7345559999',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(404)
+    expect(body.error).toBe('not_found')
+  })
+
+  it('rejects a missing invitationId', async () => {
+    const response = await PATCH(
+      patchRequest({ inviteeDisplayName: 'Dad', phone: '7345559999' })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('missing_invitation_id')
+    expect(updateFriendInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid phone before touching the database', async () => {
+    const response = await PATCH(
+      patchRequest({
+        invitationId: 'inv-1',
+        inviteeDisplayName: 'Dad',
+        phone: '123',
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('invalid_phone')
+    expect(updateFriendInvitationMock).not.toHaveBeenCalled()
   })
 })
