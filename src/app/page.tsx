@@ -76,7 +76,7 @@ export default async function Home() {
           </span>
           <span className="absolute top-[580px] right-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[70px] max-w-none -scale-x-100" />
           </span>
         </div>
 
