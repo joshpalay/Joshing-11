@@ -22,6 +22,7 @@ import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import LoadingScreen from '@/components/LoadingScreen';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
+import { getBonusCount, getCoreSlots, getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
 import {
   buildSessionCloseLines,
   type SessionSlotSummary,
@@ -41,7 +42,7 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
   // a deliberate, easier add rather than a generation miss. The "bonus from a
   // friend's knowledge" framing lives in the attribution line GameplayChat
   // renders above the question (see presenceSourceName).
-  if (slot.presence_source_id && slot.difficulty_estimate === 'accessible') {
+  if (isBonusSlot(slot) && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
   return badges;
@@ -372,6 +373,13 @@ export default function DailyPage() {
   // produce a graceful-degraded shorter queue, and the progress dots should
   // match the real number of questions rather than always showing five.
   const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
+  // Track split (D-F1): core dots vs additive bonus dots, derived from the shared
+  // selector rather than index math. Track length stays the real queue length
+  // (graceful-degrade can yield <5 core); the bonus group is set apart by a gap +
+  // label, never counted toward the five.
+  const coreDotCount =
+    queue && queue.slots.length > 0 ? getCoreSlots(queue.slots).length : DAILY_QUEUE_SIZE;
+  const bonusDotCount = queue ? getBonusCount(queue.slots) : 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
   // Defense-in-depth against a partial queue snapshot (B-DAILY-PARTIAL-QUEUE-01).
@@ -492,8 +500,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
-          presenceSourceName: slot.presence_source_name ?? null,
-          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
+          presenceSourceName: getSlotPresence(slot)?.name ?? null,
+          presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -544,7 +552,7 @@ export default function DailyPage() {
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
-          text: slot.presence_source_name
+          text: isBonusSlot(slot)
             ? `Resting ${restedLabel}. You won't see these in your five.`
             : "Skipped. We'll bring it back later.",
         });
@@ -557,8 +565,8 @@ export default function DailyPage() {
           assignmentId: String(slot.slot_index),
           questionText: slot.question_text,
           creatorName: null,
-          presenceSourceName: slot.presence_source_name ?? null,
-          presenceSourceExtraCount: slot.presence_source_extra_count ?? 0,
+          presenceSourceName: getSlotPresence(slot)?.name ?? null,
+          presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
           isNew: true,
           badges: questionBadges(slot),
         });
@@ -828,7 +836,8 @@ export default function DailyPage() {
         </div>
         <div className="flex items-center gap-2">
           <GeometricProgress
-            total={queueLength}
+            coreCount={coreDotCount}
+            bonusCount={bonusDotCount}
             current={Math.min(completedCount + 1, queueLength)}
             results={results}
           />

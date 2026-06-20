@@ -73,6 +73,21 @@ export const queueSlotSchema = z.object({
   dismissed_at: z.string().optional(),
   dismissed_reason: z.enum(['not_interested', 'too_old', 'unclear']).optional(),
   /**
+   * Catch-up recovery state — kept SEPARATE from the live `answer_state`,
+   * `submitted_answer`, and `awarded_points` above. Re-answering a slot in
+   * catch-up must never rewrite the live-round verdict (that drives the daily
+   * progress dots and the summary totals); the original wrong/skipped result
+   * stays put. A `catchup_answer_state` of 'correct' closes the slot for
+   * catch-up (see isCatchUpSlotEligible); 'incorrect' leaves it re-attemptable.
+   */
+  catchup_answer_state: queueSlotAnswerStateSchema.optional(),
+  /** Text the player typed in their most recent catch-up attempt. */
+  catchup_submitted_answer: z.string().optional(),
+  /** Points earned in catch-up (the recovery weight), distinct from the live awarded_points. */
+  catchup_awarded_points: z.number().optional(),
+  /** ISO timestamp of the most recent catch-up attempt on this slot. */
+  catchup_answered_at: z.string().optional(),
+  /**
    * True when the effective difficulty for this slot's domain was stepped up above the
    * user's base preference due to mastery progress. Used by the UI to show "Getting harder".
    */

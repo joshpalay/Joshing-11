@@ -31,6 +31,11 @@ export function isCatchUpSlotEligible(slot: QueueSlot): boolean {
   // question_id (the canonical Question.id). Either is sufficient to
   // re-serve the slot in catch-up.
   if (!slot.generated_question_id && !slot.question_id) return false;
+  // Already recovered in a prior catch-up attempt — a correct catch-up answer
+  // closes the slot for good. We key off catchup_answer_state (NOT answer_state)
+  // because recovery deliberately leaves the live verdict untouched so the
+  // daily-five dots keep showing the original wrong/skipped result.
+  if (slot.catchup_answer_state === 'correct') return false;
   // Wrong daily-5 answers are eligible for re-attempt; correct ones are not.
   if (slot.answered) return slot.answer_state === 'incorrect';
   return true;

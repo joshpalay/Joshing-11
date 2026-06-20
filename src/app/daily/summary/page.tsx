@@ -156,6 +156,14 @@ export default function DailySummaryPage() {
     )
   }
 
+  // D-F3: every count/denominator surface reads the core five — +2 bonus
+  // questions are additive and never enter the spoken X/Y (or the share). X and
+  // Y both come from the same (visible) core rows so they can never disagree;
+  // bonus performance is reflected in the bonus dot-group, not the headline.
+  const coreQuestions = summary.questions.filter((q) => !q.isBonus)
+  const coreCorrect = coreQuestions.filter((q) => q.isCorrect).length
+  const coreTotal = coreQuestions.length
+
   return (
     <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
       <div className="relative mx-auto max-w-3xl">
@@ -188,16 +196,12 @@ export default function DailySummaryPage() {
                 edges of the map.
               </p>
             </div>
-            <p
-              className="shrink-0 pt-2 text-sm font-medium text-[var(--brand-ink-400)]"
-              aria-label={`${summary.totalCorrect} out of ${summary.questions.length} correct`}
-            >
-              {summary.totalCorrect} / {summary.questions.length}
-            </p>
+            <div className="shrink-0 pt-1">
+              <ShareResultsButton correct={coreCorrect} total={coreTotal} />
+            </div>
           </div>
-          <div className="mt-5 flex items-center justify-between gap-3">
+          <div className="mt-5">
             <ResultDots questions={summary.questions} />
-            <ShareResultsButton correct={summary.totalCorrect} total={summary.questions.length} />
           </div>
           {line ? <InterpretiveLine text={line} /> : null}
         </header>
@@ -323,14 +327,19 @@ function interpretiveLine(summary: DailySummaryView): string | null {
   if (newDomain) return `You found new ground in ${newDomain.displayName}.`
 
   const answered = summary.questions.filter((q) => !q.isSkipped)
-  const total = answered.length
+
+  // 3 & 4 are the "perfect/whiffed five" beats — gated on the CORE five (D-F3:
+  // bonus is additive and never enters the count), so they fire on a clean or
+  // missed core round regardless of how the +2 bonus went.
+  const coreAnswered = answered.filter((q) => !q.isBonus)
+  const coreAnsweredCorrect = coreAnswered.filter((q) => q.isCorrect).length
 
   // 3. 5/5
-  if (total > 0 && summary.totalCorrect === total && total === 5)
+  if (coreAnswered.length === 5 && coreAnsweredCorrect === 5)
     return 'Clean sweep.'
 
   // 4. 0/5
-  if (total > 0 && summary.totalCorrect === 0 && total === 5)
+  if (coreAnswered.length === 5 && coreAnsweredCorrect === 0)
     return 'Every one of them. Tomorrow.'
 
   // 5. 3+ correct in a row
@@ -364,27 +373,96 @@ function interpretiveLine(summary: DailySummaryView): string | null {
   return null
 }
 
+function firstNameFrom(name: string): string {
+  const trimmed = name.trim()
+  const space = trimmed.indexOf(' ')
+  return space === -1 ? trimmed : trimmed.slice(0, space)
+}
+
+// D-F4: the quiet recap attribution for a +2 bonus row. Presence-framed and
+// singular — "from {Name}'s knowledge" (extra-count form mirrors
+// GameplayChat's bonusSourceLabel). The friend never authored or answered the
+// question, so this is never "by {Name}".
+export function bonusKnowledgeLine(presence: { name: string; extraCount: number }): string {
+  const name = firstNameFrom(presence.name)
+  return presence.extraCount > 0
+    ? `from ${name} + others’ knowledge`
+    : `from ${name}’s knowledge`
+}
+
+function ResultDot({
+  question,
+  ariaLabel,
+}: {
+  question: QuestionRecap
+  ariaLabel: string
+}) {
+  return (
+    <span
+      className="size-2.5 rounded-full border"
+      style={{
+        backgroundColor: question.isSkipped
+          ? 'color-mix(in srgb, var(--brand-ink) 24%, transparent)'
+          : question.isCorrect
+            ? 'color-mix(in srgb, var(--game-correct) 88%, var(--brand-card))'
+            : 'color-mix(in srgb, var(--game-wrong) 78%, var(--brand-card))',
+        borderColor: 'color-mix(in srgb, var(--brand-border) 72%, transparent)',
+        boxShadow: '0 0 0 2px var(--brand-card)',
+      }}
+      aria-label={ariaLabel}
+    />
+  )
+}
+
+// D-F1 / D-F1b: one continuous track — core dots, then (only when there are
+// bonus questions) a visible separator, the bonus dots, and the generic
+// "+{N} friend bonus" label. The bonus signal is the gap + label (real
+// text), never color. Mirrors the live-session GeometricProgress track.
 function ResultDots({ questions }: { questions: QuestionRecap[] }) {
+  const core = questions.filter((q) => !q.isBonus)
+  const bonus = questions.filter((q) => q.isBonus)
+
+  const outcome = (q: QuestionRecap) =>
+    q.isSkipped ? 'skipped' : q.isCorrect ? 'correct' : 'not this time'
+
+  if (bonus.length === 0) {
+    return (
+      <div className="flex items-center gap-2" aria-label="Question results">
+        {core.map((question, index) => (
+          <ResultDot
+            key={question.questionId}
+            question={question}
+            ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-center gap-2" aria-label="Question results">
-      {questions.map((question, index) => (
-        <span
+      {core.map((question, index) => (
+        <ResultDot
           key={question.questionId}
-          className="size-2.5 rounded-full border"
-          style={{
-            backgroundColor: question.isSkipped
-              ? 'color-mix(in srgb, var(--brand-ink) 24%, transparent)'
-              : question.isCorrect
-                ? 'color-mix(in srgb, var(--game-correct) 88%, var(--brand-card))'
-                : 'color-mix(in srgb, var(--game-wrong) 78%, var(--brand-card))',
-            borderColor: 'color-mix(in srgb, var(--brand-border) 72%, transparent)',
-            boxShadow: '0 0 0 2px var(--brand-card)',
-          }}
-          aria-label={`Question ${index + 1}: ${
-            question.isSkipped ? 'skipped' : question.isCorrect ? 'correct' : 'not this time'
-          }`}
+          question={question}
+          ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
         />
       ))}
+      <span
+        aria-hidden
+        className="mx-0.5 h-3 w-px shrink-0"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
+      />
+      {bonus.map((question, index) => (
+        <ResultDot
+          key={question.questionId}
+          question={question}
+          ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
+        />
+      ))}
+      <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
+        +{bonus.length} friend bonus
+      </span>
     </div>
   )
 }
@@ -581,6 +659,11 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
               )}
               {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             </p>
+            {question.bonusPresence ? (
+              <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
+                {bonusKnowledgeLine(question.bonusPresence)}
+              </p>
+            ) : null}
           </div>
         </div>
 
