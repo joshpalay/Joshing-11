@@ -21,7 +21,7 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
+    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 overflow-x-clip px-4 py-6 pb-32 md:py-10">
       {/* Top triangle band (Variant4-TOP, grain baked in; lower portion
           transparent so cream shows through). Bounded to the content-column
           width (inset-x-0 inside the max-w-2xl main) — the same width the
@@ -76,7 +76,7 @@ export default async function Home() {
           </span>
           <span className="absolute top-[580px] right-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/Variant4-DUO.png" alt="" className="block w-[140px] max-w-none -scale-x-100" />
+            <img src="/images/Variant4-DUO.png" alt="" className="block w-[70px] max-w-none -scale-x-100" />
           </span>
         </div>
 
