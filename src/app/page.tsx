@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
+import { OverflowDebug } from '@/components/dev/OverflowDebug'
 import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, {
   type DailyStatus,
@@ -22,6 +23,8 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
+      {/* TEMPORARY: on-page horizontal-overflow culprit finder. Remove after diagnosis. */}
+      <OverflowDebug />
       {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
           transparent so cream shows through). Rendered as a BACKGROUND image, not
           an <img>: background-size:auto pins it to its INTRINSIC size (so its
