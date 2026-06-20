@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 
 import { writeActivity } from '@/server/activity/write-activity'
 import { db, follows, users } from '@/server/db'
+import { backfillFollowedUserFeedItems } from '@/server/feed/backfill-inviter-feed'
 
 export type Follow = typeof follows.$inferSelect
 
@@ -100,6 +101,18 @@ export async function createOrReusePendingFriendshipRequest({
     referenceType: 'follow',
   })
 
+  // Friend-add backfill: a freshly approved follow seeds the follower's feed
+  // with the followee's recent activity (what would have propagated had the edge
+  // already existed). Only the auto-approved (public-target) branch creates an
+  // approved edge here; the pending branch backfills on approval instead. The
+  // backfill is best-effort internally — it cannot throw.
+  if (autoApprove) {
+    await backfillFollowedUserFeedItems({
+      answererUserId: followeeId,
+      recipientUserId: followerId,
+    })
+  }
+
   return { friendship: edge, state: autoApprove ? 'auto_approved' : 'created' }
 }
 
@@ -136,6 +149,15 @@ export async function acceptPendingFriendshipRequest({
     actorUserId: userId,
     referenceId: edge.id,
     referenceType: 'follow',
+  })
+
+  // Friend-add backfill: now that the request is approved, seed the requester's
+  // (follower's) feed with the approver's (followee's) recent activity — what
+  // would have propagated had the follow edge existed when they answered.
+  // Best-effort internally — it cannot throw, so it can't affect the approval.
+  await backfillFollowedUserFeedItems({
+    answererUserId: edge.followeeId,
+    recipientUserId: edge.followerId,
   })
 
   return edge
