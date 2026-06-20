@@ -20,6 +20,10 @@ export type DirectSentFeedItem = FeedCardBaseItem & {
   type: 'direct_sent'
   senderName: string
   senderHref?: string | null
+  /** Resolved provenance: true when the sender authored the question themselves
+   *  (question_source === 'authored'), false/absent when curated. Resolved at
+   *  the builder so the card stays dumb (B-DIRECTSENT-SIMPLIFY-01). */
+  authoredBySender?: boolean
 }
 
 export type FriendAddedFeedItem = FeedCardBaseItem & {

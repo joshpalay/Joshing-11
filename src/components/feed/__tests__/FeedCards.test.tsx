@@ -92,17 +92,38 @@ describe('Feed card preview fixtures', () => {
     expect(answeredByYou).toContain('You both had it')
   })
 
-  it('marks direct sends with the eyebrow on the plain bordered tile (no triangle mat)', () => {
+  it('marks direct sends with the hourglass signal row on the plain bordered tile (no triangle mat)', () => {
     const directSent = html(
       <DirectSentCard item={feedCardPreviewFixtures.directSentUnanswered} />
     )
-    expect(directSent).toContain('Sent directly to you')
+    // The single hourglass on the signal line reinforces "directed" (the old
+    // centered eyebrow is retired); the curated fixture reads "sent you this".
+    expect(directSent).toContain('<svg')
+    expect(directSent).toContain('sent you this')
+    expect(directSent).not.toContain('Sent directly to you')
     expect(directSent).not.toContain('/images/Variant4.png')
+    // Curated path must not borrow the authored verb or the teal text cue.
+    // (--tri-darkteal also fills the hourglass, so assert on the text class.)
+    expect(directSent).not.toContain('question they wrote')
+    expect(directSent).not.toContain('text-[var(--tri-darkteal)]')
 
     const friendAdded = html(
       <FriendAddedCard item={feedCardPreviewFixtures.friendAddedWroteQuestion} />
     )
-    expect(friendAdded).not.toContain('Sent directly to you')
+    expect(friendAdded).not.toContain('sent you this')
+  })
+
+  it('renders the authored-provenance verb with the teal cue when the sender wrote the question', () => {
+    const authored = html(
+      <DirectSentCard
+        item={{ ...feedCardPreviewFixtures.directSentUnanswered, authoredBySender: true }}
+      />
+    )
+    // Authored sends say "question they wrote" and reinforce it with the
+    // hourglass's teal token — honest attribution, never a curated fallback.
+    expect(authored).toContain('question they wrote')
+    expect(authored).toContain('text-[var(--tri-darkteal)]')
+    expect(authored).not.toContain('sent you this')
   })
 
   it('drops the "has knowledge to share" phrasing from the unanswered question card', () => {

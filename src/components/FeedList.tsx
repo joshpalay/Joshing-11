@@ -347,6 +347,7 @@ function toTypedFeedItem(item: FeedApiItem, hideTimestamp = false) {
       type: 'direct_sent' as const,
       senderName: item.source_friend_display_name,
       senderHref: item.source_profile_href ?? profileHref(item.source_user_id),
+      authoredBySender: item.question_source === 'authored',
     } satisfies DirectSentFeedItem
   }
 
