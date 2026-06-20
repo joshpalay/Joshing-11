@@ -1,4 +1,5 @@
 import { questionContainsAnswer } from '@/server/questions/self-answering';
+import { MAX_ALTERNATE_ANSWERS } from '@/lib/questions-types';
 
 function readBoolean(value: unknown): boolean {
   if (value === true) return true;
@@ -33,7 +34,7 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
     : typeof body?.answer_text === 'string'
       ? body.answer_text.trim()
       : '';
-  const alternateAnswers = splitAlternates(body?.alternateAnswers ?? body?.accepted_alternatives).slice(0, 5);
+  const alternateAnswers = splitAlternates(body?.alternateAnswers ?? body?.accepted_alternatives).slice(0, MAX_ALTERNATE_ANSWERS);
   const explanation = typeof body?.explanation === 'string'
     ? body.explanation.trim() || null
     : null;
@@ -70,7 +71,7 @@ export function readCreateQuestionPayload(body: Record<string, unknown> | null) 
   }
   if (!text || text.length > 300) errors.push('text');
   if (!correctAnswer || correctAnswer.length > 200) errors.push('correctAnswer');
-  if (alternateAnswers.length > 5 || alternateAnswers.some((answer) => answer.length > 200)) errors.push('alternateAnswers');
+  if (alternateAnswers.length > MAX_ALTERNATE_ANSWERS || alternateAnswers.some((answer) => answer.length > 200)) errors.push('alternateAnswers');
   if (explanation && explanation.length > 500) errors.push('explanation');
   if (creatorNote && creatorNote.length > 200) errors.push('creatorNote');
   if (verified === null) errors.push('verified');
