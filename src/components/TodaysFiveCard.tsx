@@ -233,6 +233,11 @@ export default function TodaysFiveCard({
   const isComplete =
     effectiveStatus.isComplete || effectiveStatus.questionsRemaining <= 0
   const hasStartedRound = Boolean(effectiveStatus.queueId) && answered > 0
+  // Bonus dots are an in-progress/after-the-fact detail: before the player has
+  // touched today's round we show just the clean five (hiding the +N friend
+  // bonus group). Once they've started — or finished — the bonus group appears.
+  const showBonusDots =
+    effectiveStatus.bonusOutcomes.length > 0 && (hasStartedRound || isComplete)
   const playHref = isComplete
     ? '/daily/summary'
     : '/daily'
@@ -312,7 +317,7 @@ export default function TodaysFiveCard({
         {effectiveStatus.slotOutcomes.slice(0, 5).map((outcome, index) => (
           <OutcomeDot key={`core-${index}`} outcome={outcome} label={outcomeLabel(outcome)} />
         ))}
-        {effectiveStatus.bonusOutcomes.length > 0 ? (
+        {showBonusDots ? (
           <>
             <span
               aria-hidden
