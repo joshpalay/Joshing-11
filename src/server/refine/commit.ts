@@ -37,6 +37,10 @@ const COOLDOWN_MS: Record<RefineItemType, number> = {
   // heads-up doesn't re-fire while the freeze is active.
   difficulty_escalation: 30 * DAY_MS,
   struggle_pruning: 7 * DAY_MS,
+  // Navigational nudge — never staged, committed, or defaulted (it's added only
+  // in buildRefineSection, not in deriveSelectedRefineCandidates), so this is
+  // never read at runtime. Present only for Record exhaustiveness.
+  add_territories: 0,
 };
 
 const FREEZE_MS = 30 * DAY_MS;
@@ -90,6 +94,9 @@ async function applyResolvedEffect(userId: string, row: DecisionRow, until: Date
     }
     case 'difficulty_escalation':
       await freezeDomainDifficulty(userId, domain, until);
+      return;
+    case 'add_territories':
+      // Navigational nudge with no durable effect; never reaches commit.
       return;
   }
 }
