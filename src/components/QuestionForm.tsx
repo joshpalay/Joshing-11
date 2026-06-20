@@ -2,6 +2,7 @@
 
 import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { MAX_ALTERNATE_ANSWERS } from '@/lib/questions-types';
 
 export type QuestionFormValues = {
   text: string;
@@ -202,7 +203,7 @@ function reducer(state: State, action: Action): State {
 }
 
 function alternateAnswersFrom(text: string): string[] {
-  return text.split(',').map((answer) => answer.trim()).filter(Boolean).slice(0, 5);
+  return text.split(',').map((answer) => answer.trim()).filter(Boolean).slice(0, MAX_ALTERNATE_ANSWERS);
 }
 
 // Small inline loader shown while the LLM suggestion is being fetched, so the
@@ -243,7 +244,7 @@ function validate(state: State): string | null {
   if (state.questionText.trim().length > 300) return 'Question text must be 300 characters or fewer.';
   if (!state.userAnswer.trim()) return 'Correct answer is required.';
   if (state.userAnswer.trim().length > 200) return 'Correct answer must be 200 characters or fewer.';
-  if (alternateAnswers.length > 5) return 'Use at most 5 alternate answers.';
+  if (alternateAnswers.length > MAX_ALTERNATE_ANSWERS) return `Use at most ${MAX_ALTERNATE_ANSWERS} alternate answers.`;
   if (alternateAnswers.some((answer) => answer.length > 200)) return 'Alternate answers must be 200 characters or fewer.';
   if (state.explanation.length > 500) return 'Explanation must be 500 characters or fewer.';
   if (state.creatorNote.length > 200) return 'Between us text must be 200 characters or fewer.';
@@ -661,7 +662,7 @@ export function QuestionForm({
           <div>
             <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
             <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Accepted variations, separated by commas" />
-            <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/5 alternates</p>
+            <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/{MAX_ALTERNATE_ANSWERS} alternates</p>
           </div>
 
           {/* The explanation is written by Joshing's answer suggestion and is

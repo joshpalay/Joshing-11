@@ -124,27 +124,38 @@ export function toBackfillFeedItemRows(
 }
 
 /**
- * Inviter-only, one-time backfill. Best-effort: any failure is swallowed so a
- * backfill hiccup can never break invitation acceptance / signup. Returns the
- * number of feed items created (0 when the inviter has no qualifying answers, or
- * when everything was already backfilled).
+ * Backfill a follower's feed with the most recent correct daily/catchup answers
+ * of someone they just started following (`answererUserId` = the followee whose
+ * activity propagates, `recipientUserId` = the follower who now sees it).
+ *
+ * Honest under the forward-propagation model for the SAME reason the invite seed
+ * is: forward propagation only fires for answers the answerer gives AFTER the
+ * follow edge exists, so these rows reconstruct exactly what WOULD have
+ * propagated had the edge existed when the answerer answered — same source_type,
+ * same attribution, same true answer time. Used by both the invite auto-friendship
+ * (B-HomeSeed-1) and a normal friend-add (an approved follow edge).
+ *
+ * Best-effort: any failure is swallowed so a backfill hiccup can never break
+ * invitation acceptance, signup, or friend-request approval. Returns the number
+ * of feed items created (0 when the answerer has no qualifying answers, or when
+ * everything was already backfilled).
  */
-export async function backfillInviterFeedItems({
-  inviterUserId,
-  inviteeUserId,
+export async function backfillFollowedUserFeedItems({
+  answererUserId,
+  recipientUserId,
   limit = INVITER_BACKFILL_MAX_ITEMS,
 }: {
-  inviterUserId: string;
-  inviteeUserId: string;
+  answererUserId: string;
+  recipientUserId: string;
   limit?: number;
 }): Promise<{ created: number }> {
   try {
-    if (!inviterUserId || !inviteeUserId || inviterUserId === inviteeUserId) {
+    if (!answererUserId || !recipientUserId || answererUserId === recipientUserId) {
       return { created: 0 };
     }
 
-    // The inviter's correct daily/catchup answers, newest first, joined to a
-    // feed-eligible question (public, not deleted, not authored by the invitee —
+    // The answerer's correct daily/catchup answers, newest first, joined to a
+    // feed-eligible question (public, not deleted, not authored by the recipient —
     // the milestone surface 403s "answer your own question", so don't seed it).
     const rows = await db
       .select({
@@ -156,12 +167,12 @@ export async function backfillInviterFeedItems({
       .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
       .where(
         and(
-          eq(masteryEvents.userId, inviterUserId),
+          eq(masteryEvents.userId, answererUserId),
           inArray(masteryEvents.sourceType, DAILY_SURFACE_SOURCE_TYPES),
           inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
           eq(questions.visibility, 'public'),
           isNull(questions.deletedAt),
-          or(isNull(questions.creatorId), ne(questions.creatorId, inviteeUserId)),
+          or(isNull(questions.creatorId), ne(questions.creatorId, recipientUserId)),
         ),
       )
       .orderBy(desc(masteryEvents.createdAt))
@@ -186,8 +197,8 @@ export async function backfillInviterFeedItems({
       .from(feedItems)
       .where(
         and(
-          eq(feedItems.recipientUserId, inviteeUserId),
-          eq(feedItems.sourceUserId, inviterUserId),
+          eq(feedItems.recipientUserId, recipientUserId),
+          eq(feedItems.sourceUserId, answererUserId),
           inArray(feedItems.questionId, candidateQuestionIds),
         ),
       );
@@ -198,15 +209,36 @@ export async function backfillInviterFeedItems({
     );
     if (toInsert.length === 0) return { created: 0 };
 
-    await db.insert(feedItems).values(toBackfillFeedItemRows(inviterUserId, inviteeUserId, toInsert));
+    await db.insert(feedItems).values(toBackfillFeedItemRows(answererUserId, recipientUserId, toInsert));
 
     return { created: toInsert.length };
   } catch (error) {
-    console.error('[backfillInviterFeedItems] suppressed error:', {
-      inviterUserId,
-      inviteeUserId,
+    console.error('[backfillFollowedUserFeedItems] suppressed error:', {
+      answererUserId,
+      recipientUserId,
       error: error instanceof Error ? error.message : String(error),
     });
     return { created: 0 };
   }
+}
+
+/**
+ * Inviter-only, one-time backfill (B-HomeSeed-1). Thin alias over
+ * backfillFollowedUserFeedItems preserving the invite call sites' naming: the
+ * inviter is the answerer whose activity seeds the new invitee's feed.
+ */
+export async function backfillInviterFeedItems({
+  inviterUserId,
+  inviteeUserId,
+  limit = INVITER_BACKFILL_MAX_ITEMS,
+}: {
+  inviterUserId: string;
+  inviteeUserId: string;
+  limit?: number;
+}): Promise<{ created: number }> {
+  return backfillFollowedUserFeedItems({
+    answererUserId: inviterUserId,
+    recipientUserId: inviteeUserId,
+    limit,
+  });
 }

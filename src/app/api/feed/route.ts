@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/server/auth/session';
 import { type FeedCursor, type FeedFilter } from '@/server/db/queries/feed';
 import { decodeFeedCursor, getFeedPagePayload } from '@/server/feed/get-feed-page';
-import { createServerTiming } from '@/server/lib/server-timing';
+import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +67,8 @@ export async function GET(request: NextRequest) {
         }
       : {}),
   });
+
+  logServerTiming('feed', timing, { filter: pagination.filter, items: payload.meta.page_item_count });
 
   const response = NextResponse.json(payload);
   response.headers.set('Server-Timing', timing.toHeader());

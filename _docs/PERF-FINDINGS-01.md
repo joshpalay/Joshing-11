@@ -143,6 +143,10 @@ Each item is independently shippable and leaves the codebase working.
 ### Structural (code / platform, days)
 
 - **B-PERF-04 — Stand up real load-time measurement (prerequisite for *enforcing* §12.6).** *(config + light code)* Enable Vercel Speed Insights / Web Analytics for field Core Web Vitals, and add structured per-route server timing logs (the `Server-Timing` proxy header already exists — extend to key routes / wire RUM). Without this, §0 stays true and every later perf claim is a guess. This is the real "Phase 1" the prompt wanted; it just has to be built before it can be run.
+  - **Status (2026-06-20): DONE (code side).** Both halves are now in place — see §6 for the query recipe.
+    - *Field RUM:* `<SpeedInsights/>` + `<Analytics/>` render in `src/app/layout.tsx` (Core Web Vitals + page views, beacon-only).
+    - *Server timing logs:* every §12.6 surface now emits one grep-able `[perf] { route, …_ms, … }` line to the Vercel function logs (the `Server-Timing` *header* only reaches the browser Network panel and never appears in logs, so it could not back a p50/p95 table on its own). Helpers live in `src/server/lib/server-timing.ts` (`logServerTiming`, `timeServerWork`). Covered routes/surfaces: `feed`, `daily/queue` (GET **and** the previously-untimed synchronous-build POST long pole), `knowledge`, `daily/answer`, and the home RSC (`home/todays-five`, `home/from-friends`).
+    - *Still config-only (not code):* confirm a real production `[perf]` line once a deploy is promoted (§0 — no production traffic has been logged yet), and optionally wire a Vercel log drain to compute the percentiles automatically.
 - **B-PERF-05 — (post-launch) Trim the boot-guard chain itself.** *(code, structural)* Even with `SKIP_BOOT_DB_GUARDS=1`, preview/dev cold starts pay the full ~70-round-trip chain. Gate the guard block behind a cheap schema-version / fingerprint check so it short-circuits when the DB is already current, instead of re-issuing every `IF NOT EXISTS` each boot. Defer until after launch; touches the most safety-critical file in the repo (read the `instrumentation.ts` header + `CLAUDE.md` migration rules first).
 - **B-PERF-06 — (conditional) Resolve the daily-page fetch waterfall.** *(code)* Only if the daily-page-load target is missed once B-PERF-04 is live: move the existing-queue read server-side (RSC) or prefetch it, so the page doesn't shell→hydrate→fetch. Skip if measurement shows it already clears 2s/4G.
 
@@ -161,6 +165,36 @@ Each item is independently shippable and leaves the codebase working.
 | **Housekeeping** | B-PERF-07 | post-traffic only |
 
 **Sequence:** 01 → 02 → 03 (cheap, immediate), then **04 early** (so 05/06 can be judged on data instead of guessed), then 05/06/07 as measurement dictates.
+
+## 6. Building the §12.6 p50/p95 table from `[perf]` logs (B-PERF-04)
+
+The §0 baseline table can be filled in once a production deploy is promoted and traffic flows. Each instrumented surface emits a single structured line per request:
+
+```
+[perf] { route: "feed", feed_ms: 12, filter: "all", items: 20 }
+[perf] { route: "daily/queue", queue_ms: 11 }
+[perf] { route: "daily/queue:POST", build_ms: 8421, total_ms: 8460, outcome: "built" }
+[perf] { route: "knowledge", knowledge_ms: 19 }
+[perf] { route: "daily/answer", grade_ms: 38, total_ms: 71, cold: false }
+[perf] { route: "home/todays-five", todays_five_ms: 14 }
+[perf] { route: "home/from-friends", home_edition_ms: 22 }
+```
+
+**Span key:** the per-route span is `<name>_ms`; `total_ms` (where present) is end-to-end. The `_ms` suffix matches the older `[daily/answer timings]` line, which is kept for its richer cold/load/persist/mastery breakdown — `[perf]` is the uniform tag for cross-route aggregation.
+
+**Route → §12.6 surface mapping:**
+
+| §12.6 surface | `[perf]` route(s) | Span to percentile-ise |
+|---|---|---|
+| Home screen load | `home/todays-five`, `home/from-friends` | `todays_five_ms`, `home_edition_ms` (server data fetch only; combine with Speed Insights LCP for true load) |
+| Daily Five reveal | `daily/queue` (warm read), `daily/queue:POST` (`outcome:"built"` = cold synchronous-LLM build) | `queue_ms`; `total_ms` for the build long pole |
+| Answer grading | `daily/answer` | `grade_ms` (split cold vs warm via the `cold` field) |
+| Feed load | `feed` | `feed_ms` |
+| Knowledge page load | `knowledge` | `knowledge_ms` |
+
+**To compute percentiles:** pull the function logs for the window (Vercel dashboard → Logs, or a configured log drain), filter to lines containing `[perf]`, group by `route`, and take p50/p95/p99 of the relevant `_ms` field. Field Core Web Vitals (LCP/INP/CLS/TTFB) come from the Speed Insights dashboard, route-attributed. Together these replace the "unmeasured" row in §0.
+
+---
 
 ## DO-NOT reminders honored
 - No code changed (diagnosis only).
