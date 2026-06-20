@@ -14,6 +14,7 @@ import { getBonusSlots } from '@/server/daily/bonus'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
+import { timeServerWork } from '@/server/lib/server-timing'
 
 const FEED_PAGE_SIZE = 20
 
@@ -105,10 +106,12 @@ export default async function Home() {
 }
 
 async function TodaysFiveSection({ userId }: { userId: string }) {
-  const [queue, catchupItems] = await Promise.all([
-    getTodaysDailyQueue(userId),
-    getCatchupQuestions(userId),
-  ])
+  // Home is the #1 §12.6 surface (< 1.5s) but is a streamed RSC, so it can't
+  // set a Server-Timing header — log the server data-fetch span instead
+  // (B-PERF-04) so the home hot path is queryable alongside the API routes.
+  const [queue, catchupItems] = await timeServerWork('home/todays-five', 'todays_five', () =>
+    Promise.all([getTodaysDailyQueue(userId), getCatchupQuestions(userId)]),
+  )
 
   const status = buildDailyStatusSnapshot(queue)
 
@@ -153,7 +156,9 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   // the overflow counts the question zones window against, the one rotating
   // panel, and the all-empty switch. FeedList renders this pre-budgeted edition
   // (no client-side selection, no infinite scroll, no temporal buckets).
-  const { edition, feedMeta } = await buildHomeEdition(userId)
+  const { edition, feedMeta } = await timeServerWork('home/from-friends', 'home_edition', () =>
+    buildHomeEdition(userId),
+  )
 
   // Seed FeedList with the served direct slice and the same meta the empty-state
   // copy / surface tabs read. has_more is false: the budget is the page; the

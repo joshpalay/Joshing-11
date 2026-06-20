@@ -7,7 +7,7 @@ import {
   loadKnowledgeInputs,
 } from '@/server/db/queries/knowledge';
 import { ensureAuthoredDomainsOpened } from '@/server/knowledge/open-domain';
-import { createServerTiming } from '@/server/lib/server-timing';
+import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +39,7 @@ export async function GET() {
   ]);
   await ensureOpened;
   timing.measure('knowledge', startedAt);
+  logServerTiming('knowledge', timing);
 
   const response = NextResponse.json({ mastery, pageData });
   response.headers.set('Server-Timing', timing.toHeader());

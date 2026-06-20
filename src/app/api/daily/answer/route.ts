@@ -20,7 +20,7 @@ import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/serve
 import { suggestAnswer } from '@/lib/llm';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
-import { createServerTiming } from '@/server/lib/server-timing';
+import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,14 +62,14 @@ function logStepTimings(marks: StepMarks) {
   }
 }
 
-// Build a Server-Timing header value from the step marks already captured on
-// the grading path (B-PERF-04). Reuses the same stamps logStepTimings reads —
+// Build a Server-Timing accumulator from the step marks already captured on the
+// grading path (B-PERF-04). Reuses the same stamps logStepTimings reads —
 // `grade` is the grader span (deterministic or LLM), `total` is end-to-end.
-function serverTimingFromMarks(marks: StepMarks): string {
+function serverTimingFromMarks(marks: StepMarks) {
   const timing = createServerTiming();
   if (marks.grade != null && marks.load != null) timing.add('grade', marks.grade - marks.load);
   timing.add('total', Date.now() - marks.start);
-  return timing.toHeader();
+  return timing;
 }
 
 type DailyAnswerErrorCode =
@@ -537,12 +537,17 @@ export async function POST(request: NextRequest) {
     // LLM is already split by the [daily/answer timings] log's cold/grade_ms)
     // and end-to-end total, derived from the marks already captured above — no
     // new timing work. Header-only; response body is unchanged.
-    response.headers.set('Server-Timing', serverTimingFromMarks(marks));
+    response.headers.set('Server-Timing', serverTimingFromMarks(marks).toHeader());
     return response;
   } catch (error) {
     console.error('[daily/answer] unexpected failure', error);
     return dailyAnswerErrorResponse(500, 'unexpected', 'Could not record that answer.');
   } finally {
     logStepTimings(marks);
+    // Uniform `[perf]` line (B-PERF-04) so a single log filter covers every
+    // §12.6 surface; the richer cold/persist/mastery breakdown stays in the
+    // `[daily/answer timings]` line above. Built from the same marks — `cold`
+    // included because grade latency is dominated by the first-request boot.
+    logServerTiming('daily/answer', serverTimingFromMarks(marks), { cold: marks.cold });
   }
 }

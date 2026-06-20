@@ -6,7 +6,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
-import { createServerTiming } from '@/server/lib/server-timing';
+import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
 // The POST path can fall through to synchronous LLM generation when the cron
@@ -95,6 +95,7 @@ export async function GET() {
   const withTiming = (response: NextResponse): NextResponse => {
     const timing = createServerTiming();
     timing.measure('queue', startedAt);
+    logServerTiming('daily/queue', timing);
     response.headers.set('Server-Timing', timing.toHeader());
     return response;
   };
@@ -135,6 +136,13 @@ export async function GET() {
 }
 
 export async function POST() {
+  // The POST path is the Daily Five reveal's worst case: when the cron hasn't
+  // pre-built today's queue it falls through to synchronous Sonnet generation
+  // (seconds), which the GET path never pays. Time the build span and the
+  // end-to-end total here (B-PERF-04) so this long pole is queryable in logs —
+  // the GET-only `Server-Timing` header never sees it.
+  const startedAt = Date.now();
+  const timing = createServerTiming();
   const userId = await requireUserId();
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -142,6 +150,8 @@ export async function POST() {
     await fillDailyQueueForUser(userId);
   } catch (error) {
     if (error instanceof DailyQueueFillError) {
+      timing.measure('total', startedAt);
+      logServerTiming('daily/queue:POST', timing, { outcome: error.code });
       return NextResponse.json(
         { error: error.code, message: error.message },
         { status: error.code === 'no_knowledge_base' ? 409 : 503 },
@@ -149,6 +159,7 @@ export async function POST() {
     }
     throw error;
   }
+  timing.measure('build', startedAt);
 
   const [queue, prefs, totalQueues] = await Promise.all([
     getTodaysDailyQueue(userId),
@@ -157,8 +168,12 @@ export async function POST() {
   ]);
 
   if (!queue) {
+    timing.measure('total', startedAt);
+    logServerTiming('daily/queue:POST', timing, { outcome: 'queue_not_created' });
     return NextResponse.json({ error: 'queue_not_created' }, { status: 500 });
   }
 
+  timing.measure('total', startedAt);
+  logServerTiming('daily/queue:POST', timing, { outcome: 'built' });
   return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues));
 }
