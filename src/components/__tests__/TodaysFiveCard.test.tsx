@@ -47,6 +47,39 @@ describe('TodaysFiveCard dot track', () => {
     expect(html).toContain('Bonus 2 of 2, from friends')
   })
 
+  it('before the round starts: shows only the five dots, hides the bonus group', () => {
+    const html = renderToStaticMarkup(
+      <TodaysFiveCard
+        initialStatus={status({
+          isComplete: false,
+          questionsRemaining: 5,
+          questionsAnswered: 0,
+          queueId: 'q1',
+          bonusOutcomes: ['unanswered', 'unanswered'],
+        })}
+      />,
+    )
+    expect((html.match(DOT) ?? []).length).toBe(5)
+    expect(html).not.toContain('w-px')
+    expect(html).not.toContain('friend bonus')
+  })
+
+  it('once the round is in progress: reveals the bonus group', () => {
+    const html = renderToStaticMarkup(
+      <TodaysFiveCard
+        initialStatus={status({
+          isComplete: false,
+          questionsRemaining: 3,
+          questionsAnswered: 2,
+          queueId: 'q1',
+          bonusOutcomes: ['unanswered', 'unanswered'],
+        })}
+      />,
+    )
+    expect((html.match(DOT) ?? []).length).toBe(7)
+    expect(html).toContain('+2 friend bonus')
+  })
+
   it('the spoken count stays "of 5" even with bonus dots present', () => {
     const html = renderToStaticMarkup(
       <TodaysFiveCard
