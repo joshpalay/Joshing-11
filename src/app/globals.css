@@ -571,6 +571,24 @@ body > main {
   }
 }
 
+/* Safari/Chrome paint autofilled fields with their own UA background — a muddy
+   yellow that overrode the login phone field's bg-white and made it read as a
+   yellow box (reported on Safari). There's no real `background` property to
+   reset; the UA draws it via an animated transition. Giving background-color an
+   effectively infinite transition keeps each field pinned to its OWN
+   author-specified background (white here, transparent/cream elsewhere), so this
+   stays color-agnostic and safe across every input in the app. Pin the typed
+   text to its own color too, since autofill recolors that as well. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  transition: background-color 100000s ease-in-out 0s;
+  -webkit-text-fill-color: currentColor;
+}
+
 @keyframes territory-settle {
     0% { transform: translate3d(0, 8px, 0) scale(0.96); opacity: 0; }
     45% { transform: translate3d(0, -3px, 0) scale(1.02); opacity: 1; }
