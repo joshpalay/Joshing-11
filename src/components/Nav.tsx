@@ -159,7 +159,12 @@ export function Nav({
         className="z-40 border-b bg-background/95 backdrop-blur"
         aria-label="Primary header"
       >
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+        {/* w-full is load-bearing on iOS WebKit: a block-level `display:flex`
+            element with `margin:auto` (mx-auto) gets shrink-wrapped to its
+            content width on iOS (Safari + all iOS browsers, incl. Chrome),
+            collapsing the header to ~2/3 width while the body cards stay full.
+            Explicit w-full stops the shrink-wrap; it's a no-op everywhere else. */}
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
             className="font-wordmark text-[22px] font-semibold leading-none tracking-[0.05em] text-foreground"
