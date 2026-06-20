@@ -1,16 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { X } from 'lucide-react';
 
 import { GameplayChatThread } from '@/components/play/GameplayChat';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
-import { GeometricProgress } from '@/components/play/GeometricProgress';
-import { PlayHeader } from '@/components/play/PlayHeader';
-import { useCondensedOnScroll } from '@/components/play/useCondensedOnScroll';
 import { ThreadCard } from '@/components/play/ThreadCard';
 import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCatchupFlow';
-import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
 import { AuthorName } from '@/components/AuthorName';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
@@ -26,6 +24,7 @@ export default function DailyCatchupPage() {
     submitting,
     isResolvingTurn,
     error,
+    remainingLabel,
     phase,
     batchRecords,
     remainingCount,
@@ -38,31 +37,10 @@ export default function DailyCatchupPage() {
     dismissCurrent,
   } = useCatchupFlow();
   const [answer, setAnswer] = useState('');
-  // Collapses the header's title block once the player scrolls into the thread,
-  // leaving just the progress dots + close (shared with the Daily Five surface).
-  const { condensed, onScroll } = useCondensedOnScroll();
 
   const hasItems = initialTotal > 0;
   const showSummary = phase === 'summary';
   const roundComplete = phase === 'round_complete';
-
-  // Round-scoped progress dots (D-decision: current round, up to CATCH_UP_BATCH_SIZE,
-  // mirroring the Daily Five round dots — not the whole catch-up session). The
-  // round started with `remainingCount + batchRecords.length` items still on the
-  // board (answered/skipped turns are recorded in batchRecords; dismissed/stale
-  // items leave the round and correctly shrink the count), so its size is that,
-  // capped at the batch size. Per-dot results come straight from this round's
-  // records; revealed (gave-up) reads as a neutral/expired dot.
-  const roundSize = Math.min(CATCH_UP_BATCH_SIZE, remainingCount + batchRecords.length);
-  const roundResults = useMemo(() => {
-    const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
-    batchRecords.forEach((record, index) => {
-      map[index + 1] =
-        record.outcome === 'correct' ? 'correct' : record.outcome === 'wrong' ? 'wrong' : 'expired';
-    });
-    return map;
-  }, [batchRecords]);
-  const roundCurrent = batchRecords.length + 1;
 
   async function handleSubmit() {
     const submitted = answer.trim();
@@ -72,30 +50,45 @@ export default function DailyCatchupPage() {
   }
 
   return (
-    <main className="mx-auto flex h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
-      <PlayHeader
-        eyebrow="Catch up"
-        title={
-          loading
-            ? 'Missed questions'
-            : `${initialTotal} missed ${initialTotal === 1 ? 'question' : 'questions'} from the past week`
-        }
-        condensed={condensed}
-        dots={
-          !loading && hasItems && phase === 'playing' ? (
-            <GeometricProgress
-              coreCount={roundSize}
-              bonusCount={0}
-              current={roundCurrent}
-              results={roundResults}
-            />
-          ) : undefined
-        }
-      />
+    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
+      <header
+        className="sticky top-0 z-20 border-b px-4 py-2"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'color-mix(in srgb, var(--surface) 94%, transparent)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium tracking-[0.12em] text-[var(--text-muted)] uppercase">
+              Catch up
+            </p>
+            <h1 className="font-serif text-lg font-semibold text-[var(--text)]">
+              {loading
+                ? 'Missed questions'
+                : `${initialTotal} missed ${initialTotal === 1 ? 'question' : 'questions'} from the past week`}
+            </h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {!loading && hasItems && !showSummary ? (
+              <p className="text-right text-[0.65rem] font-medium tracking-[0.1em] text-[var(--text-muted)] uppercase">
+                {remainingLabel}
+              </p>
+            ) : null}
+            <Link
+              href="/"
+              aria-label="Close"
+              className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none"
+            >
+              <X className="size-5" strokeWidth={1.9} />
+            </Link>
+          </div>
+        </div>
+      </header>
 
       <section
-        onScroll={onScroll}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        className="flex-1 overflow-y-auto px-4 py-4"
         style={{
           paddingBottom:
             currentItem && phase === 'playing'
