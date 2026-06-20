@@ -59,6 +59,7 @@ vi.mock('@/server/db', () => ({
 vi.mock('@/server/feed/visibility', () => ({ SOCIAL_FEED_SOURCE_TYPE: 'friend_answered' }));
 
 import {
+  backfillFollowedUserFeedItems,
   backfillInviterFeedItems,
   backfillSourceAnswerId,
   dropAlreadyPresent,
@@ -197,6 +198,35 @@ describe('backfillInviterFeedItems (hook)', () => {
 
   it('no-ops when inviter and invitee are the same user', async () => {
     const result = await backfillInviterFeedItems({ inviterUserId: INVITER, inviteeUserId: INVITER });
+    expect(result).toEqual({ created: 0 });
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('backfillFollowedUserFeedItems (friend-add hook)', () => {
+  const ANSWERER = 'followee-1';
+  const RECIPIENT = 'follower-1';
+
+  it('seeds the follower with the followee\'s recent answers, attributed to the followee', async () => {
+    const rows = [answerRow(1, { questionId: 'q-a' }), answerRow(2, { questionId: 'q-b' })];
+    state.selectResults = [masteryDbRows(rows), /* existing */ []];
+
+    const result = await backfillFollowedUserFeedItems({
+      answererUserId: ANSWERER,
+      recipientUserId: RECIPIENT,
+    });
+
+    expect(result).toEqual({ created: 2 });
+    expect(state.inserted.every((r) => r.sourceUserId === ANSWERER)).toBe(true);
+    expect(state.inserted.every((r) => r.recipientUserId === RECIPIENT)).toBe(true);
+    expect(state.inserted.every((r) => r.sourceType === 'friend_answered')).toBe(true);
+  });
+
+  it('no-ops when the followee and follower are the same user', async () => {
+    const result = await backfillFollowedUserFeedItems({
+      answererUserId: ANSWERER,
+      recipientUserId: ANSWERER,
+    });
     expect(result).toEqual({ created: 0 });
     expect(dbMock.select).not.toHaveBeenCalled();
   });
