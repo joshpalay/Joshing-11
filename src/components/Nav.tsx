@@ -221,7 +221,7 @@ export function Nav({
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div
-          className="mx-auto grid max-w-2xl"
+          className="mx-auto grid max-w-2xl px-4"
           style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
           role="list"
         >
