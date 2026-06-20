@@ -65,7 +65,7 @@ export default async function RootLayout({
       lang="en"
       className={`font-sans ${josefin.variable} ${montserrat.variable} ${cormorant.variable}`}
     >
-      <body className={`${josefin.className} flex min-h-dvh flex-col overflow-x-clip`}>
+      <body className={`${josefin.className} flex min-h-dvh flex-col`}>
         {/* HIDDEN — dev design-choice bar. Uncomment the boot <script> and the
             <PaletteToggle/> below (plus its import above) to bring it back.
             The script applies the saved card-background choice before paint so
