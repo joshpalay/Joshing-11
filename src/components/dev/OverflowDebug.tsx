@@ -12,26 +12,22 @@ export function OverflowDebug() {
     const run = () => {
       const vw = document.documentElement.clientWidth
       const sw = document.documentElement.scrollWidth
-      const hits: { right: number; width: number; desc: string }[] = []
-      document.querySelectorAll<HTMLElement>('body *').forEach((el) => {
+      const body = document.body
+      const main = document.querySelector('main')
+      const fmt = (el: Element | null) => {
+        if (!el) return 'null'
         const r = el.getBoundingClientRect()
-        if (r.width === 0 || r.height === 0) return
-        if (r.right > vw + 0.5) {
-          const cls =
-            typeof el.className === 'string' ? el.className.replace(/\s+/g, '.').slice(0, 34) : ''
-          hits.push({
-            right: Math.round(r.right),
-            width: Math.round(r.width),
-            desc: `${el.tagName.toLowerCase()}.${cls}`,
-          })
-        }
-      })
-      hits.sort((a, b) => b.right - a.right)
-      const top = hits
-        .slice(0, 8)
-        .map((h) => `R${h.right} w${h.width} ${h.desc}`)
-        .join('\n')
-      setLines(`vw=${vw} sw=${sw} overflow=${sw > vw ? sw - vw : 0}px  (${hits.length} past edge)\n${top}`)
+        const cs = getComputedStyle(el)
+        return `L${Math.round(r.left)} R${Math.round(r.right)} w${Math.round(r.width)} | mL${cs.marginLeft} mR${cs.marginRight} pL${cs.paddingLeft} pR${cs.paddingRight} maxW${cs.maxWidth}`
+      }
+      // the today card = first elevated card inside main
+      const card = main?.querySelector('div[class*="feed-card-elevated"]') ?? main?.children[1] ?? null
+      setLines(
+        `vw=${vw} sw=${sw} over=${sw - vw}\n` +
+          `BODY ${fmt(body)}\n` +
+          `MAIN ${fmt(main)}\n` +
+          `CARD ${fmt(card)}`,
+      )
     }
     run()
     const t = window.setTimeout(run, 1200)
