@@ -22,22 +22,26 @@ export default async function Home() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 overflow-x-clip px-4 py-6 pb-32 md:py-10">
-      {/* Top triangle band (Variant4-TOP, grain baked in; lower portion
-          transparent so cream shows through). Bounded to the content-column
-          width (inset-x-0 inside the max-w-2xl main) — the same width the
-          original banner used — and rendered at its INTRINSIC size (centered &
-          clipped, never scaled). The first card sits over it. */}
+      {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
+          transparent so cream shows through). Rendered as a BACKGROUND image, not
+          an <img>: background-size:auto pins it to its INTRINSIC size (so its
+          triangles match the side clusters, which are also native), center-top
+          shows the middle portion, and the box clips the rest. The previous
+          <img max-w-none -translate-x-1/2> approach (a) scaled inconsistently and
+          (b) its transform escaped overflow:hidden on iOS WebKit, widening the
+          page; a background can do neither — it never participates in layout or
+          scroll width. Height pinned to the band's native 160px (h-40). The first
+          card sits over the transparent lower portion. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-hidden"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/Variant4-TOP.png"
-          alt=""
-          className="relative left-1/2 block max-w-none -translate-x-1/2"
-        />
-      </div>
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 overflow-hidden"
+        style={{
+          backgroundImage: 'url(/images/Variant4-TOP.png)',
+          backgroundSize: 'auto',
+          backgroundPosition: 'center top',
+          backgroundRepeat: 'no-repeat',
+        }}
+      />
 
       {/* Today's Five — a card, so it can ride over the top triangle band. */}
       {session ? (
