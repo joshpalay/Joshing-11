@@ -159,7 +159,13 @@ export function Nav({
         className="z-40 border-b bg-background/95 backdrop-blur"
         aria-label="Primary header"
       >
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+        {/* w-full is load-bearing on iOS Safari: b4c528ce made <body> a flex
+            column, turning <header> into a flex item. iOS then shrink-wraps this
+            margin:auto flex row to its content width (~2/3), so the bell/avatar
+            stop short of the right edge. Desktop Chrome/WebKit render it full —
+            this only shows on a real iPhone. w-full forces it to fill; no-op
+            elsewhere. */}
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
             className="font-wordmark text-[22px] font-semibold leading-none tracking-[0.05em] text-foreground"
