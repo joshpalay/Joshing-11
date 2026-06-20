@@ -455,6 +455,64 @@ export async function listOutgoingFriendInvitations({
   }))
 }
 
+export type UpdateFriendInvitationInput = {
+  invitationId: string
+  inviterUserId: string
+  inviteePhone: string
+  inviteeDisplayName: string
+  preSeededInterests?: unknown
+  personalMessage?: string | null
+  now?: Date
+}
+
+/**
+ * Edit a still-pending outgoing invitation in place (B-Friends edit-before-click).
+ * Only the inviter who created it may edit, and only while it is genuinely
+ * pending — not accepted, not cancelled, not expired. The token (and therefore
+ * the share link) is intentionally preserved so a link the inviter has already
+ * copied but not yet sent stays valid; acceptance still gates on the (possibly
+ * corrected) `inviteePhone`. Returns null when no row matched the pending guard.
+ */
+export async function updateFriendInvitation({
+  invitationId,
+  inviterUserId,
+  inviteePhone,
+  inviteeDisplayName,
+  preSeededInterests = null,
+  personalMessage = null,
+  now = new Date(),
+}: UpdateFriendInvitationInput): Promise<FriendInvitation | null> {
+  const normalizedInviteePhone = normalizeRequiredText(
+    inviteePhone,
+    'inviteePhone'
+  )
+  const normalizedInviteeDisplayName = normalizeRequiredText(
+    inviteeDisplayName,
+    'inviteeDisplayName'
+  )
+
+  const [invitation] = await db
+    .update(friendInvitations)
+    .set({
+      inviteePhone: normalizedInviteePhone,
+      inviteeDisplayName: normalizedInviteeDisplayName,
+      preSeededInterests,
+      personalMessage,
+    })
+    .where(
+      and(
+        eq(friendInvitations.id, invitationId),
+        eq(friendInvitations.inviterUserId, inviterUserId),
+        isNull(friendInvitations.acceptedAt),
+        isNull(friendInvitations.cancelledAt),
+        gt(friendInvitations.expiresAt, now)
+      )
+    )
+    .returning()
+
+  return invitation ?? null
+}
+
 export async function cancelFriendInvitation({
   invitationId,
   inviterUserId,

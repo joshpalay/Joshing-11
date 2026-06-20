@@ -174,6 +174,7 @@ import {
   getInvitationByToken,
   getInvitePrefillByToken,
   getPendingInvitationForPhone,
+  updateFriendInvitation,
 } from '@/server/friends/invitations'
 import { parsePreSeededInterests } from '@/server/db/queries/users'
 
@@ -559,6 +560,35 @@ describe('friend invitation helpers', () => {
       expect.objectContaining({
         id: 'inv-1',
         inviteeDisplayName: null,
+      })
+    )
+  })
+
+  it('edits a pending invitation in place, normalizing name and preserving the token', async () => {
+    setInvitation({ token: 'keep-this-token' })
+
+    const updated = await updateFriendInvitation({
+      invitationId: 'inv-1',
+      inviterUserId: 'user-inviter',
+      inviteePhone: '+17345559999',
+      inviteeDisplayName: '  Dad  Palay ',
+      preSeededInterests: [{ label: 'Sondheim' }],
+      now,
+    })
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        id: 'inv-1',
+        token: 'keep-this-token',
+        inviteePhone: '+17345559999',
+        inviteeDisplayName: 'Dad Palay',
+        preSeededInterests: [{ label: 'Sondheim' }],
+      })
+    )
+    expect(state.updateValues).toEqual(
+      expect.objectContaining({
+        inviteePhone: '+17345559999',
+        inviteeDisplayName: 'Dad Palay',
       })
     )
   })

@@ -8,7 +8,9 @@ import {
   cancelFriendInvitation,
   createFriendInvitation,
   deleteFriendInvitation,
+  getPendingInvitationForPhone,
   listOutgoingFriendInvitations,
+  updateFriendInvitation,
   type OutgoingFriendInvitation,
 } from '@/server/friends/invitations'
 import { createOrReusePendingFriendshipRequest } from '@/server/friends/friendships'
@@ -486,6 +488,134 @@ export async function DELETE(request: Request) {
     console.error('[friend-invitations] cancel failed', error)
     return NextResponse.json(
       { error: 'server_error', message: 'Unable to cancel friend invitation.' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  const session = await getSession()
+  if (!session)
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const rawBody = (await request.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null
+  const invitationId =
+    typeof rawBody?.invitationId === 'string' ? rawBody.invitationId.trim() : ''
+
+  if (!invitationId) {
+    return NextResponse.json(
+      { error: 'missing_invitation_id', message: 'invitationId is required.' },
+      { status: 400 }
+    )
+  }
+
+  const parsed = validateCreateFriendInvitationBody(rawBody)
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.error, message: parsed.message },
+      { status: parsed.status }
+    )
+  }
+
+  try {
+    const { inviteeDisplayName, phone, suggestedInterests } = parsed.value
+
+    // Editing toward a number that already belongs to a Joshing account isn't
+    // an SMS invite anymore — it'd need to become a follow request. Keep edit
+    // semantics simple: send them back through the add-friend flow instead.
+    const existingUser = await getUserByPhone(phone)
+    if (existingUser) {
+      if (existingUser.id === session.userId) {
+        return NextResponse.json(
+          { error: 'self_invite', message: 'You cannot invite yourself.' },
+          { status: 400 }
+        )
+      }
+
+      return NextResponse.json(
+        {
+          error: 'already_on_joshing',
+          message:
+            'That number already belongs to someone on Joshing. Set this note aside and send them a friend request instead.',
+        },
+        { status: 409 }
+      )
+    }
+
+    // Guard against collapsing two pending notes onto the same number: if the
+    // inviter already has a different pending invitation for the new phone,
+    // editing this one to match would leave two live links for one person.
+    const conflicting = await getPendingInvitationForPhone({
+      inviterUserId: session.userId,
+      inviteePhone: phone,
+    })
+    if (conflicting && conflicting.id !== invitationId) {
+      return NextResponse.json(
+        {
+          error: 'duplicate_pending',
+          message: 'You already have a pending note out to that number.',
+        },
+        { status: 409 }
+      )
+    }
+
+    const invitation = await updateFriendInvitation({
+      invitationId,
+      inviterUserId: session.userId,
+      inviteePhone: phone,
+      inviteeDisplayName,
+      preSeededInterests: suggestedInterests,
+    })
+
+    if (!invitation) {
+      return NextResponse.json(
+        {
+          error: 'not_found',
+          message:
+            'This note can no longer be edited — it may have been accepted, set aside, or expired.',
+        },
+        { status: 404 }
+      )
+    }
+
+    const inviteUrl = `${getBaseUrl(request)}/invite/${invitation.token}`
+    const message = buildFriendInvitationMessage({
+      inviteUrl,
+      suggestedInterests,
+    })
+
+    if (invitation.personalMessage !== message) {
+      await db
+        .update(friendInvitations)
+        .set({ personalMessage: message })
+        .where(eq(friendInvitations.id, invitation.id))
+    }
+
+    logTelemetry('add_friend_invite_edited', {
+      inviter_user_id: session.userId,
+      invitation_id: invitation.id,
+      suggested_interest_count: suggestedInterests.length,
+    })
+
+    return NextResponse.json({
+      ok: true,
+      type: 'friend_invitation',
+      id: invitation.id,
+      invitationId: invitation.id,
+      inviteUrl,
+      message,
+      inviteeDisplayName: invitation.inviteeDisplayName ?? inviteeDisplayName,
+      inviteePhone: invitation.inviteePhone,
+      suggestedInterests,
+      expiresAt: invitation.expiresAt.toISOString(),
+    })
+  } catch (error) {
+    console.error('[friend-invitations] edit failed', error)
+    return NextResponse.json(
+      { error: 'server_error', message: 'Unable to edit friend invitation.' },
       { status: 500 }
     )
   }
