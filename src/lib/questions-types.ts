@@ -183,6 +183,14 @@ export const CATEGORIES = [
 
 export const VISIBILITIES = ['private', 'public'] as const;
 
+// Maximum number of accepted alternate answers an author may supply. Combined
+// with the single correct answer this is the count of acceptable answers a
+// question can carry — e.g. a "name one of the seven heavenly virtues" question
+// needs all seven accepted, i.e. 1 correct + 6 alternates. Enforced on the
+// author form, the create payload parser, and the PATCH edit schema; keep those
+// in lockstep via this constant.
+export const MAX_ALTERNATE_ANSWERS = 6;
+
 export const QUESTION_TYPES = ['factual', 'personal', 'ambiguous', 'factual_uncertain'] as const;
 
 export const ANSWER_SOURCES = ['llm_suggested', 'creator_written', 'llm_edited'] as const;

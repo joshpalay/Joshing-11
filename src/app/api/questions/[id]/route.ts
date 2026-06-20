@@ -14,6 +14,7 @@ import {
   updateQuestion,
 } from '@/server/db/queries/questions';
 import { resolveActiveIncorrectReportsForQuestion } from '@/server/db/queries/content-reports';
+import { MAX_ALTERNATE_ANSWERS } from '@/lib/questions-types';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -56,7 +57,7 @@ const patchSchema = z.object({
   text: z.string().transform((s) => s.trim()).pipe(z.string().min(1).max(300)).optional(),
   correctAnswer: z.string().transform((s) => s.trim()).pipe(z.string().min(1).max(200)).optional(),
   alternateAnswers: z
-    .preprocess((v) => (v === undefined ? undefined : splitAlternates(v) ?? []), z.array(z.string().max(200)).max(5))
+    .preprocess((v) => (v === undefined ? undefined : splitAlternates(v) ?? []), z.array(z.string().max(200)).max(MAX_ALTERNATE_ANSWERS))
     .optional(),
   explanation: z.string().catch('').transform((s) => s.trim()).pipe(z.string().max(500)).optional(),
 });
