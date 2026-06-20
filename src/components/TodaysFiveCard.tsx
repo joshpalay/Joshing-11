@@ -236,8 +236,12 @@ export default function TodaysFiveCard({
   // Bonus dots are an in-progress/after-the-fact detail: before the player has
   // touched today's round we show just the clean five (hiding the +N friend
   // bonus group). Once they've started — or finished — the bonus group appears.
-  const showBonusDots =
-    effectiveStatus.bonusOutcomes.length > 0 && (hasStartedRound || isComplete)
+  // DIAGNOSTIC (temporary): force the +N friend bonus group off to test whether
+  // the bonus dots row is what's pushing the home card past the viewport on iOS.
+  // Revert this line to restore the gated behavior below.
+  const showBonusDots = false
+  // const showBonusDots =
+  //   effectiveStatus.bonusOutcomes.length > 0 && (hasStartedRound || isComplete)
   const playHref = isComplete
     ? '/daily/summary'
     : '/daily'
