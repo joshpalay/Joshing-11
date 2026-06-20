@@ -369,7 +369,12 @@ export function ActivityStreamItem({
           background: 'var(--feed-card-elevated)',
           border: '1px solid var(--brand-border)',
           borderRadius: 4,
-          boxShadow: 'var(--shadow-card-strong)',
+          // Match the Today's 5 card's shadow (--shadow-card) rather than the
+          // stronger raised tier. The strong shadow shares the same blur but at
+          // 10% vs 4% opacity, so its visible halo bled ~15px past the right
+          // edge and made these cards read as WIDER than the Today card even
+          // though the box edges align to the pixel.
+          boxShadow: 'var(--shadow-card)',
         }
       : opened
         ? // Opened reveal: a soft paper wash defines the expanded cluster, with
