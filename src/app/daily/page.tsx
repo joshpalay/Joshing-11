@@ -812,7 +812,7 @@ export default function DailyPage() {
   }, [queue, currentSlot, submitting]);
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
+    <main className="relative mx-auto flex h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
       {/* Brand triangle pattern (same artwork as the login screen / home feed)
           tiled full-strength behind the game. No cream scrim — the gameplay
           thread is entirely cards, which sit opaque on top; the sticky header
@@ -852,7 +852,7 @@ export default function DailyPage() {
       </header>
 
       <section
-        className="flex-1 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         style={{
           paddingBottom:
             currentSlot && !loading
