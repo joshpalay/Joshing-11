@@ -22,7 +22,7 @@ export default async function Home() {
   const session = await getSession()
 
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
+    <main className="relative mx-auto flex w-full min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {/* TEMPORARY: on-page horizontal-overflow culprit finder. Remove after diagnosis. */}
       <OverflowDebug />
       {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
