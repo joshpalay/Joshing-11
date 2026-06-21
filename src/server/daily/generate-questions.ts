@@ -25,6 +25,7 @@ import {
   getKnowledgeBase,
   getRecentAnsweredCanonicalTexts,
   getRecentDailyQuestionTexts,
+  getNearestAnsweredQuestionDistance,
   getRecentDomainCounts,
   getRecentFactKeys,
   getRecentSkipCountsByDomain,
@@ -53,6 +54,7 @@ import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/serve
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
+import { embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
 import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
@@ -1012,6 +1014,65 @@ Which NEW indices duplicate any RECENT entry?`;
   }
 }
 
+// Semantic per-user history dedup (B-DEDUP-SEMANTIC-01). findRecentHistoryDuplicates
+// (Haiku) and the prompt avoid list only cover the last ~30/80 questions by COUNT,
+// so for an active player a repeat from a couple of weeks ago falls out of the
+// window and slips through — exact-question_id dedup can't catch it either, since
+// a regenerated paraphrase gets a new id (observed 2026-06-21: a near-identical
+// "name the 1911 Triangle Shirtwaist factory" question re-served 16 days after
+// the user answered it; cosine 0.89). This gate embeds the freshly-generated
+// candidates and drops any whose cosine similarity to a question the user already
+// answered correctly (within DAILY_HISTORY_DEDUP_WINDOW_DAYS) meets the threshold,
+// reusing the same Voyage embeddings the pool dedup already stores. Best-effort:
+// any failure (embeddings disabled, API/DB error) drops nothing so the build is
+// never blocked on it.
+//
+// Threshold calibrated on the incident: the true duplicate scored 0.8948 while a
+// genuinely-different same-topic question scored 0.8348, so 0.88 catches the
+// repeat without dropping distinct same-domain questions. Both knobs are
+// env-overridable.
+const DAILY_HISTORY_DEDUP_COSINE_THRESHOLD = Number(
+  process.env.DAILY_HISTORY_DEDUP_COSINE_THRESHOLD ?? 0.88,
+);
+const DAILY_HISTORY_DEDUP_WINDOW_DAYS = Number(
+  process.env.DAILY_HISTORY_DEDUP_WINDOW_DAYS ?? 180,
+);
+
+async function findAnsweredHistoryDuplicates(
+  userId: string,
+  generated: LlmQuestion[],
+): Promise<Set<number>> {
+  const drop = new Set<number>();
+  if (generated.length === 0 || !isEmbeddingEnabled()) return drop;
+  try {
+    const embeddings = await embedTexts(
+      generated.map((q) => q.question_text),
+      'document',
+    );
+    if (!embeddings) return drop;
+    await Promise.all(
+      embeddings.map(async (embedding, i) => {
+        if (!embedding) return;
+        const distance = await getNearestAnsweredQuestionDistance(
+          userId,
+          embedding,
+          DAILY_HISTORY_DEDUP_WINDOW_DAYS,
+        );
+        if (distance === null) return;
+        if (1 - distance >= DAILY_HISTORY_DEDUP_COSINE_THRESHOLD) {
+          drop.add(i);
+        }
+      }),
+    );
+  } catch (error) {
+    // Best-effort: never block the daily build on the semantic history gate.
+    console.warn('[daily/generate-questions] answered-history embedding gate failed; skipping', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return drop;
+}
+
 // Max questions requested per Sonnet call. The generator caps each response at
 // 2000 output tokens (~33s at Sonnet's output rate, sized to fit the 90s live
 // route with a retry). A full question with explainer is ~300-400 tokens, so a
@@ -1203,12 +1264,14 @@ export async function generateDailyQuestions(
   // - findAnswerLeaks (below, synchronous): deterministic fail-closed backstop
   //   for answer leakage when the Haiku quality gate misses or fails open.
   const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
-  const [batchDuplicates, recentDuplicates, qualityResult, factualResult] = await Promise.all([
-    findBatchDuplicates(generated),
-    findRecentHistoryDuplicates(generated, recentForGate),
-    findQualityFailures(generated),
-    findFactualFailures(generated),
-  ]);
+  const [batchDuplicates, recentDuplicates, qualityResult, factualResult, answeredHistoryDuplicates] =
+    await Promise.all([
+      findBatchDuplicates(generated),
+      findRecentHistoryDuplicates(generated, recentForGate),
+      findQualityFailures(generated),
+      findFactualFailures(generated),
+      findAnsweredHistoryDuplicates(userId, generated),
+    ]);
 
   if (batchDuplicates.size > 0) {
     console.warn('[daily/generate-questions] dropping intra-batch duplicates', {
@@ -1221,6 +1284,13 @@ export async function generateDailyQuestions(
     console.warn('[daily/generate-questions] dropping recent-history duplicates', {
       droppedCount: recentDuplicates.size,
       droppedIndices: [...recentDuplicates].sort((a, b) => a - b),
+      originalCount: generated.length,
+    });
+  }
+  if (answeredHistoryDuplicates.size > 0) {
+    console.warn('[daily/generate-questions] dropping answered-history duplicates (semantic)', {
+      droppedCount: answeredHistoryDuplicates.size,
+      droppedIndices: [...answeredHistoryDuplicates].sort((a, b) => a - b),
       originalCount: generated.length,
     });
   }
@@ -1275,6 +1345,7 @@ export async function generateDailyQuestions(
   const allDrops = new Set<number>([
     ...batchDuplicates,
     ...recentDuplicates,
+    ...answeredHistoryDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
