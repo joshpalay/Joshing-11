@@ -259,7 +259,7 @@ export default function TodaysFiveCard({
   // Play Missed Questions sage button answers; Branch B keeps "Today, done."
   const headline = isComplete
     ? missedCount > 0
-      ? 'Nice going — now learn from your misses'
+      ? 'Contain more multitudes'
       : 'Today, done.'
     : hasStartedRound
       ? 'Pick up where you left off'
