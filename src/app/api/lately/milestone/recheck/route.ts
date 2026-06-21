@@ -11,8 +11,8 @@ import { recheckAnswerWithLLM } from '@/server/llm/recheck';
 
 export const dynamic = 'force-dynamic';
 
-// "Challenge the grade" for a Lately milestone reveal. A milestone is not a feed
-// item, so there's no feedItemId for the client to recheck against — but the
+// Recheck (dispute the grade) for a Lately milestone reveal. A milestone is not a
+// feed item, so there's no feedItemId for the client to recheck against — but the
 // milestone answer route writes a synthetic `milestone_missed` FeedItem on every
 // wrong answer (sourceAnswerId = `milestone-miss:<questionId>`, state='answered',
 // answerResult='incorrect'). That row is this dispute's anchor: we look it up by
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: 'unauthorized', message: 'Please sign in to challenge that answer.' }, { status: 401 });
+      return NextResponse.json({ error: 'unauthorized', message: 'Please sign in to request a recheck.' }, { status: 401 });
     }
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
@@ -51,13 +51,13 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     if (!row) {
-      return NextResponse.json({ error: 'not_found', message: 'We could not find that answer to challenge.' }, { status: 404 });
+      return NextResponse.json({ error: 'not_found', message: 'We could not find that answer to recheck.' }, { status: 404 });
     }
 
     const { feedItem, question } = row;
 
     if (feedItem.state !== 'answered' || !feedItem.submittedAnswer) {
-      return NextResponse.json({ error: 'invalid_state', message: 'Answer the question before challenging it.' }, { status: 400 });
+      return NextResponse.json({ error: 'invalid_state', message: 'Answer the question before requesting a recheck.' }, { status: 400 });
     }
     if (feedItem.answerResult === 'correct') {
       return NextResponse.json({ error: 'invalid_state', message: 'That answer is already marked correct.' }, { status: 400 });
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     if (existingDispute) {
-      return NextResponse.json({ error: 'invalid_state', message: 'That answer has already been challenged.' }, { status: 400 });
+      return NextResponse.json({ error: 'invalid_state', message: 'That answer has already been rechecked.' }, { status: 400 });
     }
 
     const canonicalAnswer = question.answerText;
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     });
 
     // §8.22 dispute path: notify the question's author so they can review. The
-    // challenge is the answerer's explicit ask for a second look, which is the
+    // recheck is the answerer's explicit ask for a second look, which is the
     // consent gate that lets the author see the literal submitted text.
     if (disputeId && question.creatorId && question.creatorId !== session.userId) {
       await writeActivity({
@@ -167,6 +167,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[lately/milestone/recheck] unexpected', error);
-    return NextResponse.json({ error: 'unexpected', message: 'Could not challenge that answer.' }, { status: 500 });
+    return NextResponse.json({ error: 'unexpected', message: 'Could not recheck that answer.' }, { status: 500 });
   }
 }

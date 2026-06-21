@@ -150,7 +150,7 @@ export function AnswerFeedbackSheet({
       setRecheckAccepted(outcome.accepted)
     } catch {
       setRecheckState('error')
-      setRecheckMessage('Could not challenge that answer.')
+      setRecheckMessage('Could not recheck that answer.')
       setRecheckAccepted(false)
     }
   }
@@ -280,7 +280,7 @@ export function AnswerFeedbackSheet({
                 >
                   Your answer: {submittedAnswer}
                 </p>
-                {/* The challenge (dispute-the-grade) link sits right by the
+                {/* The recheck (dispute-the-grade) link sits right by the
                     answer it disputes — that's where you look when you think the
                     grade is wrong. Hidden once a verdict is in (recheckState
                     'done') and on a correct answer (whole block is gated on
@@ -292,7 +292,7 @@ export function AnswerFeedbackSheet({
                     onClick={() => void requestRecheck()}
                     disabled={recheckState === 'submitting'}
                   >
-                    {recheckState === 'submitting' ? 'Challenging…' : 'Challenge →'}
+                    {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
                   </FeedActionLink>
                 ) : null}
               </div>
@@ -328,8 +328,8 @@ export function AnswerFeedbackSheet({
             ) : null
           })()}
 
-          {/* Challenge verdict. Rendered ungated by isCorrect so an accepted
-              challenge — which flips the sheet to "Correct!" — still shows its
+          {/* Recheck verdict. Rendered ungated by isCorrect so an accepted
+              recheck — which flips the sheet to "Correct!" — still shows its
               confirmation. The trigger link itself lives up by "Your answer". */}
           {recheckMessage ? (
             recheckAccepted ? (
