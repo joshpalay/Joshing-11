@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { formatRelativeTime } from '@/components/feed/visual';
 import { buildAddSomeoneHandoff } from '@/components/friends/add-someone';
+import { saveInviteEdit } from '@/components/friends/invite-edit';
+import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 type FriendSort = 'name_asc' | 'name_desc' | 'recent';
 
@@ -146,14 +148,63 @@ function PendingInviteCard({
   cancellingId,
   onCopy,
   onCancel,
+  onSaved,
 }: {
   invite: OutgoingInvite;
   copyingId: string | null;
   cancellingId: string | null;
   onCopy: (invite: OutgoingInvite) => void;
   onCancel: (invite: OutgoingInvite) => void;
+  onSaved: () => Promise<void> | void;
 }) {
   const canMessage = invite.message && invite.inviteePhoneForActions;
+
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editInterests, setEditInterests] = useState<string[]>(['', '', '']);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function startEdit() {
+    setEditName(invite.inviteeDisplayName);
+    setEditPhone(formatUsPhoneInput(invite.inviteePhoneForActions ?? ''));
+    setEditInterests([
+      invite.suggestedInterests[0] ?? '',
+      invite.suggestedInterests[1] ?? '',
+      invite.suggestedInterests[2] ?? '',
+    ]);
+    setEditError(null);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      setEditError('Add their name first.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    const result = await saveInviteEdit({
+      invitationId: invite.id,
+      inviteeDisplayName: trimmedName,
+      phone: editPhone,
+      suggestedInterests: editInterests.map((interest) => interest.trim()).filter(Boolean),
+    });
+
+    setSavingEdit(false);
+
+    if (!result.ok) {
+      setEditError(result.message);
+      return;
+    }
+
+    setEditing(false);
+    await onSaved();
+  }
 
   return (
     <article className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
@@ -167,46 +218,124 @@ function PendingInviteCard({
         </span>
       </div>
 
-      {invite.suggestedInterests.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {invite.suggestedInterests.map((interest) => (
-            <span
-              key={interest}
-              className="border-primary/10 bg-primary/5 text-foreground rounded-full border px-3 py-1 text-sm"
-            >
-              {interest}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      {editing ? (
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveEdit();
+          }}
+        >
+          <label className="text-foreground block text-sm font-medium">
+            Name
+            <input
+              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+              value={editName}
+              onChange={(event) => {
+                setEditName(event.target.value);
+                setEditError(null);
+              }}
+              autoComplete="name"
+              maxLength={60}
+              placeholder="Their name"
+            />
+          </label>
+          <label className="text-foreground block text-sm font-medium">
+            Phone number
+            <input
+              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+              value={editPhone}
+              onChange={(event) => {
+                setEditPhone(formatUsPhoneInput(event.target.value));
+                setEditError(null);
+              }}
+              autoComplete="tel"
+              inputMode="tel"
+              maxLength={14}
+              placeholder="(555) 123-4567"
+            />
+          </label>
+          <div className="space-y-2">
+            <span className="text-foreground block text-sm font-medium">Ideas (up to three)</span>
+            {editInterests.map((interest, index) => (
+              <input
+                key={index}
+                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-full border border-[var(--accent-gold)] px-4 text-base transition outline-none"
+                value={interest}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setEditInterests((current) => current.map((value, i) => (i === index ? next : value)));
+                  setEditError(null);
+                }}
+                maxLength={60}
+                placeholder={`Idea ${index + 1}`}
+              />
+            ))}
+          </div>
 
-      {canMessage ? (
-        <div className="mt-4 space-y-2">
-          <a
-            className="btn-primary flex w-full items-center justify-center"
-            href={buildSmsHref(invite.inviteePhoneForActions!, invite.message!)}
-          >
-            Send message
-          </a>
-          <div className="flex justify-center gap-6">
-            <button
-              type="button"
-              className="text-muted-foreground text-sm"
-              onClick={() => onCopy(invite)}
-            >
-              {copyingId === invite.id ? 'Copied ✓' : 'Copy instead'}
+          {editError ? <p className="text-destructive text-sm font-medium">{editError}</p> : null}
+
+          <div className="flex gap-3">
+            <button type="submit" className="btn-primary flex-1" disabled={savingEdit}>
+              {savingEdit ? 'Saving…' : 'Save changes'}
             </button>
             <button
               type="button"
-              className="text-muted-foreground text-sm"
-              onClick={() => onCancel(invite)}
-              disabled={cancellingId === invite.id}
+              className="btn-ghost flex-1"
+              onClick={() => setEditing(false)}
+              disabled={savingEdit}
             >
-              {cancellingId === invite.id ? 'Setting aside…' : 'Set aside'}
+              Cancel
             </button>
           </div>
-        </div>
-      ) : null}
+        </form>
+      ) : (
+        <>
+          {invite.suggestedInterests.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {invite.suggestedInterests.map((interest) => (
+                <span
+                  key={interest}
+                  className="border-primary/10 bg-primary/5 text-foreground rounded-full border px-3 py-1 text-sm"
+                >
+                  {interest}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {canMessage ? (
+            <div className="mt-4 space-y-2">
+              <a
+                className="btn-primary flex w-full items-center justify-center"
+                href={buildSmsHref(invite.inviteePhoneForActions!, invite.message!)}
+              >
+                Send message
+              </a>
+              <div className="flex justify-center gap-6">
+                <button
+                  type="button"
+                  className="text-muted-foreground text-sm"
+                  onClick={() => onCopy(invite)}
+                >
+                  {copyingId === invite.id ? 'Copied ✓' : 'Copy instead'}
+                </button>
+                <button type="button" className="text-muted-foreground text-sm" onClick={startEdit}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="text-muted-foreground text-sm"
+                  onClick={() => onCancel(invite)}
+                  disabled={cancellingId === invite.id}
+                >
+                  {cancellingId === invite.id ? 'Setting aside…' : 'Set aside'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
     </article>
   );
 }
@@ -589,6 +718,7 @@ export default function FriendsList() {
                 cancellingId={cancellingId}
                 onCopy={copyInvite}
                 onCancel={cancelInvite}
+                onSaved={loadInvites}
               />
             ))}
             {outboundRequests.map((request) => (

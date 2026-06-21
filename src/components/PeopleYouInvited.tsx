@@ -3,20 +3,9 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
+import { saveInviteEdit } from '@/components/friends/invite-edit'
 import { Chip } from '@/components/ui/Chip'
 import { formatUsPhoneInput } from '@/lib/phone-e164'
-
-const EDIT_ERROR_COPY: Record<string, string> = {
-  invalid_phone: 'Use a US mobile number.',
-  too_many_suggested_interests: 'Choose up to three ideas.',
-  missing_invitee_display_name: 'Add their name first.',
-  invalid_invitee_display_name: 'Use a shorter, real display name.',
-  invalid_suggested_interests: 'Keep each idea short and friendly.',
-  already_on_joshing:
-    'That number already belongs to someone on Joshing. Set this note aside and send them a friend request instead.',
-  duplicate_pending: 'You already have a pending note out to that number.',
-  self_invite: 'You cannot invite yourself.',
-}
 
 type InviteStatus = 'pending' | 'accepted' | 'expired' | 'cancelled'
 
@@ -233,52 +222,31 @@ export default function PeopleYouInvited() {
   async function saveEdit(invite: OutgoingInvite) {
     const trimmedName = editName.trim()
     if (!trimmedName) {
-      setEditError(EDIT_ERROR_COPY.missing_invitee_display_name)
+      setEditError('Add their name first.')
       return
     }
-
-    const suggestedInterests = editInterests
-      .map((interest) => interest.trim())
-      .filter(Boolean)
 
     setSavingEdit(true)
     setEditError(null)
 
-    try {
-      const response = await fetch('/api/friend-invitations', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          invitationId: invite.id,
-          inviteeDisplayName: trimmedName,
-          phone: editPhone,
-          suggestedInterests,
-        }),
-      })
-      const body = (await response.json().catch(() => null)) as {
-        error?: string
-        message?: string
-      } | null
+    const result = await saveInviteEdit({
+      invitationId: invite.id,
+      inviteeDisplayName: trimmedName,
+      phone: editPhone,
+      suggestedInterests: editInterests
+        .map((interest) => interest.trim())
+        .filter(Boolean),
+    })
 
-      if (!response.ok) {
-        const apiError = body?.error
-        throw new Error(
-          (apiError && EDIT_ERROR_COPY[apiError]) ??
-            body?.message ??
-            'Could not save your changes.'
-        )
-      }
+    setSavingEdit(false)
 
-      setEditingId(null)
-      await loadInvites()
-    } catch (caught) {
-      setEditError(
-        caught instanceof Error ? caught.message : 'Could not save your changes.'
-      )
-    } finally {
-      setSavingEdit(false)
+    if (!result.ok) {
+      setEditError(result.message)
+      return
     }
+
+    setEditingId(null)
+    await loadInvites()
   }
 
   function createNewInvite(invite: OutgoingInvite) {
