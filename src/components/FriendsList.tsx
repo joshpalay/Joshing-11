@@ -701,7 +701,29 @@ export default function FriendsList() {
         </section>
       ) : null}
 
-      {!loading && (pendingInvites.length > 0 || outboundRequests.length > 0) ? (
+      {!loading && outboundRequests.length > 0 ? (
+        <section aria-labelledby="requests-sent" className="space-y-3">
+          <h2
+            id="requests-sent"
+            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+          >
+            Requests Sent{' '}
+            <span className="text-foreground tabular-nums">({outboundRequests.length})</span>
+          </h2>
+          <div className="space-y-3">
+            {outboundRequests.map((request) => (
+              <OutboundRequestCard
+                key={request.id}
+                request={request}
+                pendingRequestId={pendingRequestId}
+                onCancel={cancelRequest}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && pendingInvites.length > 0 ? (
         <section aria-labelledby="waiting-for-response" className="space-y-3">
           <h2
             id="waiting-for-response"
@@ -719,14 +741,6 @@ export default function FriendsList() {
                 onCopy={copyInvite}
                 onCancel={cancelInvite}
                 onSaved={loadInvites}
-              />
-            ))}
-            {outboundRequests.map((request) => (
-              <OutboundRequestCard
-                key={request.id}
-                request={request}
-                pendingRequestId={pendingRequestId}
-                onCancel={cancelRequest}
               />
             ))}
           </div>
