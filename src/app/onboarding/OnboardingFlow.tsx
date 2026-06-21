@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
@@ -13,12 +13,6 @@ import { AddTopicField, type AddTopicError } from '@/components/interests/AddTop
 // off this flow into the post-first-five recap (FirstSessionRecap), so the ask
 // arrives once the player has actually felt the loop.
 type CurrentStep = 'display-name' | 'handle' | 'review'
-
-export type WarmupAnswers = {
-  deepDive?: string
-  hourLongTopic?: string
-  anythingElse?: string
-}
 
 export type ProposedInterest = {
   domain: string
@@ -54,37 +48,6 @@ function sanitizeForHandle(input: string): string {
     .replace(/^[^a-z]+/, '')
     .slice(0, HANDLE_MAX)
 }
-
-const WARMUP_FIELDS: Array<{
-  field: keyof WarmupAnswers
-  label: string
-  placeholder: string
-  optional?: boolean
-}> = [
-  {
-    field: 'deepDive',
-    label: "A book, composer, or filmmaker you've gone deep on?",
-    placeholder:
-      "e.g. Middlemarch, or Tchaikovsky's symphonies, or Werner Herzog",
-  },
-  {
-    field: 'hourLongTopic',
-    label: 'A topic you could talk about for an hour without preparation?',
-    placeholder: 'e.g. the French Revolution, or Italian Renaissance painting',
-  },
-  {
-    field: 'anythingElse',
-    label: 'Anything else — a period of history, a sport, a field you studied?',
-    placeholder: 'Anything',
-    optional: true,
-  },
-]
-
-const LOADING_COPY = [
-  'Reading your answers…',
-  'Finding good question areas…',
-  'Turning these into question areas…',
-]
 
 const MIN_INTERESTS = 3
 // Onboarding caps the starting-areas selection at 12 (per product spec). The cap
@@ -144,15 +107,6 @@ function isSelected(
     : false
 }
 
-function Spinner({ small = false }: { small?: boolean }) {
-  return (
-    <Loader2
-      className={`${small ? 'size-4' : 'size-7'} animate-spin`}
-      aria-hidden="true"
-    />
-  )
-}
-
 function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="space-y-2">
@@ -200,11 +154,6 @@ export default function OnboardingFlow({
   >({ state: 'idle' })
   const [isSavingHandle, setIsSavingHandle] = useState(false)
   const [handleError, setHandleError] = useState<string | null>(null)
-  const [showWarmup, setShowWarmup] = useState(false)
-  const [warmupAnswers, setWarmupAnswers] = useState<WarmupAnswers>({})
-  const [proposedInterests, setProposedInterests] = useState<
-    ProposedInterest[] | null
-  >(null)
   // Inviter-seeded suggestions are immutable after the initial pre-selection: the
   // invitee keeps, ignores, or removes them (and adds their own), but never edits
   // the wording inline — so this is a stable value, not state.
@@ -220,59 +169,26 @@ export default function OnboardingFlow({
       .slice(0, MAX_INTERESTS)
   )
   const [isLoading, setIsLoading] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loadingCopyIndex, setLoadingCopyIndex] = useState(0)
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
+  // Whether the invitee arrived with any pre-seeded topics. Drives the welcome
+  // copy: with seeds we frame the screen as "remove what doesn't fit"; without
+  // any (e.g. invite-link signups) we frame it as "add a few to start".
+  const hasSeeds = inviteInterests.length > 0
 
-  const canGenerate =
-    normalizeDomain(warmupAnswers.deepDive ?? '').length > 0 &&
-    normalizeDomain(warmupAnswers.hourLongTopic ?? '').length > 0
-
-  const reviewInterests = useMemo(
-    () => [
-      ...inviteInterests,
-      ...(proposedInterests ?? []).filter(
-        (interest) =>
-          !inviteInterests.some(
-            (seeded) =>
-              selectedKey(
-                toSelected(seeded) ?? { domain: '', broadCategory: '' }
-              ) ===
-              selectedKey(
-                toSelected(interest) ?? { domain: '', broadCategory: '' }
-              )
-          )
-      ),
-    ],
-    [inviteInterests, proposedInterests]
-  )
-
-  const isFromInvite = (interest: ProposedInterest) =>
-    inviteInterests.some(
-      (seeded) =>
-        selectedKey(toSelected(seeded) ?? { domain: '', broadCategory: '' }) ===
-        selectedKey(toSelected(interest) ?? { domain: '', broadCategory: '' })
-    )
-
-  // Suggestions split into two scannable groups, each shown only when it has
-  // unselected items: the inviter's picks ("Suggested by {name}") and any
-  // warm-up-generated picks ("More ideas you might like"). Selected suggestions move up into the
-  // "Selected areas" chips, so they drop out of these lists automatically.
+  // The merged "suggested for you" list: pre-seeded topics the invitee removed
+  // from their selection, offered back as one re-addable group. (Selected topics
+  // live in the chips above and drop out of this list automatically.)
   const inviteSuggestions = inviteInterests.filter(
     (interest) => !isSelected(selectedInterests, interest)
-  )
-  const moreIdeas = reviewInterests.filter(
-    (interest) =>
-      !isSelected(selectedInterests, interest) && !isFromInvite(interest)
   )
   const atSelectionCap = selectedInterests.length >= MAX_INTERESTS
 
   // Compact, tappable suggestion chips (not large cards): just the area name with
-  // a "+" affordance. Tapping adds it to Selected areas. No rationale paragraphs
-  // or category labels — keeps the screen scannable on mobile.
+  // a "+" affordance. Tapping adds it back to Your topics. No rationale
+  // paragraphs or category labels — keeps the screen scannable on mobile.
   const renderSuggestionChips = (list: ProposedInterest[], keyPrefix: string) => (
     <div className="flex flex-wrap gap-2">
       {list.map((interest) => (
@@ -353,23 +269,6 @@ export default function OnboardingFlow({
     }
   }, [currentStep, handle])
 
-  useEffect(() => {
-    if (!isGenerating) return
-
-    const interval = window.setInterval(() => {
-      setLoadingCopyIndex((current) => (current + 1) % LOADING_COPY.length)
-    }, 3000)
-
-    return () => window.clearInterval(interval)
-  }, [isGenerating])
-
-  function updateWarmupAnswer(field: keyof WarmupAnswers, value: string) {
-    setWarmupAnswers((current) => ({
-      ...current,
-      [field]: value.slice(0, 200),
-    }))
-  }
-
   function toggleInterest(interest: ProposedInterest) {
     const selected = toSelected(interest)
     if (!selected) return
@@ -385,41 +284,6 @@ export default function OnboardingFlow({
       if (current.length >= MAX_INTERESTS) return current
       return [...current, selected]
     })
-  }
-
-  async function generateProposals() {
-    if (!canGenerate) return
-
-    setError(null)
-    setIsGenerating(true)
-    setLoadingCopyIndex(0)
-
-    try {
-      // Cultural anchor was removed from onboarding; the endpoint generates
-      // from warm-up answers alone.
-      const response = await fetch('/api/onboarding/propose-interests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ warmupAnswers }),
-      })
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok || !Array.isArray(data?.proposedInterests)) {
-        setError(
-          "We couldn't generate suggestions. You can try again or write your own."
-        )
-        return
-      }
-
-      setProposedInterests(data.proposedInterests)
-      setShowWarmup(false)
-    } catch {
-      setError(
-        "We couldn't generate suggestions. You can try again or write your own."
-      )
-    } finally {
-      setIsGenerating(false)
-    }
   }
 
   // Stage a chosen topic (from the add-topic field) into the selected list.
@@ -617,35 +481,26 @@ export default function OnboardingFlow({
     }
   }
 
-  if (isGenerating) {
-    return (
-      <main className="bg-background text-foreground grid min-h-screen place-items-center px-5 py-12">
-        <div className="flex max-w-sm flex-col items-center gap-5 text-center">
-          <div className="bg-card grid size-16 place-items-center rounded-full border shadow-sm">
-            <Spinner />
-          </div>
-          <p className="text-xl font-semibold">
-            {LOADING_COPY[loadingCopyIndex]}
-          </p>
-        </div>
-      </main>
-    )
-  }
-
   return (
     <main className="bg-background text-foreground min-h-screen px-4 pt-8 pb-10 sm:px-6 sm:pt-12">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-2xl flex-col">
         <div className="flex flex-1 flex-col">
           {currentStep === 'display-name' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
-              <StepHeader
-                title="What should we call you?"
-                subtitle={
-                  inviteeDisplayName?.trim()
+              <div className="space-y-3">
+                <p className="font-wordmark text-[13px] font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
+                  Joshing
+                </p>
+                <StepHeader
+                  title="What should we call you?"
+                  subtitle="Joshing is a daily trivia game you play with friends — questions tuned to what you actually know."
+                />
+                <p className="text-muted-foreground text-sm leading-6">
+                  {inviteeDisplayName?.trim()
                     ? `${displayInviterName} added you as "${inviteeDisplayName.trim()}". Keep it or change it — ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`
-                    : `This is how you'll appear to friends. ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`
-                }
-              />
+                    : `This is how you'll appear to friends. ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`}
+                </p>
+              </div>
 
               <form
                 className="space-y-4"
@@ -777,13 +632,25 @@ export default function OnboardingFlow({
 
           {currentStep === 'review' ? (
             <div className="flex flex-1 flex-col gap-7">
-              <StepHeader
-                title="Pick your starting areas"
-                subtitle="Choose topics that would make good questions for you. You can change these later."
-              />
+              {/* Welcome hero — wordmark eyebrow + editorial serif headline. The
+                  explainer frames the screen as remove-or-add when topics were
+                  pre-seeded, or add-to-start when the invitee arrived with none. */}
+              <div className="space-y-3">
+                <p className="font-wordmark text-[13px] font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
+                  Joshing
+                </p>
+                <h1 className="font-serif text-4xl leading-tight font-semibold text-balance sm:text-5xl">
+                  Welcome to Joshing
+                </h1>
+                <p className="text-muted-foreground text-base leading-7">
+                  {hasSeeds
+                    ? "A new trivia game. Here are some topics we picked for you — remove any that don't fit, or add your own."
+                    : "A new trivia game. Add a few topics you'd want questions about, and we'll build your first round from them."}
+                </p>
+              </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-medium">Selected areas</p>
+                <p className="text-sm font-medium">Your topics</p>
                 {selectedInterests.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
                     Nothing yet — add a few below.
@@ -794,12 +661,12 @@ export default function OnboardingFlow({
                       <button
                         key={selectedKey(interest)}
                         type="button"
-                        className="bg-foreground text-background inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
+                        className="bg-[var(--brand-navy)] inline-flex items-center gap-2 rounded-full py-2 pr-2.5 pl-4 text-sm font-medium text-white transition hover:opacity-90"
                         onClick={() => removeSelectedInterest(interest)}
                         aria-label={`Remove ${interest.domain}`}
                       >
                         {interest.domain}
-                        <X className="size-3.5" />
+                        <X className="size-3.5 opacity-80" />
                       </button>
                     ))}
                   </div>
@@ -814,78 +681,19 @@ export default function OnboardingFlow({
                 disabled={selectedInterests.length >= MAX_INTERESTS}
                 existingLabels={selectedInterests.map((item) => item.domain)}
                 onAdd={addSelectedInterest}
-                inputClassName="bg-background focus:ring-ring h-11 min-w-0 flex-1 rounded-md border px-3 text-base outline-none focus:ring-2 disabled:opacity-60"
-                buttonClassName="bg-card h-11 rounded-md border px-5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-                chipClassName="rounded-md border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+                inputClassName="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] h-12 min-w-0 flex-1 rounded-full border border-[var(--accent-gold)] px-4 text-base outline-none transition disabled:opacity-60"
+                buttonClassName="bg-[var(--brand-navy)] h-12 rounded-full px-5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                chipClassName="rounded-full border border-[var(--border-warm)] bg-[var(--brand-card)] px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
                 mutedClassName="text-muted-foreground text-sm"
                 errorClassName="text-destructive mt-3 text-sm"
               />
 
               {inviteSuggestions.length > 0 ? (
                 <div className="space-y-3">
-                  <p className="text-sm font-medium">Suggested by {displayInviterName}</p>
-                  {renderSuggestionChips(inviteSuggestions, 'invite')}
+                  <p className="text-sm font-medium">Suggested for you</p>
+                  {renderSuggestionChips(inviteSuggestions, 'suggested')}
                 </div>
               ) : null}
-
-              {moreIdeas.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">More ideas you might like</p>
-                  {renderSuggestionChips(moreIdeas, 'idea')}
-                </div>
-              ) : null}
-
-              <div className="space-y-3">
-                {!showWarmup ? (
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4 transition"
-                    onClick={() => setShowWarmup(true)}
-                  >
-                    Need ideas? Answer a couple quick questions
-                  </button>
-                ) : (
-                  <div className="bg-card space-y-4 rounded-lg border p-4">
-                    {WARMUP_FIELDS.map(({ field, label, placeholder, optional }) => {
-                      const value = warmupAnswers[field] ?? ''
-                      return (
-                        <label key={field} className="block">
-                          <span className="text-sm font-medium">
-                            {label}
-                            {optional ? (
-                              <span className="text-muted-foreground"> optional</span>
-                            ) : null}
-                          </span>
-                          <input
-                            className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
-                            maxLength={200}
-                            placeholder={placeholder}
-                            value={value}
-                            onChange={(event) => updateWarmupAnswer(field, event.target.value)}
-                          />
-                        </label>
-                      )
-                    })}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className="btn-primary flex-1"
-                        onClick={generateProposals}
-                        disabled={!canGenerate || isGenerating}
-                      >
-                        See suggestions
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-ghost px-4"
-                        onClick={() => setShowWarmup(false)}
-                      >
-                        Hide
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
 
               <div className="bg-background/95 sticky bottom-0 border-t py-4 backdrop-blur">
                 {error ? (
