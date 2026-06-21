@@ -388,7 +388,7 @@ describe('Answer feedback sheet recheck affordance', () => {
     onClose: () => {},
   }
 
-  it('offers a Recheck → link on a wrong answer when onRecheck is provided', () => {
+  it('offers a Recheck → link beside the answer on a wrong answer when onRecheck is provided', () => {
     const rendered = html(
       <AnswerFeedbackSheet
         {...baseProps}
