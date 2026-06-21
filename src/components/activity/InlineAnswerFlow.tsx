@@ -82,6 +82,33 @@ export function InlineAnswerFlow({
     }
   }
 
+  // Recheck (dispute the grade) on a wrong milestone answer: re-grade through the
+  // milestone recheck route (anchored on the synthetic catch-up FeedItem the
+  // answer route wrote). On accept, reflect the win locally so the sheet flips to
+  // "Correct!" and finish() retires the question as correct.
+  async function submitRecheck(): Promise<{ accepted: boolean; message: string }> {
+    const res = await fetch('/api/lately/milestone/recheck', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ questionId: question.questionId }),
+    });
+    const body = (await res.json().catch(() => null)) as
+      | { accepted?: boolean; status?: string; reason?: string; pointsAwarded?: number; message?: string }
+      | null;
+    if (!res.ok) throw new Error(body?.message ?? 'Could not recheck that answer.');
+    const accepted = Boolean(body?.accepted);
+    const points = typeof body?.pointsAwarded === 'number' ? body.pointsAwarded : 0;
+    if (accepted) {
+      setFeedback((current) => (current ? { ...current, isCorrect: true, pointsAwarded: points } : current));
+      return { accepted: true, message: `Recheck accepted — +${points} ${points === 1 ? 'point' : 'points'}.` };
+    }
+    if (body?.status === 'needs_human') {
+      return { accepted: false, message: body.reason ?? 'Flagged for a human look.' };
+    }
+    return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' };
+  }
+
   // Hand the resolution up only once the viewer dismisses the result pop-up, so
   // this block stays mounted (and the sheet visible) through the reveal, then
   // the parent moves the question into the answered history.
@@ -158,6 +185,7 @@ export function InlineAnswerFlow({
           questionId={question.questionId}
           feedItemId={`milestone:${question.questionId}`}
           report={{ target: { questionId: question.questionId }, surface: 'lately_result' }}
+          onRecheck={feedback.isCorrect ? null : submitRecheck}
           onClose={finish}
         />
       ) : null}

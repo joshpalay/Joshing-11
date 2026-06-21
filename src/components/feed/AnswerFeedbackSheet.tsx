@@ -269,16 +269,33 @@ export function AnswerFeedbackSheet({
               </Chip>
             ) : null}
             {!isCorrect ? (
-              <p
-                className="text-[13px] italic"
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  color: 'var(--ink)',
-                  opacity: 0.7,
-                }}
-              >
-                Your answer: {submittedAnswer}
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p
+                  className="text-[13px] italic"
+                  style={{
+                    fontFamily: 'var(--font-serif)',
+                    color: 'var(--ink)',
+                    opacity: 0.7,
+                  }}
+                >
+                  Your answer: {submittedAnswer}
+                </p>
+                {/* The recheck (dispute-the-grade) link sits right by the
+                    answer it disputes — that's where you look when you think the
+                    grade is wrong. Hidden once a verdict is in (recheckState
+                    'done') and on a correct answer (whole block is gated on
+                    !isCorrect). */}
+                {onRecheck && recheckState !== 'done' ? (
+                  <FeedActionLink
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => void requestRecheck()}
+                    disabled={recheckState === 'submitting'}
+                  >
+                    {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
+                  </FeedActionLink>
+                ) : null}
+              </div>
             ) : null}
           </div>
 
@@ -311,51 +328,37 @@ export function AnswerFeedbackSheet({
             ) : null
           })()}
 
-          {onRecheck ? (
-            <div className="space-y-2">
-              {!isCorrect && recheckState !== 'done' ? (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    Think we got this wrong?
-                  </p>
-                  <FeedActionLink
-                    onClick={() => void requestRecheck()}
-                    disabled={recheckState === 'submitting'}
-                  >
-                    {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
-                  </FeedActionLink>
-                </div>
-              ) : null}
-              {recheckMessage ? (
-                recheckAccepted ? (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
-                    style={{
-                      backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
-                      borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',
-                      color: 'var(--game-correct)',
-                    }}
-                  >
-                    <span aria-hidden className="text-[15px] leading-none">✓</span>
-                    <span>{recheckMessage}</span>
-                  </div>
-                ) : (
-                  <p
-                    role="status"
-                    aria-live="polite"
-                    className="text-[11px]"
-                    style={{
-                      color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
-                      opacity: recheckState === 'error' ? 1 : 0.6,
-                    }}
-                  >
-                    {recheckMessage}
-                  </p>
-                )
-              ) : null}
-            </div>
+          {/* Recheck verdict. Rendered ungated by isCorrect so an accepted
+              recheck — which flips the sheet to "Correct!" — still shows its
+              confirmation. The trigger link itself lives up by "Your answer". */}
+          {recheckMessage ? (
+            recheckAccepted ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
+                style={{
+                  backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
+                  borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',
+                  color: 'var(--game-correct)',
+                }}
+              >
+                <span aria-hidden className="text-[15px] leading-none">✓</span>
+                <span>{recheckMessage}</span>
+              </div>
+            ) : (
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-[11px]"
+                style={{
+                  color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
+                  opacity: recheckState === 'error' ? 1 : 0.6,
+                }}
+              >
+                {recheckMessage}
+              </p>
+            )
           ) : null}
 
           {!isCorrect ? (
