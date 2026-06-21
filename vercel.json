@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/daily-assignments",
+      "schedule": "5 17 * * *"
+    },
+    {
       "path": "/api/cron/weekly-ceremony",
       "schedule": "0 8 * * *"
     },
