@@ -23,6 +23,7 @@ import {
   generateBonusQuestionsForDomains,
   generateDailyQuestionsFromKnowledgeBase,
 } from '@/server/daily/generate-questions';
+import { GENERATION_TIMEOUT_MS } from '@/lib/llm';
 import {
   DAILY_BONUS_SLOT_MAX,
   DAILY_QUEUE_MAX_PER_SUBCATEGORY,
@@ -87,12 +88,34 @@ function makeSubcategoryDiversityGate(
 // gates — we never relax them to hit the count — so a round is the honest cost of
 // trying to surface another genuinely-good question.
 //
-// Only START a new round while this much of the function budget is still unspent.
-// A round can take up to GENERATION_TIMEOUT_MS (35s); gating each round's start on
-// elapsed time, with the route's 90s maxDuration, leaves a worst-case round plus
-// slot persistence (and a degraded-but-skippable +2 bonus) comfortably inside the
-// platform ceiling. Set well below maxDuration so the request never dies mid-build.
-const TOP_UP_TIME_BUDGET_MS = 45_000;
+// The platform function-duration ceiling this synchronous build runs under,
+// used to gate the LLM rounds below so they never START work that can't finish
+// before the function is killed. Defaults to the route's declared
+// `maxDuration = 90` (s), which Pro/Enterprise honor.
+//
+// Background: on the Vercel **Hobby** plan every function is hard-capped at 60s
+// regardless of the declared 90 — so a long build was killed mid-generation
+// (confirmed in prod 2026-06-21: `POST /api/daily/queue` → 504, and the user was
+// served the 3-question floor instead of five). The project has since upgraded
+// past Hobby, so 90s is honored and the default below is correct; if it is ever
+// run on a plan with a lower ceiling, set DAILY_BUILD_DURATION_BUDGET_MS to that
+// ceiling (e.g. 60000) so the build degrades to a short-but-served queue instead
+// of a 504. Keep this in lockstep with the route's `maxDuration`.
+const FUNCTION_DURATION_BUDGET_MS = Number(
+  process.env.DAILY_BUILD_DURATION_BUDGET_MS ?? 90_000,
+);
+
+// Headroom reserved AFTER the last LLM round for assembling + atomically
+// persisting the queue before the ceiling.
+const BUILD_PERSIST_MARGIN_MS = 8_000;
+
+// Only START another LLM round (a top-up, or the +2 bonus) while it — taking up
+// to GENERATION_TIMEOUT_MS — plus persistence can still finish before the
+// platform kills the function. This is what keeps a short-but-served (≥ floor)
+// queue from degrading into a 504 + a "forever" wait on Hobby.
+const hasBudgetForAnotherRound = (elapsedMs: number) =>
+  elapsedMs + GENERATION_TIMEOUT_MS + BUILD_PERSIST_MARGIN_MS <=
+  FUNCTION_DURATION_BUDGET_MS;
 
 // Hard cap on top-up rounds, independent of the time budget — a backstop against
 // a pathological domain that keeps generating questions the gates fully reject.
@@ -393,7 +416,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) >
       0 &&
     topUpRounds < MAX_TOP_UP_ROUNDS &&
-    Date.now() - startedAt < TOP_UP_TIME_BUDGET_MS
+    hasBudgetForAnotherRound(Date.now() - startedAt)
   ) {
     topUpRounds += 1;
     const roundShortfall =
@@ -598,7 +621,11 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       DAILY_BONUS_SLOT_MAX,
       restingDomains,
     );
-    if (bonusDomains.length > 0) {
+    // Gate the bonus LLM call on the remaining function budget. The +2 is purely
+    // additive, so when little time is left (e.g. a slow core build near the
+    // ceiling) skipping it lets the core queue still persist instead of risking a
+    // mid-bonus kill that would lose the whole build.
+    if (bonusDomains.length > 0 && hasBudgetForAnotherRound(Date.now() - startedAt)) {
       const presenceByDomain = new Map(
         bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
       );
