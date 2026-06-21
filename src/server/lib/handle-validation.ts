@@ -30,7 +30,6 @@ const ROUTE_RESERVED = [
   'new-game',
   'onboarding',
   'questions',
-  'replay',
   'share',
   'users',
 ] as const;

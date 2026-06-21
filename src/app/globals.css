@@ -236,7 +236,7 @@
        50–200 utilities the 2026-05-30 audit flagged (DESIGN-SYSTEM.md §1.7).
        Warning is a new hue (no prior accent), so its three values are explicit;
        success/error tints derive from their existing accent via color-mix — the
-       same proportions already used inline in GameplayChat/ReplaySummary, so the
+       same proportions already used inline in GameplayChat, so the
        tints track the accent if it ever moves. */
     --warning:             #b45309;  /* amber/700 — caution text / accent      */
     --warning-surface:     #fdf6e6;  /* pale caution banner fill               */
@@ -266,7 +266,7 @@
     --interlude-terracotta: color-mix(in srgb, var(--brand-orange) 82%, var(--brand-ink));
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
-       Knowledge page, replay/catch-up) render with navy ink instead of warm
+       Knowledge page, catch-up) render with navy ink instead of warm
        near-black. Keep the names; only the values changed. */
     --ink:             var(--brand-ink);        /* navy #0a1f3d (was warm near-black) */
     --cream:           var(--brand-card);        /* #fdfcfb content surface */

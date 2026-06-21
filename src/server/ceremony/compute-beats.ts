@@ -607,8 +607,7 @@ export function selectDiscoveries(
  * questions table). Pure bot daily slots generate a per-user question with no
  * shared id, so (a) there is no canonical row to render their text from and
  * (b) the "most friends also missed it" signal is undefined for them. Those
- * misses live behind the "View all discoveries →" deep-link to /replay
- * (getReplayWrongQuestions), which covers bot + friend slots.
+ * pure-bot misses are simply not surfaced in the ceremony.
  *
  * Selection: selectDiscoveries() — friend-co-miss → most-recent → hash-stable.
  * The friend-co-miss query mirrors getLatelyConvergences (co-correct overlap),
