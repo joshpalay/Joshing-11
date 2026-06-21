@@ -25,6 +25,7 @@ import {
   getKnowledgeBase,
   getRecentAnsweredCanonicalTexts,
   getRecentDailyQuestionTexts,
+  getNearestAnsweredQuestionDistance,
   getRecentDomainCounts,
   getRecentFactKeys,
   getRecentSkipCountsByDomain,
@@ -53,6 +54,7 @@ import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/serve
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
+import { embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
 import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
@@ -1012,6 +1014,124 @@ Which NEW indices duplicate any RECENT entry?`;
   }
 }
 
+// Semantic dedup via Voyage embeddings (B-DEDUP-SEMANTIC-01), reusing the same
+// embeddings the pool dedup stores. Two complementary gates run off ONE embedding
+// pass over the freshly-generated batch (embedGeneratedBatch below):
+//
+//  1. INTRA-BATCH (findIntraBatchEmbeddingDuplicates) — a deterministic,
+//     fail-CLOSED backstop to the Haiku findBatchDuplicates gate (which fails
+//     OPEN on a timeout/outage). The generator sometimes emits the same fact
+//     reworded several times in one build — observed 2026-06-21: a new user's
+//     Daily Five had THREE "name Henry VIII's Act of Supremacy" paraphrases
+//     (pairwise cosine 0.96–0.99) that the Haiku gate let through. Greedy
+//     keep-first: drop any candidate too similar to one already kept this batch.
+//
+//  2. ACROSS-HISTORY (findAnsweredHistoryDuplicates) — drops candidates too
+//     similar to a question the user already answered correctly within
+//     DAILY_HISTORY_DEDUP_WINDOW_DAYS. exact-question_id "already seen" filtering
+//     misses these because a regenerated paraphrase gets a new id (observed: a
+//     "1911 Triangle Shirtwaist factory" question re-served 16 days after the
+//     user answered it; cosine 0.89). Does nothing for brand-new users (no
+//     history) — which is exactly why the intra-batch gate is needed too.
+//
+// One cosine threshold serves both: the real cases cluster cleanly — true
+// duplicates score 0.89–0.99, genuinely-different same-topic questions ≤ 0.84,
+// cross-topic ~0.55 — so 0.88 catches repeats without dropping distinct
+// questions. Both gates are best-effort: embeddings disabled or any error drops
+// nothing, so the build is never blocked on them. Knobs are env-overridable.
+const DAILY_DEDUP_COSINE_THRESHOLD = Number(
+  process.env.DAILY_DEDUP_COSINE_THRESHOLD ??
+    process.env.DAILY_HISTORY_DEDUP_COSINE_THRESHOLD ??
+    0.88,
+);
+const DAILY_HISTORY_DEDUP_WINDOW_DAYS = Number(
+  process.env.DAILY_HISTORY_DEDUP_WINDOW_DAYS ?? 180,
+);
+
+// Cosine similarity of two equal-length vectors. Voyage embeddings come back
+// normalized, but the full form is computed so it's correct regardless.
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// Embed a freshly-generated batch once, shared by both embedding gates below.
+// Returns null when embeddings are disabled or the API call fails — both gates
+// then no-op (best-effort, never blocks the build).
+async function embedGeneratedBatch(
+  generated: LlmQuestion[],
+): Promise<Array<number[] | null> | null> {
+  if (generated.length === 0 || !isEmbeddingEnabled()) return null;
+  try {
+    return await embedTexts(generated.map((q) => q.question_text), 'document');
+  } catch (error) {
+    console.warn('[daily/generate-questions] batch embedding failed; semantic dedup skipped', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+// Deterministic intra-batch dedup (gate 1 above). Greedy: walk the batch in
+// order, keep the first of any near-identical cluster, drop the rest.
+function findIntraBatchEmbeddingDuplicates(
+  embeddings: Array<number[] | null> | null,
+): Set<number> {
+  const drop = new Set<number>();
+  if (!embeddings) return drop;
+  const kept: number[] = [];
+  for (let i = 0; i < embeddings.length; i++) {
+    const emb = embeddings[i];
+    if (!emb) continue;
+    const isDup = kept.some((j) => {
+      const other = embeddings[j];
+      return other != null && cosineSimilarity(emb, other) >= DAILY_DEDUP_COSINE_THRESHOLD;
+    });
+    if (isDup) drop.add(i);
+    else kept.push(i);
+  }
+  return drop;
+}
+
+// Across-history dedup (gate 2 above). Takes the shared batch embeddings.
+async function findAnsweredHistoryDuplicates(
+  userId: string,
+  embeddings: Array<number[] | null> | null,
+): Promise<Set<number>> {
+  const drop = new Set<number>();
+  if (!embeddings) return drop;
+  try {
+    await Promise.all(
+      embeddings.map(async (embedding, i) => {
+        if (!embedding) return;
+        const distance = await getNearestAnsweredQuestionDistance(
+          userId,
+          embedding,
+          DAILY_HISTORY_DEDUP_WINDOW_DAYS,
+        );
+        if (distance === null) return;
+        if (1 - distance >= DAILY_DEDUP_COSINE_THRESHOLD) {
+          drop.add(i);
+        }
+      }),
+    );
+  } catch (error) {
+    // Best-effort: never block the daily build on the semantic history gate.
+    console.warn('[daily/generate-questions] answered-history embedding gate failed; skipping', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return drop;
+}
+
 // Max questions requested per Sonnet call. The generator caps each response at
 // 2000 output tokens (~33s at Sonnet's output rate, sized to fit the 90s live
 // route with a retry). A full question with explainer is ~300-400 tokens, so a
@@ -1203,12 +1323,20 @@ export async function generateDailyQuestions(
   // - findAnswerLeaks (below, synchronous): deterministic fail-closed backstop
   //   for answer leakage when the Haiku quality gate misses or fails open.
   const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
-  const [batchDuplicates, recentDuplicates, qualityResult, factualResult] = await Promise.all([
-    findBatchDuplicates(generated),
-    findRecentHistoryDuplicates(generated, recentForGate),
-    findQualityFailures(generated),
-    findFactualFailures(generated),
-  ]);
+  // One embedding pass over the batch feeds both semantic gates (intra-batch +
+  // across-history). null when embeddings are disabled/failed → both no-op.
+  const batchEmbeddings = await embedGeneratedBatch(generated);
+  const [batchDuplicates, recentDuplicates, qualityResult, factualResult, answeredHistoryDuplicates] =
+    await Promise.all([
+      findBatchDuplicates(generated),
+      findRecentHistoryDuplicates(generated, recentForGate),
+      findQualityFailures(generated),
+      findFactualFailures(generated),
+      findAnsweredHistoryDuplicates(userId, batchEmbeddings),
+    ]);
+  // Deterministic, fail-closed backstop to the Haiku findBatchDuplicates gate —
+  // synchronous over the same embeddings, so it runs after the Promise.all.
+  const intraBatchDuplicates = findIntraBatchEmbeddingDuplicates(batchEmbeddings);
 
   if (batchDuplicates.size > 0) {
     console.warn('[daily/generate-questions] dropping intra-batch duplicates', {
@@ -1217,10 +1345,24 @@ export async function generateDailyQuestions(
       originalCount: generated.length,
     });
   }
+  if (intraBatchDuplicates.size > 0) {
+    console.warn('[daily/generate-questions] dropping intra-batch duplicates (semantic backstop)', {
+      droppedCount: intraBatchDuplicates.size,
+      droppedIndices: [...intraBatchDuplicates].sort((a, b) => a - b),
+      originalCount: generated.length,
+    });
+  }
   if (recentDuplicates.size > 0) {
     console.warn('[daily/generate-questions] dropping recent-history duplicates', {
       droppedCount: recentDuplicates.size,
       droppedIndices: [...recentDuplicates].sort((a, b) => a - b),
+      originalCount: generated.length,
+    });
+  }
+  if (answeredHistoryDuplicates.size > 0) {
+    console.warn('[daily/generate-questions] dropping answered-history duplicates (semantic)', {
+      droppedCount: answeredHistoryDuplicates.size,
+      droppedIndices: [...answeredHistoryDuplicates].sort((a, b) => a - b),
       originalCount: generated.length,
     });
   }
@@ -1274,7 +1416,9 @@ export async function generateDailyQuestions(
 
   const allDrops = new Set<number>([
     ...batchDuplicates,
+    ...intraBatchDuplicates,
     ...recentDuplicates,
+    ...answeredHistoryDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,

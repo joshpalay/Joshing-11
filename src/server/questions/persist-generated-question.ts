@@ -188,6 +188,13 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         // Carry the precomputed aside through; the editorial label is applied at
         // display time (selectInsideJokeForViewer) for these null-creator rows.
         insideJoke: generated.insideJoke,
+        // Carry the machine row's Voyage embedding onto the canonical promotion
+        // (B-DEDUP-SEMANTIC-01). Without this, daily_generated promotions land
+        // with a NULL embedding, so the per-user semantic history gate
+        // (getNearestAnsweredQuestionDistance) can't see questions answered from
+        // the daily path — the most common kind. Copied, not recomputed, so it
+        // adds no Voyage call; null when the source embed hadn't completed.
+        embedding: generated.embedding,
       })
       .onConflictDoNothing({ target: questions.generatedQuestionId })
       .returning({ id: questions.id });

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, cosineDistance, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -1792,6 +1792,44 @@ export async function getRecentDomainCounts(
 }
 
 // Recently-answered CANONICAL question texts for a user (BP-6 / audit Q8).
+// Embedding-based per-user history dedup (B-DEDUP-SEMANTIC-01). The exact-
+// question_id "already seen" filters above (pickEligibleAuthoredQuestions /
+// pickHouseQuestions) miss a near-identical PARAPHRASE: a freshly generated
+// question gets a brand-new id, so the same fact can be re-served weeks apart
+// (observed 2026-06-21 — a "name the 1911 Triangle Shirtwaist factory" question
+// re-served 16 days after the user answered an all-but-identical one; cosine
+// 0.89). Returns the smallest cosine DISTANCE (1 - similarity) between
+// `embedding` and any canonical question the user has already answered correctly
+// (live or catch-up) within `sinceDays`, so the generator can drop candidates
+// that are semantically a repeat. Returns null when the user has no embedded
+// answered history in the window (no comparison possible → never drops). Reuses
+// the same Voyage embeddings the pool dedup already stores on Question.embedding.
+export async function getNearestAnsweredQuestionDistance(
+  userId: string,
+  embedding: number[],
+  sinceDays: number,
+): Promise<number | null> {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+  const distance = cosineDistance(canonicalQuestions.embedding, embedding);
+  const [row] = await db
+    .select({ distance })
+    .from(masteryEvents)
+    .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+        isNotNull(canonicalQuestions.embedding),
+        isNull(canonicalQuestions.deletedAt),
+        gte(masteryEvents.createdAt, since),
+      ),
+    )
+    .orderBy(distance)
+    .limit(1);
+  return row ? Number(row.distance) : null;
+}
+
 // Canonical questions reached socially — a friend's authored question via a
 // feed send or a milestone click-through, a forwarded curated question, a
 // house question — carry NO fact_key, so they never enter the fact-key avoid
