@@ -582,6 +582,13 @@
       "when": 1783641600000,
       "tag": "0082_question_bank_added_at_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1783728000000,
+      "tag": "0083_fk_covering_indexes",
+      "breakpoints": true
     }
   ]
 }

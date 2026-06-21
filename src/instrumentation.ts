@@ -1501,6 +1501,25 @@ export async function register() {
       // UserQuestionBank may not exist yet on a fresh database — migrate()
       // creates it before this migration runs.
     }
+
+    // Migration 0083 adds covering indexes for the cold-path foreign keys the
+    // Supabase advisor flags as unindexed (lint 0001). Pure, idempotent index
+    // additions — a preview/production database that records the migration
+    // without them present must still get them (precedent: 0079, 0082). Each
+    // CREATE INDEX IF NOT EXISTS is a no-op when the index already exists.
+    try {
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "DAILY_REFINE_DECISION_queue_id_idx" ON "DAILY_REFINE_DECISION" ("queue_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "FriendInvitation_inviteeUserId_idx" ON "FriendInvitation" ("inviteeUserId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Friendship_requestedByUserId_idx" ON "Friendship" ("requestedByUserId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "Friendship_removedByUserId_idx" ON "Friendship" ("removedByUserId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "JoshingGameQuestion_questionId_idx" ON "JoshingGameQuestion" ("questionId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "JoshingGameResponse_questionId_idx" ON "JoshingGameResponse" ("questionId")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "SkippedDailyQuestion_question_id_idx" ON "SkippedDailyQuestion" ("question_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "SkippedDailyQuestion_generated_question_id_idx" ON "SkippedDailyQuestion" ("generated_question_id")`);
+    } catch {
+      // These tables may not exist yet on a fresh database — migrate() creates
+      // them (and the same indexes) before/at this migration.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
