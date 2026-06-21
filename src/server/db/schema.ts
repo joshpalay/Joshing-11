@@ -832,6 +832,11 @@ export const skippedDailyQuestions = pgTable(
     index('SkippedDailyQuestion_user_id_question_id_idx').on(table.userId, table.questionId),
     index('SkippedDailyQuestion_user_id_generated_question_id_idx').on(table.userId, table.generatedQuestionId),
     index('SkippedDailyQuestion_queue_id_idx').on(table.queueId),
+    // Standalone covering indexes for the question_id / generated_question_id
+    // FKs (0083 / advisor 0001). The composites above lead with user_id, so they
+    // can't serve a lookup/FK-check on the question columns alone.
+    index('SkippedDailyQuestion_question_id_idx').on(table.questionId),
+    index('SkippedDailyQuestion_generated_question_id_idx').on(table.generatedQuestionId),
   ],
 );
 
@@ -910,6 +915,8 @@ export const dailyRefineDecisions = pgTable(
       table.cooldownUntil,
     ),
     index('DAILY_REFINE_DECISION_uncommitted_idx').on(table.userId, table.committedAt),
+    // Covering index for the queue_id FK (0083 / advisor 0001).
+    index('DAILY_REFINE_DECISION_queue_id_idx').on(table.queueId),
   ],
 );
 
@@ -995,6 +1002,10 @@ export const friendships = pgTable(
     unique('Friendship_userAId_userBId_key').on(table.userAId, table.userBId),
     index('Friendship_userAId_status_idx').on(table.userAId, table.status),
     index('Friendship_userBId_status_idx').on(table.userBId, table.status),
+    // Covering indexes for the requestedByUserId / removedByUserId FKs
+    // (0083 / advisor 0001).
+    index('Friendship_requestedByUserId_idx').on(table.requestedByUserId),
+    index('Friendship_removedByUserId_idx').on(table.removedByUserId),
   ],
 );
 
@@ -1123,6 +1134,10 @@ export const joshingGameQuestions = pgTable(
   (table) => [
     unique('JoshingGameQuestion_gameId_position_key').on(table.gameId, table.position),
     unique('JoshingGameQuestion_gameId_questionId_key').on(table.gameId, table.questionId),
+    // Covering index for the questionId FK (0083 / advisor 0001) — the
+    // (gameId, questionId) unique above leads with gameId, so it can't serve a
+    // lookup on questionId alone.
+    index('JoshingGameQuestion_questionId_idx').on(table.questionId),
   ],
 );
 
@@ -1145,6 +1160,8 @@ export const joshingGameResponses = pgTable(
     unique('JoshingGameResponse_gameId_questionId_userId_key').on(table.gameId, table.questionId, table.userId),
     index('JoshingGameResponse_gameId_userId_idx').on(table.gameId, table.userId),
     index('JoshingGameResponse_userId_idx').on(table.userId),
+    // Covering index for the questionId FK (0083 / advisor 0001).
+    index('JoshingGameResponse_questionId_idx').on(table.questionId),
   ],
 );
 
@@ -1226,6 +1243,8 @@ export const friendInvitations = pgTable(
     uniqueIndex('FriendInvitation_token_key').on(table.token),
     index('FriendInvitation_token_idx').on(table.token),
     index('FriendInvitation_inviterUserId_idx').on(table.inviterUserId),
+    // Covering index for the inviteeUserId FK (0083 / advisor 0001).
+    index('FriendInvitation_inviteeUserId_idx').on(table.inviteeUserId),
     index('FriendInvitation_inviteePhone_idx').on(table.inviteePhone),
     index('FriendInvitation_inviterUserId_inviteePhone_idx').on(table.inviterUserId, table.inviteePhone),
   ],
