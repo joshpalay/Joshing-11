@@ -106,7 +106,6 @@ export function Nav({
   })();
   const hidesNewGameShortcut =
     pathname.startsWith('/daily') ||
-    pathname === '/replay' ||
     pathname.startsWith('/games/') ||
     pathname === '/friends' ||
     isOtherUserProfilePath;
