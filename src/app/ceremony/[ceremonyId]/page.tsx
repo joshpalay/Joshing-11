@@ -361,13 +361,6 @@ function Beat({ beat, mode }: { beat: BeatView; mode?: CeremonyMode }) {
             </div>
           ))}
         </div>
-        <a
-          href="/replay"
-          onClick={(event) => event.stopPropagation()}
-          className="mt-12 inline-block text-sm text-stone-300 underline underline-offset-4 transition hover:text-stone-50"
-        >
-          View all discoveries &rarr;
-        </a>
       </div>
     );
   }
