@@ -23,7 +23,10 @@
 import Link from 'next/link'
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 
-import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
+import type {
+  FirstSessionRecapBeat3,
+  FirstSessionRecapView,
+} from '@/server/daily/first-session-recap'
 
 // Mirrors RoundReminderCard's `titleStyle` so the merged reminder ask reads
 // identically to the standalone opt-in.
@@ -34,6 +37,72 @@ const reminderTitleStyle: CSSProperties = {
   color: '#111111',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
+}
+
+// Beat 3 (social). Pure presentation over the server-computed `beat3` branch:
+// connect a new player to whoever (if anyone) invited them, or — for organic
+// signups — fall back to an invite-a-friend CTA. Styled to match the reminder
+// block below so the two reads as one register.
+function SocialBeat({ beat3 }: { beat3: FirstSessionRecapBeat3 }) {
+  if (beat3.kind === 'inviter_present') {
+    const { inviterName } = beat3
+    return (
+      <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+        <h3 style={reminderTitleStyle}>{inviterName} is already in your game</h3>
+        <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+          Some of the questions in your feed are ones {inviterName} answered —
+          look for the{' '}
+          <span className="font-semibold text-[var(--brand-ink)]">
+            Via {inviterName}
+          </span>{' '}
+          label, and answer one back.
+        </p>
+        <p className="mt-3 text-sm leading-6">
+          <Link
+            href="/#feed"
+            className="text-[var(--brand-link)] underline underline-offset-4"
+          >
+            Go to your feed
+          </Link>
+        </p>
+      </div>
+    )
+  }
+
+  if (beat3.kind === 'inviter_future') {
+    const { inviterName } = beat3
+    return (
+      <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+        <h3 style={reminderTitleStyle}>You&apos;re connected with {inviterName}</h3>
+        <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+          When {inviterName} plays, their questions will land in your feed marked{' '}
+          <span className="font-semibold text-[var(--brand-ink)]">
+            Via {inviterName}
+          </span>
+          .
+        </p>
+      </div>
+    )
+  }
+
+  // no_inviter — copy is DRAFT, pending review (see PR).
+  return (
+    <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+      <h3 style={reminderTitleStyle}>Joshing is better with a friend in it</h3>
+      <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+        Bring someone you like to outsmart — their questions show up in your feed,
+        and yours in theirs.
+      </p>
+      <p className="mt-3 text-sm leading-6">
+        <Link
+          href="/friends"
+          className="text-[var(--brand-link)] underline underline-offset-4"
+        >
+          Invite a friend
+        </Link>
+      </p>
+    </div>
+  )
 }
 
 type EmailState =
@@ -86,6 +155,8 @@ export function FirstSessionPanel({ recap }: { recap: FirstSessionRecapView }) {
         </Link>{' '}
         page.
       </p>
+
+      <SocialBeat beat3={recap.beat3} />
 
       {/* Reminder opt-in, merged into the same card. Email-only, no dismiss. */}
       <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
