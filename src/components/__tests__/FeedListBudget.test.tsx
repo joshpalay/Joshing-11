@@ -48,6 +48,15 @@ vi.mock('@/components/activity/ActivityStreamItem', () => ({
   ),
 }))
 
+// From Friends milestone streaks now render through FromFriendsStreak on the home
+// zones (B-FROMFRIENDS-STREAK-HEADER-01); stub it to a marker so this test
+// exercises the budgeted SECTIONING, not the card internals.
+vi.mock('@/components/feed/FromFriendsStreak', () => ({
+  FromFriendsStreak: ({ item }: { item: { id: string; friendId?: string | null } }) => (
+    <div data-streak={item.id}>streak:{item.id}:{item.friendId ?? 'none'}</div>
+  ),
+}))
+
 vi.mock('@/components/activity/PersonActivityCard', () => ({
   PersonActivityCard: () => <div data-person />,
 }))
@@ -164,7 +173,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('questions your friends created or sent directly to you')
     expect(html).toContain('From Friends')
     expect(html).toContain('4 more from friends →')
-    expect(html).toContain('3 more →')
+    // From Friends overflow counts BUNDLES and reads "{N} more from friends →"
+    // (D-B); both question zones share the phrasing, so anchor on the count.
+    expect(html).toContain('3 more from friends →')
     // The 7-day boundary is folded onto the "From Friends" heading as a quiet
     // "(Past 7 days)" qualifier — stated once, only on that heading. Zone 1
     // (the directed "For you" descriptor) still sits ABOVE it, outside the band.
@@ -181,9 +192,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html.indexOf('Past 7 days')).toBeGreaterThan(html.indexOf('From Friends'))
     expect(html).toContain('href="/for-you"')
     expect(html).toContain('href="/from-friends"')
-    // Served direct cards and playables both rendered.
+    // Served direct cards and playables both rendered (playables now as streaks).
     expect(html).toContain('direct:robyn')
-    expect(html).toContain('activity:p0:josh')
+    expect(html).toContain('streak:p0:josh')
     // Texture row rendered, and NO temporal recency bucket heading (§4 removed).
     expect(html).toContain('activity:t0:tex-friend')
     expect(html).not.toContain('Today')
@@ -279,7 +290,7 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('Past 7 days')
     // From Friends has content → real rows, no honest empty there.
     expect(html).toContain('From Friends')
-    expect(html).toContain('activity:p0:josh')
+    expect(html).toContain('streak:p0:josh')
     expect(html).not.toContain('No friend activity this week')
     // Recent activity is empty-in-window → hidden outright, no honest empty.
     expect(html).not.toContain('Recent activity')

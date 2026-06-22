@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { StreamItem } from '@/lib/activity-stream';
 import { FF, INK, INK2, INK3 } from '@/components/lately/tokens';
 
-import { Line } from './ActivityStreamItem';
+import { Line } from './stream-card-helpers';
 import { ActivityIcon } from './ActivityIcon';
 
 // Width of the shape column (mark 24 + gap 8), so the rolled-up lines indent to
