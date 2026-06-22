@@ -331,7 +331,11 @@ async function readFeedItems(userId: string, source?: ArchiveSource): Promise<Ar
       correctAnswer: question.answerText,
       explanation: questionExplanation(question),
       pointsAwarded: correctEvent ? Number(correctEvent.awardedPoints ?? 0) : 0,
-      answeredAt: (correctEvent?.createdAt ?? feedItem.sourceEventAt).toISOString(),
+      // Prefer the stamped answer time (0085) so a card sent long ago but answered
+      // recently sorts by when it was answered. correctEvent.createdAt is an
+      // equivalent answer time when present; sourceEventAt (send-time) is the
+      // last-resort fallback only for pre-0085 rows with no recoverable answer time.
+      answeredAt: (feedItem.answeredAt ?? correctEvent?.createdAt ?? feedItem.sourceEventAt).toISOString(),
       isInBank: false,
       myRating: null,
       canUseQuestionActions: true,

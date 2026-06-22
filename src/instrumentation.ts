@@ -338,6 +338,23 @@ export async function register() {
       // User / FeedItem may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0085 adds FeedItem.answeredAt — the true answer time the Answered
+    // archive (readFeedItems) sorts on, replacing the sourceEventAt (send-time)
+    // fallback that buried recently-answered cards below the first page. A
+    // preview/production DB that records 0085 without the column present would
+    // break the answer writes (feed/answer, lately/milestone/answer set it) and
+    // the archive read; pre-apply it idempotently (precedent: 0084's viaUserId
+    // guard above). The historical backfill is left to migrate() — it is not
+    // needed for read safety.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "FeedItem"
+          ADD COLUMN IF NOT EXISTS "answeredAt" timestamptz
+      `);
+    } catch {
+      // FeedItem table may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value

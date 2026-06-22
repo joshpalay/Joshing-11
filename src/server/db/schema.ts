@@ -1106,6 +1106,12 @@ export const feedItems = pgTable(
     personalMessage: text('personalMessage'),
     submittedAnswer: text('submittedAnswer'),
     answerResult: text('answerResult').$type<'correct' | 'incorrect'>(),
+    // The time the recipient actually answered this card. Stamped at answer time
+    // (feed/answer, lately/milestone/answer) and used as the answeredAt sort key
+    // in the Answered archive (readFeedItems). Nullable: NULL means not yet
+    // answered, or a pre-0085 answered row with no recoverable answer time — the
+    // archive falls back to sourceEventAt for those.
+    answeredAt: timestamp('answeredAt', { withTimezone: true }),
     pointsAwarded: doublePrecision('pointsAwarded'),
     masteryDelta: jsonb('masteryDelta').$type<Record<string, unknown> | null>(),
     sourceAnswerId: text('sourceAnswerId'),
