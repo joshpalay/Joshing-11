@@ -1,27 +1,29 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-
-import { FromFriendsStreak } from '@/components/feed/FromFriendsStreak'
+import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
+import { formatRelativeTime } from '@/components/feed/visual'
 import type { StreamItem } from '@/lib/activity-stream'
 
-// The full pending-playables queue, answerable in place. Each streak renders
-// through the exact home-zone treatment (B-FROMFRIENDS-STREAK-HEADER-01: a
-// header + per-question answer/dismiss cards in the DirectSentCard register),
-// so the From Friends zone reads identically on Home and on this overflow page.
-// Resolving a question refreshes the router cache so Home recomputes its
-// served top-4 and overflow count on return (D-HOME-PACING-01 §7); the cards
-// themselves stay in place as their in-session spent state.
+// The full From Friends queue, each streak shown as the compact triangle bundle
+// summary (B-FROMFRIENDS-STREAK-PAGE-01) — the exact treatment Home uses — that
+// links into the streak's own page where its questions are answerable. Keeping
+// the overflow list and Home identical means the surface reads the same in both
+// places; the per-streak page is the one place you actually play.
 export function PendingPlayablesList({ items }: { items: StreamItem[] }) {
-  const router = useRouter()
   return (
     <section className="space-y-3">
       {items.map((item) => (
-        <FromFriendsStreak
+        <ActivityStreamItem
           key={item.id}
           item={item}
+          timestamp={formatRelativeTime(item.sortAt)}
+          showTimestamp={false}
           elevated
-          onQuestionResolved={() => router.refresh()}
+          playHref={
+            item.expand?.kind === 'milestone'
+              ? `/from-friends/${encodeURIComponent(item.id)}`
+              : undefined
+          }
         />
       ))}
     </section>
