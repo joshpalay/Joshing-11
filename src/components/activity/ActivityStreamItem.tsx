@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Send } from 'lucide-react';
+import { ChevronDown, ChevronRight, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type CSSProperties, type KeyboardEvent } from 'react';
 
@@ -83,6 +83,7 @@ export function ActivityStreamItem({
   nested = false,
   showTimestamp = true,
   elevated = false,
+  playHref,
   onQuestionResolved,
 }: {
   item: StreamItem;
@@ -100,6 +101,12 @@ export function ActivityStreamItem({
   // page as the thing you can play, while the ambient one-liners stay flat. Off
   // by default (the full /activities log keeps every row flat).
   elevated?: boolean;
+  // When set on a playable milestone bundle (the home From Friends zone + the
+  // /from-friends overflow), the bundle summary becomes a NAVIGATION target: the
+  // whole row links here — the streak's own page (B-FROMFRIENDS-STREAK-PAGE-01) —
+  // instead of expanding its questions inline. Omitted everywhere else (the flat
+  // /activities log keeps the in-place expand).
+  playHref?: string;
   // Fires after a milestone question is resolved in place (answered right or
   // wrong). The pending-playables overflow subpage (B-HOME-OVERFLOW-02 §7)
   // uses it to invalidate the client router cache so Home recomputes its
@@ -126,9 +133,7 @@ export function ActivityStreamItem({
   const [serverAnswered] = useState<Set<string>>(
     () =>
       new Set(
-        (milestoneQuestions ?? [])
-          .filter((q) => q.priorResult !== null)
-          .map((q) => q.questionId),
+        (milestoneQuestions ?? []).filter((q) => q.priorResult !== null).map((q) => q.questionId),
       ),
   );
   // Resolutions captured this session — both correct and "not this time" — keyed
@@ -205,8 +210,12 @@ export function ActivityStreamItem({
   // Matches the FeedCardShell elevated question cards so the two playable
   // surfaces share one "liftable" look. Other activity rows (relationship
   // events, reactions, read-only reveals) stay flat one-liners.
-  const playableCard =
-    elevated && !nested && expandable && expand?.kind === 'milestone';
+  const playableCard = elevated && !nested && expandable && expand?.kind === 'milestone';
+
+  // A playable bundle with a playHref navigates to the streak's page instead of
+  // toggling open inline. (Only playable milestone cards ever navigate; the flat
+  // ambient rows never carry a playHref.)
+  const navigates = Boolean(playHref) && playableCard;
 
   // Only the playable milestone bundles take the elevated cream-card chrome +
   // editorial two-line serif headline on the home feed (the warm fill, light
@@ -225,11 +234,8 @@ export function ActivityStreamItem({
   // actor part off here and render the remainder as the second line. Lines with
   // no leading actor (e.g. "You and Craig both …") fall back to the whole line in
   // the large serif (see the headline render below).
-  const headlineActor =
-    editorialCard && item.line[0]?.t === 'actor' ? item.line[0] : null;
-  const headlinePredicate = headlineActor
-    ? trimLeadingPredicate(item.line.slice(1))
-    : null;
+  const headlineActor = editorialCard && item.line[0]?.t === 'actor' ? item.line[0] : null;
+  const headlinePredicate = headlineActor ? trimLeadingPredicate(item.line.slice(1)) : null;
   // The lower-right affordance is a bare verb that tracks the card's state. The
   // friend's name already headlines the card directly above it, so the link
   // doesn't re-state it — it lands on the action instead. On a playable milestone:
@@ -238,8 +244,7 @@ export function ActivityStreamItem({
   // an expandable texture card (a convergence / send-onward reveal): a quiet
   // "See" → "Close". Non-expandable texture cards carry no affordance row at all
   // (the headline is the whole card).
-  const allAnswered =
-    !!milestoneProgress && milestoneProgress.answered >= milestoneProgress.total;
+  const allAnswered = !!milestoneProgress && milestoneProgress.answered >= milestoneProgress.total;
   const playAffordanceLabel = playableCard
     ? open
       ? 'Close'
@@ -287,143 +292,138 @@ export function ActivityStreamItem({
           // alone.
           { padding: '14px 2px', borderBottom: `1px solid ${RULE}` };
 
-  return (
-    <div id={item.anchorId ?? undefined} style={containerStyle}>
-      <div
-        role={expandable ? 'button' : undefined}
-        tabIndex={expandable ? 0 : undefined}
-        aria-expanded={expandable ? open : undefined}
-        onClick={toggle}
-        onKeyDown={handleKeyDown}
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          cursor: expandable ? 'pointer' : 'default',
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      >
-        {editorialCard ? (
-          // Elevated home card (playable From Friends milestones only): an
-          // editorial two-line headline — the person's NAME in the large serif,
-          // the rest of the sentence in a medium serif below it — with the
-          // "X of Y questions" progress + a Play affordance in the lower-right.
-          // Recent-activity texture rows do NOT take this branch; they render as
-          // flat one-liners below.
-          <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <ActivityIcon spec={iconSpec} seed={item.id} />
-              <div style={{ minWidth: 0, flex: 1 }}>
+  // The tappable header row. When the bundle navigates (playHref), the whole row
+  // is a Link to the streak page; otherwise it's the in-place expand/collapse
+  // button. The inner content is identical either way.
+  const rowInner = (
+    <>
+      {editorialCard ? (
+        // Elevated home card (playable From Friends milestones only): an
+        // editorial two-line headline — the person's NAME in the large serif,
+        // the rest of the sentence in a medium serif below it — with the
+        // "X of Y questions" progress + a Play affordance in the lower-right.
+        // Recent-activity texture rows do NOT take this branch; they render as
+        // flat one-liners below.
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <ActivityIcon spec={iconSpec} seed={item.id} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 22,
+                  lineHeight: 1.15,
+                  letterSpacing: 0.2,
+                  color: INK,
+                }}
+              >
+                {headlineActor ? (
+                  <ActorLink
+                    name={headlineActor.name}
+                    userId={headlineActor.userId}
+                    style={HEADLINE_NAME_STYLE}
+                  />
+                ) : (
+                  <Line parts={item.line} />
+                )}
+              </p>
+              {headlinePredicate && headlinePredicate.length > 0 ? (
                 <p
                   style={{
-                    margin: 0,
+                    margin: '3px 0 0',
                     fontFamily: 'var(--font-serif)',
-                    fontSize: 22,
-                    lineHeight: 1.15,
-                    letterSpacing: 0.2,
-                    color: INK,
+                    fontSize: 16,
+                    lineHeight: 1.4,
+                    color: INK2,
                   }}
                 >
-                  {headlineActor ? (
-                    <ActorLink
-                      name={headlineActor.name}
-                      userId={headlineActor.userId}
-                      style={HEADLINE_NAME_STYLE}
-                    />
-                  ) : (
-                    <Line parts={item.line} />
-                  )}
+                  <Line parts={headlinePredicate} />
                 </p>
-                {headlinePredicate && headlinePredicate.length > 0 ? (
-                  <p
-                    style={{
-                      margin: '3px 0 0',
-                      fontFamily: 'var(--font-serif)',
-                      fontSize: 16,
-                      lineHeight: 1.4,
-                      color: INK2,
-                    }}
-                  >
-                    <Line parts={headlinePredicate} />
-                  </p>
-                ) : null}
-                {milestoneProgress ? (
-                  <p
-                    style={{
-                      margin: '8px 0 0',
-                      fontFamily: FM,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                      color: INK3,
-                    }}
-                  >
-                    {milestoneProgress.total - milestoneProgress.answered} of{' '}
-                    {milestoneProgress.total} questions
-                  </p>
-                ) : null}
-                {/* Texture cards may carry supplementary metadata (a domain, a
+              ) : null}
+              {milestoneProgress ? (
+                <p
+                  style={{
+                    margin: '8px 0 0',
+                    fontFamily: FM,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    color: INK3,
+                  }}
+                >
+                  {milestoneProgress.total - milestoneProgress.answered} of{' '}
+                  {milestoneProgress.total} questions
+                </p>
+              ) : null}
+              {/* Texture cards may carry supplementary metadata (a domain, a
                     quoted question) as a secondLine — kept in its System mono /
                     serif voice below the headline. Milestones set secondLine
                     null, so this never renders on a From Friends card. */}
-                {item.secondLine ? (
-                  <p
-                    style={{
-                      margin: '6px 0 0',
-                      ...(item.secondLineVoice === 'system'
-                        ? {
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: 11,
-                            textTransform: 'uppercase' as const,
-                            letterSpacing: 1,
-                          }
-                        : {
-                            fontFamily: 'var(--font-serif)',
-                            fontSize: 14,
-                          }),
-                      lineHeight: 1.45,
-                      color: INK2,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {item.secondLine}
-                  </p>
-                ) : null}
-              </div>
+              {item.secondLine ? (
+                <p
+                  style={{
+                    margin: '6px 0 0',
+                    ...(item.secondLineVoice === 'system'
+                      ? {
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          textTransform: 'uppercase' as const,
+                          letterSpacing: 1,
+                        }
+                      : {
+                          fontFamily: 'var(--font-serif)',
+                          fontSize: 14,
+                        }),
+                    lineHeight: 1.45,
+                    color: INK2,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {item.secondLine}
+                </p>
+              ) : null}
             </div>
-            {/* Lower-right disclosure affordance. The whole card is the button
+          </div>
+          {/* Lower-right disclosure affordance. The whole card is the button
                 (aria-expanded on the wrapper), so this is a styled label, not a
                 nested button; the disclosure arrow flips as the card opens. Only
                 shown when the card actually reveals something (a playable
                 milestone, or an expandable texture card). */}
-            {showCardAffordance ? (
-              <div
+          {showCardAffordance ? (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginTop: 12,
+              }}
+            >
+              <span
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  marginTop: 12,
+                  gap: 5,
+                  // Same text treatment as the "Answer →" feed action: the
+                  // sans (Interface voice) at 14px in the link slate, underlined,
+                  // matching the Today's Five card link. A tappable affordance
+                  // never takes the Editorial serif.
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: 'var(--brand-link)',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 4,
                 }}
               >
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    // Same text treatment as the "Answer →" feed action: the
-                    // sans (Interface voice) at 14px in the link slate, underlined,
-                    // matching the Today's Five card link. A tappable affordance
-                    // never takes the Editorial serif.
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: 14,
-                    fontWeight: 500,
-                    color: 'var(--brand-link)',
-                    textDecoration: 'underline',
-                    textUnderlineOffset: 4,
-                  }}
-                >
-                  {playAffordanceLabel}
+                {playAffordanceLabel}
+                {navigates ? (
+                  // Navigating summary: a static right chevron (goes to a page),
+                  // never the rotating disclosure caret of an inline expander.
+                  <ChevronRight size={16} aria-hidden />
+                ) : (
                   <ChevronDown
                     size={16}
                     aria-hidden
@@ -432,97 +432,132 @@ export function ActivityStreamItem({
                       transform: open ? 'rotate(180deg)' : 'none',
                     }}
                   />
-                </span>
-              </div>
+                )}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          {/* Nested rows carry no shape — the per-person heading holds the one
+            diamond; everything beneath it is a plain indented line. */}
+          {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} open={opened} />}
+
+          <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 15,
+                lineHeight: 1.5,
+                letterSpacing: 0.2,
+                color: INK,
+              }}
+            >
+              {/* `plain` keeps the whole one-liner in the row's sans face — no
+                serif category run — so the ambient stream reads in one voice. */}
+              <Line parts={item.line} plain />
+            </p>
+            {item.secondLine ? (
+              <p
+                style={{
+                  margin: '2px 0 0',
+                  // Domain/label metadata stays System mono with the caps +
+                  // tracking label signature (§2); everything else stays in the
+                  // row's sans face (no serif), so the stream reads in one voice.
+                  ...(item.secondLineVoice === 'system'
+                    ? {
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        textTransform: 'uppercase' as const,
+                        letterSpacing: 1,
+                      }
+                    : {
+                        fontSize: 14,
+                      }),
+                  lineHeight: 1.45,
+                  color: INK2,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                {item.secondLine}
+              </p>
+            ) : null}
+            {milestoneProgress ? (
+              <p
+                style={{
+                  margin: '4px 0 0',
+                  fontFamily: FM,
+                  fontSize: 10,
+                  letterSpacing: 1,
+                  color: INK3,
+                }}
+              >
+                {milestoneProgress.answered} of {milestoneProgress.total} questions
+              </p>
             ) : null}
           </div>
-        ) : (
-          <>
-        {/* Nested rows carry no shape — the per-person heading holds the one
-            diamond; everything beneath it is a plain indented line. */}
-        {nested ? null : <ActivityIcon spec={iconSpec} seed={item.id} open={opened} />}
 
-        <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
-          <p
+          <div
             style={{
-              margin: 0,
-              fontSize: 15,
-              lineHeight: 1.5,
-              letterSpacing: 0.2,
-              color: INK,
+              flexShrink: 0,
+              alignSelf: 'stretch',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+              gap: 4,
             }}
           >
-            {/* `plain` keeps the whole one-liner in the row's sans face — no
-                serif category run — so the ambient stream reads in one voice. */}
-            <Line parts={item.line} plain />
-          </p>
-          {item.secondLine ? (
-            <p
-              style={{
-                margin: '2px 0 0',
-                // Domain/label metadata stays System mono with the caps +
-                // tracking label signature (§2); everything else stays in the
-                // row's sans face (no serif), so the stream reads in one voice.
-                ...(item.secondLineVoice === 'system'
-                  ? {
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      textTransform: 'uppercase' as const,
-                      letterSpacing: 1,
-                    }
-                  : {
-                      fontSize: 14,
-                    }),
-                lineHeight: 1.45,
-                color: INK2,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {item.secondLine}
-            </p>
-          ) : null}
-          {milestoneProgress ? (
-            <p
-              style={{
-                margin: '4px 0 0',
-                fontFamily: FM,
-                fontSize: 10,
-                letterSpacing: 1,
-                color: INK3,
-              }}
-            >
-              {milestoneProgress.answered} of {milestoneProgress.total} questions
-            </p>
-          ) : null}
-        </div>
+            {/* Metadata recedes to near-invisible (v2 §4): quiet, small timestamp.
+              Hidden entirely on the home feed (showTimestamp=false). */}
+            {showTimestamp ? (
+              <span style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap' }}>
+                {timestamp}
+              </span>
+            ) : null}
+            {/* No disclosure chevron — the whole row is the button (aria-expanded
+              above); the ambient one-liners read clean on the right edge. */}
+          </div>
+        </>
+      )}
+    </>
+  );
 
-        <div
+  return (
+    <div id={item.anchorId ?? undefined} style={containerStyle}>
+      {navigates ? (
+        <Link
+          href={playHref!}
           style={{
-            flexShrink: 0,
-            alignSelf: 'stretch',
             display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            justifyContent: 'space-between',
-            gap: 4,
+            alignItems: 'flex-start',
+            textDecoration: 'none',
+            color: 'inherit',
+            WebkitTapHighlightColor: 'transparent',
           }}
         >
-          {/* Metadata recedes to near-invisible (v2 §4): quiet, small timestamp.
-              Hidden entirely on the home feed (showTimestamp=false). */}
-          {showTimestamp ? (
-            <span style={{ fontSize: 12, color: INK3, opacity: 0.6, whiteSpace: 'nowrap' }}>
-              {timestamp}
-            </span>
-          ) : null}
-          {/* No disclosure chevron — the whole row is the button (aria-expanded
-              above); the ambient one-liners read clean on the right edge. */}
+          {rowInner}
+        </Link>
+      ) : (
+        <div
+          role={expandable ? 'button' : undefined}
+          tabIndex={expandable ? 0 : undefined}
+          aria-expanded={expandable ? open : undefined}
+          onClick={toggle}
+          onKeyDown={handleKeyDown}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            cursor: expandable ? 'pointer' : 'default',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          {rowInner}
         </div>
-          </>
-        )}
-      </div>
+      )}
 
       {item.action ? <ItemAction action={item.action} /> : null}
 
@@ -748,10 +783,7 @@ export function ConvergenceExpansion({
       }}
     >
       {expand.questions.map((q) => (
-        <div
-          key={q.questionId}
-          style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}
-        >
+        <div key={q.questionId} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <p
             style={{
               margin: 0,

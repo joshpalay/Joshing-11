@@ -42,18 +42,13 @@ vi.mock('@/components/feed', () => ({
   visibleFeedCategory: (c: string | null | undefined) => c ?? null,
 }))
 
+// From Friends milestone streaks render as a compact bundle summary through
+// ActivityStreamItem on the home zone now (B-FROMFRIENDS-STREAK-PAGE-01: tap to
+// open the streak's own page); stub it to a marker so this test exercises the
+// budgeted SECTIONING, not the card internals.
 vi.mock('@/components/activity/ActivityStreamItem', () => ({
   ActivityStreamItem: ({ item }: { item: { id: string; friendId?: string | null } }) => (
     <div data-activity={item.id}>activity:{item.id}:{item.friendId ?? 'none'}</div>
-  ),
-}))
-
-// From Friends milestone streaks now render through FromFriendsStreak on the home
-// zones (B-FROMFRIENDS-STREAK-HEADER-01); stub it to a marker so this test
-// exercises the budgeted SECTIONING, not the card internals.
-vi.mock('@/components/feed/FromFriendsStreak', () => ({
-  FromFriendsStreak: ({ item }: { item: { id: string; friendId?: string | null } }) => (
-    <div data-streak={item.id}>streak:{item.id}:{item.friendId ?? 'none'}</div>
   ),
 }))
 
@@ -183,9 +178,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html.match(/Past 7 days/g) ?? []).toHaveLength(1)
     expect(html).toContain('Recent activity')
     // From Friends is promoted to a peer of "For you" and carries a descriptive
-    // subtitle beneath its heading — it names the per-card answer/dismiss model,
-    // not a single "Play" (Phase 4).
-    expect(html).toContain('Answer or pass — each question stands on its own')
+    // subtitle beneath its heading — it now names the tap-to-open model
+    // (B-FROMFRIENDS-STREAK-PAGE-01), not inline answering.
+    expect(html).toContain('Tap a streak to play your friend')
     expect(html.indexOf('questions your friends created or sent directly to you')).toBeLessThan(
       html.indexOf('Past 7 days'),
     )
@@ -193,9 +188,10 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html.indexOf('Past 7 days')).toBeGreaterThan(html.indexOf('From Friends'))
     expect(html).toContain('href="/for-you"')
     expect(html).toContain('href="/from-friends"')
-    // Served direct cards and playables both rendered (playables now as streaks).
+    // Served direct cards and playables both rendered (playables now render as
+    // compact bundle summaries via the ActivityStreamItem marker).
     expect(html).toContain('direct:robyn')
-    expect(html).toContain('streak:p0:josh')
+    expect(html).toContain('activity:p0:josh')
     // Texture row rendered, and NO temporal recency bucket heading (§4 removed).
     expect(html).toContain('activity:t0:tex-friend')
     expect(html).not.toContain('Today')
@@ -291,7 +287,7 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html).toContain('Past 7 days')
     // From Friends has content → real rows, no honest empty there.
     expect(html).toContain('From Friends')
-    expect(html).toContain('streak:p0:josh')
+    expect(html).toContain('activity:p0:josh')
     expect(html).not.toContain('No friend activity this week')
     // Recent activity is empty-in-window → hidden outright, no honest empty.
     expect(html).not.toContain('Recent activity')

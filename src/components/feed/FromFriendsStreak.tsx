@@ -46,10 +46,15 @@ const CARD_INDENT = 20;
 export function FromFriendsStreak({
   item,
   elevated = false,
+  headerless = false,
   onQuestionResolved,
 }: {
   item: StreamItem;
   elevated?: boolean;
+  // On the streak's own page (B-FROMFRIENDS-STREAK-PAGE-01) the page header
+  // already names the friend + categories, so the cards render BARE: no internal
+  // streak header, no per-card "via {friend}'s streak" line, no indent.
+  headerless?: boolean;
   // Fires after a card is answered in place. The /from-friends overflow subpage
   // (B-HOME-OVERFLOW-02 §7) uses it to refresh the router cache so Home recomputes
   // its served window on return; Home itself omits it.
@@ -81,7 +86,11 @@ export function FromFriendsStreak({
   // lone-question bundle stands alone with the compact "via {friend}'s streak"
   // line instead. Keyed on the original size so the header doesn't flip to the
   // via-line mid-session as questions resolve away.
-  const showHeader = questions.length >= 2;
+  const showHeader = !headerless && questions.length >= 2;
+  // The per-card "via {friend}'s streak" line stands in for the header on a
+  // single-question bundle — but never in headerless (page) mode, where the page
+  // header carries attribution for the whole streak.
+  const showViaLine = !headerless && !showHeader;
 
   const cards = visible.map((q) => (
     <StreakQuestionCard
@@ -89,7 +98,7 @@ export function FromFriendsStreak({
       question={q}
       friendName={expand.friendName}
       friendId={expand.friendId}
-      showViaLine={!showHeader}
+      showViaLine={showViaLine}
       elevated={elevated}
       resolved={isResolved(q.questionId)}
       resolution={resolutions.get(q.questionId) ?? null}

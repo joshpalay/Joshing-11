@@ -26,7 +26,6 @@ import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
-import { FromFriendsStreak } from '@/components/feed/FromFriendsStreak'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
 import { EditorialFeature } from '@/components/feed/EditorialFeature'
@@ -1760,18 +1759,21 @@ function FeedListContent({
       if (embed?.kind === 'recently_expanding') {
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
-      // From Friends milestone streaks render as a header + per-question
-      // answer/dismiss cards (B-FROMFRIENDS-STREAK-HEADER-01) on the home zones
-      // (Home + the /from-friends overflow, both `homeZoneCards`). The flat
-      // /activities log keeps the collapsed one-liner bundle via
-      // ActivityStreamItem below. Server budget is unchanged — whole streaks
-      // only, never split.
+      // From Friends milestone streaks render as a compact triangle bundle
+      // SUMMARY on the home zone (B-FROMFRIENDS-STREAK-PAGE-01): tapping opens the
+      // streak's own page (/from-friends/[id]) — where the questions render in the
+      // full answer/dismiss treatment — rather than expanding inline, so the home
+      // zone stays glanceable. The flat /activities log keeps the in-place expand
+      // (no playHref). Server budget is unchanged — whole streaks only.
       if (row.item.expand?.kind === 'milestone' && homeZoneCards) {
         return (
-          <FromFriendsStreak
+          <ActivityStreamItem
             key={`ff-${row.item.id}`}
             item={row.item}
-            elevated={homeZoneCards}
+            timestamp={formatRelativeTime(row.item.sortAt)}
+            showTimestamp={false}
+            elevated
+            playHref={`/from-friends/${encodeURIComponent(row.item.id)}`}
           />
         )
       }
@@ -2112,7 +2114,7 @@ function FeedListContent({
                     unifiedHome={unifiedHome}
                     prominent
                     windowLabel={bandLabelVisible && bandHasContent ? 'Past 7 days' : undefined}
-                    subtitle="Answer or pass — each question stands on its own."
+                    subtitle="Tap a streak to play your friend's questions."
                   >
                     From Friends
                   </FeedSectionHeading>

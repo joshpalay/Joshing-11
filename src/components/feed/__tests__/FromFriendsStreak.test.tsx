@@ -85,6 +85,30 @@ describe('FromFriendsStreak — header-presence fork (D-C)', () => {
   });
 });
 
+describe('FromFriendsStreak — headerless (streak page) mode', () => {
+  it('drops the streak header AND the per-card via line, rendering bare cards', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak item={streakItem([q('a'), q('b')])} headerless />,
+    );
+    // The page header carries attribution, so the component renders neither the
+    // internal streak header nor a per-card "via {friend}'s streak" line.
+    expect(html).not.toContain('has been on a tear through');
+    expect(html).not.toContain('via ');
+    // The answerable cards (and their category eyebrows) still render.
+    expect(answerCardCount(html)).toBe(2);
+    expect(html).toContain('Question a');
+    expect(html).toContain('Tennis Fundamentals');
+  });
+
+  it('drops the via line for a lone-question bundle too', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak item={streakItem([q('solo')])} headerless />,
+    );
+    expect(html).not.toContain('via ');
+    expect(answerCardCount(html)).toBe(1);
+  });
+});
+
 describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', () => {
   it('removes a correctly-answered question and leaves the rest answerable', () => {
     const html = renderToStaticMarkup(

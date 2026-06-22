@@ -42,18 +42,12 @@ vi.mock('@/components/feed', () => ({
   visibleFeedCategory: (c: string | null | undefined) => c ?? null,
 }))
 
+// From Friends milestone streaks render as a compact bundle summary through
+// ActivityStreamItem on the home zone (B-FROMFRIENDS-STREAK-PAGE-01); stub it to
+// a marker so this round-trip asserts the windowing/sectioning, not the internals.
 vi.mock('@/components/activity/ActivityStreamItem', () => ({
   ActivityStreamItem: ({ item }: { item: { id: string; friendId?: string | null } }) => (
     <div data-activity={item.id}>activity:{item.id}:{item.friendId ?? 'none'}</div>
-  ),
-}))
-
-// From Friends milestone streaks render through FromFriendsStreak on the home
-// zones (B-FROMFRIENDS-STREAK-HEADER-01); stub it to a marker so this round-trip
-// asserts the windowing/sectioning, not the per-card internals.
-vi.mock('@/components/feed/FromFriendsStreak', () => ({
-  FromFriendsStreak: ({ item }: { item: { id: string; friendId?: string | null } }) => (
-    <div data-streak={item.id}>streak:{item.id}:{item.friendId ?? 'none'}</div>
   ),
 }))
 
@@ -179,20 +173,20 @@ describe('overflow subpages — §7 state sync (Home is a window onto the pendin
     const pending = [0, 1, 2, 3, 4, 5].map((i) => bundle(i, [null]))
 
     const before = renderHome([], pending)
-    expect(before).toContain('streak:p0:friend0')
-    expect(before).toContain('streak:p3:friend3')
-    expect(before).not.toContain('streak:p4:friend4') // beyond the served window
+    expect(before).toContain('activity:p0:friend0')
+    expect(before).toContain('activity:p3:friend3')
+    expect(before).not.toContain('activity:p4:friend4') // beyond the served window
     expect(before).toContain('2 more from friends →')
     expect(before).toContain('href="/from-friends"')
 
     // The subpage answer records the viewer's result on p0's last open question.
-    // Unlike the old pending-queue, the bundle does NOT leave — it stays as a
-    // spent card in the same slot, and the overflow count is unchanged.
+    // Unlike the old pending-queue, the bundle does NOT leave the served window —
+    // it stays in the same slot, and the overflow count is unchanged.
     const afterAnswer = [bundle(0, ['correct']), ...pending.slice(1)]
 
     const after = renderHome([], afterAnswer)
-    expect(after).toContain('streak:p0:friend0') // still here (now spent)
-    expect(after).not.toContain('streak:p4:friend4') // still beyond the served window
+    expect(after).toContain('activity:p0:friend0') // still here
+    expect(after).not.toContain('activity:p4:friend4') // still beyond the served window
     expect(after).toContain('2 more from friends →') // count unchanged — nothing was consumed
   })
 })
