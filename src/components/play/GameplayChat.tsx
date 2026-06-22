@@ -9,6 +9,7 @@ import { answerHeadingStyle } from '@/components/answer-heading';
 import { firstSentence } from '@/lib/first-sentence';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { ThreadCard } from '@/components/play/ThreadCard';
+import { QuestionNumberMarker } from '@/components/play/QuestionNumberMarker';
 import { SessionCloseMessage } from '@/components/play/SessionCloseMessage';
 import { NewTerritoryUndo } from '@/components/feed/NewTerritoryUndo';
 import {
@@ -65,6 +66,13 @@ export type ChatMessage =
       isNew?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
+      /**
+       * B-GAMEPLAY-QUESTION-NUMBER-BOX-01: the editorial number marker shown in
+       * the gutter above the card. `value` is the 1-based core question number
+       * (1–5); `bonus` renders `✦` instead (additive, never numbered). Omit to
+       * render no marker (e.g. non-Daily-Five surfaces).
+       */
+      numberMarker?: { value: number; bonus: boolean } | null;
     }
   | { id: string; kind: 'dismiss_notice'; questionText: string; onUndo: () => Promise<void> }
   | { id: string; kind: 'user'; text: string }
@@ -356,6 +364,7 @@ function QuestionRow({
   presenceSourceName = null,
   presenceSourceExtraCount = 0,
   isNew = false,
+  numberMarker = null,
   onGiveUp,
   giveUpDisabled = false,
   onDismiss,
@@ -364,6 +373,7 @@ function QuestionRow({
   muteDisabled = false,
 }: {
   subhead?: string | null;
+  numberMarker?: { value: number; bonus: boolean } | null;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
@@ -401,6 +411,16 @@ function QuestionRow({
           : undefined
       }
     >
+      {numberMarker ? (
+        // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: editorial number marker in the
+        // gutter above the card — left-aligned, ~6px inset, ~10px gap to the
+        // card (8px here + the column's 2px gap). Positional only; it persists
+        // unchanged after the question is answered (F2) and never reflects
+        // result state.
+        <div style={{ paddingLeft: '6px', marginBottom: '8px' }}>
+          <QuestionNumberMarker value={numberMarker.value} bonus={numberMarker.bonus} />
+        </div>
+      ) : null}
       <div
         style={{
           alignSelf: 'flex-start',
@@ -1505,6 +1525,7 @@ export function GameplayChatThread({
                 presenceSourceExtraCount={m.presenceSourceExtraCount}
                 isNew={m.isNew}
                 subhead={m.subhead}
+                numberMarker={m.numberMarker}
                 badges={m.badges}
                 onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
                 giveUpDisabled={giveUpDisabled}

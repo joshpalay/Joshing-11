@@ -53,11 +53,11 @@ const boxBaseStyle: CSSProperties = {
   // tokens; color-agnostic by design.
   background: 'var(--ink)',
   color: 'var(--primary-foreground)',
-  // Soft drop so the box lifts off the triangle pattern. FLAG: no shadow token
-  // matches this strong-but-soft register (the existing --shadow-* tiers top out
-  // at ~0.1 opacity, too faint to clear the dense pattern). Inline rgba (not a
-  // hex literal) per the surrounding GameplayChat cards.
-  boxShadow: '0 3px 10px rgba(0, 0, 0, 0.35)',
+  // Drop shadow so the box lifts off the dense triangle pattern. Uses the
+  // existing --shadow-overlay token (the heaviest elevation register — modals/
+  // overlays) rather than a one-off rgba: no new color is introduced, and it is
+  // the strongest lift available from the established tokens.
+  boxShadow: 'var(--shadow-overlay)',
   fontFamily: 'var(--font-serif)',
   fontWeight: 600,
   lineHeight: 1,
