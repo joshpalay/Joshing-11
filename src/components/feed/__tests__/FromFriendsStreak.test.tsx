@@ -85,16 +85,37 @@ describe('FromFriendsStreak — header-presence fork (D-C)', () => {
   });
 });
 
-describe('FromFriendsStreak — per-card spent state (Phase 2)', () => {
-  it('renders a seeded (prior-result) card as spent and leaves the others answerable', () => {
+describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', () => {
+  it('removes a correctly-answered question and leaves the rest answerable', () => {
     const html = renderToStaticMarkup(
       <FromFriendsStreak item={streakItem([q('done', { priorResult: 'correct' }), q('fresh')])} />,
     );
-    // The settled card reads as spent ("Correct"), not as an answer card; only
-    // the fresh question keeps its Answer button. Resolving one card never
-    // collapses the others.
-    expect(html).toContain('Correct');
+    // New paradigm: a correct answer drops out of the streak entirely.
+    expect(html).not.toContain('Question done');
+    expect(html).toContain('Question fresh');
     expect(answerCardCount(html)).toBe(1);
+  });
+
+  it('keeps an incorrectly-answered question as a spent "Not this time" card', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([q('missed', { priorResult: 'incorrect' }), q('fresh')])}
+      />,
+    );
+    // A miss stays visible (spent), only the fresh one is still answerable.
+    expect(html).toContain('Not this time');
+    expect(html).toContain('Question missed');
+    expect(answerCardCount(html)).toBe(1);
+  });
+
+  it('renders nothing once every question is already correct', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([q('a', { priorResult: 'correct' }), q('b', { priorResult: 'correct' })])}
+      />,
+    );
+    // The whole streak (header included) disappears when nothing's left to show.
+    expect(html).toBe('');
   });
 });
 
