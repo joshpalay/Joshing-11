@@ -37,6 +37,10 @@ const feedItemCompatibilityColumns = {
   sourceType: feedItems.sourceType,
   sourceUserId: feedItems.sourceUserId,
   sourceResult: feedItems.sourceResult,
+  // D-4 via-attribution (0084). NULL in the compatibility projection so a
+  // preview/prod DB that hasn't applied 0084 yet still reads cleanly (mirrors
+  // sourceAnswerId below); the boot guard backfills the real column.
+  viaUserId: sql<string | null>`NULL`.as('viaUserId'),
   sourceEventAt: feedItems.sourceEventAt,
   personalMessage: feedItems.personalMessage,
   submittedAnswer: feedItems.submittedAnswer,
@@ -53,7 +57,7 @@ function isMissingOptionalFeedColumn(error: unknown): boolean {
   if (pgErrorCode(error) !== '42703') return false;
 
   const message = pgErrorMessage(error) ?? (error instanceof Error ? error.message : String(error));
-  return ['answerResult', 'pointsAwarded', 'masteryDelta', 'sourceAnswerId'].some((column) =>
+  return ['answerResult', 'pointsAwarded', 'masteryDelta', 'sourceAnswerId', 'viaUserId'].some((column) =>
     message.includes(column),
   );
 }

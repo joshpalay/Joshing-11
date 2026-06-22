@@ -129,11 +129,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // D-4 via-attribution (two-hop relay). Stamp the user THIS sender (the
+  // forwarder) received this question from, so the downstream recipient can
+  // discover them ("via {source}"). It's the sourceUserId of the forwarder's
+  // own inbound forward row for this question — NOT propagated from that row's
+  // own viaUserId, so the lookback is capped at exactly one hop above the
+  // forwarder. NULL when the sender authored it or got it organically (no
+  // inbound forward). Earliest inbound row wins (the forwarder's true entry
+  // point). Null it out if the source is the recipient themselves (a "via you"
+  // is pointless). See the D-4 amendment in PRD-D-4-…-SPEC.md.
+  const [inboundForward] = await db
+    .select({ sourceUserId: feedItems.sourceUserId })
+    .from(feedItems)
+    .where(and(
+      eq(feedItems.recipientUserId, session.userId),
+      eq(feedItems.questionId, sendableQuestionId!),
+      eq(feedItems.sourceType, DIRECT_SENT_FEED_SOURCE_TYPE),
+    ))
+    .orderBy(feedItems.sourceEventAt)
+    .limit(1);
+  const viaUserId =
+    inboundForward && inboundForward.sourceUserId !== parsed.recipientUserId
+      ? inboundForward.sourceUserId
+      : null;
+
   const created = await createFeedItem({
     recipientUserId: parsed.recipientUserId,
     questionId: sendableQuestionId!,
     sourceType: DIRECT_SENT_FEED_SOURCE_TYPE,
     sourceUserId: session.userId,
+    viaUserId,
     sourceEventAt: new Date(),
     personalMessage: parsed.personalMessage,
     state: 'active',
