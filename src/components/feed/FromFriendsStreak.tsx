@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 
-import { ActorLink, Line, QuestionProvenance } from '@/components/activity/stream-card-helpers';
+import {
+  ActorLink,
+  Line,
+  QuestionProvenance,
+  questionProvenance,
+} from '@/components/activity/stream-card-helpers';
 import { useMilestoneAnswer } from '@/components/activity/use-milestone-answer';
 import { FF, FM, FS, INK, INK2, INK3 } from '@/components/lately/tokens';
 import type { StreamItem, StreamQuestion } from '@/lib/activity-stream';
@@ -17,6 +22,11 @@ import { useStreakResolutions, type StreakResolution } from './use-streak-resolu
 // pulls from the established category-color system (colorForCategory → the
 // --cat-* / portrait scale the feed already uses), so no hex is hand-picked here.
 const TEAL = 'var(--tri-darkteal)';
+
+// The card stack indents under the streak header so the cards read as children
+// of it. Aligns the cards' left edge with the header TEXT (past the header's
+// hourglass mark + gap), the way an expansion sits under its row.
+const CARD_INDENT = 20;
 
 // B-FROMFRIENDS-STREAK-HEADER-01 — bundle-as-header, cards-as-children.
 //
@@ -55,26 +65,53 @@ export function FromFriendsStreak({
 
   if (!expand || expand.kind !== 'milestone' || questions.length === 0) return null;
 
-  // D-C: ≥2 questions get the streak header; a lone question stands alone and
-  // carries the compact "via {friend}'s streak" line on its card instead.
+  // New paradigm: a question the viewer has gotten CORRECT drops out of the
+  // streak entirely (server-prior or in-session) — "I got it, I don't need to
+  // see it again." A miss stays as a spent card; an unanswered one stays
+  // answerable. When nothing's left to show, the whole streak (header included)
+  // disappears.
+  const answeredCorrect = (q: StreamQuestion): boolean => {
+    const r = resolutions.get(q.questionId);
+    return r ? r.isCorrect : q.priorResult === 'correct';
+  };
+  const visible = questions.filter((q) => !answeredCorrect(q));
+  if (visible.length === 0) return null;
+
+  // D-C: a streak whose ORIGINAL bundle holds ≥2 questions gets the header; a
+  // lone-question bundle stands alone with the compact "via {friend}'s streak"
+  // line instead. Keyed on the original size so the header doesn't flip to the
+  // via-line mid-session as questions resolve away.
   const showHeader = questions.length >= 2;
+
+  const cards = visible.map((q) => (
+    <StreakQuestionCard
+      key={q.questionId}
+      question={q}
+      friendName={expand.friendName}
+      friendId={expand.friendId}
+      showViaLine={!showHeader}
+      elevated={elevated}
+      resolved={isResolved(q.questionId)}
+      resolution={resolutions.get(q.questionId) ?? null}
+      onResolved={resolve}
+    />
+  ));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {showHeader ? <StreakHeader item={item} /> : null}
-      {questions.map((q) => (
-        <StreakQuestionCard
-          key={q.questionId}
-          question={q}
-          friendName={expand.friendName}
-          friendId={expand.friendId}
-          showViaLine={!showHeader}
-          elevated={elevated}
-          resolved={isResolved(q.questionId)}
-          resolution={resolutions.get(q.questionId) ?? null}
-          onResolved={resolve}
-        />
-      ))}
+      {/* Indent the card stack under the header so the cards read as its
+          children (request: "look like they're under the Jaime heading"). */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          marginLeft: showHeader ? CARD_INDENT : 0,
+        }}
+      >
+        {cards}
+      </div>
     </div>
   );
 }
@@ -181,6 +218,7 @@ function StreakQuestionCard({
   const [passed, setPassed] = useState(false);
 
   const category = question.domain?.trim() || null;
+  const hasProvenance = questionProvenance(question) !== null;
 
   if (passed && !resolved) {
     return (
@@ -227,16 +265,23 @@ function StreakQuestionCard({
           </div>
         ) : null}
 
-        {category ? (
-          <div style={{ marginBottom: 10 }}>
-            <CategoryLabel category={category} />
+        {/* Category eyebrow with the authorship marker on the SAME row (right-
+            aligned) to save vertical space. D-D (canon): house/LLM authorship is
+            marked PRE-answer; human shows nothing, never a generic "A friend". */}
+        {category || hasProvenance ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginBottom: 10,
+            }}
+          >
+            {category ? <CategoryLabel category={category} /> : <span />}
+            {hasProvenance ? <QuestionProvenance q={question} style={{ margin: 0 }} /> : null}
           </div>
         ) : null}
-
-        {/* D-D (canon): honest authorship PRE-answer — house/LLM marked, human
-            shows nothing, never a generic "A friend" fallback. Self-guards to
-            null when no marker is needed. */}
-        <QuestionProvenance q={question} style={{ margin: '0 0 10px' }} />
 
         <p
           style={{
