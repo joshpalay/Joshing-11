@@ -64,11 +64,14 @@ export default async function Home() {
             cancels the main's px-4 so its edges line up with the top band's
             inset-x-0 edges), and the clusters hang from those left/right edges,
             pointing inward. Capped to the top region (h-[760px] +
-            overflow-hidden) so none fall beside or below Recent activity. Right
-            copy mirrored. */}
+            overflow-hidden) so none fall beside or below Recent activity. The
+            whole layer is mirrored (-scale-x-100) so the yellow SIDESQ motif
+            sits on the RIGHT and the DUO on the left — the symmetric -left-4
+            /-right-4 insets make the flip a clean swap that keeps both clusters
+            pointing inward. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[760px] overflow-hidden"
+          className="pointer-events-none absolute top-0 -left-4 -right-4 -z-10 h-[760px] -scale-x-100 overflow-hidden"
         >
           {/* One cluster on the left and one on the right, at different heights
               (not mirrored pairs) — a single module per side, sat in the open
