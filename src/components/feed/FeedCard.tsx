@@ -26,6 +26,12 @@ type FeedCardProps = {
    * Answer action. Distinct from the card's own attribution (who sent/authored).
    */
   viaAttribution?: ReactNode
+  /**
+   * D-4 via-attribution: the "by {author}" / "via {source}" stranger-discovery
+   * affordance, rendered just under the card's byline. Distinct from
+   * viaAttribution (who answered) — this names who wrote it / who it came via.
+   */
+  discoveryAttribution?: ReactNode
   dimQuestion?: boolean
   /** Tier 1 "playable" lift on the unified home feed. Forwarded to FeedCardShell. */
   elevated?: boolean
@@ -70,6 +76,7 @@ export function FeedCard({
   headerContent,
   verb,
   viaAttribution,
+  discoveryAttribution,
   dimQuestion,
   elevated,
 }: FeedCardProps) {
@@ -141,6 +148,8 @@ export function FeedCard({
           </div>
           {overflow ? <div className="shrink-0">{overflow}</div> : null}
         </div>
+
+        {discoveryAttribution ? <div className="mt-1.5">{discoveryAttribution}</div> : null}
 
         <QuestionText question={item.question} dim={dimQuestion} />
 

@@ -502,6 +502,9 @@ export default function DailyPage() {
           creatorName: null,
           presenceSourceName: getSlotPresence(slot)?.name ?? null,
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
+          // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
+          // is 0-based; bonus is additive and renders ✦, never a numeral).
+          numberMarker: { value: slot.slot_index + 1, bonus: isBonusSlot(slot) },
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -568,6 +571,9 @@ export default function DailyPage() {
           presenceSourceName: getSlotPresence(slot)?.name ?? null,
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
           isNew: true,
+          // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
+          // is 0-based; bonus is additive and renders ✦, never a numeral).
+          numberMarker: { value: slot.slot_index + 1, bonus: isBonusSlot(slot) },
           badges: questionBadges(slot),
         });
         if (submitting && answer.trim()) {

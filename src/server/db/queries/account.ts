@@ -459,6 +459,24 @@ export async function getNicheMatchDiscoverable(
   return new Set(rows.map((r) => r.id));
 }
 
+// Batched lookup of the forward-relay discovery opt-in flag (D-4 via-attribution).
+// Returns the subset of the supplied ids whose discoverableByForward is currently
+// true. Sibling to getNicheMatchDiscoverable — kept separate so the "via {source}"
+// forward-relay exposure can be gated independently of niche-match. Single query.
+export async function getForwardDiscoverable(
+  userIds: string[],
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(
+      inArray(users.id, userIds),
+      eq(users.discoverableByForward, true),
+    ));
+  return new Set(rows.map((r) => r.id));
+}
+
 // Builds a parenthesized SQL value list for `… in (…)`. Empty → `(null)`, which
 // matches no rows (`x in (null)` is never true), so callers can use it
 // unconditionally without a separate empty-set branch.

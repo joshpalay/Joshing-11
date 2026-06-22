@@ -13,6 +13,7 @@ import {
   FriendAddedCard,
   FriendLikedCard,
   ViaAttribution,
+  DiscoveryAttribution,
   visibleFeedCategory,
   type AnsweredByYouFeedItem,
   type DirectSentFeedItem,
@@ -20,6 +21,7 @@ import {
   type FriendAddedFeedItem,
   type FriendLikedFeedItem,
   type ViaAnswerer,
+  type DiscoveryPerson,
 } from '@/components/feed'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
 import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
@@ -87,6 +89,12 @@ type FeedApiItem = {
   // A distinct field from friend_results (which the answered-card comparison
   // copy reads) so the two can't collide.
   via_answerers?: ViaAnswerer[] | null
+  // D-4 via-attribution: gated stranger-discovery affordances. discovery_author
+  // = the human who wrote the question; discovery_via = the relay source it
+  // reached the viewer through (two hops up). Independent — both, either, or
+  // neither present. Server-gated (stranger-only, opt-in, public questions).
+  discovery_author?: DiscoveryPerson | null
+  discovery_via?: DiscoveryPerson | null
   viewer_answer_status?: { result: 'correct' | 'incorrect' } | null
   endorsement_count?: number | null
   additional_endorsers?: Array<{ userId: string; displayName: string }> | null
@@ -1904,6 +1912,14 @@ function FeedListContent({
         <ViaAttribution answerers={item.via_answerers} />
       ) : undefined
 
+    // D-4 via-attribution: the gated "by {author}" / "via {source}" discovery
+    // affordance. Server emits only the signals that cleared the stranger +
+    // opt-in + public gates; render whatever survived.
+    const discoveryAttribution =
+      item.discovery_author || item.discovery_via ? (
+        <DiscoveryAttribution author={item.discovery_author} via={item.discovery_via} />
+      ) : undefined
+
     // On the home "What's Happening" feed these answerable question cards are
     // the playable rows, interleaved with flat activity one-liners — give them
     // the Tier 1 lift (cream fill + stroke + drop shadow) so they step forward.
@@ -1916,6 +1932,7 @@ function FeedListContent({
           onAnswer={onAnswer}
           onDismiss={onDismiss}
           viaAttribution={viaAttribution}
+          discoveryAttribution={discoveryAttribution}
           elevated={homeZoneCards}
         />
       )
@@ -1927,6 +1944,7 @@ function FeedListContent({
           onAnswer={onAnswer}
           onDismiss={onDismiss}
           viaAttribution={viaAttribution}
+          discoveryAttribution={discoveryAttribution}
           elevated={homeZoneCards}
         />
       )
@@ -1938,6 +1956,7 @@ function FeedListContent({
           onAnswer={onAnswer}
           onDismiss={onDismiss}
           viaAttribution={viaAttribution}
+          discoveryAttribution={discoveryAttribution}
           elevated={homeZoneCards}
         />
       )

@@ -11,6 +11,7 @@ export { FeedDismissButton } from './FeedDismissButton'
 export { FriendAddedCard } from './FriendAddedCard'
 export { FriendLikedCard } from './FriendLikedCard'
 export { ViaAttribution, type ViaAnswerer } from './ViaAttribution'
+export { DiscoveryAttribution, type DiscoveryPerson } from './DiscoveryAttribution'
 export { feedCardPreviewFixtures, mockTypedFeedItems } from './mock-feed-items'
 export { visibleFeedCategory } from './category'
 export type {

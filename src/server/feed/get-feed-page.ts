@@ -24,6 +24,7 @@ import {
   visibleFeedSourcePredicate,
 } from '@/server/feed/visibility';
 import { getViaAnswerersForQuestions } from '@/server/feed/via-answerers';
+import { getDiscoveryAttributionForItems } from '@/server/feed/discovery-attribution';
 
 const visibleSourcePredicate = visibleFeedSourcePredicate(feedItems);
 
@@ -33,6 +34,8 @@ const feedQuestionSelectColumns = {
   answerText: questions.answerText,
   creatorId: questions.creatorId,
   source: questions.source,
+  // D-4 via-attribution: the public gate for the by/via discovery affordances.
+  visibility: questions.visibility,
   explainerBrief: questions.explainerBrief,
   factualExplanation: questions.factualExplanation,
   canonicalSubcategory: questions.canonicalSubcategory,
@@ -258,6 +261,22 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
     : [];
   const userById = new Map(userRows.map((u) => [u.id, u]));
 
+  // D-4 via-attribution: gated "by {author}" + "via {source}" stranger-discovery
+  // affordances for this page. Batched (relationships + opt-in flags + names) —
+  // see discovery-attribution.ts. Public-gated, stranger-only, consent-gated.
+  const discoveryByItem = await getDiscoveryAttributionForItems(
+    viewerUserId,
+    feed.map((item) => {
+      const question = item.questionId ? questionById.get(item.questionId) : undefined;
+      return {
+        feedItemId: item.id,
+        authorUserId: question?.creatorId ?? null,
+        viaUserId: item.viaUserId ?? null,
+        isPublic: question?.visibility === 'public',
+      };
+    }),
+  );
+
   return {
     viewer_user_id: viewerUserId,
     meta: {
@@ -345,6 +364,13 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         // live on different fields and coexist (audit §C9).
         via_answerers:
           (item.questionId && viaAnswerersByQuestion.get(item.questionId)) || null,
+        // D-4 via-attribution: gated stranger-discovery affordances. Author
+        // ("by {author}") and relay source ("via {source}") are independent
+        // signals — both, either, or neither present. Omitted by compactNulls
+        // when absent. Distinct from via_answerers (who answered) and from the
+        // proximate forwarder (source_*).
+        discovery_author: discoveryByItem.get(item.id)?.author ?? null,
+        discovery_via: discoveryByItem.get(item.id)?.via ?? null,
       });
     }),
   };

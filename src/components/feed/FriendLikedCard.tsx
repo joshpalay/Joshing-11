@@ -9,10 +9,11 @@ type FriendLikedCardProps = {
   onAnswer?: () => void
   onDismiss?: () => void
   viaAttribution?: ReactNode
+  discoveryAttribution?: ReactNode
   elevated?: boolean
 }
 
-export function FriendLikedCard({ item, overflow, onAnswer, onDismiss, viaAttribution, elevated }: FriendLikedCardProps) {
+export function FriendLikedCard({ item, overflow, onAnswer, onDismiss, viaAttribution, discoveryAttribution, elevated }: FriendLikedCardProps) {
   const merged: FriendLikedFeedItem = {
     ...item,
     avatarName: item.avatarName ?? item.friendName,
@@ -26,6 +27,7 @@ export function FriendLikedCard({ item, overflow, onAnswer, onDismiss, viaAttrib
       onDismiss={onDismiss}
       verb="thought you would like this"
       viaAttribution={viaAttribution}
+      discoveryAttribution={discoveryAttribution}
       elevated={elevated}
     />
   )

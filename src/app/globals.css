@@ -264,6 +264,11 @@
        (--brand-orange) deepened with navy so cream type clears AA on top.
        Recorded in DECISIONS.md. */
     --interlude-terracotta: color-mix(in srgb, var(--brand-orange) 82%, var(--brand-ink));
+    /* Interlude teal — the short full-bleed ground for the home daily-reminder
+       prompt (B-HOME-INTERLUDE-TYPE-01). Points at the decorative triangle teal
+       (--tri-darkteal) so the band borrows the triangle palette directly; cream
+       type sits on top. Recorded in DECISIONS.md. */
+    --interlude-teal:      var(--tri-darkteal);
     /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, catch-up) render with navy ink instead of warm
