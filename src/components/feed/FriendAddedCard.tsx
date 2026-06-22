@@ -11,6 +11,7 @@ type FriendAddedCardProps = {
   onAnswer?: () => void
   onDismiss?: () => void
   viaAttribution?: ReactNode
+  discoveryAttribution?: ReactNode
   className?: string
   elevated?: boolean
 }
@@ -21,6 +22,7 @@ export function FriendAddedCard({
   onAnswer,
   onDismiss,
   viaAttribution,
+  discoveryAttribution,
   className,
   elevated,
 }: FriendAddedCardProps) {
@@ -56,6 +58,7 @@ export function FriendAddedCard({
       answerAsButton
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
       viaAttribution={viaAttribution}
+      discoveryAttribution={discoveryAttribution}
       className={className}
       elevated={elevated}
     />

@@ -31,6 +31,12 @@ type SparkleEnvelopeProps = {
    * (the `signal` line) — they coexist on different fields and never collide.
    */
   viaAttribution?: ReactNode
+  /**
+   * D-4 via-attribution: the "by {author}" / "via {source}" stranger-discovery
+   * affordance, rendered just under the attribution signal (the byline) rather
+   * than at the bottom — it names who wrote it / who it came via, a header fact.
+   */
+  discoveryAttribution?: ReactNode
   className?: string
   /**
    * Card chrome. 'bordered' is the plain hairline-border tile both feed cards
@@ -64,6 +70,7 @@ export function SparkleEnvelope({
   answerLabel = 'Answer →',
   answerAsButton = false,
   viaAttribution,
+  discoveryAttribution,
   className,
   variant = 'triangle',
   elevated = false,
@@ -87,6 +94,7 @@ export function SparkleEnvelope({
             <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
               {signal}
             </p>
+            {discoveryAttribution ? <div className="mt-1.5">{discoveryAttribution}</div> : null}
           </div>
           {overflow ? <div className="shrink-0">{overflow}</div> : null}
         </div>
