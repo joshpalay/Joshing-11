@@ -216,6 +216,9 @@ export async function POST(request: NextRequest) {
           sourceEventAt: new Date(),
           submittedAnswer,
           answerResult: 'incorrect',
+          // The miss is recorded as the answer event; stamp the answer time so the
+          // Answered archive sorts it by when it was answered, not send-time.
+          answeredAt: new Date(),
           sourceAnswerId: `milestone-miss:${question.id}`,
           state: 'answered',
         })

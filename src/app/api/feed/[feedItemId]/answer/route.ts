@@ -208,6 +208,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         state: 'answered',
         submittedAnswer: parsed.submittedAnswer,
         answerResult: isCorrect ? 'correct' : 'incorrect',
+        // True answer time — the Answered archive sorts on this so a card sent
+        // long ago but answered now surfaces at the top, not buried by send-time.
+        // A direct_sent retry re-stamps it, reflecting the latest attempt.
+        answeredAt: new Date(),
         pointsAwarded: pointsAwarded,
         masteryDelta: masteryDelta as Record<string, unknown>,
       })
