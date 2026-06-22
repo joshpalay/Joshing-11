@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
@@ -200,6 +200,31 @@ function CategoryLabel({ category }: { category: string }) {
   );
 }
 
+// The card's recurring "two-ends" row: a left node and a right node pushed to
+// opposite edges. The card uses this shape three times — category ↔ report menu,
+// graded result ↔ "Send onward", and Dismiss ↔ Answer — so the flex/space-between
+// wrapper lives here once rather than being hand-rolled at each call site.
+function CardRow({
+  left,
+  right,
+  gap = 0,
+  marginBottom = 0,
+}: {
+  left: ReactNode;
+  right: ReactNode;
+  gap?: number;
+  marginBottom?: number;
+}) {
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap, marginBottom }}
+    >
+      {left}
+      {right}
+    </div>
+  );
+}
+
 // One question in the streak. Active: the elevated card with Answer/Dismiss.
 // Answered: the same card dimmed to a calm spent state with its graded result.
 // Dismissed: a compact undo bar (view-state only; passing never hits the server).
@@ -284,21 +309,14 @@ function StreakQuestionCard({
             incorrect or inappropriate. The authorship marker no longer rides this
             row; it drops to its own second line below so the corner is free for
             the report affordance. */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
-            marginBottom: hasProvenance ? 4 : 10,
-          }}
-        >
-          {category ? <CategoryLabel category={category} /> : <span />}
-          <AnsweredRowActions
-            target={{ questionId: question.questionId }}
-            surface="lately_result"
-          />
-        </div>
+        <CardRow
+          gap={8}
+          marginBottom={hasProvenance ? 4 : 10}
+          left={category ? <CategoryLabel category={category} /> : <span />}
+          right={
+            <AnsweredRowActions target={{ questionId: question.questionId }} surface="lately_result" />
+          }
+        />
         {/* Second level: honest authorship (D-D canon: house/LLM marked
             PRE-answer; a human author shows nothing, never a generic "A friend"). */}
         {hasProvenance ? (
@@ -324,21 +342,24 @@ function StreakQuestionCard({
           // Settled: show the graded result, and offer forwarding the question
           // onward to someone else (the viewer answered it, so it's no longer
           // theirs to answer — but it's still theirs to pass on).
-          <div
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-          >
-            <SpentResult resolution={resolution} priorResult={question.priorResult} />
-            <FeedActionLink size="sm" onClick={() => setSendOpen(true)}>
-              Send onward →
-            </FeedActionLink>
-          </div>
+          <CardRow
+            gap={12}
+            left={<SpentResult resolution={resolution} priorResult={question.priorResult} />}
+            right={
+              <FeedActionLink size="sm" onClick={() => setSendOpen(true)}>
+                Send onward →
+              </FeedActionLink>
+            }
+          />
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <FeedDismissButton onClick={() => setPassed(true)} />
-            <button type="button" className="btn-primary" onClick={answer.open}>
-              Answer
-            </button>
-          </div>
+          <CardRow
+            left={<FeedDismissButton onClick={() => setPassed(true)} />}
+            right={
+              <button type="button" className="btn-primary" onClick={answer.open}>
+                Answer
+              </button>
+            }
+          />
         )}
       </div>
       {spent ? null : answer.sheets}
