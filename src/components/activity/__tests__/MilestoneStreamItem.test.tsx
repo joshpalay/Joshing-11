@@ -140,37 +140,20 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
   });
 });
 
-describe('ActivityStreamItem — navigating bundle summary (B-FROMFRIENDS-STREAK-PAGE-01)', () => {
-  const STREAK_HREF = '/from-friends/m-1';
-
-  it('wraps the whole bundle summary in a link to the streak page instead of expanding inline', () => {
+describe('ActivityStreamItem — collapsed bundle summary expands in place (not a page link)', () => {
+  it('renders the triangle summary with a Play affordance and no link to a streak page', () => {
     const html = renderToStaticMarkup(
       <ActivityStreamItem
         item={MILESTONE_ITEM}
         timestamp="2:00 PM"
         elevated
         showTimestamp={false}
-        playHref={STREAK_HREF}
       />,
     );
-    // The summary is a Link to the streak's own page (next/link is mocked to <a>).
-    expect(html).toContain(`href="${STREAK_HREF}"`);
-    // It still reads as a playable bundle: the remaining count + a Play affordance.
+    // Collapsed summary: the remaining count + a Play affordance, tapped to expand.
     expect(html).toContain('1 of 3 questions');
     expect(html).toContain('Play');
-    // Tapping NAVIGATES — the in-place answer expansion is not part of the summary.
-    expect(html).not.toContain('ANSWER THIS ONE');
-  });
-
-  it('does not link to a streak page when no playHref is given (the flat /activities path)', () => {
-    const html = renderToStaticMarkup(
-      <ActivityStreamItem
-        item={MILESTONE_ITEM}
-        timestamp="2:00 PM"
-        elevated
-        showTimestamp={false}
-      />,
-    );
+    // It is NOT a navigation to a separate streak page — it expands in place.
     expect(html).not.toContain('href="/from-friends/');
   });
 });

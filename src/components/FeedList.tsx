@@ -1760,11 +1760,11 @@ function FeedListContent({
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
       // From Friends milestone streaks render as a compact triangle bundle
-      // SUMMARY on the home zone (B-FROMFRIENDS-STREAK-PAGE-01): tapping opens the
-      // streak's own page (/from-friends/[id]) — where the questions render in the
-      // full answer/dismiss treatment — rather than expanding inline, so the home
-      // zone stays glanceable. The flat /activities log keeps the in-place expand
-      // (no playHref). Server budget is unchanged — whole streaks only.
+      // SUMMARY on the home zone; tapping EXPANDS it in place to the streak's
+      // questions in the new card styling (category eyebrow + per-card
+      // answer/dismiss), via ActivityStreamItem's milestone expansion. The flat
+      // /activities log shares the component but keeps its original inline answer
+      // list. Server budget is unchanged — whole streaks only.
       if (row.item.expand?.kind === 'milestone' && homeZoneCards) {
         return (
           <ActivityStreamItem
@@ -1773,7 +1773,6 @@ function FeedListContent({
             timestamp={formatRelativeTime(row.item.sortAt)}
             showTimestamp={false}
             elevated
-            playHref={`/from-friends/${encodeURIComponent(row.item.id)}`}
           />
         )
       }
