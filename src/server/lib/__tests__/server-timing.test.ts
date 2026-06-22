@@ -50,12 +50,16 @@ describe('createServerTiming', () => {
 });
 
 describe('logServerTiming', () => {
-  it('emits a single `[perf]` line with route, metrics, and extra fields', () => {
+  it('emits a single JSON `[perf]` line with route, metrics, and extra fields', () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const timing = createServerTiming();
     timing.add('feed', 12);
     logServerTiming('feed', timing, { filter: 'all', items: 20 });
-    expect(info).toHaveBeenCalledWith('[perf]', {
+    // One JSON-stringified argument so a Vercel Log Drain parses structured fields.
+    expect(info).toHaveBeenCalledTimes(1);
+    const [line] = info.mock.calls[0];
+    expect(JSON.parse(line as string)).toEqual({
+      tag: '[perf]',
       route: 'feed',
       feed_ms: 12,
       filter: 'all',
@@ -79,8 +83,9 @@ describe('timeServerWork', () => {
     const result = await timeServerWork('home/todays-five', 'todays_five', async () => 'payload');
     expect(result).toBe('payload');
     expect(info).toHaveBeenCalledTimes(1);
-    const [tag, fields] = info.mock.calls[0];
-    expect(tag).toBe('[perf]');
+    const [line] = info.mock.calls[0];
+    const fields = JSON.parse(line as string);
+    expect(fields.tag).toBe('[perf]');
     expect(fields).toMatchObject({ route: 'home/todays-five' });
     expect(fields).toHaveProperty('todays_five_ms');
     info.mockRestore();
@@ -94,7 +99,8 @@ describe('timeServerWork', () => {
         throw boom;
       }),
     ).rejects.toBe(boom);
-    expect(info).toHaveBeenCalledWith('[perf]', expect.objectContaining({ route: 'home/from-friends' }));
+    const [line] = info.mock.calls[0];
+    expect(JSON.parse(line as string)).toMatchObject({ tag: '[perf]', route: 'home/from-friends' });
     info.mockRestore();
   });
 });
