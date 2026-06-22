@@ -1759,6 +1759,23 @@ function FeedListContent({
       if (embed?.kind === 'recently_expanding') {
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
+      // From Friends milestone streaks render as a compact triangle bundle
+      // SUMMARY on the home zone; tapping EXPANDS it in place to the streak's
+      // questions in the new card styling (category eyebrow + per-card
+      // answer/dismiss), via ActivityStreamItem's milestone expansion. The flat
+      // /activities log shares the component but keeps its original inline answer
+      // list. Server budget is unchanged — whole streaks only.
+      if (row.item.expand?.kind === 'milestone' && homeZoneCards) {
+        return (
+          <ActivityStreamItem
+            key={`ff-${row.item.id}`}
+            item={row.item}
+            timestamp={formatRelativeTime(row.item.sortAt)}
+            showTimestamp={false}
+            elevated
+          />
+        )
+      }
       // Everything else renders as a one-liner row, with its bundle triangle
       // mark + tap-to-answer expansion living inside ActivityStreamItem. On the
       // home feed the playable milestone bundles take the cream card treatment
@@ -2096,15 +2113,17 @@ function FeedListContent({
                     unifiedHome={unifiedHome}
                     prominent
                     windowLabel={bandLabelVisible && bandHasContent ? 'Past 7 days' : undefined}
-                    subtitle="Play the questions your friends have aced."
+                    subtitle="Tap a streak to play your friend's questions."
                   >
                     From Friends
                   </FeedSectionHeading>
                   {groupActivityByFriend(fromFriendsRows).map(renderRow)}
                   {budget.playablesOverflowCount > 0 ? (
+                    // D-B: overflow counts BUNDLES (whole streaks), not
+                    // questions — playablesOverflowCount is the bundle remainder.
                     <OverflowRow
                       unifiedHome={unifiedHome}
-                      label={`${budget.playablesOverflowCount} more →`}
+                      label={`${budget.playablesOverflowCount} more from friends →`}
                       href="/from-friends"
                     />
                   ) : null}
