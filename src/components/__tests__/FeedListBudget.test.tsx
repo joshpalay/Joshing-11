@@ -183,8 +183,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     expect(html.match(/Past 7 days/g) ?? []).toHaveLength(1)
     expect(html).toContain('Recent activity')
     // From Friends is promoted to a peer of "For you" and carries a descriptive
-    // subtitle beneath its heading.
-    expect(html).toContain('Play the questions your friends have aced')
+    // subtitle beneath its heading — the verb is "Answer" now that the cards
+    // carry an answer/dismiss affordance, not a single "Play" (Phase 4).
+    expect(html).toContain('Answer the questions your friends have aced')
     expect(html.indexOf('questions your friends created or sent directly to you')).toBeLessThan(
       html.indexOf('Past 7 days'),
     )
