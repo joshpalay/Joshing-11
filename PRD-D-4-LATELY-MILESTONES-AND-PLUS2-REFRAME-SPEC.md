@@ -171,6 +171,124 @@ those decisions is warranted **after build**.
 
 ---
 
+## Amendment (2026-06-22) — Author + relay "via" discovery on forwarded questions
+
+> **New, additive surface.** Triggered by a separate product conversation (2026-06-22) about how
+> attribution should read when a question reached you through a **chain of forwards**. It does **not**
+> touch §A (milestones) or §B (the +2); it adds **two** per-question discovery affordances — the
+> question's **author** and the **two-hop relay source** — to the **forward/direct-send path**
+> (`/api/questions/send`). Both are siblings of the **D-2 niche-match discovery loop** and **must reuse
+> D-2's consent machinery** (see "Privacy — reuse D-2" below) rather than standing up a parallel exposure
+> path. Like the rest of D-4 this is **spec-only**; the build is separate.
+
+### Context — two complementary discovery signals
+
+A player sees a question that reached them because a friend (**Joshua**) **forwarded** it. Two different
+strangers may be worth discovering off that one card, and **we surface both** (each independently gated):
+
+- **Author ("by {author}")** — the human who *wrote* the question, when there is one. This is the
+  "origin" in the **authorship** sense.
+- **Relay via ("via {source}")** — the person **Joshua got it from** (two hops up), when the question
+  reached Joshua by forward.
+
+They are usually **different people** (the author wrote it; the via-source merely passed it along), and
+**either, both, or neither** may apply to a given card. The desired read when both exist is e.g. *"by
+Maria · via ButtKicker"* (Maria wrote it; ButtKicker is who Joshua got it from) — meet whoever's worth
+meeting and pull them into your graph.
+
+**Author is already stored; relay is not** — which is why the bulk of the build is the relay half:
+
+- **Author** = `Question.creatorId` (→ the daily slot's `author_id`/`author_name`,
+  `src/server/daily/types.ts:31-34`), already persisted on every human-authored question. Surfacing it as
+  a discovery affordance is a **read-gate + UI** change, **no new storage**. Present only for
+  human-created questions (`creatorId` non-null); LLM-origin rows (`daily_generated`/`curated_sent`) carry
+  a **null `creatorId`** → no author line.
+- **Relay** ("Joshua *received/forwarded* it from ButtKicker") is **not** captured — each forward records
+  only its **immediate** sender. Closing that single-hop gap (the new `viaUserId` column) is the bulk of
+  this amendment.
+
+**Two-hop, confirmed (relay only):** the "via" names the person **exactly one hop above the forwarder** —
+*who your friend got it from* — **not** the ultimate root of a longer chain. For `you ← Joshua ←
+ButtKicker ← Alice` the via is **ButtKicker**, not Alice. Bounded, and needs **no lineage propagation**
+(see the write path). The **author is independent of chain length** — always whoever wrote it.
+
+### Verified facts (read directly from current code)
+
+| # | Claim | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | A forward records only the **immediate** sender — no upstream lineage | TRUE | `/api/questions/send` writes the feed item via `createFeedItem({ … sourceType: DIRECT_SENT_FEED_SOURCE_TYPE, sourceUserId: session.userId … })` (`src/app/api/questions/send/route.ts:132-141`). Where the forwarder *got* it is never copied onto the new row. |
+| 2 | The single-hop assumption is explicit | TRUE | "Who sent it is preserved separately on the FeedItem (sourceUserId)" (`route.ts:222-223`) — one hop, by design. |
+| 3 | Reconstructing the chain post-hoc is not possible from the recipient's row | TRUE | The fact "Joshua got it from ButtKicker" lives only on **Joshua's** feed item (`recipientUserId=Joshua, questionId=Q`), which the viewer cannot see and which is not linked to the viewer's row. |
+| 4 | A per-user discoverability model already exists | TRUE | `users.discoverableByContacts` / `discoverableByMutualFriends` / `discoverableByNicheMatch` (`src/server/db/schema.ts:229-235`; niche-match added in `drizzle/0059_niche_match_discoverability.sql`, **default ON** during the test phase). |
+| 5 | A stranger-discovery loop with an asymmetric consent gate already exists | TRUE | `notifyNicheMatch` (`src/server/feed/create-feed-items-for-answer.ts:229-294`): fires only when `getRelationship(...).state === 'none'` (STRANGER gate), exposes each party **only with that party's own flag** (`getNicheMatchDiscoverable`), and never fires for LLM-origin questions (null `creatorId`). Spec: `PRD-D-2-NICHE-MATCH-DISCOVERY-SPEC.md`. |
+| 6 | Forward dedup is keyed on a stable canonical `questionId` | TRUE | `resolveQuestionIdForSend` reuses the canonical Question for a generated row (`route.ts:197-243`, `findCanonicalQuestionIdForGenerated`), so lineage keyed on `questionId` holds across hops. |
+| 7 | Current migration head | TRUE | `drizzle/0082_question_bank_added_at_idx.sql` (`ls drizzle/*.sql | sort | tail -1`). Next is `0083_*`. |
+
+### Decision ledger
+
+| Q | Decision | Notes |
+|---|----------|-------|
+| **1. What "via" surfaces** | The person the **forwarding friend** got it from (one hop above the forwarder) — the discovery target, **distinct** from the proximate forwarder. | The proximate forwarder (Joshua) is already known to the viewer; their source (ButtKicker) is the person worth discovering. |
+| **2. Two-hop vs. root (CONFIRMED: two-hop)** | **Two-hop** — surface exactly the hop **above the viewer's forwarder** (*who they got it from*), never the ultimate root. | For `you ← Joshua ← ButtKicker ← Alice` this is **ButtKicker**, not Alice. Bounded and comprehensible, and — unlike root — needs **no lineage propagation**: each row's via is just its forwarder's own immediate sender (see write path). |
+| **3. Lineage storage** | A single **nullable `viaUserId`** column on `FeedItem`, stamped at forward time. **No propagation, no read-time chain walk.** | Additive migration `0083_*` + an idempotent instrumentation guard (CLAUDE.md). |
+| **4. Privacy (CONFIRMED: sibling flag)** | **Reuse D-2's asymmetric stranger gate**, keyed on the **via-person's** discoverability flag. Discovery defaults ON (matching the test-phase niche-match posture) but the via-person can opt out. | New sibling flag **`discoverableByForward`** (default ON) — a clean independent opt-out. Riding your name on a forwarded question is a distinct surface from co-answering, so it gets its own toggle rather than coupling to `discoverableByNicheMatch`. |
+| **5. Action** | **"via {source} · Add friend"**, the same discover/follow-the-stranger affordance D-2 already uses. | Aligns with `niche_match_*` discovery, not a new pattern. |
+| **6. Backfill** | **None.** Pre-existing forwarded rows have `viaUserId = null` → no "via". Feature applies **forward-only**. | Acceptable: discovery is about live forwards, and a null via cleanly degrades to today's behavior. (The **author** half needs no backfill — `creatorId` is already populated, so it works retroactively on any human-authored question.) |
+| **7. Author discovery ("by {author}")** | **Also surface the question's human author** as a discovery target, gated independently of the relay via. | `Question.creatorId`; **no new storage**, present only when non-null (human-authored). Exposure gated by the **author's** flag — **reuse `discoverableByNicheMatch`** (this is exactly D-2's authorship-discovery consent), stranger-gated. |
+| **8. Composition / dedupe** | Show **both** when author ≠ via-source and both pass their gates; **collapse to one** when they're the **same person**; show whichever passes when only one does; nothing when neither. | Never render "by X · via X". **Author leads** (they made it); via second. The proximate forwarder is never a discovery target (already a friend). |
+
+### The design — one new column (relay), zero for author, D-2-shaped read gates
+
+1. **Schema.** Relay only: add `viaUserId text references users(id)` (**nullable**) to `FeedItem`. Migration `0083_*` + instrumentation guard. **The author half adds no storage** — it reads the existing `Question.creatorId`.
+
+2. **Write path (`/api/questions/send`, the sole chokepoint).** Before `createFeedItem`, look up the **forwarder's own** feed item for this question — `feedItems` where `recipientUserId = session.userId AND questionId = sendableQuestionId`, `sourceType = DIRECT_SENT_FEED_SOURCE_TYPE` — and stamp the new row with **the forwarder's own immediate sender**:
+
+   ```
+   viaUserId = forwarderItem.sourceUserId   // null if the forwarder has no inbound forward row
+   ```
+
+   Two-hop falls out for free: when Joshua (who received from ButtKicker) forwards to the viewer, Joshua's inbound row has `sourceUserId = ButtKicker`, so the viewer's row gets `viaUserId = ButtKicker`. **Nothing propagates** — `viaUserId` is *not* read from the forwarder's own `viaUserId`, only from its `sourceUserId`, so the lookback is naturally capped at exactly one hop above the forwarder. When the forwarder **authored** the question or got it **organically** (no inbound `direct_sent` row), the lookup finds nothing → `viaUserId` stays **null** → no "via".
+   - **Tiebreak** when the forwarder has multiple inbound forwards for the same question: pick the **earliest** received (deterministic — the forwarder's true entry point for it).
+
+3. **Read + gate — relay via (D-2-shaped).** Surface `via_user` only when **all** hold:
+   - `viaUserId` is non-null and `≠ viewer`;
+   - the **viewer↔via-person relationship is `none`** (STRANGER gate — friends already discover each other via friend/niche-match surfaces; reuse `getRelationship`);
+   - the **via-person's `discoverableByForward`** flag is ON (reuse a `getNicheMatchDiscoverable`-style batch read on the new flag — the flag of the **exposed** party gates the exposure, exactly as D-2 §"Gate direction" requires; **do not invert**);
+   - the question is **public** (`Question.visibility = 'public'`) — a second built-in guard, since a non-public question never reaches strangers anyway.
+
+4. **Read + gate — author (D-2-shaped, no new storage).** Surface `author_user` only when **all** hold:
+   - `Question.creatorId` is non-null (human-authored) and `≠ viewer`;
+   - the **viewer↔author relationship is `none`** (STRANGER gate);
+   - the **author's `discoverableByNicheMatch`** flag is ON — this *is* D-2 authorship-discovery consent, so reuse it rather than mint a new flag;
+   - the question is **public**.
+
+5. **Compose + UI.** With both resolved:
+   - **Same person** (author == via-source) → render **one** affordance (never "by X · via X").
+   - **Differ, both pass** → render **both**, **author leading** ("by {author}"), relay second ("via {source}"), each with its own **"· Add friend"** wired to the existing follow-the-stranger action used by `niche_match_*`.
+   - **Only one passes its gate** → render that one. **Neither** → render nothing; fall back to the proximate forwarder / today's behavior.
+
+   A surfaced party is **never** exposed against their own setting.
+
+### Privacy — reuse D-2, do not fork it
+
+Both signals are the **same exposure shape** as niche-match (surface a stranger to a viewer so they can connect), so both **must** ride D-2's gate, not a parallel one: STRANGER-only firing, asymmetric consent keyed on the **exposed** party, public-questions-only. **Author exposure reuses `discoverableByNicheMatch`** (it *is* authorship discovery, D-2's own domain, and an LLM-origin row has no author to surface); **relay exposure uses the new `discoverableByForward`** sibling flag. The only genuinely new pieces are (a) the **forward** trigger (vs. D-2's co-answering trigger) and (b) that one sibling flag. Generalizing `getNicheMatchDiscoverable` / the gate helper to take the relevant flag is preferable to copy-pasting the loop.
+
+### What carries over unchanged
+
+- House questions (`source='house_authored'`) are already non-forwardable (`route.ts:68-73`); house/LLM-origin questions carry no human author (`creatorId` null, or the non-`users.id` `'Joshing'` identity) → **no author line**, and an LLM-origin forward still yields no relay collision. Both degrade cleanly.
+- Unverified questions still can't be forwarded by non-authors (`route.ts:91-96`); relay lineage only ever accrues on a legitimately forwarded row.
+- The **proximate-forwarder** attribution is **unchanged**. The question's **author byline** (already shown — e.g. the daily slot's `author_name`) is **upgraded** from static credit to a gated discovery affordance ("by {author} · Add friend") for human-authored questions; the relay **"via {source}"** is an **additional** line. Neither replaces the proximate-forwarder credit.
+
+### Re-audit / migration note
+
+This adds one column and **two** new exposure signals (author + relay via) adjacent to a
+**conformance-audited** discovery loop (D-2) — the author signal reuses D-2's own `discoverableByNicheMatch`
+flag, so a re-audit against the D-2 niche-match gate decisions is warranted **after build**, and the migration
+must follow the repo's hand-written-journal convention (`drizzle/meta/_journal.json` lockstep,
+`scripts/reconcile-drizzle.mjs`; CLAUDE.md "ORM & migrations").
+
+---
+
 ## The spec
 
 > **⚠️ Amended by CORRECTION 2 (2026-06-02) — unified quiet stream + relationship-determined action.**
