@@ -1,32 +1,33 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 
-import { QuestionTriangle } from '@/components/activity/ActivityIcon';
-import {
-  Line,
-  QuestionProvenance,
-  questionProvenance,
-} from '@/components/activity/stream-card-helpers';
+import { ActorLink, Line, QuestionProvenance } from '@/components/activity/stream-card-helpers';
 import { useMilestoneAnswer } from '@/components/activity/use-milestone-answer';
-import { FS, INK, INK3 } from '@/components/lately/tokens';
+import { FF, FM, FS, INK, INK2, INK3 } from '@/components/lately/tokens';
 import type { StreamItem, StreamQuestion } from '@/lib/activity-stream';
 
-import { SparkleEnvelope } from './SparkleEnvelope';
+import { colorForCategory } from './visual';
+import { FeedActionLink } from './FeedActionLink';
+import { FeedDismissButton } from './FeedDismissButton';
 import { useStreakResolutions, type StreakResolution } from './use-streak-resolutions';
+
+// All color comes from existing tokens — no new hues. The mark uses the named
+// teal (--tri-darkteal) the directed card already carries; the category swatch
+// pulls from the established category-color system (colorForCategory → the
+// --cat-* / portrait scale the feed already uses), so no hex is hand-picked here.
+const TEAL = 'var(--tri-darkteal)';
 
 // B-FROMFRIENDS-STREAK-HEADER-01 — bundle-as-header, cards-as-children.
 //
-// The From Friends zone used to collapse a friend's milestone streak into ONE
-// one-liner ("X of 5 questions" + a single Play that expanded inline). This
-// renders the same StreamItem as a lightweight section HEADER (the friend's
-// streak line, once) followed by one ANSWER/DISMISS card per question, in the
-// exact `DirectSentCard` register — one card language for "answer or pass",
-// whether a question was sent directly or surfaced through a friend's streak.
+// A friend's milestone streak renders as a lightweight section HEADER (the
+// streak line, once) followed by one ANSWER/DISMISS card per question. Each card
+// leads with the question's category (swatch + label), carries honest authorship
+// provenance pre-answer, and settles in place — answered cards dim to a calm
+// spent state, dismissed cards collapse to an undo bar — never removed.
 //
-// Decisions this builds to (DECISIONS.md, do not re-litigate):
-//   D-A  header + per-question cards in the DirectSentCard register.
+// Decisions (DECISIONS.md, do not re-litigate):
+//   D-A  header + per-question cards.
 //   D-C  single-question bundles get NO header; the card carries a compact
 //        "via {friend}'s streak" line instead. Header renders only at size ≥ 2.
 //   D-D  each card renders honest human/house provenance PRE-answer; no generic
@@ -59,7 +60,7 @@ export function FromFriendsStreak({
   const showHeader = questions.length >= 2;
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {showHeader ? <StreakHeader item={item} /> : null}
       {questions.map((q) => (
         <StreakQuestionCard
@@ -78,31 +79,82 @@ export function FromFriendsStreak({
   );
 }
 
-// The streak line as a lightweight editorial header — the friend's name + the
-// rolled-up domains the builder already composed (e.g. "Joshua P has been on a
-// tear through Tennis Fundamentals, Early 20th Century American History and 3
-// others"). It stands alone above the cards rather than introducing a Play
-// affordance. The triangle answered-state is owned per-card, not here.
-function StreakHeader({ item }: { item: StreamItem }) {
+// A simple outline hourglass mark, single-color so it can take the named teal.
+// (The app's ActivityIcon hourglass is the fixed two-tone triangle pair; this is
+// the quiet inline mark the streak header / via line want.)
+function Hourglass({ color = TEAL }: { color?: string }) {
   return (
-    <p
-      style={{
-        margin: 0,
-        fontFamily: FS,
-        fontSize: 18,
-        lineHeight: 1.4,
-        letterSpacing: 0.2,
-        color: INK,
-      }}
-    >
-      <Line parts={item.line} />
-    </p>
+    <span style={{ display: 'inline-flex', width: 13, height: 13, flex: '0 0 auto' }} aria-hidden>
+      <svg
+        viewBox="0 0 24 24"
+        width="13"
+        height="13"
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M6 2h12M6 22h12M6 2c0 4 4 6 6 8 2-2 6-4 6-8M6 22c0-4 4-6 6-8 2 2 6 4 6 8" />
+      </svg>
+    </span>
   );
 }
 
-// One answerable question, rendered as a DirectSentCard-register card: the
-// bordered SparkleEnvelope frame, an Answer primary button, and a Dismiss link.
-// Once answered or dismissed it reads as a calm spent card (not removed).
+// The streak line as a lightweight header — the friend + the rolled-up domains
+// the builder already composed (e.g. "Joshua P has been on a tear through Tennis
+// Fundamentals, …"). Sans (Interface voice); it stands alone above the cards
+// rather than introducing a Play affordance.
+function StreakHeader({ item }: { item: StreamItem }) {
+  return (
+    <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '6px 2px 2px' }}>
+      <span style={{ marginTop: 3 }}>
+        <Hourglass />
+      </span>
+      <p style={{ fontFamily: FF, fontSize: 14, lineHeight: 1.45, color: INK2, margin: 0 }}>
+        {/* `plain` keeps the whole line in the sans face — the friend reads as a
+            link (ActorLink), the domains as quiet weight, no serif run. */}
+        <Line parts={item.line} plain />
+      </p>
+    </div>
+  );
+}
+
+// The category eyebrow: a swatch in the question's category hue (from the
+// existing category-color system) + the label. Color is never the sole carrier —
+// the text label always sits beside the swatch.
+function CategoryLabel({ category }: { category: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span
+        aria-hidden
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: 2,
+          background: colorForCategory(category),
+          flex: '0 0 auto',
+        }}
+      />
+      <span
+        style={{
+          fontFamily: FM,
+          fontSize: 10,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          color: INK3,
+        }}
+      >
+        {category}
+      </span>
+    </span>
+  );
+}
+
+// One question in the streak. Active: the elevated card with Answer/Dismiss.
+// Answered: the same card dimmed to a calm spent state with its graded result.
+// Dismissed: a compact undo bar (view-state only; passing never hits the server).
 function StreakQuestionCard({
   question,
   friendName,
@@ -123,117 +175,122 @@ function StreakQuestionCard({
   onResolved: (questionId: string, submitted: string, isCorrect: boolean) => void;
 }) {
   // The same milestone answer/grade flow the inline list row uses; the card's
-  // Answer button just opens it. Hook is called unconditionally (the spent
-  // branch below still mounts the component).
+  // Answer button just opens it.
   const answer = useMilestoneAnswer(question, onResolved);
-  // Dismiss is view-state only ("pass"): mark the card spent locally, matching
-  // the directed card's Dismiss. No milestone has a server "pass" — passing is
-  // simply declining to play, and the card stays as a spent (passed) tile.
+  // Dismiss is view-state only ("pass"): collapse the card to an undo bar.
   const [passed, setPassed] = useState(false);
 
-  if (resolved || passed) {
+  const category = question.domain?.trim() || null;
+
+  if (passed && !resolved) {
     return (
-      <SpentStreakCard
-        question={question}
-        resolution={resolution}
-        passed={passed && !resolved}
-        elevated={elevated}
-      />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          fontFamily: FF,
+          fontSize: 13,
+          color: INK3,
+        }}
+      >
+        <span>Dismissed{category ? ` · ${category}` : ''}</span>
+        <FeedActionLink size="sm" onClick={() => setPassed(false)}>
+          Undo
+        </FeedActionLink>
+      </div>
     );
   }
 
-  // The per-card mark: a solid triangle leads the signal row (unplayed),
-  // flipping to hollow on the spent card — preserving the solid→hollow
-  // answered-state the bundle line used to carry, now once per card.
-  const signal = (
-    <span className="inline-flex items-center gap-2">
-      <QuestionTriangle solid seed={question.questionId} />
-      {showViaLine ? (
-        <span>
-          via{' '}
-          {friendId ? (
-            <Link
-              href={`/users/${friendId}`}
-              className="font-semibold text-[var(--brand-link)] hover:opacity-70"
-            >
-              {friendName}
-            </Link>
-          ) : (
-            <span className="font-semibold text-[var(--brand-link)]">{friendName}</span>
-          )}
-          &rsquo;s streak
-        </span>
-      ) : null}
-    </span>
-  );
-
-  // D-D (canon): honest provenance PRE-answer — house/LLM marked, human shows
-  // nothing (the streak already attributes the answerer; authorship is a
-  // separate fact and only the machine cases need a marker). Rendered above the
-  // Answer action, exactly as the send-onward path does. Only passed when there
-  // is a real marker, so a human-authored card never renders an empty slot — and
-  // never the generic "A friend" string.
-  const viaAttribution = questionProvenance(question) ? (
-    <QuestionProvenance q={question} style={{ margin: 0 }} />
-  ) : undefined;
+  const spent = resolved;
 
   return (
     <>
-      <SparkleEnvelope
-        variant="bordered"
-        signal={signal}
-        question={question.text}
-        onAnswer={answer.open}
-        answerAsButton
-        onDismiss={() => setPassed(true)}
-        viaAttribution={viaAttribution}
-        elevated={elevated}
-      />
-      {answer.sheets}
+      <div
+        style={{
+          background: elevated ? 'var(--feed-card-elevated)' : 'var(--warm-cream)',
+          border: '1px solid var(--brand-border)',
+          borderRadius: 12,
+          boxShadow: 'var(--shadow-card)',
+          padding: '16px 18px 14px',
+          opacity: spent ? 0.72 : 1,
+        }}
+      >
+        {showViaLine ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+            <Hourglass />
+            <span style={{ fontFamily: FF, fontSize: 12.5, color: INK2 }}>
+              via <ActorLink name={friendName} userId={friendId} />
+              &rsquo;s streak
+            </span>
+          </div>
+        ) : null}
+
+        {category ? (
+          <div style={{ marginBottom: 10 }}>
+            <CategoryLabel category={category} />
+          </div>
+        ) : null}
+
+        {/* D-D (canon): honest authorship PRE-answer — house/LLM marked, human
+            shows nothing, never a generic "A friend" fallback. Self-guards to
+            null when no marker is needed. */}
+        <QuestionProvenance q={question} style={{ margin: '0 0 10px' }} />
+
+        <p
+          style={{
+            fontFamily: FS,
+            fontSize: 21,
+            lineHeight: 1.28,
+            fontWeight: 500,
+            color: INK,
+            margin: '0 0 14px',
+          }}
+        >
+          &ldquo;{question.text}&rdquo;
+        </p>
+
+        {spent ? (
+          <SpentResult resolution={resolution} priorResult={question.priorResult} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <FeedDismissButton onClick={() => setPassed(true)} />
+            <button type="button" className="btn-primary" onClick={answer.open}>
+              Answer
+            </button>
+          </div>
+        )}
+      </div>
+      {spent ? null : answer.sheets}
     </>
   );
 }
 
-// The calm spent treatment for a settled card (matching AnsweredByYouCard's
-// register): the bordered frame at reduced emphasis, a hollow triangle, and a
-// quiet result line — "Correct" / "Not this time" (in the semantic answer
-// colors) or "Passed" for a dismissed card. The card stays in place, spent, not
-// removed (Phase 2).
-function SpentStreakCard({
-  question,
+// The graded result on a settled card, in the existing semantic answer tokens
+// (the same registers the AnsweredHistory uses): correct reads green, a miss
+// reads in the calm brick red. priorResult is non-null when the server already
+// had the attempt on load (no submitted text then); an in-session resolution
+// carries both.
+function SpentResult({
   resolution,
-  passed,
-  elevated,
+  priorResult,
 }: {
-  question: StreamQuestion;
   resolution: StreakResolution | null;
-  passed: boolean;
-  elevated: boolean;
+  priorResult: StreamQuestion['priorResult'];
 }) {
-  // priorResult is non-null when the server already had this attempt on load (we
-  // lack the submitted text then); an in-session resolution carries both.
-  const isCorrect = resolution ? resolution.isCorrect : question.priorResult !== 'incorrect';
-  const label = passed ? 'Passed' : isCorrect ? 'Correct' : 'Not this time';
-  const color = passed ? INK3 : isCorrect ? 'var(--game-correct)' : 'var(--game-wrong)';
-
-  const signal = (
-    <span className="inline-flex items-center gap-2 font-semibold" style={{ color }}>
-      <QuestionTriangle solid={false} seed={question.questionId} />
-      <span>
-        {label}
-        {resolution ? ` — ${resolution.submitted}` : ''}
-      </span>
-    </span>
-  );
-
+  const isCorrect = resolution ? resolution.isCorrect : priorResult !== 'incorrect';
   return (
-    <div style={{ opacity: 0.7 }}>
-      <SparkleEnvelope
-        variant="bordered"
-        signal={signal}
-        question={question.text}
-        elevated={elevated}
-      />
+    <div
+      style={{
+        fontFamily: FF,
+        fontSize: 13,
+        fontWeight: 600,
+        color: isCorrect ? 'var(--game-correct)' : 'var(--game-wrong)',
+      }}
+    >
+      {isCorrect ? '✓ Correct' : 'Not this time'}
+      {resolution ? ` · ${resolution.submitted}` : ''}
     </div>
   );
 }

@@ -73,13 +73,14 @@ describe('FromFriendsStreak — header-presence fork (D-C)', () => {
 
   it('renders a single card with NO header and a "via {friend}’s streak" line for a 1-question bundle', () => {
     const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('solo')])} />);
-    // No header: the streak predicate / domain roll-up is absent.
+    // No header: the streak predicate / domain roll-up sentence is absent.
     expect(html).not.toContain('has been on a tear through');
-    expect(html).not.toContain('Tennis Fundamentals');
     // The lone card carries the compact answerer-streak attribution instead.
     expect(html).toContain('via ');
     expect(html).toContain('Joshua P');
     expect(html).toContain('streak');
+    // The card still leads with its category eyebrow.
+    expect(html).toContain('Tennis Fundamentals');
     expect(answerCardCount(html)).toBe(1);
   });
 });

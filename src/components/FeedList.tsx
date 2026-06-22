@@ -2112,7 +2112,7 @@ function FeedListContent({
                     unifiedHome={unifiedHome}
                     prominent
                     windowLabel={bandLabelVisible && bandHasContent ? 'Past 7 days' : undefined}
-                    subtitle="Answer the questions your friends have aced."
+                    subtitle="Answer or pass — each question stands on its own."
                   >
                     From Friends
                   </FeedSectionHeading>
