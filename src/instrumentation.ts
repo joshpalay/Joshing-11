@@ -315,6 +315,29 @@ export async function register() {
       // Question table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0084 adds FeedItem.viaUserId (the two-hop forward-relay source,
+    // D-4 via-attribution) and User.discoverable_by_forward (its consent gate).
+    // A preview/production DB that records 0084 without these columns present
+    // would break feed reads that select viaUserId and the discoverability gate;
+    // pre-apply them idempotently (precedent: 0080's author_deleted guard above).
+    // The FK constraint is not re-added here — migrate() adds it on fresh DBs and
+    // it is not needed for read safety.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "discoverable_by_forward" boolean NOT NULL DEFAULT true
+      `);
+      await db.execute(sql`
+        ALTER TABLE "FeedItem"
+          ADD COLUMN IF NOT EXISTS "viaUserId" text
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "FeedItem_viaUserId_idx" ON "FeedItem" ("viaUserId")
+      `);
+    } catch {
+      // User / FeedItem may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value

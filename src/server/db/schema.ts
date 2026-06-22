@@ -233,6 +233,14 @@ export const users = pgTable(
     // revisit after the test; do not assume default-ON as the shipping default.
     // See drizzle/0059_niche_match_discoverability.sql.
     discoverableByNicheMatch: boolean('discoverable_by_niche_match').notNull().default(true),
+    // D-4 via-attribution: gates the "via {source}" forward-relay discovery
+    // exposure — the flag of the EXPOSED party (whoever the question was forwarded
+    // from) controls whether their identity surfaces to a downstream stranger
+    // recipient. Sibling to discoverable_by_niche_match, kept separate so
+    // forward-relay exposure opts out independently of niche-match. TEST-PHASE
+    // default ON (mirrors niche-match); the production default is an OPEN DECISION
+    // to revisit after the test. See the D-4 amendment.
+    discoverableByForward: boolean('discoverable_by_forward').notNull().default(true),
     // D-1 Stage 3 — gate on new followers. Default approval_required; public is opt-in.
     followPrivacy: followPrivacyEnum('follow_privacy').notNull().default('approval_required'),
     phoneHash: text('phone_hash'),
@@ -1084,6 +1092,15 @@ export const feedItems = pgTable(
     joshingGameId: text('joshingGameId').references(() => joshingGames.id, { onDelete: 'set null' }),
     sourceType: text('sourceType').notNull(),
     sourceUserId: text('sourceUserId').notNull().references(() => users.id),
+    // D-4 via-attribution: the user the FORWARDER got this question from — two
+    // hops above the recipient. Stamped at forward time in /api/questions/send as
+    // the forwarder's own sourceUserId (no lineage propagation); NULL when the
+    // forwarder authored it or got it organically (no inbound forward row).
+    // Drives the "via {source}" stranger-discovery affordance, gated by the
+    // via-person's discoverableByForward flag. ON DELETE set null so a deleted
+    // via-user cleanly drops the attribution. See the D-4 amendment in
+    // PRD-D-4-LATELY-MILESTONES-AND-PLUS2-REFRAME-SPEC.md.
+    viaUserId: text('viaUserId').references(() => users.id, { onDelete: 'set null' }),
     sourceResult: text('sourceResult').$type<'correct' | 'incorrect' | null>(),
     sourceEventAt: timestamp('sourceEventAt', { withTimezone: true }).notNull().defaultNow(),
     personalMessage: text('personalMessage'),
@@ -1105,6 +1122,9 @@ export const feedItems = pgTable(
     index('FeedItem_questionId_idx').on(table.questionId),
     index('FeedItem_sourceUserId_idx').on(table.sourceUserId),
     index('FeedItem_joshingGameId_idx').on(table.joshingGameId),
+    // Covering index for the viaUserId FK (mirrors the B-PERF-03 / 0079 treatment
+    // of the other FeedItem FKs) so deleting a User doesn't seq-scan FeedItem.
+    index('FeedItem_viaUserId_idx').on(table.viaUserId),
   ],
 );
 
