@@ -39,15 +39,23 @@ export async function logoutAndRedirect(navigate: (url: string) => void): Promis
   navigate('/login');
 }
 
+// TEMP (ungate): the Developer-tools section is currently shown to every owner
+// viewing their own profile, regardless of admin status. To restore the
+// ADMIN_USER_IDS gate (D-DESIGN-DEBT-STRUCTURAL-01, Phase 3), flip this back to
+// `false` — `showDeveloperTools` then falls back to the `isAdmin` prop. The
+// matching /dev route gate lives in src/app/dev/layout.tsx; revert both together.
+const DEV_TOOLS_UNGATED = true;
+
 /**
- * `isAdmin` gates the Developer-tools section (D-DESIGN-DEBT-STRUCTURAL-01,
- * Phase 3). Before this it rendered for every owner viewing their own profile,
- * so any normal user could reach /dev/* (reset-session, noon-reset, …). The
- * caller computes it server-side from `isAdminUser(session.userId)` — the same
- * ADMIN_USER_IDS allowlist that guards the report queue. Defaults to false:
- * fail closed, so a caller that forgets to pass it hides the tools.
+ * `isAdmin` normally gates the Developer-tools section via the ADMIN_USER_IDS
+ * allowlist (the caller computes it from `isAdminUser(session.userId)`).
+ * Defaults to false (fail closed). While `DEV_TOOLS_UNGATED` is true the gate
+ * is bypassed and the section renders for any profile owner. This component only
+ * mounts in the owner self-view, so the tools are never exposed on other
+ * people's profiles either way.
  */
 export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
+  const showDeveloperTools = DEV_TOOLS_UNGATED || isAdmin;
   const router = useRouter();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -125,7 +133,7 @@ export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
 
   return (
     <>
-      {isAdmin ? (
+      {showDeveloperTools ? (
         <section className="mb-8">
           <h2 className="mb-3 font-serif text-2xl font-semibold">Developer tools</h2>
           <SettingsGroup>
