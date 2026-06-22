@@ -198,6 +198,36 @@ export default function DailyPage() {
   const answerInputRef = useRef<HTMLInputElement>(null);
   // Guards the one-shot end-of-round revalidation below (B-DAILY-PARTIAL-QUEUE-01).
   const revalidatedEndRef = useRef(false);
+  // MISC-4: scroll a freshly-revealed result into view. The reveal is inline
+  // thread content inside the scrolling section (not a fixed modal), so on a
+  // short viewport it can land below the fold after answering. We track the
+  // highest answered slot and scroll its ResultRow into view only when it grows
+  // from a new answer — never on initial load of an already-played day.
+  const lastAnsweredSlotIndex = useMemo(() => {
+    let max: number | null = null;
+    for (const slot of queue?.slots ?? []) {
+      if (slot.answered && (max === null || slot.slot_index > max)) max = slot.slot_index;
+    }
+    return max;
+  }, [queue?.slots]);
+  const prevAnsweredSlotIndexRef = useRef<number | null>(null);
+  const answeredScrollMountedRef = useRef(false);
+  useEffect(() => {
+    if (!answeredScrollMountedRef.current) {
+      // First effect run: baseline only (a resumed day mounts already-answered).
+      answeredScrollMountedRef.current = true;
+      prevAnsweredSlotIndexRef.current = lastAnsweredSlotIndex;
+      return;
+    }
+    const prev = prevAnsweredSlotIndexRef.current;
+    prevAnsweredSlotIndexRef.current = lastAnsweredSlotIndex;
+    if (lastAnsweredSlotIndex === null) return;
+    // Only scroll when a *new* answer just landed (index advanced).
+    if (prev !== null && lastAnsweredSlotIndex <= prev) return;
+    document
+      .getElementById(`daily-result-${lastAnsweredSlotIndex}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [lastAnsweredSlotIndex]);
 
   // Show the first-run intro once, only for the server-flagged first untouched
   // queue and only if this device hasn't already dismissed it.
