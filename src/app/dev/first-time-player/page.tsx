@@ -38,6 +38,65 @@ const reminderTitleStyle: CSSProperties = {
   letterSpacing: '0.05em',
 };
 
+// Static replica of FirstSessionPanel's `SocialBeat` (Beat 3). Mirrors the live
+// markup/copy for each branch so this preview stays faithful after the panel
+// gained its social beat; rendered inert (links are spans, like the rest of
+// this page). `name` is unused for the no_inviter branch.
+function SocialBeatPreview({
+  kind,
+  name,
+}: {
+  kind: 'inviter_present' | 'inviter_future' | 'no_inviter';
+  name?: string;
+}) {
+  if (kind === 'inviter_present') {
+    return (
+      <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+        <h3 style={reminderTitleStyle}>{name} is already in your game</h3>
+        <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+          Some of the questions in your feed are ones {name} answered — look for
+          the{' '}
+          <span className="font-semibold text-[var(--brand-ink)]">Via {name}</span>{' '}
+          label, and answer one back.
+        </p>
+        <p className="mt-3 text-sm leading-6">
+          <span className="text-[var(--brand-link)] underline underline-offset-4">
+            Go to your feed
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  if (kind === 'inviter_future') {
+    return (
+      <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+        <h3 style={reminderTitleStyle}>You&apos;re connected with {name}</h3>
+        <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+          When {name} plays, their questions will land in your feed marked{' '}
+          <span className="font-semibold text-[var(--brand-ink)]">Via {name}</span>.
+        </p>
+      </div>
+    );
+  }
+
+  // no_inviter — copy is DRAFT, pending review.
+  return (
+    <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
+      <h3 style={reminderTitleStyle}>Joshing is better with a friend in it</h3>
+      <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+        Bring someone you like to outsmart — their questions show up in your feed,
+        and yours in theirs.
+      </p>
+      <p className="mt-3 text-sm leading-6">
+        <span className="text-[var(--brand-link)] underline underline-offset-4">
+          Invite a friend
+        </span>
+      </p>
+    </div>
+  );
+}
+
 // Mirrors the summary page's section-title style.
 const sectionTitleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
@@ -263,6 +322,11 @@ export default function DevFirstTimePlayerPage() {
               page.
             </p>
 
+            {/* Beat 3 (social). This preview shows the inviter_present branch —
+                the canonical path for a player who arrived via someone's profile
+                link. The other two branches are shown for reference below. */}
+            <SocialBeatPreview kind="inviter_present" name="Maya" />
+
             <div className="mt-5 border-t border-[var(--brand-border)] pt-5">
               <h3 style={reminderTitleStyle}>
                 Get notified when the next batch is available
@@ -356,6 +420,34 @@ export default function DevFirstTimePlayerPage() {
                 See your knowledge map
               </span>
             </div>
+          </section>
+        </div>
+
+        {/* Beat 3 — other social states. The card above shows inviter_present;
+            these are the two branches a player sees instead depending on whether
+            their inviter has played yet, or whether they arrived with no inviter
+            at all. Shown here so every Beat 3 state is reviewable in one place. */}
+        <div className="mt-10 rounded-2xl border border-dashed border-[var(--brand-border)] p-4">
+          <p className="mb-1 text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+            Beat 3 · other social states
+          </p>
+          <p className="mb-4 text-sm leading-6 text-muted-foreground">
+            Only one of these (including the inviter_present card above) renders
+            for a given player.
+          </p>
+
+          <section className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
+            <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+              Inviter hasn&apos;t played yet
+            </p>
+            <SocialBeatPreview kind="inviter_future" name="Maya" />
+          </section>
+
+          <section className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
+            <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+              No inviter on record · <span className="text-amber-700">draft copy</span>
+            </p>
+            <SocialBeatPreview kind="no_inviter" />
           </section>
         </div>
       </div>
