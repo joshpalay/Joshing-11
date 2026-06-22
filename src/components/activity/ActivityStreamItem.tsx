@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Send } from 'lucide-react';
+import { ChevronDown, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type CSSProperties, type KeyboardEvent } from 'react';
 
@@ -13,6 +13,8 @@ import type {
   StreamLinePart,
   StreamQuestion,
 } from '@/lib/activity-stream';
+
+import { FromFriendsStreak } from '@/components/feed/FromFriendsStreak';
 
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
@@ -83,7 +85,6 @@ export function ActivityStreamItem({
   nested = false,
   showTimestamp = true,
   elevated = false,
-  playHref,
   onQuestionResolved,
 }: {
   item: StreamItem;
@@ -101,12 +102,6 @@ export function ActivityStreamItem({
   // page as the thing you can play, while the ambient one-liners stay flat. Off
   // by default (the full /activities log keeps every row flat).
   elevated?: boolean;
-  // When set on a playable milestone bundle (the home From Friends zone + the
-  // /from-friends overflow), the bundle summary becomes a NAVIGATION target: the
-  // whole row links here — the streak's own page (B-FROMFRIENDS-STREAK-PAGE-01) —
-  // instead of expanding its questions inline. Omitted everywhere else (the flat
-  // /activities log keeps the in-place expand).
-  playHref?: string;
   // Fires after a milestone question is resolved in place (answered right or
   // wrong). The pending-playables overflow subpage (B-HOME-OVERFLOW-02 §7)
   // uses it to invalidate the client router cache so Home recomputes its
@@ -159,7 +154,13 @@ export function ActivityStreamItem({
     onQuestionResolved?.();
   }
 
-  const answeredCount = (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length;
+  // On the playable home card the expansion renders the From Friends streak cards
+  // (which own their own resolution state), so answers there don't flow through
+  // `resolve` above. This counter ticks the summary's triangle cluster + count in
+  // step as questions are answered in the open expansion.
+  const [expansionResolved, setExpansionResolved] = useState(0);
+  const answeredCount =
+    (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length + expansionResolved;
 
   // The "{remaining} of {total} questions" count under a milestone line — how
   // many are still answerable (D-HOME-DASHBOARD-MODEL-01 point 3), in lockstep
@@ -211,11 +212,6 @@ export function ActivityStreamItem({
   // surfaces share one "liftable" look. Other activity rows (relationship
   // events, reactions, read-only reveals) stay flat one-liners.
   const playableCard = elevated && !nested && expandable && expand?.kind === 'milestone';
-
-  // A playable bundle with a playHref navigates to the streak's page instead of
-  // toggling open inline. (Only playable milestone cards ever navigate; the flat
-  // ambient rows never carry a playHref.)
-  const navigates = Boolean(playHref) && playableCard;
 
   // Only the playable milestone bundles take the elevated cream-card chrome +
   // editorial two-line serif headline on the home feed (the warm fill, light
@@ -292,9 +288,8 @@ export function ActivityStreamItem({
           // alone.
           { padding: '14px 2px', borderBottom: `1px solid ${RULE}` };
 
-  // The tappable header row. When the bundle navigates (playHref), the whole row
-  // is a Link to the streak page; otherwise it's the in-place expand/collapse
-  // button. The inner content is identical either way.
+  // The tappable header row — the in-place expand/collapse button for an
+  // expandable item (a playable milestone bundle or a texture reveal).
   const rowInner = (
     <>
       {editorialCard ? (
@@ -419,20 +414,14 @@ export function ActivityStreamItem({
                 }}
               >
                 {playAffordanceLabel}
-                {navigates ? (
-                  // Navigating summary: a static right chevron (goes to a page),
-                  // never the rotating disclosure caret of an inline expander.
-                  <ChevronRight size={16} aria-hidden />
-                ) : (
-                  <ChevronDown
-                    size={16}
-                    aria-hidden
-                    style={{
-                      transition: 'transform 150ms ease',
-                      transform: open ? 'rotate(180deg)' : 'none',
-                    }}
-                  />
-                )}
+                <ChevronDown
+                  size={16}
+                  aria-hidden
+                  style={{
+                    transition: 'transform 150ms ease',
+                    transform: open ? 'rotate(180deg)' : 'none',
+                  }}
+                />
               </span>
             </div>
           ) : null}
@@ -528,48 +517,53 @@ export function ActivityStreamItem({
 
   return (
     <div id={item.anchorId ?? undefined} style={containerStyle}>
-      {navigates ? (
-        <Link
-          href={playHref!}
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            textDecoration: 'none',
-            color: 'inherit',
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          {rowInner}
-        </Link>
-      ) : (
-        <div
-          role={expandable ? 'button' : undefined}
-          tabIndex={expandable ? 0 : undefined}
-          aria-expanded={expandable ? open : undefined}
-          onClick={toggle}
-          onKeyDown={handleKeyDown}
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            cursor: expandable ? 'pointer' : 'default',
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          {rowInner}
-        </div>
-      )}
+      <div
+        role={expandable ? 'button' : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        aria-expanded={expandable ? open : undefined}
+        onClick={toggle}
+        onKeyDown={handleKeyDown}
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          cursor: expandable ? 'pointer' : 'default',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        {rowInner}
+      </div>
 
       {item.action ? <ItemAction action={item.action} /> : null}
 
       {expandable && open && expand ? (
         <div style={{ marginLeft: EXPANSION_INDENT }}>
           {expand.kind === 'milestone' ? (
-            <MilestoneExpansion
-              expand={expand}
-              isResolved={isResolved}
-              resolutions={resolutions}
-              onResolved={resolve}
-            />
+            playableCard ? (
+              // The playable home/overflow card expands in place to the From
+              // Friends streak's question cards in the new card styling (category
+              // eyebrow, per-card answer/dismiss, correct-answered drops away) —
+              // inline, not a separate page. FromFriendsStreak owns its own
+              // resolution state; bump the summary count so the triangle cluster +
+              // "N of M" tick as questions resolve in the open expansion.
+              <div style={{ marginTop: 14 }} onClick={(e) => e.stopPropagation()}>
+                <FromFriendsStreak
+                  item={item}
+                  headerless
+                  onQuestionResolved={() => {
+                    setExpansionResolved((n) => n + 1);
+                    onQuestionResolved?.();
+                  }}
+                />
+              </div>
+            ) : (
+              // The flat /activities log keeps the original inline answer list.
+              <MilestoneExpansion
+                expand={expand}
+                isResolved={isResolved}
+                resolutions={resolutions}
+                onResolved={resolve}
+              />
+            )
           ) : expand.kind === 'same_correct' ? (
             <ConvergenceExpansion expand={expand} />
           ) : (

@@ -36,9 +36,24 @@ import { ActivityStreamItem, MilestoneExpansion } from '@/components/activity/Ac
 // prior session (the bug — must NOT be answerable here, and the ANSWERED
 // history must read "Not this time", not "Correct"). q-fresh: never attempted.
 const QUESTIONS: StreamQuestion[] = [
-  { questionId: 'q-correct', text: 'Who captains the Enterprise-D?', domain: 'Star Trek', priorResult: 'correct' },
-  { questionId: 'q-wrong', text: 'What is a prior inconsistent statement?', domain: 'Mock Trial', priorResult: 'incorrect' },
-  { questionId: 'q-fresh', text: 'Name the Enterprise-D android.', domain: 'Star Trek', priorResult: null },
+  {
+    questionId: 'q-correct',
+    text: 'Who captains the Enterprise-D?',
+    domain: 'Star Trek',
+    priorResult: 'correct',
+  },
+  {
+    questionId: 'q-wrong',
+    text: 'What is a prior inconsistent statement?',
+    domain: 'Mock Trial',
+    priorResult: 'incorrect',
+  },
+  {
+    questionId: 'q-fresh',
+    text: 'Name the Enterprise-D android.',
+    domain: 'Star Trek',
+    priorResult: null,
+  },
 ];
 
 const EXPAND: Extract<StreamExpand, { kind: 'milestone' }> = {
@@ -87,7 +102,12 @@ const MILESTONE_ITEM: StreamItem = {
 describe('ActivityStreamItem — playable milestone card on the home feed', () => {
   it('gives an elevated milestone bundle the cream card chrome (fill + stroke + drop shadow)', () => {
     const html = renderToStaticMarkup(
-      <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" elevated showTimestamp={false} />,
+      <ActivityStreamItem
+        item={MILESTONE_ITEM}
+        timestamp="2:00 PM"
+        elevated
+        showTimestamp={false}
+      />,
     );
     expect(html).toContain('var(--feed-card-elevated)'); // shared elevated fill token
     expect(html).toContain('var(--brand-border)'); // neutral hairline stroke (matches Today's 5)
@@ -108,10 +128,33 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     // so 1 of 3 is still answerable. The label is the remaining count ("1 of 3"),
     // matching the solid bundle triangles — not the played count ("2 of 3").
     const html = renderToStaticMarkup(
-      <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" elevated showTimestamp={false} />,
+      <ActivityStreamItem
+        item={MILESTONE_ITEM}
+        timestamp="2:00 PM"
+        elevated
+        showTimestamp={false}
+      />,
     );
     expect(html).toContain('1 of 3 questions');
     expect(html).not.toContain('2 of 3 questions');
+  });
+});
+
+describe('ActivityStreamItem — collapsed bundle summary expands in place (not a page link)', () => {
+  it('renders the triangle summary with a Play affordance and no link to a streak page', () => {
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem
+        item={MILESTONE_ITEM}
+        timestamp="2:00 PM"
+        elevated
+        showTimestamp={false}
+      />,
+    );
+    // Collapsed summary: the remaining count + a Play affordance, tapped to expand.
+    expect(html).toContain('1 of 3 questions');
+    expect(html).toContain('Play');
+    // It is NOT a navigation to a separate streak page — it expands in place.
+    expect(html).not.toContain('href="/from-friends/');
   });
 });
 
