@@ -6,17 +6,20 @@ import { getSession } from '@/server/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-// D-DESIGN-DEBT-STRUCTURAL-01, Phase 3 — gate the entire /dev tree.
+// TEMP (ungate): the /dev tree is currently session-gated only — any
+// authenticated user can reach the dev tools (reset-session, noon-reset,
+// points-diagnostic, flags, first-time-player, invite-login, …) by URL.
 //
-// Before this, /dev/* (reset-session, noon-reset, points-diagnostic, flags,
-// first-time-player, invite-login, loading-preview, test-game) was only
-// session-gated: any authenticated non-admin could reach the dev tools by URL,
-// even once the settings entry point was hidden. This mirrors the admin/reports
-// guard — members of the ADMIN_USER_IDS allowlist only; everyone else (incl.
-// authenticated non-admins) gets Next's 404, so the routes' existence is not
-// revealed. Unset env ⇒ no admins ⇒ always 404 (fail closed).
+// Normally (D-DESIGN-DEBT-STRUCTURAL-01, Phase 3) this is admin-gated against
+// the ADMIN_USER_IDS allowlist, mirroring the admin/reports guard, so non-admins
+// get Next's 404 and the routes' existence is not revealed. To restore that,
+// flip `DEV_ROUTES_UNGATED` back to `false`. The matching settings-menu gate
+// lives in src/components/profile/settings/AccountActions.tsx; revert both
+// together. (Unauthenticated visitors still 404 regardless.)
+const DEV_ROUTES_UNGATED = true;
+
 export default async function DevLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
-  if (!session || !isAdminUser(session.userId)) notFound();
+  if (!session || (!DEV_ROUTES_UNGATED && !isAdminUser(session.userId))) notFound();
   return <>{children}</>;
 }
