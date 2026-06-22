@@ -48,6 +48,15 @@ vi.mock('@/components/activity/ActivityStreamItem', () => ({
   ),
 }))
 
+// From Friends milestone streaks render through FromFriendsStreak on the home
+// zones (B-FROMFRIENDS-STREAK-HEADER-01); stub it to a marker so this round-trip
+// asserts the windowing/sectioning, not the per-card internals.
+vi.mock('@/components/feed/FromFriendsStreak', () => ({
+  FromFriendsStreak: ({ item }: { item: { id: string; friendId?: string | null } }) => (
+    <div data-streak={item.id}>streak:{item.id}:{item.friendId ?? 'none'}</div>
+  ),
+}))
+
 vi.mock('@/components/activity/PersonActivityCard', () => ({
   PersonActivityCard: () => <div data-person />,
 }))
@@ -170,10 +179,10 @@ describe('overflow subpages — §7 state sync (Home is a window onto the pendin
     const pending = [0, 1, 2, 3, 4, 5].map((i) => bundle(i, [null]))
 
     const before = renderHome([], pending)
-    expect(before).toContain('activity:p0:friend0')
-    expect(before).toContain('activity:p3:friend3')
-    expect(before).not.toContain('activity:p4:friend4') // beyond the served window
-    expect(before).toContain('2 more →')
+    expect(before).toContain('streak:p0:friend0')
+    expect(before).toContain('streak:p3:friend3')
+    expect(before).not.toContain('streak:p4:friend4') // beyond the served window
+    expect(before).toContain('2 more from friends →')
     expect(before).toContain('href="/from-friends"')
 
     // The subpage answer records the viewer's result on p0's last open question.
@@ -182,9 +191,9 @@ describe('overflow subpages — §7 state sync (Home is a window onto the pendin
     const afterAnswer = [bundle(0, ['correct']), ...pending.slice(1)]
 
     const after = renderHome([], afterAnswer)
-    expect(after).toContain('activity:p0:friend0') // still here (now spent)
-    expect(after).not.toContain('activity:p4:friend4') // still beyond the served window
-    expect(after).toContain('2 more →') // count unchanged — nothing was consumed
+    expect(after).toContain('streak:p0:friend0') // still here (now spent)
+    expect(after).not.toContain('streak:p4:friend4') // still beyond the served window
+    expect(after).toContain('2 more from friends →') // count unchanged — nothing was consumed
   })
 })
 

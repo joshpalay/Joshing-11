@@ -26,6 +26,7 @@ import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
+import { FromFriendsStreak } from '@/components/feed/FromFriendsStreak'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
 import { EditorialFeature } from '@/components/feed/EditorialFeature'
@@ -1759,6 +1760,21 @@ function FeedListContent({
       if (embed?.kind === 'recently_expanding') {
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
+      // From Friends milestone streaks render as a header + per-question
+      // answer/dismiss cards (B-FROMFRIENDS-STREAK-HEADER-01) on the home zones
+      // (Home + the /from-friends overflow, both `homeZoneCards`). The flat
+      // /activities log keeps the collapsed one-liner bundle via
+      // ActivityStreamItem below. Server budget is unchanged — whole streaks
+      // only, never split.
+      if (row.item.expand?.kind === 'milestone' && homeZoneCards) {
+        return (
+          <FromFriendsStreak
+            key={`ff-${row.item.id}`}
+            item={row.item}
+            elevated={homeZoneCards}
+          />
+        )
+      }
       // Everything else renders as a one-liner row, with its bundle triangle
       // mark + tap-to-answer expansion living inside ActivityStreamItem. On the
       // home feed the playable milestone bundles take the cream card treatment
@@ -2096,15 +2112,17 @@ function FeedListContent({
                     unifiedHome={unifiedHome}
                     prominent
                     windowLabel={bandLabelVisible && bandHasContent ? 'Past 7 days' : undefined}
-                    subtitle="Play the questions your friends have aced."
+                    subtitle="Answer the questions your friends have aced."
                   >
                     From Friends
                   </FeedSectionHeading>
                   {groupActivityByFriend(fromFriendsRows).map(renderRow)}
                   {budget.playablesOverflowCount > 0 ? (
+                    // D-B: overflow counts BUNDLES (whole streaks), not
+                    // questions — playablesOverflowCount is the bundle remainder.
                     <OverflowRow
                       unifiedHome={unifiedHome}
-                      label={`${budget.playablesOverflowCount} more →`}
+                      label={`${budget.playablesOverflowCount} more from friends →`}
                       href="/from-friends"
                     />
                   ) : null}
