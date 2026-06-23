@@ -77,11 +77,7 @@ const SCOPED_STYLE = `
 @keyframes wtsBob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
 .wts-driver{position:absolute;inset:0;z-index:4;overflow-y:scroll;scrollbar-width:none;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .wts-driver::-webkit-scrollbar{display:none;}
-.wts-sheet{position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;text-align:center;background:color-mix(in srgb, var(--brand-ink-950) 86%, transparent);color:var(--primary-foreground);}
-.wts-sheet h2{font-family:var(--font-cormorant, Georgia, serif);font-size:2rem;font-weight:600;line-height:1.05;}
-.wts-sheet p{font-size:1rem;line-height:1.5;color:color-mix(in srgb, var(--primary-foreground) 85%, transparent);max-width:18rem;}
-.wts-sheet .wts-primary{margin-top:6px;width:100%;max-width:18rem;background:var(--brand-orange);color:var(--primary-foreground);font-size:1.15rem;font-weight:700;letter-spacing:.02em;border:none;border-radius:13px;padding:16px;cursor:pointer;}
-.wts-sheet .wts-secondary{background:none;border:none;color:color-mix(in srgb, var(--primary-foreground) 82%, transparent);font-size:.95rem;text-decoration:underline;text-underline-offset:4px;cursor:pointer;}
+.wts-sheet{position:absolute;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb, var(--brand-ink-950) 80%, transparent);}
 /* The end card lets scroll/touch pass through to the driver below (so scrolling
    up exits it and revisits the beats); only its buttons capture taps. */
 .wts-end{pointer-events:none;}
@@ -579,32 +575,57 @@ export default function WelcomeTourScreen({
           </div>
         </div>
 
-        {/* Intro card (before start) */}
+        {/* Intro card (before start) — a contained cream card, matching login. */}
         {!started ? (
           <div className="wts-sheet">
-            <User className="size-9 text-[var(--brand-cream)]" strokeWidth={1.6} aria-hidden="true" />
-            <h2>A quick look around</h2>
-            <p>Here&apos;s where everything lives. About 20 seconds — then you&apos;re playing.</p>
-            <button type="button" className="wts-primary" onClick={startTour}>
-              Start
-            </button>
-            <button type="button" className="wts-secondary" onClick={() => finish(exploreHref)}>
-              Skip the tour
-            </button>
+            <div className="w-full max-w-[18rem] rounded-[var(--radius-md)] border border-[var(--brand-border)] bg-[var(--brand-cream-card)] px-7 py-8 text-center shadow-[var(--shadow-overlay)]">
+              <User
+                className="mx-auto size-9 text-[var(--brand-ink-400)]"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+              <h2 className="mt-3 font-serif text-3xl font-semibold leading-tight text-[var(--brand-ink)]">
+                A quick look around
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+                Here&apos;s where everything lives. About 20 seconds — then you&apos;re playing.
+              </p>
+              <button type="button" className="btn-primary mt-5 w-full" onClick={startTour}>
+                Start the tour
+              </button>
+              <button
+                type="button"
+                className="mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
+                onClick={() => finish(exploreHref)}
+              >
+                Skip the tour
+              </button>
+            </div>
           </div>
         ) : null}
 
-        {/* End card (after the last beat) */}
+        {/* End card (after the last beat) — same card; pass-through so scrolling
+            up exits and revisits the beats. */}
         {started && atEnd ? (
           <div className="wts-sheet wts-end">
-            <h2>That&apos;s the tour.</h2>
-            <p>Your five are ready whenever you are. Scroll up to look again.</p>
-            <button type="button" className="wts-primary" onClick={() => finish(playHref)}>
-              Play Now →
-            </button>
-            <button type="button" className="wts-secondary" onClick={() => finish(exploreHref)}>
-              I&apos;ll explore more first
-            </button>
+            <div className="w-full max-w-[18rem] rounded-[var(--radius-md)] border border-[var(--brand-border)] bg-[var(--brand-cream-card)] px-7 py-8 text-center shadow-[var(--shadow-overlay)]">
+              <h2 className="font-serif text-3xl font-semibold leading-tight text-[var(--brand-ink)]">
+                That&apos;s the tour.
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
+                Your five are ready whenever you are. Scroll up to look again.
+              </p>
+              <button type="button" className="btn-primary mt-5 w-full" onClick={() => finish(playHref)}>
+                Play Now →
+              </button>
+              <button
+                type="button"
+                className="mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
+                onClick={() => finish(exploreHref)}
+              >
+                I&apos;ll explore more first
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
