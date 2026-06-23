@@ -4,9 +4,11 @@ import { useRouter } from 'next/navigation';
 import {
   BarChart3,
   Code2,
+  Compass,
   FlaskConical,
   Loader2,
   LogOut,
+  Map,
   RefreshCw,
   Smartphone,
   Sparkles,
@@ -173,6 +175,18 @@ export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
               title="Show me the first time player"
               subtitle="Preview the first-session experience a new player sees"
               href="/dev/first-time-player"
+            />
+            <SettingsRow
+              icon={<Map className="size-5" />}
+              title="Replay onboarding stages"
+              subtitle="Walk through every signup / first-run stage on demand (read-only)"
+              href="/dev/onboarding"
+            />
+            <SettingsRow
+              icon={<Compass className="size-5" />}
+              title="Replay the welcome tour"
+              subtitle="The first-run coach-marks over a sample home, into Play"
+              href="/dev/welcome-tour"
             />
             <SettingsRow
               icon={<Smartphone className="size-5" />}

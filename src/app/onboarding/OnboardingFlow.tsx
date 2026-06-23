@@ -33,6 +33,14 @@ type OnboardingFlowProps = {
   inviteeDisplayName?: string | null
   initialDisplayName?: string | null
   initialHandle?: string | null
+  /**
+   * Read-only replay for the dev onboarding harness. When set, the name, handle,
+   * and interests steps advance through the real UI WITHOUT their mutating
+   * writes (no PATCH /api/account, no POST /api/onboarding/save-interests), and
+   * finishing chains to the next harness stage instead of the live flow. Lets
+   * the harness drive this real component without burning onboarding state.
+   */
+  previewMode?: boolean
 }
 
 const DISPLAY_NAME_MIN = 2
@@ -124,6 +132,7 @@ export default function OnboardingFlow({
   inviteeDisplayName,
   initialDisplayName,
   initialHandle,
+  previewMode = false,
 }: OnboardingFlowProps) {
   const router = useRouter()
   const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
@@ -345,6 +354,17 @@ export default function OnboardingFlow({
     }
 
     setDisplayNameError(null)
+
+    // Dev harness replay — advance through the real UI without the PATCH.
+    if (previewMode) {
+      setDisplayName(trimmed)
+      if (!handle && !hasInitialHandle) {
+        setHandle(sanitizeForHandle(trimmed))
+      }
+      setCurrentStep(hasInitialHandle ? 'review' : 'handle')
+      return
+    }
+
     setIsSavingDisplayName(true)
 
     try {
@@ -385,8 +405,16 @@ export default function OnboardingFlow({
       return
     }
 
-    setIsSavingHandle(true)
     setHandleError(null)
+
+    // Dev harness replay — advance to review without the PATCH.
+    if (previewMode) {
+      setHandle(candidate)
+      setCurrentStep('review')
+      return
+    }
+
+    setIsSavingHandle(true)
 
     try {
       const response = await fetch('/api/account/handle', {
@@ -437,6 +465,14 @@ export default function OnboardingFlow({
     }
 
     setError(null)
+
+    // Dev harness replay — skip the save + first-round generation and chain to
+    // the next stage (the welcome tour) instead of the live home.
+    if (previewMode) {
+      router.push('/dev/welcome-tour')
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -471,9 +507,12 @@ export default function OnboardingFlow({
       }).catch(() => {})
 
       // Onboarding is now complete (save-interests set the flag) and the queue
-      // is generating in the background — land the player straight in /daily.
-      // The daily-reminder opt-in now lives in the post-first-five recap.
-      router.push('/daily')
+      // is generating in the background. Land the player on home with the
+      // first-run welcome tour armed (`?welcome=1`); its closing CTA drops them
+      // straight into playing their Five. The tour self-suppresses after one
+      // run, so returning users skip it. The daily-reminder opt-in lives in the
+      // post-first-five recap.
+      router.push('/?welcome=1')
     } catch {
       setError('Unable to save interests.')
     } finally {
