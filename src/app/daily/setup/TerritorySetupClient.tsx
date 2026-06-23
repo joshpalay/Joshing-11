@@ -518,7 +518,7 @@ export function TerritorySetupClient({
         </header>
 
         {domains.length === 0 ? (
-          <section className="mb-6 rounded-[2rem] border border-dashed border-[var(--border-warm)] bg-white/35 p-6 text-center">
+          <section className="mb-6 rounded-[var(--radius-4xl)] border border-dashed border-[var(--border-warm)] bg-white/35 p-6 text-center">
             <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">
               Your map is ready for its first territory.
             </h2>
@@ -539,7 +539,7 @@ export function TerritorySetupClient({
             </p>
           </div>
           {creating ? (
-            <div className="mb-5 rounded-[1.5rem] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-4">
+            <div className="mb-5 rounded-[var(--radius-3xl)] border border-[var(--border-warm)] bg-[var(--cream-warm)] p-4">
               <AddTopicField
                 inputRef={newTopicInputRef}
                 existingLabels={domains.map((domain) => domain.domain)}
@@ -677,7 +677,7 @@ export function TerritorySetupClient({
           onClick={() => setPendingRemoval(null)}
         >
           <div
-            className="w-full max-w-sm rounded-[1.75rem] border border-[var(--border-warm)] bg-[var(--cream)] p-6 shadow-[0_24px_60px_rgba(26,18,8,0.28)]"
+            className="w-full max-w-sm rounded-[var(--radius-4xl)] border border-[var(--border-warm)] bg-[var(--cream)] p-6 shadow-[0_24px_60px_rgba(26,18,8,0.28)]"
             onClick={(event) => event.stopPropagation()}
           >
             <h2
@@ -791,7 +791,7 @@ function TerritoryZone({
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
       <div
-        className={`min-h-28 space-y-4 rounded-[1.5rem] border border-dashed p-3 transition ${highlighted ? 'border-[var(--ink)] bg-[var(--cream)]/70 shadow-[var(--shadow-overlay)]' : 'border-[var(--border-light)] bg-[var(--cream)]/50'}`}
+        className={`min-h-28 space-y-4 rounded-[var(--radius-3xl)] border border-dashed p-3 transition ${highlighted ? 'border-[var(--ink)] bg-[var(--cream)]/70 shadow-[var(--shadow-overlay)]' : 'border-[var(--border-light)] bg-[var(--cream)]/50'}`}
       >
         {categoryGroups.length > 0 ? (
           categoryGroups.map(({ category, domains: groupDomains }) => (
@@ -893,7 +893,7 @@ function TerritoryCircle({
 
   return (
     <div
-      className={`group relative flex w-full touch-none flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center transition duration-300 select-none ${dragging ? 'scale-95' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
+      className={`group relative flex w-full touch-none flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center transition duration-300 select-none ${dragging ? 'scale-95' : 'opacity-100'} ${settling ? 'motion-safe:animate-[territory-settle_850ms_ease-out]' : ''}`}
       onPointerDown={(event) => onDragStart(event, domain.domain, currentFrequency)}
       onPointerMove={onDragMove}
       onPointerUp={onDragEnd}
@@ -1024,7 +1024,7 @@ function GhostTerritoryCircle({
   return (
     <button
       type="button"
-      className="flex w-full flex-col items-center gap-2 rounded-[1.5rem] p-1 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
+      className="flex w-full flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
       style={style}
       disabled={disabled}
       onClick={onAdd}

@@ -996,6 +996,7 @@ function ResultRow({
   recheckAction,
   canonicalSubcategory,
   openedTerritoryDomain,
+  domId,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
   submitted: string;
@@ -1016,6 +1017,8 @@ function ResultRow({
   pointsLabel?: string | null;
   recheckAction?: RecheckAction | null;
   openedTerritoryDomain?: string | null;
+  /** DOM id for the reveal root so the page can scroll a freshly-revealed result into view (MISC-4). */
+  domId?: string;
 }) {
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>(
     'idle',
@@ -1085,6 +1088,7 @@ function ResultRow({
 
   return (
     <div
+      id={domId}
       className="result-reveal flex flex-col gap-0 pt-0.5"
       style={{ alignItems: 'flex-start', maxWidth: THREAD_CARD_MAX_WIDTH }}
     >
@@ -1547,6 +1551,7 @@ export function GameplayChatThread({
             return (
               <ResultRow
                 key={m.id}
+                domId={`daily-result-${m.assignmentId}`}
                 result={m.result}
                 submitted={m.submitted}
                 questionText={m.questionText}

@@ -27,7 +27,13 @@ import { join, relative } from 'node:path';
 // `rounded-[4px]` to `rounded-[var(--radius-xs)]`, lowering this 25 → 16.
 // Burn-down 2 (2026-06-16) snapped the six `rounded-[8px]` (an exact 0.5rem /
 // --radius-md match) to `rounded-[var(--radius-md)]`, lowering this 16 → 11.
-const CEILING = 11;
+// Burn-down 3 (2026-06-23, CONS-6 close-out) routed the last six rem literals
+// in TerritorySetupClient through the scale tokens — `rounded-[2rem]` and
+// `rounded-[1.75rem]` → `--radius-4xl` (1.625rem), the four `rounded-[1.5rem]`
+// → `--radius-3xl` (1.375rem) (≤6px design-approved shift) — lowering this
+// 11 → 0. Every corner radius in src/ now reads from the scale/tokens; no new
+// literal arbitrary can land.
+const CEILING = 0;
 
 // ── Exemptions (mirrors the color/font/spacing ratchets) ────────────────────
 const EXEMPT = [
