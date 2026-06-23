@@ -198,6 +198,27 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
     expect(rendered).toContain('Undo');
   });
 
+  it('renders the editorial number marker above a catch-up question card (B-GAMEPLAY-QUESTION-NUMBER-BOX-01)', () => {
+    // Catch-up reuses the Daily Five marker: a positional `1.`–`5.` box in the
+    // gutter above the card. Catch-up has no bonus questions, so it is never `✦`.
+    const rendered = html([
+      {
+        id: 'catchup-q-queue-1:0',
+        kind: 'question',
+        assignmentId: 'queue-1:0',
+        questionText: 'Which composer wrote the Goldberg Variations?',
+        creatorName: 'Dana',
+        creatorIsHouse: false,
+        subhead: 'FROM YESTERDAY',
+        numberMarker: { value: 2, bonus: false },
+        badges: [],
+      },
+    ]);
+
+    expect(rendered).toContain('aria-label="Question 2"');
+    expect(rendered).toContain('2.');
+  });
+
   it('renders no aside when the server gated it out (selectInsideJokeForViewer returned null)', () => {
     const rendered = html([
       buildCatchupResultMessage({
