@@ -175,7 +175,7 @@ export function buildCatchupResultMessage(params: {
   };
 }
 
-function questionMessage(item: CatchupQueueItem): ChatMessage {
+function questionMessage(item: CatchupQueueItem, position: number): ChatMessage {
   const badges: NonNullable<Extract<ChatMessage, { kind: 'question' }>['badges']> = [];
   const tier = difficultyEstimateToTierLabel(item.difficultyEstimate);
   if (tier) badges.push({ label: tier });
@@ -190,6 +190,11 @@ function questionMessage(item: CatchupQueueItem): ChatMessage {
     creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
     creatorIsHouse: item.authorIsHouse ?? false,
     subhead: formatQuestionSubhead(item),
+    // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: the same editorial number marker the
+    // Daily Five shows in the gutter above each card. Catch-up plays in rounds of
+    // up to CATCH_UP_BATCH_SIZE, so `position` is the question's 1-based slot in
+    // the current round. Catch-up has no bonus questions, so `bonus` is never set.
+    numberMarker: { value: position, bonus: false },
     badges,
   };
 }
@@ -335,7 +340,10 @@ export function useCatchupFlow() {
     })) return;
 
     introducedItemIdsRef.current.add(currentItem.dailyQueueItemId);
-    setMessages((existing) => [...existing, questionMessage(currentItem)]);
+    // 1-based position within the current round: the count already resolved this
+    // round, plus this one. Matches the Daily Five's 1.–5. numbering.
+    const position = answeredInBatchRef.current + 1;
+    setMessages((existing) => [...existing, questionMessage(currentItem, position)]);
   }, [currentItem, isResolvingTurn, loading, phase]);
 
   const advancePast = useCallback((dailyQueueItemId: string) => {

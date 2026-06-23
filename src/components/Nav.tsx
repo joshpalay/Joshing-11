@@ -126,13 +126,23 @@ export function Nav({
   // floated over the experience.
   const isCeremonyScreen = pathname.startsWith('/ceremony/');
 
+  // The onboarding-harness preview routes are self-contained, isolated replays
+  // (the welcome tour overlays a sample home; the setup replay renders its own
+  // full-screen flow; the building state is a takeover). The global chrome would
+  // clash with the tour's own header/closing panel and read as clutter, so it's
+  // suppressed here — matching /onboarding and /daily. The /dev/onboarding hub
+  // itself keeps the nav.
+  const isOnboardingHarnessPreview =
+    pathname === '/dev/welcome-tour' || pathname.startsWith('/dev/onboarding/');
+
   if (
     pathname === '/onboarding' ||
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
     pathname.startsWith('/invite/') ||
     isGamePlayScreen ||
-    isCeremonyScreen
+    isCeremonyScreen ||
+    isOnboardingHarnessPreview
   ) {
     return null;
   }
@@ -155,6 +165,7 @@ export function Nav({
   return (
     <>
       <header
+        data-app-chrome
         className="z-40 border-b bg-background/95 backdrop-blur"
         aria-label="Primary header"
       >
@@ -198,6 +209,7 @@ export function Nav({
       {showNewGameShortcut ? (
         <button
           type="button"
+          data-app-chrome
           className={[
             'fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg',
             // The dedicated add-a-question FAB shows on every viewport; the
@@ -215,6 +227,7 @@ export function Nav({
         </button>
       ) : null}
       <nav
+        data-app-chrome
         className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur"
         aria-label="Primary navigation"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}

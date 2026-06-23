@@ -110,36 +110,63 @@ describe('FromFriendsStreak — headerless (streak page) mode', () => {
 });
 
 describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', () => {
-  it('removes a correctly-answered question and leaves the rest answerable', () => {
+  it('keeps a correctly-answered question as a spent "✓ Correct" card with a Send-onward affordance', () => {
     const html = renderToStaticMarkup(
       <FromFriendsStreak item={streakItem([q('done', { priorResult: 'correct' }), q('fresh')])} />,
     );
-    // New paradigm: a correct answer drops out of the streak entirely.
-    expect(html).not.toContain('Question done');
+    // The answered-correct question stays visible as a settled card (it is no
+    // longer answerable but it IS forwardable), only the fresh one is playable.
+    expect(html).toContain('Question done');
+    expect(html).toContain('✓ Correct');
+    expect(html).toContain('Send onward');
     expect(html).toContain('Question fresh');
     expect(answerCardCount(html)).toBe(1);
   });
 
-  it('keeps an incorrectly-answered question as a spent "Not this time" card', () => {
+  it('keeps an incorrectly-answered question as a spent "Not this time" card with a Send-onward affordance', () => {
     const html = renderToStaticMarkup(
       <FromFriendsStreak
         item={streakItem([q('missed', { priorResult: 'incorrect' }), q('fresh')])}
       />,
     );
-    // A miss stays visible (spent), only the fresh one is still answerable.
+    // A miss stays visible (spent) and forwardable, only the fresh one is still answerable.
     expect(html).toContain('Not this time');
     expect(html).toContain('Question missed');
+    expect(html).toContain('Send onward');
     expect(answerCardCount(html)).toBe(1);
   });
 
-  it('renders nothing once every question is already correct', () => {
+  it('keeps every already-answered question visible as a forwardable spent card', () => {
     const html = renderToStaticMarkup(
       <FromFriendsStreak
         item={streakItem([q('a', { priorResult: 'correct' }), q('b', { priorResult: 'correct' })])}
       />,
     );
-    // The whole streak (header included) disappears when nothing's left to show.
-    expect(html).toBe('');
+    // The streak no longer collapses to nothing when all its questions are
+    // answered — each settled question reads as correct and can be sent onward.
+    expect(html).not.toBe('');
+    expect(html).toContain('Question a');
+    expect(html).toContain('Question b');
+    expect(html).toContain('✓ Correct');
+    expect(html).toContain('Send onward');
+    // None are answerable any more.
+    expect(answerCardCount(html)).toBe(0);
+  });
+});
+
+describe('FromFriendsStreak — report affordance + author placement', () => {
+  it('renders a report (⋯) control in the upper-right corner of every card', () => {
+    const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('a'), q('b')])} />);
+    // The ⋯ menu (AnsweredRowActions) is the entry point to flag a question as
+    // incorrect or inappropriate — one per card.
+    expect((html.match(/aria-label="More actions"/g) ?? []).length).toBe(2);
+  });
+
+  it('keeps the report control even on a settled (spent) card', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak item={streakItem([q('done', { priorResult: 'correct' })])} />,
+    );
+    expect(html).toContain('aria-label="More actions"');
   });
 });
 

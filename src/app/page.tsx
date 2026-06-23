@@ -17,13 +17,24 @@ import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/da
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
+import WelcomeTour from '@/components/welcome/WelcomeTour'
 
 const FEED_PAGE_SIZE = 20
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>
+}) {
   const session = await getSession()
+  // First-run welcome tour — coach-marks over this real home. Activated by the
+  // `?welcome=1` param onboarding routes to (client-side; the tour self-
+  // suppresses via localStorage once seen). Signed-in only.
+  const params = await searchParams
+  const tourActive = params?.welcome === '1' && Boolean(session)
 
   return (
+    <>
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
           transparent so cream shows through). Rendered as a BACKGROUND image, not
@@ -105,7 +116,7 @@ export default async function Home() {
           </Suspense>
         ) : null}
 
-        <section id="feed">
+        <section id="feed" data-tour="foryou">
           {session ? (
             <Suspense fallback={null}>
               <FromYourFriendsSection userId={session.userId} />
@@ -116,6 +127,11 @@ export default async function Home() {
         </section>
       </div>
     </main>
+    {/* First-run welcome tour — a fixed spotlight overlay over this real home.
+        It dims + spotlights the data-tour sections, pans the page, and hides the
+        global app chrome while it runs. Renders only while active. */}
+    {tourActive ? <WelcomeTour /> : null}
+    </>
   )
 }
 

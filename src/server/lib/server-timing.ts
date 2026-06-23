@@ -54,11 +54,19 @@ export function createServerTiming(): ServerTiming {
 
 /**
  * Emit one structured, grep-able `[perf]` log line per request so per-route
- * durations are queryable from Vercel function logs (B-PERF-04). The
+ * durations are queryable from Vercel function logs (B-PERF-04, PERF-4). The
  * `Server-Timing` *header* only reaches the browser Network panel and never
  * appears in function logs, so it cannot back the §12.6 p50/p95 table on its
- * own. One consistent shape — `[perf] { route, …_ms, … }` — across every §12.6
- * surface lets a log drain aggregate percentiles per `route`.
+ * own. One consistent shape across every §12.6 surface lets a log drain
+ * aggregate percentiles per `route`.
+ *
+ * Logged as a **single JSON-stringified argument** so a Vercel Log Drain parses
+ * the metrics as structured fields: a two-arg `console.info('[perf]', obj)`
+ * renders the object through `util.inspect` (single-quoted, unquoted keys — not
+ * valid JSON) and arrives at the drain as one opaque string, defeating
+ * per-route percentile queries. The `[perf]` tag stays a top-level `tag` field
+ * so the line is still grep-able and a drain can filter `tag = "[perf]"` before
+ * aggregating the `…_ms` fields.
  *
  * Telemetry only: logging never throws and never alters a response.
  */
@@ -68,7 +76,7 @@ export function logServerTiming(
   extra?: Record<string, string | number | boolean | null | undefined>,
 ): void {
   try {
-    console.info('[perf]', { route, ...timing.toMetrics(), ...extra });
+    console.info(JSON.stringify({ tag: '[perf]', route, ...timing.toMetrics(), ...extra }));
   } catch {
     // telemetry only — swallow
   }

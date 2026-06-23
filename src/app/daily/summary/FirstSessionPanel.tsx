@@ -109,15 +109,28 @@ type EmailState =
   | { kind: 'idle'; value: string; error: string | null; saving: boolean }
   | { kind: 'saved'; email: string }
 
-export function FirstSessionPanel({ recap }: { recap: FirstSessionRecapView }) {
+export function FirstSessionPanel({
+  recap,
+  preview = false,
+}: {
+  recap: FirstSessionRecapView
+  /**
+   * Read-only replay (dev harness): renders the real panel — including
+   * `recap.beat3` — but suppresses its side effects, so it never records the
+   * one-time "seen" signal or PATCHes reminder settings.
+   */
+  preview?: boolean
+}) {
   // Persist the seen-signal as soon as the panel shows — re-entry, refresh, and
-  // replaying catch-up must never re-trigger it. Fire-and-forget.
+  // replaying catch-up must never re-trigger it. Fire-and-forget. Skipped in
+  // preview so a harness replay never burns the one-time flag.
   useEffect(() => {
+    if (preview) return
     fetch('/api/daily/first-session-recap/seen', {
       method: 'POST',
       credentials: 'include',
     }).catch(() => undefined)
-  }, [])
+  }, [preview])
 
   const [email, setEmail] = useState<EmailState>({
     kind: 'idle',
@@ -195,6 +208,11 @@ export function FirstSessionPanel({ recap }: { recap: FirstSessionRecapView }) {
                   return
                 }
                 setEmail({ ...email, saving: true, error: null })
+                // Preview replay — show the saved state without the PATCH.
+                if (preview) {
+                  setEmail({ kind: 'saved', email: trimmed })
+                  return
+                }
                 const response = await fetch('/api/account/reminders', {
                   method: 'PATCH',
                   credentials: 'include',

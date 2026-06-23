@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { Send } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
+import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import {
   ActorLink,
   Line,
@@ -70,17 +73,17 @@ export function FromFriendsStreak({
 
   if (!expand || expand.kind !== 'milestone' || questions.length === 0) return null;
 
-  // New paradigm: a question the viewer has gotten CORRECT drops out of the
-  // streak entirely (server-prior or in-session) — "I got it, I don't need to
-  // see it again." A miss stays as a spent card; an unanswered one stays
-  // answerable. When nothing's left to show, the whole streak (header included)
-  // disappears.
-  const answeredCorrect = (q: StreamQuestion): boolean => {
-    const r = resolutions.get(q.questionId);
-    return r ? r.isCorrect : q.priorResult === 'correct';
-  };
-  const visible = questions.filter((q) => !answeredCorrect(q));
-  if (visible.length === 0) return null;
+  // A question the viewer has already answered STAYS in the streak as a settled
+  // card: correct reads "✓ Correct", a miss reads "Not this time", and either way
+  // the card offers a "Send onward" affordance so the viewer can forward it to
+  // someone else (request 2026-06-22). This replaces the earlier treatment that
+  // dropped answered-correct questions out of the streak entirely — the viewer
+  // wanted to SEE what they got right and be able to pass it on, not have it
+  // vanish silently. Server-side exhaustion is unchanged: a bundle with no
+  // still-answerable questions never reaches the client (build-stream keeps only
+  // bundles whose remaining-unanswered count is > 0), so a fully-played streak
+  // still disappears on the next load — it just no longer disappears mid-session
+  // the instant its last question is answered.
 
   // D-C: a streak whose ORIGINAL bundle holds ≥2 questions gets the header; a
   // lone-question bundle stands alone with the compact "via {friend}'s streak"
@@ -92,7 +95,7 @@ export function FromFriendsStreak({
   // header carries attribution for the whole streak.
   const showViaLine = !headerless && !showHeader;
 
-  const cards = visible.map((q) => (
+  const cards = questions.map((q) => (
     <StreakQuestionCard
       key={q.questionId}
       question={q}
@@ -198,6 +201,31 @@ function CategoryLabel({ category }: { category: string }) {
   );
 }
 
+// The card's recurring "two-ends" row: a left node and a right node pushed to
+// opposite edges. The card uses this shape three times — category ↔ report menu,
+// graded result ↔ "Send onward", and Dismiss ↔ Answer — so the flex/space-between
+// wrapper lives here once rather than being hand-rolled at each call site.
+function CardRow({
+  left,
+  right,
+  gap = 0,
+  marginBottom = 0,
+}: {
+  left: ReactNode;
+  right: ReactNode;
+  gap?: number;
+  marginBottom?: number;
+}) {
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap, marginBottom }}
+    >
+      {left}
+      {right}
+    </div>
+  );
+}
+
 // One question in the streak. Active: the elevated card with Answer/Dismiss.
 // Answered: the same card dimmed to a calm spent state with its graded result.
 // Dismissed: a compact undo bar (view-state only; passing never hits the server).
@@ -225,6 +253,9 @@ function StreakQuestionCard({
   const answer = useMilestoneAnswer(question, onResolved);
   // Dismiss is view-state only ("pass"): collapse the card to an undo bar.
   const [passed, setPassed] = useState(false);
+  // Forwarding a settled question: the "Send onward" affordance opens the same
+  // SendQuestionDrawer the convergence / your-question reveals use.
+  const [sendOpen, setSendOpen] = useState(false);
 
   const category = question.domain?.trim() || null;
   const hasProvenance = questionProvenance(question) !== null;
@@ -274,21 +305,24 @@ function StreakQuestionCard({
           </div>
         ) : null}
 
-        {/* Category eyebrow with the authorship marker on the SAME row (right-
-            aligned) to save vertical space. D-D (canon): house/LLM authorship is
-            marked PRE-answer; human shows nothing, never a generic "A friend". */}
-        {category || hasProvenance ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              marginBottom: 10,
-            }}
-          >
-            {category ? <CategoryLabel category={category} /> : <span />}
-            {hasProvenance ? <QuestionProvenance q={question} style={{ margin: 0 }} /> : null}
+        {/* Top row: the category eyebrow (left) and the ⋯ report menu pinned to
+            the upper-right corner — the entry point to flag this question as
+            incorrect or inappropriate. The authorship marker no longer rides this
+            row; it drops to its own second line below so the corner is free for
+            the report affordance. */}
+        <CardRow
+          gap={8}
+          marginBottom={hasProvenance ? 4 : 10}
+          left={category ? <CategoryLabel category={category} /> : <span />}
+          right={
+            <AnsweredRowActions target={{ questionId: question.questionId }} surface="lately_result" />
+          }
+        />
+        {/* Second level: honest authorship (D-D canon: house/LLM marked
+            PRE-answer; a human author shows nothing, never a generic "A friend"). */}
+        {hasProvenance ? (
+          <div style={{ marginBottom: 10 }}>
+            <QuestionProvenance q={question} style={{ margin: 0 }} />
           </div>
         ) : null}
 
@@ -306,17 +340,41 @@ function StreakQuestionCard({
         </p>
 
         {spent ? (
-          <SpentResult resolution={resolution} priorResult={question.priorResult} />
+          // Settled: show the graded result, and offer forwarding the question
+          // onward to someone else (the viewer answered it, so it's no longer
+          // theirs to answer — but it's still theirs to pass on).
+          <CardRow
+            gap={12}
+            left={<SpentResult resolution={resolution} priorResult={question.priorResult} />}
+            right={
+              <FeedActionLink
+                size="sm"
+                className="no-underline"
+                onClick={() => setSendOpen(true)}
+                aria-label="Send onward"
+                title="Send onward"
+              >
+                <Send className="size-4" aria-hidden="true" />
+              </FeedActionLink>
+            }
+          />
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <FeedDismissButton onClick={() => setPassed(true)} />
-            <button type="button" className="btn-primary" onClick={answer.open}>
-              Answer
-            </button>
-          </div>
+          <CardRow
+            left={<FeedDismissButton onClick={() => setPassed(true)} />}
+            right={
+              <button type="button" className="btn-primary" onClick={answer.open}>
+                Answer
+              </button>
+            }
+          />
         )}
       </div>
       {spent ? null : answer.sheets}
+      <SendQuestionDrawer
+        isOpen={sendOpen}
+        onClose={() => setSendOpen(false)}
+        question={{ id: question.questionId, text: question.text, domain: question.domain ?? '' }}
+      />
     </>
   );
 }
