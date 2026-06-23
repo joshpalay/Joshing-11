@@ -135,15 +135,15 @@ export default function WelcomeTourScreen({
         copy: 'Further down, <b>recent activity</b> shows what everyone you play with is up to.',
       },
       {
-        target: 'knowledge',
-        label: 'Knowledge',
-        copy: 'Watch your <b>knowledge grow</b> across every topic — it lives in this tab.',
-        inNav: true,
-      },
-      {
         target: 'questions',
         label: 'Questions',
         copy: 'Questions <b>you write</b> to ask your friends live in this tab.',
+        inNav: true,
+      },
+      {
+        target: 'knowledge',
+        label: 'Knowledge',
+        copy: 'Watch your <b>knowledge grow</b> across every topic — it lives in this tab.',
         inNav: true,
       },
     ],
