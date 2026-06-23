@@ -126,12 +126,10 @@ export default async function Home({
           )}
         </section>
       </div>
-
-      {/* Welcome-tour closing panel mounts here (last in the home flow, so the
-          tour's final scroll lands on it) and the controller overlay drives the
-          coach-marks. Both render only while the tour is active. */}
-      {tourActive ? <div id="welcome-tour-closer-slot" /> : null}
     </main>
+    {/* First-run welcome tour — a fixed spotlight overlay over this real home.
+        It dims + spotlights the data-tour sections, pans the page, and hides the
+        global app chrome while it runs. Renders only while active. */}
     {tourActive ? <WelcomeTour /> : null}
     </>
   )

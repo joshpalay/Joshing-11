@@ -12,7 +12,7 @@ import { AddTopicField, type AddTopicError } from '@/components/interests/AddTop
 // lands the player straight in /daily. The daily-reminder email opt-in moved
 // off this flow into the post-first-five recap (FirstSessionRecap), so the ask
 // arrives once the player has actually felt the loop.
-type CurrentStep = 'display-name' | 'handle' | 'review'
+type CurrentStep = 'setup' | 'review'
 
 export type ProposedInterest = {
   domain: string
@@ -41,6 +41,12 @@ type OnboardingFlowProps = {
    * the harness drive this real component without burning onboarding state.
    */
   previewMode?: boolean
+  /**
+   * Where the interests step routes after finishing in `previewMode`. Lets the
+   * full-walkthrough harness chain onward (e.g. into the welcome tour) instead
+   * of the live home. Defaults to the standalone welcome-tour preview.
+   */
+  previewNextHref?: string
 }
 
 const DISPLAY_NAME_MIN = 2
@@ -133,13 +139,15 @@ export default function OnboardingFlow({
   initialDisplayName,
   initialHandle,
   previewMode = false,
+  previewNextHref = '/dev/welcome-tour',
 }: OnboardingFlowProps) {
   const router = useRouter()
   const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
   const hasInitialHandle = Boolean(initialHandle?.trim())
   const [currentStep, setCurrentStep] = useState<CurrentStep>(() => {
-    if (!hasInitialDisplayName) return 'display-name'
-    if (!hasInitialHandle) return 'handle'
+    // Name and call sign now share one "setup" screen; only skip it when both
+    // are already on file.
+    if (!hasInitialDisplayName || !hasInitialHandle) return 'setup'
     return 'review'
   })
   const [displayName, setDisplayName] = useState<string>(() =>
@@ -223,7 +231,7 @@ export default function OnboardingFlow({
   )
 
   useEffect(() => {
-    if (currentStep !== 'handle') return
+    if (currentStep !== 'setup') return
 
     const candidate = handle.trim().toLowerCase()
     const controller = new AbortController()
@@ -344,59 +352,17 @@ export default function OnboardingFlow({
     )
   }
 
-  async function submitDisplayName() {
-    const trimmed = displayName.trim().replace(/\s+/g, ' ')
-    if (trimmed.length < DISPLAY_NAME_MIN || trimmed.length > DISPLAY_NAME_MAX) {
+  // Name + call sign now save together from one "setup" screen. Name persists
+  // first, then handle; a handle failure surfaces under the handle field while
+  // the (already-saved) name is kept, so retrying only re-runs the handle PATCH.
+  async function submitSetup() {
+    const trimmedName = displayName.trim().replace(/\s+/g, ' ')
+    if (trimmedName.length < DISPLAY_NAME_MIN || trimmedName.length > DISPLAY_NAME_MAX) {
       setDisplayNameError(
         `Pick something between ${DISPLAY_NAME_MIN} and ${DISPLAY_NAME_MAX} characters.`
       )
       return
     }
-
-    setDisplayNameError(null)
-
-    // Dev harness replay — advance through the real UI without the PATCH.
-    if (previewMode) {
-      setDisplayName(trimmed)
-      if (!handle && !hasInitialHandle) {
-        setHandle(sanitizeForHandle(trimmed))
-      }
-      setCurrentStep(hasInitialHandle ? 'review' : 'handle')
-      return
-    }
-
-    setIsSavingDisplayName(true)
-
-    try {
-      const response = await fetch('/api/account', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: trimmed }),
-      })
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        setDisplayNameError(
-          typeof data?.error === 'string'
-            ? data.error
-            : "We couldn't save that name. Try again."
-        )
-        return
-      }
-
-      setDisplayName(trimmed)
-      if (!handle && !hasInitialHandle) {
-        setHandle(sanitizeForHandle(trimmed))
-      }
-      setCurrentStep(hasInitialHandle ? 'review' : 'handle')
-    } catch {
-      setDisplayNameError("We couldn't save that name. Try again.")
-    } finally {
-      setIsSavingDisplayName(false)
-    }
-  }
-
-  async function submitHandle() {
     const candidate = handle.trim().toLowerCase()
     if (!HANDLE_FORMAT.test(candidate)) {
       setHandleError(
@@ -405,39 +371,56 @@ export default function OnboardingFlow({
       return
     }
 
+    setDisplayNameError(null)
     setHandleError(null)
 
-    // Dev harness replay — advance to review without the PATCH.
+    // Dev harness replay — advance through the real UI without the PATCHes.
     if (previewMode) {
+      setDisplayName(trimmedName)
       setHandle(candidate)
       setCurrentStep('review')
       return
     }
 
-    setIsSavingHandle(true)
-
+    setIsSavingDisplayName(true)
     try {
-      const response = await fetch('/api/account/handle', {
+      const nameResponse = await fetch('/api/account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: trimmedName }),
+      })
+      const nameData = await nameResponse.json().catch(() => ({}))
+      if (!nameResponse.ok) {
+        setDisplayNameError(
+          typeof nameData?.error === 'string'
+            ? nameData.error
+            : "We couldn't save that name. Try again."
+        )
+        return
+      }
+      setDisplayName(trimmedName)
+
+      setIsSavingHandle(true)
+      const handleResponse = await fetch('/api/account/handle', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ handle: candidate }),
       })
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
+      const handleData = await handleResponse.json().catch(() => ({}))
+      if (!handleResponse.ok) {
         setHandleError(
-          typeof data?.message === 'string'
-            ? data.message
+          typeof handleData?.message === 'string'
+            ? handleData.message
             : "We couldn't save that handle. Try again."
         )
         return
       }
-
       setHandle(candidate)
       setCurrentStep('review')
     } catch {
-      setHandleError("We couldn't save that handle. Try again.")
+      setHandleError("We couldn't save your details. Try again.")
     } finally {
+      setIsSavingDisplayName(false)
       setIsSavingHandle(false)
     }
   }
@@ -469,7 +452,7 @@ export default function OnboardingFlow({
     // Dev harness replay — skip the save + first-round generation and chain to
     // the next stage (the welcome tour) instead of the live home.
     if (previewMode) {
-      router.push('/dev/welcome-tour')
+      router.push(previewNextHref)
       return
     }
 
@@ -524,28 +507,28 @@ export default function OnboardingFlow({
     <main className="bg-background text-foreground min-h-screen px-4 pt-8 pb-10 sm:px-6 sm:pt-12">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-2xl flex-col">
         <div className="flex flex-1 flex-col">
-          {currentStep === 'display-name' ? (
+          {currentStep === 'setup' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
               <div className="space-y-3">
                 <p className="font-wordmark text-[13px] font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
                   Joshing
                 </p>
                 <StepHeader
-                  title="What should we call you?"
+                  title="Set up your profile"
                   subtitle="Joshing is a daily trivia game you play with friends — questions tuned to what you actually know."
                 />
                 <p className="text-muted-foreground text-sm leading-6">
                   {inviteeDisplayName?.trim()
-                    ? `${displayInviterName} added you as "${inviteeDisplayName.trim()}". Keep it or change it — ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`
-                    : `This is how you'll appear to friends. ${DISPLAY_NAME_MIN} to ${DISPLAY_NAME_MAX} characters.`}
+                    ? `${displayInviterName} added you as "${inviteeDisplayName.trim()}". Set your name and call sign — friends use your @ to find you.`
+                    : 'Pick the name friends see and your call sign — your @ on Joshing.'}
                 </p>
               </div>
 
               <form
-                className="space-y-4"
+                className="space-y-5"
                 onSubmit={(event) => {
                   event.preventDefault()
-                  if (!isSavingDisplayName) void submitDisplayName()
+                  if (!isSavingDisplayName && !isSavingHandle) void submitSetup()
                 }}
               >
                 <label className="block">
@@ -559,53 +542,28 @@ export default function OnboardingFlow({
                     maxLength={DISPLAY_NAME_MAX}
                     value={displayName}
                     onChange={(e) => {
-                      setDisplayName(e.target.value.slice(0, DISPLAY_NAME_MAX))
+                      const next = e.target.value.slice(0, DISPLAY_NAME_MAX)
+                      setDisplayName(next)
                       if (displayNameError) setDisplayNameError(null)
+                      // Seed the call sign from the name until the user edits it.
+                      if (!handleTouched && !hasInitialHandle) {
+                        setHandle(sanitizeForHandle(next))
+                      }
                     }}
                   />
+                  {displayNameError ? (
+                    <p className="text-destructive mt-2 text-sm">{displayNameError}</p>
+                  ) : null}
                 </label>
 
-                {displayNameError ? (
-                  <p className="text-destructive text-sm">{displayNameError}</p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  className="btn-primary w-full"
-                  disabled={
-                    isSavingDisplayName ||
-                    displayName.trim().length < DISPLAY_NAME_MIN
-                  }
-                >
-                  {isSavingDisplayName ? 'Saving...' : 'Continue'}
-                </button>
-              </form>
-            </div>
-          ) : null}
-
-          {currentStep === 'handle' ? (
-            <div className="flex flex-1 flex-col justify-center gap-8">
-              <StepHeader
-                title="Pick your handle"
-                subtitle={`This is your @ on Joshing — friends use it to find you. ${HANDLE_MIN}–${HANDLE_MAX} characters, lowercase letters, numbers, and underscores. Starts with a letter.`}
-              />
-
-              <form
-                className="space-y-4"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  if (!isSavingHandle) void submitHandle()
-                }}
-              >
                 <label className="block">
-                  <span className="text-sm font-medium">Your handle</span>
+                  <span className="text-sm font-medium">Your call sign</span>
                   <div className="mt-2 flex items-center gap-2">
                     <span className="text-muted-foreground text-base">@</span>
                     <input
                       type="text"
                       className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
                       placeholder="yourhandle"
-                      autoFocus
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
@@ -623,47 +581,51 @@ export default function OnboardingFlow({
                       }}
                     />
                   </div>
+                  {handleTouched && handle.length >= HANDLE_MIN ? (
+                    <p
+                      className={`mt-2 text-sm ${
+                        handleStatus.state === 'available'
+                          ? 'text-emerald-600'
+                          : handleStatus.state === 'unavailable'
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'
+                      }`}
+                    >
+                      {handleStatus.state === 'checking'
+                        ? 'Checking…'
+                        : handleStatus.state === 'available'
+                          ? `@${handle} is available.`
+                          : handleStatus.state === 'unavailable'
+                            ? handleStatus.reason === 'taken'
+                              ? 'That call sign is already taken.'
+                              : handleStatus.reason === 'reserved'
+                                ? 'That call sign is reserved.'
+                                : 'Use only lowercase letters, numbers, and underscores. Start with a letter.'
+                            : null}
+                    </p>
+                  ) : null}
+                  {handleError ? (
+                    <p className="text-destructive mt-2 text-sm">{handleError}</p>
+                  ) : null}
                 </label>
 
-                {handleTouched && handle.length >= HANDLE_MIN ? (
-                  <p
-                    className={`text-sm ${
-                      handleStatus.state === 'available'
-                        ? 'text-emerald-600'
-                        : handleStatus.state === 'unavailable'
-                          ? 'text-destructive'
-                          : 'text-muted-foreground'
-                    }`}
-                  >
-                    {handleStatus.state === 'checking'
-                      ? 'Checking…'
-                      : handleStatus.state === 'available'
-                        ? `@${handle} is available.`
-                        : handleStatus.state === 'unavailable'
-                          ? handleStatus.reason === 'taken'
-                            ? 'That handle is already taken.'
-                            : handleStatus.reason === 'reserved'
-                              ? 'That handle is reserved.'
-                              : 'Use only lowercase letters, numbers, and underscores. Start with a letter.'
-                          : null}
-                  </p>
-                ) : null}
-
-                {handleError ? (
-                  <p className="text-destructive text-sm">{handleError}</p>
-                ) : null}
+                <p className="text-muted-foreground text-xs leading-5">
+                  {`${DISPLAY_NAME_MIN}–${DISPLAY_NAME_MAX} characters for your name. Call sign is ${HANDLE_MIN}–${HANDLE_MAX} characters — lowercase letters, numbers, and underscores, starting with a letter.`}
+                </p>
 
                 <button
                   type="submit"
                   className="btn-primary w-full"
                   disabled={
+                    isSavingDisplayName ||
                     isSavingHandle ||
+                    displayName.trim().length < DISPLAY_NAME_MIN ||
                     handle.length < HANDLE_MIN ||
                     handleStatus.state === 'checking' ||
                     handleStatus.state === 'unavailable'
                   }
                 >
-                  {isSavingHandle ? 'Saving…' : 'Continue'}
+                  {isSavingDisplayName || isSavingHandle ? 'Saving…' : 'Continue'}
                 </button>
               </form>
             </div>
