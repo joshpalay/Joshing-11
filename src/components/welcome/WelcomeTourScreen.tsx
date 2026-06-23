@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Bell, Brain, Home, Pencil, SlidersHorizontal, User, Users } from 'lucide-react';
+import { Bell, Brain, Home, MoreHorizontal, Pencil, SlidersHorizontal, Star, User, Users } from 'lucide-react';
 
 /**
  * Welcome tour — a self-contained first-run "overview".
@@ -413,16 +413,31 @@ export default function WelcomeTourScreen({
               <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
                 For you
               </p>
-              <article className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
-                <p className="text-sm text-[var(--brand-ink-700)]">
-                  <span className="font-semibold text-[var(--brand-ink)]">{inviter}</span> sent you a
-                  question they wrote
+              {/* For You — mirrors SparkleEnvelope (the real directed-send card):
+                  sans signal + overflow, a short rule, the serif question with
+                  faded quotes, Dismiss / Answer. */}
+              <article className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-3.5">
+                <div className="flex w-full items-start justify-between gap-3">
+                  <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
+                    <span className="font-semibold">{inviter}</span> sent you a question they wrote
+                  </p>
+                  <MoreHorizontal
+                    className="size-5 shrink-0 text-[var(--brand-ink-400)]"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div aria-hidden="true" className="mx-auto my-4 h-px w-[70px] bg-[var(--brand-rule)]" />
+                <p className="font-serif text-2xl font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]">
+                  <span aria-hidden="true" className="opacity-60">
+                    &ldquo;
+                  </span>
+                  In the surrey with the fringe on top, what was the dashboard made of?
+                  <span aria-hidden="true" className="opacity-60">
+                    &rdquo;
+                  </span>
                 </p>
-                <p className="mt-2 mb-3 font-serif text-[1.2rem] leading-snug font-medium text-[var(--brand-ink)]">
-                  &ldquo;In the surrey with the fringe on top, what was the dashboard made of?&rdquo;
-                </p>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Dismiss</span>
+                <div className="mt-5 flex items-center justify-between">
+                  <span className="text-sm font-medium text-[var(--brand-ink-400)]">Dismiss</span>
                   <span className="btn-primary">Answer</span>
                 </div>
               </article>
@@ -459,23 +474,57 @@ export default function WelcomeTourScreen({
               </div>
             </section>
 
-            {/* Recent activity — lower on the page (beat ~3.5). */}
-            <section data-tour="activity" className="mt-5">
-              <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
+            {/* Recent activity — lower on the page (beat ~3.5). Mirrors the real
+                feed: a milestone row, then the sage "Overlap" common-ground band
+                (EditorialFeature, interlude-sage). */}
+            <section data-tour="activity" className="mt-6">
+              <p className="mb-3 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
                 Recent activity
               </p>
-              <div className="space-y-2.5 rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
-                <p className="text-sm text-[var(--brand-ink-700)]">
-                  <span className="font-semibold text-[var(--brand-ink)]">{inviter}</span> played their
-                  first five
+              <div className="flex items-start gap-2.5 pl-0.5">
+                <Star
+                  className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold)]"
+                  fill="currentColor"
+                  aria-hidden="true"
+                />
+                <p className="text-sm leading-6 text-[var(--brand-ink-700)]">
+                  <span className="font-semibold text-[var(--brand-ink)]">Someone</span> played their
+                  first five questions
                 </p>
-                <p className="text-sm text-[var(--brand-ink-700)]">
-                  You and <span className="font-semibold text-[var(--brand-ink)]">{inviter}</span> keep
-                  meeting in the same places
+              </div>
+
+              {/* Common ground — the full-bleed sage editorial band. -mx-3 cancels
+                  the mock home's 12px gutter so it reaches the column edges. */}
+              <div className="-mx-3 mt-5 bg-[var(--interlude-sage)] px-5 pt-8 pb-8">
+                <h3 className="max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)]">
+                  You and {inviter} keep meeting in the same places.
+                </h3>
+                <div className="mt-7 flex items-start gap-8">
+                  {[
+                    { label: 'American City Nicknames', color: 'var(--tri-orange)' },
+                    { label: 'Bikini Bottom Animated Series', color: 'var(--brand-navy)' },
+                  ].map((d) => (
+                    <span key={d.label} className="flex flex-col gap-2">
+                      <span
+                        className="block size-12 rounded-full"
+                        style={{ background: d.color }}
+                        aria-hidden="true"
+                      />
+                      <span className="max-w-[120px] font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
+                        {d.label}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-4 font-serif text-[15px] font-semibold text-[var(--brand-ink)]">
+                  {inviter}
                 </p>
-                <p className="text-sm text-[var(--brand-ink-700)]">
-                  <span className="font-semibold text-[var(--brand-ink)]">Dana</span> joined Joshing
+                <p className="mt-5 font-sans text-[13px] tracking-[0.12em] text-[var(--brand-ink-400)] uppercase">
+                  Shared ground with 1 friend
                 </p>
+                <span className="mt-3 inline-flex min-h-11 items-center font-sans text-[13px] font-medium tracking-[0.12em] text-[var(--ink)] uppercase underline underline-offset-4">
+                  Explore your overlap →
+                </span>
               </div>
             </section>
           </div>
