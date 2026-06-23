@@ -72,7 +72,8 @@ const SCOPED_STYLE = `
 .wts-help .wts-arrow{position:absolute;width:0;height:0;}
 .wts-help.below .wts-arrow{top:-8px;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:9px solid var(--brand-card);}
 .wts-help.above .wts-arrow{bottom:-8px;border-left:9px solid transparent;border-right:9px solid transparent;border-top:9px solid var(--brand-card);}
-.wts-hint{position:absolute;bottom:14px;left:0;right:0;z-index:5;text-align:center;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-ink-700);animation:wtsBob 1.8s ease-in-out infinite;pointer-events:none;}
+.wts-hint{position:absolute;bottom:16px;left:0;right:0;z-index:65;display:flex;justify-content:center;pointer-events:none;}
+.wts-hint span{display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb, var(--brand-ink-950) 82%, transparent);color:var(--primary-foreground);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:7px 14px;box-shadow:0 6px 18px -8px color-mix(in srgb, var(--brand-ink-950) 60%, transparent);animation:wtsBob 1.6s ease-in-out infinite;}
 @keyframes wtsBob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
 .wts-driver{position:absolute;inset:0;z-index:4;overflow-y:scroll;scrollbar-width:none;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .wts-driver::-webkit-scrollbar{display:none;}
@@ -85,7 +86,7 @@ const SCOPED_STYLE = `
    up exits it and revisits the beats); only its buttons capture taps. */
 .wts-end{pointer-events:none;}
 .wts-end button{pointer-events:auto;}
-@media (prefers-reduced-motion:reduce){.wts-spot,.wts-dim,.wts-ring,.wts-help,.wts-hint,.wts-home{transition:none;animation:none;}}
+@media (prefers-reduced-motion:reduce){.wts-spot,.wts-dim,.wts-ring,.wts-help,.wts-hint,.wts-hint span,.wts-home{transition:none;animation:none;}}
 `;
 
 type WelcomeTourScreenProps = {
@@ -438,7 +439,7 @@ export default function WelcomeTourScreen({
           {/* scroll hint while touring */}
           {started && !atEnd ? (
             <div className="wts-hint" aria-hidden="true">
-              {stepIndex >= lastIndex ? 'Keep scrolling to finish ↓' : 'Scroll to move through ↓'}
+              <span>{stepIndex >= lastIndex ? 'Keep scrolling to finish ↓' : 'Scroll to explore ↓'}</span>
             </div>
           ) : null}
 
