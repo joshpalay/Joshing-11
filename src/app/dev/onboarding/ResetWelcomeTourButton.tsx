@@ -4,7 +4,7 @@ import { RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
-import { clearWelcomeTourSeen } from '@/components/welcome/WelcomeTour';
+import { clearWelcomeTourSeen } from '@/components/welcome/WelcomeTourScreen';
 
 /**
  * Re-arm the first-run welcome tour by clearing its persisted client flag.

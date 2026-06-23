@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Bell, Brain, Home, MoreHorizontal, Pencil, SlidersHorizontal, Star, User, Users } from 'lucide-react';
 
 /**
@@ -106,6 +106,20 @@ export default function WelcomeTourScreen({
 }: WelcomeTourScreenProps) {
   const router = useRouter();
   const isClient = useSyncExternalStore(subscribeNoop, getClientSnapshot, getServerSnapshot);
+  // Self-suppress once seen (so a refresh/back to /welcome doesn't re-run it).
+  // `forced` (dev replay) ignores the flag.
+  const seen = useSyncExternalStore(
+    subscribeNoop,
+    () => {
+      if (forced) return false;
+      try {
+        return Boolean(window.localStorage.getItem(storageKey));
+      } catch {
+        return false;
+      }
+    },
+    () => false,
+  );
   const inviter = inviterName?.trim() ? inviterName.trim() : 'a friend';
 
   const beats: Beat[] = useMemo(
@@ -338,7 +352,12 @@ export default function WelcomeTourScreen({
     router.push(href);
   };
 
-  if (!isClient) return null;
+  // Already seen (and not a forced dev replay) — leave for the explore target.
+  useEffect(() => {
+    if (!forced && seen) router.replace(exploreHref);
+  }, [forced, seen, exploreHref, router]);
+
+  if (!isClient || (!forced && seen)) return null;
 
   return (
     <div className="wts-root">

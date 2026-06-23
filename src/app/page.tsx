@@ -17,24 +17,21 @@ import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/da
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
-import WelcomeTour from '@/components/welcome/WelcomeTour'
 
 const FEED_PAGE_SIZE = 20
 
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ welcome?: string }>
+  searchParams: Promise<{ firstrun?: string }>
 }) {
   const session = await getSession()
-  // First-run welcome tour — coach-marks over this real home. Activated by the
-  // `?welcome=1` param onboarding routes to (client-side; the tour self-
-  // suppresses via localStorage once seen). Signed-in only.
+  // After the welcome tour's "explore first" path (its "Play Now" routes
+  // straight to /daily), the player lands here with a one-time nudge to play.
   const params = await searchParams
-  const tourActive = params?.welcome === '1' && Boolean(session)
+  const showFirstRunNote = params?.firstrun === '1' && Boolean(session)
 
   return (
-    <>
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
           transparent so cream shows through). Rendered as a BACKGROUND image, not
@@ -56,6 +53,15 @@ export default async function Home({
           backgroundRepeat: 'no-repeat',
         }}
       />
+
+      {/* First-run note — shown once after the welcome tour's "explore first"
+          path (?firstrun=1), nudging the player to start their first five. */}
+      {showFirstRunNote ? (
+        <div className="rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-cream-card)] px-4 py-3 text-sm leading-6 text-[var(--brand-ink-700)]">
+          <span className="font-semibold text-[var(--brand-ink)]">You&apos;re all set.</span> Your
+          first five are ready — tap Play to start.
+        </div>
+      ) : null}
 
       {/* Today's Five — a card, so it can ride over the top triangle band. */}
       {session ? (
@@ -127,11 +133,6 @@ export default async function Home({
         </section>
       </div>
     </main>
-    {/* First-run welcome tour — a fixed spotlight overlay over this real home.
-        It dims + spotlights the data-tour sections, pans the page, and hides the
-        global app chrome while it runs. Renders only while active. */}
-    {tourActive ? <WelcomeTour /> : null}
-    </>
   )
 }
 

@@ -490,12 +490,11 @@ export default function OnboardingFlow({
       }).catch(() => {})
 
       // Onboarding is now complete (save-interests set the flag) and the queue
-      // is generating in the background. Land the player on home with the
-      // first-run welcome tour armed (`?welcome=1`); its closing CTA drops them
-      // straight into playing their Five. The tour self-suppresses after one
-      // run, so returning users skip it. The daily-reminder opt-in lives in the
-      // post-first-five recap.
-      router.push('/?welcome=1')
+      // is generating in the background. Land the player on the welcome tour
+      // overview (/welcome); its "Play Now" drops them straight into the Five and
+      // "explore first" returns home. The tour self-suppresses after one run.
+      // The daily-reminder opt-in lives in the post-first-five recap.
+      router.push('/welcome')
     } catch {
       setError('Unable to save interests.')
     } finally {

@@ -137,6 +137,7 @@ export function Nav({
 
   if (
     pathname === '/onboarding' ||
+    pathname === '/welcome' ||
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
     pathname.startsWith('/invite/') ||
