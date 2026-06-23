@@ -79,6 +79,10 @@ const SCOPED_STYLE = `
 .wts-sheet p{font-size:1rem;line-height:1.5;color:color-mix(in srgb, var(--primary-foreground) 85%, transparent);max-width:18rem;}
 .wts-sheet .wts-primary{margin-top:6px;width:100%;max-width:18rem;background:var(--brand-orange);color:var(--primary-foreground);font-size:1.15rem;font-weight:700;letter-spacing:.02em;border:none;border-radius:13px;padding:16px;cursor:pointer;}
 .wts-sheet .wts-secondary{background:none;border:none;color:color-mix(in srgb, var(--primary-foreground) 82%, transparent);font-size:.95rem;text-decoration:underline;text-underline-offset:4px;cursor:pointer;}
+/* The end card lets scroll/touch pass through to the driver below (so scrolling
+   up exits it and revisits the beats); only its buttons capture taps. */
+.wts-end{pointer-events:none;}
+.wts-end button{pointer-events:auto;}
 @media (prefers-reduced-motion:reduce){.wts-spot,.wts-help,.wts-hint,.wts-home{transition:none;animation:none;}}
 `;
 
@@ -140,7 +144,7 @@ export default function WelcomeTourScreen({
 
   const [started, setStarted] = useState(false);
   const [stepIndex, setStepIndex] = useState(-1);
-  const [ended, setEnded] = useState(false);
+  const [atEnd, setAtEnd] = useState(false);
 
   const homeRef = useRef<HTMLDivElement | null>(null);
   const spotRef = useRef<HTMLDivElement | null>(null);
@@ -152,6 +156,7 @@ export default function WelcomeTourScreen({
   const stageRef = useRef<HTMLDivElement | null>(null);
 
   const startedRef = useRef(false);
+  const atEndRef = useRef(false);
   const currentRef = useRef(-1);
   const panRef = useRef(0);
   const dwellRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -246,12 +251,29 @@ export default function WelcomeTourScreen({
 
   const onDrive = () => {
     const driver = driverRef.current;
-    if (!startedRef.current || ended || !driver) return;
+    if (!startedRef.current || !driver) return;
     const max = driver.scrollHeight - driver.clientHeight;
     const p = max > 0 ? Math.min(1, Math.max(0, driver.scrollTop / max)) : 0;
-    const idx = Math.min(lastIndex, Math.floor(p * beats.length * 0.999));
+    // One slot past the last beat is the (reversible) end card — scrolling back
+    // up returns to the beats and re-shows the spotlight.
+    const positions = beats.length + 1;
+    const idx = Math.min(beats.length, Math.floor(p * positions * 0.999));
+    if (idx >= beats.length) {
+      if (!atEndRef.current) {
+        atEndRef.current = true;
+        setAtEnd(true);
+        spotRef.current?.classList.remove('show');
+        helpRef.current?.classList.remove('show');
+        markSeen();
+      }
+      return;
+    }
+    if (atEndRef.current) {
+      atEndRef.current = false;
+      setAtEnd(false);
+      currentRef.current = -1; // force the current beat to re-place on the way back
+    }
     goToStep(idx);
-    if (idx === lastIndex) markSeen();
   };
 
   const startTour = () => {
@@ -366,15 +388,16 @@ export default function WelcomeTourScreen({
           </div>
 
           {/* scroll hint while touring */}
-          {started && !ended && stepIndex < lastIndex ? (
+          {started && !atEnd ? (
             <div className="wts-hint" aria-hidden="true">
-              Scroll to move through ↓
+              {stepIndex >= lastIndex ? 'Keep scrolling to finish ↓' : 'Scroll to move through ↓'}
             </div>
           ) : null}
 
-          {/* invisible scroll driver (only meaningful once started) */}
+          {/* invisible scroll driver (only meaningful once started). The tall
+              spacer sets the scroll distance per step — bigger = less twitchy. */}
           <div className="wts-driver" ref={driverRef} onScroll={onDrive}>
-            <div style={{ height: `${Math.max(beats.length, 1) * 100}%` }} />
+            <div style={{ height: `${(beats.length + 1) * 160}%` }} />
           </div>
         </div>
 
@@ -424,28 +447,14 @@ export default function WelcomeTourScreen({
         ) : null}
 
         {/* End card (after the last beat) */}
-        {started && stepIndex >= lastIndex ? (
-          <div className="wts-sheet">
+        {started && atEnd ? (
+          <div className="wts-sheet wts-end">
             <h2>That&apos;s the tour.</h2>
-            <p>Your five are ready whenever you are.</p>
-            <button
-              type="button"
-              className="wts-primary"
-              onClick={() => {
-                setEnded(true);
-                finish(playHref);
-              }}
-            >
+            <p>Your five are ready whenever you are. Scroll up to look again.</p>
+            <button type="button" className="wts-primary" onClick={() => finish(playHref)}>
               Play Now →
             </button>
-            <button
-              type="button"
-              className="wts-secondary"
-              onClick={() => {
-                setEnded(true);
-                finish(exploreHref);
-              }}
-            >
+            <button type="button" className="wts-secondary" onClick={() => finish(exploreHref)}>
               I&apos;ll explore more first
             </button>
           </div>
