@@ -1,4 +1,5 @@
-import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import {
   deriveLatelyMilestones,
@@ -24,7 +25,7 @@ import {
   type TrustTier,
 } from '@/server/daily/verification-gating';
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
-import { SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
+import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
 
@@ -338,6 +339,17 @@ export async function getFriendActivity(
     Date.now() - windowDays * 24 * 60 * 60 * 1000,
   );
 
+  // A question the viewer has been DELIBERATELY handed — a direct send or a
+  // broadcast (any ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES row in their rendered
+  // Feed inbox) — belongs to the top "For You" / Sent surface, not the ambient
+  // From-Friends band. Suppress it here so a send moves the question OUT of From
+  // Friends and INTO the Feed rather than showing it in both. Scoped to
+  // still-present rows (a rolled-off send relinquishes its claim, so From Friends
+  // may reclaim the question). Dropping it can shrink a friend's daily batch below
+  // the 2-question floor, which naturally holds/retires the card — the intended
+  // effect.
+  const deliveredToInbox = alias(feedItems, 'delivered_to_inbox');
+
   const rows = await db
     .select({
       friendId: feedItems.sourceUserId,
@@ -370,6 +382,20 @@ export async function getFriendActivity(
         // From-Friends log, except to its own author (a friend answering the
         // viewer's own question lands here as a spent card) — the owner exception.
         notBlockedForViewer(userId),
+        // Hand-off to the Feed: hide questions the viewer was sent/broadcast.
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(deliveredToInbox)
+            .where(
+              and(
+                eq(deliveredToInbox.recipientUserId, userId),
+                eq(deliveredToInbox.questionId, feedItems.questionId),
+                inArray(deliveredToInbox.sourceType, [...ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES]),
+                ne(deliveredToInbox.state, 'rolled_off'),
+              ),
+            ),
+        ),
       ),
     )
     .orderBy(desc(feedItems.sourceEventAt))
