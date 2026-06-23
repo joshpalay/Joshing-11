@@ -36,9 +36,6 @@ export default async function Home({
   return (
     <>
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
-      {/* Welcome-tour sticky header mounts here (first in flow, so it can shrink
-          to a sticky bar as the page scrolls). Renders only while active. */}
-      {tourActive ? <div id="welcome-tour-header-slot" className="-mx-4 -mt-6 md:-mt-10" /> : null}
       {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
           transparent so cream shows through). Rendered as a BACKGROUND image, not
           an <img>: background-size:auto pins it to its INTRINSIC size (so its
@@ -129,14 +126,10 @@ export default async function Home({
           )}
         </section>
       </div>
-
-      {/* Welcome-tour closing panel mounts here (last in the home flow, so the
-          tour's final scroll lands on it) and the controller overlay drives the
-          coach-marks. Both render only while the tour is active. `-mx-4` bleeds
-          the dark panel to the column edges; `-mb-32` cancels main's bottom
-          padding so no cream gap trails below it. */}
-      {tourActive ? <div id="welcome-tour-closer-slot" className="-mx-4 -mb-32" /> : null}
     </main>
+    {/* First-run welcome tour — a fixed spotlight overlay over this real home.
+        It dims + spotlights the data-tour sections, pans the page, and hides the
+        global app chrome while it runs. Renders only while active. */}
     {tourActive ? <WelcomeTour /> : null}
     </>
   )
