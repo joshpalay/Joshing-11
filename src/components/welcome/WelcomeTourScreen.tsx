@@ -130,6 +130,11 @@ export default function WelcomeTourScreen({
         copy: `When <b>${inviter}</b> sends you a question — or a friend aces one — it shows up here to answer back.`,
       },
       {
+        target: 'activity',
+        label: 'Activity',
+        copy: 'Further down, <b>recent activity</b> shows what everyone you play with is up to.',
+      },
+      {
         target: 'knowledge',
         label: 'Knowledge',
         copy: 'Watch your <b>knowledge grow</b> across every topic — it lives in this tab.',
@@ -425,12 +430,51 @@ export default function WelcomeTourScreen({
                 From Friends
               </p>
               <div className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
-                <p className="font-serif text-[1.1rem] font-semibold text-[var(--brand-ink)]">
-                  {inviter}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-serif text-[1.1rem] font-semibold text-[var(--brand-ink)]">
+                    {inviter}
+                  </p>
+                  {/* The friend's streak — five aced questions, one Joshing
+                      triangle each (the brand motif). */}
+                  <div className="flex items-end gap-1" aria-label="5 of 5 aced">
+                    {[
+                      'var(--tri-orange)',
+                      'var(--tri-darkyellow)',
+                      'var(--tri-darkteal)',
+                      'var(--tri-lightteal)',
+                      'var(--tri-amber)',
+                    ].map((c, i) => (
+                      <svg key={i} width="15" height="13" viewBox="0 0 16 14" aria-hidden="true">
+                        <polygon points="8,0 16,14 0,14" style={{ fill: c }} />
+                      </svg>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--brand-ink-700)]">
+                  aced all five in Tennis Fundamentals this week — play the same set.
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--brand-ink-700)]">
-                  aced Tennis Fundamentals and Early 20th Century American History — play the same
-                  questions.
+                <div className="mt-3 flex items-center justify-end">
+                  <span className="text-[13px] font-semibold text-[var(--brand-ink-700)]">Play →</span>
+                </div>
+              </div>
+            </section>
+
+            {/* Recent activity — lower on the page (beat ~3.5). */}
+            <section data-tour="activity" className="mt-5">
+              <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
+                Recent activity
+              </p>
+              <div className="space-y-2.5 rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
+                <p className="text-sm text-[var(--brand-ink-700)]">
+                  <span className="font-semibold text-[var(--brand-ink)]">{inviter}</span> played their
+                  first five
+                </p>
+                <p className="text-sm text-[var(--brand-ink-700)]">
+                  You and <span className="font-semibold text-[var(--brand-ink)]">{inviter}</span> keep
+                  meeting in the same places
+                </p>
+                <p className="text-sm text-[var(--brand-ink-700)]">
+                  <span className="font-semibold text-[var(--brand-ink)]">Dana</span> joined Joshing
                 </p>
               </div>
             </section>
