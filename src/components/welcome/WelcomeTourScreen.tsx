@@ -55,12 +55,14 @@ const SCOPED_STYLE = `
 .wts-pips i.on{background:var(--brand-orange);}
 .wts-stage{position:relative;flex:1;overflow:hidden;}
 .wts-home{position:absolute;inset:0;padding:14px 12px 0;transition:transform .6s ${PAN_EASE};will-change:transform;}
-.wts-nav{position:relative;z-index:6;display:flex;justify-content:space-around;align-items:center;background:var(--brand-card);border-top:1px solid var(--brand-border);padding:8px 0 10px;}
+.wts-nav{position:relative;z-index:6;pointer-events:none;display:flex;justify-content:space-around;align-items:center;background:var(--brand-card);border-top:1px solid var(--brand-border);padding:8px 0 10px;}
 .wts-nav .wts-tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--brand-ink-400);}
 .wts-nav .wts-tab.active{color:var(--brand-ink);}
 .wts-nav .wts-tab .wts-lbl{font-size:9px;letter-spacing:.05em;text-transform:uppercase;}
-.wts-spot{position:fixed;z-index:62;border-radius:13px;pointer-events:none;opacity:0;box-shadow:0 0 0 3px var(--brand-orange), 0 0 0 4000px color-mix(in srgb, var(--brand-ink-950) 66%, transparent);transition:opacity .4s ease, top .6s ${PAN_EASE}, left .6s ${PAN_EASE}, width .4s ease, height .4s ease;}
+.wts-spot{position:fixed;inset:0;z-index:62;pointer-events:none;opacity:0;transition:opacity .4s ease;}
 .wts-spot.show{opacity:1;}
+.wts-dim{position:absolute;background:color-mix(in srgb, var(--brand-ink-950) 66%, transparent);transition:top .6s ${PAN_EASE}, left .6s ${PAN_EASE}, width .4s ease, height .4s ease;}
+.wts-ring{position:absolute;border-radius:13px;box-shadow:0 0 0 3px var(--brand-orange);transition:top .6s ${PAN_EASE}, left .6s ${PAN_EASE}, width .4s ease, height .4s ease;}
 .wts-help{position:fixed;z-index:64;width:248px;opacity:0;pointer-events:none;transition:opacity .35s ease, top .5s ${PAN_EASE}, left .35s ease;}
 .wts-help.show{opacity:1;}
 .wts-help .wts-box{background:var(--brand-card);color:var(--brand-ink);border-radius:12px;padding:13px 15px;box-shadow:0 16px 40px -14px color-mix(in srgb, var(--brand-ink-950) 55%, transparent);position:relative;}
@@ -72,7 +74,7 @@ const SCOPED_STYLE = `
 .wts-help.above .wts-arrow{bottom:-8px;border-left:9px solid transparent;border-right:9px solid transparent;border-top:9px solid var(--brand-card);}
 .wts-hint{position:absolute;bottom:14px;left:0;right:0;z-index:5;text-align:center;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-ink-700);animation:wtsBob 1.8s ease-in-out infinite;pointer-events:none;}
 @keyframes wtsBob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
-.wts-driver{position:absolute;inset:0;z-index:4;overflow-y:scroll;scrollbar-width:none;}
+.wts-driver{position:absolute;inset:0;z-index:4;overflow-y:scroll;scrollbar-width:none;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .wts-driver::-webkit-scrollbar{display:none;}
 .wts-sheet{position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;text-align:center;background:color-mix(in srgb, var(--brand-ink-950) 86%, transparent);color:var(--primary-foreground);}
 .wts-sheet h2{font-family:var(--font-cormorant, Georgia, serif);font-size:2rem;font-weight:600;line-height:1.05;}
@@ -83,7 +85,7 @@ const SCOPED_STYLE = `
    up exits it and revisits the beats); only its buttons capture taps. */
 .wts-end{pointer-events:none;}
 .wts-end button{pointer-events:auto;}
-@media (prefers-reduced-motion:reduce){.wts-spot,.wts-help,.wts-hint,.wts-home{transition:none;animation:none;}}
+@media (prefers-reduced-motion:reduce){.wts-spot,.wts-dim,.wts-ring,.wts-help,.wts-hint,.wts-home{transition:none;animation:none;}}
 `;
 
 type WelcomeTourScreenProps = {
@@ -148,6 +150,11 @@ export default function WelcomeTourScreen({
 
   const homeRef = useRef<HTMLDivElement | null>(null);
   const spotRef = useRef<HTMLDivElement | null>(null);
+  const dimTRef = useRef<HTMLDivElement | null>(null);
+  const dimBRef = useRef<HTMLDivElement | null>(null);
+  const dimLRef = useRef<HTMLDivElement | null>(null);
+  const dimRRef = useRef<HTMLDivElement | null>(null);
+  const ringRef = useRef<HTMLDivElement | null>(null);
   const helpRef = useRef<HTMLDivElement | null>(null);
   const helpKRef = useRef<HTMLParagraphElement | null>(null);
   const helpPRef = useRef<HTMLParagraphElement | null>(null);
@@ -201,11 +208,40 @@ export default function WelcomeTourScreen({
       geomRef.current = { top: r.top + delta, left: r.left, width: r.width, height: r.height };
     }
 
+    const dimT = dimTRef.current;
+    const dimB = dimBRef.current;
+    const dimL = dimLRef.current;
+    const dimR = dimRRef.current;
+    const ring = ringRef.current;
+    if (!dimT || !dimB || !dimL || !dimR || !ring) return false;
+
     const g = geomRef.current;
-    spot.style.top = `${g.top - PAD}px`;
-    spot.style.left = `${g.left - PAD}px`;
-    spot.style.width = `${g.width + PAD * 2}px`;
-    spot.style.height = `${g.height + PAD * 2}px`;
+    const x0 = g.left - PAD;
+    const y0 = g.top - PAD;
+    const w = g.width + PAD * 2;
+    const h = g.height + PAD * 2;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const box = (
+      e: HTMLDivElement,
+      left: number,
+      top: number,
+      width: number,
+      height: number,
+    ) => {
+      e.style.left = `${left}px`;
+      e.style.top = `${top}px`;
+      e.style.width = `${Math.max(0, width)}px`;
+      e.style.height = `${Math.max(0, height)}px`;
+    };
+    // Four scrim panels frame a transparent window over the target (no giant
+    // box-shadow, so iOS keeps the scroll gesture). Top/bottom span full width
+    // so the corners are covered.
+    box(dimT, 0, 0, vw, y0);
+    box(dimB, 0, y0 + h, vw, vh - (y0 + h));
+    box(dimL, 0, y0, x0, h);
+    box(dimR, x0 + w, y0, vw - (x0 + w), h);
+    box(ring, x0, y0, w, h);
     spot.classList.add('show');
     return true;
   };
@@ -222,9 +258,21 @@ export default function WelcomeTourScreen({
     help.classList.add('show');
     const hh = help.offsetHeight;
     const g = geomRef.current;
-    // Below the target when it sits in the top half, else above (nav → above).
-    const below = g.top < window.innerHeight * 0.5;
-    const top = below ? g.top + g.height + PAD + 12 : g.top - hh - 12;
+    // Place inside the safe band: below the strip, above the bottom nav. Prefer
+    // below the target; flip above when below would overflow (e.g. a tall
+    // section, or a nav target at the very bottom); then clamp into the band so
+    // the tooltip is never cut off.
+    const navEl = document.querySelector<HTMLElement>('.wts-nav');
+    const stripEl = document.querySelector<HTMLElement>('.wts-strip');
+    const bottomSafe = (navEl ? navEl.getBoundingClientRect().top : window.innerHeight) - 8;
+    const topSafe = (stripEl ? stripEl.getBoundingClientRect().bottom : 0) + 8;
+    let below = true;
+    let top = g.top + g.height + PAD + 12;
+    if (top + hh > bottomSafe) {
+      below = false;
+      top = g.top - hh - 12;
+    }
+    top = Math.max(topSafe, Math.min(top, bottomSafe - hh));
     let left = g.left + g.width / 2 - hw / 2;
     left = Math.max(10, Math.min(left, window.innerWidth - hw - 10));
     help.classList.toggle('below', below);
@@ -422,7 +470,13 @@ export default function WelcomeTourScreen({
         </div>
 
         {/* Spotlight + helper (fixed to viewport) */}
-        <div className="wts-spot" ref={spotRef} aria-hidden="true" />
+        <div className="wts-spot" ref={spotRef} aria-hidden="true">
+          <div className="wts-dim" ref={dimTRef} />
+          <div className="wts-dim" ref={dimBRef} />
+          <div className="wts-dim" ref={dimLRef} />
+          <div className="wts-dim" ref={dimRRef} />
+          <div className="wts-ring" ref={ringRef} />
+        </div>
         <div className="wts-help" ref={helpRef} role="status" aria-live="polite">
           <div className="wts-box">
             <span className="wts-arrow" ref={arrowRef} aria-hidden="true" />
