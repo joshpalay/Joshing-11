@@ -99,6 +99,8 @@ const DEFAULT_COPY: WelcomeTourCopy = {
 type WelcomeTourProps = {
   steps?: WelcomeTourStep[];
   copy?: Partial<WelcomeTourCopy>;
+  /** Element id (rendered in page flow) the sticky header portals into. */
+  headerSlotId?: string;
   /** Element id (rendered in page flow) the closing panel portals into. */
   closerSlotId?: string;
   /**
@@ -108,7 +110,12 @@ type WelcomeTourProps = {
   forced?: boolean;
   /** Persisted suppression key (localStorage). */
   storageKey?: string;
-  /** Closing CTA handler. Defaults to routing into the Daily Five (`/daily`). */
+  /**
+   * Where the closing CTA routes. Serializable, so server components can set it
+   * (e.g. the walkthrough chains into the building state). Defaults to `/daily`.
+   */
+  playHref?: string;
+  /** Closing CTA handler. Overrides `playHref` when provided. */
   onPlay?: () => void;
   /** Skip/close handler. Defaults to stripping `?welcome` and staying on home. */
   onClose?: () => void;
@@ -124,8 +131,8 @@ export function clearWelcomeTourSeen(storageKey: string = WELCOME_TOUR_STORAGE_K
 }
 
 const SCOPED_STYLE = `
-.welcome-tour-header{position:fixed;top:0;left:0;right:0;z-index:50;background:var(--brand-ink-950);color:var(--primary-foreground);overflow:hidden;}
-.welcome-tour-header .wt-inner{max-width:42rem;margin:0 auto;position:relative;}
+.welcome-tour-header{position:sticky;top:0;z-index:50;background:var(--brand-ink-950);color:var(--primary-foreground);overflow:hidden;border-bottom-left-radius:var(--radius-xs);border-bottom-right-radius:var(--radius-xs);}
+.welcome-tour-header .wt-inner{position:relative;}
 .welcome-tour-header .wt-big{transition:opacity .3s ease,max-height .35s ease,padding .35s ease;max-height:240px;}
 .welcome-tour-header[data-shrunk="true"] .wt-big{max-height:0;opacity:0;padding-top:0;padding-bottom:0;}
 .welcome-tour-header .wt-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;height:0;opacity:0;overflow:hidden;transition:opacity .3s ease,height .35s ease;}
@@ -145,9 +152,11 @@ const SCOPED_STYLE = `
 export default function WelcomeTour({
   steps = DEFAULT_WELCOME_TOUR_STEPS,
   copy: copyOverride,
+  headerSlotId = 'welcome-tour-header-slot',
   closerSlotId = 'welcome-tour-closer-slot',
   forced = false,
   storageKey = WELCOME_TOUR_STORAGE_KEY,
+  playHref = '/daily',
   onPlay,
   onClose,
 }: WelcomeTourProps) {
@@ -175,7 +184,6 @@ export default function WelcomeTour({
   const currentRef = useRef(-1);
   const endedRef = useRef(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bigHeaderHeight = useRef(0);
 
   // Read external (browser) state into render the lint-sanctioned way: a
   // useSyncExternalStore snapshot returning a STABLE PRIMITIVE, with arrays
@@ -242,9 +250,9 @@ export default function WelcomeTour({
     if (onPlay) {
       onPlay();
     } else {
-      router.push('/daily');
+      router.push(playHref);
     }
-  }, [markSeen, onPlay, router]);
+  }, [markSeen, onPlay, playHref, router]);
 
   // Core scroll engine: header shrink, step selection (snap & dwell), and
   // coach-mark placement. Mirrors the prototype, mutating the coach via refs so
@@ -269,9 +277,15 @@ export default function WelcomeTour({
       const cw = Math.min(260, window.innerWidth - 32);
       coach.style.width = `${cw}px`;
       const ch = coach.offsetHeight;
-      // Above or below the target depending on room.
-      const below = r.top < window.innerHeight * 0.45;
-      const top = below ? r.bottom + 12 : r.top - ch - 12;
+      // Keep the callout inside a safe band: below the sticky welcome bar and
+      // above the app's fixed bottom nav, so it never collides with chrome.
+      const TOP_SAFE = 64;
+      const BOTTOM_SAFE = 96;
+      const roomBelow = window.innerHeight - BOTTOM_SAFE - (r.bottom + 12);
+      const roomAbove = r.top - 12 - TOP_SAFE;
+      const below = roomBelow >= ch || roomBelow >= roomAbove;
+      let top = below ? r.bottom + 12 : r.top - ch - 12;
+      top = Math.max(TOP_SAFE, Math.min(top, window.innerHeight - BOTTOM_SAFE - ch));
       coach.classList.toggle('arrow-up', below);
       coach.classList.toggle('arrow-down', !below);
       // Center on the target, clamp to the viewport; arrow follows the target.
@@ -384,13 +398,6 @@ export default function WelcomeTour({
       }
     });
 
-    // Push page content below the (fixed) header, then collapse with it.
-    const prevBodyPad = document.body.style.paddingTop;
-    const prevBodyTransition = document.body.style.transition;
-    bigHeaderHeight.current = headerRef.current?.offsetHeight ?? 0;
-    document.body.style.transition = 'padding-top .35s ease';
-    document.body.style.paddingTop = `${bigHeaderHeight.current}px`;
-
     let raf = 0;
     const onScroll = () => {
       if (raf) return;
@@ -415,16 +422,8 @@ export default function WelcomeTour({
         el.style.scrollMarginTop = '';
         el.classList.remove('welcome-tour-lit');
       });
-      document.body.style.paddingTop = prevBodyPad;
-      document.body.style.transition = prevBodyTransition;
     };
   }, [inactive, isClient, closerSlotId, markSeen, activeSteps]);
-
-  // Keep body padding in lockstep with the header collapse.
-  useEffect(() => {
-    if (inactive || !isClient) return;
-    document.body.style.paddingTop = shrunk ? '46px' : `${bigHeaderHeight.current}px`;
-  }, [shrunk, inactive, isClient]);
 
   if (inactive || !isClient) return null;
 
@@ -510,8 +509,13 @@ export default function WelcomeTour({
 
   const closer = (
     <section
-      className="flex min-h-[70vh] flex-col justify-center px-6 py-16"
-      style={{ background: 'var(--brand-ink-950)', color: 'var(--primary-foreground)' }}
+      className="flex min-h-[70vh] flex-col justify-center px-6 pt-16"
+      style={{
+        background: 'var(--brand-ink-950)',
+        color: 'var(--primary-foreground)',
+        // Clear the app's fixed bottom nav so the CTA is never hidden behind it.
+        paddingBottom: 'calc(7rem + env(safe-area-inset-bottom))',
+      }}
     >
       <p
         className="text-[13px] font-semibold tracking-[0.14em] uppercase"
@@ -543,14 +547,19 @@ export default function WelcomeTour({
     </section>
   );
 
-  const slot = document.getElementById(closerSlotId);
+  const headerSlot = document.getElementById(headerSlotId);
+  const closerSlot = document.getElementById(closerSlotId);
 
   return (
     <>
       <style>{SCOPED_STYLE}</style>
-      {createPortal(header, document.body)}
+      {/* Header rides an in-flow slot at the top of the page so it pushes
+          content and collapses to a sticky bar — no body-padding hack. The
+          coach is viewport-fixed (portaled to body); the closer sits in its
+          own slot at the bottom of the page flow. */}
+      {headerSlot ? createPortal(header, headerSlot) : null}
       {createPortal(coach, document.body)}
-      {slot ? createPortal(closer, slot) : null}
+      {closerSlot ? createPortal(closer, closerSlot) : null}
     </>
   );
 }

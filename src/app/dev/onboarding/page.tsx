@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronLeft, Compass, Info, Loader2, Sparkles, UserPlus } from 'lucide-react';
+import { ChevronLeft, Compass, Info, Loader2, PlayCircle, Sparkles, UserPlus } from 'lucide-react';
 
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 
@@ -48,12 +48,24 @@ export default function DevOnboardingHubPage() {
       </div>
 
       <section className="mt-8">
-        <h2 className="mb-3 font-serif text-2xl font-semibold">Stages</h2>
+        <h2 className="mb-3 font-serif text-2xl font-semibold">Full experience</h2>
+        <SettingsGroup>
+          <SettingsRow
+            icon={<PlayCircle className="size-5" />}
+            title="Full signup walkthrough"
+            subtitle="Setup → areas of knowledge → welcome tour → building → first-session recap, chained"
+            href="/dev/onboarding/intro?walk=1"
+          />
+        </SettingsGroup>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="mb-3 font-serif text-2xl font-semibold">Individual stages</h2>
         <SettingsGroup>
           <SettingsRow
             icon={<UserPlus className="size-5" />}
-            title="Name, call sign & areas of knowledge"
-            subtitle="The real setup flow driven with mock invite data (writes are stubbed)"
+            title="Setup & areas of knowledge"
+            subtitle="Name + call sign on one screen, then areas — the real flow, writes stubbed"
             href="/dev/onboarding/intro"
           />
           <SettingsRow

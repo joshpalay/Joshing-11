@@ -10,32 +10,48 @@ export const dynamic = 'force-dynamic';
  *
  * The live tour overlays the real home (mounted by `?welcome=1`). This page
  * stands in a static, side-effect-free home replica carrying all five
- * `data-tour` anchors (five, customize, foryou, friends, shared) plus the
- * closing-panel slot, then mounts `<WelcomeTour forced />`. `forced` bypasses —
- * and never writes — the persisted seen-flag, so replaying here never mutates
- * real state, and every callout resolves to a target (the live home only
- * carries some anchors today; here all five are present).
+ * `data-tour` anchors (five, customize, foryou, friends, shared), plus the
+ * header + closing-panel slots, then mounts `<WelcomeTour forced />`. `forced`
+ * bypasses — and never writes — the persisted seen-flag, so replaying never
+ * mutates real state, and every callout resolves to a target.
  *
- * The closing CTA routes to `/daily` like the real tour. To re-run, reload.
+ * The global app nav (top bar / bottom tabs / FAB) is suppressed here (see
+ * Nav.tsx) and the replica is framed phone-width so the preview reads as the
+ * real mobile app rather than a desktop page.
+ *
+ * In `?walk=1` (full-walkthrough) mode the closing CTA chains into the
+ * building-your-five state instead of `/daily`.
  */
 
 // Generous inter-section spacing so snap & dwell has real scroll distance to
 // travel between callouts (the live home tunes this per-section).
-const SECTION_GAP = { paddingBottom: '34vh' } as const;
+const SECTION_GAP = { paddingBottom: '30vh' } as const;
 
-export default function DevWelcomeTourPage() {
+export default async function DevWelcomeTourPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ walk?: string }>;
+}) {
+  const params = await searchParams;
+  const walk = params?.walk === '1';
+
   return (
     <main className="min-h-dvh bg-[var(--brand-cream-page)] text-[var(--brand-ink)]">
-      <div className="mx-auto max-w-2xl px-4 py-6">
-        <Link
-          href="/dev/onboarding"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" />
-          Onboarding stages
-        </Link>
+      <div className="mx-auto w-full max-w-[420px] px-4 py-4">
+        {!walk ? (
+          <Link
+            href="/dev/onboarding"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="size-4" />
+            Onboarding stages
+          </Link>
+        ) : null}
 
-        <div className="mt-6 flex flex-col gap-5" style={{ paddingTop: '4vh' }}>
+        {/* Welcome-tour sticky header mounts here. */}
+        <div id="welcome-tour-header-slot" className="-mx-4 mt-3" />
+
+        <div className="mt-4 flex flex-col gap-5">
           {/* Today's Five — carries both the `five` and `customize` anchors. */}
           <div style={SECTION_GAP}>
             <div
@@ -147,7 +163,7 @@ export default function DevWelcomeTourPage() {
       {/* Closing panel mounts here. */}
       <div id="welcome-tour-closer-slot" />
 
-      <WelcomeTour forced />
+      <WelcomeTour forced playHref={walk ? '/dev/onboarding/building?walk=1' : '/daily'} />
     </main>
   );
 }
