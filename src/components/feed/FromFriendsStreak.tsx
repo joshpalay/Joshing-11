@@ -1,5 +1,6 @@
 'use client';
 
+import { Send } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
@@ -346,8 +347,14 @@ function StreakQuestionCard({
             gap={12}
             left={<SpentResult resolution={resolution} priorResult={question.priorResult} />}
             right={
-              <FeedActionLink size="sm" onClick={() => setSendOpen(true)}>
-                Send onward →
+              <FeedActionLink
+                size="sm"
+                className="no-underline"
+                onClick={() => setSendOpen(true)}
+                aria-label="Send onward"
+                title="Send onward"
+              >
+                <Send className="size-4" aria-hidden="true" />
               </FeedActionLink>
             }
           />
