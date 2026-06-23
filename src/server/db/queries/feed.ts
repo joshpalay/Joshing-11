@@ -1,7 +1,7 @@
 import { and, count, desc, eq, exists, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
-import { notBlocked, visibleFeedSourcePredicate } from '@/server/feed/visibility';
+import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, notBlocked, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
 export type FeedItem = typeof feedItems.$inferSelect;
@@ -499,6 +499,20 @@ export async function userHasQuestionInVisibleFeed(userId: string, questionId: s
   return Boolean(row);
 }
 
+// True when `questionId` is already pending in the recipient's RENDERED Feed
+// inbox — i.e. a prior direct send or broadcast they can still act on. Used to
+// suppress a duplicate send/share.
+//
+// Scoped to ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES on purpose. The D-1 Stage 5
+// feed flip (2026-06-01) pulled `friend_answered` (type-3) OUT of the Feed — it
+// is now ambient From-Friends presence, derived per-batch and possibly held as
+// an invisible singleton for up to 5 days (see lib/friend-activity.ts). A row
+// the recipient can't even see must NOT block a deliberate send, so a
+// `friend_answered` row is intentionally excluded here. Before the flip this
+// guard had no sourceType filter, which silently became over-broad once type-3
+// stopped rendering — a question you'd answered (auto-fanned to your followers)
+// could no longer be hand-sent to any of them. (`userAnsweredQuestionCorrectly`
+// still independently blocks sending something the recipient already got right.)
 export async function userHasQuestionInBlockingFeed(userId: string, questionId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: feedItems.id })
@@ -507,6 +521,7 @@ export async function userHasQuestionInBlockingFeed(userId: string, questionId: 
       eq(feedItems.recipientUserId, userId),
       eq(feedItems.questionId, questionId),
       inArray(feedItems.state, BLOCKING_FEED_STATES),
+      inArray(feedItems.sourceType, [...ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES]),
     ))
     .limit(1);
 
