@@ -266,7 +266,10 @@ export default function TodaysFiveCard({
       : 'Ready when you are!'
 
   return (
-    <div className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]">
+    <div
+      data-tour="five"
+      className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
@@ -283,6 +286,7 @@ export default function TodaysFiveCard({
             by the eyebrow on narrow widths. */}
         <Link
           href="/daily/setup"
+          data-tour="customize"
           className={CUSTOMIZE_DAILY_LINK_CLASS}
           aria-label="Customize your Daily Five"
         >
