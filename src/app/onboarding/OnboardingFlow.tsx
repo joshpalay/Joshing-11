@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { X } from 'lucide-react'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
@@ -651,26 +650,34 @@ export default function OnboardingFlow({
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-medium">Your topics</p>
+                <p className="text-sm font-medium">
+                  Trivia Questions will come from these subjects
+                </p>
                 {selectedInterests.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
                     Nothing yet — add a few below.
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <ul className="flex flex-col gap-2">
                     {selectedInterests.map((interest) => (
-                      <button
+                      <li
                         key={selectedKey(interest)}
-                        type="button"
-                        className="bg-[var(--brand-navy)] inline-flex items-center gap-2 rounded-full py-2 pr-2.5 pl-4 text-sm font-medium text-white transition hover:opacity-90"
-                        onClick={() => removeSelectedInterest(interest)}
-                        aria-label={`Remove ${interest.domain}`}
+                        className="flex items-center justify-between gap-3"
                       >
-                        {interest.domain}
-                        <X className="size-3.5 opacity-80" />
-                      </button>
+                        <span className="text-base font-medium">
+                          {interest.domain}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive text-sm font-medium transition-colors"
+                          onClick={() => removeSelectedInterest(interest)}
+                          aria-label={`Remove ${interest.domain}`}
+                        >
+                          Remove
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
 
