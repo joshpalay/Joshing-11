@@ -22,7 +22,7 @@ describe('OnboardingFlow invited interests', () => {
     )
 
     expect(html).toContain('Welcome to Joshing')
-    expect(html).toContain('Your topics')
+    expect(html).toContain('Trivia Questions will come from these subjects')
     expect(html).toContain('1 selected · pick at least 2 more')
     expect(html).toContain('Sondheim')
   })
@@ -41,7 +41,7 @@ describe('OnboardingFlow invited interests', () => {
       />
     )
 
-    expect(html).toContain('Your topics')
+    expect(html).toContain('Trivia Questions will come from these subjects')
     expect(html).toContain('3 selected · add up to 9 more')
     expect(html).toContain('Sondheim')
     expect(html).toContain('Jazz')
