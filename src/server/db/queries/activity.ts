@@ -994,14 +994,16 @@ export async function markActivityBellOpened(userId: string): Promise<void> {
 }
 
 /**
- * Bell badge count = events that have rolled off Home's top-3 RecentActivity
- * AND fired since the user last opened the bell.
+ * NOTE: No longer wired to the nav bell badge. The badge now counts ONLY
+ * pending friend requests (see getIncomingFollowRequestCount in
+ * queries/friends.ts, consumed by /api/nav). This "rolled-off-Home activity"
+ * count is retained for potential reuse but is not currently rendered anywhere.
  *
- * Semantics: "there's value here you can't see from Home." If an event is
- * still visible on Home, the badge stays quiet. If the bell has never been
- * opened (NULL), the floor is the activity 90-day cutoff via activityCutoff().
- *
- * Returns the raw count; the UI caps the displayed string at "99+".
+ * Original semantics: events that have rolled off Home's top-3 RecentActivity
+ * AND fired since the user last opened the bell — "there's value here you can't
+ * see from Home." If an event is still visible on Home, the count stays quiet.
+ * If the bell has never been opened (NULL), the floor is the activity 90-day
+ * cutoff via activityCutoff(). Returns the raw count.
  */
 export async function getBellBadgeCount(userId: string): Promise<number> {
   const [userRow] = await db
