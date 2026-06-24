@@ -349,6 +349,11 @@ export async function getFriendActivity(
   // the 2-question floor, which naturally holds/retires the card — the intended
   // effect.
   const deliveredToInbox = alias(feedItems, 'delivered_to_inbox');
+  // D-4 via-attribution: the relay source ("via Josh") rides on the SAME feed row
+  // we're already reading (it's who the answering friend got the question from).
+  // A second users alias resolves that source's display name in the same query —
+  // left-joined because viaUserId is null for organically-met questions.
+  const viaUser = alias(users, 'via_user');
 
   const rows = await db
     .select({
@@ -359,6 +364,8 @@ export async function getFriendActivity(
       joshingGameId: feedItems.joshingGameId,
       creatorId: questions.creatorId,
       answeredAt: feedItems.sourceEventAt,
+      viaUserId: feedItems.viaUserId,
+      viaName: viaUser.displayName,
     })
     .from(feedItems)
     .innerJoin(
@@ -371,6 +378,7 @@ export async function getFriendActivity(
     )
     .innerJoin(questions, eq(questions.id, feedItems.questionId))
     .innerJoin(users, eq(users.id, feedItems.sourceUserId))
+    .leftJoin(viaUser, eq(viaUser.id, feedItems.viaUserId))
     .where(
       and(
         eq(feedItems.recipientUserId, userId),
@@ -401,6 +409,22 @@ export async function getFriendActivity(
     .orderBy(desc(feedItems.sourceEventAt))
     .limit(500);
 
+  // Relay source per (friend, question) — keyed so two friends who both relayed
+  // the same question keep their own "via". Rows arrive newest-first, so the
+  // first write per key is the most-recent relay. A "via you" is dropped (the
+  // viewer discovering themselves as the source is pointless).
+  const viaByFriendQuestion = new Map<string, { userId: string; name: string }>();
+  for (const row of rows) {
+    if (!row.questionId || !row.viaUserId || row.viaUserId === userId) continue;
+    const key = `${row.friendId}:${row.questionId}`;
+    if (!viaByFriendQuestion.has(key)) {
+      viaByFriendQuestion.set(key, {
+        userId: row.viaUserId,
+        name: row.viaName?.trim() || 'A friend',
+      });
+    }
+  }
+
   const playRows: FriendPlayRow[] = [];
   for (const row of rows) {
     if (!row.questionId || !row.answeredAt) continue;
@@ -420,7 +444,22 @@ export async function getFriendActivity(
     });
   }
 
-  return deriveFriendActivity(playRows, new Date());
+  const cards = deriveFriendActivity(playRows, new Date());
+
+  // Attach the relay source per card. Cards are friend-scoped (a fixed friendId)
+  // and the via is per (friend, question), so the lookup is exact for every card
+  // shape — burst, daily batch, or flushed held-singles. Cards with no relayed
+  // question carry no viaByQuestionId at all.
+  for (const card of cards) {
+    let via: Record<string, { userId: string; name: string }> | undefined;
+    for (const questionId of card.questionIds) {
+      const source = viaByFriendQuestion.get(`${card.friendId}:${questionId}`);
+      if (source) (via ??= {})[questionId] = source;
+    }
+    if (via) card.viaByQuestionId = via;
+  }
+
+  return cards;
 }
 
 // A friend's literal question, shaped for the seeded play session (the Lately

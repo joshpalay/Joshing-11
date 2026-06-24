@@ -123,6 +123,10 @@ export async function buildActivityStream(
           priorResult: priorById.get(q.questionId) ?? null,
           authorName: q.authorName,
           authorIsHouse: q.authorIsHouse,
+          // D-4 via-attribution: the relay source the friend got this question
+          // from ("via Josh"). Friend-and-question-specific, so it's read off the
+          // card (not the global textById map, which is keyed by questionId alone).
+          via: card.viaByQuestionId?.[q.questionId] ?? null,
         }));
       // D-HOME-DASHBOARD-MODEL-01 point 3 — a From Friends bundle is a dashboard
       // item, not an archive entry. Once the viewer has played EVERY answerable
