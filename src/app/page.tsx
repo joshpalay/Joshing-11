@@ -122,7 +122,7 @@ export default async function Home({
           </Suspense>
         ) : null}
 
-        <section id="feed" data-tour="foryou">
+        <section id="feed">
           {session ? (
             <Suspense fallback={null}>
               <FromYourFriendsSection userId={session.userId} />

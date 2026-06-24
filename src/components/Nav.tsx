@@ -166,7 +166,6 @@ export function Nav({
   return (
     <>
       <header
-        data-app-chrome
         className="z-40 border-b bg-background/95 backdrop-blur"
         aria-label="Primary header"
       >
@@ -210,7 +209,6 @@ export function Nav({
       {showNewGameShortcut ? (
         <button
           type="button"
-          data-app-chrome
           className={[
             'fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg',
             // The dedicated add-a-question FAB shows on every viewport; the
@@ -228,7 +226,6 @@ export function Nav({
         </button>
       ) : null}
       <nav
-        data-app-chrome
         className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur"
         aria-label="Primary navigation"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
