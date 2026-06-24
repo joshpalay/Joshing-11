@@ -322,6 +322,9 @@ export const questions = pgTable(
     categoryOverridden: boolean('category_overridden').notNull().default(false),
     creatorNote: text('creator_note'),
     insideJoke: text('inside_joke'),
+    // Primary subject the question is ABOUT (carried from GeneratedQuestion on
+    // promotion, or backfilled). Feeds the Tier 2 subject-cooldown gate. Nullable.
+    subjectEntity: text('subject_entity'),
     difficultyEstimate: difficultyEstimateEnum('difficulty_estimate'),
     llmDifficulty: difficultyEstimateEnum('llm_difficulty'),
     calibratedDifficulty: difficultyEstimateEnum('calibrated_difficulty'),
@@ -651,6 +654,12 @@ export const generatedQuestions = pgTable(
     // per domain and fed back to the generation prompt as positive guidance:
     // "you've covered X, Y, Z — pick something else." See migration 0055.
     subAngles: text('sub_angles').array().notNull().default([]),
+    // Primary subject the question is ABOUT (e.g. "Peter Pettigrew", "Guys and
+    // Dolls"), emitted by the generator. Distinct from fact_key (which encodes
+    // the specific fact) — used by the Tier 2 subject-cooldown gate to space out
+    // same-subject questions across a window. Nullable: older rows pre-date the
+    // column; the backfill (scripts/backfill-subject-entity.ts) fills them.
+    subjectEntity: text('subject_entity'),
     // Precomputed "between us" aside, generated once at question-generation time
     // (src/server/daily/generate-questions.ts) and copied into Question.inside_joke
     // when the row is persisted. Nullable: older rows and any where generation
