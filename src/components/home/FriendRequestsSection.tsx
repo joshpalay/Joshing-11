@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 // Serialized at the RSC boundary: createdAt is an ISO string (mirrors how the
@@ -38,6 +39,13 @@ export async function submitFriendRequestAction(
       credentials: 'include',
     })
     const body = (await response.json().catch(() => null)) as { message?: string } | null
+    // A 404 means the request is no longer pending — it was already accepted or
+    // declined (from the Recent Activity duplicate, the /friends hub, or another
+    // tab). The desired end state already holds, so treat it as success and let
+    // the caller clear the now-stale card instead of surfacing a scary error.
+    if (response.status === 404) {
+      return { ok: true }
+    }
     if (!response.ok) {
       return { ok: false, message: body?.message ?? failureMessage }
     }
@@ -127,6 +135,7 @@ function RequestCard({
 }
 
 export default function FriendRequestsSection({ initial }: FriendRequestsSectionProps) {
+  const router = useRouter()
   const [requests, setRequests] = useState<SerializedIncomingRequest[]>(initial.top)
   const [totalCount, setTotalCount] = useState(initial.totalCount)
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -151,6 +160,11 @@ export default function FriendRequestsSection({ initial }: FriendRequestsSection
       // "See all" overflow line stays honest as cards clear.
       setRequests((current) => current.filter((item) => item.id !== request.id))
       setTotalCount((current) => Math.max(0, current - 1))
+      // Keep the other home surfaces in sync: the same pending request also
+      // shows in the Recent Activity stream ("wants to be friends"). Re-render
+      // the server components so that duplicate clears too — otherwise it lingers
+      // and its Accept button 404s on the now-settled request.
+      router.refresh()
     } else {
       // Failure: the card stays put and we surface an inline error.
       setError(result.message)
