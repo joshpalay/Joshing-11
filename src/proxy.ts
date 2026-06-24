@@ -101,9 +101,17 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/auth/')
 
   if (claims.onboardingComplete) {
-    if (isLoginPage || isOnboardingPage) {
+    if (isOnboardingPage) {
       return tagTiming(NextResponse.redirect(new URL('/', request.url)), startedAt)
     }
+    // /login is intentionally NOT redirected here. These claims are verified
+    // from the JWT signature alone (no DB lookup), so they can outlive the DB
+    // session — a "zombie" cookie after secret rotation, a deleted/expired
+    // session row, or a DB reset. Bouncing /login -> / on signature alone
+    // traps such a session: server getSession() (DB-checked) says logged-out,
+    // so the home renders signed-out and /api/feed 401s, yet the proxy bars
+    // the one recovery surface. The login page redirects genuinely
+    // authenticated users home itself, via a DB-checked getSession().
     return tagTiming(NextResponse.next(), startedAt)
   }
 
