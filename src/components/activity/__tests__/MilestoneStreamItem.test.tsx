@@ -138,6 +138,29 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     expect(html).toContain('1 of 3 questions');
     expect(html).not.toContain('2 of 3 questions');
   });
+
+  it('reads as a settled completion once every question is answered, not "0 of N questions"', () => {
+    // A bundle whose questions are all already attempted (right or wrong) reaches
+    // the card with 0 remaining. The progress line must read as a completion
+    // ("All 3 answered"), not the bare "0 of 3 questions" — which read as "no
+    // questions" to a player who had in fact gotten every one.
+    const allAnsweredExpand: Extract<StreamExpand, { kind: 'milestone' }> = {
+      ...EXPAND,
+      questions: QUESTIONS.map((q) => ({ ...q, priorResult: q.priorResult ?? 'correct' })),
+    };
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem
+        item={{ ...MILESTONE_ITEM, expand: allAnsweredExpand }}
+        timestamp="2:00 PM"
+        elevated
+        showTimestamp={false}
+      />,
+    );
+    expect(html).toContain('All 3 answered');
+    expect(html).not.toContain('0 of 3 questions');
+    // The affordance flips to Revisit once they're all done.
+    expect(html).toContain('Revisit');
+  });
 });
 
 describe('ActivityStreamItem — collapsed bundle summary expands in place (not a page link)', () => {

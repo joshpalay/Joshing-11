@@ -346,8 +346,16 @@ export function ActivityStreamItem({
                     color: INK3,
                   }}
                 >
-                  {milestoneProgress.total - milestoneProgress.answered} of{' '}
-                  {milestoneProgress.total} questions
+                  {/* While questions remain, count down what's still
+                      answerable ("1 of 3 questions"), in lockstep with the solid
+                      bundle triangles. Once every question is answered, the
+                      remaining count is 0 — so read it as a settled completion
+                      ("All 3 answered") rather than the bare "0 of 3 questions",
+                      which read as "no questions" to players who had in fact
+                      gotten every one (request 2026-06-23). */}
+                  {allAnswered
+                    ? `All ${milestoneProgress.total} answered`
+                    : `${milestoneProgress.total - milestoneProgress.answered} of ${milestoneProgress.total} questions`}
                 </p>
               ) : null}
               {/* Texture cards may carry supplementary metadata (a domain, a
