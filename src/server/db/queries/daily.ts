@@ -23,6 +23,7 @@ import { pgErrorCode } from '@/server/db/pg-error';
 import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
 import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { answerCooldownKey } from '@/server/daily/answer-cooldown';
 import {
   FRIEND_FACING_TIERS,
   SELF_PRACTICE_TIERS,
@@ -1828,6 +1829,43 @@ export async function getNearestAnsweredQuestionDistance(
     .orderBy(distance)
     .limit(1);
   return row ? Number(row.distance) : null;
+}
+
+/**
+ * Answer-cooldown history (B-DEDUP-ANSWER-COOLDOWN, Tier 1). The set of
+ * answerCooldownKey values for every canonical question this user answered
+ * (live or catch-up) within `sinceDays` — feeds the serve-time answer-cooldown
+ * gate so a fresh question whose answer the player just gave is deflected before
+ * it reaches the queue. Mirrors getNearestAnsweredQuestionDistance's history
+ * scope (same source types, same per-user `userId`) but keyed on the answer
+ * string rather than the embedding, which is what catches exact-answer repeats
+ * the 0.88 embedding gate lets through. Blank/generic answers fold to '' in
+ * answerCooldownKey and are dropped here, so they never seed a false block.
+ */
+export async function getRecentAnsweredAnswerKeys(
+  userId: string,
+  sinceDays: number,
+): Promise<Set<string>> {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ answerText: canonicalQuestions.answerText })
+    .from(masteryEvents)
+    .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+        isNull(canonicalQuestions.deletedAt),
+        gte(masteryEvents.createdAt, since),
+      ),
+    );
+  const keys = new Set<string>();
+  for (const row of rows) {
+    const key = answerCooldownKey(row.answerText);
+    if (key) keys.add(key);
+  }
+  return keys;
 }
 
 // Canonical questions reached socially — a friend's authored question via a

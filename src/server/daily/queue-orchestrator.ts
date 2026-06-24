@@ -11,8 +11,10 @@ import {
   persistDailyQueue,
   pickEligibleAuthoredQuestions,
   pickHouseQuestions,
+  getRecentAnsweredAnswerKeys,
   type BonusPresence,
 } from '@/server/db/queries/daily';
+import { ANSWER_COOLDOWN_DAYS, makeAnswerCooldownGate } from '@/server/daily/answer-cooldown';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
 import {
@@ -296,6 +298,18 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
     oftenDomains.has(normalizedSubcategory) ? DAILY_QUEUE_SIZE : baseDiversityCap;
   const diversityGate = makeSubcategoryDiversityGate(capForSubcategory);
 
+  // Answer-cooldown gate (B-DEDUP-ANSWER-COOLDOWN, Tier 1). Deflects any pick —
+  // authored, house, or generated — whose answer the player already gave within
+  // ANSWER_COOLDOWN_DAYS, plus any two same-answer picks within this one build.
+  // Deflected picks go to the SAME reserves as diversity deflections, so a
+  // tapped-out knowledge base restores them rather than serving a short queue.
+  const recentAnswerKeys =
+    ANSWER_COOLDOWN_DAYS > 0
+      ? await getRecentAnsweredAnswerKeys(userId, ANSWER_COOLDOWN_DAYS)
+      : new Set<string>();
+  const answerCooldownGate = makeAnswerCooldownGate(recentAnswerKeys);
+  let deflectedForAnswerCooldown = 0;
+
   const socialGraph = await getFriendAndFoFUserIds(userId);
   const authoredAll = await pickEligibleAuthoredQuestions(
     userId,
@@ -308,9 +322,17 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
   // would otherwise leave the queue short.
   const authoredReserve: typeof authoredAll = [];
   const authored = authoredAll.filter((pick) => {
-    if (diversityGate.admit(pick.canonicalSubcategory)) return true;
-    authoredReserve.push(pick);
-    return false;
+    if (answerCooldownGate.blocks(pick.answerText)) {
+      deflectedForAnswerCooldown += 1;
+      authoredReserve.push(pick);
+      return false;
+    }
+    if (!diversityGate.admit(pick.canonicalSubcategory)) {
+      authoredReserve.push(pick);
+      return false;
+    }
+    answerCooldownGate.record(pick.answerText);
+    return true;
   });
 
   // D-3: seed curated house/editorial questions into the core for the niches
@@ -326,9 +348,17 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
   );
   const houseReserve: typeof housePicksAll = [];
   const housePicks = housePicksAll.filter((pick) => {
-    if (diversityGate.admit(pick.canonicalSubcategory)) return true;
-    houseReserve.push(pick);
-    return false;
+    if (answerCooldownGate.blocks(pick.answerText)) {
+      deflectedForAnswerCooldown += 1;
+      houseReserve.push(pick);
+      return false;
+    }
+    if (!diversityGate.admit(pick.canonicalSubcategory)) {
+      houseReserve.push(pick);
+      return false;
+    }
+    answerCooldownGate.record(pick.answerText);
+    return true;
   });
 
   const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
@@ -376,6 +406,14 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       continue;
     }
     seenTexts.add(key);
+    // Answer cooldown (Tier 1): a generated question whose answer the player gave
+    // within the window — or already used earlier in this build — is spaced out
+    // via the reserve like a diversity deflection.
+    if (answerCooldownGate.blocks(question.answer)) {
+      deflectedForAnswerCooldown += 1;
+      generatedReserve.push(question);
+      continue;
+    }
     // Intra-day diversity cap, applied AFTER the generic + dedup gates so a deflected
     // pick is a genuine, distinct question we're merely spacing out — see the reserve
     // backfill below.
@@ -384,6 +422,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       generatedReserve.push(question);
       continue;
     }
+    answerCooldownGate.record(question.answer);
     dedupedGenerated.push(question);
   }
   if (droppedDuplicates > 0) {
@@ -436,11 +475,17 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       const key = normalize(question.questionText);
       if (seenTexts.has(key)) continue;
       seenTexts.add(key);
+      if (answerCooldownGate.blocks(question.answer)) {
+        deflectedForAnswerCooldown += 1;
+        generatedReserve.push(question);
+        continue;
+      }
       if (!diversityGate.admit(question.canonicalSubcategory)) {
         deflectedForDiversity += 1;
         generatedReserve.push(question);
         continue;
       }
+      answerCooldownGate.record(question.answer);
       topUpGenerated.push(question);
       recoveredThisRound += 1;
     }
@@ -535,6 +580,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       baseDiversityCap,
       oftenDomains: oftenDomains.size,
       deflectedForDiversity,
+      deflectedForAnswerCooldown,
       diversityBackfilled,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
@@ -564,6 +610,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       baseDiversityCap,
       oftenDomains: oftenDomains.size,
       deflectedForDiversity,
+      deflectedForAnswerCooldown,
       diversityBackfilled,
       knowledgeBaseDomains: knowledgeBase.length,
       domainMode: preferences.domainMode,

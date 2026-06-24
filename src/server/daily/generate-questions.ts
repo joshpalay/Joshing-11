@@ -23,6 +23,7 @@ import {
 import {
   getAuthoredQuestionTexts,
   getKnowledgeBase,
+  getRecentAnsweredAnswerKeys,
   getRecentAnsweredCanonicalTexts,
   getRecentDailyQuestionTexts,
   getNearestAnsweredQuestionDistance,
@@ -51,6 +52,7 @@ import {
   selectCustomDomainsForRound,
 } from '@/server/daily/domain-selection';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import { ANSWER_COOLDOWN_DAYS, answerCooldownKey } from '@/server/daily/answer-cooldown';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
@@ -1101,6 +1103,31 @@ function findIntraBatchEmbeddingDuplicates(
   return drop;
 }
 
+// Answer-cooldown pre-filter (B-DEDUP-ANSWER-COOLDOWN, Tier 1). The deterministic
+// generation-time companion to the serve-time answer-cooldown gate: drop a fresh
+// question whose answer the player already gave within the window (recentKeys),
+// or that repeats another answer earlier in THIS batch, BEFORE it is persisted —
+// so an exact-answer repeat never enters the shared pool in the first place
+// (token-cheap: one string key per row, no LLM). The 0.88 embedding gate misses
+// these because a same-answer/different-angle pair scores below threshold.
+function findAnswerCooldownDuplicates(
+  generated: LlmQuestion[],
+  recentKeys: ReadonlySet<string>,
+): Set<number> {
+  const drop = new Set<number>();
+  const seenThisBatch = new Set<string>();
+  for (let i = 0; i < generated.length; i += 1) {
+    const key = answerCooldownKey(generated[i].answer);
+    if (!key) continue;
+    if (recentKeys.has(key) || seenThisBatch.has(key)) {
+      drop.add(i);
+      continue;
+    }
+    seenThisBatch.add(key);
+  }
+  return drop;
+}
+
 // Across-history dedup (gate 2 above). Takes the shared batch embeddings.
 async function findAnsweredHistoryDuplicates(
   userId: string,
@@ -1325,7 +1352,21 @@ export async function generateDailyQuestions(
   const recentForGate = avoidList.slice(0, RECENT_HISTORY_GATE_LIMIT);
   // One embedding pass over the batch feeds both semantic gates (intra-batch +
   // across-history). null when embeddings are disabled/failed → both no-op.
-  const batchEmbeddings = await embedGeneratedBatch(generated);
+  // Answer-cooldown keys fetched alongside (deterministic, resilient on failure).
+  const [batchEmbeddings, recentAnswerKeys] = await Promise.all([
+    embedGeneratedBatch(generated),
+    ANSWER_COOLDOWN_DAYS > 0
+      ? getRecentAnsweredAnswerKeys(userId, ANSWER_COOLDOWN_DAYS).catch(() => new Set<string>())
+      : Promise.resolve(new Set<string>()),
+  ]);
+  const answerCooldownDuplicates = findAnswerCooldownDuplicates(generated, recentAnswerKeys);
+  if (answerCooldownDuplicates.size > 0) {
+    console.warn('[daily/generate-questions] dropping answer-cooldown repeats', {
+      droppedCount: answerCooldownDuplicates.size,
+      droppedIndices: [...answerCooldownDuplicates].sort((a, b) => a - b),
+      originalCount: generated.length,
+    });
+  }
   const [batchDuplicates, recentDuplicates, qualityResult, factualResult, answeredHistoryDuplicates] =
     await Promise.all([
       findBatchDuplicates(generated),
@@ -1419,6 +1460,7 @@ export async function generateDailyQuestions(
     ...intraBatchDuplicates,
     ...recentDuplicates,
     ...answeredHistoryDuplicates,
+    ...answerCooldownDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
