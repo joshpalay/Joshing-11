@@ -106,6 +106,20 @@ export default function WelcomeTourScreen({
 }: WelcomeTourScreenProps) {
   const router = useRouter();
   const isClient = useSyncExternalStore(subscribeNoop, getClientSnapshot, getServerSnapshot);
+  // Self-suppress once seen (live mount via `?welcome=1`). `forced` (dev replay)
+  // bypasses and never reads the flag.
+  const seen = useSyncExternalStore(
+    subscribeNoop,
+    () => {
+      if (forced) return false;
+      try {
+        return Boolean(window.localStorage.getItem(storageKey));
+      } catch {
+        return false;
+      }
+    },
+    () => false,
+  );
   const inviter = inviterName?.trim() ? inviterName.trim() : 'a friend';
 
   const beats: Beat[] = useMemo(
@@ -338,7 +352,7 @@ export default function WelcomeTourScreen({
     router.push(href);
   };
 
-  if (!isClient) return null;
+  if (!isClient || (!forced && seen)) return null;
 
   return (
     <div className="wts-root">
