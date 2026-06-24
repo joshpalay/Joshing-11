@@ -697,6 +697,18 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         expand: null,
       };
 
+    case 'follow_mutual':
+      // Written to the accepter when they approve a request: the two are now
+      // mutual friends. The actor is the new friend; name-first reads as the
+      // quiet "now connected" confirmation the accepter was missing.
+      return {
+        ...base,
+        line: [a, txt(' is now a friend')],
+        secondLine: null,
+        action: null,
+        expand: null,
+      };
+
     case 'invited_friend_played_first_five':
       return {
         ...base,
