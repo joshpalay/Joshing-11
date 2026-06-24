@@ -23,7 +23,7 @@ import {
   storePoolEmbedding,
   type NearestPoolMatch,
 } from '@/server/db/queries/pool';
-import { embedText, isEmbeddingEnabled } from '@/server/llm/embeddings';
+import { embedText, embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
 
 // Cosine *similarity* threshold (1 = identical). Start strict per §7 (the spec's
 // knob table does not pin a number); override via env without a deploy.
@@ -114,6 +114,57 @@ export async function embedAndResolveDuplicate(args: {
     console.warn('[pool/dedup] insert-time dedup skipped (non-fatal)', {
       id: args.id,
       origin: args.origin,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Batched variant of {@link embedAndResolveDuplicate} for a freshly-generated
+ * pool batch (B-DEDUP-EMBED-RELIABILITY). Embeds every row's text in ONE Voyage
+ * call instead of one-call-per-row, which is what made the daily generation
+ * cron burst dozens of concurrent single-item requests and get rate-limited
+ * (~20-50% of rows landed embedding-less). Storage + the collision pass stay
+ * per-row and interleaved (store row i, then resolve it against the pool, which
+ * now includes rows already stored this batch) — identical semantics to calling
+ * embedAndResolveDuplicate in a loop, minus the Voyage call amplification.
+ * Best-effort: a disabled/failed embed leaves the rows un-embedded (the daily
+ * gate then can't see them) but never blocks generation.
+ */
+export async function embedAndResolveDuplicatesBatch(
+  rows: Array<{ id: string; origin: PoolOrigin; questionText: string }>,
+): Promise<void> {
+  if (!isEmbeddingEnabled() || rows.length === 0) return;
+  try {
+    const vectors = await embedTexts(rows.map((r) => r.questionText), 'document');
+    if (!vectors) return;
+    const threshold = getDedupCosineThreshold();
+    for (let i = 0; i < rows.length; i += 1) {
+      const embedding = vectors[i];
+      if (!embedding) continue;
+      const row = rows[i];
+      await storePoolEmbedding(row.origin, row.id, embedding);
+
+      const nearest = await findNearestInPool(embedding, row.id);
+      const decision = resolveCollision({ id: row.id, origin: row.origin }, nearest, threshold);
+      if (decision.action === 'suppress_incoming') {
+        await markPoolDuplicate(row.origin, row.id, decision.survivorId);
+        console.info('[pool/dedup] suppressed new near-duplicate', {
+          origin: row.origin,
+          id: row.id,
+          survivor: decision.survivorId,
+        });
+      } else if (decision.action === 'suppress_existing') {
+        await markPoolDuplicate(decision.existingOrigin, decision.existingId, decision.survivorId);
+        console.info('[pool/dedup] human beat machine; suppressed existing machine row', {
+          existing: decision.existingId,
+          survivor: decision.survivorId,
+        });
+      }
+    }
+  } catch (error) {
+    console.warn('[pool/dedup] batch insert-time dedup skipped (non-fatal)', {
+      count: rows.length,
       message: error instanceof Error ? error.message : String(error),
     });
   }

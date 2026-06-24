@@ -188,6 +188,9 @@ export async function persistGeneratedQuestion(generatedQuestionId: string, slot
         // Carry the precomputed aside through; the editorial label is applied at
         // display time (selectInsideJokeForViewer) for these null-creator rows.
         insideJoke: generated.insideJoke,
+        // Carry the model's primary subject onto the canonical row so the Tier 2
+        // subject-cooldown gate can read it from a user's answered history.
+        subjectEntity: generated.subjectEntity,
         // Carry the machine row's Voyage embedding onto the canonical promotion
         // (B-DEDUP-SEMANTIC-01). Without this, daily_generated promotions land
         // with a NULL embedding, so the per-user semantic history gate

@@ -22,6 +22,8 @@ vi.mock('@/server/db/queries/daily', () => ({
   getRecentFactKeys: mocks.getRecentFactKeys,
   getAuthoredQuestionTexts: mocks.getAuthoredQuestionTexts,
   getRecentAnsweredCanonicalTexts: mocks.getRecentAnsweredCanonicalTexts,
+  getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
+  getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
   getRecentDomainCounts: vi.fn(),
   getRecentSkipCountsByDomain: vi.fn(),
   getRecentSubAnglesByDomain: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/pool/dedup', () => ({
   embedAndResolveDuplicate: vi.fn(async () => undefined),
+  embedAndResolveDuplicatesBatch: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/lib/llm', async (importOriginal) => {
