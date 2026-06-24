@@ -24,6 +24,7 @@ import {
   getAuthoredQuestionTexts,
   getKnowledgeBase,
   getRecentAnsweredAnswerKeys,
+  getRecentAnsweredEntities,
   getRecentAnsweredCanonicalTexts,
   getRecentDailyQuestionTexts,
   getNearestAnsweredQuestionDistance,
@@ -53,6 +54,7 @@ import {
 } from '@/server/daily/domain-selection';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { ANSWER_COOLDOWN_DAYS, answerCooldownKey } from '@/server/daily/answer-cooldown';
+import { SUBJECT_COOLDOWN_DAYS, entityKey } from '@/server/daily/subject-cooldown';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { textContainsAnswer } from '@/server/questions/self-answering';
@@ -192,6 +194,8 @@ For each question, also emit a fact_key: a short hyphenated lowercase identifier
 
 Keep fact_keys under 80 characters. Two questions with the same fact_key are duplicates and will be rejected.
 
+For each question, also emit subject_entity: the single primary subject the question is ABOUT — the person, work, character, place, or thing at its center (e.g. "Peter Pettigrew", "Guys and Dolls", "the Krebs cycle"). Name the most specific recurring entity a fan would point to, not the broad domain. This is COARSER than fact_key: many different facts about Peter Pettigrew all share subject_entity "Peter Pettigrew". Keep it under 60 characters and omit a leading article.
+
 QUESTION SHAPE VARIETY:
 Trivia gets monotonous when every question follows the same template ("What is the name of X?"). Vary the shape across the batch. Choose from this catalog and emit the chosen shape on each question via the question_shape field:
 
@@ -231,6 +235,7 @@ Return format:
       "explainer": "string, 2-3 sentences of educational context",
       "difficulty_estimate": "accessible | moderate | specialist",
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
+      "subject_entity": "string, the single primary subject the question is about (see above) — coarser than fact_key",
       "sub_angles": ["1-3 short tags identifying the facets of the domain covered (see above)"],
       "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next | fill_in_blank | complete_the_quote | name_multiple (held back — do not emit)"
     }
@@ -265,6 +270,7 @@ export type LlmQuestion = {
   explainer: string;
   difficulty_estimate: 'accessible' | 'moderate' | 'specialist';
   fact_key: string | null;
+  subject_entity: string | null;
   sub_angles: string[];
   question_shape: QuestionShape | null;
 };
@@ -545,9 +551,20 @@ function parseBaseQuestion(item: unknown): LlmQuestion | null {
     explainer,
     difficulty_estimate: difficulty,
     fact_key: factKey,
+    subject_entity: normalizeSubjectEntity(rec.subject_entity),
     sub_angles: normalizeSubAngles(rec.sub_angles),
     question_shape: asQuestionShape(rec.question_shape),
   };
+}
+
+// Store the model's subject label lightly normalized (trimmed, leading article
+// dropped, length-capped) but otherwise as written — the readable form lives on
+// the row; the Tier 2 gate folds it to a match key at compare time. Null when
+// the model omitted it or returned a non-string.
+function normalizeSubjectEntity(value: unknown): string | null {
+  const str = asString(value)?.trim();
+  if (!str) return null;
+  return str.replace(/^(the|a|an)\s+/i, '').slice(0, 80).trim() || null;
 }
 
 function parseQuestions(raw: string): LlmQuestion[] {
@@ -1128,6 +1145,32 @@ function findAnswerCooldownDuplicates(
   return drop;
 }
 
+// Subject-cooldown pre-filter (B-DEDUP-SUBJECT-COOLDOWN, Tier 2). Generation-time
+// companion to the serve-time subject gate: drop a fresh question whose subject
+// OR answer names an entity the player recently touched (recentEntities = recent
+// subjects ∪ answers), or that repeats an entity earlier in THIS batch. Catches
+// same-subject saturation the answer/embedding gates miss (the Peter Pettigrew
+// case, where the entity is an answer in one question and a subject in another).
+function findSubjectCooldownDuplicates(
+  generated: LlmQuestion[],
+  recentEntities: ReadonlySet<string>,
+): Set<number> {
+  const drop = new Set<number>();
+  const seenThisBatch = new Set<string>();
+  const hit = (key: string) => key !== '' && (recentEntities.has(key) || seenThisBatch.has(key));
+  for (let i = 0; i < generated.length; i += 1) {
+    const subjectK = entityKey(generated[i].subject_entity);
+    const answerK = entityKey(generated[i].answer);
+    if (hit(subjectK) || hit(answerK)) {
+      drop.add(i);
+      continue;
+    }
+    if (subjectK) seenThisBatch.add(subjectK);
+    if (answerK) seenThisBatch.add(answerK);
+  }
+  return drop;
+}
+
 // Across-history dedup (gate 2 above). Takes the shared batch embeddings.
 async function findAnsweredHistoryDuplicates(
   userId: string,
@@ -1353,10 +1396,13 @@ export async function generateDailyQuestions(
   // One embedding pass over the batch feeds both semantic gates (intra-batch +
   // across-history). null when embeddings are disabled/failed → both no-op.
   // Answer-cooldown keys fetched alongside (deterministic, resilient on failure).
-  const [batchEmbeddings, recentAnswerKeys] = await Promise.all([
+  const [batchEmbeddings, recentAnswerKeys, recentEntities] = await Promise.all([
     embedGeneratedBatch(generated),
     ANSWER_COOLDOWN_DAYS > 0
       ? getRecentAnsweredAnswerKeys(userId, ANSWER_COOLDOWN_DAYS).catch(() => new Set<string>())
+      : Promise.resolve(new Set<string>()),
+    SUBJECT_COOLDOWN_DAYS > 0
+      ? getRecentAnsweredEntities(userId, SUBJECT_COOLDOWN_DAYS).catch(() => new Set<string>())
       : Promise.resolve(new Set<string>()),
   ]);
   const answerCooldownDuplicates = findAnswerCooldownDuplicates(generated, recentAnswerKeys);
@@ -1364,6 +1410,14 @@ export async function generateDailyQuestions(
     console.warn('[daily/generate-questions] dropping answer-cooldown repeats', {
       droppedCount: answerCooldownDuplicates.size,
       droppedIndices: [...answerCooldownDuplicates].sort((a, b) => a - b),
+      originalCount: generated.length,
+    });
+  }
+  const subjectCooldownDuplicates = findSubjectCooldownDuplicates(generated, recentEntities);
+  if (subjectCooldownDuplicates.size > 0) {
+    console.warn('[daily/generate-questions] dropping subject-cooldown repeats', {
+      droppedCount: subjectCooldownDuplicates.size,
+      droppedIndices: [...subjectCooldownDuplicates].sort((a, b) => a - b),
       originalCount: generated.length,
     });
   }
@@ -1461,6 +1515,7 @@ export async function generateDailyQuestions(
     ...recentDuplicates,
     ...answeredHistoryDuplicates,
     ...answerCooldownDuplicates,
+    ...subjectCooldownDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
@@ -1582,6 +1637,7 @@ export async function generateDailyQuestions(
         difficultyEstimate: question.difficulty_estimate,
         basePoints,
         factKey,
+        subjectEntity: question.subject_entity,
         subAngles: question.sub_angles,
         insideJoke: insideJokeByQuestion.get(question) ?? null,
         trustTier,

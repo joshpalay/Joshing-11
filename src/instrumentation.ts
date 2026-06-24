@@ -355,6 +355,26 @@ export async function register() {
       // FeedItem table may not exist yet — migrate() handles initial creation.
     }
 
+    // Migration 0086 adds GeneratedQuestion.subject_entity + Question.subject_entity
+    // — the primary subject feeding the Tier 2 subject-cooldown gate. The generator
+    // writes it and persistGeneratedQuestion carries it onto the canonical row; a
+    // preview/production DB that records 0086 without the columns present would
+    // break those writes. Pre-apply idempotently (precedent: 0085 above). The
+    // historical backfill (scripts/backfill-subject-entity.ts) is separate and not
+    // needed for read/write safety — a NULL subject_entity just means "no signal".
+    try {
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion"
+          ADD COLUMN IF NOT EXISTS "subject_entity" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "subject_entity" text
+      `);
+    } catch {
+      // Tables may not exist yet — migrate() handles initial creation.
+    }
+
     // Migration 0028 adds the Category.general_knowledge enum value and migration
     // 0030 uses it as a default/backfill value. Drizzle wraps all pending Postgres
     // migrations in one transaction, but Postgres requires a newly-added enum value

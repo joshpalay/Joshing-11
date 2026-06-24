@@ -1036,6 +1036,7 @@ export type AuthoredPick = {
   broadCategory: string | null;
   category: string;
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
+  subjectEntity: string | null;
   authorName: string | null;
   authorNote: string | null;
 };
@@ -1057,6 +1058,7 @@ export type HousePick = {
   broadCategory: string | null;
   category: string;
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist' | null;
+  subjectEntity: string | null;
   authorNote: string | null;
 };
 
@@ -1155,6 +1157,7 @@ export async function pickEligibleAuthoredQuestions(
       broadCategory: canonicalQuestions.broadCategory,
       category: canonicalQuestions.category,
       difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      subjectEntity: canonicalQuestions.subjectEntity,
       creatorNote: canonicalQuestions.creatorNote,
       publicEligibilityScore: canonicalQuestions.publicEligibilityScore,
       trustTier: canonicalQuestions.trustTier,
@@ -1231,6 +1234,7 @@ export async function pickEligibleAuthoredQuestions(
     broadCategory: row.broadCategory,
     category: String(row.category ?? ''),
     difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+    subjectEntity: row.subjectEntity ?? null,
     authorName: row.creatorId ? nameById.get(row.creatorId) ?? null : null,
     authorNote: row.creatorNote ?? null,
   } satisfies AuthoredPick));
@@ -1311,6 +1315,7 @@ export type HouseCandidateRow = {
   broadCategory: string | null;
   category: string | null;
   difficultyEstimate: string | null;
+  subjectEntity: string | null;
   creatorNote: string | null;
   createdAt: Date | null;
 };
@@ -1343,6 +1348,7 @@ export function selectHousePicks(
       broadCategory: row.broadCategory,
       category: String(row.category ?? ''),
       difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+      subjectEntity: row.subjectEntity ?? null,
       authorNote: row.creatorNote ?? null,
     } satisfies HousePick));
 }
@@ -1405,6 +1411,7 @@ export async function pickHouseQuestions(
       broadCategory: canonicalQuestions.broadCategory,
       category: canonicalQuestions.category,
       difficultyEstimate: canonicalQuestions.difficultyEstimate,
+      subjectEntity: canonicalQuestions.subjectEntity,
       creatorNote: canonicalQuestions.creatorNote,
       trustTier: canonicalQuestions.trustTier,
       createdAt: canonicalQuestions.createdAt,
@@ -1866,6 +1873,46 @@ export async function getRecentAnsweredAnswerKeys(
     if (key) keys.add(key);
   }
   return keys;
+}
+
+/**
+ * Recent-entity history (B-DEDUP-SUBJECT-COOLDOWN, Tier 2). The set of entity
+ * keys — folding BOTH the subject_entity and the answer of every canonical
+ * question this user answered within `sinceDays` — that feeds the subject-
+ * cooldown gate. Folding both into one key space is what lets the gate catch the
+ * case where an entity is a question's ANSWER in one place and its SUBJECT in
+ * another (the Peter Pettigrew repeat). answerCooldownKey doubles as the entity
+ * normalizer (see entityKey in subject-cooldown.ts).
+ */
+export async function getRecentAnsweredEntities(
+  userId: string,
+  sinceDays: number,
+): Promise<Set<string>> {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      answerText: canonicalQuestions.answerText,
+      subjectEntity: canonicalQuestions.subjectEntity,
+    })
+    .from(masteryEvents)
+    .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+        isNotNull(masteryEvents.questionId),
+        isNull(canonicalQuestions.deletedAt),
+        gte(masteryEvents.createdAt, since),
+      ),
+    );
+  const entities = new Set<string>();
+  for (const row of rows) {
+    const answerKey = answerCooldownKey(row.answerText);
+    if (answerKey) entities.add(answerKey);
+    const subjectKey = answerCooldownKey(row.subjectEntity);
+    if (subjectKey) entities.add(subjectKey);
+  }
+  return entities;
 }
 
 // Canonical questions reached socially — a friend's authored question via a

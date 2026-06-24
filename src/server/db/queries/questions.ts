@@ -148,7 +148,7 @@ export const bankQuestionSelectColumns = questionViewColumns;
 type QuestionViewNonViewKey =
   | 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
   | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding'
-  | 'authorDeleted';
+  | 'authorDeleted' | 'subjectEntity';
 type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
   & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 

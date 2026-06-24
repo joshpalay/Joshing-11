@@ -12,9 +12,11 @@ import {
   pickEligibleAuthoredQuestions,
   pickHouseQuestions,
   getRecentAnsweredAnswerKeys,
+  getRecentAnsweredEntities,
   type BonusPresence,
 } from '@/server/db/queries/daily';
 import { ANSWER_COOLDOWN_DAYS, makeAnswerCooldownGate } from '@/server/daily/answer-cooldown';
+import { SUBJECT_COOLDOWN_DAYS, makeSubjectCooldownGate } from '@/server/daily/subject-cooldown';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
 import {
@@ -310,6 +312,17 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
   const answerCooldownGate = makeAnswerCooldownGate(recentAnswerKeys);
   let deflectedForAnswerCooldown = 0;
 
+  // Subject-cooldown gate (B-DEDUP-SUBJECT-COOLDOWN, Tier 2). Deflects a pick
+  // whose subject OR answer names an entity the player recently touched (subjects
+  // ∪ answers over SUBJECT_COOLDOWN_DAYS), spacing out same-subject saturation
+  // even when the fact and the answer differ. Same reserve fallback as above.
+  const recentEntities =
+    SUBJECT_COOLDOWN_DAYS > 0
+      ? await getRecentAnsweredEntities(userId, SUBJECT_COOLDOWN_DAYS)
+      : new Set<string>();
+  const subjectCooldownGate = makeSubjectCooldownGate(recentEntities);
+  let deflectedForSubjectCooldown = 0;
+
   const socialGraph = await getFriendAndFoFUserIds(userId);
   const authoredAll = await pickEligibleAuthoredQuestions(
     userId,
@@ -327,11 +340,17 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       authoredReserve.push(pick);
       return false;
     }
+    if (subjectCooldownGate.blocks(pick.subjectEntity, pick.answerText)) {
+      deflectedForSubjectCooldown += 1;
+      authoredReserve.push(pick);
+      return false;
+    }
     if (!diversityGate.admit(pick.canonicalSubcategory)) {
       authoredReserve.push(pick);
       return false;
     }
     answerCooldownGate.record(pick.answerText);
+    subjectCooldownGate.record(pick.subjectEntity, pick.answerText);
     return true;
   });
 
@@ -353,11 +372,17 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       houseReserve.push(pick);
       return false;
     }
+    if (subjectCooldownGate.blocks(pick.subjectEntity, pick.answerText)) {
+      deflectedForSubjectCooldown += 1;
+      houseReserve.push(pick);
+      return false;
+    }
     if (!diversityGate.admit(pick.canonicalSubcategory)) {
       houseReserve.push(pick);
       return false;
     }
     answerCooldownGate.record(pick.answerText);
+    subjectCooldownGate.record(pick.subjectEntity, pick.answerText);
     return true;
   });
 
@@ -414,6 +439,11 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       generatedReserve.push(question);
       continue;
     }
+    if (subjectCooldownGate.blocks(question.subjectEntity, question.answer)) {
+      deflectedForSubjectCooldown += 1;
+      generatedReserve.push(question);
+      continue;
+    }
     // Intra-day diversity cap, applied AFTER the generic + dedup gates so a deflected
     // pick is a genuine, distinct question we're merely spacing out — see the reserve
     // backfill below.
@@ -423,6 +453,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       continue;
     }
     answerCooldownGate.record(question.answer);
+    subjectCooldownGate.record(question.subjectEntity, question.answer);
     dedupedGenerated.push(question);
   }
   if (droppedDuplicates > 0) {
@@ -480,12 +511,18 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
         generatedReserve.push(question);
         continue;
       }
+      if (subjectCooldownGate.blocks(question.subjectEntity, question.answer)) {
+        deflectedForSubjectCooldown += 1;
+        generatedReserve.push(question);
+        continue;
+      }
       if (!diversityGate.admit(question.canonicalSubcategory)) {
         deflectedForDiversity += 1;
         generatedReserve.push(question);
         continue;
       }
       answerCooldownGate.record(question.answer);
+      subjectCooldownGate.record(question.subjectEntity, question.answer);
       topUpGenerated.push(question);
       recoveredThisRound += 1;
     }
@@ -581,6 +618,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       oftenDomains: oftenDomains.size,
       deflectedForDiversity,
       deflectedForAnswerCooldown,
+      deflectedForSubjectCooldown,
       diversityBackfilled,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
@@ -611,6 +649,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       oftenDomains: oftenDomains.size,
       deflectedForDiversity,
       deflectedForAnswerCooldown,
+      deflectedForSubjectCooldown,
       diversityBackfilled,
       knowledgeBaseDomains: knowledgeBase.length,
       domainMode: preferences.domainMode,
