@@ -14,10 +14,17 @@ export default function FriendsHubPage() {
     window.dispatchEvent(new CustomEvent('friend-invitations:create-new', { detail }));
   }
 
-  // No-match invite from the lookup. A US number can seed the SMS invite; a
+  // No-match invite from the lookup. A US number seeds the SMS invite's phone
+  // field; a typed name seeds the invite's Name field so it isn't retyped. A
   // handle isn't a phone (or a real name), so it opens the invite flow blank.
   function handleLookupInvite(query: string, classification: QueryClassification) {
-    openInviteFlow(classification === 'phone' ? { phone: query } : {});
+    if (classification === 'phone') {
+      openInviteFlow({ phone: query });
+    } else if (classification === 'name') {
+      openInviteFlow({ inviteeDisplayName: query });
+    } else {
+      openInviteFlow({});
+    }
   }
 
   return (
