@@ -53,19 +53,27 @@ vi.mock('@/server/db', () => ({
     visibility: 'questions.visibility',
     deletedAt: 'questions.deletedAt',
     creatorId: 'questions.creatorId',
+    source: 'questions.source',
+    createdAt: 'questions.createdAt',
   },
 }));
 
 vi.mock('@/server/feed/visibility', () => ({ SOCIAL_FEED_SOURCE_TYPE: 'friend_answered' }));
 
 import {
+  AUTHORED_BACKFILL_MAX_ITEMS,
+  authoredBackfillSourceAnswerId,
+  backfillAuthoredQuestionsFeedItems,
   backfillFollowedUserFeedItems,
   backfillInviterFeedItems,
   backfillSourceAnswerId,
   dropAlreadyPresent,
   INVITER_BACKFILL_MAX_ITEMS,
+  pickAuthoredBackfillQuestions,
   pickInviterBackfillAnswers,
+  toAuthoredBackfillFeedItemRows,
   toBackfillFeedItemRows,
+  type AuthoredQuestionRow,
   type InviterAnswerRow,
 } from '@/server/feed/backfill-inviter-feed';
 
@@ -227,6 +235,89 @@ describe('backfillFollowedUserFeedItems (friend-add hook)', () => {
       answererUserId: ANSWERER,
       recipientUserId: ANSWERER,
     });
+    expect(result).toEqual({ created: 0 });
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('authored-question backfill', () => {
+  const AUTHOR = 'author-1';
+  const RECIPIENT = 'recipient-1';
+
+  function authoredRow(n: number, opts: { questionId?: string; at?: string } = {}): AuthoredQuestionRow {
+    return {
+      questionId: opts.questionId ?? `q-${n}`,
+      authoredAt: new Date(opts.at ?? `2026-06-0${(n % 9) + 1}T12:00:00.000Z`),
+    };
+  }
+
+  function questionDbRows(rows: AuthoredQuestionRow[]) {
+    return rows.map((r) => ({ id: r.questionId, createdAt: r.authoredAt }));
+  }
+
+  it('dedupes by questionId and enforces the cap (8 most recent distinct)', () => {
+    const rows = Array.from({ length: 12 }, (_, i) => authoredRow(i, { questionId: `q-${i}` }));
+    const picked = pickAuthoredBackfillQuestions(rows);
+    expect(AUTHORED_BACKFILL_MAX_ITEMS).toBe(8);
+    expect(picked).toHaveLength(8);
+    expect(picked.map((p) => p.questionId)).toEqual(rows.slice(0, 8).map((r) => r.questionId));
+  });
+
+  it('builds authored_shared rows with original authored time, null result, and a deterministic id', () => {
+    const at = new Date('2026-05-05T09:30:00.000Z');
+    const rows = toAuthoredBackfillFeedItemRows(AUTHOR, RECIPIENT, [{ questionId: 'q-x', authoredAt: at }]);
+    expect(rows).toEqual([
+      {
+        recipientUserId: RECIPIENT,
+        questionId: 'q-x',
+        sourceType: 'authored_shared',
+        sourceUserId: AUTHOR,
+        sourceResult: null,
+        sourceEventAt: at,
+        sourceAnswerId: authoredBackfillSourceAnswerId('q-x'),
+        state: 'active',
+        isPinned: false,
+      },
+    ]);
+    expect(rows[0].sourceAnswerId).toBe('authored-backfill:q-x');
+  });
+
+  it('seeds the recipient with the author\'s public authored questions, attributed to the author', async () => {
+    const rows = [authoredRow(1, { questionId: 'q-a' }), authoredRow(2, { questionId: 'q-b' })];
+    state.selectResults = [questionDbRows(rows), /* existing */ []];
+
+    const result = await backfillAuthoredQuestionsFeedItems({ authorUserId: AUTHOR, recipientUserId: RECIPIENT });
+
+    expect(result).toEqual({ created: 2 });
+    expect(state.inserted.every((r) => r.sourceType === 'authored_shared')).toBe(true);
+    expect(state.inserted.every((r) => r.sourceUserId === AUTHOR)).toBe(true);
+    expect(state.inserted.every((r) => r.recipientUserId === RECIPIENT)).toBe(true);
+    expect(state.inserted.every((r) => r.sourceResult === null)).toBe(true);
+    // sourceEventAt preserves the question's original authored time (not now).
+    expect(state.inserted[0].sourceEventAt).toEqual(rows[0].authoredAt);
+  });
+
+  it('creates nothing when the author has no public authored questions', async () => {
+    state.selectResults = [[]]; // no question rows; existing select never runs
+
+    const result = await backfillAuthoredQuestionsFeedItems({ authorUserId: AUTHOR, recipientUserId: RECIPIENT });
+
+    expect(result).toEqual({ created: 0 });
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent on re-fire — inserts only the not-yet-present subset', async () => {
+    const rows = [authoredRow(1, { questionId: 'q-a' }), authoredRow(2, { questionId: 'q-b' })];
+    state.selectResults = [questionDbRows(rows), [{ questionId: 'q-a' }]];
+
+    const result = await backfillAuthoredQuestionsFeedItems({ authorUserId: AUTHOR, recipientUserId: RECIPIENT });
+
+    expect(result).toEqual({ created: 1 });
+    expect(state.inserted.map((r) => r.questionId)).toEqual(['q-b']);
+  });
+
+  it('no-ops when author and recipient are the same user', async () => {
+    const result = await backfillAuthoredQuestionsFeedItems({ authorUserId: AUTHOR, recipientUserId: AUTHOR });
     expect(result).toEqual({ created: 0 });
     expect(dbMock.select).not.toHaveBeenCalled();
   });

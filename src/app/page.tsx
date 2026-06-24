@@ -8,8 +8,10 @@ import TodaysFiveCard, {
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { DailyReminderInterlude } from '@/components/home/DailyReminderInterlude'
+import FriendRequestsSection from '@/components/home/FriendRequestsSection'
 import { getSession } from '@/server/auth/session'
 import { getReminderState } from '@/server/db/queries/account'
+import { getHomeFriendRequests } from '@/server/db/queries/friends'
 import { getPreSeededInterestsForUser } from '@/server/db/queries/users'
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
@@ -81,6 +83,16 @@ export default async function Home({
       {session ? (
         <Suspense fallback={null}>
           <DailyReminderSection userId={session.userId} />
+        </Suspense>
+      ) : null}
+
+      {/* Pending follow requests — a quiet "Wants to connect" section at the head
+          of the social content (below the daily-five + reminder block, above the
+          ceremony pin and feed). Signed-in only; renders nothing at zero state,
+          so a frequently-empty section needs no skeleton (fallback={null}). */}
+      {session ? (
+        <Suspense fallback={null}>
+          <FriendRequestsHomeSection userId={session.userId} />
         </Suspense>
       ) : null}
 
@@ -190,6 +202,27 @@ async function DailyReminderSection({ userId }: { userId: string }) {
   }
   return (
     <DailyReminderInterlude hasVerifiedEmail={state.emailVerified && Boolean(state.email)} />
+  )
+}
+
+async function FriendRequestsHomeSection({ userId }: { userId: string }) {
+  // B-PERF parity: time the server fetch like the other home spans (home is a
+  // streamed RSC and can't set a Server-Timing header).
+  const { top, totalCount } = await timeServerWork('home/friend-requests', 'friend_requests', () =>
+    getHomeFriendRequests(userId),
+  )
+  // Serialize createdAt to an ISO string at the RSC boundary (mirrors the
+  // ceremony / reminder sections handing dates to their client components).
+  return (
+    <FriendRequestsSection
+      initial={{
+        top: top.map((request) => ({
+          ...request,
+          createdAt: request.createdAt.toISOString(),
+        })),
+        totalCount,
+      }}
+    />
   )
 }
 

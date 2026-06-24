@@ -442,6 +442,39 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   }
 }
 
+// The home page's quiet "Wants to connect" section reads this: the top few
+// pending inbound requests plus the full pending count (so it can offer a
+// "See all (N)" overflow to /friends). `top` is most-recent-first, capped at 3.
+export type HomeFriendRequests = {
+  top: IncomingFollowRequest[]
+  totalCount: number
+}
+
+export const HOME_FRIEND_REQUESTS_LIMIT = 3
+
+// Pure selection over the hub's already-computed incoming requests: sort
+// most-recent-first, slice the cap for `top`, and keep the full pending count.
+// Kept side-effect-free so it can be unit-tested without the DB.
+export function selectHomeFriendRequests(
+  incomingRequests: IncomingFollowRequest[],
+): HomeFriendRequests {
+  const top = [...incomingRequests]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, HOME_FRIEND_REQUESTS_LIMIT)
+  return { top, totalCount: incomingRequests.length }
+}
+
+/**
+ * Home-page view of pending inbound follow requests: the 3 most recent plus the
+ * full pending count. Reuses `getFriendsHub` (which already computes
+ * `incomingRequests`) rather than introducing a parallel query — the home RSC
+ * only needs this slice, so it never reads the rest of the hub.
+ */
+export async function getHomeFriendRequests(userId: string): Promise<HomeFriendRequests> {
+  const hub = await getFriendsHub(userId)
+  return selectHomeFriendRequests(hub.incomingRequests)
+}
+
 /**
  * Returns the viewer's 1st-degree mutual-follow ids and 2nd-degree
  * (mutual-follows of mutual-follows) ids, with the extended set de-duplicated
