@@ -424,9 +424,10 @@ export default function WelcomeTour({
       ) : null}
 
       {/* Invisible scroll driver — captures scroll to advance steps. Tall enough
-          to give each step a screenful of travel. */}
+          to give each step ~two screenfuls of travel, so a normal scroll flick
+          doesn't blow past a group. */}
       <div className="welcome-tour-driver" ref={driverRef}>
-        <div style={{ height: `${Math.max(activeSteps.length, 1) * 100}vh` }} />
+        <div style={{ height: `${Math.max(activeSteps.length, 1) * 200}vh` }} />
       </div>
     </>
   );
