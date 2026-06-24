@@ -37,6 +37,33 @@ function requestContextForSuggestedInterests(suggestedInterests: string[]): Frie
   return suggestedInterests.length > 0 ? { suggestedInterests } : null
 }
 
+// Upsert a single approved follow edge. Idempotent via the (followerId,
+// followeeId) unique constraint: a pending or already-approved edge settles to
+// approved. This is the "back" edge that makes a follow MUTUAL — a friendship is
+// bidirectional, so every friendship-forming path approves both directions.
+async function ensureApprovedFollowEdge(followerId: string, followeeId: string, now: Date): Promise<void> {
+  await db
+    .insert(follows)
+    .values({ followerId, followeeId, state: 'approved', approvedAt: now })
+    .onConflictDoUpdate({
+      target: [follows.followerId, follows.followeeId],
+      set: { state: 'approved', approvedAt: now },
+    })
+}
+
+// Seed BOTH friends' feeds with each other's recent correct answers AND public
+// authored questions — what would have propagated had the mutual edge existed
+// when they answered/authored. Each call is best-effort internally and cannot
+// throw, so none can affect the friendship write.
+async function backfillMutualFeeds(userAId: string, userBId: string): Promise<void> {
+  await Promise.all([
+    backfillFollowedUserFeedItems({ answererUserId: userAId, recipientUserId: userBId }),
+    backfillFollowedUserFeedItems({ answererUserId: userBId, recipientUserId: userAId }),
+    backfillAuthoredQuestionsFeedItems({ authorUserId: userAId, recipientUserId: userBId }),
+    backfillAuthoredQuestionsFeedItems({ authorUserId: userBId, recipientUserId: userAId }),
+  ])
+}
+
 /**
  * Follow `inviteeUserId`. If the target's followPrivacy is `public` the edge is
  * approved immediately; otherwise it lands `pending` for the target to approve.
@@ -96,23 +123,43 @@ export async function createOrReusePendingFriendshipRequest({
 
   if (!edge) throw new Error('Follow could not be created')
 
-  await writeActivity({
-    userId: followeeId,
-    type: autoApprove ? 'follow' : 'follow_request',
-    actorUserId: followerId,
-    referenceId: edge.id,
-    referenceType: 'follow',
-  })
-
-  // Friend-add backfill: a freshly approved follow seeds the follower's feed
-  // with the followee's recent activity (what would have propagated had the edge
-  // already existed). Only the auto-approved (public-target) branch creates an
-  // approved edge here; the pending branch backfills on approval instead. The
-  // backfill is best-effort internally — it cannot throw.
   if (autoApprove) {
-    await backfillFollowedUserFeedItems({
-      answererUserId: followeeId,
-      recipientUserId: followerId,
+    // Public target: the request is approved immediately. A friendship is
+    // bidirectional, so also approve the target's follow-back edge — adding a
+    // public account makes the two MUTUAL friends, not a one-way follower.
+    await ensureApprovedFollowEdge(followeeId, followerId, now)
+
+    await Promise.all([
+      // The target learns the requester added them; the requester gets the
+      // matching "now connected" card.
+      writeActivity({
+        userId: followeeId,
+        type: 'follow',
+        actorUserId: followerId,
+        referenceId: edge.id,
+        referenceType: 'follow',
+      }),
+      writeActivity({
+        userId: followerId,
+        type: 'follow_mutual',
+        actorUserId: followeeId,
+        referenceId: edge.id,
+        referenceType: 'follow',
+      }),
+    ])
+
+    // Seed both feeds with each other's recent answers + public authored
+    // questions (what would have propagated had the edge already existed).
+    await backfillMutualFeeds(followerId, followeeId)
+  } else {
+    // approval_required target: the request lands pending. The friendship — and
+    // its mutual edge, cards, and backfill — forms when the target accepts.
+    await writeActivity({
+      userId: followeeId,
+      type: 'follow_request',
+      actorUserId: followerId,
+      referenceId: edge.id,
+      referenceType: 'follow',
     })
   }
 
@@ -147,23 +194,10 @@ export async function acceptPendingFriendshipRequest({
   if (!edge) return null
 
   // Mutual-accept: accepting a "wants to be friends" request makes the two
-  // FRIENDS, not just a one-way follower — so create/approve the accepter's
-  // follow-back edge too. Without this the accepter lands in a one-way
-  // `follows_you` state (the profile still offers "Add friend" and the pair
-  // never become mutual). Idempotent via the (followerId, followeeId) unique
-  // constraint: an existing pending/approved reverse edge settles to approved.
-  await db
-    .insert(follows)
-    .values({
-      followerId: userId,
-      followeeId: edge.followerId,
-      state: 'approved',
-      approvedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [follows.followerId, follows.followeeId],
-      set: { state: 'approved', approvedAt: now },
-    })
+  // FRIENDS, not just a one-way follower — so approve the accepter's follow-back
+  // edge too. Without this the accepter lands in a one-way `follows_you` state
+  // (the profile still offers "Add friend" and the pair never become mutual).
+  await ensureApprovedFollowEdge(userId, edge.followerId, now)
 
   // The requester learns their request was accepted; the accepter gets a
   // matching "you're now connected" card (today only the requester got one).
@@ -184,30 +218,10 @@ export async function acceptPendingFriendshipRequest({
     }),
   ])
 
-  // Friend-add backfill: now that it's a MUTUAL follow, seed BOTH feeds with the
-  // other person's recent correct answers AND their public authored questions —
-  // what would have propagated had the edge existed when they answered/authored.
-  // The accepter's side (recipient = followee) is the fix for "I accepted but my
-  // feed didn't change" — previously only the requester's feed was seeded. Each
-  // call is best-effort internally and cannot throw, so none can affect approval.
-  await Promise.all([
-    backfillFollowedUserFeedItems({
-      answererUserId: edge.followeeId,
-      recipientUserId: edge.followerId,
-    }),
-    backfillFollowedUserFeedItems({
-      answererUserId: edge.followerId,
-      recipientUserId: edge.followeeId,
-    }),
-    backfillAuthoredQuestionsFeedItems({
-      authorUserId: edge.followeeId,
-      recipientUserId: edge.followerId,
-    }),
-    backfillAuthoredQuestionsFeedItems({
-      authorUserId: edge.followerId,
-      recipientUserId: edge.followeeId,
-    }),
-  ])
+  // Now that it's a MUTUAL follow, seed BOTH feeds. The accepter's side is the
+  // fix for "I accepted but my feed didn't change" — previously only the
+  // requester's feed was seeded.
+  await backfillMutualFeeds(edge.followerId, edge.followeeId)
 
   return edge
 }

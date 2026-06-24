@@ -84,9 +84,9 @@ beforeEach(() => {
   authoredBackfillMock.mockClear()
 })
 
-describe('createOrReusePendingFriendshipRequest backfill', () => {
-  it('backfills the followee\'s activity into the follower\'s feed when auto-approved', async () => {
-    // No existing edge, public target -> auto-approved edge is created.
+describe('createOrReusePendingFriendshipRequest', () => {
+  it('forms a MUTUAL friendship when the target is public (both edges, both cards, both feeds)', async () => {
+    // No existing edge, public target -> auto-approved + follow-back.
     dbMock._selectQueue.push([], [{ followPrivacy: 'public' }])
     state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'approved' }
 
@@ -96,11 +96,24 @@ describe('createOrReusePendingFriendshipRequest backfill', () => {
     })
 
     expect(result.state).toBe('auto_approved')
-    expect(answerBackfillMock).toHaveBeenCalledTimes(1)
+    // Forward edge insert + the mutual follow-back edge upsert.
+    expect(dbMock.insert).toHaveBeenCalledTimes(2)
+    // Both connection cards: the target learns they were added; the requester
+    // gets the "now connected" card.
+    expect(writeActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: FOLLOWEE, type: 'follow', actorUserId: FOLLOWER }),
+    )
+    expect(writeActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: FOLLOWER, type: 'follow_mutual', actorUserId: FOLLOWEE }),
+    )
+    // Both feeds seeded, both content types.
+    expect(answerBackfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWER, recipientUserId: FOLLOWEE })
     expect(answerBackfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWEE, recipientUserId: FOLLOWER })
+    expect(authoredBackfillMock).toHaveBeenCalledWith({ authorUserId: FOLLOWER, recipientUserId: FOLLOWEE })
+    expect(authoredBackfillMock).toHaveBeenCalledWith({ authorUserId: FOLLOWEE, recipientUserId: FOLLOWER })
   })
 
-  it('does NOT backfill when the request lands pending (private target)', async () => {
+  it('lands pending with NO mutual edge or backfill when the target requires approval', async () => {
     dbMock._selectQueue.push([], [{ followPrivacy: 'private' }])
     state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'pending' }
 
@@ -110,10 +123,15 @@ describe('createOrReusePendingFriendshipRequest backfill', () => {
     })
 
     expect(result.state).toBe('created')
+    expect(dbMock.insert).toHaveBeenCalledTimes(1) // only the pending forward edge
+    expect(writeActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: FOLLOWEE, type: 'follow_request', actorUserId: FOLLOWER }),
+    )
     expect(answerBackfillMock).not.toHaveBeenCalled()
+    expect(authoredBackfillMock).not.toHaveBeenCalled()
   })
 
-  it('does NOT backfill when the edge already exists (already_following)', async () => {
+  it('does NOT re-form or backfill when an approved edge already exists (already_following)', async () => {
     dbMock._selectQueue.push([{ id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'approved' }])
 
     const result = await createOrReusePendingFriendshipRequest({
@@ -122,7 +140,9 @@ describe('createOrReusePendingFriendshipRequest backfill', () => {
     })
 
     expect(result.state).toBe('already_following')
+    expect(dbMock.insert).not.toHaveBeenCalled()
     expect(answerBackfillMock).not.toHaveBeenCalled()
+    expect(authoredBackfillMock).not.toHaveBeenCalled()
   })
 })
 
