@@ -41,6 +41,13 @@ const BONUS_FONT_SIZE = 42;
 // Optical nudge: pad the numeral left ~12% of the font size so the trailing
 // period doesn't visually shove the numeral off-center.
 const CORE_LEFT_PAD = Math.round(CORE_FONT_SIZE * 0.12);
+// Vertical optical nudge. Cormorant Garamond reserves generous space above its
+// glyphs (for accents), and the trailing period adds ink at the baseline, so
+// with line-height 1 the numeral is centered by its line box but reads LOW.
+// Lift the glyph ~8% of the em to optically center the visible ink. In em so it
+// scales with the font size; applied to the inner glyph span only (the box and
+// its accessible label are unaffected).
+const NUMERAL_NUDGE_Y = '-0.08em';
 
 const boxBaseStyle: CSSProperties = {
   display: 'inline-flex',
@@ -100,7 +107,9 @@ export function QuestionNumberMarker({
         paddingLeft: CORE_LEFT_PAD,
       }}
     >
-      <span aria-hidden>{value}.</span>
+      <span aria-hidden style={{ transform: `translateY(${NUMERAL_NUDGE_Y})` }}>
+        {value}.
+      </span>
     </span>
   );
 }
