@@ -180,7 +180,9 @@ export function Nav({
             <Link
               href="/activities"
               aria-label={
-                showBadge ? `Activity, ${badgeCount} unread` : 'Activity'
+                showBadge
+                  ? `Activity, ${badgeCount} pending friend request${badgeCount === 1 ? '' : 's'}`
+                  : 'Activity'
               }
               className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
