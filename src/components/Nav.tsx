@@ -178,11 +178,11 @@ export function Nav({
           </Link>
           <div className="flex items-center gap-1">
             <Link
-              href="/activities"
+              href="/friends"
               aria-label={
                 showBadge
-                  ? `Activity, ${badgeCount} pending friend request${badgeCount === 1 ? '' : 's'}`
-                  : 'Activity'
+                  ? `Friend requests, ${badgeCount} pending`
+                  : 'Friend requests'
               }
               className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
