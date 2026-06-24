@@ -64,7 +64,7 @@ describe('OnboardingFlow invited interests', () => {
 })
 
 describe('OnboardingFlow display-name gate', () => {
-  it('renders the name step first when no displayName is set', () => {
+  it('renders the setup step first when no displayName is set', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         preSeededInterests={[
@@ -74,11 +74,11 @@ describe('OnboardingFlow display-name gate', () => {
       />
     )
 
-    expect(html).toContain('What should we call you?')
+    expect(html).toContain('Set up your profile')
     expect(html).not.toContain('suggested these for you.')
   })
 
-  it('prefills the input with the invitee name from the invitation', () => {
+  it('prefills the name input with the invitee name the inviter entered', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         preSeededInterests={[]}
@@ -87,8 +87,9 @@ describe('OnboardingFlow display-name gate', () => {
       />
     )
 
-    expect(html).toContain('What should we call you?')
+    expect(html).toContain('Set up your profile')
     expect(html).toContain('value="Morgan Lee"')
+    // The subtitle attributes the pre-filled name to the inviter.
     expect(html).toContain('Alex Inviter')
   })
 
@@ -97,11 +98,11 @@ describe('OnboardingFlow display-name gate', () => {
       <OnboardingFlow preSeededInterests={[]} inviterName={null} />
     )
 
-    expect(html).toContain('What should we call you?')
-    expect(html).toContain("This is how you&#x27;ll appear to friends.")
+    expect(html).toContain('Set up your profile')
+    expect(html).toContain('Pick the name friends see')
   })
 
-  it('skips the name step when the user already has a displayName', () => {
+  it('skips the setup step when the user already has a displayName and handle', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         preSeededInterests={[]}
@@ -110,7 +111,7 @@ describe('OnboardingFlow display-name gate', () => {
       />
     )
 
-    expect(html).not.toContain('What should we call you?')
+    expect(html).not.toContain('Set up your profile')
     expect(html).toContain('Welcome to Joshing')
   })
 })
