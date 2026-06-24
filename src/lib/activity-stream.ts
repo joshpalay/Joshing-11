@@ -63,6 +63,13 @@ export type StreamQuestion = {
   // A house/LLM question must NEVER render as if a person wrote it.
   authorName?: string | null;
   authorIsHouse?: boolean;
+  // D-4 via-attribution (From Friends only): the two-hop relay source the
+  // ANSWERING friend got this question from — rendered as "via Josh". Distinct
+  // from authorName (who WROTE it): an LLM-authored ("Maid Acasa") question that
+  // reached the viewer through Josh shows BOTH the author marker and the via
+  // line. null/undefined when the friend met it organically or the source can't
+  // be surfaced.
+  via?: { userId: string; name: string } | null;
 };
 
 // The action an expanded, question-backed item offers — determined by the
