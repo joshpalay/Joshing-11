@@ -59,11 +59,11 @@ const SCOPED_STYLE = `
 .wts-nav .wts-tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--brand-ink-400);}
 .wts-nav .wts-tab.active{color:var(--brand-ink);}
 .wts-nav .wts-tab .wts-lbl{font-size:9px;letter-spacing:.05em;text-transform:uppercase;}
-.wts-spot{position:fixed;inset:0;z-index:62;pointer-events:none;opacity:0;transition:opacity .4s ease;}
+.wts-spot{position:absolute;inset:0;z-index:62;pointer-events:none;opacity:0;transition:opacity .4s ease;}
 .wts-spot.show{opacity:1;}
 .wts-dim{position:absolute;background:color-mix(in srgb, var(--brand-ink-950) 66%, transparent);transition:top .6s ${PAN_EASE}, left .6s ${PAN_EASE}, width .4s ease, height .4s ease;}
 .wts-ring{position:absolute;border-radius:13px;box-shadow:0 0 0 3px var(--brand-orange);transition:top .6s ${PAN_EASE}, left .6s ${PAN_EASE}, width .4s ease, height .4s ease;}
-.wts-help{position:fixed;z-index:64;width:248px;opacity:0;pointer-events:none;transition:opacity .35s ease, top .5s ${PAN_EASE}, left .35s ease;}
+.wts-help{position:absolute;z-index:64;width:248px;opacity:0;pointer-events:none;transition:opacity .35s ease, top .5s ${PAN_EASE}, left .35s ease;}
 .wts-help.show{opacity:1;}
 .wts-help .wts-box{background:var(--brand-card);color:var(--brand-ink);border-radius:12px;padding:13px 15px;box-shadow:0 16px 40px -14px color-mix(in srgb, var(--brand-ink-950) 55%, transparent);position:relative;}
 .wts-help .wts-k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-orange);margin-bottom:4px;}
@@ -164,6 +164,7 @@ export default function WelcomeTourScreen({
   const [stepIndex, setStepIndex] = useState(-1);
   const [atEnd, setAtEnd] = useState(false);
 
+  const colRef = useRef<HTMLDivElement | null>(null);
   const homeRef = useRef<HTMLDivElement | null>(null);
   const spotRef = useRef<HTMLDivElement | null>(null);
   const dimTRef = useRef<HTMLDivElement | null>(null);
@@ -202,15 +203,27 @@ export default function WelcomeTourScreen({
     const stage = stageRef.current;
     const home = homeRef.current;
     const spot = spotRef.current;
+    const col = colRef.current;
     const el = document.querySelector<HTMLElement>(`[data-tour="${CSS.escape(beat.target)}"]`);
-    if (!stage || !spot || !el) return false;
+    if (!stage || !spot || !col || !el) return false;
+
+    // Everything is positioned RELATIVE TO THE PHONE COLUMN (the overlay panels
+    // are absolute inside it). Using getBoundingClientRect differences cancels
+    // the iOS layout-vs-visual-viewport gap that a position:fixed overlay +
+    // raw viewport coords would otherwise mis-align by the browser-chrome height.
+    const colRect = col.getBoundingClientRect();
 
     if (beat.inNav) {
       // Nav targets are fixed at the bottom — show the whole home, don't pan.
       panRef.current = 0;
       if (home) home.style.transform = 'translateY(0)';
       const r = el.getBoundingClientRect();
-      geomRef.current = { top: r.top, left: r.left, width: r.width, height: r.height };
+      geomRef.current = {
+        top: r.top - colRect.top,
+        left: r.left - colRect.left,
+        width: r.width,
+        height: r.height,
+      };
     } else {
       const stageRect = stage.getBoundingClientRect();
       const r = el.getBoundingClientRect();
@@ -221,7 +234,12 @@ export default function WelcomeTourScreen({
       const delta = newPan - panRef.current;
       panRef.current = newPan;
       if (home) home.style.transform = `translateY(${newPan}px)`;
-      geomRef.current = { top: r.top + delta, left: r.left, width: r.width, height: r.height };
+      geomRef.current = {
+        top: r.top - colRect.top + delta,
+        left: r.left - colRect.left,
+        width: r.width,
+        height: r.height,
+      };
     }
 
     const dimT = dimTRef.current;
@@ -236,8 +254,8 @@ export default function WelcomeTourScreen({
     const y0 = g.top - PAD;
     const w = g.width + PAD * 2;
     const h = g.height + PAD * 2;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vw = colRect.width;
+    const vh = colRect.height;
     const box = (
       e: HTMLDivElement,
       left: number,
@@ -265,23 +283,26 @@ export default function WelcomeTourScreen({
   const placeHelp = (n: number) => {
     const beat = beats[n];
     const help = helpRef.current;
-    if (!help || !helpKRef.current || !helpPRef.current || !arrowRef.current) return;
+    const col = colRef.current;
+    if (!help || !col || !helpKRef.current || !helpPRef.current || !arrowRef.current) return;
+    const colRect = col.getBoundingClientRect();
     helpKRef.current.textContent = beat.label;
     helpPRef.current.innerHTML = beat.copy;
-    const hw = Math.min(248, window.innerWidth - 28);
+    const hw = Math.min(248, colRect.width - 28);
     help.style.width = `${hw}px`;
     help.style.visibility = 'hidden';
     help.classList.add('show');
     const hh = help.offsetHeight;
     const g = geomRef.current;
-    // Place inside the safe band: below the strip, above the bottom nav. Prefer
-    // below the target; flip above when below would overflow (e.g. a tall
-    // section, or a nav target at the very bottom); then clamp into the band so
-    // the tooltip is never cut off.
+    // Place inside the safe band (column-relative): below the strip, above the
+    // bottom nav. Prefer below the target; flip above when below would overflow
+    // (a tall section, or a nav target at the very bottom); then clamp into the
+    // band so the tooltip is never cut off.
     const navEl = document.querySelector<HTMLElement>('.wts-nav');
     const stripEl = document.querySelector<HTMLElement>('.wts-strip');
-    const bottomSafe = (navEl ? navEl.getBoundingClientRect().top : window.innerHeight) - 8;
-    const topSafe = (stripEl ? stripEl.getBoundingClientRect().bottom : 0) + 8;
+    const bottomSafe =
+      (navEl ? navEl.getBoundingClientRect().top - colRect.top : colRect.height) - 8;
+    const topSafe = (stripEl ? stripEl.getBoundingClientRect().bottom - colRect.top : 0) + 8;
     let below = true;
     let top = g.top + g.height + PAD + 12;
     if (top + hh > bottomSafe) {
@@ -290,7 +311,7 @@ export default function WelcomeTourScreen({
     }
     top = Math.max(topSafe, Math.min(top, bottomSafe - hh));
     let left = g.left + g.width / 2 - hw / 2;
-    left = Math.max(10, Math.min(left, window.innerWidth - hw - 10));
+    left = Math.max(10, Math.min(left, colRect.width - hw - 10));
     help.classList.toggle('below', below);
     help.classList.toggle('above', !below);
     help.style.left = `${left}px`;
@@ -357,7 +378,7 @@ export default function WelcomeTourScreen({
   return (
     <div className="wts-root">
       <style>{SCOPED_STYLE}</style>
-      <div className="wts-col">
+      <div className="wts-col" ref={colRef}>
         {/* Top strip */}
         <div className="wts-strip">
           <span className="wts-wm">Welcome — a quick look around</span>
