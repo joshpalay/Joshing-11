@@ -1,6 +1,8 @@
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 
 import TriangleBackground from '@/components/TriangleBackground';
+import { getSession } from '@/server/auth/session';
 import { getInvitePrefillByToken } from '@/server/friends/invitations';
 import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
@@ -51,6 +53,15 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
+  // Redirect genuinely-authenticated visitors home. This is the DB-checked
+  // (getSession) counterpart to the redirect the Edge proxy used to do on
+  // signature alone — moved here so a "zombie" cookie (valid JWT, no DB
+  // session row) is NOT bounced back to a signed-out home but instead reaches
+  // this login form, where signing in mints a fresh cookie and escapes the
+  // trap. See src/proxy.ts.
+  const session = await getSession();
+  if (session) redirect('/');
+
   const params = await searchParams;
   const invitationToken = readInvitationToken(params);
   const userInvite = readUserInvite(params);
