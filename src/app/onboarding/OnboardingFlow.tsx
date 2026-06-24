@@ -650,8 +650,8 @@ export default function OnboardingFlow({
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-medium">
-                  Trivia Questions will come from these subjects
+                <p className="font-serif text-2xl leading-tight font-semibold text-balance text-[var(--ink)] sm:text-3xl">
+                  Your trivia questions will come from these subjects
                 </p>
                 {selectedInterests.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
@@ -662,7 +662,7 @@ export default function OnboardingFlow({
                     {selectedInterests.map((interest) => (
                       <li
                         key={selectedKey(interest)}
-                        className="flex items-center justify-between gap-3"
+                        className="flex items-center gap-3"
                       >
                         <span className="text-base font-medium">
                           {interest.domain}

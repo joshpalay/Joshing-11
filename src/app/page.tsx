@@ -17,7 +17,7 @@ import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/da
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
-import WelcomeTour from '@/components/welcome/WelcomeTour'
+import WelcomeTourScreen from '@/components/welcome/WelcomeTourScreen'
 
 const FEED_PAGE_SIZE = 20
 
@@ -127,10 +127,11 @@ export default async function Home({
         </section>
       </div>
     </main>
-    {/* First-run welcome tour — a fixed spotlight overlay over this real home.
-        It dims + spotlights the data-tour sections, pans the page, and hides the
-        global app chrome while it runs. Renders only while active. */}
-    {tourActive ? <WelcomeTour /> : null}
+    {/* First-run welcome tour — the self-contained "first time experience"
+        overview (its own mock home + intro + dual end), shown as a fixed overlay.
+        Activated by the `?welcome=1` param onboarding routes to; it self-
+        suppresses via localStorage once seen. Renders only while active. */}
+    {tourActive ? <WelcomeTourScreen /> : null}
     </>
   )
 }
