@@ -95,7 +95,10 @@ describe('proxy (invitation gate)', () => {
       expect(res.headers.get('x-middleware-next')).toBe('1')
     })
 
-    it('redirects an onboarded user away from /login', async () => {
+    it('passes an onboarded user through to /login (the page does the DB-checked redirect home)', async () => {
+      // The proxy no longer bounces /login on signature-only claims: that
+      // trapped "zombie" cookies (valid JWT, no DB session row). The login
+      // page now redirects genuinely-authenticated users home via getSession.
       readSessionClaimsMock.mockResolvedValueOnce({
         userId: 'u1',
         sessionId: 's1',
@@ -103,8 +106,9 @@ describe('proxy (invitation gate)', () => {
         onboardingComplete: true,
       })
       const res = await proxy(makeRequest('/login', { cookie: 'valid.jwt' }))
-      expect(res.status).toBe(307)
-      expect(res.headers.get('location')).toMatch(/\/$/)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-middleware-next')).toBe('1')
+      expect(res.headers.get('location')).toBeNull()
     })
 
     it('redirects an onboarded user away from /onboarding', async () => {
