@@ -150,6 +150,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'follow',
     'follow_request',
     'follow_approved',
+    'follow_mutual',
     'invited_friend_played_first_five',
     'received_direct_question',
     'reaction_received',

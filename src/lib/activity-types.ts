@@ -20,10 +20,14 @@ export type ActivityItemType =
   | 'friend_request_accepted'
   // D-1 Stage 3 follow model. `follow` = someone followed you (public account,
   // auto-approved). `follow_request` = someone requested to follow you
-  // (approval_required). `follow_approved` = you approved their request.
+  // (approval_required). `follow_approved` = you approved their request (written
+  // to the requester). `follow_mutual` = you accepted their request and the two
+  // became mutual friends — written to the ACCEPTER as a "now connected" card
+  // (the requester's matching card stays `follow_approved`).
   | 'follow'
   | 'follow_request'
   | 'follow_approved'
+  | 'follow_mutual'
   // An invited friend both accepted the inviter's invitation and got far
   // enough into the product to play their first five questions. Surfaced to
   // the inviter as a "your invite stuck" milestone. Written from

@@ -2,7 +2,10 @@ import { and, eq } from 'drizzle-orm'
 
 import { writeActivity } from '@/server/activity/write-activity'
 import { db, follows, users } from '@/server/db'
-import { backfillFollowedUserFeedItems } from '@/server/feed/backfill-inviter-feed'
+import {
+  backfillAuthoredQuestionsFeedItems,
+  backfillFollowedUserFeedItems,
+} from '@/server/feed/backfill-inviter-feed'
 
 export type Follow = typeof follows.$inferSelect
 
@@ -143,22 +146,68 @@ export async function acceptPendingFriendshipRequest({
 
   if (!edge) return null
 
-  await writeActivity({
-    userId: edge.followerId,
-    type: 'follow_approved',
-    actorUserId: userId,
-    referenceId: edge.id,
-    referenceType: 'follow',
-  })
+  // Mutual-accept: accepting a "wants to be friends" request makes the two
+  // FRIENDS, not just a one-way follower — so create/approve the accepter's
+  // follow-back edge too. Without this the accepter lands in a one-way
+  // `follows_you` state (the profile still offers "Add friend" and the pair
+  // never become mutual). Idempotent via the (followerId, followeeId) unique
+  // constraint: an existing pending/approved reverse edge settles to approved.
+  await db
+    .insert(follows)
+    .values({
+      followerId: userId,
+      followeeId: edge.followerId,
+      state: 'approved',
+      approvedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [follows.followerId, follows.followeeId],
+      set: { state: 'approved', approvedAt: now },
+    })
 
-  // Friend-add backfill: now that the request is approved, seed the requester's
-  // (follower's) feed with the approver's (followee's) recent activity — what
-  // would have propagated had the follow edge existed when they answered.
-  // Best-effort internally — it cannot throw, so it can't affect the approval.
-  await backfillFollowedUserFeedItems({
-    answererUserId: edge.followeeId,
-    recipientUserId: edge.followerId,
-  })
+  // The requester learns their request was accepted; the accepter gets a
+  // matching "you're now connected" card (today only the requester got one).
+  await Promise.all([
+    writeActivity({
+      userId: edge.followerId,
+      type: 'follow_approved',
+      actorUserId: userId,
+      referenceId: edge.id,
+      referenceType: 'follow',
+    }),
+    writeActivity({
+      userId: edge.followeeId,
+      type: 'follow_mutual',
+      actorUserId: edge.followerId,
+      referenceId: edge.id,
+      referenceType: 'follow',
+    }),
+  ])
+
+  // Friend-add backfill: now that it's a MUTUAL follow, seed BOTH feeds with the
+  // other person's recent correct answers AND their public authored questions —
+  // what would have propagated had the edge existed when they answered/authored.
+  // The accepter's side (recipient = followee) is the fix for "I accepted but my
+  // feed didn't change" — previously only the requester's feed was seeded. Each
+  // call is best-effort internally and cannot throw, so none can affect approval.
+  await Promise.all([
+    backfillFollowedUserFeedItems({
+      answererUserId: edge.followeeId,
+      recipientUserId: edge.followerId,
+    }),
+    backfillFollowedUserFeedItems({
+      answererUserId: edge.followerId,
+      recipientUserId: edge.followeeId,
+    }),
+    backfillAuthoredQuestionsFeedItems({
+      authorUserId: edge.followeeId,
+      recipientUserId: edge.followerId,
+    }),
+    backfillAuthoredQuestionsFeedItems({
+      authorUserId: edge.followerId,
+      recipientUserId: edge.followeeId,
+    }),
+  ])
 
   return edge
 }

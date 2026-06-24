@@ -92,13 +92,13 @@ export function pickInviterBackfillAnswers(
   return picked;
 }
 
-// Drop questions that already have a friend_answered row from this inviter for
-// this invitee, so a re-fire (or a race with forward propagation) is a no-op.
-// Pure.
-export function dropAlreadyPresent(
-  picked: InviterAnswerRow[],
+// Drop questions that already have a backfilled row from this source for this
+// recipient, so a re-fire (or a race with forward propagation) is a no-op. Pure;
+// generic over any row carrying a `questionId` (answer-seed or authored-seed).
+export function dropAlreadyPresent<T extends { questionId: string }>(
+  picked: T[],
   existingQuestionIds: Iterable<string>,
-): InviterAnswerRow[] {
+): T[] {
   const existing = new Set(existingQuestionIds);
   return picked.filter((row) => !existing.has(row.questionId));
 }
@@ -215,6 +215,167 @@ export async function backfillFollowedUserFeedItems({
   } catch (error) {
     console.error('[backfillFollowedUserFeedItems] suppressed error:', {
       answererUserId,
+      recipientUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { created: 0 };
+  }
+}
+
+// --- Authored-question backfill (B-HOME-FRIEND-REQUESTS follow-up) ------------
+//
+// When a mutual friendship forms, also seed each side's feed with the OTHER
+// person's public authored questions, so a new friend's actual content shows up
+// — not just their recent answers. These land as `authored_shared` rows (the
+// same envelope question-creation's "share with all friends" writes), stamped at
+// the question's ORIGINAL authored time so feed ordering stays truthful (product
+// decision 2026-06-24: truthful authored-date over surfacing-at-accept-time).
+
+const AUTHORED_SHARED_FEED_SOURCE_TYPE = 'authored_shared' as const;
+
+// Most recent N of the friend's public authored questions, regardless of date.
+export const AUTHORED_BACKFILL_MAX_ITEMS = 8;
+
+// Over-read before the cap so the public/authored filter can't starve us.
+const AUTHORED_SCAN_LIMIT = 100;
+
+export type AuthoredQuestionRow = {
+  questionId: string;
+  authoredAt: Date;
+};
+
+export type AuthoredBackfillFeedItemRow = {
+  recipientUserId: string;
+  questionId: string;
+  sourceType: typeof AUTHORED_SHARED_FEED_SOURCE_TYPE;
+  sourceUserId: string;
+  sourceResult: null;
+  sourceEventAt: Date;
+  sourceAnswerId: string;
+  state: 'active';
+  isPinned: false;
+};
+
+// Deterministic + prefixed so a re-fire collides on
+// FeedItem_recipientUserId_sourceAnswerId_key and can never collide with a real
+// answer id or the inviter-backfill answer seed.
+export function authoredBackfillSourceAnswerId(questionId: string): string {
+  return `authored-backfill:${questionId}`;
+}
+
+// Dedupe by questionId (rows arrive newest-first) and keep the most recent
+// `limit` distinct questions. Pure.
+export function pickAuthoredBackfillQuestions(
+  rows: AuthoredQuestionRow[],
+  limit = AUTHORED_BACKFILL_MAX_ITEMS,
+): AuthoredQuestionRow[] {
+  const seen = new Set<string>();
+  const picked: AuthoredQuestionRow[] = [];
+  for (const row of rows) {
+    if (!row.questionId || !row.authoredAt) continue;
+    if (seen.has(row.questionId)) continue;
+    seen.add(row.questionId);
+    picked.push(row);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
+
+// Build the authored_shared insert rows. sourceEventAt is the question's TRUE
+// authored time; sourceResult is null (no answer is involved). Pure.
+export function toAuthoredBackfillFeedItemRows(
+  authorUserId: string,
+  recipientUserId: string,
+  picked: AuthoredQuestionRow[],
+): AuthoredBackfillFeedItemRow[] {
+  return picked.map((row) => ({
+    recipientUserId,
+    questionId: row.questionId,
+    sourceType: AUTHORED_SHARED_FEED_SOURCE_TYPE,
+    sourceUserId: authorUserId,
+    sourceResult: null,
+    sourceEventAt: row.authoredAt,
+    sourceAnswerId: authoredBackfillSourceAnswerId(row.questionId),
+    state: 'active',
+    isPinned: false,
+  }));
+}
+
+/**
+ * Backfill a recipient's feed with a friend's most recent PUBLIC authored
+ * questions (`authorUserId` = the friend whose questions seed the feed,
+ * `recipientUserId` = the friend who now sees them). Only `visibility: 'public'`,
+ * `source: 'authored'`, non-deleted questions are eligible — a question the
+ * author kept private is never surfaced.
+ *
+ * Best-effort: any failure is swallowed so a backfill hiccup can never break
+ * friend-request approval. Returns the number of feed items created (0 when the
+ * author has no qualifying questions, or when everything was already present).
+ */
+export async function backfillAuthoredQuestionsFeedItems({
+  authorUserId,
+  recipientUserId,
+  limit = AUTHORED_BACKFILL_MAX_ITEMS,
+}: {
+  authorUserId: string;
+  recipientUserId: string;
+  limit?: number;
+}): Promise<{ created: number }> {
+  try {
+    if (!authorUserId || !recipientUserId || authorUserId === recipientUserId) {
+      return { created: 0 };
+    }
+
+    const rows = await db
+      .select({ id: questions.id, createdAt: questions.createdAt })
+      .from(questions)
+      .where(
+        and(
+          eq(questions.creatorId, authorUserId),
+          eq(questions.source, 'authored'),
+          eq(questions.visibility, 'public'),
+          isNull(questions.deletedAt),
+        ),
+      )
+      .orderBy(desc(questions.createdAt))
+      .limit(AUTHORED_SCAN_LIMIT);
+
+    const authoredRows: AuthoredQuestionRow[] = [];
+    for (const row of rows) {
+      if (!row.id || !row.createdAt) continue;
+      authoredRows.push({ questionId: row.id, authoredAt: row.createdAt });
+    }
+
+    const candidates = pickAuthoredBackfillQuestions(authoredRows, limit);
+    if (candidates.length === 0) return { created: 0 };
+
+    const candidateQuestionIds = candidates.map((c) => c.questionId);
+    const existing = await db
+      .select({ questionId: feedItems.questionId })
+      .from(feedItems)
+      .where(
+        and(
+          eq(feedItems.recipientUserId, recipientUserId),
+          eq(feedItems.sourceUserId, authorUserId),
+          eq(feedItems.sourceType, AUTHORED_SHARED_FEED_SOURCE_TYPE),
+          inArray(feedItems.questionId, candidateQuestionIds),
+        ),
+      );
+
+    const toInsert = dropAlreadyPresent(
+      candidates,
+      existing.map((e) => e.questionId).filter((id): id is string => Boolean(id)),
+    );
+    if (toInsert.length === 0) return { created: 0 };
+
+    await db
+      .insert(feedItems)
+      .values(toAuthoredBackfillFeedItemRows(authorUserId, recipientUserId, toInsert));
+
+    return { created: toInsert.length };
+  } catch (error) {
+    console.error('[backfillAuthoredQuestionsFeedItems] suppressed error:', {
+      authorUserId,
       recipientUserId,
       error: error instanceof Error ? error.message : String(error),
     });

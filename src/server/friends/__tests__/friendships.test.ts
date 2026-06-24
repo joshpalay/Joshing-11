@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Friend-add backfill wiring: these tests lock the follow DIRECTION — a fresh
-// approved edge seeds the FOLLOWER's feed with the FOLLOWEE's recent activity
-// (answerer = followee, recipient = follower). Getting this backwards would seed
-// the wrong person, so it is the highest-value thing to pin.
+// Friend-add + mutual-accept wiring. These tests lock two things:
+//  1. createOrReuse: a fresh auto-approved edge seeds the FOLLOWER's feed with
+//     the FOLLOWEE's recent activity (answerer = followee, recipient = follower).
+//  2. accept: approving a request makes the two MUTUAL friends — it upserts the
+//     accepter's follow-back edge, writes BOTH connection cards (follow_approved
+//     to the requester, follow_mutual to the accepter), and seeds BOTH feeds with
+//     each other's answers AND authored questions. Getting the direction wrong
+//     would seed the wrong person, so it is the highest-value thing to pin.
 
-const { dbMock, state, writeActivityMock, backfillMock } = vi.hoisted(() => {
+const { dbMock, state, writeActivityMock, answerBackfillMock, authoredBackfillMock } = vi.hoisted(() => {
   const writeActivityMock = vi.fn(async () => undefined)
-  const backfillMock = vi.fn(async () => ({ created: 0 }))
+  const answerBackfillMock = vi.fn(async () => ({ created: 0 }))
+  const authoredBackfillMock = vi.fn(async () => ({ created: 0 }))
   const state = {
     // The row returned by createOrReusePendingFriendshipRequest's pre-check
     // select (an existing edge) and the inserted/updated edge.
@@ -29,8 +34,13 @@ const { dbMock, state, writeActivityMock, backfillMock } = vi.hoisted(() => {
   const dbMock = {
     _selectQueue: selectQueue,
     select: vi.fn(() => makeSelect()),
+    // values() must support BOTH .returning() (createOrReuse edge insert) and
+    // .onConflictDoUpdate() (accept reverse-edge upsert).
     insert: vi.fn(() => ({
-      values: vi.fn(() => ({ returning: vi.fn(async () => [state.returnedEdge]) })),
+      values: vi.fn(() => ({
+        returning: vi.fn(async () => [state.returnedEdge]),
+        onConflictDoUpdate: vi.fn(async () => undefined),
+      })),
     })),
     update: vi.fn(() => ({
       set: vi.fn(() => ({
@@ -41,7 +51,7 @@ const { dbMock, state, writeActivityMock, backfillMock } = vi.hoisted(() => {
     })),
   }
 
-  return { dbMock, state, writeActivityMock, backfillMock }
+  return { dbMock, state, writeActivityMock, answerBackfillMock, authoredBackfillMock }
 })
 
 vi.mock('@/server/db', () => ({
@@ -53,7 +63,8 @@ vi.mock('@/server/db', () => ({
 vi.mock('@/server/activity/write-activity', () => ({ writeActivity: writeActivityMock }))
 
 vi.mock('@/server/feed/backfill-inviter-feed', () => ({
-  backfillFollowedUserFeedItems: backfillMock,
+  backfillFollowedUserFeedItems: answerBackfillMock,
+  backfillAuthoredQuestionsFeedItems: authoredBackfillMock,
 }))
 
 import { acceptPendingFriendshipRequest, createOrReusePendingFriendshipRequest } from '@/server/friends/friendships'
@@ -67,8 +78,10 @@ beforeEach(() => {
   state.returnedEdge = undefined
   state.updateReturnsEdge = true
   dbMock._selectQueue.length = 0
+  dbMock.insert.mockClear()
   writeActivityMock.mockClear()
-  backfillMock.mockClear()
+  answerBackfillMock.mockClear()
+  authoredBackfillMock.mockClear()
 })
 
 describe('createOrReusePendingFriendshipRequest backfill', () => {
@@ -83,8 +96,8 @@ describe('createOrReusePendingFriendshipRequest backfill', () => {
     })
 
     expect(result.state).toBe('auto_approved')
-    expect(backfillMock).toHaveBeenCalledTimes(1)
-    expect(backfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWEE, recipientUserId: FOLLOWER })
+    expect(answerBackfillMock).toHaveBeenCalledTimes(1)
+    expect(answerBackfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWEE, recipientUserId: FOLLOWER })
   })
 
   it('does NOT backfill when the request lands pending (private target)', async () => {
@@ -97,7 +110,7 @@ describe('createOrReusePendingFriendshipRequest backfill', () => {
     })
 
     expect(result.state).toBe('created')
-    expect(backfillMock).not.toHaveBeenCalled()
+    expect(answerBackfillMock).not.toHaveBeenCalled()
   })
 
   it('does NOT backfill when the edge already exists (already_following)', async () => {
@@ -109,27 +122,49 @@ describe('createOrReusePendingFriendshipRequest backfill', () => {
     })
 
     expect(result.state).toBe('already_following')
-    expect(backfillMock).not.toHaveBeenCalled()
+    expect(answerBackfillMock).not.toHaveBeenCalled()
   })
 })
 
-describe('acceptPendingFriendshipRequest backfill', () => {
-  it('backfills the approver\'s (followee\'s) activity into the requester\'s (follower\'s) feed', async () => {
+describe('acceptPendingFriendshipRequest', () => {
+  it('makes the two mutual friends, writes both connection cards, and seeds both feeds', async () => {
+    // The accepted edge is the requester (FOLLOWER) -> accepter (FOLLOWEE).
     state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'approved' }
 
     const edge = await acceptPendingFriendshipRequest({ friendshipId: 'edge-1', userId: FOLLOWEE })
 
     expect(edge).not.toBeNull()
-    expect(backfillMock).toHaveBeenCalledTimes(1)
-    expect(backfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWEE, recipientUserId: FOLLOWER })
+
+    // Mutual: the accepter's follow-back edge is upserted exactly once.
+    expect(dbMock.insert).toHaveBeenCalledTimes(1)
+
+    // Two connection cards: the requester learns it was accepted; the accepter
+    // gets the "now connected" card.
+    expect(writeActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: FOLLOWER, type: 'follow_approved', actorUserId: FOLLOWEE }),
+    )
+    expect(writeActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: FOLLOWEE, type: 'follow_mutual', actorUserId: FOLLOWER }),
+    )
+
+    // Answer backfill BOTH directions.
+    expect(answerBackfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWEE, recipientUserId: FOLLOWER })
+    expect(answerBackfillMock).toHaveBeenCalledWith({ answererUserId: FOLLOWER, recipientUserId: FOLLOWEE })
+
+    // Authored-question backfill BOTH directions.
+    expect(authoredBackfillMock).toHaveBeenCalledWith({ authorUserId: FOLLOWEE, recipientUserId: FOLLOWER })
+    expect(authoredBackfillMock).toHaveBeenCalledWith({ authorUserId: FOLLOWER, recipientUserId: FOLLOWEE })
   })
 
-  it('does NOT backfill when there is no matching pending edge to approve', async () => {
+  it('does nothing when there is no matching pending edge to approve', async () => {
     state.updateReturnsEdge = false
 
     const edge = await acceptPendingFriendshipRequest({ friendshipId: 'missing', userId: FOLLOWEE })
 
     expect(edge).toBeNull()
-    expect(backfillMock).not.toHaveBeenCalled()
+    expect(dbMock.insert).not.toHaveBeenCalled()
+    expect(writeActivityMock).not.toHaveBeenCalled()
+    expect(answerBackfillMock).not.toHaveBeenCalled()
+    expect(authoredBackfillMock).not.toHaveBeenCalled()
   })
 })

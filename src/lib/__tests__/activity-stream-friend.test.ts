@@ -74,6 +74,21 @@ describe('StreamItem.friendId', () => {
     expect(item.secondLineVoice).toBeUndefined()
   })
 
+  it('renders the now-connected (follow_mutual) card name-first, tagged with the new friend', () => {
+    const item = activityToStreamItem(
+      activity('follow_mutual', {
+        referenceType: 'follow',
+        actor: { displayName: 'Duo Prova' },
+        reference: {},
+      } as unknown as Partial<ActivityItemView>),
+    )
+    expect(item.line[0]).toEqual(expect.objectContaining({ t: 'actor', name: 'Duo Prova' }))
+    expect(item.line[1]).toEqual(expect.objectContaining({ t: 'text', v: ' is now a friend' }))
+    expect(item.friendId).toBe('friend-1')
+    expect(item.action).toBeNull()
+    expect(item.expand).toBeNull()
+  })
+
   it('tags a moment with the moment friend id', () => {
     const moment: LatelyMoment = {
       momentId: 'm-1',
