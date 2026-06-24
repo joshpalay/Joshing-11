@@ -27,8 +27,15 @@ export function AnsweredRowActions({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsMenuOpen(false);
     };
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setIsMenuOpen(false);
+    };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
   }, [isMenuOpen]);
 
   return (
@@ -45,13 +52,10 @@ export function AnsweredRowActions({
       </button>
 
       {isMenuOpen ? (
-        <div
-          className="fixed inset-0 z-[55] flex items-end justify-center px-3 pt-16 pb-3 sm:items-start sm:pt-24"
-          style={{ background: 'rgba(0,0,0,0.2)' }}
-        >
+        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
           <button
             type="button"
-            className="absolute inset-0 cursor-default"
+            className="absolute inset-0 cursor-default sm:hidden"
             aria-label="Close menu"
             onClick={() => setIsMenuOpen(false)}
           />
