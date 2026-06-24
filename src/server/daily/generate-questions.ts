@@ -14,7 +14,7 @@ import {
 } from '@/lib/llm';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
-import { embedAndResolveDuplicate } from '@/server/pool/dedup';
+import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 import {
   getDomainDifficultyOverrides,
   mapAdaptiveLevelToDifficultyHint,
@@ -1550,14 +1550,20 @@ export async function generateDailyQuestions(
       })
       .returning();
     persisted.push(row);
-
-    // Semantic-dedup backstop (B1 pool substrate). Best-effort and no-op without
-    // VOYAGE_API_KEY, so it never blocks generation; the fact_key/Haiku/text
-    // guards above remain the cheap first pass. A new machine row that collides
-    // with an existing pool question is flagged is_duplicate (never deleted), so
-    // pickBankSource stops serving it.
-    await embedAndResolveDuplicate({ id: row.id, origin: 'machine', questionText: row.questionText });
   }
+
+  // Semantic-dedup backstop (B1 pool substrate). Best-effort and no-op without
+  // VOYAGE_API_KEY, so it never blocks generation; the fact_key/Haiku/text
+  // guards above remain the cheap first pass. A new machine row that collides
+  // with an existing pool question is flagged is_duplicate (never deleted), so
+  // pickBankSource stops serving it. Embedded as ONE batch (not one Voyage call
+  // per row) so the concurrent generation cron stops bursting single-item
+  // requests into Voyage rate limits and dropping ~1/3 of rows' embeddings
+  // (B-DEDUP-EMBED-RELIABILITY) — which had been blinding the answered-history
+  // gate to those rows.
+  await embedAndResolveDuplicatesBatch(
+    persisted.map((row) => ({ id: row.id, origin: 'machine' as const, questionText: row.questionText })),
+  );
 
   return persisted;
 }
