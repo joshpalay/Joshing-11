@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 
 import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questionRatings, questions } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
@@ -7,7 +7,7 @@ import { getFollowers } from '@/server/db/queries/friends';
 import { getRelationship } from '@/server/db/queries/friend-requests';
 import { rollOffOldItems } from '@/server/db/queries/feed';
 import { isQuestionReportSuppressed } from '@/server/db/queries/content-reports';
-import { isCorrectAnswerFeedEligible, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
+import { DIRECT_SENT_FEED_SOURCE_TYPE, isCorrectAnswerFeedEligible, SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 // Joshing-games funnel through this same after() entrypoint but stamp their
 // sourceAnswerId with this prefix (see src/app/api/joshing-games/[id]/answer/
@@ -169,12 +169,44 @@ async function _createFeedItemsForFriendsFromAnswer(
 
   if (eligibleRecipientIds.length > 0) {
     const eventAt = new Date();
+
+    // D-4 via-attribution on the answer fan-out ("via {source}"). Each recipient
+    // sees that `userId` answered correctly (sourceUserId) — but `userId` met
+    // this question through someone else, and that origin is worth surfacing two
+    // hops down so the From-Friends streak can read "via Josh". It's the
+    // sourceUserId of the answerer's OWN inbound feed row for this question — the
+    // person who put it in front of them, whether that was a friend_answered
+    // fan-out or a deliberate direct send. Capped at exactly one hop: we read
+    // that row's sourceUserId, never its own viaUserId, so the lookback never
+    // walks the whole chain (mirrors the send route's stamping, route.ts:132).
+    // NULL when the answerer met the question organically (their own daily /
+    // catch-up — no inbound person-source). Earliest inbound row wins (their true
+    // entry point); a "via you" is nulled per-recipient below.
+    const [inboundSource] = await db
+      .select({ sourceUserId: feedItems.sourceUserId })
+      .from(feedItems)
+      .where(and(
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.questionId, questionId),
+        inArray(feedItems.sourceType, [SOCIAL_FEED_SOURCE_TYPE, DIRECT_SENT_FEED_SOURCE_TYPE]),
+        isNotNull(feedItems.sourceUserId),
+      ))
+      .orderBy(feedItems.sourceEventAt)
+      .limit(1);
+    const viaSource =
+      inboundSource?.sourceUserId && inboundSource.sourceUserId !== userId
+        ? inboundSource.sourceUserId
+        : null;
+
     await db.insert(feedItems).values(
       eligibleRecipientIds.map((recipientId) => ({
         recipientUserId: recipientId,
         questionId,
         sourceType: SOCIAL_FEED_SOURCE_TYPE,
         sourceUserId: userId,
+        // Null a "via you" — a recipient discovering themselves as the relay
+        // source is pointless (and they already saw it).
+        viaUserId: viaSource && viaSource !== recipientId ? viaSource : null,
         sourceResult: result,
         sourceEventAt: eventAt,
         sourceAnswerId,

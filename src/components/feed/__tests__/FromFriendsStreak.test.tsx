@@ -170,6 +170,40 @@ describe('FromFriendsStreak — report affordance + author placement', () => {
   });
 });
 
+describe('FromFriendsStreak — relay via-attribution (D-4 "via Josh")', () => {
+  it('renders a "via {source}" line for a question the friend relayed, linked to the source', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([
+          q('relayed', { via: { userId: 'josh-1', name: 'Josh' } }),
+          q('organic'),
+        ])}
+      />,
+    );
+    // The relayed question names its origin; the source links to their profile.
+    expect(html).toContain('via ');
+    expect(html).toContain('Josh');
+    expect(html).toContain('href="/users/josh-1"');
+    // Both cards are still answerable — the via line is attribution, not a gate.
+    expect(answerCardCount(html)).toBe(2);
+  });
+
+  it('shows the relay via alongside an LLM author marker (orthogonal signals)', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([
+          q('a', { authorName: null, via: { userId: 'josh-1', name: 'Josh' } }),
+          q('b'),
+        ])}
+      />,
+    );
+    // Authored by Maid Acasa (LLM) AND reached the viewer via Josh — both render.
+    expect(html).toContain('MAID ACASA');
+    expect(html).toContain('via ');
+    expect(html).toContain('href="/users/josh-1"');
+  });
+});
+
 describe('FromFriendsStreak — honest provenance pre-answer (D-D canon)', () => {
   it('marks house/LLM authorship and never falls back to "A friend"', () => {
     const html = renderToStaticMarkup(

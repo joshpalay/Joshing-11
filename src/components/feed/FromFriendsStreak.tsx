@@ -321,9 +321,18 @@ function StreakQuestionCard({
         {/* Second level: honest authorship (D-D canon: house/LLM marked
             PRE-answer; a human author shows nothing, never a generic "A friend"). */}
         {hasProvenance ? (
-          <div style={{ marginBottom: 10 }}>
+          <div style={{ marginBottom: question.via ? 4 : 10 }}>
             <QuestionProvenance q={question} style={{ margin: 0 }} />
           </div>
+        ) : null}
+
+        {/* D-4 via-attribution: the relay source — who the answering friend got
+            this question from ("via Josh"). Orthogonal to authorship above: an
+            LLM-authored question relayed by a friend shows both. */}
+        {question.via ? (
+          <p style={{ margin: '0 0 10px', fontFamily: FF, fontSize: 12.5, color: INK2 }}>
+            via <ActorLink name={question.via.name} userId={question.via.userId} />
+          </p>
         ) : null}
 
         <p
