@@ -375,27 +375,23 @@ export default function TodaysFiveCard({
               {`Play (${missedCount}) Missed Question${missedCount === 1 ? '' : 's'}`}
             </Link>
           ) : (
-            // Branch B — nothing left to catch up on; turn the player outward.
-            // "Send a friend a question" routes to the existing recipient-first
-            // authoring flow (CreateChooser's "send to specific people" intent).
+            // Branch B — nothing left to catch up on (daily five AND any catch-up
+            // questions done). This is the calmest completed state, so it carries
+            // no button: the day's work is finished. The forward nudge is a quiet
+            // link outward to grow your circle, routing to the canonical
+            // /friends/find destination ("Find friends →" elsewhere in the app).
             <>
               <Link
-                href="/questions?create=1&intent=specific"
-                className="btn-primary w-full"
+                href="/friends/find"
+                className="block text-sm font-medium text-[var(--brand-link)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
               >
-                Send a friend a question →
+                Find friends →
               </Link>
-              {/* Outward invite beat — quiet support copy under the primary
-                  action, framing the send as a way into friends' questions and
-                  knowledge while the next round is crafted. */}
-              <p className="text-xs leading-5 text-[var(--brand-ink-400)]">
-                Invite friends to see their questions and knowledge.
-              </p>
               <Link
                 href="/questions?create=1&intent=bank"
                 className="block text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
               >
-                or add one to your bank
+                Add a question to your bank
               </Link>
             </>
           )}
