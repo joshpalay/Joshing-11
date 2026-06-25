@@ -29,6 +29,7 @@ import {
   type GeneratedQuestionRow,
 } from '@/server/daily/generate-questions';
 import { GENERATION_TIMEOUT_MS } from '@/lib/llm';
+import { recalibrateDomainDifficultyToSupply } from '@/server/adaptive-difficulty';
 import {
   DAILY_BONUS_SLOT_MAX,
   DAILY_QUEUE_MAX_PER_SUBCATEGORY,
@@ -602,6 +603,25 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
     seenTexts.add(key);
     underDifficultyBackfill.push(question);
     backfillShortfall -= 1;
+  }
+
+  // Supply-side difficulty correction. Having to serve below-tier questions from
+  // the under-difficulty reserve is proof the domain couldn't field the tier we
+  // asked for, so pull its stored difficulty back down to what we could actually
+  // deliver — next run requests the sustainable tier instead of re-gating the same
+  // too-hard ask. Best-effort: never let a difficulty write break queue assembly.
+  if (underDifficultyBackfill.length > 0) {
+    try {
+      await recalibrateDomainDifficultyToSupply(
+        userId,
+        underDifficultyBackfill.map((question) => ({
+          domain: question.canonicalSubcategory,
+          deliveredTier: question.difficultyEstimate,
+        })),
+      );
+    } catch (error) {
+      console.error('[daily orchestrator] supply-side difficulty recalibration failed', error);
+    }
   }
 
   const coreAuthored = [...authored, ...authoredBackfill];

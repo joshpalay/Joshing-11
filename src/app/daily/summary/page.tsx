@@ -28,6 +28,7 @@ import type {
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
 import { RoundReminderCard } from './RoundReminderCard'
+import { ExpandDomainOfferCard } from './ExpandDomainOfferCard'
 import { FirstSessionPanel } from './FirstSessionPanel'
 import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
@@ -215,6 +216,10 @@ export default function DailySummaryPage() {
         </section>
 
         {summary.refine ? <RefineYourGame refine={summary.refine} /> : null}
+
+        {summary.expansionOffer ? (
+          <ExpandDomainOfferCard offer={summary.expansionOffer} />
+        ) : null}
 
         {firstTierCrossing ? (
           <MasteryMoment

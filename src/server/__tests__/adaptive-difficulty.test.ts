@@ -12,6 +12,7 @@ import {
   applyAdaptiveLevelAdjustment,
   applyFocusFloor,
   computeDomainDifficultyStep,
+  computeSupplyCorrection,
   mapAdaptiveLevelToDifficultyHint,
   type DomainDifficultyState,
 } from '@/server/adaptive-difficulty';
@@ -174,6 +175,41 @@ describe('computeDomainDifficultyStep — per-domain streak tracking', () => {
       }
       expect(s.servedDifficulty).toBe('accessible');
     });
+  });
+});
+
+describe('computeSupplyCorrection — supply-side overshoot correction', () => {
+  // The streak ladder can raise a domain to a tier the generator can't field
+  // (e.g. specialist Tears of the Kingdom, which does not exist). When the run had
+  // to serve a lower tier from the under-difficulty reserve, pull the stored tier
+  // down to what we could actually deliver so the next run stops re-gating.
+
+  it('pulls specialist down to the moderate tier we could actually deliver', () => {
+    // Butkicker's exact case: asked specialist, only moderate ToTK exists.
+    expect(computeSupplyCorrection('specialist', 'moderate', 'accessible')).toBe('moderate');
+  });
+
+  it('pulls specialist down to accessible for a demonstrated domain', () => {
+    expect(computeSupplyCorrection('specialist', 'accessible', 'accessible')).toBe('accessible');
+  });
+
+  it('never demotes a declared domain below its engaged-fan floor', () => {
+    // Even if only accessible could be fielded, a declared fan holds at moderate
+    // (Part 1 still serves the easier question; we just do not pin below the floor).
+    expect(computeSupplyCorrection('specialist', 'accessible', 'moderate')).toBe('moderate');
+  });
+
+  it('returns null when the delivered tier already matches the stored tier (no overshoot)', () => {
+    expect(computeSupplyCorrection('moderate', 'moderate', 'accessible')).toBeNull();
+  });
+
+  it('returns null when delivered is somehow higher than stored — never promotes', () => {
+    expect(computeSupplyCorrection('moderate', 'specialist', 'accessible')).toBeNull();
+  });
+
+  it('returns null when the only correction would be below the floor (already floored)', () => {
+    // Stored sits at the floor; an accessible delivery cannot pull it lower.
+    expect(computeSupplyCorrection('moderate', 'accessible', 'moderate')).toBeNull();
   });
 });
 

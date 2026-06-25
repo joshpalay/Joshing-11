@@ -871,6 +871,13 @@ export const userDomainDifficulties = pgTable(
     // difficulty is pinned — updateDomainDifficultyOnAnswer() skips the step.
     // NULL means no freeze (normal adaptive behavior).
     freezeUntil: timestamp('freeze_until', { withTimezone: true }),
+    // Expansion offer (post-daily-Five "you're crushing X — branch out?"). Set by
+    // the supply-side correction when a player tops the ladder yet still out-runs a
+    // domain's available content; the daily summary surfaces the offer while this
+    // is set and expansionOfferedAt is NULL. NULL means no pending offer.
+    expansionEligibleSince: timestamp('expansion_eligible_since', { withTimezone: true }),
+    // Stamped when the expansion offer was accepted or dismissed, so it shows once.
+    expansionOfferedAt: timestamp('expansion_offered_at', { withTimezone: true }),
   },
   (table) => [
     unique('USER_DOMAIN_DIFFICULTY_user_id_canonical_subcategory_key').on(

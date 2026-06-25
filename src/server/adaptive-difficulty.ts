@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { db, declaredInterests, playerMastery, userDomainDifficulties, users } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -411,6 +411,183 @@ export async function updateDomainDifficultyOnAnswer(
 /** True while an "Ease off" freeze is in effect for a domain. */
 export function isFrozen(freezeUntil: Date | null | undefined, now: Date): boolean {
   return Boolean(freezeUntil && freezeUntil.getTime() > now.getTime());
+}
+
+/**
+ * Pure decision for the supply-side correction. Given a domain's currently stored
+ * tier, the highest tier we could actually DELIVER for it this run, and its erosion
+ * floor, return the tier to pin it to — or `null` when no correction applies. Only
+ * ever corrects *overshoot* (returns a strictly lower tier); never promotes. The
+ * delivered tier is clamped up to the floor so a declared fan is never demoted below
+ * the engaged-fan rung even if only accessible content could be fielded.
+ */
+export function computeSupplyCorrection(
+  current: ServedDifficulty,
+  delivered: ServedDifficulty,
+  floor: ServedDifficulty,
+): ServedDifficulty | null {
+  const targetIdx = Math.max(DIFFICULTY_LADDER.indexOf(floor), DIFFICULTY_LADDER.indexOf(delivered));
+  if (targetIdx >= DIFFICULTY_LADDER.indexOf(current)) return null;
+  return DIFFICULTY_LADDER[targetIdx];
+}
+
+/**
+ * Supply-side difficulty correction — the counterpart to the demand-side streak
+ * ladder in updateDomainDifficultyOnAnswer. A streak step-up is *optimistic*: it can
+ * raise a domain to a tier the generator can't actually field (there is, for example,
+ * no specialist-tier Tears-of-the-Kingdom content anywhere), so the difficulty gate
+ * eats the whole domain and the daily pipeline degrades toward a short Five. Part 1
+ * catches that at serve time by filling the slots from the under-difficulty reserve —
+ * good questions one or more tiers below what was asked. THIS records the supply
+ * ceiling those reserve fills reveal: it pulls the stored servedDifficulty back down
+ * to the tier we could actually deliver, so the NEXT run requests what the domain can
+ * sustain instead of re-gating the same too-hard ask (Butkicker's ToTK settles at
+ * moderate). It only moves a domain DOWN (corrects overshoot, never promotes — that
+ * stays the streak ladder's job), respects the same declared/demonstrated erosion
+ * floor as the answer-time step-down, and leaves frozen ("Ease off") domains alone.
+ * Streak counters reset on a correction, so a re-climb needs a fresh mastery streak;
+ * the mastery+thin moment this exposes is also the cue for the expansion offer.
+ *
+ * `deliveries` is the per-domain list of tiers actually served from the reserve this
+ * run (typically the orchestrator's under-difficulty backfill); the highest tier per
+ * domain is taken as what the domain could sustain.
+ */
+export async function recalibrateDomainDifficultyToSupply(
+  userId: string,
+  deliveries: Array<{ domain: string; deliveredTier: string }>,
+): Promise<void> {
+  // Collapse to the highest valid tier delivered per domain.
+  const deliveredByDomain = new Map<string, ServedDifficulty>();
+  for (const { domain, deliveredTier } of deliveries) {
+    if (!domain) continue;
+    const tier = deliveredTier as ServedDifficulty;
+    if (DIFFICULTY_LADDER.indexOf(tier) === -1) continue;
+    const prev = deliveredByDomain.get(domain);
+    if (!prev || DIFFICULTY_LADDER.indexOf(tier) > DIFFICULTY_LADDER.indexOf(prev)) {
+      deliveredByDomain.set(domain, tier);
+    }
+  }
+
+  const domains = [...deliveredByDomain.keys()];
+  if (domains.length === 0) return;
+
+  const now = new Date();
+  const [rows, declaredDomains] = await Promise.all([
+    db
+      .select()
+      .from(userDomainDifficulties)
+      .where(and(
+        eq(userDomainDifficulties.userId, userId),
+        inArray(userDomainDifficulties.canonicalSubcategory, domains),
+      )),
+    getDeclaredDomainSet(userId, domains),
+  ]);
+  const existingByDomain = new Map(rows.map((row) => [row.canonicalSubcategory, row]));
+
+  for (const domain of domains) {
+    const delivered = deliveredByDomain.get(domain)!;
+    const floor: ServedDifficulty = declaredDomains.has(domain)
+      ? FOCUS_DOMAIN_MIN_DIFFICULTY
+      : 'accessible';
+    const floorIdx = DIFFICULTY_LADDER.indexOf(floor);
+    const target = DIFFICULTY_LADDER[Math.max(floorIdx, DIFFICULTY_LADDER.indexOf(delivered))];
+
+    const existing = existingByDomain.get(domain);
+
+    if (!existing) {
+      // No persisted row yet — difficulty was seeded in-memory for this run
+      // (getDomainDifficultyOverrides only persists on the first answer). Persist
+      // the supply ceiling so the next run reads it instead of re-seeding high.
+      await db
+        .insert(userDomainDifficulties)
+        .values({
+          userId,
+          canonicalSubcategory: domain,
+          servedDifficulty: target,
+          consecutiveCorrect: 0,
+          consecutiveIncorrect: 0,
+          lastUpdated: now,
+        })
+        .onConflictDoNothing({
+          target: [userDomainDifficulties.userId, userDomainDifficulties.canonicalSubcategory],
+        });
+      continue;
+    }
+
+    if (isFrozen(existing.freezeUntil, now)) continue;
+
+    const corrected = computeSupplyCorrection(existing.servedDifficulty as ServedDifficulty, delivered, floor);
+    if (!corrected) continue;
+
+    // Topping the ladder (specialist) yet still out-running supply is the
+    // "you're crushing this domain but it's tapped out" moment — flag it for the
+    // post-daily-Five expansion offer. Only stamp the first time (preserve the
+    // original eligibility; once offered, expansionOfferedAt suppresses re-show).
+    const reachedCeiling = (existing.servedDifficulty as ServedDifficulty) === 'specialist';
+    const markEligible = reachedCeiling && !existing.expansionEligibleSince;
+
+    await db
+      .update(userDomainDifficulties)
+      .set({
+        servedDifficulty: corrected,
+        consecutiveCorrect: 0,
+        consecutiveIncorrect: 0,
+        lastUpdated: now,
+        ...(markEligible ? { expansionEligibleSince: now } : {}),
+      })
+      .where(eq(userDomainDifficulties.id, existing.id));
+  }
+}
+
+export type PendingExpansionDomain = {
+  canonicalSubcategory: string;
+  eligibleSince: Date;
+};
+
+/**
+ * Domains for which a post-daily-Five expansion offer is pending — the player
+ * topped a domain's difficulty ladder yet still out-ran its supply
+ * (recalibrateDomainDifficultyToSupply set expansionEligibleSince), and the offer
+ * has not yet been accepted or dismissed (expansionOfferedAt is still NULL). Most
+ * recently eligible first, so the summary can lead with the freshest crush.
+ */
+export async function getPendingExpansionDomains(
+  userId: string,
+): Promise<PendingExpansionDomain[]> {
+  const rows = await db
+    .select({
+      canonicalSubcategory: userDomainDifficulties.canonicalSubcategory,
+      eligibleSince: userDomainDifficulties.expansionEligibleSince,
+    })
+    .from(userDomainDifficulties)
+    .where(and(
+      eq(userDomainDifficulties.userId, userId),
+      isNotNull(userDomainDifficulties.expansionEligibleSince),
+      isNull(userDomainDifficulties.expansionOfferedAt),
+    ))
+    .orderBy(desc(userDomainDifficulties.expansionEligibleSince));
+
+  return rows
+    .filter((row): row is { canonicalSubcategory: string; eligibleSince: Date } => row.eligibleSince != null)
+    .map((row) => ({ canonicalSubcategory: row.canonicalSubcategory, eligibleSince: row.eligibleSince }));
+}
+
+/**
+ * Resolve a pending expansion offer for a domain — stamped when the player accepts
+ * (adds ≥1 adjacent domain) or dismisses it, so the offer surfaces only once.
+ */
+export async function markDomainExpansionOffered(
+  userId: string,
+  canonicalSubcategory: string,
+): Promise<void> {
+  if (!canonicalSubcategory) return;
+  await db
+    .update(userDomainDifficulties)
+    .set({ expansionOfferedAt: new Date() })
+    .where(and(
+      eq(userDomainDifficulties.userId, userId),
+      eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+    ));
 }
 
 /**

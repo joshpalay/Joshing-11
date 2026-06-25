@@ -1268,6 +1268,26 @@ export async function register() {
       // migrate() creates it before this migration runs.
     }
 
+    // Migration 0089 adds USER_DOMAIN_DIFFICULTY.expansion_eligible_since and
+    // .expansion_offered_at for the post-daily-Five expansion offer. The daily
+    // summary reads them to decide whether to surface "you're crushing X — branch
+    // out?", so a preview/production database with the migration recorded but the
+    // columns missing would error. Additive nullable columns — pre-apply
+    // idempotently.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_DIFFICULTY"
+          ADD COLUMN IF NOT EXISTS "expansion_eligible_since" timestamp with time zone
+      `);
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_DIFFICULTY"
+          ADD COLUMN IF NOT EXISTS "expansion_offered_at" timestamp with time zone
+      `);
+    } catch {
+      // USER_DOMAIN_DIFFICULTY may not exist yet on a fresh database —
+      // migrate() creates it before this migration runs.
+    }
+
     // Migration 0065 (Refine Your Game) creates DAILY_REFINE_DECISION, the
     // decision + cooldown ledger behind the daily-summary refine section. The
     // summary builder, the resolve/undo route, and the next-daily commit hook

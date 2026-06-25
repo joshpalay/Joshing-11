@@ -1,4 +1,4 @@
-import { Brain, Globe, type LucideIcon, Pencil, Users as UsersIcon } from 'lucide-react';
+import { Brain, Globe, type LucideIcon, Pencil, Sparkles, Users as UsersIcon } from 'lucide-react';
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -241,6 +241,12 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
               title="View as public"
               subtitle="See only what's public to everyone else."
               href={`/users/${portrait.user.id}?previewAs=public`}
+            />
+            <SettingsRow
+              icon={<Sparkles className="size-5" />}
+              title="Expansion offer card"
+              subtitle="Preview the post-daily-Five “branch out” card."
+              href="/daily/summary/expand-preview"
             />
           </SettingsGroup>
         </section>
