@@ -18,6 +18,7 @@ import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
+import { getProviderSettings } from '@/server/llm/settings';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
@@ -109,7 +110,7 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
-  const suggestion = await suggestAnswer(question.questionText, 'anthropic').catch((error) => {
+  const suggestion = await suggestAnswer(question.questionText, (await getProviderSettings()).suggest).catch((error) => {
     console.warn('[daily/answer] failed to repair generic canonical answer', {
       generatedQuestionId: question.id,
       error: error instanceof Error ? error.message : String(error),

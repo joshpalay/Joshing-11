@@ -1284,3 +1284,28 @@ export const friendInvitations = pgTable(
     index('FriendInvitation_inviterUserId_inviteePhone_idx').on(table.inviterUserId, table.inviteePhone),
   ],
 );
+
+// ─── LLM provider A/B switch (B-LLM-PROVIDER-AB-SWITCH B2) ────────────────────
+// Single global row keyed by a fixed id ('singleton'); a CHECK pins the key so
+// only one row can ever exist. Each of the four surfaces independently routes to
+// 'anthropic' (default) or 'openai'. Read through the cached getProviderSettings()
+// helper; written only by the owner via the /account LLM-provider panel. Test
+// instrumentation — removable as a unit (drop this table, the helper, the panel).
+export const appSettings = pgTable(
+  'AppSettings',
+  {
+    id: text('id').primaryKey().default('singleton'),
+    genProvider: text('gen_provider').notNull().default('anthropic'),
+    categorizeProvider: text('categorize_provider').notNull().default('anthropic'),
+    suggestProvider: text('suggest_provider').notNull().default('anthropic'),
+    gradeProvider: text('grade_provider').notNull().default('anthropic'),
+    updatedAt: updatedAt(),
+  },
+  () => [
+    check('AppSettings_singleton', sql`id = 'singleton'`),
+    check('AppSettings_gen_provider_valid', sql`gen_provider IN ('anthropic', 'openai')`),
+    check('AppSettings_categorize_provider_valid', sql`categorize_provider IN ('anthropic', 'openai')`),
+    check('AppSettings_suggest_provider_valid', sql`suggest_provider IN ('anthropic', 'openai')`),
+    check('AppSettings_grade_provider_valid', sql`grade_provider IN ('anthropic', 'openai')`),
+  ],
+);

@@ -9,6 +9,7 @@ import { resolveDailyBasePoints, type QueueSlot } from '@/server/daily/types';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
+import { getProviderSettings } from '@/server/llm/settings';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -40,7 +41,7 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
-  const suggestion = await suggestAnswer(question.questionText, 'anthropic').catch(() => null);
+  const suggestion = await suggestAnswer(question.questionText, (await getProviderSettings()).suggest).catch(() => null);
   const repairedAnswer = suggestion?.suggested_answer
     ? normalizeCanonicalAnswerLabel(suggestion.suggested_answer)
     : null;

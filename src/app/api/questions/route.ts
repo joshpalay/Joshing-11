@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { broadCategoryDisplayName, normalizeBroadQuestionCategoryOrDefault, normalizeCanonicalSubcategory } from '@/lib/question-categorization';
 import { categorizeQuestion } from '@/lib/llm';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
+import { getProviderSettings } from '@/server/llm/settings';
 // Imported from vet-verdict (not vet-question) so it resolves to the real
 // pure mapper even where vet-question is mocked.
 import { verdictToBlockedVisibility } from '@/server/llm/vet-verdict';
@@ -99,9 +100,8 @@ export async function POST(request: NextRequest) {
       rawQuestionFields.text,
       rawQuestionFields.correctAnswer,
       rawQuestionFields.alternateAnswers,
-      // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic. B2 reads the global
-      // categorize-provider setting here instead of the literal.
-      'anthropic',
+      // B-LLM-PROVIDER-AB-SWITCH B2: use the globally-selected categorize provider.
+      (await getProviderSettings()).categorize,
     );
   } catch (error) {
     console.error('[questions/create] unexpected_failure', {

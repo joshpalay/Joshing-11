@@ -8,6 +8,7 @@
  */
 
 import { gradeAnswerWithLLM } from '@/lib/llm';
+import { getProviderSettings } from '@/server/llm/settings';
 
 // Mirrors questionTypeEnum in src/server/db/schema.ts. The grader's leniency
 // policy branches on this (a 'personal' question's canonical answer is the
@@ -142,15 +143,19 @@ export async function gradeAnswer(
     });
   }
 
+  // B-LLM-PROVIDER-AB-SWITCH B2: grade with the globally-selected provider
+  // (cached read; falls back to 'anthropic' on failure so a settings outage
+  // never blocks scoring). NOTE: flipping grading can change correctness — see
+  // the panel's inline caution and the "don't flip grading + generation in the
+  // same window" recommendation.
+  const gradeProvider = (await getProviderSettings()).grade;
   const llmResult = await gradeAnswerWithLLM(
     questionText,
     canonicalAnswer,
     submitted,
     questionType,
     acceptedAlternatives,
-    // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic. B2 reads the global
-    // grade-provider setting here instead of the literal.
-    'anthropic',
+    gradeProvider,
   ).catch((error): UnscoredGrade => {
     console.warn('[grading] LLM grading call failed; holding answer unscored', {
       name: error instanceof Error ? error.name : undefined,

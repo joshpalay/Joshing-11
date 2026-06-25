@@ -610,6 +610,13 @@
       "when": 1783987200000,
       "tag": "0086_subject_entity",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1784073600000,
+      "tag": "0087_app_settings",
+      "breakpoints": true
     }
   ]
 }

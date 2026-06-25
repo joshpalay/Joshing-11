@@ -14,6 +14,7 @@ import {
   wrapUserInput,
 } from '@/lib/llm';
 import { OPENAI_FLAGSHIP_MODEL, openaiCompleteJsonText } from '@/server/llm/provider';
+import { getProviderSettings } from '@/server/llm/settings';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
@@ -2028,6 +2029,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   let llmGenerated: GeneratedQuestionRow[] = [];
   if (remainingCount > 0 && domainsForLlm.length > 0) {
+    // B-LLM-PROVIDER-AB-SWITCH B2: resolve the generation provider once per run
+    // (cached read; falls back to 'anthropic' on failure) and thread it through.
+    const genProvider = (await getProviderSettings()).gen;
     llmGenerated = await generateDailyQuestions(
       domainsForLlm,
       remainingCount,
@@ -2045,9 +2049,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       culturalAnchor,
       {
         underDifficultyReserve: options.underDifficultyReserve,
-        // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic. B2 reads the global
-        // gen-provider setting once per run and passes it here instead.
-        provider: 'anthropic',
+        provider: genProvider,
       },
     );
   }

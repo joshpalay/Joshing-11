@@ -7,6 +7,7 @@ import { categorizeQuestion } from '@/lib/llm';
 import { getSession } from '@/server/auth/session';
 import { assessQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { textContainsAnswer } from '@/server/questions/self-answering';
+import { getProviderSettings } from '@/server/llm/settings';
 import { db, questions } from '@/server/db';
 import {
   deleteQuestion,
@@ -138,12 +139,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
   if (shouldRecategorize) {
-    // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic (B2 reads the setting).
+    // B-LLM-PROVIDER-AB-SWITCH B2: use the globally-selected categorize provider.
     const categorization = await categorizeQuestion(
       effectiveText,
       effectiveAnswer,
       effectiveAlternates,
-      'anthropic',
+      (await getProviderSettings()).categorize,
     );
     const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
     const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
