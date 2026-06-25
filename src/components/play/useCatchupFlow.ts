@@ -18,6 +18,7 @@ import {
   type CatchUpSubmitParsedError,
 } from '@/server/play/catch-up-submit-error';
 import { shouldIntroduceCatchUpQuestion } from '@/server/play/catch-up-turn-sequencing';
+import { type ReportReasonTarget } from '@/components/report/ReportReasonSheet';
 
 export type CatchupQueueItem = {
   dailyQueueItemId: string;
@@ -40,6 +41,12 @@ export type CatchupQueueItem = {
   authorId?: string | null;
   /** D-3: the author is the non-human house/editorial author (renders the Editorial badge, no relational copy). */
   authorIsHouse?: boolean;
+  /**
+   * Content-report target for the recap ⋯ menu. Curated/bank + feed items carry
+   * `questionId`; LLM-origin daily items carry `generatedQuestionId`. Optional so a
+   * stale client payload without it just hides the report menu rather than crashing.
+   */
+  reportTarget?: ReportReasonTarget;
 };
 
 export type CatchupAnswerResponse = {
@@ -108,6 +115,12 @@ export type CatchupBatchRecord = {
    * the fuller note here so it is never lost.
    */
   authorNote: string | null;
+  /**
+   * Content-report target the recap ⋯ menu reports against. Threaded from the
+   * queue item so "This is incorrect" / "This is inappropriate" land a
+   * ContentReport on the right FK. Null when the item arrived without one.
+   */
+  reportTarget: ReportReasonTarget | null;
 };
 
 /**
@@ -465,6 +478,7 @@ export function useCatchupFlow() {
         authorId: item.authorId ?? null,
         authorIsHouse: item.authorIsHouse ?? false,
         authorNote: null,
+        reportTarget: item.reportTarget ?? null,
       });
     }, 1200);
   }, [currentItem, finishTurn, isResolvingTurn, submitting]);
@@ -687,6 +701,7 @@ export function useCatchupFlow() {
           authorId: item.authorId ?? null,
           authorIsHouse: item.authorIsHouse ?? false,
           authorNote: data.creatorNote ?? null,
+          reportTarget: item.reportTarget ?? null,
         });
       }, 1200);
     } catch {

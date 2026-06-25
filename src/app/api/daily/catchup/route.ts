@@ -33,6 +33,7 @@ export async function GET() {
       authorName: item.authorName,
       authorId: item.authorId,
       authorIsHouse: item.authorIsHouse,
+      reportTarget: item.reportTarget,
     })),
     introCopy: first
       ? formatCatchUpSessionThreadIntro(items.length, first.queueDate, last?.queueDate)

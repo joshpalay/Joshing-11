@@ -14,9 +14,14 @@ import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/
 export function AnsweredRowActions({
   target,
   surface = 'answered_list',
+  onReportSubmitted,
 }: {
   target: ReportReasonTarget;
   surface?: 'round_recap' | 'lately_result' | 'answered_list';
+  // Optional: fires once on a successful report so a surface can react (e.g. the
+  // round-recap hides a card reported as inappropriate, matching daily-summary).
+  // The answered-list caller omits it and the menu just closes, as before.
+  onReportSubmitted?: (category: 'incorrect' | 'inappropriate') => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null);
@@ -52,7 +57,7 @@ export function AnsweredRowActions({
       </button>
 
       {isMenuOpen ? (
-        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
+        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-[color-mix(in_srgb,var(--brand-ink)_20%,transparent)] px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
           <button
             type="button"
             className="absolute inset-0 cursor-default sm:hidden"
@@ -107,7 +112,10 @@ export function AnsweredRowActions({
           target={target}
           surface={surface}
           onClose={() => setReportCategory(null)}
-          onSubmitted={() => setReportCategory(null)}
+          onSubmitted={(category) => {
+            setReportCategory(null);
+            onReportSubmitted?.(category);
+          }}
         />
       ) : null}
     </div>
