@@ -13,11 +13,11 @@ type RecentlyExploringSectionProps = {
 // (src/components/knowledge/RecentlyExpanding.tsx) so the two surfaces read
 // as the same component family.
 const ROW_ACCENTS = [
-  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
-  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
-  { border: '#c9564d', fill: 'rgba(201, 86, 77, 0.16)' },
-  { border: '#65a8bb', fill: 'rgba(101, 168, 187, 0.20)' },
-  { border: '#a98a4c', fill: 'rgba(169, 138, 76, 0.14)' },
+  { border: 'var(--exploring-accent-red)', fill: 'color-mix(in srgb, var(--exploring-accent-red) 16%, transparent)' },
+  { border: 'var(--exploring-accent-gold)', fill: 'color-mix(in srgb, var(--exploring-accent-gold) 14%, transparent)' },
+  { border: 'var(--exploring-accent-red)', fill: 'color-mix(in srgb, var(--exploring-accent-red) 16%, transparent)' },
+  { border: 'var(--exploring-accent-blue)', fill: 'color-mix(in srgb, var(--exploring-accent-blue) 20%, transparent)' },
+  { border: 'var(--exploring-accent-gold)', fill: 'color-mix(in srgb, var(--exploring-accent-gold) 14%, transparent)' },
 ]
 
 /**
@@ -108,7 +108,7 @@ const rowStyle: CSSProperties = {
   alignItems: 'center',
   columnGap: '0.75rem',
   padding: '0.54rem 0',
-  borderTop: '1px solid #eee8dd',
+  borderTop: '1px solid var(--border-light)',
 }
 
 const badgeStyle: CSSProperties = {

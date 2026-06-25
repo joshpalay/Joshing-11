@@ -34,7 +34,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - **Validation:** Zod on every API input. No exceptions.
 - **DB access:** queries belong in `src/server/db/queries/`, not inline in route handlers.
 - **LLM calls:** centralized under `src/server/llm/` (and `src/lib/llm.ts`).
-- **Anthropic model split:** Sonnet (`claude-sonnet-4-6`) for generation; Haiku (`claude-haiku-4-5-20251001`) for grading and categorization. Don't swap these without measuring quality and cost.
+- **Anthropic model split:** Sonnet (`claude-sonnet-4-6`) for generation; Haiku (`claude-haiku-4-5-20251001`) for grading and categorization. Don't swap these without measuring quality and cost. **Measured exception:** the factual gate (`findFactualFailures`) defaults to Sonnet, overridable via `FACTUAL_GATE_MODEL` — a 2026-06 audit found Haiku-tier misses subtle false-premise questions Sonnet catches, and prompt-tweaks at Haiku didn't help; the gate runs once per generation batch, so the cost delta is small.
 - **`_salvaged/`** is excluded from TypeScript (`tsconfig.json`) and ESLint (`eslint.config.mjs`). **Never edit anything inside it.**
 - **`PHONE_HASH_SALT`** is required in production (enforced at boot in `src/instrumentation.ts`). Used by `src/server/lib/phone-hashing.ts` and the client-side hashing path B-Friends-4 will add. Rotating it invalidates every `ContactHash` row and every persisted `User.phone_hash`.
 

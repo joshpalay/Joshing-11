@@ -42,7 +42,7 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
         [data-expanding-row="true"] { grid-template-columns: 44px minmax(0, 1fr); }
         @media (hover: hover) {
           button[data-expanding-share="true"] { transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease; }
-          button[data-expanding-share="true"]:hover { border-color: #c9bea9; background: #f8f3eb; transform: translateY(-1px); }
+          button[data-expanding-share="true"]:hover { border-color: var(--warm-border-soft); background: var(--warm-cream); transform: translateY(-1px); }
         }
       `}</style>
       <p style={wordmarkStyle}>Joshing</p>
@@ -233,7 +233,7 @@ const shareButtonStyle: CSSProperties = {
   padding: '0 0.82rem',
   border: '1px solid var(--warm-border-soft)',
   borderRadius: 999,
-  background: '#fffdf8',
+  background: 'var(--brand-card)',
   color: 'var(--warm-ink)',
   display: 'inline-flex',
   alignItems: 'center',
@@ -255,7 +255,7 @@ const rowStyle: CSSProperties = {
   alignItems: 'center',
   columnGap: '0.75rem',
   padding: '0.54rem 0',
-  borderTop: '1px solid #eee8dd',
+  borderTop: '1px solid var(--border-light)',
   opacity: 0,
   transform: 'translateY(6px)',
   animation: 'recentExpansionIn 220ms ease-out forwards',
@@ -296,7 +296,7 @@ const supportingStyle: CSSProperties = {
 };
 
 const emptyWrapStyle: CSSProperties = {
-  borderTop: '1px solid #eee6d9',
+  borderTop: '1px solid var(--border-light)',
   paddingTop: '0.75rem',
 };
 

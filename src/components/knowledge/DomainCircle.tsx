@@ -58,7 +58,7 @@ export function DomainCircle({
       : 'var(--warm-cream)'
   const circleBorder = highlighted
     ? 'var(--ink)'
-    : (domainColor?.primary ?? '#d4cfc7')
+    : (domainColor?.primary ?? 'var(--warm-border-soft)')
   const resolvedCircleSlotSize = Math.max(circleSlotSize ?? diameter, diameter)
 
   if (isGhost) {
@@ -82,7 +82,7 @@ export function DomainCircle({
           <KnowledgeBubble
             diameter={diameter}
             background="transparent"
-            border="1px dashed #c8c0b0"
+            border="1px dashed var(--warm-border-soft)"
             opacity={0.5}
           >
             {Icon ? <Icon size={iconSize} color="var(--ink)" /> : null}

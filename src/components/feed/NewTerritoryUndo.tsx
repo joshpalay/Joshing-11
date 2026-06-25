@@ -11,7 +11,7 @@ import {
 } from '@/lib/daily/territory-model';
 
 // Darkened triangle-gold so the "New territory" copy clears AA on the cream
-// card (raw --accent-gold #d9a82e is too light for small text).
+// card (raw --accent-gold is too light for small text).
 const GOLD_INK = 'var(--accent-gold-ink)';
 
 // Default-add with player control (B-1): a correct answer in an unfamiliar domain

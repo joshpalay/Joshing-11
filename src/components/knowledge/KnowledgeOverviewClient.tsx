@@ -237,13 +237,13 @@ const mainStyle: CSSProperties = {
 };
 
 const headerSectionStyle: CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--brand-field)',
   border: '1px solid var(--warm-border-soft)',
   padding: '1rem 0.95rem',
 };
 
 const sectionStyle: CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--brand-field)',
   border: '1px solid var(--warm-border-soft)',
   padding: '1rem 0.95rem',
 };
@@ -267,7 +267,7 @@ const sentenceStyle: CSSProperties = {
   margin: '0.35rem 0 0',
   fontSize: 'clamp(1.1rem, 2.5vw, 1.55rem)',
   lineHeight: 1.35,
-  color: '#111111',
+  color: 'var(--warm-ink)',
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontWeight: 600,
 };
@@ -307,13 +307,16 @@ const sharePortraitWrapStyle: CSSProperties = {
 
 const sharePortraitBtnStyle: CSSProperties = {
   padding: '11px 32px',
-  border: '1.5px solid #0e0e0e',
-  backgroundColor: '#0e0e0e',
+  border: '1.5px solid var(--warm-ink)',
+  backgroundColor: 'var(--warm-ink)',
   color: 'var(--warm-paper)',
   fontFamily: 'var(--font-mono)',
   fontSize: 12,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
   cursor: 'pointer',
+  // The offset-shadow grey is a known color-drift item owned by
+  // B-VISUAL-TOKEN-BUDGET-01 (see globals.css "press register" note), not a
+  // shadow snap — left raw here deliberately rather than collapsed onto --warm-ink.
   boxShadow: '2px 2px 0 #3a3a3a',
 };

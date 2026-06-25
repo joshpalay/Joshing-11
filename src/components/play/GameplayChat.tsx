@@ -185,7 +185,7 @@ const verdictLabelStyle: CSSProperties = {
 // (this card, the feed sheet, the summary recap, the history list) stays in sync.
 
 // Darkened triangle-gold so warning/inside-joke labels clear AA on the cream
-// surface (raw --accent-gold #d9a82e is too light for small text). Mirrors the
+// surface (raw --accent-gold is too light for small text). Mirrors the
 // GOLD_INK used on the feed answer sheets.
 const GOLD_INK = 'var(--accent-gold-ink)';
 

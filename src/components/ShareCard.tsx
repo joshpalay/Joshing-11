@@ -119,7 +119,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
 // Live DOM (not rasterized — rendered on the public /share/ceremony/[token] page
 // and the in-app ceremony review), so this references brand tokens and re-themes.
 // The receipt aesthetic is preserved via the warm-ink ramp + brand cream surfaces.
-// INK's old literal (#1a1208) was already exactly the --warm-ink token value.
+// INK's old literal was already exactly the --warm-ink token value.
 const INK = 'var(--warm-ink)';
 const INK_MUTED = 'var(--warm-ink-500)';
 const CREAM = 'var(--brand-cream-card)';
