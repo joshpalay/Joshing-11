@@ -1,6 +1,6 @@
 # D-LOADING-MOMENT-SURFACE-01 — The Loading Moment
 
-**Status:** Draft for decision. Discuss → align → lock before any `B-` prompt.
+**Status:** Sub-questions resolved 2026-06-25 (see *Resolved sub-questions* below); copy strings and per-card budgets still TBD in build. Ready to seed `B-LOADING-MOMENT-*` — this doc still does **not** authorize a build.
 **Type:** Decision / design doc (D- precedes B-)
 **Owner:** Josh
 **Relates to:** §8.27 (Two-Axis Knowledge Portrait), §8.33 (Knowledge Page Display Model), §8.18 (Group Knowledge Map / connection-not-ranking), §18 (Success Metrics — internal-only, never shown as rankings)
@@ -80,7 +80,9 @@ once — one Loading Moment shows exactly one card.
   answered correctly (or practiced) in the same territory.
 - **Register:** discovery. This is the north-star thesis rendered as a moment. Never
   "you failed this before."
-- **Gate:** a wrong→right (or wrong→practiced) transition exists for the user.
+- **Gate:** a wrong→right (or wrong→practiced) transition exists for the user. **A raw,
+  still-unresolved wrong answer never qualifies** (resolved Q2) — the card requires a
+  completed turnaround, so it always reads as discovery, never as a callout.
 
 ### 4. The deepest cut you've answered
 - **Says:** "The deepest cut you've answered — {question stem}."
@@ -88,7 +90,10 @@ once — one Loading Moment shows exactly one card.
   Specialist question the user answered correctly.
 - **Register:** "deepest cut" (matches Creator's Summary language), framed as a thing
   discovered, not a thing beaten. No difficulty number shown.
-- **Gate:** user has ≥1 correct answer on a Specialist-tier question.
+- **Gate:** user has ≥1 **correct** answer on a Specialist-tier question. Correct-only by
+  design (resolved Q5) — the user has already seen and solved the stem, so re-showing it
+  is not a spoiler. This card sits **lowest in the ladder** (step 4), so it surfaces only
+  when richer cards have no data.
 
 ### 5. Who shares this with you (overlap, single warm callout)
 - **Says:** "{Name} gets {subcategory} the way you do."
@@ -127,7 +132,9 @@ The Loading Moment must always resolve to *something*, degrading gracefully:
 1. If a **wrong-answer-turned-around** (card 3) is available and fresh → prefer it
    (it's the north-star moment). Rotate so it doesn't repeat every load.
 2. Else a **rare knowledge** (2) or **deepest territory** (1) card, whichever has data.
-3. Else **overlap** (5) or **waiting discovery** (6) if social data is cached.
+3. Else **overlap** (5) or **waiting discovery** (6) if social data is cached. Overlap is
+   deliberately weighted **below** the discovery cards (resolved Q3) so a high-traffic
+   surface doesn't over-promote alignment and feed the §18 performance-game drift risk.
 4. Else **deepest cut** (4).
 5. **Sparse-portrait / cold-start fallback:** a player with too little history gets a
    quiet, non-personalized line in brand voice (e.g. an invitation to keep playing) —
@@ -151,27 +158,48 @@ The Loading Moment must always resolve to *something*, degrading gracefully:
   bonus/score framing banned. Attribution neutral and provenance honest.
 - **C-5 — Rotation / anti-repeat.** Don't show the same card two loads running where
   alternatives exist; a stat that repeats every load reads as a banner, not a moment.
+  **Anti-repeat state lives in client session only** (resolved Q4) — no write on the
+  loading path (honors C-1/C-3); resetting on a fresh session is acceptable.
+- **C-7 — Long-waits-only surface scope.** The Loading Moment is gated to waits long
+  enough to earn a moment (resolved Q1): session generation, ceremony assembly, portrait
+  hydration, etc. Short waits (e.g. a ~200ms grading blip) never trigger one. Gate on a
+  measured duration threshold (~800ms–1s, exact value set in build) rather than a hard
+  surface allowlist, so it adapts as surfaces change.
 - **C-6 — Sparse-state coverage.** New / low-history players are a first-class case, not
   an afterthought — they hit the cold-start fallback, never an empty card.
 
 ---
 
-## Open sub-questions (resolve before build)
+## Resolved sub-questions (2026-06-25)
 
-1. **Surface scope.** Does the Loading Moment appear on *all* waits, or only on the
-   long ones (session generation, ceremony assembly)? Showing it on a 200ms grading
-   blip may be more noise than moment.
-2. **Wrong-answer-card sensitivity.** Is surfacing a past wrong answer always welcome,
-   even when reframed as discovery? Needs a gut-check against the "fail toward the
-   player" principle — possibly gate to wrong→right transitions only (never raw wrongs).
-3. **Overlap card and the tension flag.** §18 flags a performance-game drift risk if
-   alignment engagement runs high while wrong-answer reaction runs low. Does promoting
-   overlap on a high-traffic surface feed that drift? Possibly weight overlap *below*
-   the discovery cards in the ladder for that reason (as drafted).
-4. **Rotation memory.** Where does anti-repeat state live — client session only, or
-   persisted? Client-only is simpler and avoids a write on the loading path.
-5. **Difficulty-card exposure.** Card 4 shows a question stem the user already
-   answered; confirm that's desirable on a wait surface vs. mild spoiler fatigue.
+All five drafting-stage sub-questions are resolved. The resolutions are folded into the
+card gates, fallback ladder, and constraints above; restated here as the decision record.
+
+1. **Surface scope → long waits only.** The Loading Moment appears only on waits long
+   enough to earn a moment (session generation, ceremony assembly, portrait hydration),
+   gated on a measured duration threshold (~800ms–1s, exact value set in build). A short
+   wait such as a ~200ms grading blip never triggers one — it would read as noise, not a
+   moment. A duration threshold is preferred over a hard surface allowlist so the rule
+   adapts as surfaces change. (See Constraint C-7.)
+2. **Wrong-answer-card sensitivity → wrong→right/practiced only.** Card 3 surfaces a past
+   wrong answer *only* once it has been turned around (answered correctly or practiced) in
+   the same territory. A raw, still-unresolved wrong never qualifies, so the card always
+   reads as discovery and never as a callout of a failure — consistent with "fail toward
+   the player." (See Card 3 gate.)
+3. **Overlap card and the tension flag → keep below discovery.** Card 5 (overlap) stays
+   weighted *below* the discovery cards in the ladder. §18 flags a performance-game drift
+   risk if alignment engagement runs high while wrong-answer reaction runs low; keeping
+   overlap beneath the discovery cards on this high-traffic surface avoids over-promoting
+   alignment and feeding that drift. (See fallback ladder step 3.)
+4. **Rotation memory → client session only.** Anti-repeat state lives in client session
+   state, not persisted server-side. This is the simplest option and, critically, adds no
+   write on the loading path (honors C-1/C-3). Anti-repeat resetting on a fresh session is
+   acceptable. (See Constraint C-5.)
+5. **Difficulty-card exposure → keep, lowest priority, correct-only.** Card 4 is retained
+   but sits at the bottom of the ladder (step 4) and surfaces only questions the user
+   answered *correctly*. Because the user has already seen and solved the stem, re-showing
+   it is not a spoiler; its low ladder position keeps it rare and special. (See Card 4
+   gate.)
 
 ---
 
