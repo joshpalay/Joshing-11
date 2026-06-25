@@ -20,7 +20,7 @@ a build tag so a made-but-unshipped decision is never mistaken for live behavior
 Decision state and build state are tracked independently. The build tags below were verified against live code
 by `D-DECISIONS-CONFORMANCE-01` (2026-06-13); where the audit refuted an earlier assumption, the entry says so.
 
-Last updated: 2026-06-25 (D-LLM-PROVIDER-AB-AND-GATE-TIER-01 — the Anthropic↔OpenAI provider A/B switch is test instrumentation defaulting to Anthropic; a 2026-06 audit showed internally-inconsistent / false-premise questions are a model-TIER problem on the factual gate, NOT a provider or prompt problem, so the factual gate defaults to Sonnet via `FACTUAL_GATE_MODEL`. See Settled. Prior: 2026-06-22 D-FROMFRIENDS-STREAK-HEADER-01.)
+Last updated: 2026-06-25 (D-LOADING-MOMENT-SURFACE-01 — draft design doc for the Loading Moment, a rotating wait-time surface showing one warm, true artifact from the player's portrait/social graph; never a score or ranking. Card taxonomy + fallback ladder + read-only/cached-only constraints defined; precedes `B-LOADING-MOMENT-*`, does not authorize a build. Prior same-day: D-LLM-PROVIDER-AB-AND-GATE-TIER-01 — the Anthropic↔OpenAI provider A/B switch is test instrumentation defaulting to Anthropic; a 2026-06 audit showed internally-inconsistent / false-premise questions are a model-TIER problem on the factual gate, NOT a provider or prompt problem, so the factual gate defaults to Sonnet via `FACTUAL_GATE_MODEL`. See Settled.)
 
 ## Durable docs
 
@@ -38,6 +38,7 @@ Last updated: 2026-06-25 (D-LLM-PROVIDER-AB-AND-GATE-TIER-01 — the Anthropic�
 |`D-REFLECTION-COPY-01.md`                            |Copy spec — Weekly Reflection ceremony, warm-register words-before-pixels gate. **Built** via `B-REFLECTION-CEREMONY-01` (copy + hierarchy + Beat E selection); 🔁 re-audit after merge. See Settled.|
 |`_docs/D-FEED-FRIEND-ACTIVITY-01.md`                 |Spec — “From Friends” chronological activity log. **Built (cut-1) and live** despite the “SKETCH/not yet wired” header in `src/lib/friend-activity.ts` — header is stale; see Settled.|
 |`D-LLM-PROVIDER-AB-AND-GATE-TIER-01.md`              |Decision + findings — the Anthropic↔OpenAI provider A/B switch (test instrumentation, default Anthropic) and the audit showing internally-inconsistent / false-premise questions are a model-**tier** problem on the factual gate, not a provider or prompt problem → gate defaults to Sonnet via `FACTUAL_GATE_MODEL`. See Settled.|
+|`D-LOADING-MOMENT-SURFACE-01.md`                     |**Draft for decision (not locked).** Design doc — the **Loading Moment**: a rotating wait-time surface that shows one warm, true artifact from the player's portrait/social graph (never a score/rank). Defines the six-card taxonomy, copy register, fallback ladder, and the read-only/cached-only/truth-gate constraints (C-1…C-6) a build must honor. Precedes `B-LOADING-MOMENT-*`; **does not authorize a build.** Open sub-questions still to resolve.|
 
 Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
 
