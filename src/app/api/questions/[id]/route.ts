@@ -138,7 +138,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
   if (shouldRecategorize) {
-    const categorization = await categorizeQuestion(effectiveText, effectiveAnswer, effectiveAlternates);
+    // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic (B2 reads the setting).
+    const categorization = await categorizeQuestion(
+      effectiveText,
+      effectiveAnswer,
+      effectiveAlternates,
+      'anthropic',
+    );
     const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
     const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
     if (textContainsAnswer(canonicalSubcategory, effectiveAnswer, effectiveAlternates)) {

@@ -109,7 +109,7 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
-  const suggestion = await suggestAnswer(question.questionText).catch((error) => {
+  const suggestion = await suggestAnswer(question.questionText, 'anthropic').catch((error) => {
     console.warn('[daily/answer] failed to repair generic canonical answer', {
       generatedQuestionId: question.id,
       error: error instanceof Error ? error.message : String(error),

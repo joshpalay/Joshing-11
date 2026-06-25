@@ -14,5 +14,6 @@ export async function POST(request: NextRequest) {
   const question = parsed.success ? parsed.data.question.trim() : '';
   if (question.length < 5) return NextResponse.json({ error: 'question too short' }, { status: 400 });
 
-  return NextResponse.json(await suggestAnswer(question));
+  // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic (B2 reads the setting).
+  return NextResponse.json(await suggestAnswer(question, 'anthropic'));
 }

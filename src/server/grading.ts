@@ -147,7 +147,10 @@ export async function gradeAnswer(
     canonicalAnswer,
     submitted,
     questionType,
-    acceptedAlternatives
+    acceptedAlternatives,
+    // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic. B2 reads the global
+    // grade-provider setting here instead of the literal.
+    'anthropic',
   ).catch((error): UnscoredGrade => {
     console.warn('[grading] LLM grading call failed; holding answer unscored', {
       name: error instanceof Error ? error.name : undefined,

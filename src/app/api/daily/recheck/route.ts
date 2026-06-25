@@ -40,7 +40,7 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
-  const suggestion = await suggestAnswer(question.questionText).catch(() => null);
+  const suggestion = await suggestAnswer(question.questionText, 'anthropic').catch(() => null);
   const repairedAnswer = suggestion?.suggested_answer
     ? normalizeCanonicalAnswerLabel(suggestion.suggested_answer)
     : null;

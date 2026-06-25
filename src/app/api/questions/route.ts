@@ -99,6 +99,9 @@ export async function POST(request: NextRequest) {
       rawQuestionFields.text,
       rawQuestionFields.correctAnswer,
       rawQuestionFields.alternateAnswers,
+      // B-LLM-PROVIDER-AB-SWITCH B1: default to Anthropic. B2 reads the global
+      // categorize-provider setting here instead of the literal.
+      'anthropic',
     );
   } catch (error) {
     console.error('[questions/create] unexpected_failure', {
