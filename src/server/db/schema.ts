@@ -1330,3 +1330,52 @@ export const appSettings = pgTable(
     check('AppSettings_grade_provider_valid', sql`grade_provider IN ('anthropic', 'openai')`),
   ],
 );
+
+// ─── LLM provider A/B metrics (B-LLM-PROVIDER-AB-METRICS) ─────────────────────
+// Append-only log of every owner flip of the provider switch (Part 3), one row
+// per surface that changed. Makes the experiment's comparison windows explicit:
+// you can read exactly when grading/generation/etc. flipped. Written best-effort
+// from the admin PATCH route after the AppSettings write. Removable as a unit.
+export const llmProviderChangeLog = pgTable(
+  'LlmProviderChangeLog',
+  {
+    id: id(),
+    surface: text('surface').notNull(),
+    fromProvider: text('from_provider').notNull(),
+    toProvider: text('to_provider').notNull(),
+    changedByUserId: text('changed_by_user_id'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check('LlmProviderChangeLog_surface_valid', sql`surface IN ('gen', 'categorize', 'suggest', 'grade')`),
+    check('LlmProviderChangeLog_from_valid', sql`from_provider IN ('anthropic', 'openai')`),
+    check('LlmProviderChangeLog_to_valid', sql`to_provider IN ('anthropic', 'openai')`),
+    index('LlmProviderChangeLog_created_at_idx').on(table.createdAt),
+  ],
+);
+
+// Per-call LLM usage events (Part 2 — cost). One row per completion (either
+// provider) carrying the token counts already in the [llm] logs, but queryable.
+// Cost is NOT stored — it's derived at read time from src/server/llm/pricing.ts
+// so a repricing needs no backfill. Written best-effort/fire-and-forget off the
+// LLM call's critical path; some rows may be lost on a cold cutoff (acceptable
+// for an estimate). Removable as a unit.
+export const llmUsageEvent = pgTable(
+  'LlmUsageEvent',
+  {
+    id: id(),
+    scope: text('scope').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+    cacheCreateTokens: integer('cache_create_tokens').notNull().default(0),
+    durationMs: integer('duration_ms'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check('LlmUsageEvent_provider_valid', sql`provider IN ('anthropic', 'openai')`),
+    index('LlmUsageEvent_provider_created_at_idx').on(table.provider, table.createdAt),
+  ],
+);

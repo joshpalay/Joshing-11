@@ -1643,6 +1643,49 @@ export async function register() {
       // These tables may not exist yet on a fresh database — migrate() creates
       // them (with these columns) before/at this migration.
     }
+
+    // Migrations 0090 + 0091 (B-LLM-PROVIDER-AB-METRICS) create the provider
+    // flip log and per-call usage tables. A preview/production database that
+    // records the migrations without the tables present would 42P01 when the
+    // PATCH route logs a flip or recordLlmUsage() inserts a row. Create them
+    // idempotently (with RLS + indexes). Both are self-contained — they depend
+    // on no other table. Precedent: 0087.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "LlmProviderChangeLog" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "surface" text NOT NULL,
+          "from_provider" text NOT NULL,
+          "to_provider" text NOT NULL,
+          "changed_by_user_id" text,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "LlmProviderChangeLog_surface_valid" CHECK (surface IN ('gen', 'categorize', 'suggest', 'grade')),
+          CONSTRAINT "LlmProviderChangeLog_from_valid" CHECK (from_provider IN ('anthropic', 'openai')),
+          CONSTRAINT "LlmProviderChangeLog_to_valid" CHECK (to_provider IN ('anthropic', 'openai'))
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "LlmProviderChangeLog" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "LlmProviderChangeLog_created_at_idx" ON "LlmProviderChangeLog" ("created_at")`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "LlmUsageEvent" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "scope" text NOT NULL,
+          "provider" text NOT NULL,
+          "model" text NOT NULL,
+          "input_tokens" integer NOT NULL DEFAULT 0,
+          "output_tokens" integer NOT NULL DEFAULT 0,
+          "cache_read_tokens" integer NOT NULL DEFAULT 0,
+          "cache_create_tokens" integer NOT NULL DEFAULT 0,
+          "duration_ms" integer,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "LlmUsageEvent_provider_valid" CHECK (provider IN ('anthropic', 'openai'))
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "LlmUsageEvent" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "LlmUsageEvent_provider_created_at_idx" ON "LlmUsageEvent" ("provider", "created_at")`);
+    } catch {
+      // Non-fatal — migrate() creates the tables from 0090/0091 immediately after.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

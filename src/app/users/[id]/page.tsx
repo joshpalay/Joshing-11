@@ -22,6 +22,7 @@ import { isAdminUser } from '@/server/auth/admin';
 import { getSession } from '@/server/auth/session';
 import { getProviderSettings } from '@/server/llm/settings';
 import { LlmProviderPanel } from '@/components/profile/settings/LlmProviderPanel';
+import { LlmExperimentReadout, loadLlmExperimentData } from '@/components/profile/settings/LlmExperimentReadout';
 import {
   getDiscoverability,
   getEditableProfile,
@@ -196,6 +197,9 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     // dropdowns reflect the DB; skip the read entirely for non-owners.
     const isOwner = isAdminUser(session.userId);
     const llmProviders = isOwner ? await getProviderSettings() : null;
+    // B-LLM-PROVIDER-AB-METRICS: load the experiment readout data here (the page
+    // is already awaited) and pass it into the sync presentational component.
+    const llmExperimentData = isOwner ? await loadLlmExperimentData() : null;
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
         <ProfileHeaderCard
@@ -272,6 +276,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         </section>
 
         {llmProviders ? <LlmProviderPanel initial={llmProviders} /> : null}
+        {llmExperimentData ? <LlmExperimentReadout data={llmExperimentData} /> : null}
 
         <AccountActions isAdmin={isAdminUser(session.userId)} />
 
