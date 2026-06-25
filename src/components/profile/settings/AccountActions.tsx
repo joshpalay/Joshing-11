@@ -201,6 +201,12 @@ export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
               subtitle="Preview the post-daily-Five “branch out” card"
               href="/daily/summary/expand-preview"
             />
+            <SettingsRow
+              icon={<BarChart3 className="size-5" />}
+              title="Expansion offer funnel"
+              subtitle="How often the “branch out” offer triggers, resolves, and pends"
+              href="/dev/expansion-offer"
+            />
           </SettingsGroup>
           {resetGameError ? (
             <p className="text-destructive mt-2 text-sm">{resetGameError}</p>
