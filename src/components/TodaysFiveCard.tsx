@@ -361,50 +361,54 @@ export default function TodaysFiveCard({
       ) : null}
 
       {isComplete ? (
-        <div className="mt-3 space-y-2.5">
-          {missedCount > 0 ? (
-            // Branch A — outstanding catch-up questions own the only button here;
-            // the home page suppresses the standalone Catch up card to match.
-            // Faded-sage fill (sage border / forest-green text) — calmer and more
-            // inviting than the old orange outline, still clearly secondary to the
-            // day's primary Play. Built from --domain-science / --game-correct.
+        missedCount > 0 ? (
+          // Branch A — outstanding catch-up questions own the only button here;
+          // the home page suppresses the standalone Catch up card to match.
+          // Faded-sage fill (sage border / forest-green text) — calmer and more
+          // inviting than the old orange outline, still clearly secondary to the
+          // day's primary Play. Built from --domain-science / --game-correct.
+          // Recap stays link-weight below the button (backward-looking, no arrow).
+          <div className="mt-3 space-y-2.5">
             <Link
               href="/daily/catchup"
               className="flex min-h-12 w-full items-center justify-center rounded-[var(--radius-xs)] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
             >
               {`Play (${missedCount}) Missed Question${missedCount === 1 ? '' : 's'}`}
             </Link>
-          ) : (
-            // Branch B — nothing left to catch up on (daily five AND any catch-up
-            // questions done). This is the calmest completed state, so it carries
-            // no button: the day's work is finished. The forward nudge is a quiet
-            // link outward to grow your circle, routing to the canonical
-            // /friends/find destination ("Find friends →" elsewhere in the app).
-            <>
-              <Link
-                href="/friends/find"
-                className="block text-sm font-medium text-[var(--brand-link)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
-              >
-                Find friends →
-              </Link>
-              <Link
-                href="/questions?create=1&intent=bank"
-                className="block text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
-              >
-                Add a question to your bank
-              </Link>
-            </>
-          )}
-
-          {/* Recap is link-weight in both branches — never a button, and
-              backward-looking, so no forward arrow. */}
-          <Link
-            href="/daily/summary"
-            className="block text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
-          >
-            See today&apos;s recap
-          </Link>
-        </div>
+            <Link
+              href="/daily/summary"
+              className="block text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
+            >
+              See today&apos;s recap
+            </Link>
+          </div>
+        ) : (
+          // Branch B — nothing left to catch up on (daily five AND any catch-up
+          // questions done). This is the calmest completed state, so it carries
+          // no button: the day's work is finished. All three nudges sit on one
+          // quiet link row (wraps on narrow widths) — Find friends routes to the
+          // canonical /friends/find destination ("Find friends →" elsewhere).
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
+            <Link
+              href="/friends/find"
+              className="text-[var(--brand-link)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
+            >
+              Find friends →
+            </Link>
+            <Link
+              href="/questions?create=1&intent=bank"
+              className="text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
+            >
+              Add a question to your bank
+            </Link>
+            <Link
+              href="/daily/summary"
+              className="text-[var(--brand-link)] underline underline-offset-4"
+            >
+              See today&apos;s recap
+            </Link>
+          </div>
+        )
       ) : (
         <>
           <Link
