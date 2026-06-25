@@ -12,7 +12,7 @@ import { INSIDE_JOKE_LABELS } from '@/lib/questions-types'
 //
 // The accessible signal is the LABEL wording (human "Between you and {Name}" vs
 // editorial "Between us!"), not the inversion or bronze alone (color alone must
-// never convey meaning). cream (#f5f0e8) on INK (#1a1208) clears WCAG AA (~16:1).
+// never convey meaning). cream (--warm-cream) on INK (--warm-ink) clears WCAG AA (~16:1).
 export type CreatorNoteProvenance =
   | { kind: 'human'; authorName: string | null }
   | { kind: 'editorial' }

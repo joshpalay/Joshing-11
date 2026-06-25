@@ -22,8 +22,8 @@ const MIN_DIAMETER = 22;
 const MAX_DIAMETER = 56;
 const CIRCLE_OPACITY = 0.72;
 
-// Brand tokens (navy-ink system) — previously a raw brutalist trio
-// (#1a1a1a / #faf8f2 / #5a5448) that drifted off the design system.
+// Brand tokens (navy-ink system) — previously a raw brutalist trio of literals
+// that drifted off the design system.
 const INK = 'var(--brand-ink)';
 const CREAM = 'var(--brand-card)';
 const MUTED_INK = 'var(--brand-ink-700)';

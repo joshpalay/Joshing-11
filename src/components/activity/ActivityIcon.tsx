@@ -28,26 +28,26 @@ import type { StreamIconKind } from '@/lib/activity-stream';
 // The triangle palette (globals.css). Solid fills are picked from these; the
 // hollow outline of a spent triangle uses the muted ink token.
 const PALETTE = [
-  'var(--tri-orange)', // #d15e36
-  'var(--tri-darkteal)', // #6d837f — teal
-  'var(--tri-lightteal)', // #adb19e — sage
-  'var(--tri-cream)', // #f8e6c7
-  'var(--tri-darkyellow)', // #deae5c
-  'var(--tri-lighttan)', // #edd2a3
+  'var(--tri-orange)',
+  'var(--tri-darkteal)', // teal
+  'var(--tri-lightteal)', // sage
+  'var(--tri-cream)',
+  'var(--tri-darkyellow)',
+  'var(--tri-lighttan)',
 ];
 // Per design: triangle fills render at 80% opacity (softens the saturated
 // orange/teal so the feed stays calm).
 const FILL_OPACITY = 0.8;
-const HOLLOW = 'var(--brand-ink-400)'; // #8a8a8a — outline of a spent triangle
+const HOLLOW = 'var(--brand-ink-400)'; // muted ink — outline of a spent triangle
 
 // The milestone star sits small against cream as five thin triangles, so the
 // washed-out light palette tokens (cream / lighttan / lightteal) disappear into
 // the page. Restrict its points to the saturated tokens and render at full
 // opacity so the star stays legible at line size.
 const STAR_PALETTE = [
-  'var(--tri-orange)', // #d15e36
-  'var(--tri-darkteal)', // #6d837f
-  'var(--tri-darkyellow)', // #deae5c
+  'var(--tri-orange)',
+  'var(--tri-darkteal)',
+  'var(--tri-darkyellow)',
 ];
 const STAR_FILL_OPACITY = 1;
 

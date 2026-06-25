@@ -11,7 +11,7 @@ import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 // sheets — so the streak cards can reuse the one-liner renderer and the honest
 // provenance marker without pulling in the whole ActivityStreamItem tree.
 
-// Friend names render in the activity-blue from Figma (--brand-link #4a5d75),
+// Friend names render in the activity-blue from Figma (--brand-link),
 // linked or not, so the actor reads as the warm social anchor of the row.
 export const ACTOR_BLUE = 'var(--brand-link)';
 

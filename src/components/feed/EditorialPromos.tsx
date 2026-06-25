@@ -211,7 +211,7 @@ export function GrowYourCircleFeature({
                   <Link
                     href={`/users/${p.id}`}
                     className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold no-underline"
-                    style={{ background: bg, color: isDarkColor(bg) ? '#fff' : '#0a1f3d' }}
+                    style={{ background: bg, color: isDarkColor(bg) ? '#fff' : 'var(--ink)' }}
                   >
                     {initialsFor(p.displayName)}
                   </Link>
