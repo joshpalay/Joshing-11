@@ -8,6 +8,13 @@ vi.mock('next/link', () => ({
   ),
 }))
 
+// The component refreshes the server tree after a successful action (to clear
+// the same request's Recent Activity duplicate), so it reads from the app
+// router. Provide a no-op so the static-render tests have a router in context.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
+
 import FriendRequestsSection, {
   FRIEND_REQUEST_ENDPOINTS,
   submitFriendRequestAction,
@@ -26,9 +33,10 @@ function request(id: string, overrides: Partial<SerializedIncomingRequest> = {})
   }
 }
 
-function jsonResponse(ok: boolean, body: unknown): Response {
+function jsonResponse(ok: boolean, body: unknown, status = ok ? 200 : 400): Response {
   return {
     ok,
+    status,
     json: async () => body,
   } as unknown as Response
 }
@@ -127,6 +135,17 @@ describe('submitFriendRequestAction', () => {
     const fetchImpl = vi.fn(async () => jsonResponse(false, { message: 'Already handled.' }))
     const result = await submitFriendRequestAction('req-1', 'accept', 'fallback', fetchImpl as typeof fetch)
     expect(result).toEqual({ ok: false, message: 'Already handled.' })
+  })
+
+  it('treats a 404 (no longer pending) as an idempotent success', async () => {
+    // The request was already accepted/declined elsewhere — the end state the
+    // tap wanted already holds, so the caller should clear the stale card rather
+    // than surface an error.
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(false, { error: 'not_found', message: 'No pending friend request was found.' }, 404),
+    )
+    const result = await submitFriendRequestAction('req-1', 'accept', 'fallback', fetchImpl as typeof fetch)
+    expect(result).toEqual({ ok: true })
   })
 
   it('falls back to the failure message when the request throws', async () => {

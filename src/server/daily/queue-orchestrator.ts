@@ -26,8 +26,10 @@ import {
 import {
   generateBonusQuestionsForDomains,
   generateDailyQuestionsFromKnowledgeBase,
+  type GeneratedQuestionRow,
 } from '@/server/daily/generate-questions';
 import { GENERATION_TIMEOUT_MS } from '@/lib/llm';
+import { recalibrateDomainDifficultyToSupply } from '@/server/adaptive-difficulty';
 import {
   DAILY_BONUS_SLOT_MAX,
   DAILY_QUEUE_MAX_PER_SUBCATEGORY,
@@ -386,11 +388,18 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
     return true;
   });
 
+  // Under-difficulty reserve (soft difficulty-floor fallback). The generator
+  // deflects good-but-too-easy questions here instead of dropping them; the final
+  // backfill below draws on it only after every in-tier reserve is spent, so a
+  // narrow tapped-out KB serves a full (if easier) Five rather than the floor.
+  const underDifficultyReserve: GeneratedQuestionRow[] = [];
+
   const remaining = DAILY_QUEUE_SIZE - authored.length - housePicks.length;
   const generated =
     remaining > 0
       ? await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(remaining), {
           firstRun: isFirstRun,
+          underDifficultyReserve,
         })
       : [];
 
@@ -495,7 +504,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
     const extra = await generateDailyQuestionsFromKnowledgeBase(
       userId,
       overRequest(roundShortfall),
-      { firstRun: isFirstRun },
+      { firstRun: isFirstRun, underDifficultyReserve },
     );
     let recoveredThisRound = 0;
     for (const question of extra) {
@@ -580,9 +589,44 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
   const diversityBackfilled =
     authoredBackfill.length + houseBackfill.length + generatedBackfill.length;
 
+  // Final fallback: under-difficulty questions (good, just easier than the
+  // requested tier). Tapped ONLY after every in-tier reserve above is exhausted,
+  // so difficulty integrity holds until a short queue is the only alternative.
+  // These never passed through the generated-intake loop's generic/text-dedup, so
+  // re-apply both guards here before one can become a slot.
+  const underDifficultyBackfill: GeneratedQuestionRow[] = [];
+  for (const question of underDifficultyReserve) {
+    if (backfillShortfall <= 0) break;
+    if (isGenericSubcategory(question.canonicalSubcategory)) continue;
+    const key = normalize(question.questionText);
+    if (seenTexts.has(key)) continue;
+    seenTexts.add(key);
+    underDifficultyBackfill.push(question);
+    backfillShortfall -= 1;
+  }
+
+  // Supply-side difficulty correction. Having to serve below-tier questions from
+  // the under-difficulty reserve is proof the domain couldn't field the tier we
+  // asked for, so pull its stored difficulty back down to what we could actually
+  // deliver — next run requests the sustainable tier instead of re-gating the same
+  // too-hard ask. Best-effort: never let a difficulty write break queue assembly.
+  if (underDifficultyBackfill.length > 0) {
+    try {
+      await recalibrateDomainDifficultyToSupply(
+        userId,
+        underDifficultyBackfill.map((question) => ({
+          domain: question.canonicalSubcategory,
+          deliveredTier: question.difficultyEstimate,
+        })),
+      );
+    } catch (error) {
+      console.error('[daily orchestrator] supply-side difficulty recalibration failed', error);
+    }
+  }
+
   const coreAuthored = [...authored, ...authoredBackfill];
   const coreHouse = [...housePicks, ...houseBackfill];
-  const coreGenerated = [...generatedForQueue, ...generatedBackfill];
+  const coreGenerated = [...generatedForQueue, ...generatedBackfill, ...underDifficultyBackfill];
 
   const achieved = coreAuthored.length + coreHouse.length + coreGenerated.length;
 
@@ -620,6 +664,8 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       deflectedForAnswerCooldown,
       deflectedForSubjectCooldown,
       diversityBackfilled,
+      underDifficultyReserve: underDifficultyReserve.length,
+      underDifficultyBackfilled: underDifficultyBackfill.length,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,
       elapsedMs: Date.now() - startedAt,
@@ -651,6 +697,8 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       deflectedForAnswerCooldown,
       deflectedForSubjectCooldown,
       diversityBackfilled,
+      underDifficultyReserve: underDifficultyReserve.length,
+      underDifficultyBackfilled: underDifficultyBackfill.length,
       knowledgeBaseDomains: knowledgeBase.length,
       domainMode: preferences.domainMode,
       selectedDomains: preferences.selectedDomains.length,

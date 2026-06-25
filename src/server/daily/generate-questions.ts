@@ -5,6 +5,7 @@ import {
   HAIKU_MODEL,
   INSTRUCTION_USER_INPUT_GUIDANCE,
   INSTRUCTION_SCOPING_QUALIFIER,
+  type LlmProvider,
   extractTextContent,
   generateInsideJoke,
   getAnthropicClient,
@@ -12,6 +13,8 @@ import {
   parseJsonObject,
   wrapUserInput,
 } from '@/lib/llm';
+import { OPENAI_FLAGSHIP_MODEL, openaiCompleteJsonText } from '@/server/llm/provider';
+import { getProviderSettings } from '@/server/llm/settings';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
@@ -1225,7 +1228,43 @@ async function callLlmOnce(
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
+  provider: LlmProvider = 'anthropic',
 ): Promise<LlmQuestion[]> {
+  const userPrompt = buildUserPrompt(
+    domains,
+    count,
+    previousQuestionTexts,
+    previousFactKeys,
+    domainSkips,
+    difficultyPreference,
+    domainDifficultyOverrides,
+    adaptiveLevel,
+    subAnglesByDomain,
+    domainTerritoryTypes,
+    domainStrengths,
+    culturalAnchor,
+  );
+
+  // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
+  // request envelope changes. Returns the same text the Anthropic branch does,
+  // so the parseQuestions validator below is shared, unchanged. The Haiku gates
+  // (dedupe / quality / factual) stay on Anthropic on purpose — this provider
+  // toggle routes the question-generation call only.
+  if (provider === 'openai') {
+    const text = await openaiCompleteJsonText({
+      scope: 'generate-questions',
+      systemText: SYSTEM_PROMPT,
+      userText: userPrompt,
+      model: OPENAI_FLAGSHIP_MODEL,
+      maxTokens: 2000,
+      temperature: 0.8,
+      timeoutMs: GENERATION_TIMEOUT_MS,
+    });
+    if (text === null) return [];
+    return parseQuestions(text);
+  }
+
+  // Anthropic branch — the existing code path, unchanged.
   const client = getAnthropicClient();
   if (!client) return [];
 
@@ -1242,25 +1281,7 @@ async function callLlmOnce(
     max_tokens: 2000,
     temperature: 0.8,
     system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-    messages: [
-      {
-        role: 'user',
-        content: buildUserPrompt(
-          domains,
-          count,
-          previousQuestionTexts,
-          previousFactKeys,
-          domainSkips,
-          difficultyPreference,
-          domainDifficultyOverrides,
-          adaptiveLevel,
-          subAnglesByDomain,
-          domainTerritoryTypes,
-          domainStrengths,
-          culturalAnchor,
-        ),
-      },
-    ],
+    messages: [{ role: 'user', content: userPrompt }],
   }, { timeoutMs: GENERATION_TIMEOUT_MS });
 
   const text = extractTextContent(response.content);
@@ -1282,8 +1303,20 @@ export async function generateDailyQuestions(
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
+  // Soft difficulty-floor fallback. When provided, questions that come back more
+  // than one tier below the requested difficulty are NOT dropped — they are
+  // persisted and pushed here (instead of into the returned in-tier array) so the
+  // orchestrator can draw on them as a last resort rather than serving a short
+  // queue (see the under-difficulty handling below and queue-orchestrator's
+  // backfill chain).
+  options: { underDifficultyReserve?: GeneratedQuestionRow[]; provider?: LlmProvider } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
+
+  // Provider for the generation call. Read once per run and threaded through
+  // every chunk — never re-resolved per question. Defaults to Anthropic; B2
+  // makes the caller pass the global setting instead of the literal below.
+  const provider: LlmProvider = options.provider ?? 'anthropic';
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -1318,6 +1351,7 @@ export async function generateDailyQuestions(
         domainTerritoryTypes,
         domainStrengths,
         culturalAnchor,
+        provider,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -1336,6 +1370,7 @@ export async function generateDailyQuestions(
         domainTerritoryTypes,
         domainStrengths,
         culturalAnchor,
+        provider,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1500,10 +1535,22 @@ export async function generateDailyQuestions(
     domainDifficultyOverrides,
     difficultyPreference,
   );
+  // Under-difficulty is a SOFT gate, unlike every hard drop above: these are
+  // good, factually-correct, novel questions — only easier than the requested
+  // tier. Rather than discard them, mark them by object identity so they survive
+  // the hard-drop filter and get persisted, then route their rows to the
+  // caller-supplied reserve. The orchestrator taps that reserve only when the
+  // queue would otherwise fall below DAILY_QUEUE_SIZE, so difficulty integrity is
+  // preserved until the sole alternative is a short Daily Five (the Butkicker
+  // case: a tapped-out narrow KB whose only fresh questions read as too easy).
+  // With no reserve supplied (e.g. the +2 bonus path) this degrades to the old
+  // behaviour — the deflected questions are simply trimmed past `count` below.
+  const underDifficultyQuestions = new Set<LlmQuestion>();
   if (underDifficulty.toDrop.size > 0) {
-    console.warn('[daily/generate-questions] dropping under-difficulty questions', {
-      droppedCount: underDifficulty.toDrop.size,
-      droppedIndices: [...underDifficulty.toDrop].sort((a, b) => a - b),
+    for (const i of underDifficulty.toDrop) underDifficultyQuestions.add(generated[i]);
+    console.warn('[daily/generate-questions] deflecting under-difficulty questions to reserve', {
+      deflectedCount: underDifficulty.toDrop.size,
+      deflectedIndices: [...underDifficulty.toDrop].sort((a, b) => a - b),
       reasons: underDifficulty.reasons,
       originalCount: generated.length,
     });
@@ -1519,11 +1566,20 @@ export async function generateDailyQuestions(
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
-    ...underDifficulty.toDrop,
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));
     if (generated.length === 0) return [];
+  }
+
+  // Order in-tier questions first so they claim the `count` budget; under-
+  // difficulty survivors fall to the back and are only persisted (into the
+  // reserve) if budget remains after the in-tier ones.
+  if (underDifficultyQuestions.size > 0) {
+    generated = [
+      ...generated.filter((q) => !underDifficultyQuestions.has(q)),
+      ...generated.filter((q) => underDifficultyQuestions.has(q)),
+    ];
   }
 
   // Surface question-shape distribution issues so we can see whether the
@@ -1534,6 +1590,9 @@ export async function generateDailyQuestions(
 
   const expiresAt = getNextDailyResetBoundary();
   const persisted: GeneratedQuestionRow[] = [];
+  // Persisted rows for questions deflected by the soft under-difficulty gate —
+  // returned via options.underDifficultyReserve, never in the main array.
+  const underDifficultyPersisted: GeneratedQuestionRow[] = [];
   const seenFactKeysThisBatch = new Set<string>();
 
   // Precompute the "between us" aside once per question, in parallel, before the
@@ -1640,6 +1699,8 @@ export async function generateDailyQuestions(
         subjectEntity: question.subject_entity,
         subAngles: question.sub_angles,
         insideJoke: insideJokeByQuestion.get(question) ?? null,
+        // B-LLM-PROVIDER-AB-SWITCH B3: stamp the provider that generated this row.
+        generatedByProvider: provider,
         trustTier,
         askToAnswerVerified,
         acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
@@ -1647,7 +1708,11 @@ export async function generateDailyQuestions(
         usedInQueue: false,
       })
       .returning();
-    persisted.push(row);
+    if (underDifficultyQuestions.has(question)) {
+      underDifficultyPersisted.push(row);
+    } else {
+      persisted.push(row);
+    }
   }
 
   // Semantic-dedup backstop (B1 pool substrate). Best-effort and no-op without
@@ -1660,8 +1725,16 @@ export async function generateDailyQuestions(
   // (B-DEDUP-EMBED-RELIABILITY) — which had been blinding the answered-history
   // gate to those rows.
   await embedAndResolveDuplicatesBatch(
-    persisted.map((row) => ({ id: row.id, origin: 'machine' as const, questionText: row.questionText })),
+    [...persisted, ...underDifficultyPersisted].map((row) => ({
+      id: row.id,
+      origin: 'machine' as const,
+      questionText: row.questionText,
+    })),
   );
+
+  if (options.underDifficultyReserve && underDifficultyPersisted.length > 0) {
+    options.underDifficultyReserve.push(...underDifficultyPersisted);
+  }
 
   return persisted;
 }
@@ -1767,7 +1840,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // seed the domain palette from declared interests in SELECTION ORDER (strong-
   // vs light-signal weighting) so the first session reads as "drawn from the
   // areas you picked" rather than a random cross-section. See first-run-seeding.ts.
-  options: { firstRun?: boolean } = {},
+  // underDifficultyReserve: forwarded to generateDailyQuestions so the orchestrator
+  // can collect soft difficulty-floor deflections for last-resort backfill.
+  options: { firstRun?: boolean; underDifficultyReserve?: GeneratedQuestionRow[] } = {},
 ): Promise<GeneratedQuestionRow[]> {
   const [
     knowledgeBase,
@@ -1956,6 +2031,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   let llmGenerated: GeneratedQuestionRow[] = [];
   if (remainingCount > 0 && domainsForLlm.length > 0) {
+    // B-LLM-PROVIDER-AB-SWITCH B2: resolve the generation provider once per run
+    // (cached read; falls back to 'anthropic' on failure) and thread it through.
+    const genProvider = (await getProviderSettings()).gen;
     llmGenerated = await generateDailyQuestions(
       domainsForLlm,
       remainingCount,
@@ -1971,6 +2049,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       territoryByDomain,
       strengthByDomain,
       culturalAnchor,
+      {
+        underDifficultyReserve: options.underDifficultyReserve,
+        provider: genProvider,
+      },
     );
   }
 
@@ -2198,6 +2280,10 @@ async function pickBankPicksForDomains(
           acceptableVariants: source.acceptableVariants,
           sourceRefs: source.sourceRefs,
           perishable: source.perishable,
+          // B-LLM-PROVIDER-AB-SWITCH B3: carry generation provenance onto the
+          // serving copy (this is a duplicate of an already-generated bank row,
+          // not a fresh generation) so the copy isn't a provenance black hole.
+          generatedByProvider: source.generatedByProvider,
           expiresAt,
           usedInQueue: false,
         })

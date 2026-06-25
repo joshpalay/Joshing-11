@@ -610,6 +610,41 @@
       "when": 1783987200000,
       "tag": "0086_subject_entity",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1784073600000,
+      "tag": "0087_app_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1784160000000,
+      "tag": "0088_provider_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1784246400000,
+      "tag": "0089_domain_expansion_offer",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1784332800000,
+      "tag": "0090_llm_provider_change_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1784419200000,
+      "tag": "0091_llm_usage_event",
+      "breakpoints": true
     }
   ]
 }

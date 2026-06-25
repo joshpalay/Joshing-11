@@ -463,6 +463,81 @@ Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": ".
   return candidates.slice(0, 8);
 }
 
+export type AdjacentDomainSuggestion = { label: string; broadCategory: string | null };
+
+/**
+ * Suggest specific domains adjacent to one the player has MASTERED, for the
+ * post-daily-Five "you're crushing X — branch out?" expansion offer. Unlike
+ * expandBroadInterest (which drills a broad bucket DOWN into specifics), this moves
+ * LATERALLY: given a mastered specific domain it proposes its closest specific
+ * neighbours — sibling entries in the same franchise/series first ("Tears of the
+ * Kingdom" → "Breath of the Wild", "Ocarina of Time"), then the wider field. The
+ * broad-category catch-all ("Other video games") is added by the caller from the
+ * domain's broadCategory, so this returns only specific siblings. Haiku, low
+ * latency, fails open to [] so an outage simply means no offer (never an error).
+ */
+export async function suggestAdjacentDomains(
+  domain: string,
+  broadCategory: string | null,
+): Promise<AdjacentDomainSuggestion[]> {
+  const cleanDomain = domain.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanDomain) return [];
+
+  const client = getAnthropicClient();
+  if (!client) return [];
+
+  const broadHint = broadCategory ? `\nThe player's mastered domain sits in the broad category "${broadCategory}".` : '';
+  const systemPrompt = `A player has MASTERED a specific trivia domain and may want to branch into closely related ones. Suggest 4 hyper-specific domains adjacent to theirs.
+Rules:
+- Order by closeness: sibling entries in the SAME franchise / series / body of work first, then the nearest neighbours in the wider field.
+- Good for "Tears of the Kingdom - the Legend of Zelda": "Breath of the Wild", "Ocarina of Time", "Majora's Mask", "The Wind Waker".
+- Good for "The Beatles": "The Rolling Stones", "The Beach Boys", "Bob Dylan", "1960s British Invasion".
+- Every item must be hyper-specific — a work, series entry, person, era, or scene — never a broad bucket like "Video Games" or "Music".
+- Do NOT include the player's own domain. Do not repeat items.
+- broadCategory is a stable top-level bucket (Music, Film & Television, History, Science, Sports, Pop Culture, etc.). Never "Other" or "General".${broadHint}
+Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": "..." } ]${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    const response = await loggedMessagesCreate(client, 'interests-suggest-adjacent', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 300,
+      temperature: 0.4,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('mastered_domain', cleanDomain) }],
+    });
+
+    const parsed = parseJsonArray(extractTextContent(response.content));
+    if (!parsed) return [];
+
+    const ownKey = cleanDomain.toLowerCase();
+    const seen = new Set<string>([ownKey]);
+    const candidates: AdjacentDomainSuggestion[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const record = item as Record<string, unknown>;
+      const label = asTrimmedString(record.label ?? record.domain);
+      if (!label) continue;
+      // Lateral neighbours must be specific too — drop any bucket-level item.
+      if (isTooBroadInterest(label)) continue;
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const rawBroad = asTrimmedString(record.broadCategory ?? record.broad_category);
+      const normalized = rawBroad ? normalizeBroadCategory(rawBroad) : null;
+      candidates.push({
+        label: label.slice(0, 80),
+        broadCategory:
+          normalized && normalized !== 'General Knowledge' ? normalized.slice(0, 80) : null,
+      });
+    }
+
+    return candidates.slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
 export type InterestAnswerability = { answerable: boolean; reason: string | null };
 
 const UNANSWERABLE_FALLBACK_REASON =

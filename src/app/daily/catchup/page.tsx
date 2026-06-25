@@ -12,6 +12,7 @@ import { useCatchupFlow, type CatchupBatchRecord } from '@/components/play/useCa
 import { AuthorName } from '@/components/AuthorName';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
 
 export default function DailyCatchupPage() {
@@ -344,6 +345,10 @@ function CatchupResultDots({ records }: { records: CatchupBatchRecord[] }) {
 
 function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
   const [isExplainerOpen, setIsExplainerOpen] = useState(false);
+  // Parity with the daily-summary recap (round_recap surface): a card the viewer
+  // reports as inappropriate vanishes — the card going away is the feedback. An
+  // "incorrect" report leaves the card in place (the sheet acknowledges it itself).
+  const [isHidden, setIsHidden] = useState(false);
 
   const isCorrect = record.outcome === 'correct';
   const isRevealed = record.outcome === 'revealed';
@@ -362,38 +367,56 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
     creatorNote: record.authorNote,
   });
 
+  // Reported inappropriate → the card vanishes (the removal is the feedback,
+  // matching the daily-summary round_recap surface). Incorrect leaves it in place.
+  if (isHidden) return null;
+
   return (
     <article className="relative overflow-hidden rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
       <div className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: accentColor }} />
 
-      <div className="flex flex-wrap items-center gap-2 pl-1">
-        <span
-          className="rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
-          style={{
-            borderColor: isCorrect
-              ? 'color-mix(in srgb, var(--game-correct) 28%, var(--brand-border))'
-              : 'var(--brand-border)',
-            backgroundColor: isCorrect
-              ? 'color-mix(in srgb, var(--game-correct) 8%, var(--brand-card))'
-              : 'color-mix(in srgb, var(--brand-cream-page) 62%, var(--brand-card))',
-            color: isCorrect ? 'var(--game-correct)' : 'var(--brand-ink-700)',
-          }}
-        >
-          {statusLabel}
-        </span>
-        <p className="text-xs leading-5 text-[var(--brand-ink-400)]">
-          <span>{record.domainDisplayName}</span>
-          {record.authorName ? (
-            <>
-              <span aria-hidden="true"> · </span>
-              <span>by </span>
-              {/* Parity with the daily-five summary: human authors link to their
-                  profile; house/editorial render plain text + the Editorial badge. */}
-              <AuthorName name={record.authorName} authorId={record.authorId} />
-              {record.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
-            </>
-          ) : null}
-        </p>
+      <div className="flex items-start justify-between gap-3 pl-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span
+            className="rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
+            style={{
+              borderColor: isCorrect
+                ? 'color-mix(in srgb, var(--game-correct) 28%, var(--brand-border))'
+                : 'var(--brand-border)',
+              backgroundColor: isCorrect
+                ? 'color-mix(in srgb, var(--game-correct) 8%, var(--brand-card))'
+                : 'color-mix(in srgb, var(--brand-cream-page) 62%, var(--brand-card))',
+              color: isCorrect ? 'var(--game-correct)' : 'var(--brand-ink-700)',
+            }}
+          >
+            {statusLabel}
+          </span>
+          <p className="text-xs leading-5 text-[var(--brand-ink-400)]">
+            <span>{record.domainDisplayName}</span>
+            {record.authorName ? (
+              <>
+                <span aria-hidden="true"> · </span>
+                <span>by </span>
+                {/* Parity with the daily-five summary: human authors link to their
+                    profile; house/editorial render plain text + the Editorial badge. */}
+                <AuthorName name={record.authorName} authorId={record.authorId} />
+                {record.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+              </>
+            ) : null}
+          </p>
+        </div>
+        {/* ⋯ menu: "This is incorrect" / "This is inappropriate" → the shared
+            ReportReasonSheet. Hidden for items that arrived without a report
+            target (none of the three catch-up sources omit it today). */}
+        {record.reportTarget ? (
+          <AnsweredRowActions
+            target={record.reportTarget}
+            surface="round_recap"
+            onReportSubmitted={(category) => {
+              if (category === 'inappropriate') setIsHidden(true);
+            }}
+          />
+        ) : null}
       </div>
 
       <p className="mt-4 pl-1 text-[1.12rem] leading-7 font-medium tracking-[-0.01em] text-[var(--brand-ink)]">

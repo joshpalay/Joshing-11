@@ -173,6 +173,53 @@ describe('fillDailyQueueForUser — minimum-size floor', () => {
     ]);
   });
 
+  it('backfills from the under-difficulty reserve to reach the full five when in-tier yield is short', async () => {
+    // Generation yields only 2 in-tier questions and never recovers more, but
+    // deflects 3 good-but-too-easy questions into the reserve. The orchestrator
+    // should top up from that reserve to a full five rather than serving the floor.
+    let reserveSeeded = false;
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockImplementation(
+      async (_userId: string, _count: number, options?: { underDifficultyReserve?: unknown[] }) => {
+        if (!reserveSeeded && options?.underDifficultyReserve) {
+          options.underDifficultyReserve.push(genq('easy1'), genq('easy2', 'Blues'), genq('easy3', 'Soul'));
+          reserveSeeded = true;
+          return [genq('q1'), genq('q2', 'Funk')];
+        }
+        // Later top-up rounds recover nothing new in-tier.
+        return [genq('q1')];
+      },
+    );
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    const bots = persistedBotSlots();
+    expect(bots).toHaveLength(DAILY_QUEUE_SIZE);
+    // In-tier picks lead; under-difficulty reserve picks fill the tail in order.
+    expect(bots.map((slot) => slot.generated_question_id)).toEqual([
+      'q1',
+      'q2',
+      'easy1',
+      'easy2',
+      'easy3',
+    ]);
+  });
+
+  it('does not draw on the under-difficulty reserve when the in-tier yield already fills the five', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockImplementation(
+      async (_userId: string, _count: number, options?: { underDifficultyReserve?: unknown[] }) => {
+        // Reserve is seeded but the in-tier yield is already a full five.
+        options?.underDifficultyReserve?.push(genq('easy1'));
+        return [genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5')];
+      },
+    );
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    const bots = persistedBotSlots();
+    expect(bots).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(bots.map((slot) => slot.generated_question_id)).not.toContain('easy1');
+  });
+
   it('loops top-up rounds until it reaches the full five', async () => {
     // Two on the first pass, then one and two more across two top-up rounds.
     mocks.generateDailyQuestionsFromKnowledgeBase

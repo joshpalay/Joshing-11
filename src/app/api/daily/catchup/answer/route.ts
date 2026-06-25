@@ -312,6 +312,8 @@ async function handleDailyCatchupAnswer({
       eventQuestionId: canonicalQuestionId,
       basePoints: catchupItem.basePoints,
       weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
+      // B-LLM-PROVIDER-AB-SWITCH B3: grader provenance (grade is scored here).
+      llmProvider: grade.gradedProvider,
     });
   } catch (error) {
     // Cross-surface dedupe: the unique key on (source_type, question_id,
@@ -493,6 +495,8 @@ async function handleFeedCatchupAnswer({
       eventQuestionId: feedRow.question.id,
       basePoints: catchupItem.basePoints,
       weight: catchupItem.basePoints > 0 ? pointsAwarded / catchupItem.basePoints : 0,
+      // B-LLM-PROVIDER-AB-SWITCH B3: grader provenance (grade is scored here).
+      llmProvider: grade.gradedProvider,
     });
   } catch (error) {
     // See note in handleDailyCatchupAnswer: tolerate cross-surface dedupe

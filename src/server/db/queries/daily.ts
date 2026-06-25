@@ -124,6 +124,17 @@ export type CatchupQueueItem = {
    * with no relational copy. Set explicitly (not inferred from the name string).
    */
   authorIsHouse: boolean;
+  /**
+   * The target a content report (incorrect / inappropriate) points at, mirroring
+   * daily-summary and archive. Exactly one id is set — curated/bank and feed
+   * questions carry `questionId` (a `questions.id`), LLM-origin daily questions
+   * carry `generatedQuestionId` (a `generatedQuestions.id`). The flat `questionId`
+   * field above can't disambiguate the two FK targets, so the report path reads
+   * this instead of guessing.
+   */
+  reportTarget:
+    | { questionId: string; generatedQuestionId?: undefined }
+    | { generatedQuestionId: string; questionId?: undefined };
 };
 
 export type CatchupQuestion = CatchupQueueItem;
@@ -637,6 +648,7 @@ async function getDailyCatchupItems(
           authorName: null, // daily-generated: LLM origin, no human author
           authorId: null,
           authorIsHouse: false,
+          reportTarget: { generatedQuestionId: slot.generated_question_id },
         } satisfies CatchupQuestion;
       }
 
@@ -678,6 +690,7 @@ async function getDailyCatchupItems(
         questionType: question.questionType,
         authorId: question.creatorId ?? null,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
+        reportTarget: { questionId: slot.question_id },
       } satisfies CatchupQuestion;
     })
     .filter((question): question is CatchupQuestion => Boolean(question));
@@ -761,6 +774,7 @@ async function getFeedCatchupItems(
         questionType: question.questionType,
         authorId: question.creatorId ?? null,
         ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
+        reportTarget: { questionId: question.id },
       } satisfies CatchupQuestion;
     })
     .filter((item): item is CatchupQuestion => Boolean(item));
@@ -1571,6 +1585,9 @@ export type BankSource = {
   acceptableVariants: string[];
   sourceRefs: string[];
   perishable: boolean;
+  // B-LLM-PROVIDER-AB-SWITCH B3: carried so the serving copy keeps the
+  // provider that originally generated this bank row.
+  generatedByProvider: string | null;
 };
 
 export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
@@ -1754,6 +1771,7 @@ export async function pickBankSource(
       acceptableVariants: Array.isArray(row.acceptableVariants) ? row.acceptableVariants : [],
       sourceRefs: Array.isArray(row.sourceRefs) ? row.sourceRefs : [],
       perishable: row.perishable ?? false,
+      generatedByProvider: row.generatedByProvider ?? null,
     };
   }
   return null;

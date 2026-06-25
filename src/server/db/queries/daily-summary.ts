@@ -5,11 +5,14 @@ import { titleCaseDomain } from '@/lib/knowledge/domain-casing';
 import {
   dailyQueues,
   db,
+  declaredInterests,
   generatedQuestions,
   masteryEvents,
   playerMastery,
   users,
 } from '@/server/db';
+import { getPendingExpansionDomains } from '@/server/adaptive-difficulty';
+import { suggestAdjacentDomains } from '@/server/llm/interests';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
@@ -39,6 +42,21 @@ export type DailySummaryView = {
   reminderPromptState: 'show' | 'hidden';
   /** Contextual "Refine Your Game" offers derived from this daily (empty → reassurance state). */
   refine: RefineSectionView;
+  /**
+   * Post-daily-Five "you're crushing X — branch out?" offer. Set when the player
+   * topped a domain's difficulty ladder yet still out-ran its content (the
+   * supply-ceiling moment), with LLM-suggested adjacent domains to add. Null when
+   * no offer is pending. Surfaces until accepted or dismissed.
+   */
+  expansionOffer: ExpansionOffer | null;
+};
+
+export type ExpansionOffer = {
+  /** Canonical subcategory the player mastered (the offer's anchor). */
+  sourceDomain: string;
+  sourceDisplayName: string;
+  /** Specific adjacent domains the player can add to their rotation. */
+  candidates: { label: string; broadCategory: string | null }[];
 };
 
 export type RecentFriendBridge = {
@@ -306,6 +324,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const refine: RefineSectionView = queue
     ? await buildRefineSection(userId, queue.id, slots)
     : { queueId: null, items: [] };
+  const expansionOffer = await buildExpansionOffer(userId);
 
   return {
     date: dateString,
@@ -332,6 +351,57 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     isFirstCompletedRound,
     reminderPromptState,
     refine,
+    expansionOffer,
+  };
+}
+
+/**
+ * Build the post-daily-Five expansion offer, or null when none is pending. Fires
+ * for the most recently flagged domain (recalibrateDomainDifficultyToSupply set
+ * expansionEligibleSince when the player topped its ladder yet still out-ran its
+ * content). Asks Haiku for adjacent specific domains, drops any the player already
+ * follows, and only returns an offer when at least one fresh candidate survives.
+ * Fails soft to null — an LLM outage simply means no card this round.
+ */
+async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | null> {
+  const pending = await getPendingExpansionDomains(userId);
+  if (pending.length === 0) return null;
+
+  const sourceDomain = pending[0].canonicalSubcategory;
+  const [mastery] = await db
+    .select({ broadCategory: playerMastery.broadCategory })
+    .from(playerMastery)
+    .where(and(
+      eq(playerMastery.userId, userId),
+      eq(playerMastery.canonicalSubcategory, sourceDomain),
+    ))
+    .limit(1);
+
+  const suggestions = await suggestAdjacentDomains(sourceDomain, mastery?.broadCategory ?? null);
+  if (suggestions.length === 0) return null;
+
+  // Drop any sibling the player already follows so the offer is always net-new.
+  const activeInterests = await db
+    .select({ domain: declaredInterests.domain })
+    .from(declaredInterests)
+    .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
+  const have = new Set(activeInterests.map((row) => row.domain.trim().toLowerCase()));
+  const candidates = suggestions.filter((s) => !have.has(s.label.trim().toLowerCase()));
+  if (candidates.length === 0) return null;
+
+  // Audit the expansion-offer funnel (eligible → shown → resolved). Fires each
+  // time the card is actually surfaced on a summary (until the player resolves it).
+  console.info('[expansion-offer] shown', {
+    phase: 'shown',
+    userId,
+    sourceDomain,
+    candidateCount: candidates.length,
+  });
+
+  return {
+    sourceDomain,
+    sourceDisplayName: displayNameForDomain(sourceDomain),
+    candidates,
   };
 }
 

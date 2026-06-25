@@ -63,13 +63,6 @@ export function RefineYourGame({ refine }: { refine: RefineSectionView }) {
           ))}
         </div>
       )}
-
-      <Link
-        href="/daily/setup"
-        className="text-muted-foreground mt-4 inline-block text-sm underline-offset-4 hover:underline"
-      >
-        Manage your territories in Settings →
-      </Link>
     </section>
   );
 }
