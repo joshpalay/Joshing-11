@@ -64,7 +64,7 @@ literal. Quoted verbatim from the `line:` arrays.
 | `follow` | `{friend}` + `' started following you'` | — | Someone followed you | No | (untagged) | friend | Medium |
 | `follow_approved` | `{friend}` + `' accepted your follow'` | — | Your follow request was approved | No | (untagged) | friend | Medium |
 | `invited_friend_played_first_five` | `{friend}` + `' played their first five questions'` | — | An invitee hit the 5-play milestone | No | (untagged) | friend | Low |
-| `grade_dispute_filed` | `{friend}` + `' asked for a re-look at your question'` | `{questionText}` | An answerer disputed your grade | No | (untagged) | friend, questionText | Low. *Not home-eligible.* |
+| `grade_dispute_filed` | `{friend}` + `' asked for a re-look at your question'` | `{questionText}` | An answerer disputed your grade | No | (untagged) | friend, questionText | **RETIRED 2026-06-25** — no longer written (no actionable surface; re-grade lives in the review queue). `filterUtilityActivities` drops historical rows. |
 | `default` (unknown type) | `'Something happened on Joshing'` | — | Fallback for an unmapped type | No | friend-less | — | Should never fire |
 
 > **Home-eligibility filter:** only `HOME_TOP3_ELIGIBLE_TYPES`

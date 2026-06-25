@@ -39,10 +39,13 @@ export type ActivityItemType =
   | 'friend_answered_your_question'
   | 'authored_question_shared'
   | 'declared_promoted'
-  // §8.22 grade-dispute path: the question's author is notified when an
-  // answerer disputes their wrong-answer grade. The dispute is the
-  // answerer's explicit ask for a second look, which is the consent gate
-  // that exposes their submitted text to the author.
+  // §8.22 grade-dispute path. RETIRED 2026-06-25 — no longer written. This
+  // card ("{friend} asked for a re-look at your question") notified the
+  // question's author when an answerer disputed their grade, but it carried no
+  // action: the re-grade happens in the human-review queue, not on the author's
+  // stream. The write was dropped from feed/recheck + milestone/recheck (daily/
+  // recheck never wrote it), and filterUtilityActivities now drops historical
+  // rows. Retained in the union so those rows still type-check and hydrate.
   | 'grade_dispute_filed'
   // D-2 niche-match discovery (slow-burn organic discovery between strangers
   // through a shared authored question). Two asymmetric writes from

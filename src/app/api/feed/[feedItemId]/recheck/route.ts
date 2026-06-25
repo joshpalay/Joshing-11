@@ -2,7 +2,6 @@ import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { writeActivity } from '@/server/activity/write-activity';
 import { db, feedItems, gradeDisputes, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { getBasePoints } from '@/server/mastery/scoring';
@@ -78,7 +77,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       pointsAwarded = getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, 'first_correct');
     }
 
-    const disputeId = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       if (accepted) {
         await tx
           .update(feedItems)
@@ -86,7 +85,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           .where(eq(feedItems.id, feedItemId));
       }
 
-      const [inserted] = await tx
+      await tx
         .insert(gradeDisputes)
         .values({
           answerId,
@@ -101,24 +100,16 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           acceptedAlternative: review.acceptedAlternative,
           status: disputeStatus,
           reviewedAt,
-        })
-        .returning({ id: gradeDisputes.id });
-      return inserted?.id ?? null;
+        });
     });
 
-    // §8.22 dispute path: notify the question's author so they can review.
-    // The dispute is the answerer's explicit ask for a second look, which
-    // is the consent gate that lets the author see the literal submitted
-    // text alongside the canonical answer.
-    if (disputeId && question.creatorId && question.creatorId !== session.userId) {
-      await writeActivity({
-        userId: question.creatorId,
-        type: 'grade_dispute_filed',
-        actorUserId: session.userId,
-        referenceId: disputeId,
-        referenceType: 'grade_dispute',
-      });
-    }
+    // §8.22 dispute path: the dispute row routes to the human-review queue
+    // (status 'pending'/'needs_human') on its own. We deliberately do NOT write
+    // a `grade_dispute_filed` activity to the question's author — that card
+    // carried no action the author could take (the re-grade happens in the
+    // review queue, not on the author's stream), so it was retired
+    // (2026-06-25). The daily/recheck path already files disputes without
+    // notifying the author; this brings feed/recheck in line.
 
     if (accepted) {
       await writeMasteryEvent({
