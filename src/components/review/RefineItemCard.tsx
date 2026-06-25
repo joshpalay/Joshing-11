@@ -14,7 +14,7 @@ const actionStyle: CSSProperties = {
 };
 
 const ACTION_CLASS =
-  'inline-flex min-h-11 items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60 sm:self-auto';
+  'inline-flex min-h-11 cursor-pointer items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto';
 
 const ROW_CLASS = 'flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4';
 
