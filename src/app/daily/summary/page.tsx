@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Heart, MoreHorizontal, Share2, X } from 'lucide-react'
+import { Flag, Heart, MoreHorizontal, Share2, X } from 'lucide-react'
 import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
@@ -538,6 +538,8 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
   })
   // B-Report-2: which "why" sheet is open, if any. Null = no sheet.
   const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null)
+  // Optimistic confirmation that the user flagged this recap as incorrect.
+  const [reportedIncorrect, setReportedIncorrect] = useState(false)
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateFeedback = useCallback(
@@ -648,6 +650,19 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             >
               {statusLabel}
             </span>
+            {reportedIncorrect ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--game-wrong) 30%, var(--brand-border))',
+                  backgroundColor: 'color-mix(in srgb, var(--game-wrong) 8%, var(--brand-card))',
+                  color: 'color-mix(in srgb, var(--game-wrong) 80%, var(--brand-ink))',
+                }}
+              >
+                <Flag className="size-3" aria-hidden="true" />
+                Marked incorrect
+              </span>
+            ) : null}
             <p className="text-xs leading-5 text-muted-foreground">
               <span>{question.domainDisplayName}</span>
               <span aria-hidden="true"> · </span>
@@ -818,6 +833,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           onClose={() => setReportCategory(null)}
           onSubmitted={(category) => {
             if (category === 'inappropriate') onHide()
+            if (category === 'incorrect') setReportedIncorrect(true)
           }}
         />
       ) : null}
@@ -897,14 +913,14 @@ function QuestionCardOverflowMenu({
             <button
               type="button"
               onClick={onReportIncorrect}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+              className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
             >
               This is incorrect
             </button>
             <button
               type="button"
               onClick={onReportInappropriate}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+              className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
             >
               This is inappropriate
             </button>
