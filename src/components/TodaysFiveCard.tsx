@@ -255,12 +255,12 @@ export default function TodaysFiveCard({
   const subtext = answered > 0 ? `${answered} of 5 answered` : 'Ready when you are'
   // Editorial serif headline (display/Body-Serif), contextual to round state.
   // Completed splits on whether there are misses to revisit: Branch A turns the
-  // "Today, done." beat into the forward "learn from your misses" nudge that the
-  // Play Missed Questions sage button answers; Branch B keeps "Today, done."
+  // forward beat into the "learn from your misses" nudge that the Play Missed
+  // Questions sage button answers; Branch B points forward to the next round.
   const headline = isComplete
     ? missedCount > 0
       ? 'Contain more multitudes'
-      : 'Today, done.'
+      : 'More questions, on the way'
     : hasStartedRound
       ? 'Pick up where you left off'
       : 'Ready when you are!'
@@ -343,8 +343,8 @@ export default function TodaysFiveCard({
       </div>
 
       {/* Active-state progress line. The completed state replaces this with the
-          forward beat below — its backward-looking "Today done" is now carried
-          by the reduced "Today, done." headline, so the stack stays
+          forward beat below — the forward-looking "More questions, on the way"
+          headline carries the day-done moment, so the stack stays
           forward-pointing. */}
       {!isComplete && answered > 0 ? (
         <p className="mt-2.5 text-xs leading-5 text-[var(--brand-ink-400)]">
@@ -385,6 +385,12 @@ export default function TodaysFiveCard({
               >
                 Send a friend a question →
               </Link>
+              {/* Outward invite beat — quiet support copy under the primary
+                  action, framing the send as a way into friends' questions and
+                  knowledge while the next round is crafted. */}
+              <p className="text-xs leading-5 text-[var(--brand-ink-400)]">
+                Invite friends to see their questions and knowledge.
+              </p>
               <Link
                 href="/questions?create=1&intent=bank"
                 className="block text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
