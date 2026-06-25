@@ -28,12 +28,18 @@ export function FriendRequestActions({
         }
       )
 
-      if (!response.ok) {
-        setError('Could not update this note.')
+      // A 404 means this request is no longer pending — it was already accepted
+      // or declined elsewhere (the "Wants to connect" card, the /friends hub, or
+      // another tab) and this Recent Activity row is just a stale duplicate. The
+      // end state the tap was reaching for already holds, so this is NOT an
+      // error: refresh so the now-settled card clears, rather than stranding a
+      // dead button behind a confusing message.
+      if (response.ok || response.status === 404) {
+        router.refresh()
         return
       }
 
-      router.refresh()
+      setError('Could not update this request.')
     } finally {
       setPendingAction(null)
     }

@@ -570,7 +570,7 @@ export default function WelcomeTourScreen({
           {/* invisible scroll driver (only meaningful once started). The tall
               spacer sets the scroll distance per step — bigger = less twitchy. */}
           <div className="wts-driver" ref={driverRef} onScroll={onDrive}>
-            <div style={{ height: `${(beats.length + 1) * 160}%` }} />
+            <div style={{ height: `${(beats.length + 1) * 280}%` }} />
           </div>
         </div>
 

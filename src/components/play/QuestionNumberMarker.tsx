@@ -41,13 +41,18 @@ const BONUS_FONT_SIZE = 42;
 // Optical nudge: pad the numeral left ~12% of the font size so the trailing
 // period doesn't visually shove the numeral off-center.
 const CORE_LEFT_PAD = Math.round(CORE_FONT_SIZE * 0.12);
-// Vertical optical nudge. Cormorant Garamond reserves generous space above its
-// glyphs (for accents), and the trailing period adds ink at the baseline, so
-// with line-height 1 the numeral is centered by its line box but reads LOW.
-// Lift the glyph ~8% of the em to optically center the visible ink. In em so it
-// scales with the font size; applied to the inner glyph span only (the box and
-// its accessible label are unaffected).
-const NUMERAL_NUDGE_Y = '-0.08em';
+// Vertical optical nudge. Cormorant Garamond carries an unusually tall ascent
+// metric (~1.49em, reserving room for accents) and a deep descent (~0.43em), so
+// with line-height 1 the baseline lands near the BOTTOM of the line box
+// (half-leading ≈ -0.46em ⇒ baseline ≈ 1.03em from the top). A lining figure
+// sits between baseline and cap-height (~0.65em), so its visible ink centers at
+// ~0.70em — about 0.2em below the line-box center — and the trailing period adds
+// a touch more ink at the baseline. The numeral therefore reads LOW. Lift the
+// glyph ~16% of the em to bring its optical center back to the box center. (The
+// earlier -0.08em corrected under half of this, which is why it still read low.)
+// In em so it scales with the font size; applied to the inner glyph span only
+// (the box and its accessible label are unaffected).
+const NUMERAL_NUDGE_Y = '-0.16em';
 
 const boxBaseStyle: CSSProperties = {
   display: 'inline-flex',

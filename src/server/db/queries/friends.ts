@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import {
@@ -473,6 +473,20 @@ export function selectHomeFriendRequests(
 export async function getHomeFriendRequests(userId: string): Promise<HomeFriendRequests> {
   const hub = await getFriendsHub(userId)
   return selectHomeFriendRequests(hub.incomingRequests)
+}
+
+/**
+ * Count of pending inbound follow requests awaiting the user's approval — the
+ * same set the home "Wants to connect" section and /friends surface, but as a
+ * bare count. This is what the nav bell badge shows: only friend requests, not
+ * the broader activity stream. Backed by the (followeeId, state) index.
+ */
+export async function getIncomingFollowRequestCount(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(follows)
+    .where(and(eq(follows.followeeId, userId), eq(follows.state, 'pending')))
+  return row?.value ?? 0
 }
 
 /**
