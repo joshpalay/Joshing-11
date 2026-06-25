@@ -16,6 +16,8 @@
 
 import OpenAI from 'openai';
 
+import { recordLlmUsage } from '@/server/db/queries/llm-provider-experiment';
+
 // The single source of truth for which provider a surface routes to. Anthropic
 // is always the default; OpenAI is the opt-in test arm.
 export type LlmProvider = 'anthropic' | 'openai';
@@ -138,6 +140,17 @@ export async function openaiCompleteJsonText(opts: {
       duration_ms: Date.now() - startedAt,
       input_tokens: usage?.prompt_tokens ?? 0,
       output_tokens: usage?.completion_tokens ?? 0,
+    });
+    // B-LLM-PROVIDER-AB-METRICS Part 2: persist usage for the cost rollup.
+    // Fire-and-forget — recordLlmUsage swallows its own errors. (OpenAI's
+    // chat-completions usage has no separate cache buckets on this path.)
+    void recordLlmUsage({
+      scope: opts.scope,
+      provider: 'openai',
+      model: opts.model,
+      inputTokens: usage?.prompt_tokens ?? 0,
+      outputTokens: usage?.completion_tokens ?? 0,
+      durationMs: Date.now() - startedAt,
     });
     return response.choices[0]?.message?.content ?? '';
   } catch (error) {

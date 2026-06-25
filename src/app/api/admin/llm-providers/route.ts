@@ -12,7 +12,8 @@ import { z } from 'zod';
 
 import { isAdminUser } from '@/server/auth/admin';
 import { getSession } from '@/server/auth/session';
-import { getProviderSettings, updateProviderSettings } from '@/server/llm/settings';
+import { getProviderSettings, updateProviderSettings, type ProviderSurface } from '@/server/llm/settings';
+import { writeProviderChanges, type ProviderChange } from '@/server/db/queries/llm-provider-experiment';
 import type { AppSettingsUpdate } from '@/server/db/queries/app-settings';
 
 const providerEnum = z.enum(['anthropic', 'openai']);
@@ -55,6 +56,21 @@ export async function PATCH(request: Request) {
   if (parsed.data.suggest) update.suggestProvider = parsed.data.suggest;
   if (parsed.data.grade) update.gradeProvider = parsed.data.grade;
 
+  // B-LLM-PROVIDER-AB-METRICS Part 3: read the pre-write state so we can log
+  // exactly which surfaces flipped (the experiment's comparison windows depend on
+  // knowing when each surface changed). getProviderSettings() reflects the value
+  // the panel showed; reading it before the write captures the "from" side.
+  const before = await getProviderSettings();
   const providers = await updateProviderSettings(update);
+
+  const surfaces: ProviderSurface[] = ['gen', 'categorize', 'suggest', 'grade'];
+  const changes: ProviderChange[] = surfaces
+    .filter((surface) => providers[surface] !== before[surface])
+    .map((surface) => ({ surface, from: before[surface], to: providers[surface] }));
+  // Awaited (not fire-and-forget): the audit row matters more than the few ms on
+  // this owner-only, low-frequency action, and writeProviderChanges swallows its
+  // own errors so it can never fail the request.
+  await writeProviderChanges(changes, session.userId);
+
   return NextResponse.json({ providers });
 }

@@ -23,6 +23,7 @@ import {
   OPENAI_GRADING_MODEL,
   openaiCompleteJsonText,
 } from '@/server/llm/provider';
+import { recordLlmUsage } from '@/server/db/queries/llm-provider-experiment';
 import { textContainsAnswer } from '@/server/questions/self-answering';
 
 export type { LlmProvider };
@@ -265,6 +266,19 @@ export async function loggedMessagesCreate(
       output_tokens: usage?.output_tokens ?? 0,
       cache_read_tokens: usage?.cache_read_input_tokens ?? 0,
       cache_create_tokens: usage?.cache_creation_input_tokens ?? 0,
+    });
+    // B-LLM-PROVIDER-AB-METRICS Part 2: persist the same usage to a queryable
+    // table for the cost rollup. Fire-and-forget — recordLlmUsage swallows its
+    // own errors, so this can never turn a successful completion into a failure.
+    void recordLlmUsage({
+      scope,
+      provider: 'anthropic',
+      model: params.model,
+      inputTokens: usage?.input_tokens ?? 0,
+      outputTokens: usage?.output_tokens ?? 0,
+      cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
+      cacheCreateTokens: usage?.cache_creation_input_tokens ?? 0,
+      durationMs: Date.now() - startedAt,
     });
     return response;
   } catch (error) {
