@@ -18,6 +18,7 @@ import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
+import { getProviderSettings } from '@/server/llm/settings';
 import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
@@ -109,7 +110,7 @@ async function resolveCanonicalAnswer(question: typeof generatedQuestions.$infer
   const currentAnswer = normalizeCanonicalAnswerLabel(question.answer);
   if (!isGenericCanonicalAnswer(currentAnswer)) return currentAnswer;
 
-  const suggestion = await suggestAnswer(question.questionText).catch((error) => {
+  const suggestion = await suggestAnswer(question.questionText, (await getProviderSettings()).suggest).catch((error) => {
     console.warn('[daily/answer] failed to repair generic canonical answer', {
       generatedQuestionId: question.id,
       error: error instanceof Error ? error.message : String(error),
@@ -327,7 +328,7 @@ export async function POST(request: NextRequest) {
     // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
     // failure — so it's constructed as a scored outcome and never held for retry.
     const grade: GradeOutcome = parsed.gaveUp
-      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' }
+      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact', gradedProvider: null }
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
@@ -499,6 +500,9 @@ export async function POST(request: NextRequest) {
         eventQuestionId: canonicalQuestionId,
         basePoints,
         weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
+        // B-LLM-PROVIDER-AB-SWITCH B3: stamp the grader provider (null for the
+        // exact-match fast-path and the give-up wrong).
+        llmProvider: grade.status === 'scored' ? grade.gradedProvider : null,
       },
       adaptiveDifficultyDomain: question.canonicalSubcategory,
       // Give-ups are deliberate wrongs: no author credit, no friend fan-out.

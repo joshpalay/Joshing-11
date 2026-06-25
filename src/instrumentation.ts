@@ -1580,6 +1580,49 @@ export async function register() {
       // These tables may not exist yet on a fresh database — migrate() creates
       // them (and the same indexes) before/at this migration.
     }
+
+    // Migration 0087 (B-LLM-PROVIDER-AB-SWITCH B2) creates the AppSettings
+    // single-row global settings table for the provider A/B switch. A
+    // preview/production database that records the migration without the table
+    // present would 42P01 when getProviderSettings() reads it. Create it
+    // idempotently (with RLS + the seed row) so the read always finds a row.
+    // Precedent: 0073 (ContentReport). Self-contained — depends on no other table.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AppSettings" (
+          "id" text PRIMARY KEY DEFAULT 'singleton' NOT NULL,
+          "gen_provider" text NOT NULL DEFAULT 'anthropic',
+          "categorize_provider" text NOT NULL DEFAULT 'anthropic',
+          "suggest_provider" text NOT NULL DEFAULT 'anthropic',
+          "grade_provider" text NOT NULL DEFAULT 'anthropic',
+          "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "AppSettings_singleton" CHECK (id = 'singleton'),
+          CONSTRAINT "AppSettings_gen_provider_valid" CHECK (gen_provider IN ('anthropic', 'openai')),
+          CONSTRAINT "AppSettings_categorize_provider_valid" CHECK (categorize_provider IN ('anthropic', 'openai')),
+          CONSTRAINT "AppSettings_suggest_provider_valid" CHECK (suggest_provider IN ('anthropic', 'openai')),
+          CONSTRAINT "AppSettings_grade_provider_valid" CHECK (grade_provider IN ('anthropic', 'openai'))
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "AppSettings" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`INSERT INTO "AppSettings" ("id") VALUES ('singleton') ON CONFLICT ("id") DO NOTHING`);
+    } catch {
+      // Non-fatal — migrate() creates the table from 0087 immediately after.
+    }
+
+    // Migration 0088 (B-LLM-PROVIDER-AB-SWITCH B3) adds provider-provenance
+    // columns to three existing tables. A preview/production database that
+    // records the migration without the columns present would 42703 when a
+    // stamped write references them. Add them idempotently (additive, nullable,
+    // no default — precedent: 0085/0086). Each ADD COLUMN IF NOT EXISTS no-ops
+    // when the column already exists.
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "generated_by_provider" text`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "categorize_provider" text`);
+      await db.execute(sql`ALTER TABLE "MASTERY_EVENTS" ADD COLUMN IF NOT EXISTS "llm_provider" text`);
+    } catch {
+      // These tables may not exist yet on a fresh database — migrate() creates
+      // them (with these columns) before/at this migration.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

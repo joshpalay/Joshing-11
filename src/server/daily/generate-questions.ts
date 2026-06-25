@@ -5,6 +5,7 @@ import {
   HAIKU_MODEL,
   INSTRUCTION_USER_INPUT_GUIDANCE,
   INSTRUCTION_SCOPING_QUALIFIER,
+  type LlmProvider,
   extractTextContent,
   generateInsideJoke,
   getAnthropicClient,
@@ -12,6 +13,8 @@ import {
   parseJsonObject,
   wrapUserInput,
 } from '@/lib/llm';
+import { OPENAI_FLAGSHIP_MODEL, openaiCompleteJsonText } from '@/server/llm/provider';
+import { getProviderSettings } from '@/server/llm/settings';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
@@ -1225,7 +1228,43 @@ async function callLlmOnce(
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
+  provider: LlmProvider = 'anthropic',
 ): Promise<LlmQuestion[]> {
+  const userPrompt = buildUserPrompt(
+    domains,
+    count,
+    previousQuestionTexts,
+    previousFactKeys,
+    domainSkips,
+    difficultyPreference,
+    domainDifficultyOverrides,
+    adaptiveLevel,
+    subAnglesByDomain,
+    domainTerritoryTypes,
+    domainStrengths,
+    culturalAnchor,
+  );
+
+  // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
+  // request envelope changes. Returns the same text the Anthropic branch does,
+  // so the parseQuestions validator below is shared, unchanged. The Haiku gates
+  // (dedupe / quality / factual) stay on Anthropic on purpose — this provider
+  // toggle routes the question-generation call only.
+  if (provider === 'openai') {
+    const text = await openaiCompleteJsonText({
+      scope: 'generate-questions',
+      systemText: SYSTEM_PROMPT,
+      userText: userPrompt,
+      model: OPENAI_FLAGSHIP_MODEL,
+      maxTokens: 2000,
+      temperature: 0.8,
+      timeoutMs: GENERATION_TIMEOUT_MS,
+    });
+    if (text === null) return [];
+    return parseQuestions(text);
+  }
+
+  // Anthropic branch — the existing code path, unchanged.
   const client = getAnthropicClient();
   if (!client) return [];
 
@@ -1242,25 +1281,7 @@ async function callLlmOnce(
     max_tokens: 2000,
     temperature: 0.8,
     system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-    messages: [
-      {
-        role: 'user',
-        content: buildUserPrompt(
-          domains,
-          count,
-          previousQuestionTexts,
-          previousFactKeys,
-          domainSkips,
-          difficultyPreference,
-          domainDifficultyOverrides,
-          adaptiveLevel,
-          subAnglesByDomain,
-          domainTerritoryTypes,
-          domainStrengths,
-          culturalAnchor,
-        ),
-      },
-    ],
+    messages: [{ role: 'user', content: userPrompt }],
   }, { timeoutMs: GENERATION_TIMEOUT_MS });
 
   const text = extractTextContent(response.content);
@@ -1288,9 +1309,14 @@ export async function generateDailyQuestions(
   // orchestrator can draw on them as a last resort rather than serving a short
   // queue (see the under-difficulty handling below and queue-orchestrator's
   // backfill chain).
-  options: { underDifficultyReserve?: GeneratedQuestionRow[] } = {},
+  options: { underDifficultyReserve?: GeneratedQuestionRow[]; provider?: LlmProvider } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
+
+  // Provider for the generation call. Read once per run and threaded through
+  // every chunk — never re-resolved per question. Defaults to Anthropic; B2
+  // makes the caller pass the global setting instead of the literal below.
+  const provider: LlmProvider = options.provider ?? 'anthropic';
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -1325,6 +1351,7 @@ export async function generateDailyQuestions(
         domainTerritoryTypes,
         domainStrengths,
         culturalAnchor,
+        provider,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -1343,6 +1370,7 @@ export async function generateDailyQuestions(
         domainTerritoryTypes,
         domainStrengths,
         culturalAnchor,
+        provider,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1671,6 +1699,8 @@ export async function generateDailyQuestions(
         subjectEntity: question.subject_entity,
         subAngles: question.sub_angles,
         insideJoke: insideJokeByQuestion.get(question) ?? null,
+        // B-LLM-PROVIDER-AB-SWITCH B3: stamp the provider that generated this row.
+        generatedByProvider: provider,
         trustTier,
         askToAnswerVerified,
         acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
@@ -2001,6 +2031,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   let llmGenerated: GeneratedQuestionRow[] = [];
   if (remainingCount > 0 && domainsForLlm.length > 0) {
+    // B-LLM-PROVIDER-AB-SWITCH B2: resolve the generation provider once per run
+    // (cached read; falls back to 'anthropic' on failure) and thread it through.
+    const genProvider = (await getProviderSettings()).gen;
     llmGenerated = await generateDailyQuestions(
       domainsForLlm,
       remainingCount,
@@ -2016,7 +2049,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       territoryByDomain,
       strengthByDomain,
       culturalAnchor,
-      { underDifficultyReserve: options.underDifficultyReserve },
+      {
+        underDifficultyReserve: options.underDifficultyReserve,
+        provider: genProvider,
+      },
     );
   }
 
@@ -2244,6 +2280,10 @@ async function pickBankPicksForDomains(
           acceptableVariants: source.acceptableVariants,
           sourceRefs: source.sourceRefs,
           perishable: source.perishable,
+          // B-LLM-PROVIDER-AB-SWITCH B3: carry generation provenance onto the
+          // serving copy (this is a duplicate of an already-generated bank row,
+          // not a fresh generation) so the copy isn't a provenance black hole.
+          generatedByProvider: source.generatedByProvider,
           expiresAt,
           usedInQueue: false,
         })
