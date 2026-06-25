@@ -20,7 +20,7 @@ a build tag so a made-but-unshipped decision is never mistaken for live behavior
 Decision state and build state are tracked independently. The build tags below were verified against live code
 by `D-DECISIONS-CONFORMANCE-01` (2026-06-13); where the audit refuted an earlier assumption, the entry says so.
 
-Last updated: 2026-06-22 (D-FROMFRIENDS-STREAK-HEADER-01 ratified — From Friends milestone bundles re-render as bundle-as-header + one-card-per-question in the DirectSentCard register; budget unit stays a whole bundle, cap 4→5; single-question bundles drop the header for a compact via-line; per-card provenance honesty preserved; decided, NOT built. See Settled. Prior: 2026-06-15 D-ACCOUNT-DELETION-TERRITORY-01 + D-HOME-DASHBOARD-MODEL-01.)
+Last updated: 2026-06-25 (D-LLM-PROVIDER-AB-AND-GATE-TIER-01 — the Anthropic↔OpenAI provider A/B switch is test instrumentation defaulting to Anthropic; a 2026-06 audit showed internally-inconsistent / false-premise questions are a model-TIER problem on the factual gate, NOT a provider or prompt problem, so the factual gate defaults to Sonnet via `FACTUAL_GATE_MODEL`. See Settled. Prior: 2026-06-22 D-FROMFRIENDS-STREAK-HEADER-01.)
 
 ## Durable docs
 
@@ -37,6 +37,7 @@ Last updated: 2026-06-22 (D-FROMFRIENDS-STREAK-HEADER-01 ratified — From Frien
 |`D-HOME-DASHBOARD-MODEL-01.md`                       |Decision — **Home is a bounded 7-day dashboard** (rolling now − 7d over Zone 2; stated "Past 7 days" band; per-section honest empties; exhausted bundles hidden; cold-start window relaxation). Supersedes `D-HOME-PACING-01`; grounded in `_docs/HOME-DASHBOARD-AUDIT-01.md`. Authorizes the `B-HOME-WINDOW-02 … -COLDSTART-06` slate; see Settled.|
 |`D-REFLECTION-COPY-01.md`                            |Copy spec — Weekly Reflection ceremony, warm-register words-before-pixels gate. **Built** via `B-REFLECTION-CEREMONY-01` (copy + hierarchy + Beat E selection); 🔁 re-audit after merge. See Settled.|
 |`_docs/D-FEED-FRIEND-ACTIVITY-01.md`                 |Spec — “From Friends” chronological activity log. **Built (cut-1) and live** despite the “SKETCH/not yet wired” header in `src/lib/friend-activity.ts` — header is stale; see Settled.|
+|`D-LLM-PROVIDER-AB-AND-GATE-TIER-01.md`              |Decision + findings — the Anthropic↔OpenAI provider A/B switch (test instrumentation, default Anthropic) and the audit showing internally-inconsistent / false-premise questions are a model-**tier** problem on the factual gate, not a provider or prompt problem → gate defaults to Sonnet via `FACTUAL_GATE_MODEL`. See Settled.|
 
 Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
 
@@ -46,6 +47,7 @@ Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
 
 ## Settled decisions (don’t re-open without cause)
 
+- **LLM question-quality misses are a model-TIER problem on the factual gate — not a provider or prompt problem.** [built: A/B switch + readout; decided, PRs open: gate→Sonnet #1221, OpenAI flagship→gpt-4.1 #1219] A 2026-06 audit (`scripts/audit-gate-compare.mjs`, n=80) showed sharpening the gate prompt at Haiku tier did nothing (+0/+1), while Haiku→Sonnet caught the false premises (≈ Opus's lift at a fraction of cost). The original "ChatGPT (GPT-5.5) caught it" was a *tier* signal, not Anthropic-vs-OpenAI. So: the factual gate (`findFactualFailures`) defaults to **Sonnet**, overridable via `FACTUAL_GATE_MODEL`; the Anthropic↔OpenAI provider A/B switch is **test instrumentation** (default Anthropic) and is *not* the lever for question quality (the gate isn't even one of its four switchable surfaces). OpenAI flagship default = `gpt-4.1`. Full record + open threads (quality gate still Haiku; provider quality A/B at equal tier still unmeasured): `D-LLM-PROVIDER-AB-AND-GATE-TIER-01.md`.
 - **Directional follow is the primitive.** [built] Symmetric friendship replaced; “friend” = mutual follow. (`PRD-D-1` Decision 1.)
 - **Authored-vs-curated provenance is honest.** [built] Forwarded LLM questions get `creatorId: null`, `source: 'curated_sent'`; credit never accrues to the forwarder.
 - **Send difficulty travels with the question.** [built] The forwarded question keeps its own `difficultyEstimate`. (`PRD-D-0` §4.1.)
