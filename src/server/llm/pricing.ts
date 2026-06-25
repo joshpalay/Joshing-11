@@ -11,12 +11,17 @@
  * cache writes at ~1.25x — the two cache_* token buckets on LlmUsageEvent are
  * priced with those multipliers below.
  *
- * The OpenAI numbers are best-effort defaults for the two models the switch
- * defaults to (OPENAI_MODEL=gpt-4o, OPENAI_GRADING_MODEL=gpt-4o-mini). They are
- * NOT verified against a live OpenAI price sheet here — VERIFY against current
- * OpenAI pricing before trusting the OpenAI dollar figures, and add a row for any
- * model you pin via OPENAI_MODEL / OPENAI_GRADING_MODEL. An unknown model falls
- * back to zero cost (and is surfaced as such in the readout) rather than guessing.
+ * The OpenAI numbers were confirmed June 2026 against public pricing aggregators
+ * (OpenAI's own pricing page blocks automated fetch, so these weren't read from
+ * the source sheet directly — glance at your OpenAI billing dashboard before
+ * trusting a figure for a cost-sensitive decision). Add a row for any model you
+ * pin via OPENAI_MODEL / OPENAI_GRADING_MODEL; an unknown model falls back to
+ * zero cost (surfaced as "unpriced" in the readout) rather than guessing.
+ *
+ * Note: the OpenAI completion path (openaiCompleteJsonText) does not record cache
+ * token buckets, so cacheRead/cacheWrite are inert for OpenAI rows (the readout
+ * only ever multiplies them by zero). They're kept at 0 to avoid implying a
+ * precision we don't track.
  */
 
 export type ModelPrice = {
@@ -48,19 +53,41 @@ export const MODEL_PRICING: Record<string, ModelPrice> = {
     cacheWritePerMtok: 1.25,
   },
 
-  // ── OpenAI (UNVERIFIED defaults — confirm against current OpenAI pricing) ──
-  // gpt-4o — flagship surfaces (generation/categorization/suggestion).
+  // ── OpenAI (confirmed June 2026; cache fields inert on this path — see header) ──
+  // gpt-4o — the default OPENAI_MODEL flagship.
   'gpt-4o': {
     inputPerMtok: 2.5,
     outputPerMtok: 10.0,
-    cacheReadPerMtok: 1.25, // gpt-4o cached input (~0.5x); no separate write charge
+    cacheReadPerMtok: 0,
     cacheWritePerMtok: 0,
   },
-  // gpt-4o-mini — grading.
+  // gpt-4o-mini — the default OPENAI_GRADING_MODEL.
   'gpt-4o-mini': {
     inputPerMtok: 0.15,
     outputPerMtok: 0.6,
-    cacheReadPerMtok: 0.075,
+    cacheReadPerMtok: 0,
+    cacheWritePerMtok: 0,
+  },
+  // gpt-4.1 — cheaper than gpt-4o and flagship-tier; the fair-comparison swap.
+  'gpt-4.1': {
+    inputPerMtok: 2.0,
+    outputPerMtok: 8.0,
+    cacheReadPerMtok: 0,
+    cacheWritePerMtok: 0,
+  },
+  // gpt-4.1-mini — ~84% cheaper than gpt-4o on a generation-shaped workload; the
+  // cost/quality sweet spot if a strict Sonnet benchmark isn't the goal.
+  'gpt-4.1-mini': {
+    inputPerMtok: 0.4,
+    outputPerMtok: 1.6,
+    cacheReadPerMtok: 0,
+    cacheWritePerMtok: 0,
+  },
+  // gpt-4.1-nano — cheapest; lowest quality.
+  'gpt-4.1-nano': {
+    inputPerMtok: 0.1,
+    outputPerMtok: 0.4,
+    cacheReadPerMtok: 0,
     cacheWritePerMtok: 0,
   },
 };
