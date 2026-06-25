@@ -33,14 +33,14 @@ const OPENAI_PLACEHOLDER_KEYS = new Set([
 
 // Model strings are deploy-time choices, not hardcodes: OpenAI's lineup and
 // pricing move, so the exact model is read from env with a sensible default.
-// The flagship default is gpt-4.1-mini — the cost/quality trade chosen after the
-// cost readout showed gpt-4o running ~5x the Anthropic arm (see the OpenAI rows
-// in src/server/llm/pricing.ts; gpt-4.1-mini is ~84% cheaper on a generation
-// workload). For a stricter quality comparison against Sonnet, override
-// OPENAI_MODEL to gpt-4.1 (or gpt-4o) — both are priced in the cost map.
-// Grading stays on a cheaper mini for the high-volume path. Override
-// OPENAI_MODEL / OPENAI_GRADING_MODEL to pin the exact strings without a code change.
-export const OPENAI_FLAGSHIP_MODEL = process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
+// The flagship default is gpt-4.1 — flagship-tier, so the OpenAI arm stays a fair
+// quality comparison against Sonnet, yet cheaper than both gpt-4o AND Sonnet
+// itself per token (see the OpenAI rows in src/server/llm/pricing.ts). For pure
+// cost over quality, override OPENAI_MODEL to gpt-4.1-mini (~84% cheaper on a
+// generation workload); for the prior baseline, gpt-4o. Grading stays on a
+// cheaper mini for the high-volume path. Override OPENAI_MODEL /
+// OPENAI_GRADING_MODEL to pin the exact strings without a code change.
+export const OPENAI_FLAGSHIP_MODEL = process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
 export const OPENAI_GRADING_MODEL = process.env.OPENAI_GRADING_MODEL?.trim() || 'gpt-4o-mini';
 
 // Default per-call timeout, mirrors DEFAULT_LLM_TIMEOUT_MS on the Anthropic side
