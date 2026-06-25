@@ -1282,6 +1282,13 @@ export async function generateDailyQuestions(
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
+  // Soft difficulty-floor fallback. When provided, questions that come back more
+  // than one tier below the requested difficulty are NOT dropped — they are
+  // persisted and pushed here (instead of into the returned in-tier array) so the
+  // orchestrator can draw on them as a last resort rather than serving a short
+  // queue (see the under-difficulty handling below and queue-orchestrator's
+  // backfill chain).
+  options: { underDifficultyReserve?: GeneratedQuestionRow[] } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -1500,10 +1507,22 @@ export async function generateDailyQuestions(
     domainDifficultyOverrides,
     difficultyPreference,
   );
+  // Under-difficulty is a SOFT gate, unlike every hard drop above: these are
+  // good, factually-correct, novel questions — only easier than the requested
+  // tier. Rather than discard them, mark them by object identity so they survive
+  // the hard-drop filter and get persisted, then route their rows to the
+  // caller-supplied reserve. The orchestrator taps that reserve only when the
+  // queue would otherwise fall below DAILY_QUEUE_SIZE, so difficulty integrity is
+  // preserved until the sole alternative is a short Daily Five (the Butkicker
+  // case: a tapped-out narrow KB whose only fresh questions read as too easy).
+  // With no reserve supplied (e.g. the +2 bonus path) this degrades to the old
+  // behaviour — the deflected questions are simply trimmed past `count` below.
+  const underDifficultyQuestions = new Set<LlmQuestion>();
   if (underDifficulty.toDrop.size > 0) {
-    console.warn('[daily/generate-questions] dropping under-difficulty questions', {
-      droppedCount: underDifficulty.toDrop.size,
-      droppedIndices: [...underDifficulty.toDrop].sort((a, b) => a - b),
+    for (const i of underDifficulty.toDrop) underDifficultyQuestions.add(generated[i]);
+    console.warn('[daily/generate-questions] deflecting under-difficulty questions to reserve', {
+      deflectedCount: underDifficulty.toDrop.size,
+      deflectedIndices: [...underDifficulty.toDrop].sort((a, b) => a - b),
       reasons: underDifficulty.reasons,
       originalCount: generated.length,
     });
@@ -1519,11 +1538,20 @@ export async function generateDailyQuestions(
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
-    ...underDifficulty.toDrop,
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));
     if (generated.length === 0) return [];
+  }
+
+  // Order in-tier questions first so they claim the `count` budget; under-
+  // difficulty survivors fall to the back and are only persisted (into the
+  // reserve) if budget remains after the in-tier ones.
+  if (underDifficultyQuestions.size > 0) {
+    generated = [
+      ...generated.filter((q) => !underDifficultyQuestions.has(q)),
+      ...generated.filter((q) => underDifficultyQuestions.has(q)),
+    ];
   }
 
   // Surface question-shape distribution issues so we can see whether the
@@ -1534,6 +1562,9 @@ export async function generateDailyQuestions(
 
   const expiresAt = getNextDailyResetBoundary();
   const persisted: GeneratedQuestionRow[] = [];
+  // Persisted rows for questions deflected by the soft under-difficulty gate —
+  // returned via options.underDifficultyReserve, never in the main array.
+  const underDifficultyPersisted: GeneratedQuestionRow[] = [];
   const seenFactKeysThisBatch = new Set<string>();
 
   // Precompute the "between us" aside once per question, in parallel, before the
@@ -1647,7 +1678,11 @@ export async function generateDailyQuestions(
         usedInQueue: false,
       })
       .returning();
-    persisted.push(row);
+    if (underDifficultyQuestions.has(question)) {
+      underDifficultyPersisted.push(row);
+    } else {
+      persisted.push(row);
+    }
   }
 
   // Semantic-dedup backstop (B1 pool substrate). Best-effort and no-op without
@@ -1660,8 +1695,16 @@ export async function generateDailyQuestions(
   // (B-DEDUP-EMBED-RELIABILITY) — which had been blinding the answered-history
   // gate to those rows.
   await embedAndResolveDuplicatesBatch(
-    persisted.map((row) => ({ id: row.id, origin: 'machine' as const, questionText: row.questionText })),
+    [...persisted, ...underDifficultyPersisted].map((row) => ({
+      id: row.id,
+      origin: 'machine' as const,
+      questionText: row.questionText,
+    })),
   );
+
+  if (options.underDifficultyReserve && underDifficultyPersisted.length > 0) {
+    options.underDifficultyReserve.push(...underDifficultyPersisted);
+  }
 
   return persisted;
 }
@@ -1767,7 +1810,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // seed the domain palette from declared interests in SELECTION ORDER (strong-
   // vs light-signal weighting) so the first session reads as "drawn from the
   // areas you picked" rather than a random cross-section. See first-run-seeding.ts.
-  options: { firstRun?: boolean } = {},
+  // underDifficultyReserve: forwarded to generateDailyQuestions so the orchestrator
+  // can collect soft difficulty-floor deflections for last-resort backfill.
+  options: { firstRun?: boolean; underDifficultyReserve?: GeneratedQuestionRow[] } = {},
 ): Promise<GeneratedQuestionRow[]> {
   const [
     knowledgeBase,
@@ -1971,6 +2016,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       territoryByDomain,
       strengthByDomain,
       culturalAnchor,
+      { underDifficultyReserve: options.underDifficultyReserve },
     );
   }
 
