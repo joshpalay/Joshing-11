@@ -39,13 +39,18 @@ const TRI_H = SIZE * 0.8660254; // equilateral row height
 // tan field, which made it read as a different design system. These six match
 // the print art exactly. (Note: the shared --tri-* tokens in globals.css are
 // also stale/blue-less — out of scope here, but worth reconciling later.)
+// SVG polygon fills sampled from the Variant4 print artwork. These intentionally
+// do NOT match the --tri-* tokens (which are stale/blue-less, see note above) and
+// have no token equivalent — decorative animated triangle fills driven through the
+// --tri-color-a/b custom props below. Each is tagged so the hex-hygiene audit skips
+// it (B-VISUAL-HEX-TOKENIZE-01).
 const PALETTE = [
-  "#F38058", // coral
-  "#FFD07E", // gold
-  "#9BC0CC", // sky blue (Variant4's signature; was missing entirely)
-  "#8EA4A0", // sage
-  "#CFD3C0", // light sage
-  "#FFFFEA", // cream
+  "#F38058", // raw hex required: coral (Variant4 art, no token)
+  "#FFD07E", // raw hex required: gold (Variant4 art, no token)
+  "#9BC0CC", // raw hex required: sky blue (Variant4 art, no token)
+  "#8EA4A0", // raw hex required: sage (Variant4 art, no token)
+  "#CFD3C0", // raw hex required: light sage (Variant4 art, no token)
+  "#FFFFEA", // raw hex required: cream (Variant4 art, no token)
 ];
 
 function rand(seed: number) {

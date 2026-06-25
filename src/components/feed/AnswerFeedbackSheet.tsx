@@ -14,7 +14,7 @@ import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
-// card (raw --accent-gold #d9a82e is too light for small text). Used by the
+// card (raw --accent-gold is too light for small text). Used by the
 // "New territory" celebration and the "Between us friends" inside-joke card.
 const GOLD_INK = 'var(--accent-gold-ink)'
 

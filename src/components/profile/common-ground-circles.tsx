@@ -12,8 +12,8 @@ export const MAX_DIAMETER = 56
 // Viewer = brand navy, friend = brand orange — the app's two signature accents
 // (--brand-navy / --brand-orange) form a calm, on-brand two-tone split so each
 // circle reads as "you" vs the friend at a glance against the cream surface.
-export const VIEWER_FILL = '#1f3a5a' // --brand-navy
-export const FRIEND_FILL = '#d15e36' // --brand-orange
+export const VIEWER_FILL = 'var(--brand-navy)'
+export const FRIEND_FILL = 'var(--brand-orange)'
 export const CIRCLE_OPACITY = 0.72
 
 const TIER_INDEX: Record<MasteryTier, number> = {

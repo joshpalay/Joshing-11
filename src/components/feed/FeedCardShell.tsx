@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 const FEED_CARD_RADIUS = 'rounded-[var(--radius-xs)]'
 const FEED_CARD_SHADOW = 'shadow-[var(--shadow-card)]'
 
-// Resting (non-elevated) home-feed card fill. Warm cream (--warm-cream #f5f0e8)
+// Resting (non-elevated) home-feed card fill. Warm cream (--warm-cream)
 // chosen over the near-white --brand-card for the feed surface — a product call
 // to warm the ambient cards while elevated/playable cards keep their distinct
 // --game-card-question lift. Scoped to the feed shell so other --brand-card
@@ -29,7 +29,7 @@ const FEED_CARD_RESTING_FILL = 'bg-[var(--warm-cream)]'
 // activity rows render as flat one-liners (no card), so a playable question card
 // needs more than a 4% lift to read as the thing you can play; the warm fill +
 // shadow make it step forward off the cream while the chatter stays quiet text.
-// Shares the shadow color (#28201E warm ink) with the resting cards, just at a
+// Shares the warm-ink shadow color with the resting cards, just at a
 // higher opacity. The stroke matches the Today's 5 card — the neutral hairline
 // --brand-border (not the editorial accent gold).
 const FEED_CARD_ELEVATED_FILL = 'bg-[var(--feed-card-elevated)]'

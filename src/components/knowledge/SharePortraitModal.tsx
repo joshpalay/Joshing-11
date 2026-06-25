@@ -86,7 +86,7 @@ export function SharePortraitModal({
     if (!node) return null;
     const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(node, {
-      backgroundColor: '#faf8f2',
+      backgroundColor: '#faf8f2', // raw hex required: html2canvas can't resolve var(); mirrors --warm-paper
       scale: 3,
       useCORS: true,
       logging: false,

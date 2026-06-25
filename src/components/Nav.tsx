@@ -276,7 +276,7 @@ export function Nav({
                   {friendsDot && label === 'Friends' ? (
                     <span
                       className="absolute -right-1 -top-1 size-2 rounded-full"
-                      style={{ backgroundColor: '#8a8a9a' }}
+                      style={{ backgroundColor: 'var(--brand-ink-400)' }}
                     />
                   ) : null}
                 </span>

@@ -294,6 +294,15 @@
     --warm-border-soft: #ddd6c7;  /* lighter warm border                  */
     --warm-paper:       #faf8f2;  /* warm off-white surface (share chrome)*/
     --warm-cream:       #f5f0e8;  /* warm cream panel                     */
+    /* Recently-exploring row-badge accents (B-VISUAL-HEX-TOKENIZE-01). The
+       friend-profile "Recently exploring" section paints each row's initial
+       badge from this rotating trio. These are POSITION-keyed decorative
+       accents (not the --cat-* category hues) with no prior token; named here
+       so the values live in globals instead of inline hex. Values unchanged —
+       this only names the existing literals. */
+    --exploring-accent-red:  #c9564d;
+    --exploring-accent-gold: #a98a4c;
+    --exploring-accent-blue: #65a8bb;
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     /* System voice (STYLE-GUIDE-TYPE §2). The typewriter face (Courier New) was
        retired app-wide — the System voice now shares the sans (Montserrat) and is

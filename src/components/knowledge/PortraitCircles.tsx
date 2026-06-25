@@ -141,7 +141,7 @@ function buildSections(
   }
   return TIER_ORDER.map((tier) => ({
     label: KNOWLEDGE_TIER_LABEL[tier],
-    color: '#6b5535',
+    color: 'var(--warm-ink-700)',
     entries: entries
       .filter((e) => e.tier === tier)
       .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
@@ -297,9 +297,9 @@ export function PortraitDomainCircle({
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
-                background: isHidden ? '#faf8f2' : '#1a1208',
-                color: isHidden ? '#1a1208' : '#faf8f2',
-                border: `1.5px solid ${isHidden ? '#1a1208' : '#1a1208'}`,
+                background: isHidden ? 'var(--warm-paper)' : 'var(--warm-ink)',
+                color: isHidden ? 'var(--warm-ink)' : 'var(--warm-paper)',
+                border: `1.5px solid var(--warm-ink)`,
                 display: 'grid',
                 placeItems: 'center',
                 fontSize: 12,
@@ -426,12 +426,12 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  backgroundColor: '#8b7355',
+                  backgroundColor: 'var(--warm-ink-500)',
                   opacity: 0.4,
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 9.5, color: '#8b7355' }}>
+              <span style={{ fontSize: 9.5, color: 'var(--warm-ink-500)' }}>
                 {KNOWLEDGE_TIER_LABEL[tier]}
               </span>
             </div>
@@ -439,7 +439,7 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
           <span
             style={{
               fontSize: 9,
-              color: '#b0a090',
+              color: 'var(--warm-ink-400)',
               fontStyle: 'italic',
               marginLeft: 'auto',
               fontFamily: 'var(--font-serif)',
@@ -545,8 +545,8 @@ const activeToggleStyle: CSSProperties = {
   padding: '0 14px',
   borderRadius: 999,
   border: 'none',
-  background: '#1a1208',
-  color: '#f5f0e8',
+  background: 'var(--warm-ink)',
+  color: 'var(--warm-cream)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 14,
@@ -558,7 +558,7 @@ const inactiveToggleStyle: CSSProperties = {
   borderRadius: 999,
   border: 'none',
   background: 'transparent',
-  color: '#8a8070',
+  color: 'var(--warm-ink-400)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 14,
@@ -581,7 +581,7 @@ const legendItemStyle: CSSProperties = {
 const sparsePromptStyle: CSSProperties = {
   marginTop: 24,
   fontSize: 13,
-  color: '#8a8070',
+  color: 'var(--warm-ink-400)',
   fontStyle: 'italic',
   fontFamily: 'var(--font-serif)',
   textAlign: 'center',
@@ -590,7 +590,7 @@ const sparsePromptStyle: CSSProperties = {
 const explainerStyle: CSSProperties = {
   margin: '6px 0 0',
   fontSize: 9.5,
-  color: '#b0a090',
+  color: 'var(--warm-ink-400)',
   fontStyle: 'italic',
   fontFamily: 'var(--font-serif)',
 }
