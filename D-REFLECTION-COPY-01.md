@@ -156,7 +156,7 @@ check the data can’t cash. Realistic proxies, in preference order:
 **FLAG 2 — “Reflection” name vs “celebration” feel.**
 Resolved as: celebratory in feel, reflective in substance. Watch that the build doesn’t
 drift into a hype-reel that contradicts the name. Pacing note in Beat E (let it breathe)
-is the main guardrail. Robyn is the right playtester to gut-check the register.
+is the main guardrail. A playtester gut-check on register is advisable.
 
 -----
 
