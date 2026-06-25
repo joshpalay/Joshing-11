@@ -106,8 +106,7 @@ export function ExpandDomainOfferCard({
     <section className="mt-5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
       <h2 style={titleStyle}>You&rsquo;re crushing {offer.sourceDisplayName}</h2>
       <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-        You&rsquo;ve out-paced what we can ask about {offer.sourceDisplayName}. Want to branch into
-        something close? Add any to your rotation:
+        Want to branch into something close? Add any to your rotation:
       </p>
 
       <div className="mt-4 space-y-2">

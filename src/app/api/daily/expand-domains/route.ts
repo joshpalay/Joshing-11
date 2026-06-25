@@ -74,5 +74,17 @@ export async function POST(request: Request) {
   // Resolve the offer regardless of accept/dismiss so it surfaces only once.
   await markDomainExpansionOffered(session.userId, sourceDomain);
 
+  // Audit the expansion-offer funnel (eligible → shown → resolved): did the
+  // player accept (and how many domains) or dismiss?
+  console.info('[expansion-offer] resolved', {
+    phase: 'resolved',
+    userId: session.userId,
+    sourceDomain,
+    accepted: added.length > 0,
+    addedCount: added.length,
+    skippedCount: skipped.length,
+    dismissed: selectedDomains.length === 0,
+  });
+
   return NextResponse.json({ added, skipped });
 }

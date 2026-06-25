@@ -389,6 +389,15 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
   const candidates = suggestions.filter((s) => !have.has(s.label.trim().toLowerCase()));
   if (candidates.length === 0) return null;
 
+  // Audit the expansion-offer funnel (eligible → shown → resolved). Fires each
+  // time the card is actually surfaced on a summary (until the player resolves it).
+  console.info('[expansion-offer] shown', {
+    phase: 'shown',
+    userId,
+    sourceDomain,
+    candidateCount: candidates.length,
+  });
+
   return {
     sourceDomain,
     sourceDisplayName: displayNameForDomain(sourceDomain),

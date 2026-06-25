@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Smartphone,
   Sparkles,
+  Sprout,
   Sun,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -193,6 +194,12 @@ export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
               title="Phone-first invite login"
               subtitle="Preview the invite login screens without sending an invite"
               href="/dev/invite-login"
+            />
+            <SettingsRow
+              icon={<Sprout className="size-5" />}
+              title="Expansion offer card"
+              subtitle="Preview the post-daily-Five “branch out” card"
+              href="/daily/summary/expand-preview"
             />
           </SettingsGroup>
           {resetGameError ? (

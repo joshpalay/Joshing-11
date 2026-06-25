@@ -536,6 +536,19 @@ export async function recalibrateDomainDifficultyToSupply(
         ...(markEligible ? { expansionEligibleSince: now } : {}),
       })
       .where(eq(userDomainDifficulties.id, existing.id));
+
+    if (markEligible) {
+      // Audit the expansion-offer funnel (eligible → shown → resolved). This is
+      // the canonical "how often is the offer triggered" count — one line per
+      // domain the first time a player tops its ladder yet out-runs its content.
+      console.info('[expansion-offer] eligible', {
+        phase: 'eligible',
+        userId,
+        domain,
+        fromTier: existing.servedDifficulty,
+        deliveredTier: delivered,
+      });
+    }
   }
 }
 
