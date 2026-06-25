@@ -780,6 +780,27 @@ Return JSON only:
 
 If nothing is wrong, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
+// Model for the factual gate. Measured 2026-06 (scripts/audit-gate-compare):
+// Haiku-tier misses subtle false-premise questions that Sonnet catches — the
+// "answer is right but the setup embeds a false claim" class (e.g. a TotK
+// question asserting Ganondorf's dragon form draws on Zelda's). Sharpening the
+// gate PROMPT at Haiku tier didn't help (+0/+1); it's a model-tier effect, and
+// Sonnet recovered essentially the full major-defect lift that Opus did. So the
+// gate now defaults to Sonnet. The gate runs once per generation BATCH (not per
+// question), so a stronger model here is a small cost on the highest-leverage
+// check. Override with FACTUAL_GATE_MODEL (e.g. claude-haiku-4-5-20251001 to
+// revert, or an Opus id for max recall) without a deploy.
+const FACTUAL_GATE_MODEL = process.env.FACTUAL_GATE_MODEL?.trim() || ANTHROPIC_MODEL;
+// Opus 4.7/4.8 and Fable removed sampling params — sending `temperature` 400s on
+// them. Haiku 4.5 and Sonnet 4.6 still accept it. Guard so an Opus override of
+// the gate model doesn't break the call.
+function gateModelRejectsTemperature(model: string): boolean {
+  return model.includes('opus-4-7') || model.includes('opus-4-8') || model.includes('fable');
+}
+// Haiku gate timeout is tuned for Haiku's speed; a heavier gate model needs more
+// headroom or it times out and fails open (silently disabling the gate).
+const FACTUAL_GATE_TIMEOUT_MS = FACTUAL_GATE_MODEL === HAIKU_MODEL ? HAIKU_GATE_TIMEOUT_MS : 20_000;
+
 export function parseFactualGateResponse(
   raw: string,
   batchSize: number,
@@ -837,12 +858,13 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
 
   try {
     const response = await loggedMessagesCreate(client, 'factual-gate', {
-      model: HAIKU_MODEL,
+      model: FACTUAL_GATE_MODEL,
       max_tokens: 500,
-      temperature: 0,
+      // Omit temperature on models that reject sampling params (Opus 4.7/4.8/Fable).
+      ...(gateModelRejectsTemperature(FACTUAL_GATE_MODEL) ? {} : { temperature: 0 }),
       system: FACTUAL_GATE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    }, { timeoutMs: FACTUAL_GATE_TIMEOUT_MS });
     return parseFactualGateResponse(extractTextContent(response.content), generated.length);
   } catch (err) {
     // Fail open: a Haiku outage should not block the daily queue. A wrong
