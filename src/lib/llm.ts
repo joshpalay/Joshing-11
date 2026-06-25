@@ -17,7 +17,15 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
+import {
+  type LlmProvider,
+  OPENAI_FLAGSHIP_MODEL,
+  OPENAI_GRADING_MODEL,
+  openaiCompleteJsonText,
+} from '@/server/llm/provider';
 import { textContainsAnswer } from '@/server/questions/self-answering';
+
+export type { LlmProvider };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -281,6 +289,70 @@ export async function loggedMessagesCreate(
     }
     throw error;
   }
+}
+
+/**
+ * Provider dispatch for a single LLM completion → plain text
+ * (B-LLM-PROVIDER-AB-SWITCH B1).
+ *
+ * The Anthropic branch is the existing code path — getAnthropicClient (passed in
+ * by the caller) + loggedMessagesCreate + extractTextContent — unchanged in
+ * behaviour. The OpenAI branch (src/server/llm/provider.ts) sends the *same*
+ * prompt text and returns the *same* text shape, so both feed identical text
+ * into the caller's existing parser/validator. The output contract out of every
+ * surface is provider-independent; only the request envelope differs.
+ *
+ * Returns null only when the *selected* provider's client is unavailable, so
+ * callers reuse their existing null-client fallback. Throws on an API error,
+ * exactly as a direct loggedMessagesCreate / OpenAI call would, so existing
+ * retry/catch logic stays intact for both providers.
+ */
+export async function dispatchLlmText(
+  provider: LlmProvider,
+  anthropicClient: Anthropic | null,
+  scope: string,
+  systemText: string,
+  userText: string,
+  opts: {
+    anthropicModel: string;
+    openaiModel: string;
+    maxTokens: number;
+    temperature: number;
+    timeoutMs?: number;
+    // Anthropic-only: wrap the system prompt in an ephemeral cache_control block.
+    // A no-op below the model's min cacheable size (see prompt-caching note above).
+    cacheSystem?: boolean;
+  },
+): Promise<string | null> {
+  if (provider === 'openai') {
+    return openaiCompleteJsonText({
+      scope,
+      systemText,
+      userText,
+      model: opts.openaiModel,
+      maxTokens: opts.maxTokens,
+      temperature: opts.temperature,
+      timeoutMs: opts.timeoutMs,
+    });
+  }
+
+  if (!anthropicClient) return null;
+  const system = opts.cacheSystem
+    ? [{ type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } }]
+    : systemText;
+  const response = await loggedMessagesCreate(
+    anthropicClient,
+    scope,
+    {
+      model: opts.anthropicModel,
+      max_tokens: opts.maxTokens,
+      temperature: opts.temperature,
+      system,
+      messages: [{ role: 'user', content: userText }],
+    },
+    opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : undefined,
+  );
+  return extractTextContent(response.content);
 }
 
 function clampConfidence(value: unknown, fallback: number): number {
@@ -580,7 +652,8 @@ export async function gradeAnswerWithLLM(
   canonicalAnswer: string,
   submittedAnswer: string,
   questionType: string,
-  acceptedAlternatives: string[] = []
+  acceptedAlternatives: string[] = [],
+  provider: LlmProvider = 'anthropic',
 ): Promise<GradingResponse> {
   const trimmedAlternatives = acceptedAlternatives.map((a) => a.trim()).filter(Boolean);
   const alternativesLine = trimmedAlternatives.length > 0
@@ -623,10 +696,10 @@ CONSOLATION RULES (for wrong answers only):
 
 Return only valid JSON with keys: result, confidence, consolation. Put result first. Do not include any other keys, reasoning, or explanation — inside or outside the JSON object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
-  const client = getAnthropicClient();
-  if (!client) {
-    // A missing/invalid key is a config problem, not a transient blip — retrying
-    // can't help, so fail fast.
+  // Only the selected provider's client is required. A missing/invalid key is a
+  // config problem, not a transient blip — retrying can't help, so fail fast.
+  const client = provider === 'anthropic' ? getAnthropicClient() : null;
+  if (provider === 'anthropic' && !client) {
     return fallbackGrading('no_client');
   }
 
@@ -639,27 +712,29 @@ Return only valid JSON with keys: result, confidence, consolation. Put result fi
   for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt += 1) {
     try {
       // Grading system prompt is ~800 tokens — below Haiku's 2048 cacheable
-      // threshold, so cache_control would be a silent no-op. Pass the prompt
-      // as a plain string for clarity. max_tokens is generous (the reply is a
-      // tiny JSON object — result/confidence/consolation, well under ~100 tokens)
-      // purely so a long consolation can never truncate the JSON mid-object —
-      // you only pay for tokens actually produced.
-      const response = await loggedMessagesCreate(client, 'grade', {
-        model: GRADING_MODEL,
-        max_tokens: 1024,
+      // threshold, so cache_control would be a silent no-op (cacheSystem omitted).
+      // max_tokens is generous (the reply is a tiny JSON object —
+      // result/confidence/consolation, well under ~100 tokens) purely so a long
+      // consolation can never truncate the JSON mid-object — you only pay for
+      // tokens actually produced.
+      const text = await dispatchLlmText(provider, client, 'grade', systemPrompt, userMessage, {
+        anthropicModel: GRADING_MODEL,
+        openaiModel: OPENAI_GRADING_MODEL,
+        maxTokens: 1024,
         temperature: 0,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }, { timeoutMs: GRADE_TIMEOUT_MS });
-
-      const text = extractTextContent(response.content);
+        timeoutMs: GRADE_TIMEOUT_MS,
+      });
+      if (text === null) {
+        // Selected provider's client is unavailable — a config problem, not a
+        // transient one; no point retrying.
+        return fallbackGrading('no_client');
+      }
       const parsed = parseJsonObject(text);
       if (!parsed) {
         lastReason = 'invalid_json';
         logFallback('gradeAnswerWithLLM', 'invalid_json', {
           attempt,
           responseLength: text.length,
-          stopReason: response.stop_reason,
         });
         continue;
       }
@@ -697,7 +772,8 @@ Return only valid JSON with keys: result, confidence, consolation. Put result fi
 export async function categorizeQuestion(
   questionText: string,
   answerText: string,
-  alternateAnswers: readonly string[] = []
+  alternateAnswers: readonly string[] = [],
+  provider: LlmProvider = 'anthropic',
 ): Promise<CategoryResult> {
   const systemPrompt = `You are a hyper-specific categorizer for a personal trivia game.
 Return exactly this JSON shape:
@@ -744,20 +820,21 @@ ${wrapUserInput('answer', answerText)}${alternatesLine}
 Categorize this question. Return JSON only.`;
 
   try {
-    const client = getAnthropicClient();
-    if (!client) {
+    const client = provider === 'anthropic' ? getAnthropicClient() : null;
+    if (provider === 'anthropic' && !client) {
       return fallbackCategorization(questionText, answerText);
     }
 
-    const response = await loggedMessagesCreate(client, 'categorize', {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 300,
+    const text = await dispatchLlmText(provider, client, 'categorize', systemPrompt, userMessage, {
+      anthropicModel: ANTHROPIC_MODEL,
+      openaiModel: OPENAI_FLAGSHIP_MODEL,
+      maxTokens: 300,
       temperature: 0,
-      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userMessage }],
+      cacheSystem: true,
     });
-
-    const text = extractTextContent(response.content);
+    if (text === null) {
+      return fallbackCategorization(questionText, answerText);
+    }
     const parsed = parseJsonObject(text);
     if (!parsed) {
       logFallback('categorizeQuestion', 'invalid_json', { responseLength: text.length });
@@ -803,17 +880,15 @@ ${wrapUserInput('broad_category', broadCategory)}
 ${wrapUserInput('current_subcategory', subcategory)} (too broad)
 Return JSON only.`;
 
-      // ~280 tokens — below Sonnet cache threshold; plain string is fine.
-      const refinementResponse = await loggedMessagesCreate(client, 'categorize-refine', {
-        model: ANTHROPIC_MODEL,
-        max_tokens: 120,
-        temperature: 0,
-        system: refinementPrompt,
-        messages: [{ role: 'user', content: refinementMessage }],
-      });
-
-      const refinementText = extractTextContent(refinementResponse.content);
-      const refinementParsed = parseJsonObject(refinementText);
+      // ~280 tokens — below Sonnet cache threshold; cacheSystem omitted.
+      const refinementText = await dispatchLlmText(
+        provider, client, 'categorize-refine', refinementPrompt, refinementMessage, {
+          anthropicModel: ANTHROPIC_MODEL,
+          openaiModel: OPENAI_FLAGSHIP_MODEL,
+          maxTokens: 120,
+          temperature: 0,
+        });
+      const refinementParsed = refinementText === null ? null : parseJsonObject(refinementText);
       const refined = asTrimmedString(refinementParsed?.subcategory);
       if (refined && !isTooGenericSubcategory(refined, broadCategory)) {
         subcategory = refined;
@@ -845,16 +920,14 @@ ${wrapUserInput('current_subcategory', subcategory)} (leaks the answer)
 Return JSON only.`;
 
       // ~290 tokens — below Sonnet cache threshold.
-      const leakResponse = await loggedMessagesCreate(client, 'categorize-deleak', {
-        model: ANTHROPIC_MODEL,
-        max_tokens: 120,
-        temperature: 0,
-        system: leakPrompt,
-        messages: [{ role: 'user', content: leakMessage }],
-      });
-
-      const leakText = extractTextContent(leakResponse.content);
-      const leakParsed = parseJsonObject(leakText);
+      const leakText = await dispatchLlmText(
+        provider, client, 'categorize-deleak', leakPrompt, leakMessage, {
+          anthropicModel: ANTHROPIC_MODEL,
+          openaiModel: OPENAI_FLAGSHIP_MODEL,
+          maxTokens: 120,
+          temperature: 0,
+        });
+      const leakParsed = leakText === null ? null : parseJsonObject(leakText);
       const deleaked = asTrimmedString(leakParsed?.subcategory);
       if (
         deleaked
@@ -1073,7 +1146,10 @@ function fallbackFactualReflectionExplanation(canonicalAnswer: string): string {
 
 // ─── Prompt 4: Answer Suggestion (Question Creation) ──────────────────────────
 
-export async function suggestAnswer(questionText: string): Promise<AnswerSuggestionResult> {
+export async function suggestAnswer(
+  questionText: string,
+  provider: LlmProvider = 'anthropic',
+): Promise<AnswerSuggestionResult> {
   const systemPrompt = `You are helping someone write trivia questions for a personal game played with their friends. When they type a question, suggest the canonical correct answer, classify the question type, and estimate difficulty.
 
 Joshing questions are factual — they have objectively correct answers that do not depend on knowing the question writer personally. Questions drawn from shared cultural, intellectual, or historical territory are ideal. Questions that can only be answered with private biographical knowledge about the writer are the wrong kind of question for this game.
@@ -1109,21 +1185,21 @@ No explanation outside the JSON object.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 Suggest a canonical answer and classify the question type. Return JSON only.`;
 
   try {
-    const client = getAnthropicClient();
-    if (!client) {
+    const client = provider === 'anthropic' ? getAnthropicClient() : null;
+    if (provider === 'anthropic' && !client) {
       return fallbackSuggestion();
     }
 
     // ~900 tokens — below Sonnet cache threshold.
-    const response = await loggedMessagesCreate(client, 'suggest-answer', {
-      model: ANTHROPIC_MODEL,
-      max_tokens: 600,
+    const text = await dispatchLlmText(provider, client, 'suggest-answer', systemPrompt, userMessage, {
+      anthropicModel: ANTHROPIC_MODEL,
+      openaiModel: OPENAI_FLAGSHIP_MODEL,
+      maxTokens: 600,
       temperature: 0,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
     });
-
-    const text = extractTextContent(response.content);
+    if (text === null) {
+      return fallbackSuggestion();
+    }
     const parsed = parseJsonObject(text);
     if (!parsed) {
       logFallback('suggestAnswer', 'invalid_json', { responseLength: text.length });

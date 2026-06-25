@@ -49,6 +49,7 @@
     "libphonenumber-js": "^1.13.3",
     "lucide-react": "^1.14.0",
     "next": "16.1.6",
+    "openai": "^6.45.0",
     "pg": "^8.20.0",
     "radix-ui": "^1.4.3",
     "react": "latest",
