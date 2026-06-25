@@ -95,13 +95,15 @@ export async function POST(request: NextRequest) {
   let categorization;
   let difficultyAssessment;
   let verdict;
+  // B-LLM-PROVIDER-AB-SWITCH B2/B3: the globally-selected categorize provider —
+  // used for the call and stamped onto the persisted question (B3).
+  const categorizeProvider = (await getProviderSettings()).categorize;
   try {
     categorization = await categorizeQuestion(
       rawQuestionFields.text,
       rawQuestionFields.correctAnswer,
       rawQuestionFields.alternateAnswers,
-      // B-LLM-PROVIDER-AB-SWITCH B2: use the globally-selected categorize provider.
-      (await getProviderSettings()).categorize,
+      categorizeProvider,
     );
   } catch (error) {
     console.error('[questions/create] unexpected_failure', {
@@ -302,6 +304,8 @@ export async function POST(request: NextRequest) {
   const created = await createQuestion({
     authorId: session.userId,
     ...categorizedQuestionFields,
+    // B-LLM-PROVIDER-AB-SWITCH B3: stamp the provider that categorized it.
+    categorizeProvider,
     publicStatus: publicScoring.publicStatus,
     publicEligibilityScore: publicScoring.publicEligibilityScore,
     publicEligibilityReason: publicScoring.publicEligibilityReason,

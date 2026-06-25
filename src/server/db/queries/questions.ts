@@ -148,7 +148,8 @@ export const bankQuestionSelectColumns = questionViewColumns;
 type QuestionViewNonViewKey =
   | 'verified' | 'llmSuggestedAnswer' | 'critiqueIterations' | 'surfacePriorityScore'
   | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding'
-  | 'authorDeleted' | 'subjectEntity';
+  // categorizeProvider: B3 provenance, not surfaced in the question view.
+  | 'authorDeleted' | 'subjectEntity' | 'categorizeProvider';
 type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
   & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 
@@ -545,6 +546,8 @@ export async function createQuestion(params: {
   // 'blocked' is set by the create route on a safety-fail vet verdict; it is
   // not user-selectable. See verdictToBlockedVisibility.
   visibility?: 'public' | 'friends' | 'private' | 'blocked';
+  // B-LLM-PROVIDER-AB-SWITCH B3: which provider categorized this question.
+  categorizeProvider?: string | null;
 }): Promise<{ id: string }> {
   const visibility = params.visibility ?? 'public';
 
@@ -562,6 +565,7 @@ export async function createQuestion(params: {
     subcategory: params.subcategory,
     canonicalSubcategory: params.canonicalSubcategory,
     categoryOverridden: false,
+    categorizeProvider: params.categorizeProvider ?? null,
     difficultyEstimate: difficulty,
     llmDifficulty: difficulty,
     calibratedDifficulty: difficulty,
@@ -696,6 +700,8 @@ export async function updateQuestion(params: {
   subcategory?: string;
   canonicalSubcategory?: string;
   difficulty?: number;
+  // B-LLM-PROVIDER-AB-SWITCH B3: provider that re-categorized this question.
+  categorizeProvider?: string | null;
 }): Promise<QuestionMutationResult> {
   const existing = await getQuestion(params.questionId, params.userId);
   if (!existing) return { ok: false, reason: 'not_found' };
@@ -713,6 +719,7 @@ export async function updateQuestion(params: {
   if (params.broadCategory !== undefined) values.broadCategory = params.broadCategory;
   if (params.subcategory !== undefined) values.subcategory = params.subcategory;
   if (params.canonicalSubcategory !== undefined) values.canonicalSubcategory = params.canonicalSubcategory;
+  if (params.categorizeProvider !== undefined) values.categorizeProvider = params.categorizeProvider;
   if (params.difficulty !== undefined) {
     const difficulty = numberToDifficulty(params.difficulty);
     values.difficultyEstimate = difficulty;

@@ -8,6 +8,7 @@
  */
 
 import { gradeAnswerWithLLM } from '@/lib/llm';
+import type { LlmProvider } from '@/server/llm/provider';
 import { getProviderSettings } from '@/server/llm/settings';
 
 // Mirrors questionTypeEnum in src/server/db/schema.ts. The grader's leniency
@@ -33,6 +34,10 @@ export type ScoredGrade = {
   // analytics; it is NO LONGER the only thing standing between an outage and a
   // wrong score (that is now the `status` discriminant below).
   gradedVia: 'exact' | 'llm';
+  // B-LLM-PROVIDER-AB-SWITCH B3: the provider that produced an `llm` verdict, for
+  // provenance stamping (MASTERY_EVENTS.llm_provider). null for the exact-match
+  // fast-path and the empty/give-up wrong — no LLM was involved.
+  gradedProvider: LlmProvider | null;
 };
 
 // The grader could not reach a verdict (timeout, parse error, no client). This
@@ -133,6 +138,7 @@ export async function gradeAnswer(
   if (!submitted.trim()) {
     return logGrade(startedAt, 'exact', true, {
       status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact',
+      gradedProvider: null,
     });
   }
 
@@ -140,6 +146,7 @@ export async function gradeAnswer(
   if (exactMatch(submitted, canonicalAnswer, acceptedAlternatives)) {
     return logGrade(startedAt, 'exact', false, {
       status: 'scored', result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact',
+      gradedProvider: null,
     });
   }
 
@@ -175,5 +182,6 @@ export async function gradeAnswer(
     consolation: llmResult.consolation ?? null,
     confidence: llmResult.confidence,
     gradedVia: 'llm',
+    gradedProvider: gradeProvider,
   });
 }

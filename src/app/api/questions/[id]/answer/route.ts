@@ -128,6 +128,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     eventQuestionId: question.id,
     basePoints,
     weight: awardsMasteryCredit ? 1 : 0,
+    // B-LLM-PROVIDER-AB-SWITCH B3: grader provenance (grade is scored here).
+    llmProvider: grade.gradedProvider,
   }).catch((error: unknown) => {
     console.warn('[questions/answer] failed to write mastery/adaptive answer event', {
       error: error instanceof Error ? error.message : 'unknown',

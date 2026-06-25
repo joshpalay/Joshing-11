@@ -1608,6 +1608,21 @@ export async function register() {
     } catch {
       // Non-fatal — migrate() creates the table from 0087 immediately after.
     }
+
+    // Migration 0088 (B-LLM-PROVIDER-AB-SWITCH B3) adds provider-provenance
+    // columns to three existing tables. A preview/production database that
+    // records the migration without the columns present would 42703 when a
+    // stamped write references them. Add them idempotently (additive, nullable,
+    // no default — precedent: 0085/0086). Each ADD COLUMN IF NOT EXISTS no-ops
+    // when the column already exists.
+    try {
+      await db.execute(sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "generated_by_provider" text`);
+      await db.execute(sql`ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "categorize_provider" text`);
+      await db.execute(sql`ALTER TABLE "MASTERY_EVENTS" ADD COLUMN IF NOT EXISTS "llm_provider" text`);
+    } catch {
+      // These tables may not exist yet on a fresh database — migrate() creates
+      // them (with these columns) before/at this migration.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

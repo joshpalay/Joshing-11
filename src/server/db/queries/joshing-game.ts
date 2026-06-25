@@ -539,6 +539,8 @@ export async function submitJoshingGameResponse(params: {
     eventQuestionId: params.questionId,
     basePoints,
     weight: 1,
+    // B-LLM-PROVIDER-AB-SWITCH B3: grader provenance (grade is scored here).
+    llmProvider: grade.gradedProvider,
   });
 
   if (isCorrect && question.creatorId && question.creatorId !== params.userId) {

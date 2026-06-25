@@ -1699,6 +1699,8 @@ export async function generateDailyQuestions(
         subjectEntity: question.subject_entity,
         subAngles: question.sub_angles,
         insideJoke: insideJokeByQuestion.get(question) ?? null,
+        // B-LLM-PROVIDER-AB-SWITCH B3: stamp the provider that generated this row.
+        generatedByProvider: provider,
         trustTier,
         askToAnswerVerified,
         acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
@@ -2278,6 +2280,10 @@ async function pickBankPicksForDomains(
           acceptableVariants: source.acceptableVariants,
           sourceRefs: source.sourceRefs,
           perishable: source.perishable,
+          // B-LLM-PROVIDER-AB-SWITCH B3: carry generation provenance onto the
+          // serving copy (this is a duplicate of an already-generated bank row,
+          // not a fresh generation) so the copy isn't a provenance black hole.
+          generatedByProvider: source.generatedByProvider,
           expiresAt,
           usedInQueue: false,
         })

@@ -42,6 +42,9 @@ type PatchValues = {
   subcategory?: string;
   canonicalSubcategory?: string;
   difficulty?: number;
+  // B-LLM-PROVIDER-AB-SWITCH B3: set alongside a re-categorization (not from the
+  // client body — assigned server-side after categorizeQuestion runs).
+  categorizeProvider?: string | null;
 };
 
 // Field order for the `fields` error array, preserved from the prior
@@ -139,12 +142,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const shouldRecategorize = values.text !== undefined || values.correctAnswer !== undefined;
   if (shouldRecategorize) {
-    // B-LLM-PROVIDER-AB-SWITCH B2: use the globally-selected categorize provider.
+    // B-LLM-PROVIDER-AB-SWITCH B2/B3: use the globally-selected categorize
+    // provider and stamp it onto the row alongside the recomputed category.
+    const categorizeProvider = (await getProviderSettings()).categorize;
     const categorization = await categorizeQuestion(
       effectiveText,
       effectiveAnswer,
       effectiveAlternates,
-      (await getProviderSettings()).categorize,
+      categorizeProvider,
     );
     const category = normalizeBroadQuestionCategoryOrDefault(categorization.broad_category);
     const canonicalSubcategory = normalizeCanonicalSubcategory(categorization.subcategory) || 'General Knowledge';
@@ -158,6 +163,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     values.broadCategory = broadCategoryDisplayName(category);
     values.canonicalSubcategory = canonicalSubcategory;
     values.subcategory = canonicalSubcategory;
+    values.categorizeProvider = categorizeProvider;
   }
 
   const shouldReassessDifficulty = values.text !== undefined

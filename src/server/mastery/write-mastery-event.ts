@@ -4,6 +4,7 @@ import { db, masteryEvents, playerMastery } from '@/server/db';
 import { maybeNotifyInviterOfFirstFive } from '@/server/activity/invite-onboarding';
 import { evaluateQuestionTrustOnPlay } from '@/server/db/queries/trust-promotion';
 import { effectiveTier } from '@/server/mastery/tiers';
+import type { LlmProvider } from '@/server/llm/provider';
 import type { AnswerState, MasteryTier } from '@/types/db';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 
@@ -22,6 +23,10 @@ export type WriteMasteryEventParams = {
   basePoints?: number;
   weight?: number;
   answeredByUserId?: string | null;
+  // B-LLM-PROVIDER-AB-SWITCH B3: provider that GRADED this answer ('anthropic'|
+  // 'openai'), or null when the grade never hit an LLM (exact-match/give-up) or
+  // the write isn't from a grading path (author/curator credit, backfill, etc.).
+  llmProvider?: LlmProvider | null;
   // When true, the best-effort tail (trust-on-play + inviter first-five notify)
   // is NOT run inline. The caller must schedule runMasteryWriteSideEffects()
   // itself (e.g. via after()) when result.eventInserted is true. Used on the
@@ -183,7 +188,8 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         "weight",
         "awarded_points",
         "answer_state",
-        "session_context"
+        "session_context",
+        "llm_provider"
       ) values (
         ${params.userId},
         ${params.domain},
@@ -201,7 +207,8 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         ${params.weight ?? (params.pointsAwarded > 0 ? 1 : 0)},
         ${params.pointsAwarded},
         ${params.sourceType === 'author_credit' || params.sourceType === 'curator_credit' ? null : (params.answerState ?? null)},
-        ${params.sourceType}
+        ${params.sourceType},
+        ${params.llmProvider ?? null}
       )
       on conflict do nothing
       returning "id"

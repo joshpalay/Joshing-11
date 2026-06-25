@@ -1571,6 +1571,9 @@ export type BankSource = {
   acceptableVariants: string[];
   sourceRefs: string[];
   perishable: boolean;
+  // B-LLM-PROVIDER-AB-SWITCH B3: carried so the serving copy keeps the
+  // provider that originally generated this bank row.
+  generatedByProvider: string | null;
 };
 
 export type BankDifficulty = 'accessible' | 'moderate' | 'specialist';
@@ -1754,6 +1757,7 @@ export async function pickBankSource(
       acceptableVariants: Array.isArray(row.acceptableVariants) ? row.acceptableVariants : [],
       sourceRefs: Array.isArray(row.sourceRefs) ? row.sourceRefs : [],
       perishable: row.perishable ?? false,
+      generatedByProvider: row.generatedByProvider ?? null,
     };
   }
   return null;

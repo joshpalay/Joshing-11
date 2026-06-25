@@ -328,7 +328,7 @@ export async function POST(request: NextRequest) {
     // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
     // failure — so it's constructed as a scored outcome and never held for retry.
     const grade: GradeOutcome = parsed.gaveUp
-      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact' }
+      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact', gradedProvider: null }
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
@@ -500,6 +500,9 @@ export async function POST(request: NextRequest) {
         eventQuestionId: canonicalQuestionId,
         basePoints,
         weight: pointsAwarded > 0 ? pointsAwarded / basePoints : 0,
+        // B-LLM-PROVIDER-AB-SWITCH B3: stamp the grader provider (null for the
+        // exact-match fast-path and the give-up wrong).
+        llmProvider: grade.status === 'scored' ? grade.gradedProvider : null,
       },
       adaptiveDifficultyDomain: question.canonicalSubcategory,
       // Give-ups are deliberate wrongs: no author credit, no friend fan-out.
