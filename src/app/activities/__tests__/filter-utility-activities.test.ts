@@ -112,6 +112,32 @@ function declaredPromotedActivity(id: string): ActivityItemView {
   };
 }
 
+function gradeDisputeFiledActivity(id: string): ActivityItemView {
+  return {
+    id,
+    userId: 'viewer-1',
+    type: 'grade_dispute_filed',
+    actorUserId: 'friend-1',
+    referenceId: 'dispute-1',
+    referenceType: 'grade_dispute',
+    read: false,
+    createdAt: new Date('2026-05-24T12:00:00.000Z'),
+    actor: { displayName: 'Sadie' },
+    reference: {
+      gradeDispute: {
+        id: 'dispute-1',
+        questionText: 'A disputed question…',
+        canonicalAnswer: 'answer',
+        submittedAnswer: 'guess',
+        status: 'pending',
+        reviewDecision: 'dispute',
+        reviewReason: null,
+        acceptedAlternative: null,
+      },
+    },
+  };
+}
+
 describe('filterUtilityActivities', () => {
   it('drops received_direct_question when a you_got_them moment covers the same questionId', () => {
     const items = [directQuestionActivity('a-1', 'fi-1', 'q-sondheim')];
@@ -149,6 +175,12 @@ describe('filterUtilityActivities', () => {
 
     const kept = filterUtilityActivities(items, []);
     expect(kept.map((i) => i.id)).toEqual(['a-2']);
+  });
+
+  it('drops grade_dispute_filed (retired — no actionable surface)', () => {
+    const items = [gradeDisputeFiledActivity('gd-1')];
+
+    expect(filterUtilityActivities(items, [])).toEqual([]);
   });
 
   // D-2 dedup non-collision: niche-match is stranger-scoped and Lately moments

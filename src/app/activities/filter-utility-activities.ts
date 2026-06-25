@@ -33,6 +33,12 @@ export function filterUtilityActivities(
       i.reference.friendAnsweredQuestion?.result === 'correct'
     ) return false;
     if (i.type === 'declared_promoted') return false;
+    // grade_dispute_filed ("{friend} asked for a re-look at your question") is
+    // retired (2026-06-25): the card carried no action the recipient could take
+    // — the re-grade happens in the human-review queue, not on the author's
+    // stream. New rows are no longer written (feed/recheck + milestone/recheck);
+    // this drops any historical rows so they stop surfacing the dead-end card.
+    if (i.type === 'grade_dispute_filed') return false;
     if (
       i.type === 'received_direct_question' &&
       i.reference.directQuestion?.questionId &&
