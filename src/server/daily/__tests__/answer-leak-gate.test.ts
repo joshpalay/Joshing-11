@@ -38,6 +38,23 @@ describe('findAnswerLeaks', () => {
     expect(result.reasons[0]).toContain('Mental model');
   });
 
+  it('drops an article-led answer whose bare noun is named in the question (episode-title leak)', () => {
+    // Both played in a duo today: the question names the episode title, which is
+    // the answer. "A box cutter" / "A fly" never substring-match because of the
+    // leading article — the gate must strip it and catch the bare noun.
+    const result = findAnswerLeaks([
+      q(
+        "In the episode 'Box Cutter,' Gus Fring silently kills one of his own men to send Walter and Jesse a message. What does he use as the murder weapon?",
+        'A box cutter',
+      ),
+      q(
+        "In the episode 'Fly,' Walt and Jesse spend an entire episode trapped together in the superlab chasing a single intruder. What is it?",
+        'A fly',
+      ),
+    ]);
+    expect([...result.toDrop].sort()).toEqual([0, 1]);
+  });
+
   it('keeps a clean question whose answer is absent from the setup', () => {
     const result = findAnswerLeaks([
       q('What cognitive bias makes recent information feel more important?', 'Recency bias'),
