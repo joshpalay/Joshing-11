@@ -308,9 +308,7 @@ export function AuthoredQuestionsFeed({
 
     return (
       <section className="mt-8" aria-label="Questions">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-          Questions
-        </p>
+        <h2 className="font-serif text-xl font-semibold">Questions</h2>
 
         {error ? (
           <p className="mt-3 rounded-md border border-[var(--destructive-border)] bg-[var(--destructive-surface)] px-3 py-2 text-sm text-destructive">
