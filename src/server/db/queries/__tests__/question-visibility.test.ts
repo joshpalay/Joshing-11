@@ -25,6 +25,12 @@ vi.mock('drizzle-orm', () => ({
   notInArray: vi.fn((column, values) => ({ op: 'notInArray', column, values })),
 }));
 
+// The mutual-friendship gate aliases the Follow table (one alias per direction).
+// Identity alias is enough for the structural assertions here.
+vi.mock('drizzle-orm/pg-core', () => ({
+  alias: vi.fn((table) => table),
+}));
+
 function makeChain(rows: unknown[] = []) {
   const chain: Record<string, unknown> = {};
   for (const method of ['select', 'from', 'innerJoin', 'where', 'orderBy', 'limit']) {
@@ -82,8 +88,8 @@ describe('feedItemVisibilityPredicate (direct_sent exemption)', () => {
   });
 });
 
-describe('questionVisibilityPredicate (D-1 Stage 4)', () => {
-  it('admits public questions unconditionally and gates friends on an approved viewer→author follow', () => {
+describe('questionVisibilityPredicate (Phase 1: friend = mutual)', () => {
+  it('admits public questions unconditionally and gates friends on a MUTUAL approved follow (both directions)', () => {
     const predicate = questionVisibilityPredicate('viewer-1') as { op: string; parts: unknown[] };
 
     expect(predicate.op).toBe('or');
@@ -91,7 +97,7 @@ describe('questionVisibilityPredicate (D-1 Stage 4)', () => {
     // Branch 1: public is always visible.
     expect(predicate.parts).toContainEqual({ op: 'eq', column: 'questions.visibility', value: 'public' });
 
-    // Branch 2: friends-visible AND an EXISTS over an approved follow edge.
+    // Branch 2: friends-visible AND a mutual-friendship gate.
     const friendsBranch = predicate.parts.find(
       (p): p is { op: string; parts: unknown[] } =>
         typeof p === 'object' && p !== null && (p as { op?: string }).op === 'and',
@@ -99,10 +105,18 @@ describe('questionVisibilityPredicate (D-1 Stage 4)', () => {
     expect(friendsBranch).toBeDefined();
     expect(friendsBranch!.parts).toContainEqual({ op: 'eq', column: 'questions.visibility', value: 'friends' });
 
-    const existsClause = friendsBranch!.parts.find(
+    // The mutual gate is a nested AND of TWO approved-follow EXISTS clauses — one
+    // per direction. A single one-directional EXISTS (the old behavior) would
+    // leak a non-friend's 'friends'-visibility question and is caught here.
+    const mutualGate = friendsBranch!.parts.find(
+      (p): p is { op: string; parts: unknown[] } =>
+        typeof p === 'object' && p !== null && (p as { op?: string }).op === 'and',
+    );
+    expect(mutualGate).toBeDefined();
+    const existsClauses = mutualGate!.parts.filter(
       (p): p is { op: string } => typeof p === 'object' && p !== null && (p as { op?: string }).op === 'exists',
     );
-    expect(existsClause).toBeDefined();
+    expect(existsClauses).toHaveLength(2);
   });
 
   it('never admits private to another viewer (no private branch)', () => {
