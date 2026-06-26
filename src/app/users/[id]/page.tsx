@@ -106,6 +106,19 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
   const isStranger = portrait.visibility === 'stranger';
   const friendFirstName = firstName(portrait.user.displayName);
 
+  // A "stranger" (public / non-friend viewer) may still see whichever sections
+  // the owner marked public. The teaser must only fully gate when NOTHING is
+  // visible; otherwise we fall through to the content view, which already gates
+  // each section by portrait.sectionVisibleTo. Bug fix: public knowledge/
+  // questions were hidden from non-friends because the gate keyed off
+  // friendship alone, never consulting sectionVisibleTo.
+  const visibleSectionCount =
+    (portrait.sectionVisibleTo.knowledge_base ? 1 : 0) +
+    (portrait.sectionVisibleTo.authored_questions ? 1 : 0) +
+    (portrait.sectionVisibleTo.friends_list ? 1 : 0);
+  const strangerSeesNothing = isStranger && visibleSectionCount === 0;
+  const strangerHasGatedSection = isStranger && visibleSectionCount < 3;
+
   // The simulated viewer's label for the banner. 'public' is the new
   // user-facing word for what the preview module still calls 'stranger'.
   const previewBannerLabel = !portrait.previewedAs
@@ -129,8 +142,11 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
     // Common ground compares the viewer's full mastery base to this profile's.
-    // Never rendered on the owner's own profile, so skip the reads there.
-    isOwnerView ? Promise.resolve(null) : getCommonGround(session.userId, portrait.user.id),
+    // Never rendered on the owner's own profile or for a public (stranger)
+    // viewer, so skip the read for both.
+    isOwnerView || isStranger
+      ? Promise.resolve(null)
+      : getCommonGround(session.userId, portrait.user.id),
     // The viewed user's own friends, surfaced (capped) in the Friends module.
     // Gated at render by their friends_list visibility. Skipped on owner view.
     isOwnerView ? Promise.resolve([]) : getFriends(portrait.user.id),
@@ -293,8 +309,10 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
   }
 
   // Stranger short-circuit: non-friend viewers (and the owner previewing
-  // as public) get the minimal teaser card without rich content.
-  if (isStranger) {
+  // as public) with NO public sections get the minimal teaser card. A
+  // stranger who can see at least one public section falls through to the
+  // content view below, which gates each section by sectionVisibleTo.
+  if (strangerSeesNothing) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5">
         {previewBannerLabel ? (
@@ -389,7 +407,22 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         }
       />
 
-      {!isSelf ? (
+      {/* Mutual friends teaser — shown to a public viewer who has at least one
+          public section (the zero-section case is handled by the short-circuit
+          teaser above). Friends/self get the relational modules instead. */}
+      {isStranger ? (
+        <MutualFriendsSection
+          friends={portrait.mutualFriends}
+          overflowCount={portrait.mutualFriendsOverflow}
+          visibility="stranger"
+          friendFirstName={friendFirstName}
+        />
+      ) : null}
+
+      {/* Common ground is relational and never shown to strangers — it derives
+          from the viewer's knowledge overlap and the teaser intentionally omits
+          it. Friends only (self never saw it). */}
+      {!isStranger && !isSelf ? (
         <CommonGround
           data={commonGround}
           friendFirstName={friendFirstName}
@@ -452,6 +485,14 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
             previewLimit={QUESTIONS_PREVIEW_LIMIT}
           />
         </section>
+      ) : null}
+
+      {/* A public viewer who can see some sections but not all still gets the
+          nudge to befriend for the rest. */}
+      {strangerHasGatedSection ? (
+        <p className="text-muted-foreground mt-6 text-sm">
+          Become friends to see more of {friendFirstName}’s profile.
+        </p>
       ) : null}
     </main>
   );

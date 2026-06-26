@@ -16,6 +16,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 import FriendRequestsSection, {
+  deriveVisibleRequests,
   FRIEND_REQUEST_ENDPOINTS,
   submitFriendRequestAction,
   type SerializedIncomingRequest,
@@ -157,39 +158,75 @@ describe('submitFriendRequestAction', () => {
   })
 })
 
-// The component's success/failure transitions are pure: on ok the card is
-// filtered out of local state and the count decremented; on failure the list is
-// untouched and the error surfaced. Mirror that here so a green action test
-// can't mask a broken consumer.
+// The component's success/failure transitions are pure: on ok the acted id is
+// added to the optimistically-removed set; on failure the list is untouched and
+// the error surfaced. The visible set is then derived from props minus that set
+// (deriveVisibleRequests), which is what keeps this card in lockstep with the
+// same request's Recent Activity duplicate across a router.refresh(). Mirror
+// that here so a green action test can't mask a broken consumer.
 describe('FriendRequestsSection state transitions', () => {
   it('removes the acted card and decrements the count on success', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(true, { ok: true }))
-    let requests = [request('a'), request('b'), request('c')]
-    let totalCount = 5
+    const initial = { top: [request('a'), request('b'), request('c')], totalCount: 5 }
+    const removed = new Set<string>()
 
     const result = await submitFriendRequestAction('b', 'accept', 'nope', fetchImpl as typeof fetch)
-    if (result.ok) {
-      requests = requests.filter((item) => item.id !== 'b')
-      totalCount = Math.max(0, totalCount - 1)
-    }
+    if (result.ok) removed.add('b')
 
+    const { requests, totalCount } = deriveVisibleRequests(initial, removed)
     expect(requests.map((r) => r.id)).toEqual(['a', 'c'])
     expect(totalCount).toBe(4)
   })
 
   it('keeps the card and surfaces the error on failure', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(false, { message: 'Try again.' }))
-    let requests = [request('a'), request('b')]
+    const initial = { top: [request('a'), request('b')], totalCount: 2 }
+    const removed = new Set<string>()
     let error: string | null = null
 
     const result = await submitFriendRequestAction('b', 'ignore', 'nope', fetchImpl as typeof fetch)
-    if (!result.ok) {
-      error = result.message
-    } else {
-      requests = requests.filter((item) => item.id !== 'b')
-    }
+    if (!result.ok) error = result.message
+    else removed.add('b')
 
+    const { requests } = deriveVisibleRequests(initial, removed)
     expect(requests.map((r) => r.id)).toEqual(['a', 'b'])
     expect(error).toBe('Try again.')
+  })
+})
+
+// The cross-surface sync fix: visible cards are DERIVED from the latest server
+// props minus locally-cleared ids — not seeded into useState — so a
+// router.refresh() triggered by accepting/declining the same request in the
+// Recent Activity feed (which re-renders this section with fresh props) clears
+// this card too, instead of stranding a stale one with dead buttons.
+describe('deriveVisibleRequests', () => {
+  it('returns all props verbatim when nothing has been cleared', () => {
+    const initial = { top: [request('a'), request('b')], totalCount: 4 }
+    const { requests, totalCount } = deriveVisibleRequests(initial, new Set())
+    expect(requests.map((r) => r.id)).toEqual(['a', 'b'])
+    expect(totalCount).toBe(4)
+  })
+
+  it('hides a locally-cleared id and decrements the overflow total', () => {
+    const initial = { top: [request('a'), request('b'), request('c')], totalCount: 5 }
+    const { requests, totalCount } = deriveVisibleRequests(initial, new Set(['b']))
+    expect(requests.map((r) => r.id)).toEqual(['a', 'c'])
+    expect(totalCount).toBe(4)
+  })
+
+  it('treats a cleared id as a no-op once the refresh drops it from props', () => {
+    // Simulates the post-router.refresh() render: the server already dropped 'b'
+    // from `top` and decremented `totalCount`, while the removed set still holds
+    // 'b'. The stale set entry must not double-decrement the count.
+    const initial = { top: [request('a'), request('c')], totalCount: 4 }
+    const { requests, totalCount } = deriveVisibleRequests(initial, new Set(['b']))
+    expect(requests.map((r) => r.id)).toEqual(['a', 'c'])
+    expect(totalCount).toBe(4)
+  })
+
+  it('never reports a negative total', () => {
+    const initial = { top: [request('a')], totalCount: 0 }
+    const { totalCount } = deriveVisibleRequests(initial, new Set(['a']))
+    expect(totalCount).toBe(0)
   })
 })

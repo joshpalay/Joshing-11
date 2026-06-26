@@ -594,7 +594,8 @@ describe('Feed card category and overflow affordances', () => {
       'Hide questions about Literature',
       'Hide questions from Maya',
       'Send to friend',
-      'Report',
+      'This is incorrect',
+      'This is inappropriate',
     ])
   })
 

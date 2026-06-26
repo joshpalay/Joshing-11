@@ -62,18 +62,16 @@ export default async function FriendFriendsPage({ params }: FriendFriendsPagePro
           {friendFirstName} hasn&rsquo;t added any friends yet.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-[var(--brand-rule)]">
+        <ul className="border-border mt-1 divide-y rounded-md border">
           {friends.map((friend) => (
             <li key={friend.id}>
               <Link
                 href={`/users/${friend.id}`}
-                className="hover:bg-muted/60 flex items-center gap-3 rounded-lg px-2 py-3"
+                className="hover:bg-secondary/40 flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors"
               >
-                <span className="bg-primary/10 text-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-serif text-lg font-semibold">
-                  {friend.displayName.slice(0, 1).toUpperCase() || 'J'}
-                </span>
-                <span className="text-foreground min-w-0 flex-1 truncate font-medium">
-                  {friend.displayName}
+                <span className="min-w-0 truncate">{friend.displayName}</span>
+                <span aria-hidden="true" className="text-muted-foreground">
+                  &rarr;
                 </span>
               </Link>
             </li>
