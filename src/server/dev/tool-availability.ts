@@ -38,6 +38,14 @@ export function getExistingDevToolHrefs(): string[] | null {
       hrefs.push('/daily/summary/expand-preview');
     }
 
+    // Nested onboarding-harness stage. The /dev/onboarding hub page was
+    // consolidated into the profile dev-tools section, so its parent folder no
+    // longer has its own page — but the dev-tools UI still links straight to the
+    // setup/areas replay one level deeper.
+    if (hasPage(path.join(devDir, 'onboarding', 'intro'))) {
+      hrefs.push('/dev/onboarding/intro');
+    }
+
     return hrefs;
   } catch {
     return null;

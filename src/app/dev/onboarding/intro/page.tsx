@@ -34,9 +34,9 @@ export default async function DevOnboardingIntroPage({
   return (
     <>
       <div className="fixed top-0 right-0 left-0 z-50 flex items-center justify-between gap-3 bg-[var(--brand-ink-950)] px-4 py-2 text-[var(--primary-foreground)]">
-        <Link href="/dev/onboarding" className="inline-flex items-center gap-1 text-sm">
+        <Link href="/users/me" className="inline-flex items-center gap-1 text-sm">
           <ChevronLeft className="size-4" />
-          Stages
+          Dev tools
         </Link>
         <span className="text-[12px] font-bold tracking-[0.1em] uppercase">
           {walk ? 'Full walkthrough · writes stubbed' : 'Read-only replay · writes stubbed'}
