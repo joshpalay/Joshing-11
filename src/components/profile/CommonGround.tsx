@@ -53,8 +53,11 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
   )
 
   return (
-    <section className="mt-8" aria-label="Common ground">
-      <h2 className="font-serif text-xl font-semibold">Common ground</h2>
+    <section
+      className="mt-8 border-t border-[var(--brand-rule)] pt-8"
+      aria-label="Common ground"
+    >
+      <h2 className="font-serif text-2xl font-semibold">Common ground</h2>
       <p className="text-muted-foreground mt-1 text-sm leading-6">{headline}</p>
 
       {isEmpty ? null : (
