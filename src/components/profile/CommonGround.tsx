@@ -53,7 +53,7 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
   )
 
   return (
-    <section className="mt-5" aria-label="Common ground">
+    <section className="mt-8" aria-label="Common ground">
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
         Common ground
       </p>
