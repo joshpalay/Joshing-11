@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { db, playerMastery, questions } from '@/server/db';
-import { getBasePoints } from '@/server/mastery/scoring';
+import { canonicalPointsForAnswer } from '@/lib/game-constants';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -101,9 +101,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     canonicalQuestionId: question.id,
     isCorrect,
     pointsFor: (state) =>
-      isCorrect
-        ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, state)
-        : 0,
+      canonicalPointsForAnswer({
+        difficulty: question.calibratedDifficulty ?? question.llmDifficulty ?? null,
+        answerState: state,
+      }),
   });
 
   const existingMastery = await db

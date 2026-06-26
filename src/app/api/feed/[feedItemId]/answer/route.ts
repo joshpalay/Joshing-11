@@ -4,7 +4,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { gradeAnswer } from '@/server/grading';
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, playerMastery, questions, users } from '@/server/db';
-import { getBasePoints } from '@/server/mastery/scoring';
+import { canonicalPointsForAnswer } from '@/lib/game-constants';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -133,17 +133,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // F2.3: derive answer_state against the user's prior history on this
   // canonical question (shared pipeline) so first_correct_after_wrong
   // (recovery) is detected instead of being collapsed into first_correct.
-  // getBasePoints returns the correct state-adjusted credit (full for
-  // first_correct, 0.25x for first_correct_after_wrong, 0 for
-  // repeat_correct / incorrect).
+  // canonicalPointsForAnswer is the single scorer across all five answer
+  // routes (D-RECOVERY-SCORING-UNIFY-01): full credit for first_correct,
+  // 0.25x for recovery, 0 for repeat_correct / incorrect.
   const { masteryAnswerState: answerState, pointsAwarded } = await deriveAnswerOutcome({
     userId: session.userId,
     canonicalQuestionId: question.id,
     isCorrect,
     pointsFor: (state) =>
-      isCorrect
-        ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, state)
-        : 0,
+      canonicalPointsForAnswer({
+        difficulty: question.calibratedDifficulty ?? question.llmDifficulty ?? null,
+        answerState: state,
+      }),
   });
 
   const existingMastery = await db

@@ -28,10 +28,7 @@ import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 // feed branch fans out on correct answers only). Unifying those is a behavior
 // change that needs its own decision, not a refactor.
 import { deriveAnswerOutcome } from '@/server/answers/answer-pipeline';
-import {
-  CATCHUP_SURFACE_WEIGHT,
-  RECOVERY_STATE_WEIGHT,
-} from '@/server/mastery/constants';
+import { canonicalPointsForAnswer } from '@/lib/game-constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -254,20 +251,23 @@ async function handleDailyCatchupAnswer({
     userId,
   );
 
-  const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
   const { masteryAnswerState, pointsAwarded } = await deriveAnswerOutcome({
     userId,
     canonicalQuestionId,
     isCorrect,
+    // Single scorer across all five answer routes (D-RECOVERY-SCORING-UNIFY-01).
+    // catchUp applies the 0.25x catch-up surface weight to first_correct;
+    // recovery earns 25% of the original live base (NOT the stacked 6.25%),
+    // because the recovery weight is selected instead of the catch-up weight,
+    // never on top of it — so wrong-then-right on catch-up still earns
+    // meaningful credit. Difficulty is the same source baseCatchupPoints used
+    // (catchupItem.basePoints = getBasePoints(difficultyEstimate, 'first_correct')).
     pointsFor: (state) =>
-      state === 'first_correct'
-        ? baseCatchupPoints
-        : state === 'first_correct_after_wrong'
-          // Recovery on a catch-up answer = 25% of the original live base (not 6.25%).
-          // RECOVERY_STATE_WEIGHT applies to the full base, not the already-reduced
-          // catch-up base, so wrong-then-right on catch-up still earns meaningful credit.
-          ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
-          : 0,
+      canonicalPointsForAnswer({
+        difficulty: catchupItem.difficultyEstimate,
+        answerState: state,
+        catchUp: true,
+      }),
   });
 
   const nextSlots = replaceQueueSlot(slots, catchupItem.slotIndex, (item) => {
@@ -468,17 +468,18 @@ async function handleFeedCatchupAnswer({
     userId,
   );
 
-  const baseCatchupPoints = Math.round(catchupItem.basePoints * CATCHUP_SURFACE_WEIGHT);
   const { masteryAnswerState, pointsAwarded } = await deriveAnswerOutcome({
     userId,
     canonicalQuestionId: feedRow.question.id,
     isCorrect,
+    // Single scorer (D-RECOVERY-SCORING-UNIFY-01); see the daily catch-up
+    // branch above for the catchUp/recovery weighting rationale.
     pointsFor: (state) =>
-      state === 'first_correct'
-        ? baseCatchupPoints
-        : state === 'first_correct_after_wrong'
-          ? Math.round(catchupItem.basePoints * RECOVERY_STATE_WEIGHT)
-          : 0,
+      canonicalPointsForAnswer({
+        difficulty: catchupItem.difficultyEstimate,
+        answerState: state,
+        catchUp: true,
+      }),
   });
 
   let masteryDelta = null;
