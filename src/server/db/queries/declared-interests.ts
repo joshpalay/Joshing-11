@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { db, declaredInterests } from '@/server/db';
 
@@ -36,4 +36,38 @@ export async function getActiveDeclaredInterests(userId: string): Promise<Active
     .orderBy(asc(declaredInterests.declaredAt), asc(declaredInterests.domain));
 
   return rows.map((row) => ({ ...row, territoryType: 'declared' as const }));
+}
+
+// Batch variant of getActiveDeclaredInterests for a SET of users in one
+// `inArray` query, grouped by userId. The global order (declaredAt asc, domain
+// asc) is preserved within each user's slice, so per-user consumers see the same
+// "first-picked first" ordering the single-user query yields. Users with no
+// active declared interests are simply absent from the map (callers default to []).
+export async function getActiveDeclaredInterestsBulk(
+  userIds: readonly string[],
+): Promise<Map<string, ActiveDeclaredInterestRow[]>> {
+  const result = new Map<string, ActiveDeclaredInterestRow[]>();
+  const ids = [...new Set(userIds)].filter(Boolean);
+  if (ids.length === 0) return result;
+
+  const rows = await db
+    .select({
+      id: declaredInterests.id,
+      userId: declaredInterests.userId,
+      domain: declaredInterests.domain,
+      broadCategory: declaredInterests.broadCategory,
+      declaredAt: declaredInterests.declaredAt,
+      isActive: declaredInterests.isActive,
+    })
+    .from(declaredInterests)
+    .where(and(inArray(declaredInterests.userId, ids), eq(declaredInterests.isActive, true)))
+    .orderBy(asc(declaredInterests.declaredAt), asc(declaredInterests.domain));
+
+  for (const row of rows) {
+    const list = result.get(row.userId);
+    const value: ActiveDeclaredInterestRow = { ...row, territoryType: 'declared' as const };
+    if (list) list.push(value);
+    else result.set(row.userId, [value]);
+  }
+  return result;
 }

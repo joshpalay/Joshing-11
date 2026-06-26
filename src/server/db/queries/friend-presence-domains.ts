@@ -18,12 +18,12 @@
  * territory domain is still eligible).
  */
 
-import { getKnowledgePageData, type DomainMastery } from '@/server/db/queries/knowledge';
+import { getKnowledgePageDataForUsers, type DomainMastery } from '@/server/db/queries/knowledge';
 import { getFollowing, getMutualFollows } from '@/server/db/queries/friends';
 import { selectRecentlyExploring } from '@/server/profile/recently-exploring';
 import {
   canViewSection,
-  getSectionVisibilities,
+  getSectionVisibilitiesBulk,
   type EffectiveViewer,
 } from '@/server/profile/visibility';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
@@ -225,41 +225,51 @@ export async function getFriendDomainsForBonus(
   // mutual set beats N per-friend `areFriends` round-trips.
   const mutualIds = new Set((await getMutualFollows(viewerUserId)).map((u) => u.id));
 
-  const perFriend = await Promise.all(
-    following.map(async (friend) => {
-      const effectiveViewer: EffectiveViewer = mutualIds.has(friend.id) ? 'friend' : 'stranger';
-      const sectionSettings = await getSectionVisibilities(friend.id);
-      if (!canViewSection(sectionSettings, 'knowledge_base', effectiveViewer)) {
-        return [] as FriendDomainContribution[];
-      }
+  // Section visibility for the whole followee set in ONE query, then the same
+  // `canViewSection` gate the profile enforces, applied in memory. A followee
+  // whose `knowledge_base` is hidden from the viewer's effective role is dropped
+  // here and never has their knowledge map fetched — identical to the old
+  // per-friend gate, minus the per-friend round-trip.
+  const visibilityByFriend = await getSectionVisibilitiesBulk(following.map((f) => f.id));
+  const visibleFriends = following.filter((friend) => {
+    const effectiveViewer: EffectiveViewer = mutualIds.has(friend.id) ? 'friend' : 'stranger';
+    const settings = visibilityByFriend.get(friend.id);
+    return settings ? canViewSection(settings, 'knowledge_base', effectiveViewer) : false;
+  });
+  if (visibleFriends.length === 0) return [];
 
-      const { allDomains } = await getKnowledgePageData(friend.id).catch(() => ({
-        allDomains: [] as DomainMastery[],
-      }));
-      const activityDomains = new Set(
-        selectRecentlyExploring(allDomains).map((d) => d.domain.toLowerCase()),
-      );
+  // Every surviving friend's domains in ONE batched fetch (the bonus pool only
+  // consumes `allDomains`). Bounded query count regardless of followee count.
+  // A batch failure degrades to an empty pool — the same best-effort posture the
+  // old per-friend `.catch(() => ({ allDomains: [] }))` gave each fetch.
+  const domainsByFriend = await getKnowledgePageDataForUsers(
+    visibleFriends.map((f) => f.id),
+  ).catch(() => new Map<string, DomainMastery[]>());
 
-      const contributions: FriendDomainContribution[] = [];
-      for (const domain of allDomains) {
-        if (excludeDomains.has(domain.domain.toLowerCase())) continue;
-        const inTerritory = isTerritoryDomain(domain);
-        const inActivity = !domain.isHidden && activityDomains.has(domain.domain.toLowerCase());
-        if (!inTerritory && !inActivity) continue;
-        contributions.push({
-          friendId: friend.id,
-          friendDisplayName: friend.displayName ?? null,
-          domain: domain.domain,
-          broadCategory: domain.broadCategory,
-          inTerritory,
-          inActivity,
-          lastActivityAt: activityMs(domain.lastActivityAt),
-          strength: domain.points,
-        });
-      }
-      return contributions;
-    }),
-  );
+  const contributions: FriendDomainContribution[] = [];
+  for (const friend of visibleFriends) {
+    const allDomains = domainsByFriend.get(friend.id) ?? [];
+    const activityDomains = new Set(
+      selectRecentlyExploring(allDomains).map((d) => d.domain.toLowerCase()),
+    );
 
-  return rankFriendDomainsForBonus(perFriend.flat(), limit);
+    for (const domain of allDomains) {
+      if (excludeDomains.has(domain.domain.toLowerCase())) continue;
+      const inTerritory = isTerritoryDomain(domain);
+      const inActivity = !domain.isHidden && activityDomains.has(domain.domain.toLowerCase());
+      if (!inTerritory && !inActivity) continue;
+      contributions.push({
+        friendId: friend.id,
+        friendDisplayName: friend.displayName ?? null,
+        domain: domain.domain,
+        broadCategory: domain.broadCategory,
+        inTerritory,
+        inActivity,
+        lastActivityAt: activityMs(domain.lastActivityAt),
+        strength: domain.points,
+      });
+    }
+  }
+
+  return rankFriendDomainsForBonus(contributions, limit);
 }

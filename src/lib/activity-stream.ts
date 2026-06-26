@@ -291,9 +291,8 @@ const HOME_ELIGIBLE = new Set<string>(HOME_TOP3_ELIGIBLE_TYPES);
 // same djb2 the convergence pool uses) so a feed of the same event type still
 // varies, while a given event always reads the same way. The `{friend}` token
 // becomes the actor link; `{topic}` the serif category. Every line is safe for
-// ANY instance of its type, and the register is connection-only — the banned
-// competition words (beat/called/nailed/crushed/schooled/"had your number") are
-// kept out by construction.
+// ANY instance of its type, and the register is connection-only — the
+// competition vocabulary the style guide prohibits is kept out by construction.
 //
 // Pool 1 — got_you: a friend answered a question YOU wrote (one-way; no "you both").
 const GOT_YOU_LINES = [
@@ -807,24 +806,24 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
 // Hash-selected per milestone id (the same djb2 the relationship pools use) so a
 // given milestone always reads the same way while the feed as a whole varies.
 // Every lead is safe for ANY domain set and stays in the warm, non-competitive
-// register (no "mastered"/"beat"/"crushed"). DEEP precedes a single domain
-// ("{name} went deep on {domain}"); BREADTH precedes the rolled-up domain list
-// ("{name} has been on a roll — A, B and N others"). Both start with the leading
-// space that joins them to the name part before them.
+// discovery register — no performance or achievement framing. DEEP precedes a
+// single domain ("{name} went deep on {domain}"); BREADTH precedes the rolled-up
+// domain list ("{name} has been all over the map — A, B and N others"). Both
+// start with the leading space that joins them to the name part before them.
 const DEEP_LEADS = [
   ' went deep on ',
   ' has been all over ',
   " can't get enough of ",
   ' has been living in ',
   ' went down a rabbit hole on ',
-  ' has been on a tear through ',
+  ' has been buried in ',
 ] as const;
 
 const BREADTH_LEADS = [
-  ' has been on a streak — ',
-  ' has been on a roll — ',
+  ' has been wandering across — ',
+  ' has been bouncing between — ',
   ' has been all over the map — ',
-  ' has been racking them up — ',
+  ' has been turning over — ',
   ' has been ranging wide — ',
   ' has been keeping busy — ',
 ] as const;
@@ -876,26 +875,28 @@ export function milestoneToStreamItem(
 
 // --- From Friends activity card (D-FEED-FRIEND-ACTIVITY-01) -------------------
 
-// Flattering, topic-attached leads for the From Friends card. Warm, complimentary
-// register (no "mastered"/"beat"/"crushed"). Each ends on a preposition so the
-// domain(s) the friend played in this burst follow as serif `category` parts —
-// e.g. "{Name} has been killing it in {Geography} and {History}". One lead is
-// picked per card id so a stack reads varied.
+// Discovery/curiosity-register leads for the From Friends card. From Friends is
+// ambient curiosity about a friend's territory, not a scoreboard — so the voice
+// names what a friend is wandering through without any performance, ranking, or
+// achievement framing (no competition or scoreboard verbs). Each
+// ends on a preposition so the domain(s) the friend played in this burst follow as
+// serif `category` parts — e.g. "{Name} has been wandering through {Geography} and
+// {History}". One lead is picked per card id so a stack reads varied.
 const FRIEND_ACTIVITY_LEADS = [
-  ' has been killing it in ',
-  ' has been on a streak of wisdom in ',
-  ' is amazing answering questions about ',
-  ' has been all over ',
-  " can't get enough of ",
-  ' has been on a tear through ',
+  ' has been wandering through ',
+  ' keeps finding corners in ',
+  ' has been circling ',
+  ' has been deep in ',
+  ' keeps coming back to ',
+  ' has been turning over ',
 ] as const;
 
 // Fallback when none of the burst's questions resolved a domain — keep the same
-// complimentary voice without naming a topic.
+// observational, never-evaluative voice without naming a topic.
 const FRIEND_ACTIVITY_LEADS_NO_TOPIC = [
-  ' has been killing it',
-  ' has been on a streak of wisdom',
-  ' is on a roll',
+  ' has been wandering somewhere new',
+  ' keeps finding new corners',
+  ' has been following a thread',
 ] as const;
 
 // Distinct domains the friend played in this card, most-recent first (the
@@ -916,7 +917,7 @@ function friendActivityDomains(questions: StreamQuestion[]): string[] {
 // One From Friends play burst/batch, expanded to its answerable questions. Mirrors
 // `milestoneToStreamItem` (same StreamItem shape, same 'milestone' expand the feed
 // already renders) but sorts on the card's chronological `effectiveAt`. The copy
-// keeps the flattering breadth voice — a complimentary lead + the burst's domains
+// keeps the discovery breadth voice — a curiosity-register lead + the burst's domains
 // rolled up "A, B and N others" — even though grouping is now time-based.
 export function friendActivityToStreamItem(
   card: FriendActivityCard,

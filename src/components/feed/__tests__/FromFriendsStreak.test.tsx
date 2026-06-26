@@ -40,7 +40,7 @@ function streakItem(
     homeEligible: true,
     line: [
       { t: 'actor', name: friendName, userId: friendId },
-      { t: 'text', v: ' has been on a tear through ' },
+      { t: 'text', v: ' has been wandering through ' },
       { t: 'category', v: 'Tennis Fundamentals' },
     ],
     secondLine: null,
@@ -61,7 +61,7 @@ describe('FromFriendsStreak — header-presence fork (D-C)', () => {
   it('renders a header + one card per question for a ≥2 bundle', () => {
     const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('a'), q('b')])} />);
     // The streak line renders as a header (the friend + the rolled-up domains).
-    expect(html).toContain('has been on a tear through');
+    expect(html).toContain('has been wandering through');
     expect(html).toContain('Tennis Fundamentals');
     // One answerable card per question.
     expect(answerCardCount(html)).toBe(2);
@@ -74,7 +74,7 @@ describe('FromFriendsStreak — header-presence fork (D-C)', () => {
   it('renders a single card with NO header and a "via {friend}’s streak" line for a 1-question bundle', () => {
     const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('solo')])} />);
     // No header: the streak predicate / domain roll-up sentence is absent.
-    expect(html).not.toContain('has been on a tear through');
+    expect(html).not.toContain('has been wandering through');
     // The lone card carries the compact answerer-streak attribution instead.
     expect(html).toContain('via ');
     expect(html).toContain('Joshua P');
@@ -92,7 +92,7 @@ describe('FromFriendsStreak — headerless (streak page) mode', () => {
     );
     // The page header carries attribution, so the component renders neither the
     // internal streak header nor a per-card "via {friend}'s streak" line.
-    expect(html).not.toContain('has been on a tear through');
+    expect(html).not.toContain('has been wandering through');
     expect(html).not.toContain('via ');
     // The answerable cards (and their category eyebrows) still render.
     expect(answerCardCount(html)).toBe(2);
