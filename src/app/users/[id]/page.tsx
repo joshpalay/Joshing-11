@@ -15,6 +15,7 @@ import { ProfileFriendsSection } from '@/components/profile/ProfileFriendsSectio
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle';
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 import { AccountActions } from '@/components/profile/settings/AccountActions';
+import { getExistingDevToolHrefs } from '@/server/dev/tool-availability';
 import { NotificationsForm } from '@/components/profile/settings/NotificationsForm';
 import { PrivacyForm } from '@/components/profile/settings/PrivacyForm';
 import { formatUsPhoneInput } from '@/lib/phone-e164';
@@ -297,7 +298,10 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         {llmProviders ? <LlmProviderPanel initial={llmProviders} /> : null}
         {llmExperimentData ? <LlmExperimentReadout data={llmExperimentData} /> : null}
 
-        <AccountActions isAdmin={isAdminUser(session.userId)} />
+        <AccountActions
+          isAdmin={isAdminUser(session.userId)}
+          availableToolHrefs={getExistingDevToolHrefs()}
+        />
 
         <footer className="text-muted-foreground mt-auto pt-6 text-center text-xs">
           <Link href="/terms" className="font-medium underline-offset-4 hover:underline">

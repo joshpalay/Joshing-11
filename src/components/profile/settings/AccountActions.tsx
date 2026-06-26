@@ -16,6 +16,7 @@ import {
   Sprout,
   Sun,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { clearCachedLoadingMomentPayload } from '@/components/loading-moment/client-cache';
@@ -55,6 +56,22 @@ export async function logoutAndRedirect(navigate: (url: string) => void): Promis
 // matching /dev route gate lives in src/app/dev/layout.tsx; revert both together.
 const DEV_TOOLS_UNGATED = true;
 
+// A single developer tool. Link tools open a route (and participate in the
+// route-exists availability check); action tools fire an inline handler and are
+// always available.
+type DevTool =
+  | { kind: 'link'; icon: ReactNode; title: string; subtitle: string; href: string }
+  | {
+      kind: 'action';
+      icon: ReactNode;
+      title: string;
+      subtitle: string;
+      onClick: () => void;
+      disabled?: boolean;
+    };
+
+type DevToolGroup = { eyebrow: string; tools: DevTool[] };
+
 /**
  * `isAdmin` normally gates the Developer-tools section via the ADMIN_USER_IDS
  * allowlist (the caller computes it from `isAdminUser(session.userId)`).
@@ -62,8 +79,20 @@ const DEV_TOOLS_UNGATED = true;
  * is bypassed and the section renders for any profile owner. This component only
  * mounts in the owner self-view, so the tools are never exposed on other
  * people's profiles either way.
+ *
+ * `availableToolHrefs` is the set of dev-tool routes the server found on disk
+ * (see getExistingDevToolHrefs). A tool whose href is absent renders dimmed and
+ * inert. `null`/`undefined` means the server couldn't run the check (e.g. a
+ * production bundle without the source tree) — fail open and treat every tool
+ * as available.
  */
-export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
+export function AccountActions({
+  isAdmin = false,
+  availableToolHrefs,
+}: {
+  isAdmin?: boolean;
+  availableToolHrefs?: string[] | null;
+}) {
   const showDeveloperTools = DEV_TOOLS_UNGATED || isAdmin;
   const router = useRouter();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
@@ -140,86 +169,156 @@ export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
     }
   }
 
+  // Grouped, eyebrow-labelled dev tools. Order within each group is
+  // intentional (most-used first). The first-time-experience group collects the
+  // onboarding / first-run preview tools so they read as one family.
+  const devToolGroups: DevToolGroup[] = [
+    {
+      eyebrow: 'First-time experience',
+      tools: [
+        {
+          kind: 'link',
+          icon: <Sparkles className="size-5" />,
+          title: 'Show me the first time player',
+          subtitle: 'Preview the first-session experience a new player sees',
+          href: '/dev/first-time-player',
+        },
+        {
+          kind: 'link',
+          icon: <Map className="size-5" />,
+          title: 'Replay onboarding stages',
+          subtitle: 'Walk through every signup / first-run stage on demand (read-only)',
+          href: '/dev/onboarding',
+        },
+        {
+          kind: 'link',
+          icon: <Compass className="size-5" />,
+          title: 'Replay the welcome tour',
+          subtitle: 'The first-run coach-marks over a sample home, into Play',
+          href: '/dev/welcome-tour',
+        },
+        {
+          kind: 'link',
+          icon: <Smartphone className="size-5" />,
+          title: 'Phone-first invite login',
+          subtitle: 'Preview the invite login screens without sending an invite',
+          href: '/dev/invite-login',
+        },
+        {
+          kind: 'link',
+          icon: <Hourglass className="size-5" />,
+          title: 'Preview the loading screen',
+          subtitle: 'Cycle every Loading Moment card + the sparse fallback, no real load',
+          href: '/dev/loading-preview',
+        },
+      ],
+    },
+    {
+      eyebrow: 'Game & session',
+      tools: [
+        {
+          kind: 'action',
+          icon: <FlaskConical className="size-5" />,
+          title: resettingGame ? 'Resetting…' : 'Create test game',
+          subtitle: "Reset today's game and play again",
+          onClick: () => void createTestGame(),
+          disabled: resettingGame,
+        },
+        {
+          kind: 'link',
+          icon: <RefreshCw className="size-5" />,
+          title: 'Reset session',
+          subtitle: 'Clear current session data',
+          href: '/dev/reset-session',
+        },
+        {
+          kind: 'link',
+          icon: <Sun className="size-5" />,
+          title: 'Trigger noon reset',
+          subtitle: 'Simulate daily reset',
+          href: '/dev/noon-reset',
+        },
+      ],
+    },
+    {
+      eyebrow: 'Diagnostics & flags',
+      tools: [
+        {
+          kind: 'link',
+          icon: <Code2 className="size-5" />,
+          title: 'View staging flags',
+          subtitle: 'See feature flag status',
+          href: '/dev/flags',
+        },
+        {
+          kind: 'link',
+          icon: <BarChart3 className="size-5" />,
+          title: 'Points diagnostic',
+          subtitle: "Inspect a user's mastery events and where points came from",
+          href: '/dev/points-diagnostic',
+        },
+        {
+          kind: 'link',
+          icon: <Sprout className="size-5" />,
+          title: 'Expansion offer card',
+          subtitle: 'Preview the post-daily-Five “branch out” card',
+          href: '/daily/summary/expand-preview',
+        },
+        {
+          kind: 'link',
+          icon: <BarChart3 className="size-5" />,
+          title: 'Expansion offer funnel',
+          subtitle: 'How often the “branch out” offer triggers, resolves, and pends',
+          href: '/dev/expansion-offer',
+        },
+      ],
+    },
+  ];
+
+  // null/undefined => the server couldn't run the route-exists check; fail open.
+  const isToolAvailable = (href: string) =>
+    availableToolHrefs == null || availableToolHrefs.includes(href);
+
+  function renderTool(tool: DevTool) {
+    if (tool.kind === 'action') {
+      return (
+        <SettingsRow
+          key={tool.title}
+          icon={tool.icon}
+          title={tool.title}
+          subtitle={tool.subtitle}
+          onClick={tool.onClick}
+          disabled={tool.disabled}
+        />
+      );
+    }
+    return (
+      <SettingsRow
+        key={tool.href}
+        icon={tool.icon}
+        title={tool.title}
+        subtitle={tool.subtitle}
+        href={tool.href}
+        unavailable={!isToolAvailable(tool.href)}
+      />
+    );
+  }
+
   return (
     <>
       {showDeveloperTools ? (
         <section className="mb-8">
           <h2 className="mb-3 font-serif text-2xl font-semibold">Developer tools</h2>
-          <SettingsGroup>
-            <SettingsRow
-              icon={<FlaskConical className="size-5" />}
-              title={resettingGame ? 'Resetting…' : 'Create test game'}
-              subtitle="Reset today's game and play again"
-              onClick={() => void createTestGame()}
-              disabled={resettingGame}
-            />
-            <SettingsRow
-              icon={<RefreshCw className="size-5" />}
-              title="Reset session"
-              subtitle="Clear current session data"
-              href="/dev/reset-session"
-            />
-            <SettingsRow
-              icon={<Sun className="size-5" />}
-              title="Trigger noon reset"
-              subtitle="Simulate daily reset"
-              href="/dev/noon-reset"
-            />
-            <SettingsRow
-              icon={<Code2 className="size-5" />}
-              title="View staging flags"
-              subtitle="See feature flag status"
-              href="/dev/flags"
-            />
-            <SettingsRow
-              icon={<BarChart3 className="size-5" />}
-              title="Points diagnostic"
-              subtitle="Inspect a user's mastery events and where points came from"
-              href="/dev/points-diagnostic"
-            />
-            <SettingsRow
-              icon={<Hourglass className="size-5" />}
-              title="Preview the loading screen"
-              subtitle="Cycle every Loading Moment card + the sparse fallback, no real load"
-              href="/dev/loading-preview"
-            />
-            <SettingsRow
-              icon={<Sparkles className="size-5" />}
-              title="Show me the first time player"
-              subtitle="Preview the first-session experience a new player sees"
-              href="/dev/first-time-player"
-            />
-            <SettingsRow
-              icon={<Map className="size-5" />}
-              title="Replay onboarding stages"
-              subtitle="Walk through every signup / first-run stage on demand (read-only)"
-              href="/dev/onboarding"
-            />
-            <SettingsRow
-              icon={<Compass className="size-5" />}
-              title="Replay the welcome tour"
-              subtitle="The first-run coach-marks over a sample home, into Play"
-              href="/dev/welcome-tour"
-            />
-            <SettingsRow
-              icon={<Smartphone className="size-5" />}
-              title="Phone-first invite login"
-              subtitle="Preview the invite login screens without sending an invite"
-              href="/dev/invite-login"
-            />
-            <SettingsRow
-              icon={<Sprout className="size-5" />}
-              title="Expansion offer card"
-              subtitle="Preview the post-daily-Five “branch out” card"
-              href="/daily/summary/expand-preview"
-            />
-            <SettingsRow
-              icon={<BarChart3 className="size-5" />}
-              title="Expansion offer funnel"
-              subtitle="How often the “branch out” offer triggers, resolves, and pends"
-              href="/dev/expansion-offer"
-            />
-          </SettingsGroup>
+          <div className="flex flex-col gap-5">
+            {devToolGroups.map((group) => (
+              <div key={group.eyebrow}>
+                <p className="text-muted-foreground mb-2 px-1 font-mono text-[0.62rem] font-semibold tracking-[0.06em] uppercase">
+                  {group.eyebrow}
+                </p>
+                <SettingsGroup>{group.tools.map(renderTool)}</SettingsGroup>
+              </div>
+            ))}
+          </div>
           {resetGameError ? (
             <p className="text-destructive mt-2 text-sm">{resetGameError}</p>
           ) : null}
