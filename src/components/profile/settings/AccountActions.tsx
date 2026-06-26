@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { clearCachedLoadingMomentPayload } from '@/components/loading-moment/client-cache';
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 
 /**
@@ -39,6 +40,10 @@ export async function logoutAndRedirect(navigate: (url: string) => void): Promis
   if (!response.ok && response.status !== 401) {
     throw new Error('Could not log out.');
   }
+
+  // Drop any cached Loading Moment payload so the next user in this tab can't
+  // read it (sessionStorage outlives logout; the loader doesn't know the user).
+  clearCachedLoadingMomentPayload();
 
   navigate('/login');
 }
