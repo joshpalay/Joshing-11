@@ -230,11 +230,20 @@ export default function LoadingScreen({
           // (Josefin Sans, small-caps) above the Editorial artifact (Cormorant
           // serif). Replaces the rotating phrase; same slot, same position. The
           // plain state below is untouched, so a no-card load looks identical.
-          <div className="relative mx-auto mt-4 max-w-[17rem] text-center">
+          //
+          // The slot is a FIXED height (h-24), sized to the tallest (3-line)
+          // artifact, with the label + artifact centered within it. Every card
+          // type therefore renders at the same height, so the card does not
+          // resize as cards rotate (B-LOADING-MOMENT-01, owner-approved bounded
+          // growth: the card is taller than the plain state, but uniform across
+          // moments and still a centered overlay — nothing on the page shifts).
+          // `line-clamp-3` is a guard so an unusually long stem can never spill
+          // past the fixed slot.
+          <div className="relative mx-auto mt-4 flex h-24 max-w-[17rem] flex-col items-center justify-center text-center">
             <p className="font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
               {loadingMoment.label}
             </p>
-            <p className="mt-1.5 font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
+            <p className="mt-1.5 line-clamp-3 font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
               {loadingMoment.artifact}
             </p>
           </div>
