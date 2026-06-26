@@ -31,6 +31,7 @@ import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
 import { EditorialFeature } from '@/components/feed/EditorialFeature'
+import { ReportReasonSheet } from '@/components/report/ReportReasonSheet'
 import {
   CommonGroundFeature,
   GrowYourCircleFeature,
@@ -973,6 +974,12 @@ function FeedListContent({
     Record<string, 'removed' | 'restored'>
   >({})
   const thumbsdownTimersRef = useRef<Record<string, number>>({})
+  // PRD-D-6 §6.1 — the open content-report sheet ("This is incorrect" /
+  // "This is inappropriate") launched from a feed card's ⋯ menu. One at a time.
+  const [reportSheet, setReportSheet] = useState<{
+    item: FeedApiItem
+    category: 'incorrect' | 'inappropriate'
+  } | null>(null)
   // B-Feed-Swipe-1 — left-swipe / Dismiss collapse a card to an inline bar.
   // View-state only and session-scoped: 'collapsing' plays the exit animation,
   // 'dismissed' shows the bar. Never persisted; never mutes.
@@ -1863,7 +1870,10 @@ function FeedListContent({
         disabled={isBusy}
         onHideCategory={() => void hideCategory(item)}
         onHidePerson={() => void hidePerson(item)}
-        onReport={() => void reportItem(item)}
+        onReportIncorrect={() => setReportSheet({ item, category: 'incorrect' })}
+        onReportInappropriate={() =>
+          setReportSheet({ item, category: 'inappropriate' })
+        }
       />
     )
 
@@ -2289,6 +2299,21 @@ function FeedListContent({
           />
         )
       })() : null}
+      {reportSheet && reportSheet.item.question_id ? (
+        <ReportReasonSheet
+          category={reportSheet.category}
+          target={{ questionId: reportSheet.item.question_id }}
+          surface="feed"
+          onClose={() => setReportSheet(null)}
+          onSubmitted={(category) => {
+            // Incorrect leaves the card in place (the sheet shows its own quiet
+            // ack). Inappropriate hides it from this player immediately and
+            // suppresses propagation — reusing the existing self-hide path so the
+            // PRD §6.2 suppression behavior stays wired (§6.6) until B-Report-3.
+            if (category === 'inappropriate') void reportItem(reportSheet.item)
+          }}
+        />
+      ) : null}
     </>
   )
 }

@@ -28,7 +28,7 @@ export function ReportReasonSheet({
 }: {
   category: ReportCategory
   target: ReportReasonTarget
-  surface: 'round_recap' | 'lately_result' | 'answered_list'
+  surface: 'round_recap' | 'lately_result' | 'answered_list' | 'feed'
   onClose: () => void
   // Fires once on a successful submit (including an idempotent duplicate). For
   // 'inappropriate' the parent removes the card from view; for 'incorrect' the card

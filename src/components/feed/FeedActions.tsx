@@ -1,6 +1,6 @@
 'use client'
 
-import { Flag, MoreHorizontal, X } from 'lucide-react'
+import { MoreHorizontal, X } from 'lucide-react'
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -28,7 +28,10 @@ export type FeedOverflowMenuProps = {
   disabled?: boolean
   onHideCategory?: () => void
   onHidePerson?: () => void
-  onReport?: () => void
+  // PRD-D-6 §6.6: the two problem-named items replace the old generic "Report".
+  // Both require a question target, so they only render when `question` is set.
+  onReportIncorrect?: () => void
+  onReportInappropriate?: () => void
   children?: ReactNode
 }
 
@@ -49,7 +52,9 @@ export function getFeedOverflowMenuLabels({
     `Hide questions from ${sourceName || 'this person'}`,
     ...(hasQuestion && !isInBank ? ['Add to bank'] : []),
     ...(hasQuestion ? ['Send to friend'] : []),
-    'Report',
+    // The content-report items target a question, so they only appear when one
+    // is present — same gate as Add to bank / Send to friend.
+    ...(hasQuestion ? ['This is incorrect', 'This is inappropriate'] : []),
   ]
 }
 
@@ -83,7 +88,8 @@ export function FeedOverflowMenu({
   disabled = false,
   onHideCategory,
   onHidePerson,
-  onReport,
+  onReportIncorrect,
+  onReportInappropriate,
   children,
 }: FeedOverflowMenuProps) {
   const [open, setOpen] = useState(false)
@@ -193,16 +199,28 @@ export function FeedOverflowMenu({
                 className="text-foreground hover:bg-muted flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition"
               />
             ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              disabled={disabled}
-              onClick={wrapAction(onReport)}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
-            >
-              <Flag className="size-4" />
-              Report
-            </button>
+            {question ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={disabled}
+                  onClick={wrapAction(onReportIncorrect)}
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
+                >
+                  This is incorrect
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={disabled}
+                  onClick={wrapAction(onReportInappropriate)}
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
+                >
+                  This is inappropriate
+                </button>
+              </>
+            ) : null}
             {children}
           </div>
         </div>
