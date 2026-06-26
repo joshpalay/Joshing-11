@@ -9,6 +9,7 @@ import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import { DailyReminderInterlude } from '@/components/home/DailyReminderInterlude'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
+import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
 import { getReminderState } from '@/server/db/queries/account'
 import { getHomeFriendRequests } from '@/server/db/queries/friends'
@@ -46,6 +47,10 @@ export default async function Home({
 
   return (
     <>
+    {/* Warm the Loading Moment cache off the critical path so a later session-
+        generation wait can read it synchronously (B-LOADING-MOMENT-01). Renders
+        nothing; signed-in only. */}
+    {session ? <LoadingMomentPrimer /> : null}
     <main className="relative mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-6 pb-32 md:py-10">
       {/* Top triangle band (Variant4-TOP, 1120x160, grain baked in; lower portion
           transparent so cream shows through). Rendered as a BACKGROUND image, not

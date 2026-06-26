@@ -6,6 +6,7 @@ import {
   Code2,
   Compass,
   FlaskConical,
+  Hourglass,
   Loader2,
   LogOut,
   Map,
@@ -170,6 +171,12 @@ export function AccountActions({ isAdmin = false }: { isAdmin?: boolean }) {
               title="Points diagnostic"
               subtitle="Inspect a user's mastery events and where points came from"
               href="/dev/points-diagnostic"
+            />
+            <SettingsRow
+              icon={<Hourglass className="size-5" />}
+              title="Preview the loading screen"
+              subtitle="Cycle every Loading Moment card + the sparse fallback, no real load"
+              href="/dev/loading-preview"
             />
             <SettingsRow
               icon={<Sparkles className="size-5" />}
