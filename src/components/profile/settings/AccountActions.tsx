@@ -9,18 +9,20 @@ import {
   Hourglass,
   Loader2,
   LogOut,
-  Map,
+  PlayCircle,
   RefreshCw,
   Smartphone,
   Sparkles,
   Sprout,
   Sun,
+  UserPlus,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { clearCachedLoadingMomentPayload } from '@/components/loading-moment/client-cache';
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
+import { ResetWelcomeTourButton } from '@/components/profile/settings/ResetWelcomeTourButton';
 
 /**
  * Log out, then redirect. `destroySession()` clears the `joshing_session`
@@ -174,21 +176,31 @@ export function AccountActions({
   // onboarding / first-run preview tools so they read as one family.
   const devToolGroups: DevToolGroup[] = [
     {
+      // The onboarding-harness stages (formerly behind the /dev/onboarding hub
+      // page, now consolidated here). Order follows the live flow: full
+      // walkthrough first, then the individual stages it chains through.
       eyebrow: 'First-time experience',
       tools: [
         {
           kind: 'link',
-          icon: <Sparkles className="size-5" />,
-          title: 'Show me the first time player',
-          subtitle: 'Preview the first-session experience a new player sees',
-          href: '/dev/first-time-player',
+          icon: <PlayCircle className="size-5" />,
+          title: 'Full signup walkthrough',
+          subtitle: 'Setup → areas → welcome tour → building → recap, chained (read-only)',
+          href: '/dev/onboarding/intro?walk=1',
         },
         {
           kind: 'link',
-          icon: <Map className="size-5" />,
-          title: 'Replay onboarding stages',
-          subtitle: 'Walk through every signup / first-run stage on demand (read-only)',
-          href: '/dev/onboarding',
+          icon: <UserPlus className="size-5" />,
+          title: 'Setup & areas of knowledge',
+          subtitle: 'Name + call sign, then areas — the real flow, writes stubbed',
+          href: '/dev/onboarding/intro',
+        },
+        {
+          kind: 'link',
+          icon: <Hourglass className="size-5" />,
+          title: 'Preview the loading screen',
+          subtitle: 'Cycle every Loading Moment card + the sparse fallback, no real load',
+          href: '/dev/loading-preview',
         },
         {
           kind: 'link',
@@ -199,17 +211,17 @@ export function AccountActions({
         },
         {
           kind: 'link',
+          icon: <Sparkles className="size-5" />,
+          title: 'Show me the first time player',
+          subtitle: 'The post-first-five recap + Beat 3 social handoff a new player sees',
+          href: '/dev/first-time-player',
+        },
+        {
+          kind: 'link',
           icon: <Smartphone className="size-5" />,
           title: 'Phone-first invite login',
           subtitle: 'Preview the invite login screens without sending an invite',
           href: '/dev/invite-login',
-        },
-        {
-          kind: 'link',
-          icon: <Hourglass className="size-5" />,
-          title: 'Preview the loading screen',
-          subtitle: 'Cycle every Loading Moment card + the sparse fallback, no real load',
-          href: '/dev/loading-preview',
         },
       ],
     },
@@ -276,8 +288,10 @@ export function AccountActions({
   ];
 
   // null/undefined => the server couldn't run the route-exists check; fail open.
+  // Strip any query string first — the availability scan keys on bare route
+  // paths, so `/dev/onboarding/intro?walk=1` checks against `/dev/onboarding/intro`.
   const isToolAvailable = (href: string) =>
-    availableToolHrefs == null || availableToolHrefs.includes(href);
+    availableToolHrefs == null || availableToolHrefs.includes(href.split('?')[0]);
 
   function renderTool(tool: DevTool) {
     if (tool.kind === 'action') {
@@ -318,6 +332,12 @@ export function AccountActions({
                 <SettingsGroup>{group.tools.map(renderTool)}</SettingsGroup>
               </div>
             ))}
+            <div>
+              <p className="text-muted-foreground mb-2 px-1 font-mono text-[0.62rem] font-semibold tracking-[0.06em] uppercase">
+                First-run reset
+              </p>
+              <ResetWelcomeTourButton />
+            </div>
           </div>
           {resetGameError ? (
             <p className="text-destructive mt-2 text-sm">{resetGameError}</p>

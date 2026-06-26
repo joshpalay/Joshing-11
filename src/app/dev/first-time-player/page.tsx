@@ -56,11 +56,11 @@ export default function DevFirstTimePlayerPage() {
     <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
       <div className="mx-auto max-w-2xl">
         <Link
-          href="/dev/onboarding"
+          href="/users/me"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="size-4" />
-          Onboarding stages
+          Dev tools
         </Link>
 
         <h1 className="mt-6 font-serif text-3xl font-semibold leading-tight">First-session recap</h1>

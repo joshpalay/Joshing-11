@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
  * real one.
  *
  * In `?walk=1` (full-walkthrough) mode, "Play Now" chains into the building
- * state; otherwise it goes to the round. "Explore" returns to the harness hub.
+ * state; otherwise it goes to the round. "Explore" returns to the profile's
+ * dev-tools section.
  */
 export default async function DevWelcomeTourPage({
   searchParams,
@@ -26,7 +27,7 @@ export default async function DevWelcomeTourPage({
       forced
       inviterName="Maya"
       playHref={walk ? '/dev/onboarding/building?walk=1' : '/daily'}
-      exploreHref="/dev/onboarding"
+      exploreHref="/users/me"
     />
   );
 }
