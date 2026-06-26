@@ -1,9 +1,12 @@
-import LoadingScreen from "@/components/LoadingScreen";
+import { LoadingPreview } from "./LoadingPreview";
 
-export default function LoadingPreviewPage() {
-  return (
-    <div className="min-h-screen w-full">
-      <LoadingScreen fullScreen />
-    </div>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function LoadingPreviewPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ card?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  return <LoadingPreview initialKey={params.card} />;
 }
