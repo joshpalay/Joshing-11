@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { usePrefersReducedMotion } from "@/components/feed/usePrefersReducedMotion";
+import type { ResolvedLoadingMoment } from "@/components/loading-moment/types";
 
 type LoadingScreenProps = {
   /** A single fixed message. Renders statically with the animated dots. */
@@ -11,6 +12,15 @@ type LoadingScreenProps = {
   messages?: string[];
   className?: string;
   fullScreen?: boolean;
+  /**
+   * The Loading Moment to show IN PLACE of the rotating copy (B-LOADING-MOMENT-01).
+   * When a resolved moment is passed it occupies the existing copy slot — System
+   * label + Editorial artifact — instead of the rotating phrase. When `null` or
+   * omitted, the plain loading state renders exactly as it does today (C-3). The
+   * caller resolves this from cached-only data off the critical path; this
+   * component never fetches.
+   */
+  loadingMoment?: ResolvedLoadingMoment | null;
 };
 
 // The default rotating copy — evocative of what's happening behind the curtain
@@ -130,6 +140,7 @@ export default function LoadingScreen({
   messages,
   className,
   fullScreen = false,
+  loadingMoment = null,
 }: LoadingScreenProps) {
   const triangles = React.useMemo(() => buildTriangles(), []);
   const reducedMotion = usePrefersReducedMotion();
@@ -169,7 +180,7 @@ export default function LoadingScreen({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      aria-label={`${current}…`}
+      aria-label={loadingMoment ? loadingMoment.artifact : `${current}…`}
     >
       <svg
         className="absolute inset-0 h-full w-full"
@@ -214,6 +225,20 @@ export default function LoadingScreen({
           className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]"
           aria-hidden="true"
         />
+        {loadingMoment ? (
+          // The Loading Moment, in the existing copy slot. System-voice label
+          // (Josefin Sans, small-caps) above the Editorial artifact (Cormorant
+          // serif). Replaces the rotating phrase; same slot, same position. The
+          // plain state below is untouched, so a no-card load looks identical.
+          <div className="relative mx-auto mt-4 max-w-[17rem] text-center">
+            <p className="font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
+              {loadingMoment.label}
+            </p>
+            <p className="mt-1.5 font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
+              {loadingMoment.artifact}
+            </p>
+          </div>
+        ) : (
         <p className="relative mx-auto mt-4 flex h-6 items-baseline justify-center font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
           {rotating ? (
             <span
@@ -248,6 +273,7 @@ export default function LoadingScreen({
             </span>
           )}
         </p>
+        )}
       </div>
     </div>
   );
