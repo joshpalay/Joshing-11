@@ -399,9 +399,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
 
       {portrait.sectionVisibleTo.knowledge_base ? (
         <section className="mt-8" aria-label="Knowledge base">
-          <p className="text-foreground text-sm font-semibold tracking-[0.1em] uppercase">
-            Knowledge base
-          </p>
+          <h2 className="font-serif text-xl font-semibold">Knowledge base</h2>
           {!isSelf && topDomains.length > 0 ? (
             <div className="mt-3">
               <KnowledgeCard
