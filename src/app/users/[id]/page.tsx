@@ -259,7 +259,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         </section>
 
         <section className="mb-8">
-          <h2 className="mb-3 font-serif text-2xl font-semibold">Preview</h2>
+          <h2 className="mb-3 font-serif text-2xl font-semibold">How others see your profile</h2>
           <SettingsGroup>
             <SettingsRow
               icon={<UsersIcon className="size-5" />}
