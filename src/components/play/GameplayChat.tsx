@@ -1034,8 +1034,8 @@ function ResultRow({
   // not the async breadcrumb — so the line is shown once and never swaps in
   // longer/replacement content after the fact.
   const explainerSentence = explanation ? firstSentence(explanation) : null;
-  // Correct keeps its explainer inline within the verdict block (before the
-  // "common ground" beat); the other reveals render it after the discovery copy.
+  // Correct keeps its explainer inline within the verdict block (right under the
+  // answer); the other reveals render it after the discovery copy.
   const showDiscoveryExplainer = !correct && Boolean(explainerSentence);
   // One unified note beneath the verdict, chosen by PROVENANCE (never answer-
   // state): a human author → their own note as the inverted block; house/LLM →
@@ -1104,8 +1104,8 @@ function ResultRow({
           <>
             {/* Compact, calm success moment: quiet verdict label, the correct
                 answer repeated immediately (even on a right answer) as the focal
-                point, then the light "common ground" beat. The fuller
-                explanation lives in the End of Session Review. */}
+                point, then the one-sentence explainer. The fuller explanation
+                lives in the End of Session Review. */}
             <p style={{ ...verdictLabelStyle, color: 'var(--game-correct)' }}>
               <span aria-hidden>✓</span>
               Locked in.
@@ -1123,17 +1123,6 @@ function ResultRow({
               </p>
             ) : null}
             {explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
-            <p
-              style={{
-                marginTop: '8px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.62rem',
-                letterSpacing: '0.04em',
-                color: 'color-mix(in srgb, var(--game-correct) 70%, var(--text-muted))',
-              }}
-            >
-              common ground ++
-            </p>
           </>
         ) : gaveUp ? (
           <>

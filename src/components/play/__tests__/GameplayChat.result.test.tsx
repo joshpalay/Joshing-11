@@ -38,12 +38,14 @@ function resultMessage(over: Partial<Extract<ChatMessage, { kind: 'result' }>>):
 }
 
 describe('GameplayChat correct-answer treatment (D-5 live thread)', () => {
-  it('shows the compact "Locked in." moment with the answer repeated and the common-ground beat', () => {
+  it('shows the compact "Locked in." moment with the answer repeated', () => {
     const rendered = html([resultMessage({ result: 'correct' })]);
     expect(rendered).toContain('Locked in.');
     // The correct answer is repeated immediately, even on a right answer.
     expect(rendered).toContain('Johann Sebastian Bach');
-    expect(rendered).toContain('common ground ++');
+    // The "common ground ++" beat was removed per owner (2026-06-26): it read as
+    // a social tag but was static copy, not tied to real overlap data.
+    expect(rendered).not.toContain('common ground');
   });
 
   it('shows a one-sentence explainer under a correct answer, trimming the rest to review', () => {
