@@ -130,8 +130,9 @@ export function Nav({
   // (the welcome tour overlays a sample home; the setup replay renders its own
   // full-screen flow; the building state is a takeover). The global chrome would
   // clash with the tour's own header/closing panel and read as clutter, so it's
-  // suppressed here — matching /onboarding and /daily. The /dev/onboarding hub
-  // itself keeps the nav.
+  // suppressed here — matching /onboarding and /daily. The hub that used to live
+  // at /dev/onboarding is gone (consolidated into the profile dev tools), so the
+  // `/dev/onboarding/` prefix now only matches the self-contained stage replays.
   const isOnboardingHarnessPreview =
     pathname === '/dev/welcome-tour' || pathname.startsWith('/dev/onboarding/');
 
