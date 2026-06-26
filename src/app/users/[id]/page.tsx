@@ -398,7 +398,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
       ) : null}
 
       {portrait.sectionVisibleTo.knowledge_base ? (
-        <section className="mt-5" aria-label="Knowledge base">
+        <section className="mt-8" aria-label="Knowledge base">
           <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
             Knowledge base
           </p>

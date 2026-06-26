@@ -307,13 +307,10 @@ export function AuthoredQuestionsFeed({
     const hasMore = questions.length > previewQuestions.length
 
     return (
-      <section className="mt-5" aria-label="Questions">
+      <section className="mt-8" aria-label="Questions">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
           Questions
         </p>
-        <h2 className="mt-1 font-serif text-2xl font-semibold">
-          {friendFirstName}&rsquo;s questions
-        </h2>
 
         {error ? (
           <p className="mt-3 rounded-md border border-[var(--destructive-border)] bg-[var(--destructive-surface)] px-3 py-2 text-sm text-destructive">
