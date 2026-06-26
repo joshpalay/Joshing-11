@@ -308,7 +308,7 @@ export function AuthoredQuestionsFeed({
 
     return (
       <section className="mt-8" aria-label="Questions">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+        <p className="text-foreground text-sm font-semibold tracking-[0.1em] uppercase">
           Questions
         </p>
 
