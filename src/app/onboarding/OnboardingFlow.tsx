@@ -664,12 +664,18 @@ export default function OnboardingFlow({
                         key={selectedKey(interest)}
                         className="flex items-center gap-3"
                       >
+                        <span
+                          aria-hidden="true"
+                          className="text-muted-foreground text-xs"
+                        >
+                          ▸
+                        </span>
                         <span className="text-base font-medium">
                           {interest.domain}
                         </span>
                         <button
                           type="button"
-                          className="text-muted-foreground hover:text-destructive text-sm font-medium transition-colors"
+                          className="text-muted-foreground hover:text-destructive text-sm font-medium underline transition-colors"
                           onClick={() => removeSelectedInterest(interest)}
                           aria-label={`Remove ${interest.domain}`}
                         >
