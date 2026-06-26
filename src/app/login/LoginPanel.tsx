@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { clearCachedLoadingMomentPayload } from '@/components/loading-moment/client-cache';
 import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 const US_E164_REGEX = /^\+1\d{10}$/;
@@ -457,6 +458,11 @@ export default function LoginPanel({
         setLoading(false);
         return;
       }
+
+      // A new session is now established for this tab. Drop any Loading Moment
+      // payload cached by a previous user so it can never leak across accounts
+      // (the loading screen reads the cache without knowing the current user).
+      clearCachedLoadingMomentPayload();
 
       const identity = readVerifiedIdentity(data);
       setVerifiedIdentity(identity);

@@ -69,6 +69,23 @@ export async function primeLoadingMomentPayload(): Promise<void> {
   }
 }
 
+/**
+ * Clear the cached payload and reset the prime guard. Call at every auth
+ * boundary (login + logout) so a user can never read a payload cached by a
+ * previous user in the same browser tab — sessionStorage outlives a soft
+ * logout/login, and the loading screen reads the cache without knowing who the
+ * current user is. After this, the next prime re-fetches for the new session.
+ */
+export function clearCachedLoadingMomentPayload(): void {
+  primed = false;
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // sessionStorage may be unavailable — non-fatal.
+  }
+}
+
 /** Test-only: reset the once-per-session prime guard. */
 export function resetLoadingMomentPrimeGuard(): void {
   primed = false;
