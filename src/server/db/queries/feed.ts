@@ -1,6 +1,7 @@
-import { and, count, desc, eq, exists, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
-import { db, feedDismissedDomains, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
+import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
+import { mutualFollowApproved } from '@/server/db/queries/follow-visibility';
 import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, notBlocked, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
 
@@ -256,11 +257,11 @@ function feedCursorPredicate(cursor: FeedCursor | null | undefined) {
 }
 
 // Render-time question visibility (D-1 Stage 4). 'public' renders for anyone;
-// 'friends' is followers-only and renders only when the viewer follows the
-// author (an approved follow edge viewer -> author); 'private' is author-only
-// and never reaches another viewer's feed (the author is also excluded by
-// viewerNotAuthorPredicate). Under the directional follow model, "the author's
-// followers" == users with an approved follow edge pointing at the author.
+// 'friends' is friends-only and renders only when the viewer and the author are
+// MUTUAL friends (an approved follow edge in BOTH directions); 'private' is
+// author-only and never reaches another viewer's feed (the author is also
+// excluded by viewerNotAuthorPredicate). Phase 1: "friend" is bidirectional, so
+// a one-directional follow does NOT unlock a 'friends'-visibility question.
 // Exported so the empty-state diagnostic counts in get-feed-page.ts apply the
 // identical rule and stay in sync with what actually renders.
 export function questionVisibilityPredicate(viewerUserId: string) {
@@ -268,16 +269,7 @@ export function questionVisibilityPredicate(viewerUserId: string) {
     eq(questions.visibility, 'public'),
     and(
       eq(questions.visibility, 'friends'),
-      exists(
-        db
-          .select({ one: sql`1` })
-          .from(follows)
-          .where(and(
-            eq(follows.followerId, viewerUserId),
-            eq(follows.followeeId, questions.creatorId),
-            eq(follows.state, 'approved'),
-          )),
-      ),
+      mutualFollowApproved(viewerUserId, questions.creatorId, 'question_visibility'),
     ),
   )!;
 }

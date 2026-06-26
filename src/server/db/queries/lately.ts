@@ -25,6 +25,7 @@ import {
   type TrustTier,
 } from '@/server/daily/verification-gating';
 import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
+import { approvedFollowExists } from '@/server/db/queries/follow-visibility';
 import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
@@ -206,8 +207,9 @@ export async function getLatelyMilestones(
       answeredAt: feedItems.sourceEventAt,
     })
     .from(feedItems)
-    // sourceUserId ∈ {people I follow}: inner-join the approved follow edge so a
-    // friend_answered row from someone I don't follow is dropped at the DB.
+    // sourceUserId ∈ {my friends}: inner-join the forward approved follow edge
+    // (viewer -> friend); the reverse edge is required in WHERE so a milestone
+    // only surfaces for a MUTUAL friend, never a one-directional follow.
     .innerJoin(
       follows,
       and(
@@ -225,6 +227,8 @@ export async function getLatelyMilestones(
         eq(feedItems.sourceResult, 'correct'),
         isNotNull(feedItems.questionId),
         gte(feedItems.sourceEventAt, windowStart),
+        // Reverse half of the mutual-friendship gate (friend -> viewer approved).
+        approvedFollowExists(feedItems.sourceUserId, userId, 'milestone_mutual'),
         // Safety hard-block: blocked questions never anchor a milestone (the
         // owner exception is moot here — viewer-authored is excluded below).
         notBlockedForViewer(userId),
@@ -368,6 +372,9 @@ export async function getFriendActivity(
       viaName: viaUser.displayName,
     })
     .from(feedItems)
+    // Forward half of the friendship check: viewer -> friend approved. The
+    // reverse half (friend -> viewer) is enforced in WHERE so a one-directional
+    // approved edge can't leak a non-friend's activity (Phase 1: friend = mutual).
     .innerJoin(
       follows,
       and(
@@ -386,6 +393,10 @@ export async function getFriendActivity(
         eq(feedItems.sourceResult, 'correct'),
         isNotNull(feedItems.questionId),
         gte(feedItems.sourceEventAt, windowStart),
+        // Reverse half of the mutual-friendship gate: the friend must follow the
+        // viewer back. Together with the forward join above this requires an
+        // approved edge in BOTH directions.
+        approvedFollowExists(feedItems.sourceUserId, userId, 'from_friends_mutual'),
         // Safety hard-block: a blocked question must not resurface in the
         // From-Friends log, except to its own author (a friend answering the
         // viewer's own question lands here as a spent card) — the owner exception.
