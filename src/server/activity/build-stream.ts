@@ -104,6 +104,22 @@ export async function buildActivityStream(
       }
       return true;
     })
+    // Stale friend/follow request rows (claude/friend-request-sync-bug). A
+    // follow_request/friend_request activity row outlives its backing edge: the
+    // edge is hard-deleted on decline/cancel and flips to approved on accept,
+    // but the row lingers and keeps rendering "{actor} wants to be friends" with
+    // no live pending edge behind it — diverging from the Friends Hub and
+    // profile, which read the live `follows` table. The decline/cancel paths now
+    // soft-delete the row, but this drops any row (pre-existing or raced) whose
+    // request is missing or no longer a live pending edge, mirroring the action-
+    // gating in activity-stream.ts.
+    .filter((item) => {
+      if (item.type !== 'follow_request' && item.type !== 'friend_request') return true;
+      const request = item.reference.friendshipRequest;
+      return Boolean(
+        request && request.status === 'pending' && request.requestedByUserId !== item.userId,
+      );
+    })
     .map(activityToStreamItem);
   const momentItems = moments.map(momentToStreamItem);
   const friendActivityItems = friendCards

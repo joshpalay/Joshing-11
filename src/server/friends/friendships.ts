@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import { writeActivity } from '@/server/activity/write-activity'
+import { softDeleteActivityByReference, writeActivity } from '@/server/activity/write-activity'
 import { db, follows, users } from '@/server/db'
 import {
   backfillAuthoredQuestionsFeedItems,
@@ -61,6 +61,28 @@ async function backfillMutualFeeds(userAId: string, userBId: string): Promise<vo
     backfillFollowedUserFeedItems({ answererUserId: userBId, recipientUserId: userAId }),
     backfillAuthoredQuestionsFeedItems({ authorUserId: userAId, recipientUserId: userBId }),
     backfillAuthoredQuestionsFeedItems({ authorUserId: userBId, recipientUserId: userAId }),
+  ])
+}
+
+// Soft-delete the "{actor} wants to be friends" activity row(s) backed by a
+// follow edge that was just hard-deleted (decline/cancel). Without this the
+// activity row outlives its edge and the stream keeps rendering a request the
+// live source of truth (Friends Hub, profile) no longer shows. Both the live
+// follow rows (referenceType 'follow') and frozen legacy friendship rows
+// (referenceType 'friendship') share the same edge-id space, so clear both
+// referenceTypes; build-stream also filters non-pending rows defensively.
+async function cleanupFollowRequestActivity(edgeId: string): Promise<void> {
+  await Promise.all([
+    softDeleteActivityByReference({
+      referenceType: 'follow',
+      referenceId: edgeId,
+      types: ['follow_request'],
+    }),
+    softDeleteActivityByReference({
+      referenceType: 'friendship',
+      referenceId: edgeId,
+      types: ['friend_request'],
+    }),
   ])
 }
 
@@ -216,6 +238,11 @@ export async function acceptPendingFriendshipRequest({
       referenceId: edge.id,
       referenceType: 'follow',
     }),
+    // The pending request is now resolved — the accepter gets the follow_mutual
+    // card above, so the original "{actor} wants to be friends" row is stale.
+    // Clear it (its edge flipped pending->approved, so build-stream would filter
+    // it anyway; this also removes it at the source).
+    cleanupFollowRequestActivity(edge.id),
   ])
 
   // Now that it's a MUTUAL follow, seed BOTH feeds. The accepter's side is the
@@ -248,6 +275,8 @@ export async function ignorePendingFriendshipRequest({
     )
     .returning()
 
+  if (edge) await cleanupFollowRequestActivity(edge.id)
+
   return edge ?? null
 }
 
@@ -272,6 +301,8 @@ export async function cancelPendingFriendshipRequest({
       ),
     )
     .returning()
+
+  if (edge) await cleanupFollowRequestActivity(edge.id)
 
   return edge ?? null
 }
