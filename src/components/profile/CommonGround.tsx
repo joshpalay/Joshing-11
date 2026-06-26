@@ -38,7 +38,7 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
   if (proven.length === 1) {
     headline = `You and ${friendFirstName} both know ${proven[0].canonical_subcategory}.`
   } else if (proven.length > 1) {
-    headline = `Common ground with ${friendFirstName}.`
+    headline = `You and ${friendFirstName} share several areas.`
   } else if (latent.length > 0) {
     headline = `Shared ground with ${friendFirstName}, still untested.`
   } else {
@@ -54,10 +54,8 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
 
   return (
     <section className="mt-8" aria-label="Common ground">
-      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Common ground
-      </p>
-      <h2 className="mt-1 font-serif text-2xl font-semibold">{headline}</h2>
+      <h2 className="font-serif text-xl font-semibold">Common ground</h2>
+      <p className="text-muted-foreground mt-1 text-sm leading-6">{headline}</p>
 
       {isEmpty ? null : (
         <>

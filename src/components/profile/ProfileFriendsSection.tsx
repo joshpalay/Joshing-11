@@ -30,9 +30,7 @@ export function ProfileFriendsSection({
 
   return (
     <section className="mt-8" aria-label="Friends">
-      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
-        Friends
-      </p>
+      <h2 className="font-serif text-xl font-semibold">Friends</h2>
 
       {shown.length === 0 ? (
         <p className="text-muted-foreground mt-2 text-sm">
