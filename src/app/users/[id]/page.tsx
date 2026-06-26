@@ -231,7 +231,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
           editable
         />
 
-        <section className="mb-8">
+        <section className="mt-8 mb-8">
           <h2 className="mb-3 font-serif text-2xl font-semibold">Privacy</h2>
           <SettingsGroup>
             <PrivacyRow
