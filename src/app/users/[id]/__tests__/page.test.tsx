@@ -382,12 +382,102 @@ describe('/users/[id] friend profile page', () => {
     // surfaces in the UI as 'public'.
     expect(html).toContain('Previewing your profile as public.')
     expect(html).toContain('href="/users/self-1"')
-    // Stranger short-circuit fires because visibility is 'stranger' — the
-    // page renders the stranger card, gated on the simulated viewer.
-    expect(html).toContain('Become friends to see')
+    // knowledge_base + authored_questions are public, so the public viewer
+    // sees that content rather than the all-gated teaser. friends_list is
+    // still gated, so the "see more" nudge appears.
+    expect(html).toContain('Knowledge base')
+    expect(html).toContain('Become friends to see more of')
     // Owner is previewing as a stranger of themselves — the friend
     // button must NOT render (you can't befriend yourself).
     expect(html).not.toContain('Add friend')
+  })
+
+  it('shows a public viewer the sections the owner marked public', async () => {
+    // Bug fix: a non-friend must see public sections instead of the all-gated
+    // teaser. Here knowledge_base + authored_questions are public; friends_list
+    // is not, so the viewer sees content plus a nudge for the rest.
+    getFriendPortraitDataMock.mockResolvedValueOnce({
+      user: {
+        id: 'jpalay-1',
+        displayName: 'Joshua P',
+        handle: 'jpalay',
+        memberSince: new Date('2026-05-01T00:00:00.000Z'),
+      },
+      visibility: 'stranger',
+      relationship: null,
+      interests: [],
+      sharedInterests: [],
+      viewerSoloInterests: [],
+      friendSoloInterests: [],
+      mutualFriends: [],
+      mutualFriendsOverflow: 0,
+      isOwnerView: false,
+      sectionSettings: null,
+      sectionVisibleTo: {
+        knowledge_base: true,
+        friends_list: false,
+        authored_questions: true,
+      },
+      previewedAs: null,
+    })
+
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'jpalay-1' }),
+      searchParams: Promise.resolve({}),
+    })
+    const html = renderToStaticMarkup(element)
+
+    // The public sections render...
+    expect(html).toContain('Knowledge base')
+    expect(html).toContain('authored-feed')
+    expect(html).toContain('href="/users/jpalay-1/knowledge"')
+    // ...a non-owner public viewer can still send a friend request...
+    expect(html).toContain('Add friend')
+    // ...and is nudged to befriend for the still-gated friends_list.
+    expect(html).toContain('Become friends to see more of')
+    // The all-gated teaser copy must NOT appear.
+    expect(html).not.toContain('knowledge portrait, interests, and authored')
+    // Common ground is relational and stays hidden from a public viewer.
+    expect(html).not.toContain('common-ground')
+  })
+
+  it('shows a public viewer the all-gated teaser when nothing is public', async () => {
+    getFriendPortraitDataMock.mockResolvedValueOnce({
+      user: {
+        id: 'private-1',
+        displayName: 'Priya Private',
+        handle: 'priya',
+        memberSince: new Date('2026-05-01T00:00:00.000Z'),
+      },
+      visibility: 'stranger',
+      relationship: null,
+      interests: [],
+      sharedInterests: [],
+      viewerSoloInterests: [],
+      friendSoloInterests: [],
+      mutualFriends: [],
+      mutualFriendsOverflow: 0,
+      isOwnerView: false,
+      sectionSettings: null,
+      sectionVisibleTo: {
+        knowledge_base: false,
+        friends_list: false,
+        authored_questions: false,
+      },
+      previewedAs: null,
+    })
+
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'private-1' }),
+      searchParams: Promise.resolve({}),
+    })
+    const html = renderToStaticMarkup(element)
+
+    // Full teaser copy, no content sections.
+    expect(html).toContain('knowledge portrait, interests, and authored')
+    expect(html).toContain('Add friend')
+    expect(html).not.toContain('Knowledge base')
+    expect(html).not.toContain('authored-feed')
   })
 
   it('renders the owner self-view with consolidated settings sections', async () => {
