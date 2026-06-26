@@ -57,10 +57,12 @@ export function CreatorNote({
           style={{
             background: 'var(--warm-ink)',
             color: 'var(--warm-cream)',
-            // House-card language: hard 1.5px border + 4×4 offset shadow, no blur
-            // (matches ShareCard/OverlapMap). The shadow casts INK onto the page.
+            // The inverted ink fill alone carries the "loud" weight here. We do
+            // NOT use the house-card 4×4 offset shadow (ShareCard/OverlapMap):
+            // that pattern casts an INK shadow against a CREAM card face, but this
+            // block is itself ink-filled, so a same-color offset just reads as a
+            // lopsided bottom-right edge rather than a shadow.
             border: '1.5px solid var(--warm-ink)',
-            boxShadow: '4px 4px 0 var(--warm-ink)',
             borderRadius: 4,
             padding: '14px 16px',
           }}
