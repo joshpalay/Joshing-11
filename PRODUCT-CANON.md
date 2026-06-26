@@ -396,3 +396,19 @@ Every designer should remember:
 10. Make every surface answer a clear product question.
 
 If a proposed design makes Joshing feel more like a generic feed, quiz app, messaging app, or growth network, it is probably moving away from the canon.
+
+---
+
+## 11. Scoring canon — answer points (single source of truth)
+
+Answer points are computed in exactly one place, `canonicalPointsForAnswer` (`src/lib/game-constants.ts`), called by all five answer routes (Daily, Catch-up, Feed, Lately, Questions). The rules (`D-RECOVERY-SCORING-UNIFY-01`, ratified 2026-06-26):
+
+- **Award only on a correct answer that earns credit.** `first_correct` and `first_correct_after_wrong` (recovery) award points; `repeat_correct` and `incorrect` award **0** (the no-double-credit guarantee).
+- **The multiply path is canonical (Decision A1).** Every award is `round(first_correct_base × weight)`, where `first_correct_base` is the difficulty's full first-correct value and `weight` is selected by state and surface:
+  - first correct, **live** → full credit (`1.0`);
+  - first correct, **catch-up** → `0.25` of full credit (catch-up is untimed, after the window closed);
+  - **recovery** (wrong-then-right) → `0.25` of full credit, **live or catch-up**.
+- **Recovery does not stack with catch-up (Decision D1).** A wrong-then-right answer earns 25% of the full live base whether it lands live or in catch-up — the recovery weight is chosen *instead of* the catch-up weight, never multiplied on top of it (that would be 6.25%, which the product does not do).
+- **`RECOVERY_STATE_WEIGHT` is the single knob.** The `first_correct_after_wrong` constants are derived and held in lockstep with `round(first_correct × RECOVERY_STATE_WEIGHT)` by a per-tier invariant test (Decision C1), so the two can never silently disagree.
+
+This is a computation-centralization rule, not a re-tuning: the point values a player sees are unchanged.

@@ -38,7 +38,11 @@ const {
     explainer: 'e',
     canonicalSubcategory: 'history',
     broadCategory: 'humanities',
+    // basePoints and difficultyEstimate are written together in production
+    // (resolveDailyBasePoints(difficulty_estimate)); 100 ⇒ specialist. Keep
+    // them consistent so the canonical scorer (which reads difficulty) matches.
     basePoints: 100,
+    difficultyEstimate: 'specialist',
   }
 
   const dbState = {

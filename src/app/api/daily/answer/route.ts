@@ -19,7 +19,8 @@ import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty'
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { getProviderSettings } from '@/server/llm/settings';
-import { RECOVERY_STATE_WEIGHT } from '@/server/mastery/constants';
+import { canonicalPointsForAnswer } from '@/lib/game-constants';
+import type { DifficultyEstimate } from '@/types/db';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
 
@@ -247,6 +248,11 @@ export async function POST(request: NextRequest) {
       canonicalSubcategory: string;
       broadCategory: string | null;
       basePoints: number;
+      // The difficulty that produced `basePoints`, threaded to the canonical
+      // scorer so it reproduces the same first-correct base (and recovery =
+      // round(base × RECOVERY_STATE_WEIGHT)) — getBasePoints(difficulty,
+      // 'first_correct') === basePoints by construction in both branches below.
+      difficulty: DifficultyEstimate | null;
       acceptedAlternatives: string[];
       questionType: GradableQuestionType;
     };
@@ -277,6 +283,13 @@ export async function POST(request: NextRequest) {
         effective.source === 'empirical'
           ? resolveDailyBasePoints(effective.difficulty)
           : Math.round(row.basePoints);
+      // The tier that produced `basePoints`: the empirically-corrected tier when
+      // the override fired, else the stored estimate that the stored basePoints
+      // were generated from. Carried so the canonical scorer reads the same base.
+      const scoringDifficulty =
+        effective.source === 'empirical'
+          ? effective.difficulty
+          : (row.difficultyEstimate as DifficultyEstimate);
       question = {
         generatedId: row.id,
         canonicalId: null,
@@ -286,6 +299,7 @@ export async function POST(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory,
         broadCategory: row.broadCategory,
         basePoints,
+        difficulty: scoringDifficulty,
         // acceptable_variants (B4 Phase 4): right-but-rephrased answers grade correct.
         acceptedAlternatives: row.acceptableVariants ?? [],
         // generatedQuestions has no question_type column — bot questions are
@@ -315,6 +329,7 @@ export async function POST(request: NextRequest) {
         canonicalSubcategory: row.canonicalSubcategory ?? slot.domain,
         broadCategory: row.broadCategory,
         basePoints: resolveDailyBasePoints(difficulty),
+        difficulty,
         acceptedAlternatives: row.acceptedAlternatives ?? [],
         // Friend slots are canonical questions and carry the author's stored
         // type — a 'personal' question must reach the grader's leniency branch.
@@ -447,12 +462,15 @@ export async function POST(request: NextRequest) {
         // removed in favour of default-add with an easy undo;
         // writeMasteryEvent's ON CONFLICT DO UPDATE opens the domain the same
         // way the authored flow does (src/app/api/questions/[id]/answer).
+        // Single scorer across all five answer routes
+        // (D-RECOVERY-SCORING-UNIFY-01). question.difficulty reproduces
+        // `basePoints` as the first-correct base; recovery earns
+        // round(base × RECOVERY_STATE_WEIGHT). Live surface (catchUp omitted).
         pointsFor: (answerState) =>
-          answerState === 'first_correct'
-            ? basePoints
-            : answerState === 'first_correct_after_wrong'
-              ? Math.round(basePoints * RECOVERY_STATE_WEIGHT)
-              : 0,
+          canonicalPointsForAnswer({
+            difficulty: question.difficulty,
+            answerState,
+          }),
       }),
       selectInsideJokeForViewer(persistedInsideJoke, persistedCreatorId, session.userId),
     ]);
