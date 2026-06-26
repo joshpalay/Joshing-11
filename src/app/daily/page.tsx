@@ -20,7 +20,7 @@ import {
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import LoadingScreen from '@/components/LoadingScreen';
-import { useLoadingMoment } from '@/components/loading-moment/useLoadingMoment';
+import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import { getBonusCount, getCoreSlots, getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
@@ -192,10 +192,10 @@ export default function DailyPage() {
   // Non-null while we're auto-retrying queue generation; drives the friendly
   // "still working (attempt N/4)" loading label instead of a bare error.
   const [generatingAttempt, setGeneratingAttempt] = useState<number | null>(null);
-  // The Loading Moment, surfaced only while a real session-generation wait is in
-  // progress (the long-wait surface, C-7). Reads cached-only data; null until the
-  // wait clears the minimum threshold, and null on a cold cache → plain state.
-  const loadingMoment = useLoadingMoment(loading && generatingAttempt != null);
+  // Loading Moments interleaved into the craft phrases while a real session-
+  // generation wait is in progress (the long-wait surface, C-7). Reads cached-
+  // only data; empty on a cold cache → the loader just rotates the craft phrases.
+  const loadingMoments = useLoadingMoments(loading && generatingAttempt != null);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
@@ -906,7 +906,7 @@ export default function DailyPage() {
             <LoadingScreen
               fullScreen
               messages={GENERATING_MESSAGES}
-              loadingMoment={loadingMoment}
+              loadingMoments={loadingMoments}
             />
           ) : (
             <LoadingScreen fullScreen label="Loading today" />

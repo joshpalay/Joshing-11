@@ -94,7 +94,7 @@ const BUILDERS: Record<
       ? {
           kind: "waiting-discovery",
           label: LABEL.FROM_YOUR_FRIENDS,
-          artifact: `${p.waitingDiscovery!.friendName.trim()} just added a question about ${p.waitingDiscovery!.subcategory.trim()} — only you'd get it.`,
+          artifact: `${p.waitingDiscovery!.friendName.trim()} just added a new question in ${p.waitingDiscovery!.subcategory.trim()}.`,
         }
       : null,
 };

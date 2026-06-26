@@ -7,40 +7,36 @@ import { resolveLoadingMomentWithRotation } from "./rotation";
 import type { ResolvedLoadingMoment } from "./types";
 
 /**
- * The minimum wait before a Loading Moment is allowed to appear (C-7): short
- * waits never earn a moment. Session generation routinely runs longer than
- * this, so a real generation wait surfaces a card while a fast one stays plain.
- */
-export const LOADING_MOMENT_MIN_WAIT_MS = 900;
-
-/**
- * Resolve a Loading Moment for an active long wait, reading cached-only data.
+ * Resolve the Loading Moments to interleave into an active long wait, reading
+ * cached-only data.
  *
- * Returns null until the wait has lasted `LOADING_MOMENT_MIN_WAIT_MS` (so a
- * short wait never flashes a card), then resolves exactly one moment from the
- * cached payload + client-session rotation. Reading the cache is synchronous —
- * no fetch on the loading path (C-1). A cold/stale cache resolves to null, and
- * the plain loading state renders unchanged (C-3).
+ * Returns an array (empty until resolved) suitable for `LoadingScreen`'s
+ * `loadingMoments` interleave. Reading the cache is synchronous — no fetch on
+ * the loading path (C-1). A cold/stale cache resolves to an empty array, so the
+ * loader just rotates the plain craft phrases (C-3). The interleave is
+ * craft-first, so a wait shorter than one rotation cycle never reaches a card
+ * (long-waits-only, C-7) — no extra delay needed here.
  *
  * `active` should be true only while a qualifying long wait is in progress
- * (e.g. session generation); pass false on short waits so no moment is gated in.
+ * (e.g. session generation); pass false on short waits.
  */
-export function useLoadingMoment(active: boolean): ResolvedLoadingMoment | null {
-  const [moment, setMoment] = React.useState<ResolvedLoadingMoment | null>(null);
+export function useLoadingMoments(active: boolean): ResolvedLoadingMoment[] {
+  const [moments, setMoments] = React.useState<ResolvedLoadingMoment[]>([]);
 
   React.useEffect(() => {
     if (!active) return;
+    // Resolve just after mount (not in the effect body) so the sequence is built
+    // before the first rotation tick, and the cache read stays off render.
     const id = window.setTimeout(() => {
       const payload = readCachedLoadingMomentPayload();
-      setMoment(resolveLoadingMomentWithRotation(payload));
-    }, LOADING_MOMENT_MIN_WAIT_MS);
-    // Clear the timer and reset on deactivation/unmount, so a finished wait
-    // never leaves a stale card mounted and the next wait re-resolves fresh.
+      const resolved = resolveLoadingMomentWithRotation(payload);
+      setMoments(resolved ? [resolved] : []);
+    }, 0);
     return () => {
       window.clearTimeout(id);
-      setMoment(null);
+      setMoments([]);
     };
   }, [active]);
 
-  return moment;
+  return moments;
 }
