@@ -148,8 +148,11 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
       ? Promise.resolve(null)
       : getCommonGround(session.userId, portrait.user.id),
     // The viewed user's own friends, surfaced (capped) in the Friends module.
-    // Gated at render by their friends_list visibility. Skipped on owner view.
-    isOwnerView ? Promise.resolve([]) : getFriends(portrait.user.id),
+    // Gated at render by their friends_list visibility. Needed whenever the
+    // friend content view renders — including when the owner previews their
+    // own profile as a friend — so skip only on the owner's self-management
+    // view (no active preview), which never shows the module.
+    ownerSelfView ? Promise.resolve([]) : getFriends(portrait.user.id),
     // Fetch one past the preview cap so the feed knows whether to show the
     // "view all" link without a separate count query.
     getAuthoredQuestionsForUser({
