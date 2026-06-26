@@ -14,7 +14,7 @@ import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-i
 import { gradeAnswer } from '@/server/grading';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
-import { getBasePoints } from '@/server/mastery/scoring';
+import { canonicalPointsForAnswer } from '@/lib/game-constants';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { selectInsideJokeForViewer } from '@/server/questions/inside-joke';
 
@@ -99,9 +99,10 @@ export async function POST(request: NextRequest) {
     canonicalQuestionId: question.id,
     isCorrect,
     pointsFor: (state) =>
-      isCorrect
-        ? getBasePoints(question.calibratedDifficulty ?? question.llmDifficulty ?? null, state)
-        : 0,
+      canonicalPointsForAnswer({
+        difficulty: question.calibratedDifficulty ?? question.llmDifficulty ?? null,
+        answerState: state,
+      }),
   });
 
   const existingMastery = await db

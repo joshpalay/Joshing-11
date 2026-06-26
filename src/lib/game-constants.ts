@@ -3,12 +3,15 @@
  * Pool minimum is per-group (minimum_questions_required); default 5.
  */
 import { getBasePoints } from '@/server/mastery/scoring';
+import {
+  CATCHUP_SURFACE_WEIGHT,
+  LIVE_SURFACE_WEIGHT,
+  RECOVERY_STATE_WEIGHT,
+} from '@/server/mastery/constants';
 import type { AnswerState, DifficultyEstimate } from '@/types/db';
 import { CATEGORIES } from '@/lib/questions-types';
 
 export const QUESTIONS_PER_DAY = 5;
-/** @deprecated Legacy flat scoring constant. Use `canonicalPointsForAnswer` instead. */
-export const POINTS_PER_CORRECT = 3;
 /** Global daily reset boundary, in UTC. Every player worldwide shares this instant; UI formats it into each viewer's local timezone. */
 export const DAILY_RESET_HOUR_UTC = 17;
 export const DEFAULT_MINIMUM_QUESTIONS = 5;
@@ -36,10 +39,30 @@ type CanonicalScoringInput = {
 };
 
 /**
- * Canonical answer scoring:
- * - base points depend on difficulty + answer_state
- * - catch-up applies 0.25x
- * - repeat_correct / incorrect earn 0
+ * Canonical answer scoring — the single source of truth for answer points
+ * across all five answer routes (daily, catch-up, feed, lately, questions).
+ * See `D-RECOVERY-SCORING-UNIFY-01` in DECISIONS.md.
+ *
+ * Decision A1 (the multiply path) is authoritative: every award is
+ *   round(first_correct_base × weight)
+ * where `first_correct_base = getBasePoints(difficulty, 'first_correct')` and
+ * the weight is selected by (answer_state, surface):
+ *   - first_correct, live              → LIVE_SURFACE_WEIGHT    (1)
+ *   - first_correct, catch-up          → CATCHUP_SURFACE_WEIGHT (0.25)
+ *   - first_correct_after_wrong        → RECOVERY_STATE_WEIGHT  (0.25), live OR catch-up
+ *   - repeat_correct / incorrect       → 0
+ *
+ * Decision D1: recovery does NOT stack the catch-up weight onto the recovery
+ * weight. A wrong-then-right answer earns 25% of the full live base whether it
+ * lands live or in catch-up — the recovery weight is selected *instead of* the
+ * catch-up weight, never multiplied on top of it. (The catch-up routes already
+ * computed this; only the helper's original body diverged.)
+ *
+ * Because `RECOVERY_STATE_WEIGHT` is the single knob, the
+ * `first_correct_after_wrong` table column is now derived — the live routes
+ * that historically read that column stay byte-identical only while
+ * `round(first_correct × RECOVERY_STATE_WEIGHT) === first_correct_after_wrong`
+ * holds, which the per-tier invariant test (Decision C1) pins.
  */
 export function canonicalPointsForAnswer({
   difficulty,
@@ -49,9 +72,14 @@ export function canonicalPointsForAnswer({
   if (answerState !== 'first_correct' && answerState !== 'first_correct_after_wrong') {
     return 0;
   }
-  const basePoints = getBasePoints(difficulty ?? null, answerState);
-  const weight = catchUp ? 0.25 : 1;
-  return Math.round(basePoints * weight);
+  const firstCorrectBase = getBasePoints(difficulty ?? null, 'first_correct');
+  const weight =
+    answerState === 'first_correct_after_wrong'
+      ? RECOVERY_STATE_WEIGHT
+      : catchUp
+        ? CATCHUP_SURFACE_WEIGHT
+        : LIVE_SURFACE_WEIGHT;
+  return Math.round(firstCorrectBase * weight);
 }
 
 export function resolveLaunchThreshold(minimumRequired?: number | null): number {

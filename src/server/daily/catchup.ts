@@ -21,11 +21,14 @@ export function isCatchupQueueDate(
 export function asQueueSlots(value: unknown): QueueSlot[] {
   if (!Array.isArray(value)) return [];
   const result = z.array(queueSlotSchema).safeParse(value);
-  if (!result.success) {
-    console.warn('[daily] QueueSlot JSONB failed schema validation', result.error.issues);
-    return value as QueueSlot[];
-  }
-  return result.data;
+  if (result.success) return result.data;
+
+  console.warn('[daily] QueueSlot JSONB failed schema validation', result.error.issues);
+  // Salvage individually-valid slots; never return the rejected array.
+  return value.flatMap((item) => {
+    const one = queueSlotSchema.safeParse(item);
+    return one.success ? [one.data] : [];
+  });
 }
 
 export function dailyQueueItemId(queueId: string, slotIndex: number): string {

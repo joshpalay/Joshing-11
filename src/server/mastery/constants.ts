@@ -24,10 +24,17 @@ export const LIVE_SURFACE_WEIGHT = 1
 export const CATCHUP_SURFACE_WEIGHT = 0.25
 
 /**
- * Recovery (first_correct_after_wrong) is the multiplier applied to base
- * credit when the user previously answered the same question wrong. PRD
- * §8.32. Applied independently of surface weight, so a catch-up recovery is
- * CATCHUP_SURFACE_WEIGHT × RECOVERY_STATE_WEIGHT = 6.25% of live base.
+ * Recovery (first_correct_after_wrong) is the multiplier applied to the full
+ * first-correct base when the user previously answered the same question
+ * wrong. PRD §8.32. This is the single knob for recovery credit
+ * (`D-RECOVERY-SCORING-UNIFY-01`, Decision A1): recovery = round(first_correct
+ * base × RECOVERY_STATE_WEIGHT), and the `first_correct_after_wrong` columns
+ * below are held equal to it by a per-tier invariant test.
+ *
+ * It is selected *instead of*, not stacked *on top of*, the catch-up surface
+ * weight (Decision D1): a wrong-then-right answer earns 25% of the full live
+ * base whether it lands live or in catch-up — NOT CATCHUP_SURFACE_WEIGHT ×
+ * RECOVERY_STATE_WEIGHT (6.25%). See `canonicalPointsForAnswer`.
  */
 export const RECOVERY_STATE_WEIGHT = 0.25
 

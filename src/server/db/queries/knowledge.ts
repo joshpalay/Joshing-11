@@ -11,7 +11,10 @@ import {
   questions,
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
-import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import {
+  getActiveDeclaredInterests,
+  getActiveDeclaredInterestsBulk,
+} from '@/server/db/queries/declared-interests';
 import { getDailyPreferences, updateDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getMasteryTierDisplay } from '@/server/mastery/get-mastery-tier-display';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
@@ -170,6 +173,55 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
 
     return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
   }
+}
+
+// Batch variant of getPlayerMasteryRows for a SET of users in one `inArray`
+// query, grouped by userId. Rows are globally ordered totalPoints-descending,
+// so each user's slice stays points-descending — the order buildMasteryByDomain
+// relies on. Carries the same 42703 (missing territory_type column) fallback as
+// the single-user path. Users with no mastery rows are absent (callers default []).
+async function getPlayerMasteryRowsBulk(
+  userIds: readonly string[],
+): Promise<Map<string, PlayerMasteryRow[]>> {
+  const result = new Map<string, PlayerMasteryRow[]>();
+  const ids = [...new Set(userIds)].filter(Boolean);
+  if (ids.length === 0) return result;
+
+  let rows: PlayerMasteryRow[];
+  try {
+    rows = await db
+      .select()
+      .from(playerMastery)
+      .where(inArray(playerMastery.userId, ids))
+      .orderBy(desc(playerMastery.totalPoints));
+  } catch (error) {
+    if (pgErrorCode(error) !== '42703') throw error;
+
+    const selectWithoutTerritoryType = {
+      id: playerMastery.id,
+      userId: playerMastery.userId,
+      canonicalSubcategory: playerMastery.canonicalSubcategory,
+      broadCategory: playerMastery.broadCategory,
+      totalPoints: playerMastery.totalPoints,
+      tier: playerMastery.tier,
+      tierReachedAt: playerMastery.tierReachedAt,
+      lifetimePointsBaseline: playerMastery.lifetimePointsBaseline,
+      updatedAt: playerMastery.updatedAt,
+    };
+    const raw = await db
+      .select(selectWithoutTerritoryType)
+      .from(playerMastery)
+      .where(inArray(playerMastery.userId, ids))
+      .orderBy(desc(playerMastery.totalPoints));
+    rows = raw.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
+  }
+
+  for (const row of rows) {
+    const list = result.get(row.userId);
+    if (list) list.push(row);
+    else result.set(row.userId, [row]);
+  }
+  return result;
 }
 
 const TIER_ORDER: MasteryTier[] = ['establishing', 'familiar', 'solid', 'mastery'];
@@ -446,6 +498,48 @@ async function loadDomainAggregates(userId: string, since: Date): Promise<Domain
     .groupBy(masteryEvents.canonicalSubcategory);
 }
 
+// Batch variant of loadDomainAggregates for a SET of users — identical per-domain
+// aggregation, but GROUP BY (user_id, canonical_subcategory) so one round-trip
+// covers every user. Rows are split back out by userId into the same
+// DomainAggregateRow shape the single-user path produces. Users with no events
+// are absent from the map (callers default to []).
+async function loadDomainAggregatesBulk(
+  userIds: readonly string[],
+  since: Date,
+): Promise<Map<string, DomainAggregateRow[]>> {
+  const result = new Map<string, DomainAggregateRow[]>();
+  const ids = [...new Set(userIds)].filter(Boolean);
+  if (ids.length === 0) return result;
+
+  const rows = await db
+    .select({
+      userId: masteryEvents.userId,
+      canonicalSubcategory: masteryEvents.canonicalSubcategory,
+      answered: sql<number>`count(*) filter (where ${masteryEvents.answerState} is not null)`,
+      correct: sql<number>`count(*) filter (where ${masteryEvents.answerState} is not null and ${masteryEvents.answerState} <> 'incorrect')`,
+      lastAnsweredAt: sql<Date | null>`max(${masteryEvents.createdAt}) filter (where ${masteryEvents.answerState} is not null)`,
+      demonstrated: sql<boolean>`coalesce(bool_or(${masteryEvents.answerState} is not null and ${masteryEvents.answerState} <> 'incorrect' and ${masteryEvents.questionId} is not null and ${masteryEvents.sessionContext} in ('feed', 'joshing_game')), false)`,
+      firstAt: sql<Date | null>`min(${masteryEvents.createdAt})`,
+      latestAt: sql<Date | null>`max(${masteryEvents.createdAt})`,
+      recentAnswered: sql<number>`count(*) filter (where ${masteryEvents.answerState} is not null and ${masteryEvents.createdAt} >= ${since})`,
+      recentPoints: sql<number>`coalesce(sum(${masteryEvents.awardedPoints}) filter (where ${masteryEvents.createdAt} >= ${since}), 0)`,
+      wrongAnswers: sql<number>`count(*) filter (where ${masteryEvents.answerState} = 'incorrect' and ${masteryEvents.createdAt} >= ${since})`,
+      socialEvents: sql<number>`count(*) filter (where ${masteryEvents.sessionContext} in ('feed', 'joshing_game') and ${masteryEvents.createdAt} >= ${since})`,
+      savedEvents: sql<number>`count(*) filter (where ${masteryEvents.sourceType} in ('authored', 'author_credit') and ${masteryEvents.createdAt} >= ${since})`,
+    })
+    .from(masteryEvents)
+    .where(inArray(masteryEvents.userId, ids))
+    .groupBy(masteryEvents.userId, masteryEvents.canonicalSubcategory);
+
+  for (const row of rows) {
+    const { userId, ...rest } = row;
+    const list = result.get(userId);
+    if (list) list.push(rest);
+    else result.set(userId, [rest]);
+  }
+  return result;
+}
+
 export type MergedDomainStats = {
   statsByDomain: Map<string, AnswerStats>;
   demonstratedDomains: Set<string>;
@@ -654,6 +748,46 @@ export async function getKnowledgePageData(
       .map((row) => row.domain.trim().replace(/\s+/g, ' '))
       .filter(Boolean),
   };
+}
+
+// Batch the `allDomains` slice of getKnowledgePageData across a SET of users.
+// Four `inArray` queries (declared interests, player mastery, domain aggregates,
+// hidden keys — NOT the recent-events query, which only feeds the overview's
+// activity feed, never `allDomains`) replace the per-user fan-out, then each
+// user's rows run through the SAME pure getKnowledgePageData derivation (passing
+// pre-fetched inputs makes that call do zero DB work), so the resulting domain
+// set is identical to calling getKnowledgePageData(userId) one user at a time.
+// Query count is constant in the number of users. Returns a Map keyed by userId;
+// users with no knowledge data map to an empty array.
+export async function getKnowledgePageDataForUsers(
+  userIds: readonly string[],
+): Promise<Map<string, DomainMastery[]>> {
+  const result = new Map<string, DomainMastery[]>();
+  const ids = [...new Set(userIds)].filter(Boolean);
+  if (ids.length === 0) return result;
+
+  const since = expansionWindowStart();
+  const [declaredByUser, masteryByUser, aggregatesByUser, hiddenByUser] = await Promise.all([
+    getActiveDeclaredInterestsBulk(ids),
+    getPlayerMasteryRowsBulk(ids),
+    loadDomainAggregatesBulk(ids, since),
+    getHiddenDomainKeysBulk(ids),
+  ]);
+
+  for (const userId of ids) {
+    const inputs: KnowledgeInputs = {
+      declaredRows: declaredByUser.get(userId) ?? [],
+      masteryRows: masteryByUser.get(userId) ?? [],
+      domainAggregates: aggregatesByUser.get(userId) ?? [],
+      // Unused by getKnowledgePageData's allDomains derivation; only the overview
+      // reads recentEvents, so the bonus path never fetches it.
+      recentEvents: [],
+      hiddenDomainKeys: hiddenByUser.get(userId) ?? new Set<string>(),
+    };
+    const { allDomains } = await getKnowledgePageData(userId, inputs);
+    result.set(userId, allDomains);
+  }
+  return result;
 }
 
 // The "Recently Expanding" territories in isolation — the same derivation the
@@ -946,6 +1080,40 @@ export async function getHiddenDomainKeys(userId: string): Promise<Set<string>> 
     if (label) hidden.add(domainKey(label));
   }
   return hidden;
+}
+
+// Batch variant of getHiddenDomainKeys for a SET of users in one `inArray`
+// query, grouped by userId. Same hidden derivation (private OR not visible) as
+// the single-user path. Users with no hidden domains are absent from the map
+// (callers default to an empty set).
+async function getHiddenDomainKeysBulk(
+  userIds: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+  const ids = [...new Set(userIds)].filter(Boolean);
+  if (ids.length === 0) return result;
+
+  const rows = await db
+    .select({
+      userId: profileDomainVisibility.userId,
+      domain: profileDomainVisibility.domain,
+      canonicalSubcategory: profileDomainVisibility.canonicalSubcategory,
+      visibility: profileDomainVisibility.visibility,
+      isVisible: profileDomainVisibility.isVisible,
+    })
+    .from(profileDomainVisibility)
+    .where(inArray(profileDomainVisibility.userId, ids));
+
+  for (const row of rows) {
+    const isHidden = row.visibility === 'private' || row.isVisible === false;
+    if (!isHidden) continue;
+    const label = row.domain ?? row.canonicalSubcategory;
+    if (!label) continue;
+    const set = result.get(row.userId);
+    if (set) set.add(domainKey(label));
+    else result.set(row.userId, new Set([domainKey(label)]));
+  }
+  return result;
 }
 
 export async function setDomainVisibility(

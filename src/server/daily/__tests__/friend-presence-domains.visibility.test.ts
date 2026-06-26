@@ -7,26 +7,42 @@ import type { SectionVisibility } from '@/server/profile/visibility';
 // the profile enforces. These tests exercise the DB-backed
 // `getFriendDomainsForBonus` with the REAL `canViewSection` predicate, mocking
 // only the data-fetching helpers it composes.
+//
+// As of B-BONUS-FRIEND-DOMAIN-N1-01 the function fetches section visibility and
+// friend domains in TWO set-based queries (`getSectionVisibilitiesBulk` +
+// `getKnowledgePageDataForUsers`) instead of fanning out ~6 round-trips per
+// followee, so the mocks here are the bulk variants.
 const {
   getFollowingMock,
   getMutualFollowsMock,
-  getKnowledgePageDataMock,
-  getSectionVisibilitiesMock,
+  getKnowledgePageDataForUsersMock,
+  getSectionVisibilitiesBulkMock,
   state,
 } = vi.hoisted(() => {
   const state = {
     // friendId -> that friend's knowledge_base section visibility.
     sectionByFriend: new Map<string, SectionVisibility>(),
+    // friendId -> the domains getKnowledgePageDataForUsers should return for them.
+    // null means "use the default single self-named territory domain".
+    domainsByFriend: null as Map<string, DomainMastery[]> | null,
   };
   return {
     getFollowingMock: vi.fn(),
     getMutualFollowsMock: vi.fn(async () => [] as Array<{ id: string }>),
-    getKnowledgePageDataMock: vi.fn(),
-    getSectionVisibilitiesMock: vi.fn(async (userId: string) => ({
-      knowledge_base: state.sectionByFriend.get(userId) ?? 'public',
-      friends_list: 'friends' as SectionVisibility,
-      authored_questions: 'public' as SectionVisibility,
-    })),
+    getKnowledgePageDataForUsersMock: vi.fn(),
+    getSectionVisibilitiesBulkMock: vi.fn(
+      async (userIds: readonly string[]) =>
+        new Map(
+          userIds.map((userId) => [
+            userId,
+            {
+              knowledge_base: state.sectionByFriend.get(userId) ?? 'public',
+              friends_list: 'friends' as SectionVisibility,
+              authored_questions: 'public' as SectionVisibility,
+            },
+          ]),
+        ),
+    ),
     state,
   };
 });
@@ -37,18 +53,18 @@ vi.mock('@/server/db/queries/friends', () => ({
 }));
 
 vi.mock('@/server/db/queries/knowledge', () => ({
-  getKnowledgePageData: getKnowledgePageDataMock,
+  getKnowledgePageDataForUsers: getKnowledgePageDataForUsersMock,
 }));
 
 // Keep the REAL `canViewSection` (the gate under test); mock only the DB read.
 vi.mock('@/server/profile/visibility', async (importActual) => {
   const actual = await importActual<typeof import('@/server/profile/visibility')>();
-  return { ...actual, getSectionVisibilities: getSectionVisibilitiesMock };
+  return { ...actual, getSectionVisibilitiesBulk: getSectionVisibilitiesBulkMock };
 });
 
 import { getFriendDomainsForBonus } from '@/server/db/queries/friend-presence-domains';
 
-function territoryDomain(domain: string): DomainMastery {
+function territoryDomain(domain: string, over: Partial<DomainMastery> = {}): DomainMastery {
   return {
     domain,
     displayName: domain,
@@ -66,18 +82,35 @@ function territoryDomain(domain: string): DomainMastery {
     isDemonstrated: false,
     territoryType: 'declared',
     isHidden: false,
+    ...over,
   };
+}
+
+// An activity-only domain: not declared/demonstrated (so NOT territory), but with
+// recent `lastActivityAt` so `selectRecentlyExploring` surfaces it.
+function activityDomain(domain: string, over: Partial<DomainMastery> = {}): DomainMastery {
+  return territoryDomain(domain, {
+    isDeclared: false,
+    isDeclaredInterest: false,
+    isDemonstrated: false,
+    territoryType: 'demonstrated',
+    lastActivityAt: new Date().toISOString(),
+    ...over,
+  });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   state.sectionByFriend.clear();
+  state.domainsByFriend = null;
   getMutualFollowsMock.mockResolvedValue([]);
-  getKnowledgePageDataMock.mockImplementation(async (friendId: string) => ({
-    allDomains: [territoryDomain(`${friendId}-domain`)],
-    declaredInterests: [],
-    expandingDomains: [],
-  }));
+  getKnowledgePageDataForUsersMock.mockImplementation(async (userIds: readonly string[]) => {
+    const map = new Map<string, DomainMastery[]>();
+    for (const userId of userIds) {
+      map.set(userId, state.domainsByFriend?.get(userId) ?? [territoryDomain(`${userId}-domain`)]);
+    }
+    return map;
+  });
 });
 
 describe('getFriendDomainsForBonus — knowledge_base section visibility gate', () => {
@@ -98,8 +131,9 @@ describe('getFriendDomainsForBonus — knowledge_base section visibility gate', 
 
     const result = await getFriendDomainsForBonus('viewer', 2);
     expect(result).toEqual([]);
-    // We don't even need their knowledge map once the section is gated out.
-    expect(getKnowledgePageDataMock).not.toHaveBeenCalledWith('pal');
+    // The gated-out friend is never even included in the batched domain fetch.
+    const fetchedIds = getKnowledgePageDataForUsersMock.mock.calls.flatMap(([ids]) => [...ids]);
+    expect(fetchedIds).not.toContain('pal');
   });
 
   it('a MUTUAL followee with a friends-only knowledge_base DOES contribute', async () => {
@@ -146,13 +180,78 @@ describe('getFriendDomainsForBonus — resting-domain opt-out', () => {
   it('matches rested domains case-insensitively and keeps the non-rested ones', async () => {
     getFollowingMock.mockResolvedValue([{ id: 'pub', displayName: 'Pub' }]);
     state.sectionByFriend.set('pub', 'public');
-    getKnowledgePageDataMock.mockImplementation(async () => ({
-      allDomains: [territoryDomain('Jazz'), territoryDomain('Opera')],
-      declaredInterests: [],
-      expandingDomains: [],
-    }));
+    state.domainsByFriend = new Map([['pub', [territoryDomain('Jazz'), territoryDomain('Opera')]]]);
     // 'JAZZ' rested (different case) should still be excluded; 'Opera' remains.
     const result = await getFriendDomainsForBonus('viewer', 2, new Set(['jazz']));
     expect(result.map((c) => c.domain)).toEqual(['Opera']);
+  });
+});
+
+describe('getFriendDomainsForBonus — bounded query count (N+1 fan-out removed)', () => {
+  // The fan-out this refactor killed was ~6 round-trips PER followee. The new
+  // path resolves the whole followee set in a constant number of set-based
+  // calls: one mutual-follows query, one bulk section-visibility query, and one
+  // bulk knowledge-domain fetch — independent of how many people are followed.
+  function seedFollowing(count: number) {
+    const following = Array.from({ length: count }, (_, i) => ({
+      id: `f${i}`,
+      displayName: `Friend ${i}`,
+    }));
+    getFollowingMock.mockResolvedValue(following);
+    for (const f of following) state.sectionByFriend.set(f.id, 'public');
+    return following;
+  }
+
+  it('issues exactly one bulk visibility + one bulk domain query for 3 followees', async () => {
+    seedFollowing(3);
+    await getFriendDomainsForBonus('viewer', 2);
+    expect(getSectionVisibilitiesBulkMock).toHaveBeenCalledTimes(1);
+    expect(getKnowledgePageDataForUsersMock).toHaveBeenCalledTimes(1);
+    expect(getMutualFollowsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays at the SAME call count for 30 followees — does not scale with follow count', async () => {
+    seedFollowing(30);
+    await getFriendDomainsForBonus('viewer', 2);
+    // Constant regardless of followee count: NOT 30×, NOT 6×30.
+    expect(getSectionVisibilitiesBulkMock).toHaveBeenCalledTimes(1);
+    expect(getKnowledgePageDataForUsersMock).toHaveBeenCalledTimes(1);
+    expect(getMutualFollowsMock).toHaveBeenCalledTimes(1);
+    // Both bulk calls receive the whole surviving set in a single invocation.
+    expect(getSectionVisibilitiesBulkMock.mock.calls[0][0]).toHaveLength(30);
+    expect(getKnowledgePageDataForUsersMock.mock.calls[0][0]).toHaveLength(30);
+  });
+});
+
+describe('getFriendDomainsForBonus — batched output equals per-friend behavior', () => {
+  it('merges territory + activity across mixed mutual/stranger friends, gating the hidden one', async () => {
+    // Sam (mutual, friends-only KB → visible): territory "Jazz".
+    // Robyn (one-way, public KB → visible): activity "Jazz" (recent) + territory "Opera".
+    //   → "Jazz" is seen as territory by one friend and activity by another ⇒ Both.
+    // Pat (one-way, friends-only KB → stranger, hidden): would add "Film" but is gated out.
+    getFollowingMock.mockResolvedValue([
+      { id: 'sam', displayName: 'Sam' },
+      { id: 'robyn', displayName: 'Robyn' },
+      { id: 'pat', displayName: 'Pat' },
+    ]);
+    getMutualFollowsMock.mockResolvedValue([{ id: 'sam' }]);
+    state.sectionByFriend.set('sam', 'friends');
+    state.sectionByFriend.set('robyn', 'public');
+    state.sectionByFriend.set('pat', 'friends');
+    state.domainsByFriend = new Map([
+      ['sam', [territoryDomain('Jazz')]],
+      ['robyn', [activityDomain('Jazz'), territoryDomain('Opera')]],
+      ['pat', [territoryDomain('Film')]],
+    ]);
+
+    const result = await getFriendDomainsForBonus('viewer', 5);
+
+    // Hidden friend's "Film" never appears; "Jazz" merges to Both and outranks
+    // the territory-only "Opera".
+    expect(result.map((c) => c.domain)).toEqual(['Jazz', 'Opera']);
+    const jazz = result.find((c) => c.domain === 'Jazz');
+    expect(jazz?.signal).toBe('both');
+    expect(jazz?.presenceSources.map((s) => s.userId).sort()).toEqual(['robyn', 'sam']);
+    expect(result.some((c) => c.domain === 'Film')).toBe(false);
   });
 });
