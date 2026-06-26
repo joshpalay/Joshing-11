@@ -33,9 +33,6 @@ export function ProfileFriendsSection({
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
         Friends
       </p>
-      <h2 className="mt-1 font-serif text-2xl font-semibold">
-        {friendFirstName}&rsquo;s friends
-      </h2>
 
       {shown.length === 0 ? (
         <p className="text-muted-foreground mt-2 text-sm">
@@ -43,14 +40,17 @@ export function ProfileFriendsSection({
         </p>
       ) : (
         <>
-          <ul className="mt-3 flex flex-wrap gap-2">
+          <ul className="border-border mt-3 divide-y rounded-md border">
             {shown.map((friend) => (
               <li key={friend.id}>
                 <Link
                   href={`/users/${friend.id}`}
-                  className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex items-center rounded-full px-3 py-1 text-sm font-medium"
+                  className="hover:bg-secondary/40 flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors"
                 >
-                  {friend.displayName}
+                  <span>{friend.displayName}</span>
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    &rarr;
+                  </span>
                 </Link>
               </li>
             ))}
