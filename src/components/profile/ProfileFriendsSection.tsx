@@ -29,7 +29,7 @@ export function ProfileFriendsSection({
   const hasMore = friends.length > shown.length
 
   return (
-    <section className="mt-5" aria-label="Friends">
+    <section className="mt-8" aria-label="Friends">
       <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
         Friends
       </p>
