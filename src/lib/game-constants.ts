@@ -12,8 +12,6 @@ import type { AnswerState, DifficultyEstimate } from '@/types/db';
 import { CATEGORIES } from '@/lib/questions-types';
 
 export const QUESTIONS_PER_DAY = 5;
-/** @deprecated Legacy flat scoring constant. Use `canonicalPointsForAnswer` instead. */
-export const POINTS_PER_CORRECT = 3;
 /** Global daily reset boundary, in UTC. Every player worldwide shares this instant; UI formats it into each viewer's local timezone. */
 export const DAILY_RESET_HOUR_UTC = 17;
 export const DEFAULT_MINIMUM_QUESTIONS = 5;

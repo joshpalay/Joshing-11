@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createFeedItemsForFriendsFromAnswerMock,
-  getBasePointsMock,
   getSessionMock,
   gradeAnswerMock,
   promoteDeclaredToDemonstratedMock,
@@ -27,11 +26,6 @@ const {
   }
   return {
     createFeedItemsForFriendsFromAnswerMock: vi.fn(async () => undefined),
-    getBasePointsMock: vi.fn((_difficulty: unknown, state: string) => {
-      if (state === 'first_correct') return 100
-      if (state === 'first_correct_after_wrong') return 25
-      return 0
-    }),
     getSessionMock: vi.fn(async () => ({ userId: 'user-1', id: 's-1' })),
     gradeAnswerMock: vi.fn(),
     promoteDeclaredToDemonstratedMock: vi.fn(),
@@ -116,9 +110,6 @@ vi.mock('@/server/db', () => ({
   users: { id: 'u.id', displayName: 'u.display' },
 }))
 
-vi.mock('@/server/mastery/scoring', () => ({
-  getBasePoints: getBasePointsMock,
-}))
 
 vi.mock('@/server/mastery/write-mastery-event', () => ({
   writeMasteryEvent: writeMasteryEventMock,
@@ -231,6 +222,9 @@ describe('POST /api/feed/[feedItemId]/answer mastery scoring (F2.3)', () => {
     expect(writeMasteryEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerState: 'first_correct_after_wrong',
+        // Real recovery math, not a mock: the scorer is now the un-mocked
+        // canonicalPointsForAnswer over the real getBasePoints table —
+        // round(specialist first_correct 100 × RECOVERY_STATE_WEIGHT 0.25) = 25.
         pointsAwarded: 25,
       }),
     )
