@@ -13,15 +13,24 @@ type LoadingScreenProps = {
   className?: string;
   fullScreen?: boolean;
   /**
-   * The Loading Moment to show IN PLACE of the rotating copy (B-LOADING-MOMENT-01).
-   * When a resolved moment is passed it occupies the existing copy slot — System
-   * label + Editorial artifact — instead of the rotating phrase. When `null` or
-   * omitted, the plain loading state renders exactly as it does today (C-3). The
-   * caller resolves this from cached-only data off the critical path; this
-   * component never fetches.
+   * A SINGLE Loading Moment shown statically in the copy slot, no rotation
+   * (B-LOADING-MOMENT-01). Used to inspect one card (the dev preview). When
+   * `null`/omitted the plain state renders as today (C-3).
    */
   loadingMoment?: ResolvedLoadingMoment | null;
+  /**
+   * Loading Moments to INTERLEAVE with the rotating craft phrases — craft word,
+   * insight, craft word, insight … — cycling at the same rate as the words
+   * (MESSAGE_CYCLE_MS). The sequence is craft-first, so a wait shorter than one
+   * cycle only ever shows a craft phrase (long-waits-only, C-7). Resolved from
+   * cached-only data off the critical path; this component never fetches.
+   */
+  loadingMoments?: ResolvedLoadingMoment[];
 };
+
+type RotationItem =
+  | { kind: "message"; text: string }
+  | { kind: "moment"; moment: ResolvedLoadingMoment };
 
 // The default rotating copy — evocative of what's happening behind the curtain
 // rather than a bare "Loading". Shown when neither `label` nor `messages` is
@@ -141,28 +150,48 @@ export default function LoadingScreen({
   className,
   fullScreen = false,
   loadingMoment = null,
+  loadingMoments,
 }: LoadingScreenProps) {
   const triangles = React.useMemo(() => buildTriangles(), []);
   const reducedMotion = usePrefersReducedMotion();
 
-  // A caller-supplied `label` is a single fixed message; otherwise rotate
-  // through `messages` (or the curated defaults). One item ⇒ no rotation.
-  const rotation = React.useMemo(
-    () => messages ?? (label != null ? [label] : DEFAULT_MESSAGES),
-    [messages, label],
-  );
-  const rotating = rotation.length > 1 && !reducedMotion;
+  // The rotation sequence. Three modes:
+  //  - `loadingMoments` present → INTERLEAVE craft phrases with insight cards,
+  //    craft-first (so a short wait shows only a craft phrase, C-7).
+  //  - a single `loadingMoment` → that card alone, static (the per-card preview).
+  //  - otherwise → the craft phrases (or `label`/defaults), exactly as before.
+  const sequence = React.useMemo<RotationItem[]>(() => {
+    const msgs = messages ?? (label != null ? [label] : DEFAULT_MESSAGES);
+    if (loadingMoments && loadingMoments.length > 0) {
+      const out: RotationItem[] = [];
+      const n = Math.max(msgs.length, loadingMoments.length);
+      for (let i = 0; i < n; i++) {
+        out.push({ kind: "message", text: msgs[i % msgs.length] });
+        out.push({ kind: "moment", moment: loadingMoments[i % loadingMoments.length] });
+      }
+      return out;
+    }
+    if (loadingMoment) return [{ kind: "moment", moment: loadingMoment }];
+    return msgs.map((text) => ({ kind: "message", text }));
+  }, [messages, label, loadingMoments, loadingMoment]);
+
+  const rotating = sequence.length > 1 && !reducedMotion;
 
   const [index, setIndex] = React.useState(0);
   React.useEffect(() => {
     if (!rotating) return;
     const id = window.setInterval(() => {
-      setIndex((i) => (i + 1) % rotation.length);
+      setIndex((i) => (i + 1) % sequence.length);
     }, MESSAGE_CYCLE_MS);
     return () => window.clearInterval(id);
-  }, [rotating, rotation.length]);
+  }, [rotating, sequence.length]);
 
-  const current = rotation[Math.min(index, rotation.length - 1)] ?? rotation[0];
+  const currentItem = sequence[Math.min(index, sequence.length - 1)] ?? sequence[0];
+  // Whether the sequence contains any card — drives the taller, fixed-height
+  // slot so the card never resizes the loader as items rotate.
+  const hasMoment = sequence.some((item) => item.kind === "moment");
+  const ariaText =
+    currentItem.kind === "moment" ? currentItem.moment.artifact : currentItem.text;
 
   const wrapperClass = [
     "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
@@ -180,7 +209,7 @@ export default function LoadingScreen({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      aria-label={loadingMoment ? loadingMoment.artifact : `${current}…`}
+      aria-label={hasMoment ? ariaText : `${ariaText}…`}
     >
       <svg
         className="absolute inset-0 h-full w-full"
@@ -225,27 +254,33 @@ export default function LoadingScreen({
           className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]"
           aria-hidden="true"
         />
-        {loadingMoment ? (
-          // The Loading Moment, in the existing copy slot. System-voice label
-          // (Josefin Sans, small-caps) above the Editorial artifact (Cormorant
-          // serif). Replaces the rotating phrase; same slot, same position. The
-          // plain state below is untouched, so a no-card load looks identical.
-          //
-          // The slot is a FIXED height (h-24), sized to the tallest (3-line)
-          // artifact, with the label + artifact centered within it. Every card
-          // type therefore renders at the same height, so the card does not
-          // resize as cards rotate (B-LOADING-MOMENT-01, owner-approved bounded
-          // growth: the card is taller than the plain state, but uniform across
-          // moments and still a centered overlay — nothing on the page shifts).
-          // `line-clamp-3` is a guard so an unusually long stem can never spill
-          // past the fixed slot.
+        {hasMoment ? (
+          // The copy slot holds either an insight card (System label + Editorial
+          // artifact) or, when interleaved, a craft phrase between cards. It is a
+          // FIXED height (h-24), sized to the tallest (3-line) artifact, with the
+          // content centered — so the loader never resizes as items rotate
+          // (B-LOADING-MOMENT-01, owner-approved bounded growth; centered overlay
+          // ⇒ nothing on the page shifts). `line-clamp-3` guards an overlong stem.
           <div className="relative mx-auto mt-4 flex h-24 max-w-[17rem] flex-col items-center justify-center text-center">
-            <p className="font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
-              {loadingMoment.label}
-            </p>
-            <p className="mt-1.5 line-clamp-3 font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
-              {loadingMoment.artifact}
-            </p>
+            <div
+              key={index}
+              className={`flex flex-col items-center justify-center ${rotating ? "loading-message" : ""}`}
+            >
+              {currentItem.kind === "moment" ? (
+                <>
+                  <p className="font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
+                    {currentItem.moment.label}
+                  </p>
+                  <p className="mt-1.5 line-clamp-3 font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
+                    {currentItem.moment.artifact}
+                  </p>
+                </>
+              ) : (
+                <p className="font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
+                  {currentItem.text}
+                </p>
+              )}
+            </div>
           </div>
         ) : (
         <p className="relative mx-auto mt-4 flex h-6 items-baseline justify-center font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
@@ -254,11 +289,11 @@ export default function LoadingScreen({
               key={index}
               className="loading-message inline-flex items-baseline gap-1"
             >
-              {current}
+              {currentItem.kind === "message" ? currentItem.text : ""}
             </span>
           ) : (
             <span className="inline-flex items-baseline gap-1">
-              <span>{current}</span>
+              <span>{currentItem.kind === "message" ? currentItem.text : ""}</span>
               <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
                 <span
                   className="triangle-loader-dot inline-block"
