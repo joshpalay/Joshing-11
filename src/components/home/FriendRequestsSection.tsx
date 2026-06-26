@@ -62,6 +62,27 @@ type FriendRequestsSectionProps = {
   }
 }
 
+// Derive what the section shows from the latest server props minus the ids the
+// viewer has optimistically cleared from THIS card. Kept pure and exported so
+// the cross-surface sync contract is unit-testable without a DOM: because the
+// visible set is computed from props (not seeded into useState), a
+// router.refresh() fired by the same request's Recent Activity duplicate flows
+// through here and clears this card too. `totalCount` is reduced only by
+// cleared ids still present in `top`, so the "See all" overflow line stays
+// honest in the gap before the refresh lands (and self-corrects once it does,
+// when those ids drop out of `top`).
+export function deriveVisibleRequests(
+  initial: { top: SerializedIncomingRequest[]; totalCount: number },
+  removedIds: ReadonlySet<string>,
+): { requests: SerializedIncomingRequest[]; totalCount: number } {
+  const requests = initial.top.filter((item) => !removedIds.has(item.id))
+  const removedFromTop = initial.top.reduce(
+    (sum, item) => (removedIds.has(item.id) ? sum + 1 : sum),
+    0,
+  )
+  return { requests, totalCount: Math.max(0, initial.totalCount - removedFromTop) }
+}
+
 // Quiet outline/text button — distinguished from the filled Accept by shape and
 // weight (border + lighter weight), never by color alone (canon tripwire).
 const DECLINE_BUTTON_CLASS = [
@@ -136,10 +157,22 @@ function RequestCard({
 
 export default function FriendRequestsSection({ initial }: FriendRequestsSectionProps) {
   const router = useRouter()
-  const [requests, setRequests] = useState<SerializedIncomingRequest[]>(initial.top)
-  const [totalCount, setTotalCount] = useState(initial.totalCount)
+  // Optimistically-cleared request ids. We DERIVE the visible cards from the
+  // latest server props (`initial`) minus this set rather than seeding the list
+  // into useState — that's the fix for the cross-surface sync gap: the same
+  // pending request also shows as a row in the Recent Activity feed, and
+  // accepting/declining it there calls router.refresh(). A useState seed would
+  // ignore the fresh props that refresh delivers, stranding a stale card here
+  // (with dead buttons) until a hard reload. Reading from props keeps this card
+  // in lockstep with the activity-feed row, which already renders straight from
+  // props. The set still gives us instant optimistic removal when the user acts
+  // from THIS card; once the refresh lands, the id drops out of `initial.top`
+  // and the set entry becomes a harmless no-op.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set())
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const { requests, totalCount } = deriveVisibleRequests(initial, removedIds)
 
   // Zero-state is invisible: this section simply isn't rendered when there are
   // no pending requests (quiet over loud — no empty chrome).
@@ -156,10 +189,14 @@ export default function FriendRequestsSection({ initial }: FriendRequestsSection
     const result = await submitFriendRequestAction(request.id, action, failureMessage)
 
     if (result.ok) {
-      // Success: remove the card and decrement the local pending total so the
-      // "See all" overflow line stays honest as cards clear.
-      setRequests((current) => current.filter((item) => item.id !== request.id))
-      setTotalCount((current) => Math.max(0, current - 1))
+      // Success: optimistically clear this card. Derived `requests`/`totalCount`
+      // (above) pick this up immediately; once the refresh lands, the id also
+      // drops out of `initial.top` and this entry becomes a no-op.
+      setRemovedIds((current) => {
+        const next = new Set(current)
+        next.add(request.id)
+        return next
+      })
       // Keep the other home surfaces in sync: the same pending request also
       // shows in the Recent Activity stream ("wants to be friends"). Re-render
       // the server components so that duplicate clears too — otherwise it lingers
