@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //     each other's answers AND authored questions. Getting the direction wrong
 //     would seed the wrong person, so it is the highest-value thing to pin.
 
-const { dbMock, state, writeActivityMock, answerBackfillMock, authoredBackfillMock } = vi.hoisted(() => {
+const { dbMock, state, writeActivityMock, softDeleteActivityMock, answerBackfillMock, authoredBackfillMock } = vi.hoisted(() => {
   const writeActivityMock = vi.fn(async () => undefined)
+  const softDeleteActivityMock = vi.fn(async () => undefined)
   const answerBackfillMock = vi.fn(async () => ({ created: 0 }))
   const authoredBackfillMock = vi.fn(async () => ({ created: 0 }))
   const state = {
@@ -20,6 +21,7 @@ const { dbMock, state, writeActivityMock, answerBackfillMock, authoredBackfillMo
     targetPrivacy: 'public' as 'public' | 'private',
     returnedEdge: undefined as Record<string, unknown> | undefined,
     updateReturnsEdge: true,
+    deleteReturnsEdge: true,
   }
 
   // db.select() is used twice in createOrReuse: 1st for the existing edge, 2nd
@@ -49,9 +51,14 @@ const { dbMock, state, writeActivityMock, answerBackfillMock, authoredBackfillMo
         })),
       })),
     })),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => ({
+        returning: vi.fn(async () => (state.deleteReturnsEdge ? [state.returnedEdge] : [])),
+      })),
+    })),
   }
 
-  return { dbMock, state, writeActivityMock, answerBackfillMock, authoredBackfillMock }
+  return { dbMock, state, writeActivityMock, softDeleteActivityMock, answerBackfillMock, authoredBackfillMock }
 })
 
 vi.mock('@/server/db', () => ({
@@ -60,14 +67,22 @@ vi.mock('@/server/db', () => ({
   users: { id: 'users.id', followPrivacy: 'users.followPrivacy' },
 }))
 
-vi.mock('@/server/activity/write-activity', () => ({ writeActivity: writeActivityMock }))
+vi.mock('@/server/activity/write-activity', () => ({
+  writeActivity: writeActivityMock,
+  softDeleteActivityByReference: softDeleteActivityMock,
+}))
 
 vi.mock('@/server/feed/backfill-inviter-feed', () => ({
   backfillFollowedUserFeedItems: answerBackfillMock,
   backfillAuthoredQuestionsFeedItems: authoredBackfillMock,
 }))
 
-import { acceptPendingFriendshipRequest, createOrReusePendingFriendshipRequest } from '@/server/friends/friendships'
+import {
+  acceptPendingFriendshipRequest,
+  cancelPendingFriendshipRequest,
+  createOrReusePendingFriendshipRequest,
+  ignorePendingFriendshipRequest,
+} from '@/server/friends/friendships'
 
 const FOLLOWER = 'follower-1' // the requester / viewer who adds a friend
 const FOLLOWEE = 'followee-1' // the friend being added, whose activity backfills
@@ -77,9 +92,12 @@ beforeEach(() => {
   state.targetPrivacy = 'public'
   state.returnedEdge = undefined
   state.updateReturnsEdge = true
+  state.deleteReturnsEdge = true
   dbMock._selectQueue.length = 0
   dbMock.insert.mockClear()
+  dbMock.delete.mockClear()
   writeActivityMock.mockClear()
+  softDeleteActivityMock.mockClear()
   answerBackfillMock.mockClear()
   authoredBackfillMock.mockClear()
 })
@@ -174,6 +192,11 @@ describe('acceptPendingFriendshipRequest', () => {
     // Authored-question backfill BOTH directions.
     expect(authoredBackfillMock).toHaveBeenCalledWith({ authorUserId: FOLLOWEE, recipientUserId: FOLLOWER })
     expect(authoredBackfillMock).toHaveBeenCalledWith({ authorUserId: FOLLOWER, recipientUserId: FOLLOWEE })
+
+    // The now-resolved "wants to be friends" row is cleared at the source.
+    expect(softDeleteActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceType: 'follow', referenceId: 'edge-1', types: ['follow_request'] }),
+    )
   })
 
   it('does nothing when there is no matching pending edge to approve', async () => {
@@ -186,5 +209,38 @@ describe('acceptPendingFriendshipRequest', () => {
     expect(writeActivityMock).not.toHaveBeenCalled()
     expect(answerBackfillMock).not.toHaveBeenCalled()
     expect(authoredBackfillMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('ignore / cancel clean up the stale follow_request activity', () => {
+  it('soft-deletes the follow_request row when a pending request is declined', async () => {
+    state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'pending' }
+
+    const edge = await ignorePendingFriendshipRequest({ friendshipId: 'edge-1', userId: FOLLOWEE })
+
+    expect(edge).not.toBeNull()
+    expect(softDeleteActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceType: 'follow', referenceId: 'edge-1', types: ['follow_request'] }),
+    )
+  })
+
+  it('soft-deletes the follow_request row when the requester cancels', async () => {
+    state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'pending' }
+
+    const edge = await cancelPendingFriendshipRequest({ friendshipId: 'edge-1', userId: FOLLOWER })
+
+    expect(edge).not.toBeNull()
+    expect(softDeleteActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceType: 'follow', referenceId: 'edge-1', types: ['follow_request'] }),
+    )
+  })
+
+  it('does NOT touch activity when there is no matching edge to delete', async () => {
+    state.deleteReturnsEdge = false
+
+    const edge = await ignorePendingFriendshipRequest({ friendshipId: 'missing', userId: FOLLOWEE })
+
+    expect(edge).toBeNull()
+    expect(softDeleteActivityMock).not.toHaveBeenCalled()
   })
 })

@@ -1,3 +1,5 @@
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+
 import { activityItems, db } from '@/server/db';
 import { HOME_TOP3_ELIGIBLE_TYPES, type ActivityItemType } from '@/lib/activity-types';
 
@@ -27,5 +29,36 @@ export async function writeActivity(params: {
     });
   } catch (error) {
     console.error('Activity write failed', error);
+  }
+}
+
+/**
+ * Soft-delete the activity rows pointing at a given reference (e.g. the
+ * follow_request row for a now-deleted pending follow edge). Used by the
+ * decline/cancel paths so a resolved request stops rendering "{actor} wants to
+ * be friends" once its backing edge is gone. Best-effort and never throws —
+ * mirrors writeActivity, so it can't break the friendship write it follows.
+ */
+export async function softDeleteActivityByReference(params: {
+  referenceType: string;
+  referenceId: string;
+  types: readonly ActivityItemType[];
+  now?: Date;
+}): Promise<void> {
+  if (params.types.length === 0) return;
+  try {
+    await db
+      .update(activityItems)
+      .set({ deletedAt: params.now ?? new Date() })
+      .where(
+        and(
+          eq(activityItems.referenceType, params.referenceType),
+          eq(activityItems.referenceId, params.referenceId),
+          inArray(activityItems.type, params.types as readonly string[]),
+          isNull(activityItems.deletedAt),
+        ),
+      );
+  } catch (error) {
+    console.error('Activity soft-delete failed', error);
   }
 }
