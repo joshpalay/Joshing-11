@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 
 import { db, profileSectionVisibility } from '@/server/db';
 
@@ -81,6 +81,43 @@ export async function getSectionVisibilities(
     if (!isProfileSection(row.section)) continue;
     if (!isSectionVisibility(row.visibility)) continue;
     result[row.section] = row.visibility;
+  }
+  return result;
+}
+
+/**
+ * Batch variant of `getSectionVisibilities` for a SET of users in a single
+ * `inArray` query, returning a Map keyed by userId. Every requested id is
+ * present in the result — ids with no rows fall back to DEFAULTS, exactly as
+ * the single-user version does. This is what set-based callers (e.g. the Daily
+ * Five +2 friend-domain pool) use instead of calling `getSectionVisibilities`
+ * once per followee, so the query count stays constant in the followee count.
+ */
+export async function getSectionVisibilitiesBulk(
+  userIds: readonly string[],
+): Promise<Map<string, Record<ProfileSection, SectionVisibility>>> {
+  const result = new Map<string, Record<ProfileSection, SectionVisibility>>();
+  const ids = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+  // Seed defaults for every requested id so callers can read inline without a
+  // per-id existence check — mirrors the single-user DEFAULTS fallback.
+  for (const id of ids) result.set(id, { ...DEFAULTS });
+  if (ids.length === 0) return result;
+
+  const rows = await db
+    .select({
+      userId: profileSectionVisibility.userId,
+      section: profileSectionVisibility.section,
+      visibility: profileSectionVisibility.visibility,
+    })
+    .from(profileSectionVisibility)
+    .where(inArray(profileSectionVisibility.userId, ids));
+
+  for (const row of rows) {
+    if (!isProfileSection(row.section)) continue;
+    if (!isSectionVisibility(row.visibility)) continue;
+    const settings = result.get(row.userId);
+    if (!settings) continue;
+    settings[row.section] = row.visibility;
   }
   return result;
 }
