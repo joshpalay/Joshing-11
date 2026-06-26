@@ -431,8 +431,11 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
       ) : null}
 
       {portrait.sectionVisibleTo.knowledge_base ? (
-        <section className="mt-8" aria-label="Knowledge base">
-          <h2 className="font-serif text-xl font-semibold">Knowledge base</h2>
+        <section
+          className="mt-8 border-t border-[var(--brand-rule)] pt-8"
+          aria-label="Knowledge base"
+        >
+          <h2 className="font-serif text-2xl font-semibold">Knowledge base</h2>
           {!isSelf && topDomains.length > 0 ? (
             <div className="mt-3">
               <KnowledgeCard

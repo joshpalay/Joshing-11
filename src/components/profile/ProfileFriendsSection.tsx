@@ -29,8 +29,11 @@ export function ProfileFriendsSection({
   const hasMore = friends.length > shown.length
 
   return (
-    <section className="mt-8" aria-label="Friends">
-      <h2 className="font-serif text-xl font-semibold">Friends</h2>
+    <section
+      className="mt-8 border-t border-[var(--brand-rule)] pt-8"
+      aria-label="Friends"
+    >
+      <h2 className="font-serif text-2xl font-semibold">Friends</h2>
 
       {shown.length === 0 ? (
         <p className="text-muted-foreground mt-2 text-sm">
