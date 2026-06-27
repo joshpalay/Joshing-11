@@ -1,4 +1,4 @@
-import { Brain, Globe, type LucideIcon, Pencil, Users as UsersIcon } from 'lucide-react';
+import { Brain, Globe, type LucideIcon, Pencil, RotateCcw, Users as UsersIcon } from 'lucide-react';
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -233,6 +233,18 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
           memberSince={portrait.user.memberSince}
           editable
         />
+
+        <section className="mb-8">
+          <h2 className="mb-3 font-serif text-2xl font-semibold">Revisit</h2>
+          <SettingsGroup>
+            <SettingsRow
+              icon={<RotateCcw className="size-5" />}
+              title="The ones you turned around"
+              subtitle="Questions you once missed and later got right. Recall, then reveal."
+              href="/recovered"
+            />
+          </SettingsGroup>
+        </section>
 
         <section className="mb-8">
           <h2 className="mb-3 font-serif text-2xl font-semibold">Privacy</h2>
