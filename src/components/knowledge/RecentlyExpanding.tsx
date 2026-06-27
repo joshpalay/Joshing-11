@@ -4,6 +4,7 @@ import { useMemo, type CSSProperties } from 'react';
 import { Share2 } from 'lucide-react';
 
 import { expandingTerritoryAccent } from '@/components/knowledge/PortraitCircles';
+import { CardTriangleStrip } from '@/components/knowledge/CardTriangleStrip';
 
 export type ExpandingDomain = {
   domain: string;
@@ -46,6 +47,7 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
         }
       `}</style>
       <p style={wordmarkStyle}>Joshing</p>
+      <CardTriangleStrip />
       <div style={headerStyle}>
         <h2 style={titleStyle}>Recently Expanding</h2>
         {visibleDomains.length > 0 ? (
