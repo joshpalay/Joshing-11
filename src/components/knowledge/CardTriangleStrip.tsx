@@ -16,7 +16,7 @@ export function CardTriangleStrip() {
 }
 
 const stripStyle: CSSProperties = {
-  height: 10,
+  height: 16,
   marginInline: '-0.95rem',
   backgroundImage: 'url(/images/Variant4-TOP.png)',
   backgroundSize: 'cover',
