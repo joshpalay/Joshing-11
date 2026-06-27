@@ -7,13 +7,17 @@
  * every caller 404s — the correct safe default. Callers that fail this check must
  * return 404 (never 403): the route's existence is not revealed to non-admins.
  */
-export function isAdminUser(userId: string | null | undefined): boolean {
-  if (!userId) return false;
+/** The parsed `ADMIN_USER_IDS` allowlist, in declared order. Empty when unset. */
+export function adminUserIds(): string[] {
   const raw = process.env.ADMIN_USER_IDS?.trim();
-  if (!raw) return false;
+  if (!raw) return [];
   return raw
     .split(',')
     .map((id) => id.trim())
-    .filter(Boolean)
-    .includes(userId);
+    .filter(Boolean);
+}
+
+export function isAdminUser(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  return adminUserIds().includes(userId);
 }
