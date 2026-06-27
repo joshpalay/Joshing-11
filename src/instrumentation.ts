@@ -1735,8 +1735,23 @@ export async function register() {
       `);
       await db.execute(sql`ALTER TABLE "LlmUsageEvent" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS "LlmUsageEvent_provider_created_at_idx" ON "LlmUsageEvent" ("provider", "created_at")`);
+      // Migration 0092 (B-LLM-COST-LATENCY-REPORT-01) stores the weekly cost &
+      // latency digest. The llm-cost-report cron would 42P01 on insert if the
+      // migration recorded without the table present. Self-contained; precedent: 0091.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "LlmCostReport" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "period_start" timestamp with time zone NOT NULL,
+          "period_end" timestamp with time zone NOT NULL,
+          "window_days" integer NOT NULL DEFAULT 7,
+          "markdown" text NOT NULL,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "LlmCostReport" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "LlmCostReport_created_at_idx" ON "LlmCostReport" ("created_at")`);
     } catch {
-      // Non-fatal — migrate() creates the tables from 0090/0091 immediately after.
+      // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;

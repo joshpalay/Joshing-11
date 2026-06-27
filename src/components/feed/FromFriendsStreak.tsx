@@ -95,7 +95,20 @@ export function FromFriendsStreak({
   // header carries attribution for the whole streak.
   const showViaLine = !headerless && !showHeader;
 
-  const cards = questions.map((q) => (
+  // Unanswered-first ordering (request 2026-06-27): answered cards sink to the
+  // bottom of the streak so the questions still to play float to the top — the
+  // primary job here is answering what's left, so the actionable cards lead and
+  // the dimmed spent cards cluster below as a scannable group. A stable partition
+  // preserves the server's original order WITHIN each group, so an answered card
+  // simply drops past the remaining unanswered ones the moment it resolves rather
+  // than reshuffling. `priorResult`-answered questions (already answered on load)
+  // partition the same way, so a half-played streak opens already grouped.
+  const ordered = [
+    ...questions.filter((q) => !isResolved(q.questionId)),
+    ...questions.filter((q) => isResolved(q.questionId)),
+  ];
+
+  const cards = ordered.map((q) => (
     <StreakQuestionCard
       key={q.questionId}
       question={q}
@@ -335,25 +348,15 @@ function StreakQuestionCard({
           </p>
         ) : null}
 
-        <p
-          style={{
-            fontFamily: FS,
-            fontSize: 21,
-            lineHeight: 1.28,
-            fontWeight: 500,
-            color: INK,
-            margin: '0 0 14px',
-          }}
-        >
-          &ldquo;{question.text}&rdquo;
-        </p>
-
         {spent ? (
-          // Settled: show the graded result, and offer forwarding the question
-          // onward to someone else (the viewer answered it, so it's no longer
-          // theirs to answer — but it's still theirs to pass on).
+          // Settled: the graded verdict LEADS the card — "✓ Correct" / "Not this
+          // time" sits above the question so it's the first thing you scan down a
+          // column of answered cards (request 2026-06-27). The "Send onward"
+          // affordance rides the same row: the viewer answered it, so it's no
+          // longer theirs to answer — but it's still theirs to pass on.
           <CardRow
             gap={12}
+            marginBottom={10}
             left={<SpentResult resolution={resolution} priorResult={question.priorResult} />}
             right={
               <FeedActionLink
@@ -367,7 +370,24 @@ function StreakQuestionCard({
               </FeedActionLink>
             }
           />
-        ) : (
+        ) : null}
+
+        <p
+          style={{
+            fontFamily: FS,
+            fontSize: 21,
+            lineHeight: 1.28,
+            fontWeight: 500,
+            color: INK,
+            // Spent cards close on the question (verdict already led above), so
+            // drop the trailing margin that separated it from the bottom row.
+            margin: spent ? 0 : '0 0 14px',
+          }}
+        >
+          &ldquo;{question.text}&rdquo;
+        </p>
+
+        {spent ? null : (
           <CardRow
             left={<FeedDismissButton onClick={() => setPassed(true)} />}
             right={
