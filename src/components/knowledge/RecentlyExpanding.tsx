@@ -46,10 +46,8 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
           button[data-expanding-share="true"]:hover { border-color: var(--warm-border-soft); background: var(--warm-cream); transform: translateY(-1px); }
         }
       `}</style>
-      <p style={wordmarkStyle}>Joshing</p>
-      <CardTriangleStrip />
       <div style={headerStyle}>
-        <h2 style={titleStyle}>Recently Expanding</h2>
+        <p style={wordmarkStyle}>Joshing</p>
         {visibleDomains.length > 0 ? (
           <button
             type="button"
@@ -63,6 +61,8 @@ export function RecentlyExpanding({ domains, playerDisplayName = 'Josh', onNotic
           </button>
         ) : null}
       </div>
+      <CardTriangleStrip />
+      <h2 style={titleStyle}>Recently Expanding</h2>
 
       {domains.length === 0 ? (
         <div style={emptyWrapStyle}>
