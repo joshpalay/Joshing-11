@@ -1,18 +1,79 @@
+'use client';
+
+import { Check, X } from 'lucide-react';
+import { useId, useState } from 'react';
+
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
 
 /**
- * D-REVIEW-RECOVERED-01 (Decision B) — silent self-reveal, no grading.
+ * D-REVIEW-RECOVERED-01 (Decision B) — graded, non-persisting review.
  *
- * The reveal is a native <details> disclosure: show the question, the player
- * recalls in their head, taps to reveal the canonical answer, self-assesses
- * silently, moves on. Nothing is recorded. This is a server component with no
- * client JS and no network on reveal — read-only by construction, so there is
- * no path through which a `mastery_events` row (or any write) could be minted.
+ * The player types an answer and submits; the server grades it for real and
+ * returns the verdict, which is discarded — nothing is written (see the grade
+ * route). The canonical answer is revealed only AFTER a submit (it is never in
+ * the page payload), keeping the interaction "recall, then check."
  *
- * No streak / count / progress register, no color-only distinction (canon
- * tripwires): the category eyebrow is text, the reveal is a labelled control.
+ * Grader-outage handling is mandatory: an `unscored` grade (HTTP 503) surfaces
+ * a warm retry note and reveals nothing as wrong — a miss is never shown for an
+ * answer the grader couldn't score. Verdicts are distinguished by text + icon,
+ * never color alone (canon tripwire).
  */
+
+type Verdict = {
+  isCorrect: boolean;
+  consolation: string | null;
+  correctAnswer: string;
+  explanation: string | null;
+  creatorNote: string | null;
+};
+
+type Phase =
+  | { kind: 'idle' }
+  | { kind: 'submitting' }
+  | { kind: 'graded'; verdict: Verdict }
+  | { kind: 'retry'; message: string };
+
 export function RecoveredCard({ question }: { question: RecoveredQuestion }) {
+  const [value, setValue] = useState('');
+  const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
+  const inputId = useId();
+
+  const loading = phase.kind === 'submitting';
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (loading) return;
+    setPhase({ kind: 'submitting' });
+    try {
+      const res = await fetch('/api/recovered/grade', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ questionId: question.questionId, answer: value }),
+      });
+      if (res.status === 503) {
+        const data = await res.json().catch(() => null);
+        // Fail toward the player: hold for retry, reveal nothing as wrong.
+        setPhase({
+          kind: 'retry',
+          message:
+            (data?.message as string | undefined) ??
+            "Couldn't check that just now — give it another go in a moment.",
+        });
+        return;
+      }
+      if (!res.ok) {
+        setPhase({ kind: 'retry', message: 'Something went sideways. Try once more in a moment.' });
+        return;
+      }
+      const verdict = (await res.json()) as Verdict;
+      setPhase({ kind: 'graded', verdict });
+    } catch {
+      setPhase({ kind: 'retry', message: 'Something went sideways. Try once more in a moment.' });
+    }
+  }
+
+  const graded = phase.kind === 'graded' ? phase.verdict : null;
+
   return (
     <article className="card p-4">
       <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
@@ -23,16 +84,53 @@ export function RecoveredCard({ question }: { question: RecoveredQuestion }) {
         {question.questionText}
       </p>
 
-      <details className="group mt-3 text-sm leading-6">
-        <summary className="inline-flex cursor-pointer items-center gap-1 font-medium text-foreground underline underline-offset-2">
-          <span className="group-open:hidden">Reveal the answer</span>
-          <span className="hidden group-open:inline">The answer</span>
-        </summary>
-        <p className="mt-2 font-medium text-foreground">{question.answerText}</p>
-        {question.factualExplanation ? (
-          <p className="mt-2 text-muted-foreground">{question.factualExplanation}</p>
-        ) : null}
-      </details>
+      {graded ? (
+        <div className="mt-3 space-y-2 text-sm">
+          <p className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+            {graded.isCorrect ? (
+              <Check className="size-4" aria-hidden="true" />
+            ) : (
+              <X className="size-4" aria-hidden="true" />
+            )}
+            {graded.isCorrect ? 'You got it' : 'Not quite'}
+          </p>
+          {!graded.isCorrect && graded.consolation ? (
+            <p className="text-muted-foreground">{graded.consolation}</p>
+          ) : null}
+          <p className="font-medium text-foreground">
+            <span className="font-semibold">Answer:</span> {graded.correctAnswer}
+          </p>
+          {graded.explanation ? (
+            <p className="text-muted-foreground">{graded.explanation}</p>
+          ) : null}
+          {graded.creatorNote ? (
+            <p className="text-muted-foreground italic">{graded.creatorNote}</p>
+          ) : null}
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="mt-3">
+          <label htmlFor={inputId} className="sr-only">
+            Your answer
+          </label>
+          <input
+            id={inputId}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="Recall it, then type your answer…"
+            disabled={loading}
+            autoComplete="off"
+            className="min-h-11 w-full rounded-xl border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-base outline-none focus:border-[var(--brand-navy)] disabled:opacity-60"
+          />
+          {phase.kind === 'retry' ? (
+            <p role="status" aria-live="polite" className="mt-2 text-sm text-muted-foreground">
+              {phase.message}
+            </p>
+          ) : null}
+          <button type="submit" disabled={loading || !value.trim()} className="btn-primary mt-3">
+            {loading ? 'Checking…' : 'Check my answer'}
+          </button>
+        </form>
+      )}
     </article>
   );
 }
