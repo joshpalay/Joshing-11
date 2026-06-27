@@ -167,6 +167,18 @@ function isDailyTopUpCarryForwardEnabled(): boolean {
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
+// Default ON (kill-switch). On a SHORT top-up round, exclude the domains already
+// filling the queue so the re-generation reaches the user's OTHER selected
+// domains instead of re-sampling the same exhausted few — the "13 interests but a
+// 4-question queue" case, where the favorite domains are mined out and the dedup
+// gates reject the repeats. Also a small cost win: a dry top-up round that would
+// recover nothing (and still bill a Sonnet call) instead draws fresh material.
+// Set DAILY_TOPUP_BROADEN_ENABLED=false to disable.
+function isDailyTopUpBroadenEnabled(): boolean {
+  const raw = process.env.DAILY_TOPUP_BROADEN_ENABLED?.trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
+
 const normalizeQueueText = (text: string) => text.trim().toLowerCase();
 
 /**
@@ -622,10 +634,26 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
     const roundShortfall =
       DAILY_QUEUE_SIZE -
       (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
+    // Broaden the palette: skip the domains already filling the queue so this
+    // round draws from the user's other selected domains (the exhausted-favorites
+    // short-queue case). Falls back to the full palette inside the generator if
+    // exclusion would empty it, so a single-domain user is unaffected.
+    const filledDomains = isDailyTopUpBroadenEnabled()
+      ? new Set<string>([
+          ...authored.map((pick) => pick.canonicalSubcategory),
+          ...housePicks.map((pick) => pick.canonicalSubcategory),
+          ...dedupedGenerated.map((question) => question.canonicalSubcategory),
+          ...topUpGenerated.map((question) => question.canonicalSubcategory),
+        ])
+      : undefined;
     const extra = await generateDailyQuestionsFromKnowledgeBase(
       userId,
       overRequest(roundShortfall),
-      { firstRun: isFirstRun, underDifficultyReserve },
+      {
+        firstRun: isFirstRun,
+        underDifficultyReserve,
+        ...(filledDomains && filledDomains.size > 0 ? { excludeDomains: filledDomains } : {}),
+      },
     );
     let recoveredThisRound = 0;
     for (const question of extra) {
