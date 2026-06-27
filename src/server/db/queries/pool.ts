@@ -211,6 +211,10 @@ export interface NearestPoolMatch {
   origin: PoolOrigin;
   /** Cosine similarity in [0,1]; 1 = identical. */
   similarity: number;
+  /** The match's normalized fact_key, when it has one (only machine rows carry
+   *  fact_key; human Question rows return null). Lets the collision matrix treat
+   *  a DIFFERENT fact_key as authoritative evidence the rows are distinct facts. */
+  factKey: string | null;
 }
 
 /**
@@ -227,7 +231,7 @@ export async function findNearestInPool(
 
   const [machineNearest, humanNearest] = await Promise.all([
     db
-      .select({ id: generatedQuestions.id, distance: machineDistance })
+      .select({ id: generatedQuestions.id, distance: machineDistance, factKey: generatedQuestions.factKey })
       .from(generatedQuestions)
       .where(and(
         isNotNull(generatedQuestions.embedding),
@@ -251,10 +255,12 @@ export async function findNearestInPool(
 
   const candidates: NearestPoolMatch[] = [];
   if (machineNearest[0]) {
-    candidates.push({ id: machineNearest[0].id, origin: 'machine', similarity: 1 - Number(machineNearest[0].distance) });
+    candidates.push({ id: machineNearest[0].id, origin: 'machine', similarity: 1 - Number(machineNearest[0].distance), factKey: machineNearest[0].factKey ?? null });
   }
   if (humanNearest[0]) {
-    candidates.push({ id: humanNearest[0].id, origin: 'human', similarity: 1 - Number(humanNearest[0].distance) });
+    // Human Question rows carry no fact_key column → null (falls back to the base
+    // threshold in the collision matrix).
+    candidates.push({ id: humanNearest[0].id, origin: 'human', similarity: 1 - Number(humanNearest[0].distance), factKey: null });
   }
   if (!candidates.length) return null;
   return candidates.reduce((best, c) => (c.similarity > best.similarity ? c : best));
