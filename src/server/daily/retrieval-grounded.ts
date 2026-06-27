@@ -18,6 +18,7 @@ import {
   type GroundedLlmQuestion,
 } from '@/server/daily/generate-questions';
 import { askToAnswerBatch, resolveMachineTrustTier } from '@/server/daily/ask-to-answer';
+import { getMonthToDateLlmSpendUsd } from '@/server/db/queries/llm-provider-experiment';
 import { assessCorroboration, getReputationLists } from '@/server/daily/source-reputation';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import {
@@ -63,6 +64,10 @@ export type PoolRefillReport = {
   reason?: string;
   usdCeiling: number;
   usdSpent: number;
+  // Month-to-date total LLM spend (USD) checked against LLM_MONTHLY_USD_CEILING,
+  // when that cap is configured; undefined when the monthly cap is disabled.
+  monthToDateUsd?: number;
+  monthlyUsdCeiling?: number;
   webSearches: number;
   domainsConsidered: number;
   domainsProcessed: number;
@@ -288,6 +293,23 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
   if (!config.enabled) blockers.push('RETRIEVAL_GROUNDING_ENABLED is not set');
   if (!client) blockers.push('Anthropic client unavailable (missing/invalid ANTHROPIC_API_KEY or LLM disabled)');
   if (!config.systemUserId) blockers.push('RETRIEVAL_SYSTEM_USER_ID is not set — no owning user for pool rows');
+
+  // Monthly spend cap. A hard stop on the discretionary grounding spend once
+  // month-to-date LLM cost crosses LLM_MONTHLY_USD_CEILING — belt-and-suspenders
+  // above the per-run dailyUsdCeiling. 0/unset disables it. (The Anthropic Console
+  // org spend limit is the platform-level global backstop that also bounds
+  // per-user generation.) A dry run still reports the numbers but, like the other
+  // blockers, only a real run hard-returns on it.
+  if (config.monthlyUsdCeiling > 0) {
+    const monthToDateUsd = await getMonthToDateLlmSpendUsd();
+    report.monthToDateUsd = monthToDateUsd;
+    report.monthlyUsdCeiling = config.monthlyUsdCeiling;
+    if (monthToDateUsd >= config.monthlyUsdCeiling) {
+      blockers.push(
+        `month-to-date LLM spend $${monthToDateUsd.toFixed(2)} >= LLM_MONTHLY_USD_CEILING $${config.monthlyUsdCeiling.toFixed(2)}`,
+      );
+    }
+  }
 
   if (blockers.length > 0) {
     report.reason = blockers.join('; ');

@@ -29,6 +29,12 @@ export type RetrievalConfig = {
   /** Hard ceiling on retrieval spend per cron run, in USD. Stops issuing new
    *  retrieval calls once the next call's worst case would cross it. */
   dailyUsdCeiling: number;
+  /** Hard MONTHLY ceiling on total LLM spend, in USD. When month-to-date LLM cost
+   *  (from the LlmUsageEvent ledger) crosses this, the grounding run no-ops — a
+   *  belt-and-suspenders cap on discretionary spend above the per-run ceiling.
+   *  0/unset disables it. The Anthropic Console org spend limit is the hard,
+   *  platform-level global backstop that also covers per-user generation. */
+  monthlyUsdCeiling: number;
   /** Searches the model may run per generated question (maps to web_search
    *  max_uses, multiplied by questions-per-call). */
   maxSearchesPerQuestion: number;
@@ -66,6 +72,7 @@ export function getRetrievalConfig(): RetrievalConfig {
     enabled: boolEnv('RETRIEVAL_GROUNDING_ENABLED', false),
     systemUserId: process.env.RETRIEVAL_SYSTEM_USER_ID?.trim() || null,
     dailyUsdCeiling: numEnv('RETRIEVAL_DAILY_USD_CEILING', 2),
+    monthlyUsdCeiling: numEnv('LLM_MONTHLY_USD_CEILING', 0),
     maxSearchesPerQuestion: Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_SEARCHES_PER_QUESTION', 3))),
     questionsPerDomain: Math.max(1, Math.round(numEnv('RETRIEVAL_QUESTIONS_PER_DOMAIN', 3))),
     poolDepthThreshold: Math.max(1, Math.round(numEnv('RETRIEVAL_POOL_DEPTH_THRESHOLD', 8))),

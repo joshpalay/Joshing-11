@@ -107,6 +107,47 @@ export async function readUsageCostByProvider(days = 14): Promise<ProviderModelC
   }));
 }
 
+/**
+ * Total estimated USD spend on LLM calls for the CURRENT calendar month (UTC),
+ * from the LlmUsageEvent ledger. Backs the retrieval-grounding monthly budget cap
+ * (LLM_MONTHLY_USD_CEILING). Token cost only — Anthropic server-side web_search is
+ * billed separately and is additionally bounded by RETRIEVAL_DAILY_USD_CEILING per
+ * run. Unpriced models contribute 0 (cost unknown, not assumed). Resilient:
+ * returns 0 on a query failure so a telemetry hiccup never hard-blocks a caller.
+ */
+export async function getMonthToDateLlmSpendUsd(): Promise<number> {
+  try {
+    const rows = await db
+      .select({
+        model: llmUsageEvent.model,
+        inputTokens: sql<number>`coalesce(sum(${llmUsageEvent.inputTokens}), 0)::float8`,
+        outputTokens: sql<number>`coalesce(sum(${llmUsageEvent.outputTokens}), 0)::float8`,
+        cacheReadTokens: sql<number>`coalesce(sum(${llmUsageEvent.cacheReadTokens}), 0)::float8`,
+        cacheCreateTokens: sql<number>`coalesce(sum(${llmUsageEvent.cacheCreateTokens}), 0)::float8`,
+      })
+      .from(llmUsageEvent)
+      .where(gte(llmUsageEvent.createdAt, sql`date_trunc('month', now() at time zone 'utc')`))
+      .groupBy(llmUsageEvent.model);
+
+    let total = 0;
+    for (const r of rows) {
+      const cost = estimateCostUsd(r.model, {
+        inputTokens: Number(r.inputTokens),
+        outputTokens: Number(r.outputTokens),
+        cacheReadTokens: Number(r.cacheReadTokens),
+        cacheCreateTokens: Number(r.cacheCreateTokens),
+      });
+      if (!cost.unpriced && cost.usd) total += cost.usd;
+    }
+    return total;
+  } catch (error) {
+    console.warn('[llm/usage] getMonthToDateLlmSpendUsd failed; treating as 0', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
+}
+
 // ─── Part 1: quality — grading ───────────────────────────────────────────────
 
 export type GradingQualityByProvider = {

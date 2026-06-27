@@ -37,6 +37,17 @@ If thin+active domains and frequent fall-throughs show up in those numbers, flip
       `RETRIEVAL_DAILY_USD_CEILING` ($2 hard stop), `RETRIEVAL_MAX_SEARCHES_PER_QUESTION`
       (3), `RETRIEVAL_QUESTIONS_PER_DOMAIN` (3), `RETRIEVAL_POOL_DEPTH_THRESHOLD` (8),
       `RETRIEVAL_MAX_DOMAINS_PER_RUN` (50).
+- [ ] **Spend caps (do this BEFORE flipping `RETRIEVAL_GROUNDING_ENABLED`):**
+      - **Hard global cap — set an Anthropic Console org monthly spend limit.** This is
+        the only cap that bounds *everything* (per-user generation + gates + grounding
+        web search) at the platform level and can't be bypassed by code. Console →
+        Settings → Limits/Billing → monthly spend limit. Do the same for the Voyage key
+        if you provision it.
+      - **In-app cap — `LLM_MONTHLY_USD_CEILING`** (default 0 = off). When month-to-date
+        LLM cost (from the `LlmUsageEvent` ledger, via `getMonthToDateLlmSpendUsd`)
+        crosses this, `runPoolRefill` no-ops — a belt-and-suspenders bound on the
+        discretionary grounding spend above the per-run ceiling. Set it to your comfort
+        number (e.g. the initial-drain estimate + headroom).
 - [ ] **Set `NARROW_KB_GUARD_ENABLED=true` in the SAME flip** (audit: niche-fiction
       fabrication, 2026-06-26). The narrow-KB exhaustion guard
       (`src/server/daily/kb-exhaustion.ts`) stops the per-user generator from fabricating
