@@ -95,7 +95,20 @@ export function FromFriendsStreak({
   // header carries attribution for the whole streak.
   const showViaLine = !headerless && !showHeader;
 
-  const cards = questions.map((q) => (
+  // Unanswered-first ordering (request 2026-06-27): answered cards sink to the
+  // bottom of the streak so the questions still to play float to the top — the
+  // primary job here is answering what's left, so the actionable cards lead and
+  // the dimmed spent cards cluster below as a scannable group. A stable partition
+  // preserves the server's original order WITHIN each group, so an answered card
+  // simply drops past the remaining unanswered ones the moment it resolves rather
+  // than reshuffling. `priorResult`-answered questions (already answered on load)
+  // partition the same way, so a half-played streak opens already grouped.
+  const ordered = [
+    ...questions.filter((q) => !isResolved(q.questionId)),
+    ...questions.filter((q) => isResolved(q.questionId)),
+  ];
+
+  const cards = ordered.map((q) => (
     <StreakQuestionCard
       key={q.questionId}
       question={q}
