@@ -1870,7 +1870,16 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // areas you picked" rather than a random cross-section. See first-run-seeding.ts.
   // underDifficultyReserve: forwarded to generateDailyQuestions so the orchestrator
   // can collect soft difficulty-floor deflections for last-resort backfill.
-  options: { firstRun?: boolean; underDifficultyReserve?: GeneratedQuestionRow[] } = {},
+  // excludeDomains: domains to keep OUT of this round's palette. The orchestrator's
+  // top-up loop passes the domains already filling the queue so a short-queue
+  // re-generation reaches the user's OTHER selected domains instead of re-sampling
+  // the same exhausted few (the "13 interests but a 4-question queue" case). Always
+  // falls back to the full palette if exclusion would empty it.
+  options: {
+    firstRun?: boolean;
+    underDifficultyReserve?: GeneratedQuestionRow[];
+    excludeDomains?: ReadonlySet<string>;
+  } = {},
 ): Promise<GeneratedQuestionRow[]> {
   const [
     knowledgeBase,
@@ -1901,6 +1910,18 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   const allDomains = knowledgeBase.map((domain) => domain.domain);
 
+  // Lowercased exclusion set (top-up broadening). Applied to the candidate pool
+  // BEFORE selection so a re-generation draws from fresh domains; a pure-string
+  // filter helper keeps the full palette when exclusion would empty it.
+  const excludeLower = new Set(
+    [...(options.excludeDomains ?? [])].map((domain) => domain.toLowerCase()),
+  );
+  const dropExcluded = <T,>(items: readonly T[], key: (item: T) => string): T[] => {
+    if (excludeLower.size === 0) return [...items];
+    const kept = items.filter((item) => !excludeLower.has(key(item).toLowerCase()));
+    return kept.length > 0 ? kept : [...items];
+  };
+
   let domainsForRound: string[];
   if (preferences.domainMode === 'custom' && preferences.selectedDomains.length > 0) {
     // Custom mode: user explicitly selected domains. The per-domain weekly cap
@@ -1917,7 +1938,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // Leading with the least-mined domains steers generation (and the bank-pick
     // pass, which walks this list in order) toward the picks that still have
     // unseen facts, keeping the queue full and the rotation honest.
-    const selectable = preferences.selectedDomains.filter((domain) => allDomains.includes(domain));
+    const selectable = dropExcluded(
+      preferences.selectedDomains.filter((domain) => allDomains.includes(domain)),
+      (domain) => domain,
+    );
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
     if (isCustomDomainWeightingEnabled()) {
       // Change 1+2: deterministic, frequency-weighted, recency-aware sample of
@@ -1959,7 +1983,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         .filter(([, frequency]) => frequency === 'resting')
         .map(([domain]) => domain.toLowerCase()),
     );
-    const eligible = knowledgeBase.filter((domain) => !resting.has(domain.domain.toLowerCase()));
+    const eligible = dropExcluded(
+      knowledgeBase.filter((domain) => !resting.has(domain.domain.toLowerCase())),
+      (domain) => domain.domain,
+    );
     const eligibleKb = eligible.length > 0 ? eligible : knowledgeBase;
 
     // First Daily Five: seed the palette from declared interests in selection
