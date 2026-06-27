@@ -2211,6 +2211,54 @@ export async function getAuthoredQuestionTexts(
   }));
 }
 
+/**
+ * Up to `perDomainLimit` authored questions per domain (from the given `authorIds`
+ * only), as (question, answer) pairs, for seeding generation. These are
+ * GROUND-TRUTH anchors fed into buildUserPrompt so the model writes NEW questions
+ * grounded in real canon instead of inventing details — the fix for niche domains
+ * it doesn't truly know (e.g. "Spy School"). Scoped to a TRUSTED author allowlist
+ * (callers pass adminUserIds()) on purpose: a seed is treated as canon, so an
+ * untrusted author's mistake must never become a generation anchor. Empty
+ * `authorIds` → no seeds (the feature is inert until an admin authors examples).
+ * Non-deleted, non-blocked; newest first; domains with no examples are absent.
+ */
+export async function getAuthoredExamplesForDomains(
+  domains: readonly string[],
+  perDomainLimit: number,
+  authorIds: readonly string[],
+): Promise<Map<string, Array<{ questionText: string; answerText: string }>>> {
+  const result = new Map<string, Array<{ questionText: string; answerText: string }>>();
+  if (domains.length === 0 || perDomainLimit <= 0 || authorIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      domain: canonicalQuestions.canonicalSubcategory,
+      questionText: canonicalQuestions.questionText,
+      answerText: canonicalQuestions.answerText,
+    })
+    .from(canonicalQuestions)
+    .where(and(
+      inArray(canonicalQuestions.canonicalSubcategory, [...domains]),
+      inArray(canonicalQuestions.creatorId, [...authorIds]),
+      isNull(canonicalQuestions.deletedAt),
+      ne(canonicalQuestions.visibility, 'blocked'),
+    ))
+    .orderBy(desc(canonicalQuestions.createdAt));
+
+  for (const row of rows) {
+    if (!row.domain) continue;
+    const existing = result.get(row.domain);
+    if (existing) {
+      if (existing.length < perDomainLimit) {
+        existing.push({ questionText: row.questionText, answerText: row.answerText });
+      }
+    } else {
+      result.set(row.domain, [{ questionText: row.questionText, answerText: row.answerText }]);
+    }
+  }
+  return result;
+}
+
 export async function getAnsweredDailyCount(queue: DailyQueueRow): Promise<number> {
   return asQueueSlots(queue.slots).filter((slot) => slot.answered).length;
 }
