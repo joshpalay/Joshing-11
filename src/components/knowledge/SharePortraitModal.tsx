@@ -53,7 +53,7 @@ async function loadShareFonts(): Promise<void> {
   );
 }
 
-type SharePhase = 'idle' | 'sharing' | 'done' | 'error';
+type SharePhase = 'idle' | 'done' | 'error';
 
 export type SharePortraitModalProps = {
   playerDisplayName: string;
@@ -76,79 +76,106 @@ export function SharePortraitModal({
   const [phase, setPhase] = useState<SharePhase>('idle');
   const [fontReady, setFontReady] = useState(false);
 
+  // Pre-captured image, produced once on mount so the Share tap can call
+  // navigator.share synchronously (iOS consumes the user-gesture if we await
+  // font/canvas work first, which silently aborts the native sheet).
+  const [shareFile, setShareFile] = useState<File | null>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const captureStartedRef = useRef(false);
+
+  const captureReady = shareFile !== null;
+
   // Load the portrait fonts on mount
   useEffect(() => {
     loadShareFonts().then(() => setFontReady(true)).catch(() => setFontReady(true));
   }, []);
 
-  const captureCanvas = useCallback(async () => {
-    const node = cardRef.current;
-    if (!node) return null;
-    const { default: html2canvas } = await import('html2canvas');
-    const canvas = await html2canvas(node, {
-      backgroundColor: '#faf8f2', // raw hex required: html2canvas can't resolve var(); mirrors --warm-paper
-      scale: 3,
-      useCORS: true,
-      logging: false,
-    });
-    return canvas;
+  // Capture the card to a File (for share) and data URL (for download) exactly
+  // once, after fonts are ready. The ref guard makes this safe against React's
+  // double-invoke and concurrent retries; on failure the guard is released so
+  // the retry affordance can re-run it.
+  const runCapture = useCallback(async () => {
+    if (captureStartedRef.current) return;
+    captureStartedRef.current = true;
+    setCaptureError(false);
+    setIsCapturing(true);
+    try {
+      const node = cardRef.current;
+      if (!node) throw new Error('Portrait card not mounted');
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(node, {
+        backgroundColor: '#faf8f2', // raw hex required: html2canvas can't resolve var(); mirrors --warm-paper
+        scale: 3,
+        useCORS: true,
+        logging: false,
+      });
+      const url = canvas.toDataURL('image/png');
+      const blob = await (await fetch(url)).blob();
+      const file = new File([blob], 'joshing-portrait.png', { type: 'image/png' });
+      setDataUrl(url);
+      setShareFile(file);
+    } catch {
+      captureStartedRef.current = false; // allow the retry affordance to re-run
+      setCaptureError(true);
+    } finally {
+      setIsCapturing(false);
+    }
   }, []);
 
-  const handleShare = useCallback(async () => {
-    setPhase('sharing');
-    try {
-      if (!fontReady) await loadShareFonts();
-      const canvas = await captureCanvas();
-      if (!canvas) { setPhase('error'); return; }
+  useEffect(() => {
+    if (!fontReady || shareFile) return;
+    runCapture();
+  }, [fontReady, shareFile, runCapture]);
 
-      const dataUrl = canvas.toDataURL('image/png');
+  // Trigger the download of the pre-captured image. Returns whether it fired so
+  // callers can decide the resulting phase.
+  const clickDownloadLink = useCallback(() => {
+    if (!dataUrl) return false;
+    const link = document.createElement('a');
+    link.download = 'joshing-portrait.png';
+    link.href = dataUrl;
+    link.click();
+    return true;
+  }, [dataUrl]);
 
-      if (
-        typeof navigator !== 'undefined' &&
-        'share' in navigator &&
-        'canShare' in navigator
-      ) {
-        const blob = await (await fetch(dataUrl)).blob();
-        const file = new File([blob], 'joshing-portrait.png', { type: 'image/png' });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'My Joshing knowledge portrait',
-          });
-          setPhase('done');
-          return;
+  const handleDownload = useCallback(() => {
+    setPhase(clickDownloadLink() ? 'done' : 'error');
+  }, [clickDownloadLink]);
+
+  // Gesture-clean: no await before navigator.share. The pre-captured file is
+  // handed straight to the native sheet.
+  const handleShare = useCallback(() => {
+    if (!shareFile) return;
+
+    const canNativeShare =
+      typeof navigator !== 'undefined' &&
+      'share' in navigator &&
+      'canShare' in navigator &&
+      navigator.canShare({ files: [shareFile] });
+
+    if (!canNativeShare) {
+      // No native file share — give the user the image via download instead.
+      handleDownload();
+      return;
+    }
+
+    navigator
+      .share({ files: [shareFile], title: 'My Joshing knowledge portrait' })
+      .then(() => setPhase('done'))
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === 'AbortError') {
+          // Real user cancellation — stay silent.
+          setPhase('idle');
+        } else {
+          // Share failed for some other reason — surface it but still get the
+          // user their image via the download fallback.
+          setPhase('error');
+          clickDownloadLink();
         }
-      }
-
-      // Fallback: download
-      const link = document.createElement('a');
-      link.download = 'joshing-portrait.png';
-      link.href = dataUrl;
-      link.click();
-      setPhase('done');
-    } catch {
-      // User cancelled native share — don't show error
-      setPhase('idle');
-    }
-  }, [captureCanvas, fontReady]);
-
-  const handleDownload = useCallback(async () => {
-    setPhase('sharing');
-    try {
-      if (!fontReady) await loadShareFonts();
-      const canvas = await captureCanvas();
-      if (!canvas) { setPhase('error'); return; }
-      const link = document.createElement('a');
-      link.download = 'joshing-portrait.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-      setPhase('done');
-    } catch {
-      setPhase('error');
-    }
-  }, [captureCanvas, fontReady]);
-
-  const isCapturing = phase === 'sharing';
+      });
+  }, [shareFile, handleDownload, clickDownloadLink]);
 
   // Close on overlay click
   const handleOverlayClick = useCallback(
@@ -178,30 +205,44 @@ export function SharePortraitModal({
         />
 
         <div style={buttonRowStyle}>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={isCapturing}
-            className="btn-primary px-8"
-          >
-            {isCapturing ? 'Saving…' : 'Download'}
-          </button>
-
-          {typeof navigator !== 'undefined' && 'share' in navigator && (
+          {captureError ? (
             <button
               type="button"
-              onClick={handleShare}
-              disabled={isCapturing}
+              onClick={runCapture}
+              style={shareButtonStyle}
               className="btn-primary px-8"
             >
-              {isCapturing ? 'Sharing…' : 'Share'}
+              Couldn&rsquo;t prepare image — try again
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={!captureReady || isCapturing}
+                style={shareButtonStyle}
+                className="btn-primary px-8"
+              >
+                {captureReady ? 'Download' : 'Preparing…'}
+              </button>
+
+              {typeof navigator !== 'undefined' && 'share' in navigator && (
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  disabled={!captureReady || isCapturing}
+                  style={shareButtonStyle}
+                  className="btn-primary px-8"
+                >
+                  {captureReady ? 'Share' : 'Preparing…'}
+                </button>
+              )}
+            </>
           )}
 
           <button
             type="button"
             onClick={onClose}
-            disabled={isCapturing}
             className="btn-ghost px-6"
           >
             Cancel
@@ -243,6 +284,12 @@ const buttonRowStyle: CSSProperties = {
   gap: 10,
   flexWrap: 'wrap',
   justifyContent: 'center',
+};
+
+// Fixed min-width so the box stays the same size across the "Preparing…",
+// "Download"/"Share", and retry labels — no layout shift when capture completes.
+const shareButtonStyle: CSSProperties = {
+  minWidth: 150,
 };
 
 const errorStyle: CSSProperties = {

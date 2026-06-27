@@ -4,6 +4,7 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { Share2 } from 'lucide-react'
 import type { MasteryTier } from '@/types/db'
 import { DomainCircle } from '@/components/knowledge/DomainCircle'
+import { CardTriangleStrip } from '@/components/knowledge/CardTriangleStrip'
 import { buildKnowledgeCardPublicUrl } from '@/lib/knowledge-card'
 
 export interface KnowledgeDomainCircle {
@@ -78,6 +79,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
   return (
     <section style={boxStyle} aria-label="Your Knowledge Portrait">
       <p style={wordmarkStyle}>Joshing</p>
+      <CardTriangleStrip />
       <div style={headerStyle}>
         <h2 style={titleStyle}>Your Knowledge Portrait</h2>
         {(!props.readOnly || props.onShareClick) && (
