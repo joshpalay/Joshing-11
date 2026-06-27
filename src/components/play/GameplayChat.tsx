@@ -1142,6 +1142,7 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
+            {explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
           </>
         ) : (
           <>
