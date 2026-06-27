@@ -79,7 +79,8 @@ export function LlmCostReportReadout({ data }: { data: CostReportData }) {
       </h2>
       <p className="text-muted-foreground mb-3 text-xs">
         Spend and player-facing wait time over the last {WINDOW_DAYS} days, rolled up by surface.
-        Shown live here; the Monday cron stores the same digest as a snapshot.
+        Shown live here; the Monday cron stores the same digest and emails it to your
+        admin account (or LLM_COST_REPORT_EMAIL, if set).
         {latestStoredAt
           ? ` Last stored ${latestStoredAt.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}.`
           : ' No stored snapshot yet.'}
