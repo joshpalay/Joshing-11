@@ -66,6 +66,43 @@ export async function register() {
     });
     const db = drizzle(pool);
 
+    // Ride out a transient cold-connection blip before the guards/migrate. The
+    // EAUTHTIMEOUT / SQLSTATE 08006 that took down the 2026-06-26 cron boot is
+    // INTERMITTENT — a flaky first connect against Supabase/PgBouncer that a short
+    // retry clears. We probe `select 1` (cheap, and it warms the pool so the
+    // guards/migrate below reuse a live connection) up to BOOT_DB_CONNECT_RETRIES
+    // times with linear backoff. Each attempt is bounded by connectionTimeoutMillis
+    // above, so the worst case here is retries × (~timeout + backoff), not minutes.
+    // Fail-open: if every attempt fails we still proceed — the guards are each
+    // try/caught and migrate() is timeout-bounded, so boot never hard-blocks on a
+    // flaky DB. Override the count via BOOT_DB_CONNECT_RETRIES (0/unset → 3).
+    const bootConnectRetries = Number(process.env.BOOT_DB_CONNECT_RETRIES) > 0
+      ? Number(process.env.BOOT_DB_CONNECT_RETRIES)
+      : 3;
+    for (let attempt = 1; attempt <= bootConnectRetries; attempt += 1) {
+      try {
+        await db.execute(sql`select 1`);
+        if (attempt > 1) {
+          console.info('[instrumentation] DB connection established on retry', { attempt });
+        }
+        break;
+      } catch (err) {
+        if (attempt >= bootConnectRetries) {
+          console.error(
+            `[instrumentation] DB connection failed after ${bootConnectRetries} attempts; proceeding anyway (guards are best-effort, migrate is timeout-bounded).`,
+            err,
+          );
+          break;
+        }
+        const backoffMs = attempt * 500;
+        console.warn(
+          `[instrumentation] DB connection attempt ${attempt}/${bootConnectRetries} failed; retrying in ${backoffMs}ms`,
+          { error: err instanceof Error ? err.message : String(err) },
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+
     // The idempotent guard blocks below pre-repair partially-recorded preview/
     // production databases so migrate() can succeed on them (additive columns,
     // enum values, and tables that a recorded-but-not-fully-applied migration

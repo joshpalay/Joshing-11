@@ -91,11 +91,15 @@ on-demand build = the observed **"long loading."**
 
 Three fixes, all shipped:
 
-1. **Bound the cold-boot DB work** (`src/instrumentation.ts`). The boot `Pool` now sets
-   `connectionTimeoutMillis` (`BOOT_DB_CONNECT_TIMEOUT_MS`, 10s default) and `migrate()` is
-   raced against a timeout (`BOOT_MIGRATE_TIMEOUT_MS`, 60s default); on timeout the boot
-   abandons the migrate and proceeds (migrations are journaled and apply on a healthy
-   boot/deploy). A cold-boot DB stall can no longer eat the function budget.
+1. **Bound the cold-boot DB work + retry the flaky connect** (`src/instrumentation.ts`). The
+   boot `Pool` now sets `connectionTimeoutMillis` (`BOOT_DB_CONNECT_TIMEOUT_MS`, 10s default)
+   and `migrate()` is raced against a timeout (`BOOT_MIGRATE_TIMEOUT_MS`, 60s default); on
+   timeout the boot abandons the migrate and proceeds (migrations are journaled and apply on
+   a healthy boot/deploy). Because the `EAUTHTIMEOUT`/`08006` is *intermittent*, boot also
+   probes `select 1` with a bounded linear-backoff retry (`BOOT_DB_CONNECT_RETRIES`, 3
+   default) to ride out a transient blip and warm the pool before the guards/migrate. A
+   cold-boot DB stall can no longer eat the function budget, and a one-off flaky connect is
+   retried rather than abandoned.
 2. **Soft per-run deadline + clean result** (`daily-assignments/route.ts`). The run stops
    STARTING new users at `DAILY_ASSIGNMENTS_BUDGET_MS` (250s default), reports the rest as
    `deferred`, and logs `[cron/daily-assignments] run complete` so coverage is diagnosable
@@ -111,7 +115,7 @@ a caching gap (the generation call already caches its ~3–4k-token system promp
 prompts are below the cache-eligibility floor). It is fixed by **Lever B (retrieval
 grounding)** raising bank hit rate, plus **Lever A (the guard)** cutting narrow-KB top-up
 churn. The intermittent `EAUTHTIMEOUT` itself (a Supabase/PgBouncer cold-connection issue)
-is a separate infra thread worth a connection-retry on the boot pool.
+is now ridden out by the bounded boot-connection retry (fix 1 above).
 
 (Note: crons were moved GitHub-Actions → native Vercel in `a72430b9`; `daily-assignments`
 *is* scheduled in `vercel.json`. The route's in-file comment claiming GitHub Actions
