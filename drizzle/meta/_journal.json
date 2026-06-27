@@ -645,6 +645,13 @@
       "when": 1784419200000,
       "tag": "0091_llm_usage_event",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1784505600000,
+      "tag": "0092_llm_cost_report",
+      "breakpoints": true
     }
   ]
 }

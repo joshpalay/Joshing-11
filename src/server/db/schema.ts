@@ -1379,3 +1379,22 @@ export const llmUsageEvent = pgTable(
     index('LlmUsageEvent_provider_created_at_idx').on(table.provider, table.createdAt),
   ],
 );
+
+// B-LLM-COST-LATENCY-REPORT-01 — stored weekly cost & latency digest. One row
+// per run of /api/cron/llm-cost-report, holding the plain-English markdown the
+// owner reads. The digest is assembled from LlmUsageEvent rows at write time;
+// cost stays read-time-derived (pricing.ts), so the markdown reflects the price
+// map in effect when the cron ran. Read-and-report-only — nothing here is on the
+// LLM call path. Removable as a unit.
+export const llmCostReport = pgTable(
+  'LlmCostReport',
+  {
+    id: id(),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+    windowDays: integer('window_days').notNull().default(7),
+    markdown: text('markdown').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('LlmCostReport_created_at_idx').on(table.createdAt)],
+);
