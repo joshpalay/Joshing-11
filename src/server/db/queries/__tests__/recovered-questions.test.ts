@@ -83,10 +83,7 @@ vi.mock('@/server/db', () => {
   };
 });
 
-import {
-  getRecoveredGradingQuestion,
-  getRecoveredQuestionsForUser,
-} from '@/server/db/queries/recovered-questions';
+import { getRecoveredQuestionsForUser } from '@/server/db/queries/recovered-questions';
 
 function flatten(node: Node | null): Node[] {
   if (!node) return [];
@@ -140,45 +137,43 @@ describe('getRecoveredQuestionsForUser — pool definition', () => {
   });
 });
 
-describe('getRecoveredGradingQuestion — pool-membership guard', () => {
-  it('filters by viewer + recovered state + the specific question id', async () => {
-    await getRecoveredGradingQuestion(VIEWER, 'q-7');
-    const flat = flatten(capturedWhere);
-    expect(flat.find((n) => n.op === 'eq' && n.column === 'me.userId')?.value).toBe(VIEWER);
-    expect(flat.find((n) => n.op === 'eq' && n.column === 'me.answerState')?.value).toBe(
-      'first_correct_after_wrong',
-    );
-    expect(flat.find((n) => n.op === 'eq' && n.column === 'me.questionId')?.value).toBe('q-7');
-  });
-
-  it('returns null when the question is not in the viewer pool', async () => {
-    limitResult = [];
-    await expect(getRecoveredGradingQuestion(VIEWER, 'q-missing')).resolves.toBeNull();
-  });
-
-  it('maps the gradable fields when the question is in the pool', async () => {
-    limitResult = [
-      {
-        questionId: 'q-7',
-        questionText: 'Who wrote the Storia d’Italia?',
-        answerText: 'Francesco Guicciardini',
-        acceptedAlternatives: ['Guicciardini'],
-        questionType: 'factual',
-        explainerFull: 'Full explainer.',
-        explainerBrief: 'Brief.',
-        factualExplanation: 'Fact.',
-        creatorNote: null,
-      },
-    ];
-    const result = await getRecoveredGradingQuestion(VIEWER, 'q-7');
-    expect(result).toEqual({
-      questionId: 'q-7',
-      questionText: 'Who wrote the Storia d’Italia?',
-      answerText: 'Francesco Guicciardini',
-      acceptedAlternatives: ['Guicciardini'],
-      questionType: 'factual',
-      explanation: 'Full explainer.',
-      creatorNote: null,
+describe('getRecoveredQuestionsForUser — ships the answer for the no-check reveal', () => {
+  it('maps the answer and explainer fields so the card can reveal them', async () => {
+    // The pool reader resolves through orderBy; stub it to return one row.
+    const { db } = (await import('@/server/db')) as unknown as {
+      db: { select: ReturnType<typeof vi.fn> };
+    };
+    db.select.mockImplementationOnce(() => {
+      selectCalls += 1;
+      return {
+        from: () => ({
+          innerJoin: () => ({
+            where: () => ({
+              orderBy: () =>
+                Promise.resolve([
+                  {
+                    id: 'me-1',
+                    questionId: 'q-7',
+                    questionText: 'Who wrote the Storia d’Italia?',
+                    canonicalSubcategory: 'history',
+                    category: 'general_knowledge',
+                    recoveredAt: new Date('2026-06-01T00:00:00Z'),
+                    answerText: 'Francesco Guicciardini',
+                    explainerFull: 'Full explainer.',
+                    explainerBrief: 'Brief.',
+                    factualExplanation: 'Fact.',
+                    creatorNote: null,
+                  },
+                ]),
+            }),
+          }),
+        }),
+      };
     });
+
+    const [row] = await getRecoveredQuestionsForUser(VIEWER);
+    expect(row.answer).toBe('Francesco Guicciardini');
+    expect(row.explanation).toBe('Full explainer.');
+    expect(row.creatorNote).toBeNull();
   });
 });
