@@ -24,6 +24,7 @@ import { getSession } from '@/server/auth/session';
 import { getProviderSettings } from '@/server/llm/settings';
 import { LlmProviderPanel } from '@/components/profile/settings/LlmProviderPanel';
 import { LlmExperimentReadout, loadLlmExperimentData } from '@/components/profile/settings/LlmExperimentReadout';
+import { LlmCostReportReadout, loadCostReportData } from '@/components/profile/settings/LlmCostReportReadout';
 import {
   getDiscoverability,
   getEditableProfile,
@@ -220,6 +221,8 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     // B-LLM-PROVIDER-AB-METRICS: load the experiment readout data here (the page
     // is already awaited) and pass it into the sync presentational component.
     const llmExperimentData = isOwner ? await loadLlmExperimentData() : null;
+    // B-LLM-COST-LATENCY-REPORT-01: the plain-English weekly cost & latency digest.
+    const costReportData = isOwner ? await loadCostReportData() : null;
     return (
       <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-28">
         <ProfileHeaderCard
@@ -297,6 +300,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
 
         {llmProviders ? <LlmProviderPanel initial={llmProviders} /> : null}
         {llmExperimentData ? <LlmExperimentReadout data={llmExperimentData} /> : null}
+        {costReportData ? <LlmCostReportReadout data={costReportData} /> : null}
 
         <AccountActions
           isAdmin={isAdminUser(session.userId)}
