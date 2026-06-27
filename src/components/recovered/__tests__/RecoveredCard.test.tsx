@@ -4,15 +4,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RecoveredCard } from '../RecoveredCard';
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
 
-// D-REVIEW-RECOVERED-01 (Decision B) — the review card renders a real answer
-// form. Two properties matter on first paint and are DOM-free to assert:
-//   - the canonical answer is NOT in the initial markup (it is revealed only
-//     through the graded submission, keeping the interaction "recall, then
-//     check" — the answer never ships in the page payload);
-//   - rendering issues no network call (no grade until the player submits).
-// The "unscored is never a miss" guarantee lives at the route boundary
-// (route.test.ts): the route returns no `isCorrect` for an unscored grade, so
-// the UI can never receive a miss to render.
+// D-REVIEW-RECOVERED-01 (Decision B) — the review card is a no-check reveal.
+// The system never grades a typed answer; it just shows the canonical answer on
+// demand. Two properties matter and are DOM-free to assert:
+//   - the answer is present in the markup (it ships collapsed inside a native
+//     <details>, revealed when the player chooses to check themselves);
+//   - there is no answer form and no network call — nothing is scored.
 
 const QUESTION: RecoveredQuestion = {
   id: 'me-1',
@@ -20,27 +17,34 @@ const QUESTION: RecoveredQuestion = {
   questionText: 'Who wrote the Storia d’Italia?',
   category: 'history',
   recoveredAt: new Date('2026-06-01T00:00:00Z'),
+  answer: 'Francesco Guicciardini',
+  explanation: 'A Florentine historian and statesman.',
+  creatorNote: null,
 };
 
-describe('RecoveredCard — graded answer form', () => {
-  it('renders an answer form, not a pre-revealed answer, and fetches nothing on render', () => {
+describe('RecoveredCard — no-check reveal', () => {
+  it('renders the question and the answer behind a reveal, with no form and no fetch', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
 
     const html = renderToStaticMarkup(<RecoveredCard question={QUESTION} />);
 
-    // The question and an input form are present.
+    // The question and a reveal trigger are present.
     expect(html).toContain(QUESTION.questionText);
-    expect(html).toContain('<form');
-    expect(html).toContain('<input');
-    expect(html).toContain('Check my answer');
+    expect(html).toContain('<details');
+    expect(html).toContain('Show answer');
 
-    // The answer is NOT pre-loaded — RecoveredQuestion carries no answerText,
-    // and nothing leaks an answer into the initial markup.
-    expect(html).not.toContain('Guicciardini');
-    expect(html).not.toContain('Answer:');
+    // The answer ships with the card (collapsed inside <details>).
+    expect(html).toContain('Answer:');
+    expect(html).toContain('Francesco Guicciardini');
+    expect(html).toContain('A Florentine historian and statesman.');
 
-    // No grading happens until the player submits.
+    // The system never checks: no answer form and no grading button.
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('<input');
+    expect(html).not.toContain('Check my answer');
+
+    // Pure render — no network round-trip.
     expect(fetchSpy).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();

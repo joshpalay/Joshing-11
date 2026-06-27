@@ -35,7 +35,7 @@ export default async function RecoveredQuestionsPage() {
           The ones you turned around
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Questions you once missed and later got right. Sit with one, recall the answer, then check yourself.
+          Questions you once missed and later got right. Sit with one, recall the answer, then reveal it to check yourself.
         </p>
       </header>
 
