@@ -1,19 +1,22 @@
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
 
+import { SetAsideButton } from './SetAsideButton';
+
 /**
  * D-REVIEW-RECOVERED-01 (Decision B) — no-check reveal.
  *
  * The player reads the question, recalls the answer in their head, then reveals
  * the canonical answer to check themselves. There is no grader and no verdict:
  * the system never scores what they typed — it just shows the answer. The
- * reveal is a native <details>, so this is a pure server component with no
- * client JS and no network round-trip, and the surface mints no writes (see the
- * query module). The answer ships collapsed and is revealed only on demand,
- * keeping the interaction "recall, then check yourself."
+ * reveal is a native <details>, server-rendered; the only client JS is the
+ * "Set aside" action (SetAsideButton).
+ *
+ * A set-aside question is demoted to the bottom of the list (ordering lives in
+ * the query) and dimmed here, with the action flipped to "Restore".
  */
 export function RecoveredCard({ question }: { question: RecoveredQuestion }) {
   return (
-    <article className="card p-4">
+    <article className={`card p-4${question.setAside ? ' opacity-60' : ''}`}>
       <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
         {question.category}
       </p>
@@ -40,6 +43,10 @@ export function RecoveredCard({ question }: { question: RecoveredQuestion }) {
           ) : null}
         </div>
       </details>
+
+      <div className="mt-3 flex justify-end">
+        <SetAsideButton questionId={question.questionId} setAside={question.setAside} />
+      </div>
     </article>
   );
 }
