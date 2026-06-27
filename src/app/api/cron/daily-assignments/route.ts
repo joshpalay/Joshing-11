@@ -19,13 +19,19 @@ import { getRecentActivityForHome } from '@/server/db/queries/activity';
 import { createUnsubscribeToken } from '@/server/email/unsubscribe-token';
 
 export const dynamic = 'force-dynamic';
-// Scheduled at 17:05 UTC by GitHub Actions (.github/workflows/external-crons.yml)
-// — NOT vercel.json, where it was removed 2026-05-30 so only one scheduler can
-// fire the SMS nudge — timed just after the 17:00 UTC daily reset
-// (DAILY_RESET_HOUR_UTC), so it pre-builds the window users are about to
-// play. The previous 06:00 UTC schedule built the window that expired at 17:00
-// UTC and left the 17:00→06:00 UTC span uncovered, forcing evening-US / APAC
-// users onto the synchronous /api/daily/queue generation path.
+// Scheduled at 17:05 UTC NATIVELY by vercel.json (the GitHub-Actions cron
+// workaround was retired in a72430b9 once the Vercel plan gained reliable crons;
+// the earlier 2026-05-30 note about a single scheduler is historical). Timed just
+// after the 17:00 UTC daily reset (DAILY_RESET_HOUR_UTC) so it pre-builds the
+// window users are about to play. The previous 06:00 UTC schedule built the
+// window that expired at 17:00 UTC and left the 17:00→06:00 UTC span uncovered,
+// forcing evening-US / APAC users onto the synchronous /api/daily/queue path.
+//
+// COVERAGE CAVEAT (audit 2026-06-26, D-NARROW-KB-FABRICATION-01): a cold-boot DB
+// connection timeout can hang migrate() for ~20 min (instrumentation boot),
+// blowing this function's 300s maxDuration before most users are built — leaving
+// the tail on the slow on-demand path. Per-user generation is also expensive when
+// the bank misses (live Sonnet per slot). See the decision doc for the open fix.
 //
 // This fans out generation across every onboarded user at USER_CONCURRENCY,
 // each costing up to GENERATION_TIMEOUT_MS, so the default function budget is
