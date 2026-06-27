@@ -448,7 +448,7 @@ export function useCatchupFlow() {
     setIsResolvingTurn(true);
     setMessages((existing) => [
       ...retireDismissNotices(existing),
-      { id: newMessageId(), kind: 'user', text: 'i give up' },
+      { id: newMessageId(), kind: 'user', text: 'I give up' },
       {
         id: newMessageId(),
         kind: 'result',
@@ -459,6 +459,7 @@ export function useCatchupFlow() {
         correctAnswer: item.correctAnswer,
         consolation: null,
         breadcrumb: null,
+        explanation: item.explanation,
         copyVariant: item.queueAge,
         creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
         creatorIsHouse: item.authorIsHouse ?? false,
