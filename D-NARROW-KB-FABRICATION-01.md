@@ -117,6 +117,21 @@ grounding)** raising bank hit rate, plus **Lever A (the guard)** cutting narrow-
 churn. The intermittent `EAUTHTIMEOUT` itself (a Supabase/PgBouncer cold-connection issue)
 is now ridden out by the bounded boot-connection retry (fix 1 above).
 
+### Don't regenerate when unplayed questions remain — top-up carry-forward `[built, flag-off]`
+
+The cron already skips users whose today-queue exists and `carryForwardUntouchedDailyQueue`
+re-dates a **full, completely-untouched** prior queue for free. The gap: a **partial** (some
+answered/skipped) or **short** (`<5`) prior queue fell through to a *fresh full
+regeneration* every day — re-billing the LLM and discarding the questions the user never
+played. `DAILY_TOPUP_CARRYFORWARD_ENABLED` (default OFF) adds the missing case: keep the
+prior queue's **unplayed** slots and generate only the **shortfall** to refill to five, then
+land the merged set on today's date in place (`carryForwardQueueWithSlots`, so carried
+questions move out of catch-up rather than double-surfacing). Composes with Lever A — for a
+tapped-out thin domain the guard makes generation return nothing, so the unplayed set is
+simply carried forward at **zero LLM cost**. Pure merge logic is unit-tested
+(`mergeCarriedWithFresh`); the path is fail-open. Default OFF pending preview validation on
+the critical daily-build path — a one-env-var flip to adopt.
+
 (Note: crons were moved GitHub-Actions → native Vercel in `a72430b9`; `daily-assignments`
 *is* scheduled in `vercel.json`. The route's in-file comment claiming GitHub Actions
 schedules it was **stale** and corrected.)
