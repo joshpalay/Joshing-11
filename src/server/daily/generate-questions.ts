@@ -147,6 +147,12 @@ Before emitting, mentally remove the work's title from the question. If what rem
 ONE CLEAN ANSWER (Rule 3 — ALL tiers):
 The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "he understands the language of birds"), re-aim the question so the answer is crisp (e.g. ask what specific ability the potion grants → "birdsong"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
 
+SINGLE ASK (Rule 3b — ALL tiers):
+Ask for exactly ONE thing. A question poses ONE question with ONE answer. NEVER bundle two distinct asks into a single question — no "what is X — and what is Y?", no "who did A, and where did it happen?", no compound joined by "and". If a setup tempts you to ask two things, keep the single better one and cut the other. This is the most common way a question goes wrong: it reads as one sentence but secretly demands two separate facts, so it has no clean single answer.
+- This is NOT the name_multiple shape. name_multiple makes ONE ask for several items of the SAME kind ("name the three Norns") — that is allowed. The ban is on asking for two DIFFERENT facts.
+- BAD (two asks): "In 'Götterdämmerung,' what vulnerability lets Hagen kill Siegfried with a single thrust — and what is the precise location of that vulnerability on his body?"
+- GOOD (one ask): "In 'Götterdämmerung,' Siegfried's bath in the dragon's blood left one spot unprotected. Where on his body is it?"
+
 NAMED-AUTHORITY RULE (Rule 4 — scoping qualifiers, ALL tiers):
 When you pin a question to a specific jurisdiction, ruleset, edition, organization, version, region, or year ("In Michigan…", "under FIDE rules…", "in the 1st edition…"), the answer you emit MUST be the one correct UNDER THAT named authority — not the more common or default answer. Named specifics frequently override the default on purpose: e.g. Michigan's Rules of Evidence permit wide-open cross-examination, so "beyond the scope of direct" is NOT a valid objection there, though it is under the Federal Rules. If you are not certain how the named authority departs from the default, pick a different angle rather than risk an answer keyed to the generic default.
 
@@ -674,6 +680,7 @@ const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-gene
 3. FALSE_PREMISE — the setup contains a factual error or assumes something incorrect. Verify embedded factual claims, not just the overall framing: counts ("six works"), dates, attributions/authorship, and "N of which M" / "X of Y" relationships must hold up. A false claim of this kind is a defect however fluently it is phrased — it is NOT one of the "subtle wordsmithing" concerns excluded below. E.g. "Bach composed six works for unaccompanied strings — three for solo violin and three for solo cello" is FALSE_PREMISE (he wrote six of each, not three), even though the question reads cleanly and its answer is correct.
 4. SELF_ANSWERING — the question names the answer in its own text ("Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?").
 5. GENERIC_AT_TIER — tier-gated: judge this defect ONLY for items whose tier is moderate or specialist. NEVER flag an accessible-tier item with this defect, and never flag any item merely for resembling a simply-phrased question. At moderate/specialist, a question is defective when it is generic trivia: mentally remove the work/domain title from the question — if what remains could appear in any generic trivia app (name-the-character/title/location roster questions, what-year/what-number lookups with no significance to a fan), it does not clear the tier's bar. E.g. "In Gilmore Girls, what is the name of Rory's first boyfriend?" at specialist is GENERIC_AT_TIER. A question probing a specific scene, running joke, exact wording, object, technique, or second-order fact is NOT generic, however plainly it is phrased — "In American Psycho, what color is Paul Allen's business card?" passes. Flag ONLY clear-cut cases; when uncertain, do not flag — at these tiers a missed generic question is cheaper than suppressing a good one.
+6. MULTI_PART — the question bundles two DISTINCT asks into one, so it has no single clean answer. Tells: an "— and what…/who…/where…?" tail, or any setup that demands two separate facts (a thing AND its location, a name AND a date). E.g. "What vulnerability lets Hagen kill Siegfried — and what is the precise location of it on his body?" is MULTI_PART. This is NOT the name_multiple style (ONE ask for several items of the SAME kind, e.g. "name the three Norns"), which is fine — flag only a question asking for two DIFFERENT facts.
 
 A high bar applies — flag a question only when one of these defects is clearly present. Subtle wordsmithing concerns are NOT defects.
 
@@ -681,7 +688,7 @@ The following styles are explicitly ACCEPTABLE and must NOT be flagged on style 
 
 ${STYLE_EXEMPLAR_BLOCK}
 
-Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
+Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, MULTI_PART, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
 
 Return JSON only:
 { "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<short reason>" } }
