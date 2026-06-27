@@ -200,6 +200,7 @@ export const SharePortraitCard = forwardRef<HTMLDivElement, SharePortraitCardPro
     return (
       <div ref={ref} style={cardStyle}>
         <p style={wordmarkStyle}>Joshing</p>
+        <div aria-hidden="true" style={triangleStripStyle} />
         <p style={titleStyle}>Your Knowledge Portrait</p>
 
         <p style={statementStyle}>{portraitStatement}</p>
@@ -249,6 +250,20 @@ const wordmarkStyle: CSSProperties = {
   color: INK,
   letterSpacing: '0.01em',
   lineHeight: 1,
+};
+
+// The JOSHING triangle band that sits under the wordmark, mirroring
+// CardTriangleStrip on the live card. The negative inline margin bleeds it to
+// the card's inner border edge; it matches cardStyle's 16px horizontal padding
+// (CardTriangleStrip's own -0.95rem is tied to the live card's padding instead).
+// Same artwork as the live strip so the snapshot keeps the palette consistent.
+const triangleStripStyle: CSSProperties = {
+  height: 16,
+  marginInline: -16,
+  backgroundImage: 'url(/images/Variant4-TOP.png)',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
 };
 
 const titleStyle: CSSProperties = {

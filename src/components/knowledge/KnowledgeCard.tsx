@@ -78,10 +78,8 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
 
   return (
     <section style={boxStyle} aria-label="Your Knowledge Portrait">
-      <p style={wordmarkStyle}>Joshing</p>
-      <CardTriangleStrip />
       <div style={headerStyle}>
-        <h2 style={titleStyle}>Your Knowledge Portrait</h2>
+        <p style={wordmarkStyle}>Joshing</p>
         {(!props.readOnly || props.onShareClick) && (
           <button
             type="button"
@@ -95,6 +93,8 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
           </button>
         )}
       </div>
+      <CardTriangleStrip />
+      <h2 style={titleStyle}>Your Knowledge Portrait</h2>
 
       <p style={statementStyle}>{props.portraitStatement}</p>
 
