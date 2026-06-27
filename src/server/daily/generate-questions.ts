@@ -47,6 +47,12 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
+import {
+  isNarrowKbGuardEnabled,
+  narrowKbThinnessThreshold,
+  selectUngroundedExcludedDomains,
+} from '@/server/daily/kb-exhaustion';
+import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeBroadCategory } from '@/server/questions/broad-category';
@@ -2048,8 +2054,48 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   );
 
   const bankFilledDomains = new Set(bankPicks.map((row) => row.canonicalSubcategory));
-  const domainsForLlm = domainsForRound.filter((d) => !bankFilledDomains.has(d));
+  let domainsForLlm = domainsForRound.filter((d) => !bankFilledDomains.has(d));
   const remainingCount = count - bankPicks.length;
+
+  // Narrow-KB exhaustion guard (flag-gated, fail-open). Suppress FRESH UNGROUNDED
+  // generation for declared-interest domains whose durable pool is still thin —
+  // the niche-fiction fabrication case (a 6-book series mined past its real
+  // facts). Bank picks above already served any grounded/authored/pooled rows
+  // for these domains; the freed slot backfills from the user's other (non-thin)
+  // domains via the orchestrator's top-up. Once retrieval-grounded refill deepens
+  // a domain's pool past the shared thinness threshold it rejoins generation.
+  // See src/server/daily/kb-exhaustion.ts. Default OFF — a no-op until enabled
+  // alongside the grounding flip.
+  if (isNarrowKbGuardEnabled() && domainsForLlm.length > 0) {
+    try {
+      const declaredDomains = new Set(
+        knowledgeBase.filter((entry) => entry.territoryType === 'declared').map((entry) => entry.domain),
+      );
+      const poolDepths = await getDurablePoolDepthForDomains(domainsForLlm);
+      const excluded = selectUngroundedExcludedDomains(
+        domainsForLlm.map((domain) => ({
+          domain,
+          isDeclaredInterest: declaredDomains.has(domain),
+          poolDepth: poolDepths.get(domain) ?? 0,
+        })),
+        narrowKbThinnessThreshold(),
+      );
+      if (excluded.size > 0) {
+        console.info('[daily/kb-exhaustion] suppressing ungrounded generation for thin declared domains', {
+          userId,
+          excluded: [...excluded],
+          threshold: narrowKbThinnessThreshold(),
+        });
+        domainsForLlm = domainsForLlm.filter((domain) => !excluded.has(domain));
+      }
+    } catch (error) {
+      // Fail open: the guard must never block a build. Proceed ungated.
+      console.warn('[daily/kb-exhaustion] guard failed; proceeding ungated', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   let llmGenerated: GeneratedQuestionRow[] = [];
   if (remainingCount > 0 && domainsForLlm.length > 0) {
