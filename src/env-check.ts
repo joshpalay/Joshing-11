@@ -13,7 +13,10 @@ const REQUIRED_ENV_VARS = [
 // OPENAI_API_KEY (B-LLM-PROVIDER-AB-SWITCH): only needed when a provider toggle is
 // flipped to OpenAI. The feature defaults to Anthropic, so unset is fine — server
 // boots and every surface stays on Anthropic. Never promote to REQUIRED.
-const OPTIONAL_ENV_VARS = ['NEXT_PUBLIC_APP_URL', 'ADMIN_USER_IDS', 'OPENAI_API_KEY'] as const;
+// LLM_COST_REPORT_EMAIL (B-LLM-COST-LATENCY-REPORT-01, B3): recipient for the weekly
+// cost & latency digest email. Unset ⇒ the cron still stores the digest and simply
+// skips the email. Never promote to REQUIRED.
+const OPTIONAL_ENV_VARS = ['NEXT_PUBLIC_APP_URL', 'ADMIN_USER_IDS', 'OPENAI_API_KEY', 'LLM_COST_REPORT_EMAIL'] as const;
 
 export default function checkEnv() {
   const jwtSecret = process.env.JWT_SECRET?.trim() || process.env.AUTH_SECRET?.trim();
