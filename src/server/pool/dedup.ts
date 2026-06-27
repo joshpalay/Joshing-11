@@ -39,6 +39,27 @@ export function getDedupCosineThreshold(): number {
   return parsed;
 }
 
+// Higher bar applied when both rows carry a fact_key and the keys DIFFER. Questions
+// about one work share so much vocabulary ("In 'Paradise Lost,' …") that genuinely
+// distinct facts embed ABOVE the base 0.92 threshold and were being falsely
+// suppressed — a 2026-06-27 audit found ~46% of distinct pooled facts hidden this
+// way. Measured separation on the live pool: true same-fact dupes sit ≥0.9996,
+// while different-fact pairs span 0.92–0.98. So when fact_key (the authoritative
+// "same fact?" signal) says the facts DIFFER, only the embedding's same-text
+// backstop should still fire — require near-identity. Override via
+// POOL_DEDUP_DIFFERENT_FACT_THRESHOLD.
+export const DEFAULT_DIFFERENT_FACT_COSINE_THRESHOLD = 0.99;
+
+export function getDifferentFactCosineThreshold(): number {
+  const raw = process.env.POOL_DEDUP_DIFFERENT_FACT_THRESHOLD?.trim();
+  if (!raw) return DEFAULT_DIFFERENT_FACT_COSINE_THRESHOLD;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+    return DEFAULT_DIFFERENT_FACT_COSINE_THRESHOLD;
+  }
+  return parsed;
+}
+
 export type CollisionDecision =
   | { action: 'none' }
   | { action: 'suppress_incoming'; survivorId: string }
@@ -49,12 +70,25 @@ export type CollisionDecision =
  * closest existing pool row (excluding self), or null if none within reach.
  */
 export function resolveCollision(
-  incoming: { id: string; origin: PoolOrigin },
+  incoming: { id: string; origin: PoolOrigin; factKey?: string | null },
   nearest: NearestPoolMatch | null,
   threshold: number,
+  differentFactThreshold: number = getDifferentFactCosineThreshold(),
 ): CollisionDecision {
   if (!nearest) return { action: 'none' };
-  if (nearest.similarity < threshold) return { action: 'none' };
+
+  // When BOTH rows have a fact_key and the keys differ, fact_key is the
+  // authoritative signal that these are distinct facts — only the embedding's
+  // near-identical-text backstop should still suppress, so raise the bar. When
+  // either fact_key is absent (or they match), use the base semantic threshold.
+  const factKeysDiffer =
+    incoming.factKey != null &&
+    nearest.factKey != null &&
+    incoming.factKey !== nearest.factKey;
+  const effectiveThreshold = factKeysDiffer
+    ? Math.max(threshold, differentFactThreshold)
+    : threshold;
+  if (nearest.similarity < effectiveThreshold) return { action: 'none' };
 
   // Human beats machine: the only case where the EXISTING row is suppressed.
   if (incoming.origin === 'human' && nearest.origin === 'machine') {
@@ -80,6 +114,7 @@ export async function embedAndResolveDuplicate(args: {
   id: string;
   origin: PoolOrigin;
   questionText: string;
+  factKey?: string | null;
 }): Promise<void> {
   if (!isEmbeddingEnabled()) return;
   try {
@@ -90,7 +125,7 @@ export async function embedAndResolveDuplicate(args: {
 
     const nearest = await findNearestInPool(embedding, args.id);
     const decision = resolveCollision(
-      { id: args.id, origin: args.origin },
+      { id: args.id, origin: args.origin, factKey: args.factKey ?? null },
       nearest,
       getDedupCosineThreshold(),
     );
@@ -132,7 +167,7 @@ export async function embedAndResolveDuplicate(args: {
  * gate then can't see them) but never blocks generation.
  */
 export async function embedAndResolveDuplicatesBatch(
-  rows: Array<{ id: string; origin: PoolOrigin; questionText: string }>,
+  rows: Array<{ id: string; origin: PoolOrigin; questionText: string; factKey?: string | null }>,
 ): Promise<void> {
   if (!isEmbeddingEnabled() || rows.length === 0) return;
   try {
@@ -146,7 +181,11 @@ export async function embedAndResolveDuplicatesBatch(
       await storePoolEmbedding(row.origin, row.id, embedding);
 
       const nearest = await findNearestInPool(embedding, row.id);
-      const decision = resolveCollision({ id: row.id, origin: row.origin }, nearest, threshold);
+      const decision = resolveCollision(
+        { id: row.id, origin: row.origin, factKey: row.factKey ?? null },
+        nearest,
+        threshold,
+      );
       if (decision.action === 'suppress_incoming') {
         await markPoolDuplicate(row.origin, row.id, decision.survivorId);
         console.info('[pool/dedup] suppressed new near-duplicate', {

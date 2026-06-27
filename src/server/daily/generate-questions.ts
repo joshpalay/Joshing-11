@@ -1757,6 +1757,9 @@ export async function generateDailyQuestions(
       id: row.id,
       origin: 'machine' as const,
       questionText: row.questionText,
+      // fact_key lets the dedup keep DISTINCT facts about the same work instead of
+      // collapsing them on shared vocabulary (the false-suppression bug).
+      factKey: row.factKey ?? null,
     })),
   );
 

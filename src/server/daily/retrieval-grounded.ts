@@ -251,6 +251,7 @@ async function refillDomain(
         id: row.id,
         origin: 'machine',
         questionText: row.questionText,
+        factKey: row.factKey ?? null,
       }).catch(() => undefined);
     } catch (err) {
       console.warn('[pool-refill] persist failed', {
