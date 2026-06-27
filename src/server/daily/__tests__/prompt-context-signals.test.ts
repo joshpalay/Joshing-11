@@ -99,3 +99,56 @@ describe('buildUserPrompt — cultural anchor block (Q3d)', () => {
     }
   });
 });
+
+describe('buildUserPrompt — admin example anchors (ground truth)', () => {
+  const examplesFor = (
+    examples?: ReadonlyMap<string, ReadonlyArray<{ questionText: string; answerText: string }>>,
+    domains: string[] = ['Spy School Books 1-6'],
+  ) =>
+    buildUserPrompt(
+      domains,
+      domains.length,
+      noPrev,
+      noPrev,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      examples,
+    );
+
+  it('renders authored examples for round domains as canon anchors', () => {
+    const out = examplesFor(
+      new Map([
+        [
+          'Spy School Books 1-6',
+          [
+            { questionText: 'What is the CIA academy disguised as?', answerText: 'a science magnet school' },
+            { questionText: "Who is Ben Ripley's classmate-turned-mole?", answerText: 'Murray Hill' },
+          ],
+        ],
+      ]),
+    );
+    expect(out).toContain('HUMAN-AUTHORED EXAMPLES');
+    expect(out).toContain('a science magnet school');
+    expect(out).toContain('Murray Hill');
+  });
+
+  it('omits the whole block when no examples are provided', () => {
+    expect(examplesFor(undefined)).not.toContain('HUMAN-AUTHORED EXAMPLES');
+    expect(examplesFor(new Map())).not.toContain('HUMAN-AUTHORED EXAMPLES');
+  });
+
+  it('includes examples only for domains in the round', () => {
+    const out = examplesFor(
+      new Map([['Wagner\'s Ring Cycle', [{ questionText: 'Q-wagner', answerText: 'A-wagner' }]]]),
+      ['Weimar Cinema'],
+    );
+    expect(out).not.toContain('HUMAN-AUTHORED EXAMPLES');
+    expect(out).not.toContain('Q-wagner');
+  });
+});

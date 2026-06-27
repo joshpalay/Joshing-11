@@ -24,6 +24,7 @@ import {
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import {
+  getAuthoredExamplesForDomains,
   getAuthoredQuestionTexts,
   getKnowledgeBase,
   getRecentAnsweredAnswerKeys,
@@ -46,6 +47,7 @@ import {
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { adminUserIds } from '@/server/auth/admin';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import {
   isNarrowKbGuardEnabled,
@@ -343,6 +345,15 @@ export type DomainStrength = {
   correctAnswerCount: number;
 };
 
+// How many admin-authored example questions to feed the prompt per domain. Kept to
+// a small HANDFUL on purpose: a few examples anchor the model's facts and register;
+// more just crowds the prompt with diminishing returns (and, across a multi-domain
+// round, adds up). Few-shot grounding wants variety, not volume.
+const DOMAIN_EXAMPLE_LIMIT = 3;
+
+// Per-domain human-authored (question, answer) examples used as generation anchors.
+export type DomainExamples = ReadonlyMap<string, ReadonlyArray<{ questionText: string; answerText: string }>>;
+
 export function buildUserPrompt(
   domains: string[],
   count: number,
@@ -356,6 +367,11 @@ export function buildUserPrompt(
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
+  // Per-domain human-authored example questions (question + answer), used as
+  // GROUND-TRUTH anchors so the model writes new questions grounded in real canon
+  // instead of inventing facts for domains it doesn't truly know. See
+  // getAuthoredExamplesForDomains / DOMAIN_EXAMPLE_LIMIT.
+  domainExamples?: ReadonlyMap<string, ReadonlyArray<{ questionText: string; answerText: string }>>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -489,7 +505,26 @@ ${perDomain.join('\n')}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}
+  let examplesHint = '';
+  if (domainExamples && domainExamples.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const examples = domainExamples.get(domain);
+      if (examples && examples.length > 0) {
+        const lines = examples
+          .slice(0, DOMAIN_EXAMPLE_LIMIT)
+          .map((ex) => `  Q: ${ex.questionText}\n     A: ${ex.answerText}`)
+          .join('\n');
+        perDomain.push(`[${domain}]\n${lines}`);
+      }
+    }
+    if (perDomain.length > 0) {
+      examplesHint = `\n\nHUMAN-AUTHORED EXAMPLES — ground truth for these domains. A person who knows the material wrote these, so treat their facts as CANON. Write NEW questions about DIFFERENT facts in the same spirit, specificity, and register. Anchor every claim to the actual work as these examples reflect it — do NOT invent names, places, or events a real fan could not confirm. (Do not reuse these exact facts; they are in the avoid list.)
+${wrapUserInput('domain_examples', perDomain.join('\n\n'))}`;
+    }
+  }
+
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${examplesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -1264,6 +1299,7 @@ async function callLlmOnce(
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
   provider: LlmProvider = 'anthropic',
+  domainExamples?: DomainExamples,
 ): Promise<LlmQuestion[]> {
   const userPrompt = buildUserPrompt(
     domains,
@@ -1278,6 +1314,7 @@ async function callLlmOnce(
     domainTerritoryTypes,
     domainStrengths,
     culturalAnchor,
+    domainExamples,
   );
 
   // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
@@ -1344,7 +1381,11 @@ export async function generateDailyQuestions(
   // orchestrator can draw on them as a last resort rather than serving a short
   // queue (see the under-difficulty handling below and queue-orchestrator's
   // backfill chain).
-  options: { underDifficultyReserve?: GeneratedQuestionRow[]; provider?: LlmProvider } = {},
+  options: {
+    underDifficultyReserve?: GeneratedQuestionRow[];
+    provider?: LlmProvider;
+    domainExamples?: DomainExamples;
+  } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -1352,6 +1393,7 @@ export async function generateDailyQuestions(
   // every chunk — never re-resolved per question. Defaults to Anthropic; B2
   // makes the caller pass the global setting instead of the literal below.
   const provider: LlmProvider = options.provider ?? 'anthropic';
+  const domainExamples = options.domainExamples;
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -1387,6 +1429,7 @@ export async function generateDailyQuestions(
         domainStrengths,
         culturalAnchor,
         provider,
+        domainExamples,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -1406,6 +1449,7 @@ export async function generateDailyQuestions(
         domainStrengths,
         culturalAnchor,
         provider,
+        domainExamples,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -2043,6 +2087,18 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
+  // Admin-authored example questions per domain — ground-truth anchors fed into
+  // the generation prompt so the model writes from real canon instead of inventing
+  // facts for domains it doesn't truly know (the niche-domain hallucination fix,
+  // e.g. "Spy School"). Scoped to ADMIN_USER_IDS: a seed is treated as canon, so
+  // only a trusted author may anchor a domain. Resilient: a miss (or no admins /
+  // no examples) just means no examples block this round.
+  const domainExamples = await getAuthoredExamplesForDomains(
+    domainsForRound,
+    DOMAIN_EXAMPLE_LIMIT,
+    adminUserIds(),
+  ).catch(() => new Map<string, Array<{ questionText: string; answerText: string }>>());
+
   // Fold recently-answered canonical texts (domain-scoped, capped) into the
   // avoid list ahead of the generated history, so a fact the player answered
   // yesterday on a friend's / house / forwarded question isn't re-created as a
@@ -2157,6 +2213,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       {
         underDifficultyReserve: options.underDifficultyReserve,
         provider: genProvider,
+        domainExamples,
       },
     );
   }
