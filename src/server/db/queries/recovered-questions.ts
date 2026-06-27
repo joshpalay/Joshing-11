@@ -1,7 +1,6 @@
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import { db, masteryEvents, questions } from '@/server/db';
-import type { GradableQuestionType } from '@/server/grading';
 
 /**
  * D-REVIEW-RECOVERED-01 — the "Recovered Questions" review pool (Version A).
@@ -11,18 +10,19 @@ import type { GradableQuestionType } from '@/server/grading';
  * (computeAnswerState, src/server/answer-state.ts), written at insert time by
  * the shared answer pipeline across all five live answer surfaces.
  *
- * This surface is READ-ONLY. The reflective pool is a SELECT; the review
- * interaction (Decision B) grades a typed answer for real via `gradeAnswer` but
- * runs NONE of the persistence tail (no `deriveAnswerOutcome`, no
- * `writeMasteryEvent`, no feed fan-out, no mastery promotion) — so a review
- * submission mints zero `mastery_events` rows and never touches mastery.
+ * This surface is READ-ONLY and does NOT check answers. The reflective pool is
+ * a single SELECT; the review interaction is a no-check reveal — the card ships
+ * the canonical answer collapsed and reveals it on demand (a native <details>,
+ * see RecoveredCard). Nothing is graded and nothing is written: a review
+ * submission mints zero `mastery_events` rows and never touches mastery, feed
+ * fan-out, or promotion.
  *
  * Decisions A–D:
  *   A. Pool = whole "ever recovered" set (no latest-state reduction, no
  *      retirement). A question stays even if later re-missed; the moment, not a
  *      current status, is what `first_correct_after_wrong` records.
- *   B. Graded, non-persisting answer form (grading lives in the route; this
- *      module supplies the gradable fields, guarded by pool membership).
+ *   B. No-check reveal: the player recalls the answer in their head, then
+ *      reveals the canonical answer to check themselves. No grader, no verdict.
  *   C. Ordering is recency: ORDER BY created_at DESC.
  *
  * `answer_state` only carries a value on the `live_correct` / `catchup_correct`
@@ -48,21 +48,9 @@ export type RecoveredQuestion = {
   category: string;
   /** When the wrong→right moment was recorded. */
   recoveredAt: Date;
-};
-
-/**
- * The gradable fields for one recovered question, returned ONLY when the
- * question is in the viewer's recovered pool. The inner join on mastery_events
- * is the membership guard: a question the viewer never recovered yields null,
- * so the review route can't be used to grade arbitrary questions. Read-only.
- */
-export type RecoveredGradingQuestion = {
-  questionId: string;
-  questionText: string;
-  answerText: string;
-  acceptedAlternatives: string[];
-  questionType: GradableQuestionType;
-  /** Revealed alongside the verdict; never sent to the client before a submit. */
+  /** The canonical answer — shipped collapsed, revealed on the card (no check). */
+  answer: string;
+  /** Revealed alongside the answer when present. */
   explanation: string | null;
   creatorNote: string | null;
 };
@@ -90,8 +78,9 @@ function prettifyCategory(canonical: string | null, coarse: string | null): stri
 /**
  * Returns the viewer's whole "ever recovered" pool, most recently recovered
  * first. Read-only: a single SELECT, no writes, no mastery coupling. The answer
- * is deliberately NOT selected here — it is revealed only through the graded
- * review submission, so it never ships in the page payload before a recall.
+ * and explainer ship with the pool so the card can reveal them client-side with
+ * no further round-trip and no grading — they sit collapsed until the player
+ * chooses to check themselves.
  */
 export async function getRecoveredQuestionsForUser(userId: string): Promise<RecoveredQuestion[]> {
   const rows = await db
@@ -102,6 +91,11 @@ export async function getRecoveredQuestionsForUser(userId: string): Promise<Reco
       canonicalSubcategory: questions.canonicalSubcategory,
       category: questions.category,
       recoveredAt: masteryEvents.createdAt,
+      answerText: questions.answerText,
+      explainerFull: questions.explainerFull,
+      explainerBrief: questions.explainerBrief,
+      factualExplanation: questions.factualExplanation,
+      creatorNote: questions.creatorNote,
     })
     .from(masteryEvents)
     .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
@@ -121,52 +115,8 @@ export async function getRecoveredQuestionsForUser(userId: string): Promise<Reco
     questionText: row.questionText,
     category: prettifyCategory(row.canonicalSubcategory, row.category),
     recoveredAt: row.recoveredAt,
-  }));
-}
-
-/**
- * Loads the gradable fields for `questionId` IFF it is in `userId`'s recovered
- * pool (the inner join on the matching mastery event is the membership guard).
- * Returns null otherwise. Read-only — the review route grades against these
- * fields and persists nothing.
- */
-export async function getRecoveredGradingQuestion(
-  userId: string,
-  questionId: string,
-): Promise<RecoveredGradingQuestion | null> {
-  const [row] = await db
-    .select({
-      questionId: questions.id,
-      questionText: questions.questionText,
-      answerText: questions.answerText,
-      acceptedAlternatives: questions.acceptedAlternatives,
-      questionType: questions.questionType,
-      explainerFull: questions.explainerFull,
-      explainerBrief: questions.explainerBrief,
-      factualExplanation: questions.factualExplanation,
-      creatorNote: questions.creatorNote,
-    })
-    .from(masteryEvents)
-    .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
-    .where(
-      and(
-        eq(masteryEvents.userId, userId),
-        inArray(masteryEvents.sourceType, ANSWER_STATE_SOURCE_TYPES),
-        eq(masteryEvents.answerState, RECOVERED_STATE),
-        eq(masteryEvents.questionId, questionId),
-      ),
-    )
-    .limit(1);
-
-  if (!row) return null;
-
-  return {
-    questionId: row.questionId,
-    questionText: row.questionText,
-    answerText: row.answerText,
-    acceptedAlternatives: row.acceptedAlternatives,
-    questionType: row.questionType,
+    answer: row.answerText,
     explanation: row.explainerFull ?? row.explainerBrief ?? row.factualExplanation ?? null,
     creatorNote: row.creatorNote ?? null,
-  };
+  }));
 }
