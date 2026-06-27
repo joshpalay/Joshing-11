@@ -1,6 +1,7 @@
-import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 
-import { db, masteryEvents, questions } from '@/server/db';
+import { db, masteryEvents, questions, recoveredSetAside } from '@/server/db';
+import { pgErrorCode } from '@/server/db/pg-error';
 
 /**
  * D-REVIEW-RECOVERED-01 — the "Recovered Questions" review pool (Version A).
@@ -53,6 +54,8 @@ export type RecoveredQuestion = {
   /** Revealed alongside the answer when present. */
   explanation: string | null;
   creatorNote: string | null;
+  /** The viewer has set this one aside — it sorts to the bottom and dims. */
+  setAside: boolean;
 };
 
 const CATEGORY_ENUM_PRETTY: Record<string, string> = {
@@ -76,40 +79,65 @@ function prettifyCategory(canonical: string | null, coarse: string | null): stri
 }
 
 /**
- * Returns the viewer's whole "ever recovered" pool, most recently recovered
- * first. Read-only: a single SELECT, no writes, no mastery coupling. The answer
- * and explainer ship with the pool so the card can reveal them client-side with
- * no further round-trip and no grading — they sit collapsed until the player
- * chooses to check themselves.
+ * The viewer's active set-aside question ids (reinstatedAt IS NULL). Read-only,
+ * and resilient to the table not existing yet: a pre-migration database returns
+ * an empty set rather than failing the whole recovered page (mirrors
+ * getDismissedDomains' 42P01 handling).
+ */
+async function getSetAsideQuestionIds(userId: string): Promise<Set<string>> {
+  try {
+    const rows = await db
+      .select({ questionId: recoveredSetAside.questionId })
+      .from(recoveredSetAside)
+      .where(and(eq(recoveredSetAside.userId, userId), isNull(recoveredSetAside.reinstatedAt)));
+    return new Set(rows.map((r) => r.questionId));
+  } catch (error) {
+    if (pgErrorCode(error) === '42P01') return new Set(); // table not yet migrated
+    throw error;
+  }
+}
+
+/**
+ * Returns the viewer's whole "ever recovered" pool. Read-only: SELECTs only, no
+ * mastery coupling. The answer and explainer ship with the pool so the card can
+ * reveal them client-side with no further round-trip and no grading — they sit
+ * collapsed until the player chooses to check themselves.
+ *
+ * Ordering: most recently recovered first, but questions the viewer has SET
+ * ASIDE are demoted to the bottom (recency preserved within each group). The
+ * card dims a set-aside question and offers to restore it.
  */
 export async function getRecoveredQuestionsForUser(userId: string): Promise<RecoveredQuestion[]> {
-  const rows = await db
-    .select({
-      id: masteryEvents.id,
-      questionId: questions.id,
-      questionText: questions.questionText,
-      canonicalSubcategory: questions.canonicalSubcategory,
-      category: questions.category,
-      recoveredAt: masteryEvents.createdAt,
-      answerText: questions.answerText,
-      explainerFull: questions.explainerFull,
-      explainerBrief: questions.explainerBrief,
-      factualExplanation: questions.factualExplanation,
-      creatorNote: questions.creatorNote,
-    })
-    .from(masteryEvents)
-    .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
-    .where(
-      and(
-        eq(masteryEvents.userId, userId),
-        inArray(masteryEvents.sourceType, ANSWER_STATE_SOURCE_TYPES),
-        eq(masteryEvents.answerState, RECOVERED_STATE),
-        isNotNull(masteryEvents.questionId),
-      ),
-    )
-    .orderBy(desc(masteryEvents.createdAt));
+  const [rows, setAsideIds] = await Promise.all([
+    db
+      .select({
+        id: masteryEvents.id,
+        questionId: questions.id,
+        questionText: questions.questionText,
+        canonicalSubcategory: questions.canonicalSubcategory,
+        category: questions.category,
+        recoveredAt: masteryEvents.createdAt,
+        answerText: questions.answerText,
+        explainerFull: questions.explainerFull,
+        explainerBrief: questions.explainerBrief,
+        factualExplanation: questions.factualExplanation,
+        creatorNote: questions.creatorNote,
+      })
+      .from(masteryEvents)
+      .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
+      .where(
+        and(
+          eq(masteryEvents.userId, userId),
+          inArray(masteryEvents.sourceType, ANSWER_STATE_SOURCE_TYPES),
+          eq(masteryEvents.answerState, RECOVERED_STATE),
+          isNotNull(masteryEvents.questionId),
+        ),
+      )
+      .orderBy(desc(masteryEvents.createdAt)),
+    getSetAsideQuestionIds(userId),
+  ]);
 
-  return rows.map((row) => ({
+  const mapped: RecoveredQuestion[] = rows.map((row) => ({
     id: row.id,
     questionId: row.questionId,
     questionText: row.questionText,
@@ -118,5 +146,50 @@ export async function getRecoveredQuestionsForUser(userId: string): Promise<Reco
     answer: row.answerText,
     explanation: row.explainerFull ?? row.explainerBrief ?? row.factualExplanation ?? null,
     creatorNote: row.creatorNote ?? null,
+    setAside: setAsideIds.has(row.questionId),
   }));
+
+  // Demote set-aside questions to the bottom; recency order is already in place
+  // within each group from the ORDER BY, and a stable partition preserves it.
+  return [...mapped.filter((q) => !q.setAside), ...mapped.filter((q) => q.setAside)];
+}
+
+/**
+ * Set a recovered question aside for the viewer (reversible soft-dismiss). A
+ * no-op if it is already set aside. The partial unique index guarantees at most
+ * one active row per (user, question). Mirrors dismissDomain.
+ */
+export async function setAsideRecoveredQuestion(userId: string, questionId: string): Promise<void> {
+  const [existing] = await db
+    .select({ id: recoveredSetAside.id })
+    .from(recoveredSetAside)
+    .where(
+      and(
+        eq(recoveredSetAside.userId, userId),
+        eq(recoveredSetAside.questionId, questionId),
+        isNull(recoveredSetAside.reinstatedAt),
+      ),
+    )
+    .limit(1);
+
+  if (existing) return;
+
+  await db.insert(recoveredSetAside).values({ userId, questionId });
+}
+
+/**
+ * Restore a set-aside recovered question (un-demote it) by marking the active
+ * row reinstated. A no-op if it was not set aside. Mirrors reinstateDomain.
+ */
+export async function restoreRecoveredQuestion(userId: string, questionId: string): Promise<void> {
+  await db
+    .update(recoveredSetAside)
+    .set({ reinstatedAt: new Date() })
+    .where(
+      and(
+        eq(recoveredSetAside.userId, userId),
+        eq(recoveredSetAside.questionId, questionId),
+        isNull(recoveredSetAside.reinstatedAt),
+      ),
+    );
 }

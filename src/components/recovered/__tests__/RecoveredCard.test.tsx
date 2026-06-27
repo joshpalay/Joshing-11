@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RecoveredCard } from '../RecoveredCard';
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
 
+// The set-aside action (the card's only client island) reads the app router.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 // D-REVIEW-RECOVERED-01 (Decision B) — the review card is a no-check reveal.
 // The system never grades a typed answer; it just shows the canonical answer on
 // demand. Two properties matter and are DOM-free to assert:
@@ -20,6 +23,7 @@ const QUESTION: RecoveredQuestion = {
   answer: 'Francesco Guicciardini',
   explanation: 'A Florentine historian and statesman.',
   creatorNote: null,
+  setAside: false,
 };
 
 describe('RecoveredCard — no-check reveal', () => {
@@ -44,9 +48,23 @@ describe('RecoveredCard — no-check reveal', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('Check my answer');
 
-    // Pure render — no network round-trip.
+    // Pure render — no network round-trip on first paint.
     expect(fetchSpy).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+
+  it('offers "Set aside" by default and "Restore" once set aside (dimmed)', () => {
+    const active = renderToStaticMarkup(<RecoveredCard question={QUESTION} />);
+    expect(active).toContain('Set aside');
+    expect(active).not.toContain('Restore');
+
+    const setAside = renderToStaticMarkup(
+      <RecoveredCard question={{ ...QUESTION, setAside: true }} />,
+    );
+    expect(setAside).toContain('Restore');
+    expect(setAside).not.toContain('Set aside');
+    // Set-aside cards are visually de-emphasized.
+    expect(setAside).toContain('opacity-60');
   });
 });

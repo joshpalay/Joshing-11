@@ -1279,6 +1279,29 @@ export const feedDismissedDomains = pgTable(
   ],
 );
 
+// Per-user "set aside" for recovered-review questions (D-REVIEW-RECOVERED-01).
+// A reversible soft-dismiss at the QUESTION level: an active row (reinstatedAt
+// IS NULL) demotes that question to the bottom of the viewer's recovered list
+// and dims it. Restoring sets reinstatedAt = now(); setting aside again inserts
+// a fresh active row. Mirrors FeedDismissedDomain exactly (the partial unique
+// index keeps at most one active row per (user, question)).
+export const recoveredSetAside = pgTable(
+  'RecoveredSetAside',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    setAsideAt: timestamp('setAsideAt', { withTimezone: true }).notNull().defaultNow(),
+    reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
+  },
+  (table) => [
+    index('RecoveredSetAside_userId_idx').on(table.userId),
+    uniqueIndex('recovered_set_aside_active_unique')
+      .on(table.userId, table.questionId)
+      .where(sql`${table.reinstatedAt} IS NULL`),
+  ],
+);
+
 export const friendInvitations = pgTable(
   'FriendInvitation',
   {
