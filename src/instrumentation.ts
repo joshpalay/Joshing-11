@@ -1753,6 +1753,31 @@ export async function register() {
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }
+    // Migration 0093 (D-REVIEW-RECOVERED-01) adds the per-user "set aside" table
+    // for the recovered-review surface. The recovered page reads it on every load
+    // and would 42P01 if the migration recorded without the table present.
+    // Self-contained; precedent: 0021's FeedDismissedDomain guard above.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "RecoveredSetAside" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "questionId" text NOT NULL REFERENCES "Question"("id") ON DELETE CASCADE,
+          "setAsideAt" timestamp with time zone NOT NULL DEFAULT now(),
+          "reinstatedAt" timestamp with time zone
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "RecoveredSetAside" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "RecoveredSetAside_userId_idx" ON "RecoveredSetAside" ("userId")`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "recovered_set_aside_active_unique"
+        ON "RecoveredSetAside" ("userId", "questionId")
+        WHERE "reinstatedAt" IS NULL
+      `);
+    } catch {
+      // Fresh databases may not have User/Question yet — migrate() creates all
+      // three in normal migration order.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

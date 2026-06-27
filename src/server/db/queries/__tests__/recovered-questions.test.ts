@@ -1,16 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// D-REVIEW-RECOVERED-01 — wiring test for the recovered-questions readers.
+// D-REVIEW-RECOVERED-01 — wiring tests for the recovered-questions readers and
+// the set-aside mutations.
 //
-// We mock drizzle as inert node-builders and capture the WHERE / ORDER BY the
-// readers construct, then assert the exact pool definition (Done-When #1):
-//   answer_state = 'first_correct_after_wrong' + question_id IS NOT NULL,
-//   ordered created_at DESC.
-//
-// It also guards the read-only contract: the db mock exposes
-// insert/update/delete that throw, so any write attempt on these readers fails
-// the test loudly. The pool — and the gradable-question membership load — are
-// built with SELECT and nothing else.
+// The drizzle layer is mocked as inert builders that record the WHERE / ORDER BY
+// and resolve to canned rows. We assert:
+//   - the pool definition (answer_state = first_correct_after_wrong +
+//     question_id IS NOT NULL, ordered created_at DESC);
+//   - set-aside questions carry the flag and sort to the bottom;
+//   - the set-aside / restore mutations issue the expected insert / update.
 interface Node {
   op: string;
   column?: unknown;
@@ -19,10 +17,15 @@ interface Node {
   parts?: Node[];
 }
 
-let capturedWhere: Node | null = null;
+let capturedWheres: Node[] = [];
 let capturedOrderBy: Node | null = null;
 let selectCalls = 0;
-let limitResult: unknown[] = [];
+let selectQueue: unknown[][] = [];
+let insertCalls = 0;
+let insertValues: unknown = null;
+let updateCalls = 0;
+let updateSet: unknown = null;
+let deleteCalls = 0;
 
 vi.mock('drizzle-orm', () => ({
   and: vi.fn((...parts: Node[]) => ({ op: 'and', parts })),
@@ -30,60 +33,87 @@ vi.mock('drizzle-orm', () => ({
   desc: vi.fn((column) => ({ op: 'desc', column })),
   inArray: vi.fn((column, values) => ({ op: 'inArray', column, values })),
   isNotNull: vi.fn((column) => ({ op: 'isNotNull', column })),
+  isNull: vi.fn((column) => ({ op: 'isNull', column })),
 }));
 
-vi.mock('@/server/db', () => {
-  const chain: Record<string, unknown> = {};
-  chain.from = vi.fn(() => chain);
-  chain.innerJoin = vi.fn(() => chain);
-  chain.where = vi.fn((cond: Node) => {
-    capturedWhere = cond;
-    return chain;
-  });
-  chain.orderBy = vi.fn((order: Node) => {
-    capturedOrderBy = order;
-    return Promise.resolve([]);
-  });
-  chain.limit = vi.fn(() => Promise.resolve(limitResult));
-  const fail = (op: string) =>
-    vi.fn(() => {
-      throw new Error(`read-only surface attempted a ${op}`);
+function builder(resolved: unknown) {
+  const node: Record<string, unknown> = {};
+  const passthrough = (capture?: (arg: unknown) => void) =>
+    vi.fn((arg: unknown) => {
+      capture?.(arg);
+      return node;
     });
-  return {
-    db: {
-      select: vi.fn(() => {
-        selectCalls += 1;
-        return chain;
-      }),
-      insert: fail('insert'),
-      update: fail('update'),
-      delete: fail('delete'),
-    },
-    masteryEvents: {
-      id: 'me.id',
-      userId: 'me.userId',
-      sourceType: 'me.sourceType',
-      answerState: 'me.answerState',
-      questionId: 'me.questionId',
-      createdAt: 'me.createdAt',
-    },
-    questions: {
-      id: 'q.id',
-      questionText: 'q.questionText',
-      answerText: 'q.answerText',
-      acceptedAlternatives: 'q.acceptedAlternatives',
-      questionType: 'q.questionType',
-      explainerFull: 'q.explainerFull',
-      explainerBrief: 'q.explainerBrief',
-      factualExplanation: 'q.factualExplanation',
-      creatorNote: 'q.creatorNote',
-      canonicalSubcategory: 'q.canonicalSubcategory',
-      category: 'q.category',
-    },
-  };
-});
+  node.from = passthrough();
+  node.innerJoin = passthrough();
+  node.leftJoin = passthrough();
+  node.where = passthrough((cond) => capturedWheres.push(cond as Node));
+  node.orderBy = passthrough((order) => {
+    capturedOrderBy = order as Node;
+  });
+  node.limit = passthrough();
+  node.values = passthrough((v) => {
+    insertValues = v;
+  });
+  node.set = passthrough((v) => {
+    updateSet = v;
+  });
+  // Thenable so `await` at any terminal (.where / .orderBy / .limit / .values …)
+  // resolves to this call's canned rows.
+  node.then = (onFulfilled: (value: unknown) => unknown) => onFulfilled(resolved);
+  return node;
+}
 
-import { getRecoveredQuestionsForUser } from '@/server/db/queries/recovered-questions';
+vi.mock('@/server/db', () => ({
+  db: {
+    select: vi.fn(() => {
+      selectCalls += 1;
+      return builder(selectQueue.length ? selectQueue.shift() : []);
+    }),
+    insert: vi.fn(() => {
+      insertCalls += 1;
+      return builder(undefined);
+    }),
+    update: vi.fn(() => {
+      updateCalls += 1;
+      return builder(undefined);
+    }),
+    delete: vi.fn(() => {
+      deleteCalls += 1;
+      return builder(undefined);
+    }),
+  },
+  masteryEvents: {
+    id: 'me.id',
+    userId: 'me.userId',
+    sourceType: 'me.sourceType',
+    answerState: 'me.answerState',
+    questionId: 'me.questionId',
+    createdAt: 'me.createdAt',
+  },
+  questions: {
+    id: 'q.id',
+    questionText: 'q.questionText',
+    answerText: 'q.answerText',
+    canonicalSubcategory: 'q.canonicalSubcategory',
+    category: 'q.category',
+    explainerFull: 'q.explainerFull',
+    explainerBrief: 'q.explainerBrief',
+    factualExplanation: 'q.factualExplanation',
+    creatorNote: 'q.creatorNote',
+  },
+  recoveredSetAside: {
+    id: 'rsa.id',
+    userId: 'rsa.userId',
+    questionId: 'rsa.questionId',
+    reinstatedAt: 'rsa.reinstatedAt',
+  },
+}));
+
+import {
+  getRecoveredQuestionsForUser,
+  restoreRecoveredQuestion,
+  setAsideRecoveredQuestion,
+} from '@/server/db/queries/recovered-questions';
 
 function flatten(node: Node | null): Node[] {
   if (!node) return [];
@@ -91,37 +121,59 @@ function flatten(node: Node | null): Node[] {
   return [node];
 }
 
+function allWhereNodes(): Node[] {
+  return capturedWheres.flatMap(flatten);
+}
+
 const VIEWER = 'viewer-1';
 
+function poolRow(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'me-1',
+    questionId: 'q-1',
+    questionText: 'Who wrote the Storia d’Italia?',
+    canonicalSubcategory: 'history',
+    category: 'general_knowledge',
+    recoveredAt: new Date('2026-06-01T00:00:00Z'),
+    answerText: 'Francesco Guicciardini',
+    explainerFull: 'Full explainer.',
+    explainerBrief: 'Brief.',
+    factualExplanation: 'Fact.',
+    creatorNote: null,
+    ...over,
+  };
+}
+
 beforeEach(() => {
-  capturedWhere = null;
+  capturedWheres = [];
   capturedOrderBy = null;
   selectCalls = 0;
-  limitResult = [];
+  selectQueue = [];
+  insertCalls = 0;
+  insertValues = null;
+  updateCalls = 0;
+  updateSet = null;
+  deleteCalls = 0;
 });
 afterEach(() => vi.clearAllMocks());
 
 describe('getRecoveredQuestionsForUser — pool definition', () => {
   it('filters on answer_state = first_correct_after_wrong', async () => {
     await getRecoveredQuestionsForUser(VIEWER);
-    const match = flatten(capturedWhere).find(
-      (n) => n.op === 'eq' && n.column === 'me.answerState',
-    );
+    const match = allWhereNodes().find((n) => n.op === 'eq' && n.column === 'me.answerState');
     expect(match).toBeDefined();
     expect(match!.value).toBe('first_correct_after_wrong');
   });
 
   it('guards question_id IS NOT NULL', async () => {
     await getRecoveredQuestionsForUser(VIEWER);
-    const match = flatten(capturedWhere).find(
-      (n) => n.op === 'isNotNull' && n.column === 'me.questionId',
-    );
+    const match = allWhereNodes().find((n) => n.op === 'isNotNull' && n.column === 'me.questionId');
     expect(match).toBeDefined();
   });
 
   it('scopes to the viewer', async () => {
     await getRecoveredQuestionsForUser(VIEWER);
-    const match = flatten(capturedWhere).find((n) => n.op === 'eq' && n.column === 'me.userId');
+    const match = allWhereNodes().find((n) => n.op === 'eq' && n.column === 'me.userId');
     expect(match).toBeDefined();
     expect(match!.value).toBe(VIEWER);
   });
@@ -131,49 +183,63 @@ describe('getRecoveredQuestionsForUser — pool definition', () => {
     expect(capturedOrderBy).toEqual({ op: 'desc', column: 'me.createdAt' });
   });
 
-  it('reads with SELECT only — no insert/update/delete on this surface', async () => {
-    await expect(getRecoveredQuestionsForUser(VIEWER)).resolves.toEqual([]);
-    expect(selectCalls).toBe(1);
+  it('issues no insert/update/delete on the read path', async () => {
+    await getRecoveredQuestionsForUser(VIEWER);
+    expect(insertCalls).toBe(0);
+    expect(updateCalls).toBe(0);
+    expect(deleteCalls).toBe(0);
   });
 });
 
-describe('getRecoveredQuestionsForUser — ships the answer for the no-check reveal', () => {
-  it('maps the answer and explainer fields so the card can reveal them', async () => {
-    // The pool reader resolves through orderBy; stub it to return one row.
-    const { db } = (await import('@/server/db')) as unknown as {
-      db: { select: ReturnType<typeof vi.fn> };
-    };
-    db.select.mockImplementationOnce(() => {
-      selectCalls += 1;
-      return {
-        from: () => ({
-          innerJoin: () => ({
-            where: () => ({
-              orderBy: () =>
-                Promise.resolve([
-                  {
-                    id: 'me-1',
-                    questionId: 'q-7',
-                    questionText: 'Who wrote the Storia d’Italia?',
-                    canonicalSubcategory: 'history',
-                    category: 'general_knowledge',
-                    recoveredAt: new Date('2026-06-01T00:00:00Z'),
-                    answerText: 'Francesco Guicciardini',
-                    explainerFull: 'Full explainer.',
-                    explainerBrief: 'Brief.',
-                    factualExplanation: 'Fact.',
-                    creatorNote: null,
-                  },
-                ]),
-            }),
-          }),
-        }),
-      };
-    });
-
+describe('getRecoveredQuestionsForUser — set-aside flag and ordering', () => {
+  it('maps the answer/explainer fields for the reveal', async () => {
+    selectQueue = [[poolRow()], []]; // pool rows, then active set-aside ids
     const [row] = await getRecoveredQuestionsForUser(VIEWER);
     expect(row.answer).toBe('Francesco Guicciardini');
     expect(row.explanation).toBe('Full explainer.');
     expect(row.creatorNote).toBeNull();
+    expect(row.setAside).toBe(false);
+  });
+
+  it('flags set-aside questions and demotes them to the bottom', async () => {
+    selectQueue = [
+      [
+        poolRow({ id: 'me-a', questionId: 'q-a' }),
+        poolRow({ id: 'me-b', questionId: 'q-b' }), // this one is set aside
+        poolRow({ id: 'me-c', questionId: 'q-c' }),
+      ],
+      [{ questionId: 'q-b' }], // active set-aside ids
+    ];
+    const result = await getRecoveredQuestionsForUser(VIEWER);
+    expect(result.map((q) => q.questionId)).toEqual(['q-a', 'q-c', 'q-b']);
+    expect(result.find((q) => q.questionId === 'q-b')!.setAside).toBe(true);
+    expect(result.find((q) => q.questionId === 'q-a')!.setAside).toBe(false);
+  });
+});
+
+describe('setAsideRecoveredQuestion', () => {
+  it('inserts an active row when none exists', async () => {
+    selectQueue = [[]]; // existing-active check returns nothing
+    await setAsideRecoveredQuestion(VIEWER, 'q-7');
+    expect(insertCalls).toBe(1);
+    expect(insertValues).toEqual({ userId: VIEWER, questionId: 'q-7' });
+  });
+
+  it('is a no-op when already set aside', async () => {
+    selectQueue = [[{ id: 'rsa-1' }]]; // an active row already exists
+    await setAsideRecoveredQuestion(VIEWER, 'q-7');
+    expect(insertCalls).toBe(0);
+  });
+});
+
+describe('restoreRecoveredQuestion', () => {
+  it('marks the active row reinstated for the viewer + question', async () => {
+    await restoreRecoveredQuestion(VIEWER, 'q-7');
+    expect(updateCalls).toBe(1);
+    expect((updateSet as { reinstatedAt: Date }).reinstatedAt).toBeInstanceOf(Date);
+    const flat = allWhereNodes();
+    expect(flat.find((n) => n.op === 'eq' && n.column === 'rsa.userId')?.value).toBe(VIEWER);
+    expect(flat.find((n) => n.op === 'eq' && n.column === 'rsa.questionId')?.value).toBe('q-7');
+    expect(flat.find((n) => n.op === 'isNull' && n.column === 'rsa.reinstatedAt')).toBeDefined();
   });
 });
