@@ -2,10 +2,7 @@ import { and, eq } from 'drizzle-orm'
 
 import { softDeleteActivityByReference, writeActivity } from '@/server/activity/write-activity'
 import { db, follows, users } from '@/server/db'
-import {
-  backfillAuthoredQuestionsFeedItems,
-  backfillFollowedUserFeedItems,
-} from '@/server/feed/backfill-inviter-feed'
+import { backfillFollowedUserFeedItems } from '@/server/feed/backfill-inviter-feed'
 
 export type Follow = typeof follows.$inferSelect
 
@@ -51,16 +48,19 @@ async function ensureApprovedFollowEdge(followerId: string, followeeId: string, 
     })
 }
 
-// Seed BOTH friends' feeds with each other's recent correct answers AND public
-// authored questions — what would have propagated had the mutual edge existed
-// when they answered/authored. Each call is best-effort internally and cannot
-// throw, so none can affect the friendship write.
+// Seed BOTH friends' feeds with each other's recent CORRECT ANSWERS — what would
+// have propagated to the From-Friends band had the mutual edge existed when they
+// answered. We deliberately do NOT backfill each other's authored questions:
+// From Friends is an answered-questions surface (it never shows an "author card"),
+// and dumping a new friend's back catalogue into the main "For You" feed (where
+// `authored_shared` rows render) was an unwanted flood. A friend's authored
+// questions still reach you the intended ways — they deliberately "share with all
+// friends" at creation, or another mutual friend answers one. Each call is
+// best-effort internally and cannot throw, so it can't affect the friendship write.
 async function backfillMutualFeeds(userAId: string, userBId: string): Promise<void> {
   await Promise.all([
     backfillFollowedUserFeedItems({ answererUserId: userAId, recipientUserId: userBId }),
     backfillFollowedUserFeedItems({ answererUserId: userBId, recipientUserId: userAId }),
-    backfillAuthoredQuestionsFeedItems({ authorUserId: userAId, recipientUserId: userBId }),
-    backfillAuthoredQuestionsFeedItems({ authorUserId: userBId, recipientUserId: userAId }),
   ])
 }
 
@@ -129,7 +129,12 @@ export async function createOrReusePendingFriendshipRequest({
     .from(users)
     .where(eq(users.id, followeeId))
     .limit(1)
-  const autoApprove = target?.followPrivacy === 'public'
+  // Phase 1 (friend = bidirectional, no asymmetric following): every friend
+  // request requires an explicit accept. The public-account auto-approve path
+  // below is RETAINED but gated off behind this flag until following returns —
+  // flip the flag back on at that point. Product decision 2026-06-26.
+  const ALLOW_PUBLIC_AUTO_APPROVE: boolean = false
+  const autoApprove = ALLOW_PUBLIC_AUTO_APPROVE && target?.followPrivacy === 'public'
 
   const [edge] = await db
     .insert(follows)
@@ -308,9 +313,11 @@ export async function cancelPendingFriendshipRequest({
 }
 
 /**
- * Unfollow: delete the viewer's outbound follow edge. This is directional — it
- * only removes my follow of them; their follow of me (if any) is untouched.
- * `friendshipId` is my outbound edge id.
+ * Unfriend: delete BOTH directional follow edges between the viewer and the
+ * other user. Phase 1 "friend = bidirectional", so removing a friend fully
+ * severs the relationship rather than leaving the other side as a one-way
+ * follower. `friendshipId` is my outbound edge id; the reverse edge is resolved
+ * from it. (When asymmetric following returns, this becomes a one-edge delete.)
  */
 export async function removeFriendship({
   friendshipId,
@@ -324,7 +331,15 @@ export async function removeFriendship({
     .where(and(eq(follows.id, friendshipId), eq(follows.followerId, userId)))
     .returning()
 
-  return edge ?? null
+  if (!edge) return null
+
+  // Sever the reverse edge (other -> viewer) so neither side retains a dangling
+  // one-directional follow.
+  await db
+    .delete(follows)
+    .where(and(eq(follows.followerId, edge.followeeId), eq(follows.followeeId, userId)))
+
+  return edge
 }
 
 /**

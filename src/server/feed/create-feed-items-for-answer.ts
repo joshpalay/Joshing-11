@@ -3,7 +3,7 @@ import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db, feedDismissedDomains, feedItems, masteryEvents, questionFeedback, questionRatings, questions } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
 import { getNicheMatchDiscoverable } from '@/server/db/queries/account';
-import { getFollowers } from '@/server/db/queries/friends';
+import { getFriends } from '@/server/db/queries/friends';
 import { getRelationship } from '@/server/db/queries/friend-requests';
 import { rollOffOldItems } from '@/server/db/queries/feed';
 import { isQuestionReportSuppressed } from '@/server/db/queries/content-reports';
@@ -101,9 +101,10 @@ async function _createFeedItemsForFriendsFromAnswer(
   // failure can't abort the friend fan-out that follows.
   await notifyNicheMatch(userId, questionId, question.creatorId, sourceAnswerId);
 
-  // friend_answered fan-out reaches my followers — people who follow me see
-  // that I answered correctly (directional follow model, D-1 Stage 3).
-  const friends = await getFollowers(userId);
+  // friend_answered fan-out reaches my MUTUAL friends — people I'm bidirectionally
+  // friends with see that I answered correctly. Phase 1 has no asymmetric
+  // following, so a one-directional follower is not an audience for this.
+  const friends = await getFriends(userId);
   if (friends.length === 0) {
     await notifyPreviousAnswerers(userId, questionId);
     return;

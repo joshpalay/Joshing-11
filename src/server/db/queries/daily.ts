@@ -475,6 +475,73 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
 }
 
 /**
+ * The most recent prior daily queue still inside the catch-up window — the row the
+ * carry-forward / top-up paths reconcile against. Shared by the orchestrator's
+ * partial/short top-up path (carryForwardUntouchedDailyQueue keeps its own inline
+ * copy of this query for the full-untouched case).
+ */
+export async function getPriorInWindowDailyQueue(userId: string): Promise<DailyQueueRow | null> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+  const oldestEligible = minusUtcDays(assignmentDateStr, CATCHUP_LOOKBACK_DAYS);
+  const [prior] = await db
+    .select()
+    .from(dailyQueues)
+    .where(and(
+      eq(dailyQueues.userId, userId),
+      lt(dailyQueues.queueDate, assignmentDateStr),
+      gte(dailyQueues.queueDate, oldestEligible),
+    ))
+    .orderBy(desc(dailyQueues.queueDate))
+    .limit(1);
+  return prior ?? null;
+}
+
+/**
+ * Re-date a prior in-window queue onto today with a REPLACED slots array — the
+ * top-up sibling of carryForwardUntouchedDailyQueue. The orchestrator builds the
+ * merged set (the prior queue's unplayed slots + freshly generated top-up slots),
+ * then calls this to land it on today's date IN PLACE, so the carried questions
+ * move out of catch-up and into today's Five without a second row (no double
+ * surface). Mirrors carry-forward's empty-today cleanup + first-writer-wins (23505)
+ * handling, and flags the freshly generated questions usedInQueue. Returns false
+ * (writing nothing) if a full today-queue won the race.
+ */
+export async function carryForwardQueueWithSlots(
+  userId: string,
+  priorQueueId: string,
+  slots: QueueSlot[],
+  newGeneratedQuestionIds: string[],
+): Promise<boolean> {
+  const { assignmentDateStr } = getDailyAssignmentBounds();
+
+  const today = await getTodaysDailyQueue(userId);
+  if (today && asQueueSlots(today.slots).length > 0) return false;
+  if (today) {
+    await db.delete(dailyQueues).where(eq(dailyQueues.id, today.id));
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(dailyQueues)
+        .set({ queueDate: assignmentDateStr, slots })
+        .where(eq(dailyQueues.id, priorQueueId));
+      if (newGeneratedQuestionIds.length > 0) {
+        await tx
+          .update(generatedQuestions)
+          .set({ usedInQueue: true })
+          .where(inArray(generatedQuestions.id, newGeneratedQuestionIds));
+      }
+    });
+    return true;
+  } catch (error) {
+    // 23505: a today-row was created concurrently — let the caller fall through.
+    if (pgErrorCode(error) === '23505') return false;
+    throw error;
+  }
+}
+
+/**
  * If today's queue is a SHORT, UNTOUCHED set that was carried over from a prior
  * day, delete it so the caller can regenerate a fresh, full set. Returns true
  * when it cleared one.

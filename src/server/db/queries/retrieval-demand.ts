@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import { db, generatedQuestions } from '@/server/db';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
@@ -51,6 +51,36 @@ export async function getThinActiveDomains(opts: {
     .filter((row) => !isGenericSubcategory(row.domain))
     .sort((a, b) => a.depth - b.depth || b.lastActivity.getTime() - a.lastActivity.getTime())
     .slice(0, opts.limit);
+}
+
+// Durable machine-pool depth (distinct non-duplicate, fact-keyed rows) for a
+// specific set of domains, as a Map keyed by canonical_subcategory. Same depth
+// metric getThinActiveDomains derives demand from — reused by the narrow-KB
+// exhaustion guard (src/server/daily/kb-exhaustion.ts) so "thin" means the same
+// thing on both the grounding (supply) and the guard (suppress-fabrication)
+// side. Domains with no pooled facts are simply absent from the map (caller
+// treats a miss as depth 0).
+export async function getDurablePoolDepthForDomains(
+  domains: readonly string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (domains.length === 0) return result;
+
+  const rows = await db
+    .select({
+      domain: generatedQuestions.canonicalSubcategory,
+      depth: sql<number>`count(distinct ${generatedQuestions.factKey})`,
+    })
+    .from(generatedQuestions)
+    .where(and(
+      inArray(generatedQuestions.canonicalSubcategory, [...domains]),
+      eq(generatedQuestions.isDuplicate, false),
+      isNotNull(generatedQuestions.factKey),
+    ))
+    .groupBy(generatedQuestions.canonicalSubcategory);
+
+  for (const row of rows) result.set(row.domain, Number(row.depth));
+  return result;
 }
 
 // Existing pool facts for a domain, shaped as the avoid lists buildUserPrompt
