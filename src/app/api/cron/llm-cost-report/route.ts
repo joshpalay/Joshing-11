@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       surfaces: report.surfaces.length,
       anyUnpriced: report.anyUnpriced,
       emailed: email.ok,
+      emailSource: email.ok ? email.source : undefined,
       emailReason: email.ok ? undefined : email.reason,
     });
   } catch (error) {

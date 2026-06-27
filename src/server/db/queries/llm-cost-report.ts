@@ -13,9 +13,10 @@
  * already recorded. Cost is still derived at read time from pricing.ts, so a
  * price edit reprices history with no backfill.
  */
-import { and, desc, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 
-import { db, generatedQuestions, llmCostReport, llmUsageEvent, masteryEvents } from '@/server/db';
+import { adminUserIds } from '@/server/auth/admin';
+import { db, generatedQuestions, llmCostReport, llmUsageEvent, masteryEvents, users } from '@/server/db';
 import { estimateCostUsd } from '@/server/llm/pricing';
 
 // ─── Decision A: the surface taxonomy ────────────────────────────────────────
@@ -483,6 +484,43 @@ export async function writeCostReport(r: CostLatencyReport, markdown: string): P
     windowDays: r.windowDays,
     markdown,
   });
+}
+
+// ─── Email recipient resolution (Decision B3) ────────────────────────────────
+
+export type CostReportRecipient = {
+  to: string;
+  /** Where the address came from, for the cron's response + logs. */
+  source: 'env' | 'admin_verified' | 'admin_unverified';
+};
+
+/**
+ * Decide who the weekly digest emails to (the choice ratified for B3):
+ *   1. LLM_COST_REPORT_EMAIL if set — an explicit override always wins.
+ *   2. otherwise the email on the ADMIN_USER_IDS account — the same allowlist
+ *      that gates the readout — preferring a verified address over an unverified
+ *      one. No separate config needed for the common "email it to me" case.
+ *
+ * Returns null when nothing resolves (no override and no admin has an email on
+ * file), so the cron skips the send and still stores its digest.
+ */
+export async function resolveCostReportRecipient(): Promise<CostReportRecipient | null> {
+  const override = process.env.LLM_COST_REPORT_EMAIL?.trim();
+  if (override) return { to: override, source: 'env' };
+
+  const ids = adminUserIds();
+  if (ids.length === 0) return null;
+
+  const rows = await db
+    .select({ email: users.email, emailVerified: users.emailVerified })
+    .from(users)
+    .where(and(inArray(users.id, ids), isNotNull(users.email)))
+    // Prefer a verified address; among equals, the DB order is fine — one owner.
+    .orderBy(desc(users.emailVerified));
+
+  const row = rows.find((r) => r.email && r.email.trim());
+  if (!row?.email) return null;
+  return { to: row.email.trim(), source: row.emailVerified ? 'admin_verified' : 'admin_unverified' };
 }
 
 /** The most recently stored digest, or null if the cron has never run. */
