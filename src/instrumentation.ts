@@ -48,7 +48,22 @@ export async function register() {
     const fs = await import('fs');
     const crypto = await import('crypto');
 
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    // Bound how long a cold boot will wait on the DB. A degraded cold connection
+    // (observed: Supabase/PgBouncer EAUTHTIMEOUT / SQLSTATE 08006 at 17:05 UTC on
+    // 2026-06-26) otherwise stalls the very first connect for ~20 minutes, and the
+    // migrate() below inherits that stall — consuming the entire function budget
+    // before any request work runs (the daily-assignments cron was killed at its
+    // 300s maxDuration having built only ~6 of 17 users; D-NARROW-KB-FABRICATION-01).
+    // connectionTimeoutMillis makes a hung connect fail in seconds instead of
+    // minutes; it has no effect on a healthy connection. Override via
+    // BOOT_DB_CONNECT_TIMEOUT_MS (0/unset → 10s default).
+    const bootConnectTimeoutMs = Number(process.env.BOOT_DB_CONNECT_TIMEOUT_MS) > 0
+      ? Number(process.env.BOOT_DB_CONNECT_TIMEOUT_MS)
+      : 10_000;
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      connectionTimeoutMillis: bootConnectTimeoutMs,
+    });
     const db = drizzle(pool);
 
     // The idempotent guard blocks below pre-repair partially-recorded preview/
@@ -1690,14 +1705,44 @@ export async function register() {
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
     const migrateStartedAt = Date.now();
+    // Hard cap on migrate() so a stalled connection can't eat the whole function
+    // budget (D-NARROW-KB-FABRICATION-01). On timeout we ABANDON the migrate and
+    // let boot proceed: every migration through the head is journaled, so a
+    // healthy later boot (or the deploy step) applies them — a one-off cold-boot
+    // stall must not block request work. Override via BOOT_MIGRATE_TIMEOUT_MS
+    // (0/unset → 60s default).
+    const bootMigrateTimeoutMs = Number(process.env.BOOT_MIGRATE_TIMEOUT_MS) > 0
+      ? Number(process.env.BOOT_MIGRATE_TIMEOUT_MS)
+      : 60_000;
+    let migrateTimedOut = false;
+    let migrateTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await migrate(db, {
+      const migratePromise = migrate(db, {
         migrationsFolder: path.join(process.cwd(), 'drizzle'),
       });
+      // If we abandon this promise on timeout, its eventual rejection (the pool is
+      // ended below) must not surface as an unhandledRejection.
+      migratePromise.catch(() => {});
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        migrateTimer = setTimeout(() => {
+          migrateTimedOut = true;
+          reject(new Error(`boot migrate exceeded ${bootMigrateTimeoutMs}ms`));
+        }, bootMigrateTimeoutMs);
+        if (typeof migrateTimer.unref === 'function') migrateTimer.unref();
+      });
+      await Promise.race([migratePromise, timeoutPromise]);
     } catch (err) {
-      console.error('[instrumentation] DB migration failed — server will start but schema may be out of date:', err);
+      if (migrateTimedOut) {
+        console.error(
+          `[instrumentation] DB migration did not finish within ${bootMigrateTimeoutMs}ms — abandoning boot migrate so a cold-boot DB stall doesn't consume the request budget. Migrations are journaled and apply on a healthy boot/deploy.`,
+          err,
+        );
+      } else {
+        console.error('[instrumentation] DB migration failed — server will start but schema may be out of date:', err);
+      }
     } finally {
-      await pool.end();
+      if (migrateTimer) clearTimeout(migrateTimer);
+      await pool.end().catch(() => {});
     }
     // One line per cold boot. guards_ms is the latency the first request waits
     // behind when SKIP_BOOT_DB_GUARDS is unset; compare against migrate_ms to see

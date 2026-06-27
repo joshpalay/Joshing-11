@@ -77,23 +77,42 @@ Both questions soft-deleted (`deleted_at`); Butkicker's two `MASTERY_EVENTS` del
 were `incorrect`/0-points, so they never touched `PLAYER_MASTERY` (the aggregate only writes
 when `pointsAwarded > 0`) — a clean reversal, no recompute.
 
-## Related operational finding — daily-build cron under-coverage `[OPEN — not yet decided]`
+## Related operational finding — daily-build cron under-coverage `[fixed]`
 
 While verifying generation, the `/api/cron/daily-assignments` run (17:05 UTC, 2026-06-26)
 **did not complete**. Vercel runtime logs show a cold-boot DB connection failure
 (`EAUTHTIMEOUT`, SQLSTATE `08006`) that hung `migrate()` for **~20 minutes**
 (`[instrumentation boot] { migrate_ms: 1199143 }`, guards skipped per `SKIP_BOOT_DB_GUARDS=1`),
 consuming the function before user work began. It then built queues at ~50–78s/user (bank
-fall-throughs forcing live Sonnet, zero prompt-cache hits, zero top-up recovery, short
-queues) and was killed at the 300s `maxDuration` after covering **~6 of 17 onboarded users**
-(no result JSON emitted; one user `generation_failed` at 1/3 floor). Uncovered users fall
-onto the slow synchronous on-demand build = the observed **"long loading."** Contributing
-root causes, in priority order: (1) **unbounded `migrate()` at cold boot** (no timeout); (2)
-**per-user generation cost** (bank misses → live Sonnet, no cache) — which Lever B directly
-improves by raising bank hit rate; (3) **no cron retry** (the native Vercel cron fires once;
-the retired GitHub-Actions curl-with-retry used to replay on timeout). Fixes TBD — see the
-follow-up.
+fall-throughs forcing live Sonnet, zero top-up recovery, short queues) and was killed at the
+300s `maxDuration` after covering **~6 of 17 onboarded users** (no result JSON emitted; one
+user `generation_failed` at 1/3 floor). Uncovered users fall onto the slow synchronous
+on-demand build = the observed **"long loading."**
+
+Three fixes, all shipped:
+
+1. **Bound the cold-boot DB work** (`src/instrumentation.ts`). The boot `Pool` now sets
+   `connectionTimeoutMillis` (`BOOT_DB_CONNECT_TIMEOUT_MS`, 10s default) and `migrate()` is
+   raced against a timeout (`BOOT_MIGRATE_TIMEOUT_MS`, 60s default); on timeout the boot
+   abandons the migrate and proceeds (migrations are journaled and apply on a healthy
+   boot/deploy). A cold-boot DB stall can no longer eat the function budget.
+2. **Soft per-run deadline + clean result** (`daily-assignments/route.ts`). The run stops
+   STARTING new users at `DAILY_ASSIGNMENTS_BUDGET_MS` (250s default), reports the rest as
+   `deferred`, and logs `[cron/daily-assignments] run complete` so coverage is diagnosable
+   from logs instead of a silent mid-build kill.
+3. **Idempotent catch-up passes** (`vercel.json`). `daily-assignments` now runs at 17:05,
+   17:30, and 18:00 UTC. Later passes skip users whose queue already exists and mop up the
+   `deferred`/failed tail; the route was already replay-safe (SMS gated on `freshlyGenerated`,
+   email on an atomic per-queue claim). This is the "retry" the retired GitHub-Actions
+   curl-with-retry used to provide.
+
+The structural cost driver — bank fall-through forcing a live Sonnet call per slot — is NOT
+a caching gap (the generation call already caches its ~3–4k-token system prompt; the gate
+prompts are below the cache-eligibility floor). It is fixed by **Lever B (retrieval
+grounding)** raising bank hit rate, plus **Lever A (the guard)** cutting narrow-KB top-up
+churn. The intermittent `EAUTHTIMEOUT` itself (a Supabase/PgBouncer cold-connection issue)
+is a separate infra thread worth a connection-retry on the boot pool.
 
 (Note: crons were moved GitHub-Actions → native Vercel in `a72430b9`; `daily-assignments`
-*is* scheduled in `vercel.json` at 17:05 UTC. The route's in-file comment claiming GitHub
-Actions schedules it is **stale** and corrected in this change.)
+*is* scheduled in `vercel.json`. The route's in-file comment claiming GitHub Actions
+schedules it was **stale** and corrected.)

@@ -19,19 +19,24 @@ import { getRecentActivityForHome } from '@/server/db/queries/activity';
 import { createUnsubscribeToken } from '@/server/email/unsubscribe-token';
 
 export const dynamic = 'force-dynamic';
-// Scheduled at 17:05 UTC NATIVELY by vercel.json (the GitHub-Actions cron
-// workaround was retired in a72430b9 once the Vercel plan gained reliable crons;
-// the earlier 2026-05-30 note about a single scheduler is historical). Timed just
-// after the 17:00 UTC daily reset (DAILY_RESET_HOUR_UTC) so it pre-builds the
-// window users are about to play. The previous 06:00 UTC schedule built the
-// window that expired at 17:00 UTC and left the 17:00→06:00 UTC span uncovered,
-// forcing evening-US / APAC users onto the synchronous /api/daily/queue path.
+// Scheduled NATIVELY by vercel.json (the GitHub-Actions cron workaround was
+// retired in a72430b9 once the Vercel plan gained reliable crons; the earlier
+// 2026-05-30 note about a single scheduler is historical). Runs in THREE idempotent
+// passes — 17:05, 17:30, 18:00 UTC — all just after the 17:00 UTC daily reset
+// (DAILY_RESET_HOUR_UTC) so the window users are about to play is pre-built. The
+// first pass builds what it can within USER_BUDGET_MS; the later passes skip users
+// whose queue already exists and mop up any `deferred`/failed tail (SMS/email are
+// replay-safe — see the idempotency notes below). The previous single 06:00 UTC
+// schedule built the window that expired at 17:00 UTC and left the 17:00→06:00 UTC
+// span uncovered, forcing evening-US / APAC users onto the synchronous path.
 //
-// COVERAGE CAVEAT (audit 2026-06-26, D-NARROW-KB-FABRICATION-01): a cold-boot DB
-// connection timeout can hang migrate() for ~20 min (instrumentation boot),
-// blowing this function's 300s maxDuration before most users are built — leaving
-// the tail on the slow on-demand path. Per-user generation is also expensive when
-// the bank misses (live Sonnet per slot). See the decision doc for the open fix.
+// COVERAGE HISTORY (audit 2026-06-26, D-NARROW-KB-FABRICATION-01): a cold-boot DB
+// connection timeout once hung migrate() for ~20 min (instrumentation boot),
+// blowing this function's 300s maxDuration before most users were built. That is
+// now bounded in instrumentation.ts (BOOT_MIGRATE_TIMEOUT_MS); the soft USER_BUDGET_MS
+// deadline below + the catch-up passes cover the rest. Per-user generation is still
+// expensive when the bank misses (live Sonnet per slot) — retrieval grounding
+// (Lever B in the decision doc) is the structural fix for that.
 //
 // This fans out generation across every onboarded user at USER_CONCURRENCY,
 // each costing up to GENERATION_TIMEOUT_MS, so the default function budget is
@@ -42,6 +47,17 @@ export const maxDuration = 300;
 // Capped at 4 to stay one connection below the 5-cap DB pool. Tune down if
 // the SMS provider's per-second rate becomes the binding limit instead of DB.
 const USER_CONCURRENCY = 4;
+
+// Soft internal deadline, well under maxDuration (300s). When a run can't finish
+// every user in time (per-user builds run ~1 min when the bank misses), stop
+// STARTING new users at this mark and return a clean result JSON instead of being
+// hard-killed mid-build with no report. The users left unbuilt are reported as
+// `deferred` and picked up by the idempotent catch-up passes scheduled a few
+// minutes later in vercel.json (the route already skips users whose queue exists,
+// and SMS/email are replay-safe). See D-NARROW-KB-FABRICATION-01.
+const USER_BUDGET_MS = Number(process.env.DAILY_ASSIGNMENTS_BUDGET_MS) > 0
+  ? Number(process.env.DAILY_ASSIGNMENTS_BUDGET_MS)
+  : 250_000;
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
@@ -60,6 +76,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  const startedAt = Date.now();
   const baseUrl = getBaseUrl(request);
   const onboardedUsers = await db
     .select({
@@ -86,11 +103,20 @@ export async function GET(request: NextRequest) {
     failedNoKnowledgeBase: 0,
     failedGeneration: 0,
     failedOther: 0,
+    // Users not even attempted because the soft deadline was hit — a healthy,
+    // expected outcome on a large user base, mopped up by the next catch-up pass.
+    deferred: 0,
     smsSent: 0,
     emailSent: 0,
   };
 
   await runWithConcurrency(onboardedUsers, USER_CONCURRENCY, async (user) => {
+    // Stop starting new users once the soft budget is spent so the function
+    // returns its result JSON instead of being killed at maxDuration mid-build.
+    if (Date.now() - startedAt > USER_BUDGET_MS) {
+      results.deferred += 1;
+      return;
+    }
     try {
       let queue = await getTodaysDailyQueue(user.id);
       const existingSlots = queue ? asQueueSlots(queue.slots) : [];
@@ -204,6 +230,14 @@ export async function GET(request: NextRequest) {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  });
+
+  // Structured run summary so coverage/timeouts are diagnosable from logs alone
+  // (the function may still be killed before the caller reads the JSON body).
+  console.info('[cron/daily-assignments] run complete', {
+    ...results,
+    elapsed_ms: Date.now() - startedAt,
+    budget_ms: USER_BUDGET_MS,
   });
 
   return NextResponse.json(results);
