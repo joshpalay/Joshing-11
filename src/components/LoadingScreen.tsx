@@ -261,22 +261,22 @@ export default function LoadingScreen({
           // content centered — so the loader never resizes as items rotate
           // (B-LOADING-MOMENT-01, owner-approved bounded growth; centered overlay
           // ⇒ nothing on the page shifts). `line-clamp-3` guards an overlong stem.
-          <div className="relative mx-auto mt-4 flex h-24 max-w-[17rem] flex-col items-center justify-center text-center">
+          <div className="relative mx-auto mt-4 flex h-24 w-full max-w-[17rem] flex-col items-center justify-center text-center">
             <div
               key={index}
-              className={`flex flex-col items-center justify-center ${rotating ? "loading-message" : ""}`}
+              className={`flex w-full flex-col items-center justify-center ${rotating ? "loading-message" : ""}`}
             >
               {currentItem.kind === "moment" ? (
                 <>
-                  <p className="font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
+                  <p className="w-full font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
                     {currentItem.moment.label}
                   </p>
-                  <p className="mt-1.5 line-clamp-3 font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
+                  <p className="mt-1.5 line-clamp-3 w-full break-words font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
                     {currentItem.moment.artifact}
                   </p>
                 </>
               ) : (
-                <p className="font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
+                <p className="w-full font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
                   {currentItem.text}
                 </p>
               )}
