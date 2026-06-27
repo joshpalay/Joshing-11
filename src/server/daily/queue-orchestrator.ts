@@ -4,9 +4,11 @@ import {
   buildHouseSlot,
   buildPresenceSlot,
   carryForwardUntouchedDailyQueue,
+  carryForwardQueueWithSlots,
   clearStaleShortTodayQueue,
   countDailyQueues,
   getKnowledgeBase,
+  getPriorInWindowDailyQueue,
   getTodaysDailyQueue,
   persistDailyQueue,
   pickEligibleAuthoredQuestions,
@@ -160,6 +162,118 @@ const overRequest = (needed: number) =>
 // build for its whole duration would starve that pool.
 const inFlightFills = new Map<string, Promise<void>>();
 
+function isDailyTopUpCarryForwardEnabled(): boolean {
+  const raw = process.env.DAILY_TOPUP_CARRYFORWARD_ENABLED?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+const normalizeQueueText = (text: string) => text.trim().toLowerCase();
+
+/**
+ * Pure: merge a prior queue's carried (unplayed) slots with freshly generated
+ * top-up questions into a single re-indexed slot array, capped at DAILY_QUEUE_SIZE.
+ * Carried slots come first (the user resumes where they left off) and are re-indexed
+ * from 0; fresh questions fill the remainder, skipping generics and any whose text
+ * duplicates a carried slot. Returns the merged slots plus the ids of the fresh
+ * questions actually placed (to flag usedInQueue). Exported for unit tests.
+ */
+export function mergeCarriedWithFresh(
+  carried: QueueSlot[],
+  fresh: GeneratedQuestionRow[],
+): { merged: QueueSlot[]; newGeneratedIds: string[] } {
+  const seen = new Set(carried.map((slot) => normalizeQueueText(slot.question_text)));
+  const merged: QueueSlot[] = carried
+    .slice(0, DAILY_QUEUE_SIZE)
+    .map((slot, index) => ({ ...slot, slot_index: index }));
+  const newGeneratedIds: string[] = [];
+  for (const question of fresh) {
+    if (merged.length >= DAILY_QUEUE_SIZE) break;
+    if (isGenericSubcategory(question.canonicalSubcategory)) continue;
+    const key = normalizeQueueText(question.questionText);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(buildBotSlot(question, merged.length));
+    newGeneratedIds.push(question.id);
+  }
+  return { merged, newGeneratedIds };
+}
+
+/**
+ * Top-up carry-forward — "don't regenerate when unplayed questions remain."
+ *
+ * carryForwardUntouchedDailyQueue only re-dates a FULL, completely untouched prior
+ * queue. A PARTIAL (some answered/skipped) or SHORT (<5) prior queue otherwise
+ * falls through to a fresh full regeneration EVERY day, re-billing the LLM and
+ * discarding the questions the user never played. Instead (flag-gated), keep the
+ * prior queue's UNPLAYED slots and generate only enough fresh questions to refill
+ * to DAILY_QUEUE_SIZE, then land the merged set on today's date IN PLACE via
+ * carryForwardQueueWithSlots (so the carried questions move out of catch-up rather
+ * than double-surfacing). Returns true when it built today's queue (caller returns
+ * early). Composes with the narrow-KB guard: for a tapped-out thin domain the guard
+ * makes generation return nothing, so this simply carries the unplayed set forward
+ * at zero LLM cost. Default OFF; fail-open (any error → false → normal fresh build).
+ */
+async function topUpAndCarryForwardPartialQueue(userId: string): Promise<boolean> {
+  if (!isDailyTopUpCarryForwardEnabled()) return false;
+  try {
+    const prior = await getPriorInWindowDailyQueue(userId);
+    if (!prior) return false;
+
+    const unplayed = asQueueSlots(prior.slots).filter(
+      (slot) => !slot.answered && !slot.skipped,
+    );
+    // Nothing left to preserve → let it regenerate a fresh Five (engaged user who
+    // finished their set). Full untouched queues are carryForwardUntouchedDailyQueue's
+    // job and never reach here (it returns first).
+    if (unplayed.length === 0) return false;
+
+    // Carry at most a full Five of unplayed slots; top up only the shortfall. A
+    // partial queue with >= DAILY_QUEUE_SIZE unplayed (e.g. bonus slots) needs no
+    // generation at all.
+    const carried = unplayed.slice(0, DAILY_QUEUE_SIZE);
+    const needed = DAILY_QUEUE_SIZE - carried.length;
+
+    let fresh: GeneratedQuestionRow[] = [];
+    if (needed > 0) {
+      try {
+        fresh = await generateDailyQuestionsFromKnowledgeBase(userId, overRequest(needed), {
+          firstRun: false,
+        });
+      } catch (error) {
+        console.warn('[daily/queue-orchestrator] top-up generation failed; falling back to fresh build', {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    }
+
+    const { merged, newGeneratedIds } = mergeCarriedWithFresh(carried, fresh);
+
+    // Only commit a queue at or above the usable floor. If we couldn't reach it
+    // (tiny carried set + a tapped-out KB that produced nothing), fall through to
+    // the normal build so its graceful-degrade / generation_failed path decides.
+    if (merged.length < DAILY_QUEUE_MIN_SIZE) return false;
+
+    const built = await carryForwardQueueWithSlots(userId, prior.id, merged, newGeneratedIds);
+    if (built) {
+      console.info('[daily/queue-orchestrator] topped up carried-forward partial queue', {
+        userId,
+        carried: carried.length,
+        added: newGeneratedIds.length,
+        total: merged.length,
+      });
+    }
+    return built;
+  } catch (error) {
+    console.warn('[daily/queue-orchestrator] top-up carry-forward failed; falling back to fresh build', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 export function fillDailyQueueForUser(userId: string): Promise<void> {
   const inFlight = inFlightFills.get(userId);
   if (inFlight) return inFlight;
@@ -206,6 +320,13 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
   // still sitting unplayed; re-dating it gives them the same five at zero cost.
   // A played prior queue is left alone, so engaged users still get a fresh set.
   if (await carryForwardUntouchedDailyQueue(userId)) return;
+
+  // Before billing a full fresh build, top-up-carry-forward a PARTIAL/SHORT prior
+  // unplayed queue: keep the unplayed questions, generate only the shortfall to
+  // refill to five. carryForwardUntouchedDailyQueue above only handles a fully
+  // untouched set; this covers "they played some / got a short set yesterday but
+  // still have unplayed questions — don't regenerate from scratch" (flag-gated).
+  if (await topUpAndCarryForwardPartialQueue(userId)) return;
 
   const [knowledgeBase, preferences] = await Promise.all([
     getKnowledgeBase(userId),

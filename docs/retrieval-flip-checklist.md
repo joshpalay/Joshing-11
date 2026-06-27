@@ -37,8 +37,22 @@ If thin+active domains and frequent fall-throughs show up in those numbers, flip
       `RETRIEVAL_DAILY_USD_CEILING` ($2 hard stop), `RETRIEVAL_MAX_SEARCHES_PER_QUESTION`
       (3), `RETRIEVAL_QUESTIONS_PER_DOMAIN` (3), `RETRIEVAL_POOL_DEPTH_THRESHOLD` (8),
       `RETRIEVAL_MAX_DOMAINS_PER_RUN` (50).
+- [ ] **Set `NARROW_KB_GUARD_ENABLED=true` in the SAME flip** (audit: niche-fiction
+      fabrication, 2026-06-26). The narrow-KB exhaustion guard
+      (`src/server/daily/kb-exhaustion.ts`) stops the per-user generator from fabricating
+      ungrounded novelty for declared-interest domains whose durable pool is still thin
+      (depth `< RETRIEVAL_POOL_DEPTH_THRESHOLD` — the SAME boundary as grounding's
+      thinness). It is the demand side of the same coin: the guard hands a thin niche
+      domain to grounded refill instead of inventing false canon for it. **Flip it
+      WITH grounding, not before** — enabling the guard while grounding is off suppresses
+      fresh questions for thin narrow domains with nothing yet refilling them (they fall
+      back to bank/authored + other-domain backfill, and a single-interest user can get a
+      short Five until the pool deepens). Default OFF; off behavior is exactly as before.
 - [ ] Dry-run first: `runPoolRefill({ dryRun: true })` previews demand and names any
-      remaining blocker without spending.
+      remaining blocker without spending. From a deployed env:
+      `GET /api/cron/pool-refill?dryRun=1` (cron-authorized) returns the same report JSON —
+      check `domainsConsidered` lists the thin niche domains and projected `usdSpent` sits
+      under the ceiling before flipping.
 
 ## After the flip
 
