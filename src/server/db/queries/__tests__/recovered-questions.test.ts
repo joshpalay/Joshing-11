@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// D-REVIEW-RECOVERED-01 — wiring test for the recovered-questions pool.
+// D-REVIEW-RECOVERED-01 — wiring test for the recovered-questions readers.
 //
 // We mock drizzle as inert node-builders and capture the WHERE / ORDER BY the
-// reader constructs, then assert the exact pool definition (Done-When #1):
+// readers construct, then assert the exact pool definition (Done-When #1):
 //   answer_state = 'first_correct_after_wrong' + question_id IS NOT NULL,
 //   ordered created_at DESC.
 //
-// It also guards the read-only contract (Done-When #3): the db mock exposes
-// insert/update/delete that throw, so any write attempt on this surface fails
-// the test loudly. The pool is built with SELECT and nothing else.
+// It also guards the read-only contract: the db mock exposes
+// insert/update/delete that throw, so any write attempt on these readers fails
+// the test loudly. The pool — and the gradable-question membership load — are
+// built with SELECT and nothing else.
 interface Node {
   op: string;
   column?: unknown;
@@ -21,6 +22,7 @@ interface Node {
 let capturedWhere: Node | null = null;
 let capturedOrderBy: Node | null = null;
 let selectCalls = 0;
+let limitResult: unknown[] = [];
 
 vi.mock('drizzle-orm', () => ({
   and: vi.fn((...parts: Node[]) => ({ op: 'and', parts })),
@@ -42,6 +44,7 @@ vi.mock('@/server/db', () => {
     capturedOrderBy = order;
     return Promise.resolve([]);
   });
+  chain.limit = vi.fn(() => Promise.resolve(limitResult));
   const fail = (op: string) =>
     vi.fn(() => {
       throw new Error(`read-only surface attempted a ${op}`);
@@ -68,14 +71,22 @@ vi.mock('@/server/db', () => {
       id: 'q.id',
       questionText: 'q.questionText',
       answerText: 'q.answerText',
+      acceptedAlternatives: 'q.acceptedAlternatives',
+      questionType: 'q.questionType',
+      explainerFull: 'q.explainerFull',
+      explainerBrief: 'q.explainerBrief',
       factualExplanation: 'q.factualExplanation',
+      creatorNote: 'q.creatorNote',
       canonicalSubcategory: 'q.canonicalSubcategory',
       category: 'q.category',
     },
   };
 });
 
-import { getRecoveredQuestionsForUser } from '@/server/db/queries/recovered-questions';
+import {
+  getRecoveredGradingQuestion,
+  getRecoveredQuestionsForUser,
+} from '@/server/db/queries/recovered-questions';
 
 function flatten(node: Node | null): Node[] {
   if (!node) return [];
@@ -89,6 +100,7 @@ beforeEach(() => {
   capturedWhere = null;
   capturedOrderBy = null;
   selectCalls = 0;
+  limitResult = [];
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -112,9 +124,7 @@ describe('getRecoveredQuestionsForUser — pool definition', () => {
 
   it('scopes to the viewer', async () => {
     await getRecoveredQuestionsForUser(VIEWER);
-    const match = flatten(capturedWhere).find(
-      (n) => n.op === 'eq' && n.column === 'me.userId',
-    );
+    const match = flatten(capturedWhere).find((n) => n.op === 'eq' && n.column === 'me.userId');
     expect(match).toBeDefined();
     expect(match!.value).toBe(VIEWER);
   });
@@ -127,5 +137,48 @@ describe('getRecoveredQuestionsForUser — pool definition', () => {
   it('reads with SELECT only — no insert/update/delete on this surface', async () => {
     await expect(getRecoveredQuestionsForUser(VIEWER)).resolves.toEqual([]);
     expect(selectCalls).toBe(1);
+  });
+});
+
+describe('getRecoveredGradingQuestion — pool-membership guard', () => {
+  it('filters by viewer + recovered state + the specific question id', async () => {
+    await getRecoveredGradingQuestion(VIEWER, 'q-7');
+    const flat = flatten(capturedWhere);
+    expect(flat.find((n) => n.op === 'eq' && n.column === 'me.userId')?.value).toBe(VIEWER);
+    expect(flat.find((n) => n.op === 'eq' && n.column === 'me.answerState')?.value).toBe(
+      'first_correct_after_wrong',
+    );
+    expect(flat.find((n) => n.op === 'eq' && n.column === 'me.questionId')?.value).toBe('q-7');
+  });
+
+  it('returns null when the question is not in the viewer pool', async () => {
+    limitResult = [];
+    await expect(getRecoveredGradingQuestion(VIEWER, 'q-missing')).resolves.toBeNull();
+  });
+
+  it('maps the gradable fields when the question is in the pool', async () => {
+    limitResult = [
+      {
+        questionId: 'q-7',
+        questionText: 'Who wrote the Storia d’Italia?',
+        answerText: 'Francesco Guicciardini',
+        acceptedAlternatives: ['Guicciardini'],
+        questionType: 'factual',
+        explainerFull: 'Full explainer.',
+        explainerBrief: 'Brief.',
+        factualExplanation: 'Fact.',
+        creatorNote: null,
+      },
+    ];
+    const result = await getRecoveredGradingQuestion(VIEWER, 'q-7');
+    expect(result).toEqual({
+      questionId: 'q-7',
+      questionText: 'Who wrote the Storia d’Italia?',
+      answerText: 'Francesco Guicciardini',
+      acceptedAlternatives: ['Guicciardini'],
+      questionType: 'factual',
+      explanation: 'Full explainer.',
+      creatorNote: null,
+    });
   });
 });
