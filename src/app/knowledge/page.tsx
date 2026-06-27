@@ -8,7 +8,9 @@ import { Skeleton } from '@/components/ui/Skeleton';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
 import { PortraitCircles, type PortraitEntry } from '@/components/knowledge/PortraitCircles';
+import { SharePortraitCard } from '@/components/knowledge/SharePortraitCard';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
+import { useSharePortraitCapture } from '@/components/knowledge/useSharePortraitCapture';
 import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/RecentlyExpanding';
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
@@ -305,6 +307,39 @@ function KnowledgePageContent() {
   const displayName = 'You';
   const hasAnything = annotatedDomains.length > 0;
 
+  // Share payload for the Knowledge Portrait card, shared by the off-screen
+  // capture card, the direct-share handler, and the modal fallback.
+  const shareDomains = useMemo(
+    () =>
+      topCardDomains.map((domain) => ({
+        canonicalSubcategory: domain.displayName,
+        currentTier: asTier(domain.tier),
+        lifetimePoints: domain.points,
+        iconKey: domain.iconKey,
+        broadCategory: domain.broadCategory,
+      })),
+    [topCardDomains],
+  );
+  const shareOverflowCount = Math.max(
+    0,
+    visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length,
+  );
+  const shareTierSignature = data
+    ? `${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`
+    : '';
+
+  // Pre-capture the portrait image in the background so the card's Share button
+  // can hand it straight to the native share sheet — no intermediate preview.
+  const { cardRef: portraitCardRef, shareNow: sharePortraitNow } = useSharePortraitCapture(
+    topCardDomains.length > 0,
+  );
+  const handlePortraitShare = () => {
+    // Common case: the image is ready, so share it directly. If the user taps
+    // before the background capture finishes, fall back to the preview modal
+    // (which captures on its own mount) rather than failing silently.
+    if (!sharePortraitNow()) setShareModalOpen(true);
+  };
+
   const toggleDomainHidden = async (canonicalSubcategory: string, nextHidden: boolean) => {
     setHideError(null);
     setHidePending(canonicalSubcategory);
@@ -582,8 +617,8 @@ function KnowledgePageContent() {
             iconKey: domain.iconKey,
             broadCategory: domain.broadCategory,
           }))}
-          overflowCount={Math.max(0, visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
-          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`}
+          overflowCount={shareOverflowCount}
+          tierSignature={shareTierSignature}
           rarestTerritory={null}
           rarestTerritorySolo={false}
           shareText={`My Joshing knowledge portrait: ${topCardDomains.map((domain) => domain.displayName).join(', ')}`}
@@ -591,7 +626,7 @@ function KnowledgePageContent() {
           shareCardExpiresAt=""
           readOnly
           highlightedSlug={activeSlug}
-          onShareClick={() => setShareModalOpen(true)}
+          onShareClick={handlePortraitShare}
         />
       )}
 
@@ -694,19 +729,28 @@ function KnowledgePageContent() {
         </button>
       </section>
 
+      {/* Off-screen portrait card, snapshotted in the background so the card's
+          Share button can fire the native share sheet without a preview step. */}
+      {topCardDomains.length > 0 ? (
+        <div aria-hidden="true" style={{ position: 'fixed', left: -10000, top: 0, pointerEvents: 'none' }}>
+          <SharePortraitCard
+            ref={portraitCardRef}
+            playerDisplayName={displayName}
+            portraitStatement={yourMind}
+            domains={shareDomains}
+            overflowCount={shareOverflowCount}
+            tierSignature={shareTierSignature}
+          />
+        </div>
+      ) : null}
+
       {shareModalOpen && (
         <SharePortraitModal
           playerDisplayName={displayName}
           portraitStatement={yourMind}
-          domains={topCardDomains.map((domain) => ({
-            canonicalSubcategory: domain.displayName,
-            currentTier: asTier(domain.tier),
-            lifetimePoints: domain.points,
-            iconKey: domain.iconKey,
-            broadCategory: domain.broadCategory,
-          }))}
-          overflowCount={Math.max(0, visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length)}
-          tierSignature={`${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`}
+          domains={shareDomains}
+          overflowCount={shareOverflowCount}
+          tierSignature={shareTierSignature}
           onClose={() => setShareModalOpen(false)}
         />
       )}
