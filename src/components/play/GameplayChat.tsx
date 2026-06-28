@@ -73,6 +73,13 @@ export type ChatMessage =
        * render no marker (e.g. non-Daily-Five surfaces).
        */
       numberMarker?: { value: number; bonus: boolean } | null;
+      /**
+       * Catch-up dismiss: set true while the dismiss call is in flight so the
+       * card collapses (shrinks) in place before it is swapped for the
+       * left-aligned "Removed … from catch up · Undo" notice. Optimistic and
+       * transient — never persisted, cleared if the dismiss fails.
+       */
+      dismissing?: boolean;
     }
   | { id: string; kind: 'dismiss_notice'; questionText: string; onUndo: () => Promise<void> }
   | { id: string; kind: 'user'; text: string }
@@ -367,6 +374,7 @@ function QuestionRow({
   presenceSourceExtraCount = 0,
   isNew = false,
   numberMarker = null,
+  dismissing = false,
   onGiveUp,
   giveUpDisabled = false,
   onDismiss,
@@ -376,6 +384,7 @@ function QuestionRow({
 }: {
   subhead?: string | null;
   numberMarker?: { value: number; bonus: boolean } | null;
+  dismissing?: boolean;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
   creatorName: string | null;
@@ -406,13 +415,32 @@ function QuestionRow({
 
   return (
     <div
-      className="flex flex-col gap-0.5"
-      style={
-        isNew
-          ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }
-          : undefined
-      }
+      style={{
+        // Catch-up dismiss collapse: animate the whole card (number marker +
+        // question) shrinking to zero height before it is swapped for the
+        // left-aligned "Removed … from catch up · Undo" notice. grid-rows
+        // 1fr → 0fr animates height with no measured pixel value (max-height
+        // can't transition from `auto`); opacity + a slight scale toward the
+        // top-left make it read as shrinking *into* the notice that replaces it.
+        display: 'grid',
+        gridTemplateRows: dismissing ? '0fr' : '1fr',
+        opacity: dismissing ? 0 : 1,
+        transform: dismissing ? 'scale(0.97)' : undefined,
+        transformOrigin: 'top left',
+        transition: 'grid-template-rows 0.3s ease, opacity 0.25s ease, transform 0.3s ease',
+        pointerEvents: dismissing ? 'none' : undefined,
+      }}
     >
+      <div
+        className="flex flex-col gap-0.5"
+        style={{
+          minHeight: 0,
+          // Visible normally so the card/marker drop shadows aren't clipped; clip
+          // only while collapsing so the grid-row shrink actually hides content.
+          overflow: dismissing ? 'hidden' : 'visible',
+          ...(isNew ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' } : {}),
+        }}
+      >
       {numberMarker ? (
         // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: editorial number marker in the
         // gutter above the card — left-aligned, ~6px inset, ~10px gap to the
@@ -658,6 +686,7 @@ function QuestionRow({
           ) : null}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
@@ -1522,6 +1551,7 @@ export function GameplayChatThread({
                 isNew={m.isNew}
                 subhead={m.subhead}
                 numberMarker={m.numberMarker}
+                dismissing={m.dismissing}
                 badges={m.badges}
                 onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
                 giveUpDisabled={giveUpDisabled}
