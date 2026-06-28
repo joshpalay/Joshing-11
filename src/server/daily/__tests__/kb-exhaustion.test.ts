@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  isAreaExpansionParentOverflowEnabled,
   isAreaExpansionThinnessTriggerEnabled,
   isNarrowKbGuardEnabled,
   narrowKbThinnessThreshold,
+  selectOverflowParents,
   selectThinnestEligibleArea,
   selectUngroundedExcludedDomains,
   type DomainGuardInput,
@@ -13,6 +15,7 @@ const GUARD_VARS = [
   'NARROW_KB_GUARD_ENABLED',
   'RETRIEVAL_POOL_DEPTH_THRESHOLD',
   'AREA_EXPANSION_THINNESS_TRIGGER_ENABLED',
+  'AREA_EXPANSION_PARENT_OVERFLOW_ENABLED',
 ] as const;
 const saved: Record<string, string | undefined> = {};
 for (const v of GUARD_VARS) saved[v] = process.env[v];
@@ -122,6 +125,47 @@ describe('selectThinnestEligibleArea', () => {
   });
 });
 
+describe('selectOverflowParents', () => {
+  const held = (...domains: string[]) => {
+    const set = new Set(domains);
+    return (d: string) => set.has(d);
+  };
+  const served = (...domains: string[]) => {
+    const set = new Set(domains);
+    return (d: string) => set.has(d);
+  };
+
+  it('routes a held parent that is not already being served', () => {
+    expect(
+      selectOverflowParents(['Moral Philosophy'], held('Moral Philosophy'), served()),
+    ).toEqual(['Moral Philosophy']);
+  });
+
+  it('skips a parent the user does not hold as a territory', () => {
+    expect(selectOverflowParents(['Moral Philosophy'], held(), served())).toEqual([]);
+  });
+
+  it('skips a parent already served this round (bank-filled or in the palette)', () => {
+    expect(
+      selectOverflowParents(
+        ['Moral Philosophy'],
+        held('Moral Philosophy'),
+        served('Moral Philosophy'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('de-dupes when two thin children share one parent', () => {
+    expect(
+      selectOverflowParents(
+        ['Moral Philosophy', 'Moral Philosophy'],
+        held('Moral Philosophy'),
+        served(),
+      ),
+    ).toEqual(['Moral Philosophy']);
+  });
+});
+
 describe('area-expansion thinness trigger config', () => {
   it('defaults the thinness trigger OFF', () => {
     delete process.env.AREA_EXPANSION_THINNESS_TRIGGER_ENABLED;
@@ -132,6 +176,15 @@ describe('area-expansion thinness trigger config', () => {
     for (const truthy of ['true', '1', 'yes', 'on']) {
       process.env.AREA_EXPANSION_THINNESS_TRIGGER_ENABLED = truthy;
       expect(isAreaExpansionThinnessTriggerEnabled()).toBe(true);
+    }
+  });
+
+  it('defaults the parent-overflow trigger OFF and honors truthy spellings', () => {
+    delete process.env.AREA_EXPANSION_PARENT_OVERFLOW_ENABLED;
+    expect(isAreaExpansionParentOverflowEnabled()).toBe(false);
+    for (const truthy of ['true', '1', 'yes', 'on']) {
+      process.env.AREA_EXPANSION_PARENT_OVERFLOW_ENABLED = truthy;
+      expect(isAreaExpansionParentOverflowEnabled()).toBe(true);
     }
   });
 });

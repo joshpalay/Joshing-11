@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { activityItems, db, masteryEvents, playerMastery, questions } from '@/server/db';
 import type { ActivityItemType } from '@/server/activity/write-activity';
@@ -227,4 +227,40 @@ export async function recordAreaExpansion(params: {
     });
     return { recorded: false };
   }
+}
+
+/**
+ * Resolve the expansion PARENT for each of the given child areas — the inverse of
+ * recordAreaExpansion's write (B-AREA-EXPANSION-01, Phase 5). Returns a Map of
+ * child domain → parent domain for children that were expanded (Pride → Moral
+ * Philosophy). The parent-overflow path reads this to route a thin child's slot to
+ * its parent. Most-recent expansion wins if a child was expanded more than once.
+ *
+ * Reads all of the user's 'expansion' events (few per user) and filters in JS,
+ * avoiding a jsonb-in-array predicate. Returns an empty map on no input.
+ */
+export async function getExpansionParents(
+  userId: string,
+  childDomains: readonly string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (childDomains.length === 0) return result;
+
+  const wanted = new Set(childDomains);
+  const rows = await db
+    .select({
+      parent: masteryEvents.canonicalSubcategory,
+      metadata: masteryEvents.metadata,
+    })
+    .from(masteryEvents)
+    .where(and(eq(masteryEvents.userId, userId), eq(masteryEvents.sourceType, 'expansion')))
+    .orderBy(desc(masteryEvents.createdAt));
+
+  for (const row of rows) {
+    const child = (row.metadata as { expandedFrom?: unknown } | null)?.expandedFrom;
+    if (typeof child === 'string' && wanted.has(child) && row.parent && !result.has(child)) {
+      result.set(child, row.parent);
+    }
+  }
+  return result;
 }

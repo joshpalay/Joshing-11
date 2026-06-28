@@ -61,6 +61,19 @@ export function isAreaExpansionThinnessTriggerEnabled(): boolean {
 }
 
 /**
+ * Whether an exhausted ("thin") child area whose slot the guard suppressed should
+ * hand that slot UP to its recorded expansion parent (B-AREA-EXPANSION-01, Phase
+ * 5 / R4) — e.g. a tapped-out "Pride" draws from "Moral Philosophy" instead of
+ * the orchestrator backfilling from unrelated domains. Off by default and only
+ * meaningful when the narrow-KB guard is on (it refines what the guard does with
+ * a suppressed domain). Kept dark so it can be flipped alongside the guard /
+ * retrieval grounding rather than silently changing generation.
+ */
+export function isAreaExpansionParentOverflowEnabled(): boolean {
+  return boolEnv('AREA_EXPANSION_PARENT_OVERFLOW_ENABLED', false);
+}
+
+/**
  * The pool depth (distinct durable facts) below which a domain counts as "thin".
  * Shared verbatim with grounding's poolDepthThreshold so the guard hands a domain
  * to grounded refill at exactly the boundary grounding considers it thin.
@@ -96,6 +109,29 @@ export function selectUngroundedExcludedDomains(
     }
   }
   return excluded;
+}
+
+/**
+ * Pure. Given the expansion parents of suppressed thin children, return the
+ * distinct parents to route their freed slots to (B-AREA-EXPANSION-01, Phase 5).
+ * A parent qualifies only if the user actually holds it as a territory (so the
+ * generator has territory/strength context for it) and it isn't already being
+ * served this round (bank-filled or already in the palette). First-seen order,
+ * de-duped.
+ */
+export function selectOverflowParents(
+  parents: Iterable<string>,
+  isHeldTerritory: (domain: string) => boolean,
+  isAlreadyServed: (domain: string) => boolean,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const parent of parents) {
+    if (seen.has(parent) || !isHeldTerritory(parent) || isAlreadyServed(parent)) continue;
+    seen.add(parent);
+    out.push(parent);
+  }
+  return out;
 }
 
 export type ThinAreaCandidate = { domain: string; poolDepth: number };
