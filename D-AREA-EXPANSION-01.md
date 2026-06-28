@@ -1,6 +1,6 @@
 # D-AREA-EXPANSION-01 — Area Expansion as a Game-End Reward
 
-**Status:** SETTLED — decisions A–E ratified 2026-06-28 to the recommended defaults (**A3 + B2 + C1 + D2 + E1**). §2 "what exists" claims verified against the live repo on the same date. Ready for `B-AREA-EXPANSION-01`.
+**Status:** SETTLED — decisions A–E ratified 2026-06-28 (**A3 + B2 + ~~C1~~ + ~~D2~~ + E1**). **Amended same day by the §9 ratification addendum** (R1–R4 + surface), which **supersedes C1, D2, S3, and §6** after a code read surfaced an existing expansion surface the original draft didn't know about. Read §9 — it governs the build. §2 claims verified against the live repo. Ready for `B-AREA-EXPANSION-01`.
 **Author:** Claude (with Josh)
 **Supersedes / relates to:** narrow-KB exhaustion guard (`src/server/daily/kb-exhaustion.ts`), domain reconciliation (`src/lib/questions/categorization.ts`), game-end recap (`src/server/games/first-game-recap.ts`, `src/components/games/game-details-mode-sections.tsx`).
 
@@ -165,4 +165,26 @@ Recorded here so the build inherits testable gates, not prose:
 | D | Provenance value for the write | **D2** — new `via: 'expansion'` (TS-only union, no migration), records source area |
 | E | What happens to the original area? | **E1** — kept; broader area opens alongside (additive) |
 
-Ratified 2026-06-28. **Next artifact: `B-AREA-EXPANSION-01`** — with read-first symbol verification (`openKBDomain` signature, `via` union type, `CompletedRecapHeader` props, thinness threshold source — all confirmed in §2 above), staged phases with approval gates, and the §7 done-when as grep-checkable criteria.
+Ratified 2026-06-28. **Next artifact: `B-AREA-EXPANSION-01`** — see §9 below for the amendments that govern it.
+
+---
+
+## 9. Ratification addendum (2026-06-28) — prior art reconciliation (R1–R4 + surface)
+
+Authoring `B-AREA-EXPANSION-01` triggered a code read that found a **complete expansion-offer feature already shipping**, which §2 did not account for:
+
+- **Card:** `ExpandDomainOfferCard` — rendered **inline inside the daily-summary page** (`src/app/daily/summary/page.tsx:220`), *not* a separate page. The standalone-looking view is the dev preview only (`/daily/summary/expand-preview`).
+- **Builder:** `buildExpansionOffer()` (`src/server/db/queries/daily-summary.ts:366`) → `suggestAdjacentDomains()` proposes **lateral/sibling** candidates (Haiku).
+- **Write:** `POST /api/daily/expand-domains` → **`addDeclaredInterest`**, whose chokepoint `upsertDeclaredInterestRow` (`src/server/db/queries/users.ts:171`) already writes **both** the `declaredInterests` row (enters rotation) **and** a `playerMastery` row with `territoryType: 'declared'` (`users.ts:214`).
+- **Stamp:** `markDomainExpansionOffered` / `expansionOfferedAt` resolves the offer once per source domain.
+
+This is a *different* feature sharing the name "expansion." Reconciled with Josh:
+
+| ID | Question | Decision | Effect on §1–8 |
+|---|---|---|---|
+| **R1** | Candidate direction | **Broader** (parent). Pride → Moral Philosophy. Add a new `suggestBroaderDomains` next to `suggestAdjacentDomains`; curated virtues/vices→parent map first (B2), one-level-up Haiku fallback. | Confirms B2 direction. |
+| **R3** | One feature or two | **Combine into ONE offer carrying both *wider* (existing siblings) and *broader* (new parent) candidates, surfaced on the existing daily-summary card.** | **Supersedes C1 and S3.** No `CompletedRecapHeader` chooser is built; the daily summary *is* the game-end recap that hosts this. |
+| **R2** | Write target | **Both** — rotation row **and** declared portrait row. Achieved by **reusing `addDeclaredInterest`** (the mandated single chokepoint), which already writes both. | **Supersedes D2.** Do **not** add `via: 'expansion'` to `openKBDomain`; do **not** route the write through it (that bypasses the chokepoint and never enters rotation). |
+| **R4** | Original area / overflow | **E1 stands (additive — keep Pride).** *Plus* the parent becomes the **overflow reservoir**: when Pride is exhausted mid-game, serve **Moral Philosophy** questions instead of unrelated backfill. **In scope for this build.** | **Supersedes §6's "backfill stays as-is."** Requires recording the Pride→Moral Philosophy link (a `masteryEvents` row, new `'expansion'` value in `masterySourceTypeEnum` — a real **migration**) and consuming it in the narrow-KB backfill / retrieval path. |
+
+**Net supersessions:** C1, D2, S3, and §6 are replaced by the rows above. A3, B2 (direction), and E1 stand. Provenance honesty (the §3 guardrail) is now carried by the `masteryEvents` `'expansion'` record (R4), not by a `via` value (R2 dropped D2).
