@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isCronAuthorized } from '@/server/auth/cron';
-import { getDomainFragmentationCandidates } from '@/server/db/queries/domain-fragmentation';
+import {
+  getDomainFragmentationCandidates,
+  getNarrowlyServedDomains,
+} from '@/server/db/queries/domain-fragmentation';
 import { resolveCostReportRecipient } from '@/server/db/queries/llm-cost-report';
 import { sendEmail } from '@/server/email/client';
 import { buildDomainFragmentationEmailTemplate } from '@/server/email/templates/domain-fragmentation';
@@ -21,22 +24,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const pairs = await getDomainFragmentationCandidates();
+    const [pairs, narrowDomains] = await Promise.all([
+      getDomainFragmentationCandidates(),
+      getNarrowlyServedDomains(),
+    ]);
+    const total = pairs.length + narrowDomains.length;
 
-    if (pairs.length === 0) {
-      console.info('[domain-fragmentation-report] no candidates above threshold; skipping email');
-      return NextResponse.json({ candidates: 0, emailed: false, reason: 'no_candidates' });
+    if (total === 0) {
+      console.info('[domain-fragmentation-report] nothing above threshold; skipping email');
+      return NextResponse.json({ candidates: 0, narrowDomains: 0, emailed: false, reason: 'no_candidates' });
     }
 
     const recipient = await resolveCostReportRecipient();
     if (!recipient) {
-      console.warn('[domain-fragmentation-report] candidates found but no recipient resolved', {
+      console.warn('[domain-fragmentation-report] items found but no recipient resolved', {
         candidates: pairs.length,
+        narrowDomains: narrowDomains.length,
       });
-      return NextResponse.json({ candidates: pairs.length, emailed: false, reason: 'no_recipient' });
+      return NextResponse.json({
+        candidates: pairs.length,
+        narrowDomains: narrowDomains.length,
+        emailed: false,
+        reason: 'no_recipient',
+      });
     }
 
-    const template = buildDomainFragmentationEmailTemplate(pairs);
+    const template = buildDomainFragmentationEmailTemplate({ pairs, narrowDomains });
     const sent = await sendEmail({
       to: recipient.to,
       subject: template.subject,
@@ -45,15 +58,22 @@ export async function GET(request: NextRequest) {
     });
 
     if (!sent.ok) {
-      console.warn('[domain-fragmentation-report] candidates found but email send failed', {
+      console.warn('[domain-fragmentation-report] items found but email send failed', {
         candidates: pairs.length,
+        narrowDomains: narrowDomains.length,
         message: sent.message,
       });
-      return NextResponse.json({ candidates: pairs.length, emailed: false, reason: sent.reason });
+      return NextResponse.json({
+        candidates: pairs.length,
+        narrowDomains: narrowDomains.length,
+        emailed: false,
+        reason: sent.reason,
+      });
     }
 
     return NextResponse.json({
       candidates: pairs.length,
+      narrowDomains: narrowDomains.length,
       emailed: true,
       emailSource: recipient.source,
     });
