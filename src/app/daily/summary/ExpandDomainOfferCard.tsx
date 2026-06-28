@@ -13,6 +13,15 @@ const titleStyle: CSSProperties = {
   letterSpacing: '0.1em',
 }
 
+const groupStyle: CSSProperties = {
+  fontFamily: 'var(--font-neutral), system-ui, sans-serif',
+  fontSize: '0.7rem',
+  fontWeight: 700,
+  color: 'var(--brand-ink-700)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+}
+
 /**
  * Post-daily-Five expansion offer: "you're crushing {domain} — branch out?".
  * Surfaces when the player topped a domain's difficulty ladder yet still out-ran
@@ -102,33 +111,47 @@ export function ExpandDomainOfferCard({
 
   const saving = state === 'saving'
 
+  const broaderCandidates = offer.candidates.filter((c) => c.kind === 'broader')
+  const widerCandidates = offer.candidates.filter((c) => c.kind === 'wider')
+
+  const renderCandidate = (candidate: ExpansionOffer['candidates'][number]) => {
+    const checked = selected.has(candidate.label)
+    return (
+      <label
+        key={candidate.label}
+        className="flex cursor-pointer items-center gap-3 rounded-md border border-[var(--brand-border)] px-3 py-2 text-sm text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-cream-page)]"
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={saving}
+          onChange={() => toggle(candidate.label)}
+          className="h-4 w-4 accent-[var(--brand-ink)]"
+        />
+        <span>{candidate.label}</span>
+      </label>
+    )
+  }
+
+  const renderGroup = (heading: string, hint: string, items: ExpansionOffer['candidates']) =>
+    items.length > 0 ? (
+      <div className="mt-4">
+        <p style={groupStyle}>{heading}</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--brand-ink-700)]">{hint}</p>
+        <div className="mt-2 space-y-2">{items.map(renderCandidate)}</div>
+      </div>
+    ) : null
+
   return (
     <section className="mt-5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
       <h2 style={titleStyle}>You&rsquo;re crushing {offer.sourceDisplayName}</h2>
       <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-        Want to branch into something close? Add any to your rotation:
+        You&rsquo;ve covered a lot of ground here. Add any to your rotation:
       </p>
 
-      <div className="mt-4 space-y-2">
-        {offer.candidates.map((candidate) => {
-          const checked = selected.has(candidate.label)
-          return (
-            <label
-              key={candidate.label}
-              className="flex cursor-pointer items-center gap-3 rounded-md border border-[var(--brand-border)] px-3 py-2 text-sm text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-cream-page)]"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={saving}
-                onChange={() => toggle(candidate.label)}
-                className="h-4 w-4 accent-[var(--brand-ink)]"
-              />
-              <span>{candidate.label}</span>
-            </label>
-          )
-        })}
-      </div>
+      {/* Broader (the graduation — open the bigger field) leads; wider follows. */}
+      {renderGroup('Go broader', 'Open up the bigger field this sits inside.', broaderCandidates)}
+      {renderGroup('Branch wider', 'Jump to something close by.', widerCandidates)}
 
       <div className="mt-4 flex items-center gap-3">
         <button

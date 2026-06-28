@@ -11,8 +11,17 @@ import {
   playerMastery,
   users,
 } from '@/server/db';
-import { getPendingExpansionDomains } from '@/server/adaptive-difficulty';
-import { suggestAdjacentDomains } from '@/server/llm/interests';
+import {
+  getExpansionOfferedDomains,
+  getPendingExpansionDomains,
+} from '@/server/adaptive-difficulty';
+import {
+  isAreaExpansionThinnessTriggerEnabled,
+  narrowKbThinnessThreshold,
+  selectThinnestEligibleArea,
+} from '@/server/daily/kb-exhaustion';
+import { suggestAdjacentDomains, suggestBroaderDomains } from '@/server/llm/interests';
+import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
@@ -51,12 +60,23 @@ export type DailySummaryView = {
   expansionOffer: ExpansionOffer | null;
 };
 
+/**
+ * One pickable target in the expansion offer. `kind` distinguishes a *wider*
+ * sibling (lateral neighbour) from a *broader* parent (one level up) so the card
+ * can group them (B-AREA-EXPANSION-01, R1/R3).
+ */
+export type ExpansionCandidate = {
+  label: string;
+  broadCategory: string | null;
+  kind: 'wider' | 'broader';
+};
+
 export type ExpansionOffer = {
   /** Canonical subcategory the player mastered (the offer's anchor). */
   sourceDomain: string;
   sourceDisplayName: string;
-  /** Specific adjacent domains the player can add to their rotation. */
-  candidates: { label: string; broadCategory: string | null }[];
+  /** Wider siblings and broader parents the player can add to their rotation. */
+  candidates: ExpansionCandidate[];
 };
 
 export type RecentFriendBridge = {
@@ -237,6 +257,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
           broadCategory: playerMastery.broadCategory,
           totalPoints: playerMastery.totalPoints,
           tier: playerMastery.tier,
+          territoryType: playerMastery.territoryType,
         })
         .from(playerMastery)
         .where(and(
@@ -324,7 +345,11 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const refine: RefineSectionView = queue
     ? await buildRefineSection(userId, queue.id, slots)
     : { queueId: null, items: [] };
-  const expansionOffer = await buildExpansionOffer(userId);
+  const touchedForExpansion: TouchedDomainForExpansion[] = [...touchedDomains].map((domain) => ({
+    domain,
+    territoryType: masteryByDomain.get(domain)?.territoryType ?? null,
+  }));
+  const expansionOffer = await buildExpansionOffer(userId, touchedForExpansion);
 
   return {
     date: dateString,
@@ -355,19 +380,62 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   };
 }
 
-/**
- * Build the post-daily-Five expansion offer, or null when none is pending. Fires
- * for the most recently flagged domain (recalibrateDomainDifficultyToSupply set
- * expansionEligibleSince when the player topped its ladder yet still out-ran its
- * content). Asks Haiku for adjacent specific domains, drops any the player already
- * follows, and only returns an offer when at least one fresh candidate survives.
- * Fails soft to null — an LLM outage simply means no card this round.
- */
-async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | null> {
-  const pending = await getPendingExpansionDomains(userId);
-  if (pending.length === 0) return null;
+type TouchedDomainForExpansion = {
+  domain: string;
+  territoryType: 'declared' | 'demonstrated' | null;
+};
 
-  const sourceDomain = pending[0].canonicalSubcategory;
+/**
+ * Choose the single area to offer expansion for this round, or null. Two triggers
+ * feed it (B-AREA-EXPANSION-01, A3 — one graduation per game):
+ *   1. A thin declared area touched this game (the "graduation" trigger) — gated
+ *      behind AREA_EXPANSION_THINNESS_TRIGGER_ENABLED, thinnest area wins.
+ *   2. The supply-ceiling pending domain (the original trigger) as a fallback.
+ * The thinness path honors the once-per-area stamp via getExpansionOfferedDomains.
+ */
+type ExpansionTrigger = 'thinness' | 'supply_ceiling';
+
+async function selectExpansionSource(
+  userId: string,
+  touched: readonly TouchedDomainForExpansion[],
+): Promise<{ domain: string; trigger: ExpansionTrigger } | null> {
+  if (isAreaExpansionThinnessTriggerEnabled()) {
+    const declared = touched.filter((t) => t.territoryType === 'declared').map((t) => t.domain);
+    if (declared.length > 0) {
+      const [depths, offered] = await Promise.all([
+        getDurablePoolDepthForDomains(declared),
+        getExpansionOfferedDomains(userId, declared),
+      ]);
+      const thinnest = selectThinnestEligibleArea(
+        declared.map((domain) => ({ domain, poolDepth: depths.get(domain) ?? 0 })),
+        narrowKbThinnessThreshold(),
+        offered,
+      );
+      if (thinnest) return { domain: thinnest, trigger: 'thinness' };
+    }
+  }
+
+  // Fallback: the supply-ceiling trigger (already excludes resolved offers).
+  const pending = await getPendingExpansionDomains(userId);
+  return pending[0] ? { domain: pending[0].canonicalSubcategory, trigger: 'supply_ceiling' } : null;
+}
+
+/**
+ * Build the post-daily-Five expansion offer, or null when none is pending. The
+ * source area comes from selectExpansionSource (a thin declared area touched this
+ * game, else the supply-ceiling domain). Asks Haiku for wider siblings + broader
+ * parents, drops any the player already follows, and only returns an offer when at
+ * least one fresh candidate survives. Fails soft to null — an LLM outage or no
+ * eligible area simply means no card this round.
+ */
+async function buildExpansionOffer(
+  userId: string,
+  touched: readonly TouchedDomainForExpansion[],
+): Promise<ExpansionOffer | null> {
+  const source = await selectExpansionSource(userId, touched);
+  if (!source) return null;
+  const { domain: sourceDomain, trigger } = source;
+
   const [mastery] = await db
     .select({ broadCategory: playerMastery.broadCategory })
     .from(playerMastery)
@@ -377,16 +445,33 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
     ))
     .limit(1);
 
-  const suggestions = await suggestAdjacentDomains(sourceDomain, mastery?.broadCategory ?? null);
-  if (suggestions.length === 0) return null;
+  // R1/R3: one offer carrying both a lateral "wider" set (siblings) and a
+  // vertical "broader" set (one level up). Both fail open to [] independently.
+  const broad = mastery?.broadCategory ?? null;
+  const [wider, broader] = await Promise.all([
+    suggestAdjacentDomains(sourceDomain, broad),
+    suggestBroaderDomains(sourceDomain, broad),
+  ]);
 
-  // Drop any sibling the player already follows so the offer is always net-new.
+  // Drop anything the player already follows so the offer is always net-new, and
+  // de-dupe by label across both lists (broader is listed first, so it wins ties).
   const activeInterests = await db
     .select({ domain: declaredInterests.domain })
     .from(declaredInterests)
     .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
   const have = new Set(activeInterests.map((row) => row.domain.trim().toLowerCase()));
-  const candidates = suggestions.filter((s) => !have.has(s.label.trim().toLowerCase()));
+  const seen = new Set<string>();
+  const tagged: ExpansionCandidate[] = [
+    ...broader.map((s) => ({ ...s, kind: 'broader' as const })),
+    ...wider.map((s) => ({ ...s, kind: 'wider' as const })),
+  ].filter((c) => {
+    const key = c.label.trim().toLowerCase();
+    if (have.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const candidates = capExpansionCandidates(tagged, 3);
   if (candidates.length === 0) return null;
 
   // Audit the expansion-offer funnel (eligible → shown → resolved). Fires each
@@ -395,7 +480,10 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
     phase: 'shown',
     userId,
     sourceDomain,
+    trigger,
     candidateCount: candidates.length,
+    widerCount: candidates.filter((c) => c.kind === 'wider').length,
+    broaderCount: candidates.filter((c) => c.kind === 'broader').length,
   });
 
   return {
@@ -403,6 +491,25 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
     sourceDisplayName: displayNameForDomain(sourceDomain),
     candidates,
   };
+}
+
+/**
+ * Cap the combined candidate list to a glanceable size while guaranteeing each
+ * flavour that exists is represented (at least one broader, at least one wider),
+ * then fill remaining slots broader-first. Keeps the chooser short without
+ * silently hiding one whole direction.
+ */
+function capExpansionCandidates(items: ExpansionCandidate[], limit: number): ExpansionCandidate[] {
+  const broader = items.filter((c) => c.kind === 'broader');
+  const wider = items.filter((c) => c.kind === 'wider');
+  const out: ExpansionCandidate[] = [];
+  if (broader.length > 0) out.push(broader[0]);
+  if (wider.length > 0 && out.length < limit) out.push(wider[0]);
+  for (const candidate of [...broader, ...wider]) {
+    if (out.length >= limit) break;
+    if (!out.includes(candidate)) out.push(candidate);
+  }
+  return out.slice(0, limit);
 }
 
 async function computeReminderPromptState(

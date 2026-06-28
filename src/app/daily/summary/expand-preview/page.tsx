@@ -12,10 +12,9 @@ const SAMPLE_OFFER: ExpansionOffer = {
   sourceDomain: 'Tears of the Kingdom - the Legend of Zelda',
   sourceDisplayName: 'Tears of the Kingdom',
   candidates: [
-    { label: 'Breath of the Wild', broadCategory: 'Video Games' },
-    { label: 'Ocarina of Time', broadCategory: 'Video Games' },
-    { label: "Majora's Mask", broadCategory: 'Video Games' },
-    { label: 'The Wind Waker', broadCategory: 'Video Games' },
+    { label: 'The Legend of Zelda series', broadCategory: 'Pop Culture', kind: 'broader' },
+    { label: 'Breath of the Wild', broadCategory: 'Pop Culture', kind: 'wider' },
+    { label: 'Ocarina of Time', broadCategory: 'Pop Culture', kind: 'wider' },
   ],
 }
 
@@ -35,9 +34,10 @@ export default function ExpandOfferPreviewPage() {
         Expansion offer preview
       </h1>
       <p className="text-muted-foreground mt-1 text-sm leading-6">
-        This is the &ldquo;you&rsquo;re crushing X — branch out?&rdquo; card that appears on the
-        daily-Five summary when a player out-paces a domain&rsquo;s content. Sample data; nothing
-        here changes your account.
+        This is the &ldquo;branch out?&rdquo; card on the daily-Five summary, shown when a player
+        out-paces a domain&rsquo;s content (supply-ceiling) or runs a small declared area dry
+        (thinness). It offers both <strong>broader</strong> parents and <strong>wider</strong>
+        siblings. Sample data; nothing here changes your account.
       </p>
 
       <ExpandDomainOfferCard offer={SAMPLE_OFFER} preview />
