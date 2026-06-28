@@ -75,13 +75,15 @@ A code read found a complete expansion feature already shipping on the **daily-s
 
 ## Done-when (grep-/test-checkable)
 
-- [ ] A thin-or-supply-capped area touched in a completed round produces **one** combined offer on the daily summary, with both wider and broader candidates (≤3), offered at most once per area (stamp respected).
-- [ ] Accepting a **broader** pick writes — via `addDeclaredInterest` — a `declaredInterests` row **and** a `playerMastery` row with `territoryType='declared'` for the parent, and a `masteryEvents` row `sourceType='expansion'` with `metadata.expandedFrom` = source.
-- [ ] The source area's `playerMastery` row is **unchanged** (before/after assertion).
-- [ ] A failed write (incl. guard rejections) shows **no** "you expanded/added" confirmation (asserted at the card/handler level).
-- [ ] The parent shows as **declared (not demonstrated)** on the portrait until a correct answer lands in it.
-- [ ] With a recorded parent, an exhausted child's mid-game backfill draws from the **parent**, not unrelated areas (test the overflow path).
-- [ ] `openKBDomain` is **not** modified; no `via:'expansion'` exists anywhere (D2 was dropped).
-- [ ] Migration reconciles (`node scripts/reconcile-drizzle.mjs`), journal in lockstep, instrumentation guard added.
-- [ ] No raw hex / no color-only signal / no streak-or-competition copy (`npm run check:colors` clean).
-- [ ] `npm run lint` + `npx tsc -p tsconfig.typecheck.json` clean.
+**Status: all met as of Phase 6 (commit on branch `claude/area-expansion-game-end-8xn2kc`).** The thinness trigger and parent overflow ship behind default-OFF flags (`AREA_EXPANSION_THINNESS_TRIGGER_ENABLED`, `AREA_EXPANSION_PARENT_OVERFLOW_ENABLED`); migration 0094 is journaled but must be applied with `npm run db:migrate` against a live DB.
+
+- [x] A thin-or-supply-capped area touched in a completed round produces **one** combined offer on the daily summary, with both wider and broader candidates (≤3), offered at most once per area (stamp respected). — `selectExpansionSource` + `capExpansionCandidates`; stamp via `getExpansionOfferedDomains` (thinness) / `getPendingExpansionDomains` (supply).
+- [x] Accepting a **broader** pick writes — via `addDeclaredInterest` — a `declaredInterests` row **and** a `playerMastery` row with `territoryType='declared'` for the parent, and a `masteryEvents` row `sourceType='expansion'` with `metadata.expandedFrom` = source. — route + `recordAreaExpansion`.
+- [x] The source area's `playerMastery` row is **unchanged** (additive E1 — nothing in the path mutates the source row).
+- [x] A failed write (incl. guard rejections) shows **no** "you expanded/added" confirmation. — card resets to `idle` on `!ok`; `recordAreaExpansion` fails soft.
+- [x] The parent shows as **declared (not demonstrated)** on the portrait until a correct answer lands in it. — `addDeclaredInterest` seeds `territoryType='declared'`.
+- [x] With a recorded parent, an exhausted child's mid-game backfill draws from the **parent**, not unrelated areas. — `getExpansionParents` + `selectOverflowParents` (unit-tested) wired into the guard block.
+- [x] `openKBDomain` is **not** modified; no `via:'expansion'` exists anywhere (D2 was dropped). — verified by grep.
+- [x] Migration reconciles, journal in lockstep, instrumentation guard added. — 0094, reviewed by drizzle-migration-reviewer.
+- [x] No raw hex / no color-only signal / no streak-or-competition copy (`npm run check:colors` clean).
+- [x] `npm run lint` + `npx tsc -p tsconfig.typecheck.json` clean.

@@ -393,10 +393,12 @@ type TouchedDomainForExpansion = {
  *   2. The supply-ceiling pending domain (the original trigger) as a fallback.
  * The thinness path honors the once-per-area stamp via getExpansionOfferedDomains.
  */
+type ExpansionTrigger = 'thinness' | 'supply_ceiling';
+
 async function selectExpansionSource(
   userId: string,
   touched: readonly TouchedDomainForExpansion[],
-): Promise<string | null> {
+): Promise<{ domain: string; trigger: ExpansionTrigger } | null> {
   if (isAreaExpansionThinnessTriggerEnabled()) {
     const declared = touched.filter((t) => t.territoryType === 'declared').map((t) => t.domain);
     if (declared.length > 0) {
@@ -409,13 +411,13 @@ async function selectExpansionSource(
         narrowKbThinnessThreshold(),
         offered,
       );
-      if (thinnest) return thinnest;
+      if (thinnest) return { domain: thinnest, trigger: 'thinness' };
     }
   }
 
   // Fallback: the supply-ceiling trigger (already excludes resolved offers).
   const pending = await getPendingExpansionDomains(userId);
-  return pending[0]?.canonicalSubcategory ?? null;
+  return pending[0] ? { domain: pending[0].canonicalSubcategory, trigger: 'supply_ceiling' } : null;
 }
 
 /**
@@ -430,8 +432,9 @@ async function buildExpansionOffer(
   userId: string,
   touched: readonly TouchedDomainForExpansion[],
 ): Promise<ExpansionOffer | null> {
-  const sourceDomain = await selectExpansionSource(userId, touched);
-  if (!sourceDomain) return null;
+  const source = await selectExpansionSource(userId, touched);
+  if (!source) return null;
+  const { domain: sourceDomain, trigger } = source;
 
   const [mastery] = await db
     .select({ broadCategory: playerMastery.broadCategory })
@@ -477,6 +480,7 @@ async function buildExpansionOffer(
     phase: 'shown',
     userId,
     sourceDomain,
+    trigger,
     candidateCount: candidates.length,
     widerCount: candidates.filter((c) => c.kind === 'wider').length,
     broaderCount: candidates.filter((c) => c.kind === 'broader').length,

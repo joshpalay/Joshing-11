@@ -34,9 +34,10 @@ export default function ExpandOfferPreviewPage() {
         Expansion offer preview
       </h1>
       <p className="text-muted-foreground mt-1 text-sm leading-6">
-        This is the &ldquo;you&rsquo;re crushing X — branch out?&rdquo; card that appears on the
-        daily-Five summary when a player out-paces a domain&rsquo;s content. Sample data; nothing
-        here changes your account.
+        This is the &ldquo;branch out?&rdquo; card on the daily-Five summary, shown when a player
+        out-paces a domain&rsquo;s content (supply-ceiling) or runs a small declared area dry
+        (thinness). It offers both <strong>broader</strong> parents and <strong>wider</strong>
+        siblings. Sample data; nothing here changes your account.
       </p>
 
       <ExpandDomainOfferCard offer={SAMPLE_OFFER} preview />

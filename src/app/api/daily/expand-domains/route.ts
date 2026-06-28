@@ -98,7 +98,8 @@ export async function POST(request: Request) {
     sourceDomain,
     accepted: added.length > 0,
     addedCount: added.length,
-    expandedCount,
+    broaderAddedCount: expandedCount,
+    widerAddedCount: added.length - expandedCount,
     skippedCount: skipped.length,
     dismissed: selectedDomains.length === 0,
   });
