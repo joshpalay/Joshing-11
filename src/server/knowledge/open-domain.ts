@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { activityItems, db, masteryEvents, playerMastery, questions } from '@/server/db';
 import type { ActivityItemType } from '@/server/activity/write-activity';
@@ -179,4 +179,88 @@ export async function promoteDeclaredToDemonstrated(params: {
     });
     return { promoted: false, reason: 'error' };
   }
+}
+
+/**
+ * Record area-expansion provenance (B-AREA-EXPANSION-01, Phase 3): a zero-point
+ * MASTERY_EVENTS row on the BROADER target area whose metadata captures
+ * `{ expandedFrom }` — the honest "Pride expanded into Moral Philosophy" record
+ * the feature's canon guardrail requires, and the link the parent-overflow
+ * backfill (Phase 5) reads.
+ *
+ * Best-effort and isolated: the area itself is opened by addDeclaredInterest, so a
+ * failure here never denies the player their expansion or shows a false
+ * confirmation — it only loses the breadcrumb (which we log). Idempotent via the
+ * deterministic answerId.
+ */
+export async function recordAreaExpansion(params: {
+  userId: string;
+  sourceDomain: string;
+  targetDomain: string;
+}): Promise<{ recorded: boolean }> {
+  const { userId, sourceDomain, targetDomain } = params;
+  if (!userId || !sourceDomain || !targetDomain) return { recorded: false };
+
+  const answerId = `expansion:${sourceDomain}:${targetDomain}:${userId}`;
+  try {
+    await db
+      .insert(masteryEvents)
+      .values({
+        userId,
+        canonicalSubcategory: targetDomain,
+        sourceType: 'expansion',
+        answerId,
+        basePoints: 0,
+        weight: 0,
+        awardedPoints: 0,
+        sessionContext: 'expansion',
+        metadata: { expandedFrom: sourceDomain },
+      })
+      .onConflictDoNothing({ target: masteryEvents.answerId });
+    return { recorded: true };
+  } catch (error) {
+    console.warn('[area-expansion] provenance write failed', {
+      userId,
+      sourceDomain,
+      targetDomain,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { recorded: false };
+  }
+}
+
+/**
+ * Resolve the expansion PARENT for each of the given child areas — the inverse of
+ * recordAreaExpansion's write (B-AREA-EXPANSION-01, Phase 5). Returns a Map of
+ * child domain → parent domain for children that were expanded (Pride → Moral
+ * Philosophy). The parent-overflow path reads this to route a thin child's slot to
+ * its parent. Most-recent expansion wins if a child was expanded more than once.
+ *
+ * Reads all of the user's 'expansion' events (few per user) and filters in JS,
+ * avoiding a jsonb-in-array predicate. Returns an empty map on no input.
+ */
+export async function getExpansionParents(
+  userId: string,
+  childDomains: readonly string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (childDomains.length === 0) return result;
+
+  const wanted = new Set(childDomains);
+  const rows = await db
+    .select({
+      parent: masteryEvents.canonicalSubcategory,
+      metadata: masteryEvents.metadata,
+    })
+    .from(masteryEvents)
+    .where(and(eq(masteryEvents.userId, userId), eq(masteryEvents.sourceType, 'expansion')))
+    .orderBy(desc(masteryEvents.createdAt));
+
+  for (const row of rows) {
+    const child = (row.metadata as { expandedFrom?: unknown } | null)?.expandedFrom;
+    if (typeof child === 'string' && wanted.has(child) && row.parent && !result.has(child)) {
+      result.set(child, row.parent);
+    }
+  }
+  return result;
 }

@@ -602,19 +602,55 @@ export async function getPendingExpansionDomains(
 /**
  * Resolve a pending expansion offer for a domain — stamped when the player accepts
  * (adds ≥1 adjacent domain) or dismisses it, so the offer surfaces only once.
+ *
+ * Upserts rather than updates: a thin area touched but never *answered* this game
+ * (B-AREA-EXPANSION-01 thinness trigger) may have no userDomainDifficulties row
+ * yet, and a plain UPDATE would silently no-op and let the offer re-show. The
+ * inserted seed row is minimal (min-level served difficulty); a real answer later
+ * recalibrates it normally.
  */
 export async function markDomainExpansionOffered(
   userId: string,
   canonicalSubcategory: string,
 ): Promise<void> {
   if (!canonicalSubcategory) return;
+  const now = new Date();
   await db
-    .update(userDomainDifficulties)
-    .set({ expansionOfferedAt: new Date() })
+    .insert(userDomainDifficulties)
+    .values({
+      userId,
+      canonicalSubcategory,
+      servedDifficulty: seedDifficultyFromAdaptiveLevel(MIN_ADAPTIVE_LEVEL),
+      consecutiveCorrect: 0,
+      consecutiveIncorrect: 0,
+      lastUpdated: now,
+      expansionOfferedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [userDomainDifficulties.userId, userDomainDifficulties.canonicalSubcategory],
+      set: { expansionOfferedAt: now },
+    });
+}
+
+/**
+ * Of the given domains, which already have an expansion offer stamped
+ * (expansionOfferedAt set) — i.e. were already offered once. Used by the thinness
+ * trigger to honor the once-per-area rule (B-AREA-EXPANSION-01).
+ */
+export async function getExpansionOfferedDomains(
+  userId: string,
+  domains: readonly string[],
+): Promise<Set<string>> {
+  if (domains.length === 0) return new Set();
+  const rows = await db
+    .select({ domain: userDomainDifficulties.canonicalSubcategory })
+    .from(userDomainDifficulties)
     .where(and(
       eq(userDomainDifficulties.userId, userId),
-      eq(userDomainDifficulties.canonicalSubcategory, canonicalSubcategory),
+      inArray(userDomainDifficulties.canonicalSubcategory, [...domains]),
+      isNotNull(userDomainDifficulties.expansionOfferedAt),
     ));
+  return new Set(rows.map((row) => row.domain));
 }
 
 /**

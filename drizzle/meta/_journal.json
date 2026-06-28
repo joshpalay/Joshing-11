@@ -666,6 +666,13 @@
       "when": 1784678400000,
       "tag": "0094_player_mastery_rotation_eligible",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1784764800000,
+      "tag": "0095_expansion_mastery_event_type",
+      "breakpoints": true
     }
   ]
 }
