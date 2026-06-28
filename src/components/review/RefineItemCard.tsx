@@ -6,17 +6,22 @@ import type { CSSProperties } from 'react';
 
 import type { RefineItem } from '@/server/refine/types';
 
-// Warm accent from the library (--brand-orange) for the single action verb.
+// Standard success green (--success) for the single affirmative action verb.
+// Same tint proportions the orange accent used, just re-hued to green.
 const actionStyle: CSSProperties = {
-  color: 'var(--brand-orange)',
-  borderColor: 'color-mix(in srgb, var(--brand-orange) 38%, var(--brand-border))',
-  background: 'color-mix(in srgb, var(--brand-orange) 8%, transparent)',
+  color: 'var(--success)',
+  borderColor: 'color-mix(in srgb, var(--success) 38%, var(--brand-border))',
+  background: 'color-mix(in srgb, var(--success) 8%, transparent)',
 };
 
 const ACTION_CLASS =
   'inline-flex min-h-11 cursor-pointer items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto';
 
-const ROW_CLASS = 'flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4';
+// Action verb sits on the left on the sm+ row (flex-row-reverse puts the
+// trailing button at the start), while mobile keeps the natural text-then-action
+// stack.
+const ROW_CLASS =
+  'flex flex-col gap-3 py-4 sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-4';
 
 export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: string }) {
   // Navigational nudge (add_territories): links out instead of staging a
