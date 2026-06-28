@@ -572,6 +572,10 @@ export default function DailyPage() {
           creatorIsHouse: slot.source === 'house',
           canonicalSubcategory: slot.domain,
           openedTerritoryDomain: openedTerritoryBySlot[slot.slot_index] ?? null,
+          // Daily territory cards are bonus-only after the gate above, so the
+          // domain is NOT yet in rotation — the card opens as an opt-in, not an
+          // already-added "remove?" (B-DOMAIN-BONUS-ROTATION-01).
+          openedTerritoryAdopted: false,
           recheckAction:
             slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
               ? { onSubmit: () => requestRecheck(slot.slot_index) }
@@ -697,12 +701,16 @@ export default function DailyPage() {
         setSubmitNotice(null);
 
         const isCorrect = Boolean(body.isCorrect ?? body.correct);
-        // A correct answer in an unfamiliar domain default-adds it to the KB
-        // (B-1). The server reports the freshly-opened domain on masteryDelta;
-        // stash it per-slot so the reveal can surface the "Added — remove?" undo.
+        // The "new territory" reveal card (Often / Sometimes / Blue Moon / Never)
+        // is the ADOPTION moment for a friend-sourced +2 bonus domain — it belongs
+        // in the bonus area, never on a core top-5 slot. A core domain is already
+        // declared/adopted, so it never needs this card. Gate it to bonus slots
+        // (B-DOMAIN-BONUS-ROTATION-01); the server parks the bonus domain out of
+        // rotation until the player picks a non-resting frequency here.
         // Client-only — deliberately not persisted into the QueueSlot schema.
         const masteryDelta = body.masteryDelta ?? body.mastery_delta;
-        const openedDomain = isCorrect ? pickOpenedTerritoryDomain(masteryDelta) : null;
+        const openedDomain =
+          isCorrect && isBonusSlot(currentSlot) ? pickOpenedTerritoryDomain(masteryDelta) : null;
         if (openedDomain) {
           setOpenedTerritoryBySlot((existing) => ({
             ...existing,

@@ -14,6 +14,7 @@ import {
   replaceQueueSlot,
 } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
+import { isBonusSlot } from '@/server/daily/bonus';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { awardAuthorCredit, isAuthorCreditEligible } from '@/server/mastery/author-credit';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -307,6 +308,9 @@ async function handleDailyCatchupAnswer({
       answerState: masteryAnswerState,
       pointsAwarded,
       sourceType: 'catchup',
+      // B-DOMAIN-BONUS-ROTATION-01: a recovered +2 bonus slot stays out of the
+      // core rotation until adopted, same as the live daily/answer path.
+      isBonus: isBonusSlot(slot),
       sourceId: catchupItem.dailyQueueItemId,
       broadCategory: catchupItem.broadCategory,
       eventQuestionId: canonicalQuestionId,

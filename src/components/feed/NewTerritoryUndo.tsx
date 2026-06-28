@@ -21,6 +21,13 @@ const GOLD_INK = 'var(--accent-gold-ink)';
 // come up — Often / Sometimes / Blue Moon / Never — via a segmented control that
 // saves on tap. No Undo is needed: the control is self-reversible (re-tap another
 // tier). Used on both reveal surfaces.
+//
+// B-DOMAIN-BONUS-ROTATION-01: on the daily +2 BONUS surface the domain is NOT
+// auto-added to rotation — it's parked out of the core five until the player
+// adopts it. There `adopted={false}` opens the control on "Never" (its real
+// state: on the map, not yet asked), so picking any other tier is the explicit
+// opt-in. The mastery row already exists, so the "Added to your knowledge base"
+// lead still holds (knowledge base = your map, which includes resting domains).
 const FREQUENCY_HINT: Record<TerritoryFrequency, string> = {
   often: 'Shows up most in your rounds.',
   sometimes: 'Stays in normal rotation.',
@@ -31,12 +38,22 @@ const FREQUENCY_HINT: Record<TerritoryFrequency, string> = {
 export function NewTerritoryUndo({
   domain,
   category,
+  adopted = true,
 }: {
   domain: string;
   category?: string | null;
+  /**
+   * Whether this domain is already in rotation (B-1 default-add). True on the
+   * feed/core surfaces. The daily +2 bonus surface passes false: the domain is
+   * parked out of rotation, so the control opens on "Never" and any other tier
+   * is the explicit opt-in (B-DOMAIN-BONUS-ROTATION-01).
+   */
+  adopted?: boolean;
 }) {
-  // Freshly-added domains start in the default rotation ('sometimes').
-  const [selected, setSelected] = useState<TerritoryFrequency>('sometimes');
+  // Adopted (default-add) domains start in the default 'sometimes' rotation; a
+  // not-yet-adopted bonus domain opens on 'resting' so any tier the player taps —
+  // including 'sometimes' — actually writes the adoption.
+  const [selected, setSelected] = useState<TerritoryFrequency>(adopted ? 'sometimes' : 'resting');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const label = category || domain;

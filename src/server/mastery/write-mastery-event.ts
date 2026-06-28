@@ -23,6 +23,13 @@ export type WriteMasteryEventParams = {
   basePoints?: number;
   weight?: number;
   answeredByUserId?: string | null;
+  // B-DOMAIN-BONUS-ROTATION-01: true when this answer came from a Daily Five +2
+  // BONUS slot (a friend-sourced domain). A bonus answer still records mastery
+  // (stats/profile count it) but a domain it newly opens is parked
+  // rotation_eligible=false so it can't leak into the core top-5 until the player
+  // adopts it (a non-resting frequency) or declares it. A core/feed/declared
+  // answer (the default, isBonus falsy) always (re)earns rotation eligibility.
+  isBonus?: boolean;
   // B-LLM-PROVIDER-AB-SWITCH B3: provider that GRADED this answer ('anthropic'|
   // 'openai'), or null when the grade never hit an LLM (exact-match/give-up) or
   // the write isn't from a grading path (author/curator credit, backfill, etc.).
@@ -227,6 +234,9 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
           tier: nextTier,
           tierReachedAt: tierChanged ? new Date() : null,
           lifetimePointsBaseline: 0,
+          // A brand-new domain opened by a +2 bonus answer is parked out of the
+          // core rotation; every other surface (core/feed/declared) earns it.
+          rotationEligible: !params.isBonus,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -236,6 +246,10 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
             totalPoints: nextTotalPoints,
             tier: nextTier,
             tierReachedAt: tierChanged ? new Date() : existing?.tierReachedAt ?? null,
+            // A non-bonus answer UPGRADES a previously bonus-only domain into the
+            // rotation; a bonus answer never downgrades an already-eligible row,
+            // so only set the flag from the non-bonus path.
+            ...(params.isBonus ? {} : { rotationEligible: true }),
             updatedAt: new Date(),
           },
         });

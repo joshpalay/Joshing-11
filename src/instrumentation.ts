@@ -180,6 +180,13 @@ export async function register() {
         ALTER TABLE "PLAYER_MASTERY"
           ADD COLUMN IF NOT EXISTS "territory_type" "public"."TerritoryType" DEFAULT 'demonstrated' NOT NULL
       `);
+      // B-DOMAIN-BONUS-ROTATION-01 (migration 0094): gate +2 bonus domains out of
+      // the core rotation until adopted. Additive, default true → no behaviour
+      // change for existing rows.
+      await db.execute(sql`
+        ALTER TABLE "PLAYER_MASTERY"
+          ADD COLUMN IF NOT EXISTS "rotation_eligible" boolean NOT NULL DEFAULT true
+      `);
       await db.execute(sql`
         DO $$ BEGIN
           IF EXISTS (
