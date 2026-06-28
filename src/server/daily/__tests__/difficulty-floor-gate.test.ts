@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 // generate-questions.ts imports @/server/db, which throws at module load without
 // a connection string. findUnderDifficultyQuestions never touches the DB; a dummy
@@ -116,5 +116,31 @@ describe('findUnderDifficultyQuestions', () => {
       'adaptive',
     );
     expect([...result.toDrop].sort()).toEqual([0]);
+  });
+});
+
+describe('findUnderDifficultyQuestions — MAX_TIER_SHORTFALL env knob', () => {
+  const KEY = 'MAX_TIER_SHORTFALL';
+  const saved = process.env[KEY];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[KEY];
+    else process.env[KEY] = saved;
+  });
+
+  const specialistRequestedAccessibleReturned = () =>
+    findUnderDifficultyQuestions(
+      [q('Sesame Street', 'accessible')],
+      new Map([['Sesame Street', 'challenging']]), // → specialist (a 2-rung miss)
+      'adaptive',
+    );
+
+  it('default (unset → 1): the 2-rung miss is flagged', () => {
+    delete process.env[KEY];
+    expect([...specialistRequestedAccessibleReturned().toDrop]).toEqual([0]);
+  });
+
+  it('MAX_TIER_SHORTFALL=2: the same 2-rung miss is tolerated (not flagged)', () => {
+    process.env[KEY] = '2';
+    expect(specialistRequestedAccessibleReturned().toDrop.size).toBe(0);
   });
 });

@@ -1,21 +1,26 @@
 import { extractTextContent, getAnthropicClient, loggedMessagesCreate, parseJsonObject } from '@/lib/llm';
 import { getKnowledgeBase } from '@/server/db/queries/daily';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 const RECONCILE_MODEL = 'claude-haiku-4-5-20251001';
 const RECONCILE_TIMEOUT_MS = 3000;
 
 const RECONCILE_SYSTEM_PROMPT = `You are reconciling a proposed trivia domain label against a user's existing domain list.
 
-Does the proposed label refer to the same body of knowledge as any existing domain? Two labels refer to the same domain if they identify the same work, artist, period, or discipline — even if the wording differs.
+Two labels refer to the SAME domain ONLY when they name the same SCOPE — the same work, artist, period, or discipline — differing only in wording, casing, or punctuation. A sub-angle of a single work (its characters, themes, a chapter) folds into that exact work.
 
-Examples of same-domain pairs:
-- "Mrs. Dalloway – Characters" and "Mrs. Dalloway" → same
-- "Late Tchaikovsky" and "Tchaikovsky's Late Period" → same
-- "Joyce's Ulysses" and "James Joyce's Ulysses" → same
+CRITICAL — never fold across granularity. A specific work, title, character, or entity is NOT the same domain as a broader genre, period, author body, series, or category that merely CONTAINS it. When in doubt, return matchesExisting:false — keeping a narrow label separate is always safe; collapsing it into a broad one silently makes the broad domain serve only that narrow slice.
 
-Examples of different-domain pairs:
+Examples of same-domain pairs (fold):
+- "Mrs. Dalloway – Characters" and "Mrs. Dalloway" → same (sub-angle of the same work)
+- "Late Tchaikovsky" and "Tchaikovsky's Late Period" → same (phrasing)
+- "Joyce's Ulysses" and "James Joyce's Ulysses" → same (phrasing)
+
+Examples of different-domain pairs (DO NOT fold):
+- "Hamlet" and "Shakespearean Tragedy" → different (a specific play is not its genre)
+- "Sweeney Todd" and "Stephen Sondheim Musicals" → different (one musical is not the whole catalog)
+- "The Battle of Hastings" and "Medieval English History" → different (an event is not the period)
 - "Tchaikovsky" and "Stravinsky" → different
-- "Mrs. Dalloway" and "To the Lighthouse" → different
 - "Renaissance Painting" and "Baroque Painting" → different
 
 Respond in JSON only: { "matchesExisting": true | false, "matchedDomain": "..." | null, "rationale": "brief explanation" }`;
@@ -23,14 +28,28 @@ Respond in JSON only: { "matchesExisting": true | false, "matchedDomain": "..." 
 export async function reconcileProposedDomain(
   proposedDomain: string,
   userId: string,
+  options: { additionalDomains?: string[] } = {},
 ): Promise<{ canonicalDomain: string; reconciled: boolean }> {
   const fallback = { canonicalDomain: proposedDomain, reconciled: false };
 
   try {
     const knowledgeBase = await getKnowledgeBase(userId);
-    if (knowledgeBase.length === 0) return fallback;
+    const userDomains = knowledgeBase.map((d) => d.domain);
 
-    const existingDomains = knowledgeBase.map((d) => d.domain);
+    // Tier-1: append well-established GLOBAL domains (deduped by domainKey, the
+    // user's own spelling winning) so a label folds onto an existing domain even
+    // when it lives on another account (e.g. the house Library), not just the
+    // author's KB. The candidate cap keeps the Haiku prompt bounded.
+    const seen = new Set(userDomains.map((d) => domainKey(d)));
+    const extraDomains: string[] = [];
+    for (const d of options.additionalDomains ?? []) {
+      const k = domainKey(d);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      extraDomains.push(d);
+    }
+    const existingDomains = [...userDomains, ...extraDomains];
+    if (existingDomains.length === 0) return fallback;
 
     // If the proposed domain exactly matches an existing one (case-insensitive), no LLM needed.
     const exactMatch = existingDomains.find(

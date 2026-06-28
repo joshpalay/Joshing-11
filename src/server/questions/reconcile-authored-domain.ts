@@ -24,6 +24,7 @@
 
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { convergeDomain } from '@/server/knowledge/converge-domain';
+import { getDeepGlobalDomains } from '@/server/db/queries/knowledge';
 
 export type AuthoredReconcileMethod = 'trgm-exact' | 'llm' | 'none';
 
@@ -53,13 +54,18 @@ export type AuthoredReconcileOutcome = {
 };
 
 /**
- * Phase 1 ships flag-OFF: the authored path always COMPUTES + shadow-logs this
- * outcome (to quantify pre-fix duplication) but only ADOPTS it when this flag is
- * enabled. Mirrors the boolean-env convention in create-payload.ts.
+ * Tier-1 prevention (D-NARROW-KB-FABRICATION-01 follow-up): authored-path
+ * reconcile is now ON by default — the Phase-1 shadow-log period is over and
+ * folding authored labels onto existing domains is the durable fix for spelling
+ * fragmentation. The env var remains an instant kill switch: set
+ * RECONCILE_AUTHORED_DOMAINS to a falsy value (false/0/no/off) to revert to the
+ * blind-write behaviour without a deploy. The authored path still always
+ * COMPUTES + shadow-logs the outcome regardless of this flag.
  */
 export function isReconcileAuthoredDomainsEnabled(): boolean {
   const raw = process.env.RECONCILE_AUTHORED_DOMAINS?.trim().toLowerCase();
-  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+  if (raw === undefined || raw === '') return true; // default ON
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
 }
 
 export async function reconcileAuthoredDomain(
@@ -115,9 +121,20 @@ export async function reconcileAuthoredDomain(
   // ── Pass 2: Haiku semantic reconcile, on trgm-exact miss only ──────────────
   // reconcileProposedDomain returns the player's existing spelling on a fold
   // (semantic OR its own per-user exact-casing short-circuit), else the proposal.
+  // We also hand it the deep GLOBAL domains so it can fold onto an established
+  // domain (e.g. one the house Library owns) the author hasn't personally played.
+  let globalDomains: string[] = [];
+  try {
+    globalDomains = (await getDeepGlobalDomains()).map((d) => d.domain);
+  } catch (error) {
+    console.warn('[authored-reconcile] global domain fetch failed (non-fatal)', {
+      proposed,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   let llm = { canonicalDomain: proposed, reconciled: false };
   try {
-    llm = await reconcileProposedDomain(proposed, userId);
+    llm = await reconcileProposedDomain(proposed, userId, { additionalDomains: globalDomains });
   } catch (error) {
     console.warn('[authored-reconcile] llm reconcile failed (non-fatal)', {
       proposed,

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import {
   db,
@@ -1059,6 +1059,47 @@ export async function findFuzzyCanonicalMatches(
     prevalence: Number(row.prevalence),
     similarity: Number(row.similarity),
   }));
+}
+
+export type GlobalDomainDepth = { domain: string; depth: number };
+
+// Tier-1 global candidate set (D-NARROW-KB-FABRICATION-01 follow-up): the deepest
+// distinct canonical_subcategory labels across the whole question corpus
+// (generated + authored), so a semantic reconcile can fold a freshly-authored
+// label onto an established domain even when that domain lives only on ANOTHER
+// account (e.g. the house "Joshing Library") and not in the author's own KB.
+// Merged across both tables by domainKey, depth-gated, and capped so the
+// downstream Haiku prompt stays focused on real, well-populated domains.
+export async function getDeepGlobalDomains(
+  minDepth = 8,
+  limit = 60,
+): Promise<GlobalDomainDepth[]> {
+  const [genRows, authoredRows] = await Promise.all([
+    db
+      .select({ domain: generatedQuestions.canonicalSubcategory, count: sql<number>`count(*)::int` })
+      .from(generatedQuestions)
+      .groupBy(generatedQuestions.canonicalSubcategory),
+    db
+      .select({ domain: questions.canonicalSubcategory, count: sql<number>`count(*)::int` })
+      .from(questions)
+      .where(isNull(questions.deletedAt))
+      .groupBy(questions.canonicalSubcategory),
+  ]);
+
+  const byKey = new Map<string, GlobalDomainDepth>();
+  for (const row of [...genRows, ...authoredRows]) {
+    const domain = row.domain?.trim();
+    if (!domain) continue;
+    const key = domainKey(domain);
+    const existing = byKey.get(key);
+    if (existing) existing.depth += Number(row.count);
+    else byKey.set(key, { domain, depth: Number(row.count) });
+  }
+
+  return [...byKey.values()]
+    .filter((d) => d.depth >= minDepth)
+    .sort((a, b) => b.depth - a.depth)
+    .slice(0, limit);
 }
 
 export async function getHiddenDomainKeys(userId: string): Promise<Set<string>> {

@@ -19,11 +19,13 @@ import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 import {
+  focusDomainMinDifficulty,
   getDomainDifficultyOverrides,
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import {
+  getAuthoredExamplesForDomains,
   getAuthoredQuestionTexts,
   getKnowledgeBase,
   getRecentAnsweredAnswerKeys,
@@ -46,6 +48,7 @@ import {
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { adminUserIds } from '@/server/auth/admin';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import {
   isNarrowKbGuardEnabled,
@@ -343,6 +346,15 @@ export type DomainStrength = {
   correctAnswerCount: number;
 };
 
+// How many admin-authored example questions to feed the prompt per domain. Kept to
+// a small HANDFUL on purpose: a few examples anchor the model's facts and register;
+// more just crowds the prompt with diminishing returns (and, across a multi-domain
+// round, adds up). Few-shot grounding wants variety, not volume.
+const DOMAIN_EXAMPLE_LIMIT = 3;
+
+// Per-domain human-authored (question, answer) examples used as generation anchors.
+export type DomainExamples = ReadonlyMap<string, ReadonlyArray<{ questionText: string; answerText: string }>>;
+
 export function buildUserPrompt(
   domains: string[],
   count: number,
@@ -356,6 +368,11 @@ export function buildUserPrompt(
   domainTerritoryTypes?: ReadonlyMap<string, TerritoryType>,
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
+  // Per-domain human-authored example questions (question + answer), used as
+  // GROUND-TRUTH anchors so the model writes new questions grounded in real canon
+  // instead of inventing facts for domains it doesn't truly know. See
+  // getAuthoredExamplesForDomains / DOMAIN_EXAMPLE_LIMIT.
+  domainExamples?: ReadonlyMap<string, ReadonlyArray<{ questionText: string; answerText: string }>>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -489,7 +506,26 @@ ${perDomain.join('\n')}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}
+  let examplesHint = '';
+  if (domainExamples && domainExamples.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const examples = domainExamples.get(domain);
+      if (examples && examples.length > 0) {
+        const lines = examples
+          .slice(0, DOMAIN_EXAMPLE_LIMIT)
+          .map((ex) => `  Q: ${ex.questionText}\n     A: ${ex.answerText}`)
+          .join('\n');
+        perDomain.push(`[${domain}]\n${lines}`);
+      }
+    }
+    if (perDomain.length > 0) {
+      examplesHint = `\n\nHUMAN-AUTHORED EXAMPLES — ground truth for these domains. A person who knows the material wrote these, so treat their facts as CANON. Write NEW questions about DIFFERENT facts in the same spirit, specificity, and register. Anchor every claim to the actual work as these examples reflect it — do NOT invent names, places, or events a real fan could not confirm. (Do not reuse these exact facts; they are in the avoid list.)
+${wrapUserInput('domain_examples', perDomain.join('\n\n'))}`;
+    }
+  }
+
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${examplesHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -922,8 +958,14 @@ const DIFFICULTY_TIER_LADDER: LlmQuestion['difficulty_estimate'][] = [
 
 // One rung of slack: the adaptive target is a soft aim and the tiers overlap, so
 // a single-rung miss (e.g. specialist requested, moderate returned) is tolerated.
-// A two-rung miss is not — it's a question that doesn't belong in the slot.
-const MAX_TIER_SHORTFALL = 1;
+// A two-rung miss is not — it's a question that doesn't belong in the slot. Env
+// knob (default 1, unchanged) is a transition escape hatch: bump to 2 if a domain
+// whose stored tier hasn't recalibrated down yet still buries good accessible
+// content. Pairs with the FOCUS_DOMAIN_MIN_DIFFICULTY recalibration.
+function maxTierShortfall(): number {
+  const parsed = Number(process.env.MAX_TIER_SHORTFALL);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 1;
+}
 
 // Map a requested difficulty preference — either a per-domain adaptive override
 // or the player's fixed global preference — to a ladder index. Keys with no
@@ -969,6 +1011,7 @@ export function findUnderDifficultyQuestions(
 ): { toDrop: Set<number>; reasons: Record<number, string> } {
   const toDrop = new Set<number>();
   const reasons: Record<number, string> = {};
+  const maxShortfall = maxTierShortfall();
 
   // Normalize override keys so a returned canonical_subcategory differing only by
   // case/whitespace from the requested domain still resolves its override.
@@ -991,7 +1034,7 @@ export function findUnderDifficultyQuestions(
     if (estimateIdx < 0) continue; // unrecognized estimate — not ours to judge.
 
     const shortfall = requestedIdx - estimateIdx;
-    if (shortfall > MAX_TIER_SHORTFALL) {
+    if (shortfall > maxShortfall) {
       toDrop.add(i);
       reasons[i] =
         `difficulty "${q.difficulty_estimate}" is ${shortfall} tiers below requested "${DIFFICULTY_TIER_LADDER[requestedIdx]}" for ${q.canonical_subcategory}`.slice(
@@ -1264,6 +1307,7 @@ async function callLlmOnce(
   domainStrengths?: ReadonlyMap<string, DomainStrength>,
   culturalAnchor?: CulturalAnchor | null,
   provider: LlmProvider = 'anthropic',
+  domainExamples?: DomainExamples,
 ): Promise<LlmQuestion[]> {
   const userPrompt = buildUserPrompt(
     domains,
@@ -1278,6 +1322,7 @@ async function callLlmOnce(
     domainTerritoryTypes,
     domainStrengths,
     culturalAnchor,
+    domainExamples,
   );
 
   // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
@@ -1344,7 +1389,11 @@ export async function generateDailyQuestions(
   // orchestrator can draw on them as a last resort rather than serving a short
   // queue (see the under-difficulty handling below and queue-orchestrator's
   // backfill chain).
-  options: { underDifficultyReserve?: GeneratedQuestionRow[]; provider?: LlmProvider } = {},
+  options: {
+    underDifficultyReserve?: GeneratedQuestionRow[];
+    provider?: LlmProvider;
+    domainExamples?: DomainExamples;
+  } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
 
@@ -1352,6 +1401,7 @@ export async function generateDailyQuestions(
   // every chunk — never re-resolved per question. Defaults to Anthropic; B2
   // makes the caller pass the global setting instead of the literal below.
   const provider: LlmProvider = options.provider ?? 'anthropic';
+  const domainExamples = options.domainExamples;
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -1387,6 +1437,7 @@ export async function generateDailyQuestions(
         domainStrengths,
         culturalAnchor,
         provider,
+        domainExamples,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -1406,6 +1457,7 @@ export async function generateDailyQuestions(
         domainStrengths,
         culturalAnchor,
         provider,
+        domainExamples,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -2043,6 +2095,18 @@ export async function generateDailyQuestionsFromKnowledgeBase(
 
   const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
 
+  // Admin-authored example questions per domain — ground-truth anchors fed into
+  // the generation prompt so the model writes from real canon instead of inventing
+  // facts for domains it doesn't truly know (the niche-domain hallucination fix,
+  // e.g. "Spy School"). Scoped to ADMIN_USER_IDS: a seed is treated as canon, so
+  // only a trusted author may anchor a domain. Resilient: a miss (or no admins /
+  // no examples) just means no examples block this round.
+  const domainExamples = await getAuthoredExamplesForDomains(
+    domainsForRound,
+    DOMAIN_EXAMPLE_LIMIT,
+    adminUserIds(),
+  ).catch(() => new Map<string, Array<{ questionText: string; answerText: string }>>());
+
   // Fold recently-answered canonical texts (domain-scoped, capped) into the
   // avoid list ahead of the generated history, so a fact the player answered
   // yesterday on a friend's / house / forwarded question isn't re-created as a
@@ -2071,12 +2135,16 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // a domain falls through to LLM generation, which incidentally adds new rows
   // back into the pool. Spans accessible/moderate/specialist so harder slots
   // are reused too, not just warm-ups.
-  // Tier-adjacent fallback floors (BP-7 / C5): declared territory floors at
-  // 'moderate' (the D2/D3 erosion floor — never condescend), demonstrated at
-  // 'accessible'. Derived from the knowledgeBase already in hand.
+  // Tier-adjacent fallback floors (BP-7 / C5): how far DOWN the bank may reach when
+  // the requested tier is scarce. Tied to focusDomainMinDifficulty() so the bank's
+  // fallback floor tracks the (recalibrated, env-tunable) focus floor — declared
+  // domains now fall back to 'accessible' by default instead of stopping at
+  // 'moderate', so a tapped-out easy domain reuses its easy bank stock instead of
+  // burning a fresh generation. Demonstrated domains already floor at 'accessible'.
+  const declaredBankFloor = focusDomainMinDifficulty() as BankDifficulty;
   const bankFallbackFloors = new Map<string, BankDifficulty>();
   for (const entry of knowledgeBase) {
-    bankFallbackFloors.set(entry.domain, entry.territoryType === 'declared' ? 'moderate' : 'accessible');
+    bankFallbackFloors.set(entry.domain, entry.territoryType === 'declared' ? declaredBankFloor : 'accessible');
   }
 
   const bankPicks = await pickBankPicksForDomains(
@@ -2157,6 +2225,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       {
         underDifficultyReserve: options.underDifficultyReserve,
         provider: genProvider,
+        domainExamples,
       },
     );
   }

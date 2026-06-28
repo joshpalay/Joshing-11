@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const convergeDomain = vi.fn();
 const reconcileProposedDomain = vi.fn();
+const getDeepGlobalDomains = vi.fn();
 
 vi.mock('@/server/knowledge/converge-domain', () => ({
   convergeDomain: (...args: unknown[]) => convergeDomain(...args),
@@ -9,6 +10,10 @@ vi.mock('@/server/knowledge/converge-domain', () => ({
 
 vi.mock('@/lib/questions/categorization', () => ({
   reconcileProposedDomain: (...args: unknown[]) => reconcileProposedDomain(...args),
+}));
+
+vi.mock('@/server/db/queries/knowledge', () => ({
+  getDeepGlobalDomains: (...args: unknown[]) => getDeepGlobalDomains(...args),
 }));
 
 import {
@@ -28,6 +33,7 @@ describe('reconcileAuthoredDomain', () => {
     vi.clearAllMocks();
     convergeDomain.mockResolvedValue(convergeResult([{ label: 'Hamlet', kind: 'new', similarity: 0 }]));
     reconcileProposedDomain.mockResolvedValue({ canonicalDomain: 'Hamlet', reconciled: false });
+    getDeepGlobalDomains.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -61,7 +67,9 @@ describe('reconcileAuthoredDomain', () => {
 
     const outcome = await reconcileAuthoredDomain('The Bard’s Tragedies', 'user-1');
 
-    expect(reconcileProposedDomain).toHaveBeenCalledWith('The Bard’s Tragedies', 'user-1');
+    expect(reconcileProposedDomain).toHaveBeenCalledWith('The Bard’s Tragedies', 'user-1', {
+      additionalDomains: [],
+    });
     expect(outcome.method).toBe('llm');
     expect(outcome.canonicalDomain).toBe('Shakespearean Tragedy');
     expect(outcome.differs).toBe(true);
@@ -93,14 +101,18 @@ describe('reconcileAuthoredDomain', () => {
     expect(outcome.method).toBe('none');
   });
 
-  it('reads the RECONCILE_AUTHORED_DOMAINS flag with the repo boolean convention', () => {
+  it('defaults the RECONCILE_AUTHORED_DOMAINS flag ON, with falsy values as the kill switch', () => {
+    // Unset / empty → ON (the Tier-1 default).
     vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', '');
-    expect(isReconcileAuthoredDomainsEnabled()).toBe(false);
-    for (const truthy of ['true', '1', 'yes', 'on', 'TRUE']) {
+    expect(isReconcileAuthoredDomainsEnabled()).toBe(true);
+    for (const truthy of ['true', '1', 'yes', 'on', 'TRUE', 'anything-else']) {
       vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', truthy);
       expect(isReconcileAuthoredDomainsEnabled()).toBe(true);
     }
-    vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', 'false');
-    expect(isReconcileAuthoredDomainsEnabled()).toBe(false);
+    // Only an explicit falsy value reverts to blind-write.
+    for (const falsy of ['false', '0', 'no', 'off', 'OFF']) {
+      vi.stubEnv('RECONCILE_AUTHORED_DOMAINS', falsy);
+      expect(isReconcileAuthoredDomainsEnabled()).toBe(false);
+    }
   });
 });
