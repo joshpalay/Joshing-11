@@ -27,17 +27,20 @@ import type { CSSProperties } from 'react';
  * its own independent element.
  */
 
-// x-large per the resolved size fork. The box height drives every other
-// dimension (radius, width, font size) so the marker scales as one unit.
-const BOX_HEIGHT = 76;
+// The box height drives every other dimension (radius, width, font size) so the
+// marker scales as one unit. Tightened from the original x-large 76px so the
+// marker reads as a quiet gutter index rather than dominating the column
+// (D-GAMEPLAY-NUMBER-BOX-PLACEMENT, size revisited 2026-06-28).
+const BOX_HEIGHT = 56;
 // Rounded rect: border-radius ≈ 0.22 × height.
 const BOX_RADIUS = Math.round(BOX_HEIGHT * 0.22);
 // Core box is slightly wider than tall (~1.12×) to hold the trailing period;
 // the bonus box is square.
 const CORE_BOX_WIDTH = Math.round(BOX_HEIGHT * 1.12);
-// Cormorant Garamond, weight 600. Core numeral ~46px; bonus glyph ~42px.
-const CORE_FONT_SIZE = 46;
-const BONUS_FONT_SIZE = 42;
+// Cormorant Garamond, weight 600. Font sizes track the box height (core ≈ 0.61×,
+// bonus ≈ 0.55×) so a single BOX_HEIGHT change resizes the whole marker.
+const CORE_FONT_SIZE = Math.round(BOX_HEIGHT * 0.605);
+const BONUS_FONT_SIZE = Math.round(BOX_HEIGHT * 0.553);
 // Optical nudge: pad the numeral left ~12% of the font size so the trailing
 // period doesn't visually shove the numeral off-center.
 const CORE_LEFT_PAD = Math.round(CORE_FONT_SIZE * 0.12);

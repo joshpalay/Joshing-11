@@ -283,17 +283,19 @@ function DismissNoticeRow({
   };
 
   return (
-    <div className="flex flex-col items-center gap-0.5 py-0.5">
+    <div className="flex flex-col items-start gap-0.5 py-0.5" style={{ paddingLeft: '6px' }}>
       {/* Like the question action links, this notice renders directly on the
           full-strength triangle pattern, where bare muted text is illegible. Wrap
           it in an opaque chip so it reads as a self-contained object on the tiles
-          rather than dissolving into them. */}
+          rather than dissolving into them. Left-aligned (and inset 6px to match
+          the number-box gutter) so it sits in the same left column as the cards
+          rather than floating centered. */}
       <p
         style={{
           ...monoStyle,
           display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
           flexWrap: 'wrap',
           // The quoted question fragment can push the line past a narrow viewport;
           // cap the chip and let it wrap to a second row rather than overflow.
@@ -301,7 +303,7 @@ function DismissNoticeRow({
           fontSize: '0.58rem',
           lineHeight: 1.4,
           color: 'var(--text-muted)',
-          textAlign: 'center',
+          textAlign: 'left',
           background: 'var(--surface)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-sm)',
@@ -341,7 +343,7 @@ function DismissNoticeRow({
             ...monoStyle,
             fontSize: '0.54rem',
             color: 'var(--danger)',
-            textAlign: 'center',
+            textAlign: 'left',
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
