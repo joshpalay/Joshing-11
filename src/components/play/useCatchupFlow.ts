@@ -532,6 +532,19 @@ export function useCatchupFlow() {
     const itemId = item.dailyQueueItemId;
     setSubmitting(true);
     setError(null);
+    // Optimistic shrink: flag the dismissed card so it collapses in place while
+    // the dismiss call is in flight (the swap-for-notice below happens on
+    // success). Set before the await so the browser paints the collapse during
+    // the round-trip; cleared again if the dismiss fails.
+    const setDismissing = (value: boolean) =>
+      setMessages((existing) =>
+        existing.map((message) =>
+          message.kind === 'question' && message.assignmentId === itemId
+            ? { ...message, dismissing: value }
+            : message,
+        ),
+      );
+    setDismissing(true);
     try {
       const response = await fetch('/api/daily/catchup/dismiss', {
         method: 'POST',
@@ -541,6 +554,7 @@ export function useCatchupFlow() {
       });
       const raw = await response.json().catch(() => null);
       if (!response.ok) {
+        setDismissing(false);
         applyCatchupSubmitFailure(item, parseCatchUpAnswerErrorBody(raw));
         return;
       }
@@ -577,6 +591,7 @@ export function useCatchupFlow() {
         setPhase('round_complete');
       }
     } catch {
+      setDismissing(false);
       applyCatchupSubmitFailure(item, parseCatchUpAnswerErrorBody({ code: 'network' }));
     } finally {
       setSubmitting(false);
