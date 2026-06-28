@@ -51,10 +51,13 @@ import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interes
 import { adminUserIds } from '@/server/auth/admin';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import {
+  isAreaExpansionParentOverflowEnabled,
   isNarrowKbGuardEnabled,
   narrowKbThinnessThreshold,
+  selectOverflowParents,
   selectUngroundedExcludedDomains,
 } from '@/server/daily/kb-exhaustion';
+import { getExpansionParents } from '@/server/knowledge/open-domain';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { domainKey } from '@/lib/knowledge/domain-key';
@@ -2192,6 +2195,27 @@ export async function generateDailyQuestionsFromKnowledgeBase(
           threshold: narrowKbThinnessThreshold(),
         });
         domainsForLlm = domainsForLlm.filter((domain) => !excluded.has(domain));
+
+        // Parent overflow (B-AREA-EXPANSION-01, Phase 5 / R4): hand a thin child's
+        // freed slot UP to its recorded expansion parent (broader, deeper pool)
+        // instead of letting the orchestrator backfill it from unrelated domains.
+        // Only parents the user actually holds as a territory are eligible, so
+        // territory/strength prompt context is always present. Gated independently.
+        if (isAreaExpansionParentOverflowEnabled()) {
+          const parents = await getExpansionParents(userId, [...excluded]);
+          const routed = selectOverflowParents(
+            parents.values(),
+            (domain) => territoryByDomain.has(domain),
+            (domain) => bankFilledDomains.has(domain) || domainsForLlm.includes(domain),
+          );
+          if (routed.length > 0) {
+            domainsForLlm.push(...routed);
+            console.info('[daily/kb-exhaustion] routed thin domains to expansion parents', {
+              userId,
+              parents: routed,
+            });
+          }
+        }
       }
     } catch (error) {
       // Fail open: the guard must never block a build. Proceed ungated.

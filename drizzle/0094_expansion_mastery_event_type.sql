@@ -1,0 +1,11 @@
+-- Area Expansion (B-AREA-EXPANSION-01, Phase 3): add an 'expansion' value to the
+-- MasterySourceType enum. When a player expands a small area into a broader/wider
+-- one, we record a zero-point MASTERY_EVENTS row with this source type whose
+-- metadata carries { expandedFrom: <source area> } — the honest "what expanded
+-- into what" provenance the feature's canon guardrail requires. Mirrors the
+-- earlier 'declared_promoted' addition (0015) on the same enum.
+--
+-- Rollback: enum values cannot be dropped in Postgres without recreating the type.
+-- This value is additive and unused until the expansion write path is enabled, so
+-- the rollback is simply to leave it in place (a no-op) and stop writing it.
+ALTER TYPE "MasterySourceType" ADD VALUE IF NOT EXISTS 'expansion';
