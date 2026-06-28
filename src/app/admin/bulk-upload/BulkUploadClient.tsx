@@ -22,24 +22,37 @@ const SAMPLE_CSV = `question,answer,alternates,explanation,category,subcategory,
 // Deliberately minimal — an internal ops tool, not a product surface.
 export function BulkUploadClient() {
   const [file, setFile] = useState<File | null>(null);
+  const [text, setText] = useState('');
   const [pending, setPending] = useState<'dry' | 'commit' | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // A selected file wins over pasted text; otherwise the textarea is the source.
+  const hasInput = file !== null || text.trim().length > 0;
+
   async function submit(dryRun: boolean) {
-    if (!file || pending) return;
+    if (!hasInput || pending) return;
     setPending(dryRun ? 'dry' : 'commit');
     setError(null);
     setResult(null);
     try {
-      const form = new FormData();
-      form.set('file', file);
-      form.set('dryRun', dryRun ? 'true' : 'false');
-      const res = await fetch('/api/admin/bulk-upload-questions', {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
+      const res = file
+        ? await fetch('/api/admin/bulk-upload-questions', {
+            method: 'POST',
+            credentials: 'include',
+            body: (() => {
+              const form = new FormData();
+              form.set('file', file);
+              form.set('dryRun', dryRun ? 'true' : 'false');
+              return form;
+            })(),
+          })
+        : await fetch('/api/admin/bulk-upload-questions', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ csv: text, dryRun }),
+          });
       const data = (await res.json().catch(() => null)) as (UploadResult & { message?: string }) | null;
       if (!res.ok) {
         setError(data?.message ?? `Upload failed (${res.status}).`);
@@ -96,11 +109,36 @@ export function BulkUploadClient() {
         />
       </div>
 
+      <div className="mt-3">
+        <label htmlFor="csv-text" className="text-muted-foreground mb-1 block text-sm">
+          …or paste CSV directly (include the header row)
+        </label>
+        <textarea
+          id="csv-text"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setResult(null);
+            setError(null);
+          }}
+          rows={8}
+          placeholder={SAMPLE_CSV}
+          disabled={file !== null}
+          className="w-full rounded-md border p-3 font-mono text-[0.75rem] disabled:opacity-50"
+          style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+        />
+        {file !== null ? (
+          <p className="text-muted-foreground mt-1 text-xs">
+            A file is selected, so the pasted text is ignored. Clear the file to use the text box.
+          </p>
+        ) : null}
+      </div>
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void submit(true)}
-          disabled={!file || pending !== null}
+          disabled={!hasInput || pending !== null}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--border)' }}
         >
@@ -109,7 +147,7 @@ export function BulkUploadClient() {
         <button
           type="button"
           onClick={() => void submit(false)}
-          disabled={!file || pending !== null}
+          disabled={!hasInput || pending !== null}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
         >
