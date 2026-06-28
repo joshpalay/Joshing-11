@@ -154,6 +154,12 @@ export async function register() {
       await db.execute(sql`
         ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'declared_promoted'
       `);
+      // Area Expansion (0094): the expansion write records a zero-point
+      // MASTERY_EVENTS row with this source type. Pre-add it so a
+      // recorded-but-not-fully-applied 0094 can't 22P02 the insert.
+      await db.execute(sql`
+        ALTER TYPE "public"."MasterySourceType" ADD VALUE IF NOT EXISTS 'expansion'
+      `);
       await db.execute(sql`
         ALTER TABLE "MASTERY_EVENTS"
           ADD COLUMN IF NOT EXISTS "metadata" jsonb

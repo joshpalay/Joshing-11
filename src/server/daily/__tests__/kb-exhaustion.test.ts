@@ -1,13 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  isAreaExpansionParentOverflowEnabled,
+  isAreaExpansionThinnessTriggerEnabled,
   isNarrowKbGuardEnabled,
   narrowKbThinnessThreshold,
+  selectOverflowParents,
+  selectThinnestEligibleArea,
   selectUngroundedExcludedDomains,
   type DomainGuardInput,
 } from '@/server/daily/kb-exhaustion';
 
-const GUARD_VARS = ['NARROW_KB_GUARD_ENABLED', 'RETRIEVAL_POOL_DEPTH_THRESHOLD'] as const;
+const GUARD_VARS = [
+  'NARROW_KB_GUARD_ENABLED',
+  'RETRIEVAL_POOL_DEPTH_THRESHOLD',
+  'AREA_EXPANSION_THINNESS_TRIGGER_ENABLED',
+  'AREA_EXPANSION_PARENT_OVERFLOW_ENABLED',
+] as const;
 const saved: Record<string, string | undefined> = {};
 for (const v of GUARD_VARS) saved[v] = process.env[v];
 
@@ -61,6 +70,122 @@ describe('selectUngroundedExcludedDomains', () => {
 
   it('returns an empty set for an empty batch', () => {
     expect(selectUngroundedExcludedDomains([], 8).size).toBe(0);
+  });
+});
+
+describe('selectThinnestEligibleArea', () => {
+  const none = new Set<string>();
+
+  it('returns null when nothing is thin', () => {
+    expect(
+      selectThinnestEligibleArea([{ domain: 'World War II', poolDepth: 40 }], 8, none),
+    ).toBeNull();
+  });
+
+  it('picks the single thinnest area among several thin ones (A3: one graduation)', () => {
+    const picked = selectThinnestEligibleArea(
+      [
+        { domain: 'Pride', poolDepth: 5 },
+        { domain: 'Wagner Ring Cycle', poolDepth: 2 },
+        { domain: 'Hamlet', poolDepth: 7 },
+        { domain: 'Renaissance Painting', poolDepth: 40 }, // not thin
+      ],
+      8,
+      none,
+    );
+    expect(picked).toBe('Wagner Ring Cycle');
+  });
+
+  it('treats depth === threshold as NOT thin (same boundary as the guard)', () => {
+    expect(selectThinnestEligibleArea([{ domain: 'Pride', poolDepth: 8 }], 8, none)).toBeNull();
+  });
+
+  it('skips an area already offered, falling through to the next thinnest', () => {
+    const picked = selectThinnestEligibleArea(
+      [
+        { domain: 'Wagner Ring Cycle', poolDepth: 2 },
+        { domain: 'Pride', poolDepth: 5 },
+      ],
+      8,
+      new Set(['Wagner Ring Cycle']),
+    );
+    expect(picked).toBe('Pride');
+  });
+
+  it('breaks ties on depth by domain name for determinism', () => {
+    const picked = selectThinnestEligibleArea(
+      [
+        { domain: 'Sloth', poolDepth: 3 },
+        { domain: 'Envy', poolDepth: 3 },
+      ],
+      8,
+      none,
+    );
+    expect(picked).toBe('Envy');
+  });
+});
+
+describe('selectOverflowParents', () => {
+  const held = (...domains: string[]) => {
+    const set = new Set(domains);
+    return (d: string) => set.has(d);
+  };
+  const served = (...domains: string[]) => {
+    const set = new Set(domains);
+    return (d: string) => set.has(d);
+  };
+
+  it('routes a held parent that is not already being served', () => {
+    expect(
+      selectOverflowParents(['Moral Philosophy'], held('Moral Philosophy'), served()),
+    ).toEqual(['Moral Philosophy']);
+  });
+
+  it('skips a parent the user does not hold as a territory', () => {
+    expect(selectOverflowParents(['Moral Philosophy'], held(), served())).toEqual([]);
+  });
+
+  it('skips a parent already served this round (bank-filled or in the palette)', () => {
+    expect(
+      selectOverflowParents(
+        ['Moral Philosophy'],
+        held('Moral Philosophy'),
+        served('Moral Philosophy'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('de-dupes when two thin children share one parent', () => {
+    expect(
+      selectOverflowParents(
+        ['Moral Philosophy', 'Moral Philosophy'],
+        held('Moral Philosophy'),
+        served(),
+      ),
+    ).toEqual(['Moral Philosophy']);
+  });
+});
+
+describe('area-expansion thinness trigger config', () => {
+  it('defaults the thinness trigger OFF', () => {
+    delete process.env.AREA_EXPANSION_THINNESS_TRIGGER_ENABLED;
+    expect(isAreaExpansionThinnessTriggerEnabled()).toBe(false);
+  });
+
+  it('honors common truthy spellings of the flag', () => {
+    for (const truthy of ['true', '1', 'yes', 'on']) {
+      process.env.AREA_EXPANSION_THINNESS_TRIGGER_ENABLED = truthy;
+      expect(isAreaExpansionThinnessTriggerEnabled()).toBe(true);
+    }
+  });
+
+  it('defaults the parent-overflow trigger OFF and honors truthy spellings', () => {
+    delete process.env.AREA_EXPANSION_PARENT_OVERFLOW_ENABLED;
+    expect(isAreaExpansionParentOverflowEnabled()).toBe(false);
+    for (const truthy of ['true', '1', 'yes', 'on']) {
+      process.env.AREA_EXPANSION_PARENT_OVERFLOW_ENABLED = truthy;
+      expect(isAreaExpansionParentOverflowEnabled()).toBe(true);
+    }
   });
 });
 

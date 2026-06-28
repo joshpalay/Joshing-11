@@ -48,6 +48,32 @@ export function isNarrowKbGuardEnabled(): boolean {
 }
 
 /**
+ * Whether a thin declared area touched in a completed round may trigger an
+ * expansion offer (B-AREA-EXPANSION-01, Phase 2). Off by default and INDEPENDENT
+ * of NARROW_KB_GUARD_ENABLED: the guard suppresses fabrication, whereas this only
+ * decides whether the player is *offered* broader/wider areas — a safe, additive,
+ * player-visible nudge. Kept dark until the expansion write path (Phases 3+) is
+ * reviewed, and so it can be flipped alongside the retrieval grounding work
+ * (docs/retrieval-flip-checklist.md) rather than silently changing prod.
+ */
+export function isAreaExpansionThinnessTriggerEnabled(): boolean {
+  return boolEnv('AREA_EXPANSION_THINNESS_TRIGGER_ENABLED', false);
+}
+
+/**
+ * Whether an exhausted ("thin") child area whose slot the guard suppressed should
+ * hand that slot UP to its recorded expansion parent (B-AREA-EXPANSION-01, Phase
+ * 5 / R4) — e.g. a tapped-out "Pride" draws from "Moral Philosophy" instead of
+ * the orchestrator backfilling from unrelated domains. Off by default and only
+ * meaningful when the narrow-KB guard is on (it refines what the guard does with
+ * a suppressed domain). Kept dark so it can be flipped alongside the guard /
+ * retrieval grounding rather than silently changing generation.
+ */
+export function isAreaExpansionParentOverflowEnabled(): boolean {
+  return boolEnv('AREA_EXPANSION_PARENT_OVERFLOW_ENABLED', false);
+}
+
+/**
  * The pool depth (distinct durable facts) below which a domain counts as "thin".
  * Shared verbatim with grounding's poolDepthThreshold so the guard hands a domain
  * to grounded refill at exactly the boundary grounding considers it thin.
@@ -83,4 +109,48 @@ export function selectUngroundedExcludedDomains(
     }
   }
   return excluded;
+}
+
+/**
+ * Pure. Given the expansion parents of suppressed thin children, return the
+ * distinct parents to route their freed slots to (B-AREA-EXPANSION-01, Phase 5).
+ * A parent qualifies only if the user actually holds it as a territory (so the
+ * generator has territory/strength context for it) and it isn't already being
+ * served this round (bank-filled or already in the palette). First-seen order,
+ * de-duped.
+ */
+export function selectOverflowParents(
+  parents: Iterable<string>,
+  isHeldTerritory: (domain: string) => boolean,
+  isAlreadyServed: (domain: string) => boolean,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const parent of parents) {
+    if (seen.has(parent) || !isHeldTerritory(parent) || isAlreadyServed(parent)) continue;
+    seen.add(parent);
+    out.push(parent);
+  }
+  return out;
+}
+
+export type ThinAreaCandidate = { domain: string; poolDepth: number };
+
+/**
+ * Pure. Pick the single thinnest declared area eligible for an expansion offer
+ * (B-AREA-EXPANSION-01, A3: one graduation per game, the thinnest area touched).
+ * A candidate qualifies when its pool is thin (depth strictly below the threshold,
+ * the SAME boundary as selectUngroundedExcludedDomains so the two never drift) and
+ * it has not already been offered. Ties break by lowest depth, then domain name
+ * for determinism. Returns null when nothing qualifies.
+ */
+export function selectThinnestEligibleArea(
+  candidates: readonly ThinAreaCandidate[],
+  threshold: number,
+  alreadyOffered: ReadonlySet<string>,
+): string | null {
+  const eligible = candidates
+    .filter((c) => c.poolDepth < threshold && !alreadyOffered.has(c.domain))
+    .sort((a, b) => a.poolDepth - b.poolDepth || a.domain.localeCompare(b.domain));
+  return eligible[0]?.domain ?? null;
 }

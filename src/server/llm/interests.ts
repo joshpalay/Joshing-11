@@ -465,6 +465,53 @@ Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": ".
 
 export type AdjacentDomainSuggestion = { label: string; broadCategory: string | null };
 
+// Shared finalize for domain-suggestion lists (adjacent siblings + broader
+// parents): drop the player's own domain and any bucket-level label, de-dupe by
+// label, normalize the broad category (folding the General Knowledge catch-all to
+// null), and cap. Pure — the LLM and curated callers feed it pre-extracted items.
+function finalizeDomainSuggestions(
+  items: AdjacentDomainSuggestion[],
+  ownKey: string,
+  limit: number,
+): AdjacentDomainSuggestion[] {
+  const seen = new Set<string>([ownKey]);
+  const out: AdjacentDomainSuggestion[] = [];
+  for (const item of items) {
+    const label = item.label.trim();
+    if (!label) continue;
+    if (isTooBroadInterest(label)) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const normalized = item.broadCategory ? normalizeBroadCategory(item.broadCategory) : null;
+    out.push({
+      label: label.slice(0, 80),
+      broadCategory:
+        normalized && normalized !== 'General Knowledge' ? normalized.slice(0, 80) : null,
+    });
+  }
+  return out.slice(0, limit);
+}
+
+// Parse an LLM JSON array of { label, broadCategory } domain suggestions into raw
+// items. No filtering here — finalizeDomainSuggestions does that.
+function parseDomainSuggestions(content: string): AdjacentDomainSuggestion[] {
+  const parsed = parseJsonArray(content);
+  if (!parsed) return [];
+  const items: AdjacentDomainSuggestion[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const label = asTrimmedString(record.label ?? record.domain);
+    if (!label) continue;
+    items.push({
+      label,
+      broadCategory: asTrimmedString(record.broadCategory ?? record.broad_category),
+    });
+  }
+  return items;
+}
+
 /**
  * Suggest specific domains adjacent to one the player has MASTERED, for the
  * post-daily-Five "you're crushing X — branch out?" expansion offer. Unlike
@@ -506,33 +553,96 @@ Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": ".
       messages: [{ role: 'user', content: wrapUserInput('mastered_domain', cleanDomain) }],
     });
 
-    const parsed = parseJsonArray(extractTextContent(response.content));
-    if (!parsed) return [];
+    const parsed = parseDomainSuggestions(extractTextContent(response.content));
+    return finalizeDomainSuggestions(parsed, cleanDomain.toLowerCase(), 4);
+  } catch {
+    return [];
+  }
+}
 
-    const ownKey = cleanDomain.toLowerCase();
-    const seen = new Set<string>([ownKey]);
-    const candidates: AdjacentDomainSuggestion[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-      const record = item as Record<string, unknown>;
-      const label = asTrimmedString(record.label ?? record.domain);
-      if (!label) continue;
-      // Lateral neighbours must be specific too — drop any bucket-level item.
-      if (isTooBroadInterest(label)) continue;
-      const key = label.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
+// Curated "one level up" parents for known-small domains (B-AREA-EXPANSION-01,
+// decision B2). The seven deadly sins and heavenly virtues are the launch set —
+// each is a genuinely small area that taps out fast, and they share natural
+// parents. Keyed by lowercased domain label; the parents are answerable bodies of
+// knowledge (never a bare top-level bucket), so they survive the
+// isTooBroadInterest filter in finalizeDomainSuggestions.
+const SEVEN_DEADLY_SINS = ['Pride', 'Greed', 'Lust', 'Envy', 'Gluttony', 'Wrath', 'Sloth'];
+const SEVEN_HEAVENLY_VIRTUES = [
+  'Chastity',
+  'Temperance',
+  'Charity',
+  'Diligence',
+  'Patience',
+  'Kindness',
+  'Humility',
+];
+const SIN_PARENTS: AdjacentDomainSuggestion[] = [
+  { label: 'The Seven Deadly Sins', broadCategory: 'Philosophy' },
+  { label: 'Moral Philosophy', broadCategory: 'Philosophy' },
+  { label: "Dante's Inferno", broadCategory: 'Literature' },
+];
+const VIRTUE_PARENTS: AdjacentDomainSuggestion[] = [
+  { label: 'The Seven Heavenly Virtues', broadCategory: 'Philosophy' },
+  { label: 'Moral Philosophy', broadCategory: 'Philosophy' },
+  { label: 'Virtue Ethics', broadCategory: 'Philosophy' },
+];
+const CURATED_BROADER_PARENTS: Record<string, AdjacentDomainSuggestion[]> = {
+  ...Object.fromEntries(SEVEN_DEADLY_SINS.map((s) => [s.toLowerCase(), SIN_PARENTS])),
+  ...Object.fromEntries(SEVEN_HEAVENLY_VIRTUES.map((v) => [v.toLowerCase(), VIRTUE_PARENTS])),
+};
 
-      const rawBroad = asTrimmedString(record.broadCategory ?? record.broad_category);
-      const normalized = rawBroad ? normalizeBroadCategory(rawBroad) : null;
-      candidates.push({
-        label: label.slice(0, 80),
-        broadCategory:
-          normalized && normalized !== 'General Knowledge' ? normalized.slice(0, 80) : null,
-      });
-    }
+/**
+ * Suggest BROADER parent domains for a small area the player has run dry — the
+ * "go broader" half of the expansion offer (B-AREA-EXPANSION-01). Where
+ * suggestAdjacentDomains moves laterally to siblings, this moves UP exactly one
+ * level: Pride → "The Seven Deadly Sins" / "Moral Philosophy" / "Dante's
+ * Inferno". A curated map (the seven sins/virtues) answers the launch cases
+ * deterministically; everything else falls back to a one-level-up Haiku prompt.
+ * Constrained to a SINGLE jump and to answerable parents (never a top-level
+ * bucket). Fails open to [] so an outage simply means no broader options.
+ */
+export async function suggestBroaderDomains(
+  domain: string,
+  broadCategory: string | null,
+): Promise<AdjacentDomainSuggestion[]> {
+  const cleanDomain = domain.trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!cleanDomain) return [];
+  const ownKey = cleanDomain.toLowerCase();
 
-    return candidates.slice(0, 4);
+  // 1. Curated map first — deterministic parents for the known-small areas.
+  const curated = CURATED_BROADER_PARENTS[ownKey];
+  if (curated) return finalizeDomainSuggestions(curated, ownKey, 3);
+
+  // 2. Constrained Haiku fallback — one level up, answerable parents only.
+  const client = getAnthropicClient();
+  if (!client) return [];
+
+  const broadHint = broadCategory
+    ? `\nThe player's domain sits in the broad category "${broadCategory}".`
+    : '';
+  const systemPrompt = `A player has run through a small, specific trivia domain and wants to GO BROADER — up exactly ONE level to a larger body of knowledge that CONTAINS their domain. Suggest 3 broader parent domains.
+Rules:
+- Go UP exactly one level. Never two jumps, and never to a bare top-level bucket like "Philosophy", "History", "Music", or "Literature".
+- Each parent must be a named, answerable body of knowledge that CONTAINS the player's domain: a collection, canon, movement, school of thought, series, era, or work.
+- Good for "Pride": "The Seven Deadly Sins", "Moral Philosophy", "Dante's Inferno".
+- Good for "Ocarina of Time": "The Legend of Zelda series", "Nintendo 64 classics".
+- Good for "The Battle of Hastings": "The Norman Conquest", "Medieval England".
+- Every item must still be specific enough to write real questions about — never a bare category bucket.
+- Do NOT include the player's own domain. Do not repeat items.
+- broadCategory is a stable top-level bucket (Music, Film & Television, History, Science, Sports, Pop Culture, Philosophy, Literature, etc.). Never "Other" or "General".${broadHint}
+Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": "..." } ]${INSTRUCTION_USER_INPUT_GUIDANCE}`;
+
+  try {
+    const response = await loggedMessagesCreate(client, 'interests-suggest-broader', {
+      model: CANONICALIZE_MODEL,
+      max_tokens: 300,
+      temperature: 0.3,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('exhausted_domain', cleanDomain) }],
+    });
+
+    const parsed = parseDomainSuggestions(extractTextContent(response.content));
+    return finalizeDomainSuggestions(parsed, ownKey, 3);
   } catch {
     return [];
   }
