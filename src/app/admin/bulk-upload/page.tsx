@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
+import { getAdminAccounts } from '@/server/db/queries/admin-accounts';
 
 import { BulkUploadClient } from './BulkUploadClient';
 
@@ -14,5 +15,9 @@ export default async function AdminBulkUploadPage() {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
-  return <BulkUploadClient />;
+  // The author picker lists all admin accounts; the route re-validates the
+  // chosen author against the allowlist, so this is display-only.
+  const adminAccounts = await getAdminAccounts();
+
+  return <BulkUploadClient adminAccounts={adminAccounts} currentUserId={session.userId} />;
 }

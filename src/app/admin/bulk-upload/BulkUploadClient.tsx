@@ -19,10 +19,20 @@ const SAMPLE_CSV = `question,answer,alternates,explanation,category,subcategory,
 "Which planet is known as the Red Planet?",Mars,,"Iron oxide gives it the colour.",science,Astronomy,1
 "Who wrote ""Hamlet""?","William Shakespeare","Shakespeare|Bill Shakespeare",,literature,Shakespeare,moderate`;
 
+// A selectable admin author (resolved server-side from ADMIN_USER_IDS).
+type AdminAccount = { id: string; displayName: string };
+
 // Deliberately minimal — an internal ops tool, not a product surface.
-export function BulkUploadClient() {
+export function BulkUploadClient({
+  adminAccounts,
+  currentUserId,
+}: {
+  adminAccounts: AdminAccount[];
+  currentUserId: string;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState('');
+  const [authorId, setAuthorId] = useState(currentUserId);
   const [pending, setPending] = useState<'dry' | 'commit' | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +54,7 @@ export function BulkUploadClient() {
               const form = new FormData();
               form.set('file', file);
               form.set('dryRun', dryRun ? 'true' : 'false');
+              form.set('authorId', authorId);
               return form;
             })(),
           })
@@ -51,7 +62,7 @@ export function BulkUploadClient() {
             method: 'POST',
             credentials: 'include',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ csv: text, dryRun }),
+            body: JSON.stringify({ csv: text, dryRun, authorId }),
           });
       const data = (await res.json().catch(() => null)) as (UploadResult & { message?: string }) | null;
       if (!res.ok) {
@@ -71,7 +82,8 @@ export function BulkUploadClient() {
       <header className="mb-5">
         <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">Bulk upload questions</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Upload a CSV to create questions in bulk. They are saved as verified, public, and attributed to you.
+          Upload a CSV to create questions in bulk. They are saved as verified and public, attributed
+          to the selected admin author.
         </p>
       </header>
 
@@ -95,6 +107,31 @@ export function BulkUploadClient() {
           {SAMPLE_CSV}
         </pre>
       </section>
+
+      <div className="mt-4">
+        <label htmlFor="author" className="text-muted-foreground mb-1 block text-sm">
+          Author
+        </label>
+        <select
+          id="author"
+          value={authorId}
+          onChange={(e) => setAuthorId(e.target.value)}
+          disabled={pending !== null}
+          className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+          style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+        >
+          {adminAccounts.length === 0 ? (
+            <option value={currentUserId}>You</option>
+          ) : (
+            adminAccounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.displayName}
+                {account.id === currentUserId ? ' (you)' : ''}
+              </option>
+            ))
+          )}
+        </select>
+      </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <input
