@@ -18,7 +18,13 @@ const optionsSchema = z.object({
   dryRun: z.boolean().optional().default(false),
 });
 
-async function readCsv(request: NextRequest): Promise<{ csv: string; dryRun: boolean } | { error: string }> {
+type ReadCsvResult = { csv: string; dryRun: boolean; authorId?: string } | { error: string };
+
+function asOptionalId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+async function readCsv(request: NextRequest): Promise<ReadCsvResult> {
   const contentType = request.headers.get('content-type') ?? '';
 
   if (contentType.includes('multipart/form-data')) {
@@ -29,15 +35,21 @@ async function readCsv(request: NextRequest): Promise<{ csv: string; dryRun: boo
     if (file.size > MAX_CSV_BYTES) return { error: 'file_too_large' };
     const dryRunRaw = form.get('dryRun');
     const dryRun = dryRunRaw === 'true' || dryRunRaw === '1';
-    return { csv: await file.text(), dryRun };
+    return { csv: await file.text(), dryRun, authorId: asOptionalId(form.get('authorId')) };
   }
 
-  // JSON fallback: { csv: string, dryRun?: boolean }
-  const body = (await request.json().catch(() => null)) as { csv?: unknown } | null;
+  // JSON fallback: { csv: string, dryRun?: boolean, authorId?: string }
+  const body = (await request.json().catch(() => null)) as
+    | { csv?: unknown; authorId?: unknown }
+    | null;
   if (!body || typeof body.csv !== 'string') return { error: 'invalid_request' };
   if (Buffer.byteLength(body.csv, 'utf8') > MAX_CSV_BYTES) return { error: 'file_too_large' };
   const opts = optionsSchema.safeParse(body);
-  return { csv: body.csv, dryRun: opts.success ? opts.data.dryRun : false };
+  return {
+    csv: body.csv,
+    dryRun: opts.success ? opts.data.dryRun : false,
+    authorId: asOptionalId(body.authorId),
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -50,6 +62,14 @@ export async function POST(request: NextRequest) {
   const read = await readCsv(request);
   if ('error' in read) {
     return NextResponse.json({ error: read.error }, { status: 400 });
+  }
+
+  // Author defaults to the uploader; an explicit choice must itself be an admin
+  // (the picker only lists admins, but never trust the client) — otherwise an
+  // admin could attribute questions to any arbitrary user id.
+  const authorId = read.authorId ?? session.userId;
+  if (!isAdminUser(authorId)) {
+    return NextResponse.json({ error: 'invalid_author' }, { status: 400 });
   }
 
   const parsed = parseBulkUploadCsv(read.csv);
@@ -77,7 +97,7 @@ export async function POST(request: NextRequest) {
   for (const row of parsed.rows) {
     try {
       const result = await createQuestion({
-        authorId: session.userId,
+        authorId,
         text: row.text,
         correctAnswer: row.correctAnswer,
         alternateAnswers: row.alternateAnswers,
@@ -111,6 +131,7 @@ export async function POST(request: NextRequest) {
 
   console.info('[admin/bulk-upload] complete', {
     adminId: session.userId,
+    authorId,
     created: created.length,
     skipped: rowErrors.length,
   });

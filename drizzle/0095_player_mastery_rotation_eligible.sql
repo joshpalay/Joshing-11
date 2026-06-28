@@ -1,0 +1,25 @@
+-- B-DOMAIN-BONUS-ROTATION-01 — keep +2 bonus (friend) domains out of the core
+-- top-5 rotation until the player adopts them.
+--
+-- A friend-sourced +2 bonus question is answered through the same mastery path as
+-- a core question, so answering one used to mint a `demonstrated` PLAYER_MASTERY
+-- row that getKnowledgeBase then served in the main five on later days — a
+-- domain the player never put on their list silently leaking into the top five.
+--
+-- `rotation_eligible` tags whether a demonstrated domain may feed the core
+-- rotation. It defaults TRUE so every existing row and every core/feed/declared
+-- write stays eligible exactly as before; only a brand-new row first created by a
+-- +2 bonus answer is written FALSE (see writeMasteryEvent). getKnowledgeBase
+-- excludes a demonstrated row only when rotation_eligible IS FALSE *and* the
+-- player hasn't adopted it (a non-resting domain frequency) *and* it isn't a
+-- declared interest — so adopting it (Often / Sometimes / Blue Moon) or declaring
+-- it re-includes it.
+--
+-- Purely additive: no existing column is touched and the default keeps current
+-- behaviour for every existing row. Idempotent and mirrored by a defensive guard
+-- in src/instrumentation.ts (precedent: the territory_type guard, migration 0035).
+--
+-- Rollback:
+--   ALTER TABLE "PLAYER_MASTERY" DROP COLUMN IF EXISTS "rotation_eligible";
+ALTER TABLE "PLAYER_MASTERY"
+  ADD COLUMN IF NOT EXISTS "rotation_eligible" boolean NOT NULL DEFAULT true;

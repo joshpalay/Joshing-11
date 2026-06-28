@@ -110,6 +110,14 @@ export type ChatMessage =
       canonicalSubcategory?: string | null;
       /** B-1 — domain newly opened in the KB by this correct answer; surfaces the "Added [Domain] — remove?" undo. */
       openedTerritoryDomain?: string | null;
+      /**
+       * B-DOMAIN-BONUS-ROTATION-01 — whether the opened domain is already in
+       * rotation. Defaults true (the B-1 default-add surfaces). The daily bonus
+       * surface passes false: a +2 bonus domain is parked out of rotation until
+       * the player adopts it here, so the card opens as an opt-in (Never preset)
+       * rather than an already-added "remove?".
+       */
+      openedTerritoryAdopted?: boolean;
       /** Author's why — commentary the question's author attached at creation, revealed on answer (correct or incorrect). */
       authorNote?: string | null;
       /** Question's stored factual explainer. Rendered as a fallback below the verdict when no breadcrumb arrives (e.g. feed-sourced catch-up items, or when /api/breadcrumb times out). */
@@ -1027,6 +1035,7 @@ function ResultRow({
   recheckAction,
   canonicalSubcategory,
   openedTerritoryDomain,
+  openedTerritoryAdopted = true,
   domId,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
@@ -1048,6 +1057,7 @@ function ResultRow({
   pointsLabel?: string | null;
   recheckAction?: RecheckAction | null;
   openedTerritoryDomain?: string | null;
+  openedTerritoryAdopted?: boolean;
   /** DOM id for the reveal root so the page can scroll a freshly-revealed result into view (MISC-4). */
   domId?: string;
 }) {
@@ -1330,7 +1340,11 @@ function ResultRow({
         {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
       </ThreadCard>
       {correct && openedTerritoryDomain ? (
-        <NewTerritoryUndo domain={openedTerritoryDomain} category={canonicalSubcategory} />
+        <NewTerritoryUndo
+          domain={openedTerritoryDomain}
+          category={canonicalSubcategory}
+          adopted={openedTerritoryAdopted}
+        />
       ) : null}
       {reactionPrompt ? <QuestionReactionPrompt prompt={reactionPrompt} /> : null}
     </div>
@@ -1595,6 +1609,7 @@ export function GameplayChatThread({
                 pointsLabel={m.pointsLabel}
                 recheckAction={m.recheckAction}
                 openedTerritoryDomain={m.openedTerritoryDomain}
+                openedTerritoryAdopted={m.openedTerritoryAdopted}
               />
             );
           case 'session_complete':
