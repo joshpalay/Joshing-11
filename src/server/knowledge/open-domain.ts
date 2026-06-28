@@ -180,3 +180,51 @@ export async function promoteDeclaredToDemonstrated(params: {
     return { promoted: false, reason: 'error' };
   }
 }
+
+/**
+ * Record area-expansion provenance (B-AREA-EXPANSION-01, Phase 3): a zero-point
+ * MASTERY_EVENTS row on the BROADER target area whose metadata captures
+ * `{ expandedFrom }` — the honest "Pride expanded into Moral Philosophy" record
+ * the feature's canon guardrail requires, and the link the parent-overflow
+ * backfill (Phase 5) reads.
+ *
+ * Best-effort and isolated: the area itself is opened by addDeclaredInterest, so a
+ * failure here never denies the player their expansion or shows a false
+ * confirmation — it only loses the breadcrumb (which we log). Idempotent via the
+ * deterministic answerId.
+ */
+export async function recordAreaExpansion(params: {
+  userId: string;
+  sourceDomain: string;
+  targetDomain: string;
+}): Promise<{ recorded: boolean }> {
+  const { userId, sourceDomain, targetDomain } = params;
+  if (!userId || !sourceDomain || !targetDomain) return { recorded: false };
+
+  const answerId = `expansion:${sourceDomain}:${targetDomain}:${userId}`;
+  try {
+    await db
+      .insert(masteryEvents)
+      .values({
+        userId,
+        canonicalSubcategory: targetDomain,
+        sourceType: 'expansion',
+        answerId,
+        basePoints: 0,
+        weight: 0,
+        awardedPoints: 0,
+        sessionContext: 'expansion',
+        metadata: { expandedFrom: sourceDomain },
+      })
+      .onConflictDoNothing({ target: masteryEvents.answerId });
+    return { recorded: true };
+  } catch (error) {
+    console.warn('[area-expansion] provenance write failed', {
+      userId,
+      sourceDomain,
+      targetDomain,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { recorded: false };
+  }
+}

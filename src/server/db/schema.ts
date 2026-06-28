@@ -185,6 +185,7 @@ export const masterySourceTypeEnum = pgEnum('MasterySourceType', [
   'catchup_correct',
   'domain_merged',
   'declared_promoted',
+  'expansion',
 ]);
 export const feedbackSignalEnum = pgEnum('FeedbackSignal', ['thumbs_up', 'thumbs_down']);
 export const territoryTypeEnum = pgEnum('TerritoryType', ['declared', 'demonstrated']);
