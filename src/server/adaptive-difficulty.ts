@@ -197,23 +197,37 @@ function seedDifficultyFromAdaptiveLevel(level: number): ServedDifficulty {
 }
 
 /**
- * Minimum first-contact difficulty for a domain the player explicitly opted
- * into — either by stating it as an area of focus or by accepting one shared by
- * a friend. Someone who raised their hand for a topic finds "Establishing"
- * (accessible) trivia condescendingly easy, so we floor the *seed* at "Familiar"
- * (moderate) for ANY focus domain (declared or demonstrated). This sets only the
- * starting point. What happens to the floor afterwards is signal-keyed: a
- * DECLARED domain also holds this as a hard *erosion* floor (the two-incorrect
- * step-down can't drop below it), while a DEMONSTRATED domain can still step
- * down to accessible (PRD-D-5 §5.2, D3 — the erosion floor is declared-only).
+ * Minimum first-contact / erosion difficulty for a domain the player opted into
+ * (declared focus, or a friend-shared domain). It floors the *seed* (and, for a
+ * DECLARED domain, the *erosion* step-down — PRD-D-5 §5.2, D3) so the difficulty
+ * machinery never requests below this for a focus domain.
+ *
+ * RECALIBRATED 2026-06-28: defaults to 'accessible' (i.e. effectively OFF). The
+ * old hard 'moderate' floor blanket-pinned every focus domain to ≥moderate, which
+ * (a) BURIED genuinely-good easy questions — they landed below the requested tier
+ * and were deflected to the under-difficulty reserve — and (b) pressured the
+ * generator to write "deep cut / specialist" questions for naturally-easy topics
+ * (a kids'-book series, a sitcom), a driver of hallucinated false canon. Climbing
+ * is now left to the signal-keyed levers that already exist — the adaptive-level
+ * seed (skilled players still START at moderate/specialist), the two-correct
+ * streak ladder, empirical re-labelling, and supply recalibration — rather than a
+ * blanket floor. Override via FOCUS_DOMAIN_MIN_DIFFICULTY (set 'moderate' to
+ * restore the old behaviour, no deploy).
  */
-const FOCUS_DOMAIN_MIN_DIFFICULTY: ServedDifficulty = 'moderate';
+export function focusDomainMinDifficulty(): ServedDifficulty {
+  const raw = process.env.FOCUS_DOMAIN_MIN_DIFFICULTY?.trim();
+  return raw === 'moderate' || raw === 'specialist' || raw === 'accessible' ? raw : 'accessible';
+}
 
-export function applyFocusFloor(difficulty: ServedDifficulty, isFocusDomain: boolean): ServedDifficulty {
+export function applyFocusFloor(
+  difficulty: ServedDifficulty,
+  isFocusDomain: boolean,
+  floor: ServedDifficulty = focusDomainMinDifficulty(),
+): ServedDifficulty {
   if (!isFocusDomain) return difficulty;
-  return DIFFICULTY_LADDER.indexOf(difficulty) >= DIFFICULTY_LADDER.indexOf(FOCUS_DOMAIN_MIN_DIFFICULTY)
+  return DIFFICULTY_LADDER.indexOf(difficulty) >= DIFFICULTY_LADDER.indexOf(floor)
     ? difficulty
-    : FOCUS_DOMAIN_MIN_DIFFICULTY;
+    : floor;
 }
 
 /**
@@ -393,7 +407,7 @@ export async function updateDomainDifficultyOnAnswer(
   // floor, demonstrated domains step down freely (default 'accessible' floor).
   const declaredDomains = await getDeclaredDomainSet(userId, [canonicalSubcategory]);
   const floor: ServedDifficulty = declaredDomains.has(canonicalSubcategory)
-    ? FOCUS_DOMAIN_MIN_DIFFICULTY
+    ? focusDomainMinDifficulty()
     : 'accessible';
   const next = computeDomainDifficultyStep(existing, isCorrect, floor);
 
@@ -487,7 +501,7 @@ export async function recalibrateDomainDifficultyToSupply(
   for (const domain of domains) {
     const delivered = deliveredByDomain.get(domain)!;
     const floor: ServedDifficulty = declaredDomains.has(domain)
-      ? FOCUS_DOMAIN_MIN_DIFFICULTY
+      ? focusDomainMinDifficulty()
       : 'accessible';
     const floorIdx = DIFFICULTY_LADDER.indexOf(floor);
     const target = DIFFICULTY_LADDER[Math.max(floorIdx, DIFFICULTY_LADDER.indexOf(delivered))];

@@ -19,6 +19,7 @@ import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 import { db, generatedQuestions } from '@/server/db';
 import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 import {
+  focusDomainMinDifficulty,
   getDomainDifficultyOverrides,
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
@@ -922,8 +923,14 @@ const DIFFICULTY_TIER_LADDER: LlmQuestion['difficulty_estimate'][] = [
 
 // One rung of slack: the adaptive target is a soft aim and the tiers overlap, so
 // a single-rung miss (e.g. specialist requested, moderate returned) is tolerated.
-// A two-rung miss is not — it's a question that doesn't belong in the slot.
-const MAX_TIER_SHORTFALL = 1;
+// A two-rung miss is not — it's a question that doesn't belong in the slot. Env
+// knob (default 1, unchanged) is a transition escape hatch: bump to 2 if a domain
+// whose stored tier hasn't recalibrated down yet still buries good accessible
+// content. Pairs with the FOCUS_DOMAIN_MIN_DIFFICULTY recalibration.
+function maxTierShortfall(): number {
+  const parsed = Number(process.env.MAX_TIER_SHORTFALL);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 1;
+}
 
 // Map a requested difficulty preference — either a per-domain adaptive override
 // or the player's fixed global preference — to a ladder index. Keys with no
@@ -969,6 +976,7 @@ export function findUnderDifficultyQuestions(
 ): { toDrop: Set<number>; reasons: Record<number, string> } {
   const toDrop = new Set<number>();
   const reasons: Record<number, string> = {};
+  const maxShortfall = maxTierShortfall();
 
   // Normalize override keys so a returned canonical_subcategory differing only by
   // case/whitespace from the requested domain still resolves its override.
@@ -991,7 +999,7 @@ export function findUnderDifficultyQuestions(
     if (estimateIdx < 0) continue; // unrecognized estimate — not ours to judge.
 
     const shortfall = requestedIdx - estimateIdx;
-    if (shortfall > MAX_TIER_SHORTFALL) {
+    if (shortfall > maxShortfall) {
       toDrop.add(i);
       reasons[i] =
         `difficulty "${q.difficulty_estimate}" is ${shortfall} tiers below requested "${DIFFICULTY_TIER_LADDER[requestedIdx]}" for ${q.canonical_subcategory}`.slice(
@@ -2071,12 +2079,16 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // a domain falls through to LLM generation, which incidentally adds new rows
   // back into the pool. Spans accessible/moderate/specialist so harder slots
   // are reused too, not just warm-ups.
-  // Tier-adjacent fallback floors (BP-7 / C5): declared territory floors at
-  // 'moderate' (the D2/D3 erosion floor — never condescend), demonstrated at
-  // 'accessible'. Derived from the knowledgeBase already in hand.
+  // Tier-adjacent fallback floors (BP-7 / C5): how far DOWN the bank may reach when
+  // the requested tier is scarce. Tied to focusDomainMinDifficulty() so the bank's
+  // fallback floor tracks the (recalibrated, env-tunable) focus floor — declared
+  // domains now fall back to 'accessible' by default instead of stopping at
+  // 'moderate', so a tapped-out easy domain reuses its easy bank stock instead of
+  // burning a fresh generation. Demonstrated domains already floor at 'accessible'.
+  const declaredBankFloor = focusDomainMinDifficulty() as BankDifficulty;
   const bankFallbackFloors = new Map<string, BankDifficulty>();
   for (const entry of knowledgeBase) {
-    bankFallbackFloors.set(entry.domain, entry.territoryType === 'declared' ? 'moderate' : 'accessible');
+    bankFallbackFloors.set(entry.domain, entry.territoryType === 'declared' ? declaredBankFloor : 'accessible');
   }
 
   const bankPicks = await pickBankPicksForDomains(
