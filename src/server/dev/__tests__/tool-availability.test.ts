@@ -19,6 +19,8 @@ describe('getExistingDevToolHrefs', () => {
     expect(hrefs).toContain('/dev/onboarding/intro');
     // The one tool that lives outside /dev.
     expect(hrefs).toContain('/daily/summary/expand-preview');
+    // The admin-only bulk CSV upload tool, also outside /dev.
+    expect(hrefs).toContain('/admin/bulk-upload');
   });
 
   it('does not invent routes that have no page', () => {

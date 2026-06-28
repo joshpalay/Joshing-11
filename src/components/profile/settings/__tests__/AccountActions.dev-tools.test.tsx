@@ -39,4 +39,14 @@ describe('AccountActions — dev-tools grouping & availability', () => {
     const html = renderToStaticMarkup(<AccountActions isAdmin availableToolHrefs={[]} />);
     expect(html).toContain('Create test game');
   });
+
+  it('surfaces the admin bulk-upload link only to admins', () => {
+    const adminHtml = renderToStaticMarkup(<AccountActions isAdmin />);
+    expect(adminHtml).toContain('Bulk upload questions');
+    expect(adminHtml).toContain('href="/admin/bulk-upload"');
+
+    // Non-admins (the ungated section still renders, but the Admin group does not).
+    const nonAdminHtml = renderToStaticMarkup(<AccountActions isAdmin={false} />);
+    expect(nonAdminHtml).not.toContain('Bulk upload questions');
+  });
 });
