@@ -13,6 +13,7 @@ import {
 import { deriveAnswerOutcome, recordAnswerSideEffects } from '@/server/answers/answer-pipeline';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { type QueueSlot } from '@/server/daily/types';
+import { isBonusSlot } from '@/server/daily/bonus';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
@@ -513,6 +514,9 @@ export async function POST(request: NextRequest) {
         answerState: masteryAnswerState,
         pointsAwarded,
         sourceType: 'daily',
+        // B-DOMAIN-BONUS-ROTATION-01: a +2 bonus (friend-sourced) domain stays out
+        // of the core rotation until adopted — see writeMasteryEvent.
+        isBonus: isBonusSlot(slot),
         sourceId: `${queue.id}:${parsed.slotIndex}`,
         broadCategory: question.broadCategory,
         eventQuestionId: canonicalQuestionId,

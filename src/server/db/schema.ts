@@ -462,6 +462,12 @@ export const playerMastery = pgTable(
     tierReachedAt: timestamp('tier_reached_at', { withTimezone: true }),
     lifetimePointsBaseline: doublePrecision('lifetime_points_baseline').notNull().default(0),
     territoryType: territoryTypeEnum('territory_type').notNull().default('demonstrated'),
+    // B-DOMAIN-BONUS-ROTATION-01: may this demonstrated domain feed the core
+    // top-5 rotation? Defaults true (existing + core/feed/declared rows stay
+    // eligible); a row first minted by a +2 bonus answer is written false so a
+    // friend's domain can't leak into the main five until the player adopts it
+    // (a non-resting frequency) or declares it. See getKnowledgeBase.
+    rotationEligible: boolean('rotation_eligible').notNull().default(true),
     updatedAt: updatedAt(),
   },
   (table) => [

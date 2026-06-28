@@ -17,6 +17,7 @@ import {
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import type { GradableQuestionType } from '@/server/grading';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { notBlockedGeneratedByContentReport, notSuppressedByContentReport } from '@/server/db/queries/content-reports';
 import { notBlocked } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -44,6 +45,7 @@ import {
 import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { masteryDomainFeedsRotation } from '@/lib/knowledge/rotation-eligibility';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -235,6 +237,7 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
         territoryType: playerMastery.territoryType,
         totalPoints: playerMastery.totalPoints,
         tier: playerMastery.tier,
+        rotationEligible: playerMastery.rotationEligible,
       })
       .from(playerMastery)
       .where(eq(playerMastery.userId, userId))
@@ -242,6 +245,9 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
   } catch (error) {
     if (pgErrorCode(error) !== '42703') throw error;
 
+    // territory_type and/or rotation_eligible not present yet (pre-migration on a
+    // partially-recorded DB). Fail open: every domain stays demonstrated and
+    // rotation-eligible, i.e. the pre-B-DOMAIN-BONUS-ROTATION-01 behaviour.
     const rows = await db
       .select({
         domain: playerMastery.canonicalSubcategory,
@@ -253,16 +259,21 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
       .where(eq(playerMastery.userId, userId))
       .orderBy(asc(playerMastery.canonicalSubcategory));
 
-    return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const }));
+    return rows.map((row) => ({
+      ...row,
+      territoryType: 'demonstrated' as const,
+      rotationEligible: true,
+    }));
   }
 }
 
 export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [masteryRows, declaredRows, excludedDomains, correctCountsByDomain] = await Promise.all([
+  const [masteryRows, declaredRows, excludedDomains, correctCountsByDomain, preferences] = await Promise.all([
     getPlayerMasteryKnowledgeRows(userId),
     getActiveDeclaredInterests(userId),
     getExcludedKnowledgeDomains(userId),
     getCorrectAnswerCountsByDomain(userId),
+    getDailyPreferences(userId),
   ]);
 
   const isExcluded = (domain: string, broadCategory: string | null): boolean => {
@@ -271,6 +282,20 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     return false;
   };
 
+  // B-DOMAIN-BONUS-ROTATION-01: a demonstrated domain first opened by a +2 bonus
+  // answer carries rotation_eligible=false. It may still feed the core five if the
+  // player has since DECLARED it or ADOPTED it — set any non-resting frequency
+  // (Often / Sometimes / Blue Moon) on the bonus reveal card. Keys are lowercased
+  // to match the rest of this function.
+  const declaredKeys = new Set(
+    declaredRows.map((row) => normalizeDomain(row.domain).toLowerCase()).filter(Boolean),
+  );
+  const adoptedKeys = new Set(
+    Object.entries(preferences.domainPreferenceFrequency)
+      .filter(([, frequency]) => frequency !== 'resting')
+      .map(([domain]) => domain.toLowerCase()),
+  );
+
   const domainsByKey = new Map<string, KnowledgeBaseDomain>();
 
   for (const row of masteryRows) {
@@ -278,6 +303,18 @@ export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDom
     if (!domain) continue;
     const key = domain.toLowerCase();
     if (isExcluded(domain, row.broadCategory)) continue;
+    // Park a bonus-only domain out of the core rotation until adopted or declared.
+    // Existing/legacy rows are rotation_eligible=true (column default) and so are
+    // never skipped here.
+    if (
+      !masteryDomainFeedsRotation({
+        rotationEligible: row.rotationEligible,
+        declared: declaredKeys.has(key),
+        adopted: adoptedKeys.has(key),
+      })
+    ) {
+      continue;
+    }
     domainsByKey.set(key, {
       domain,
       broadCategory: row.broadCategory,
