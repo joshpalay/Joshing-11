@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/server/db', () => ({
   db: {},
@@ -13,6 +13,7 @@ import {
   applyFocusFloor,
   computeDomainDifficultyStep,
   computeSupplyCorrection,
+  focusDomainMinDifficulty,
   mapAdaptiveLevelToDifficultyHint,
   type DomainDifficultyState,
 } from '@/server/adaptive-difficulty';
@@ -43,20 +44,59 @@ describe('applyAdaptiveLevelAdjustment — global adaptive level', () => {
   });
 });
 
-describe('applyFocusFloor — opted-in domains start at least Familiar', () => {
-  it('raises an accessible seed to moderate for a focus domain', () => {
-    // A player who stated this area of focus (or accepted it from a friend)
-    // should never open on "Establishing" trivia.
-    expect(applyFocusFloor('accessible', true)).toBe('moderate');
+describe('applyFocusFloor — opted-in domains, env-tunable floor', () => {
+  it('defaults to NO raise (floor accessible): an accessible focus seed stays accessible', () => {
+    // RECALIBRATED 2026-06-28: the focus floor defaults to 'accessible', so a focus
+    // domain no longer blanket-starts at moderate. Skilled players still seed up via
+    // the adaptive-level seed (consulted before this floor); the streak ladder climbs.
+    expect(applyFocusFloor('accessible', true)).toBe('accessible');
   });
 
-  it('leaves accessible alone when the domain is not a focus area', () => {
+  it('raises to an explicitly-passed floor (the "never below floor" property holds)', () => {
+    expect(applyFocusFloor('accessible', true, 'moderate')).toBe('moderate');
+    expect(applyFocusFloor('accessible', true, 'specialist')).toBe('specialist');
+    expect(applyFocusFloor('moderate', true, 'specialist')).toBe('specialist');
+  });
+
+  it('ignores the floor for non-focus domains, and never lowers an already-higher seed', () => {
     expect(applyFocusFloor('accessible', false)).toBe('accessible');
-  });
-
-  it('never lowers a seed that already sits above the floor', () => {
+    expect(applyFocusFloor('accessible', false, 'specialist')).toBe('accessible');
     expect(applyFocusFloor('moderate', true)).toBe('moderate');
     expect(applyFocusFloor('specialist', true)).toBe('specialist');
+  });
+});
+
+describe('focusDomainMinDifficulty — env knob', () => {
+  const KEY = 'FOCUS_DOMAIN_MIN_DIFFICULTY';
+  const saved = process.env[KEY];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[KEY];
+    else process.env[KEY] = saved;
+  });
+
+  it('defaults to accessible when unset or garbage', () => {
+    delete process.env[KEY];
+    expect(focusDomainMinDifficulty()).toBe('accessible');
+    process.env[KEY] = 'nonsense';
+    expect(focusDomainMinDifficulty()).toBe('accessible');
+  });
+
+  it('honors a valid override (restores the old moderate-floor behaviour)', () => {
+    process.env[KEY] = 'moderate';
+    expect(focusDomainMinDifficulty()).toBe('moderate');
+    expect(applyFocusFloor('accessible', true)).toBe('moderate');
+    process.env[KEY] = 'specialist';
+    expect(focusDomainMinDifficulty()).toBe('specialist');
+  });
+});
+
+describe('computeSupplyCorrection — easy declared domain can now settle accessible', () => {
+  it('pulls a stuck-moderate easy domain down to accessible when the floor is accessible', () => {
+    expect(computeSupplyCorrection('moderate', 'accessible', 'accessible')).toBe('accessible');
+  });
+
+  it('the OLD moderate floor would have kept it pinned at moderate (no correction)', () => {
+    expect(computeSupplyCorrection('moderate', 'accessible', 'moderate')).toBeNull();
   });
 });
 
