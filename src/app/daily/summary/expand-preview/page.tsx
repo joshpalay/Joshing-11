@@ -12,10 +12,9 @@ const SAMPLE_OFFER: ExpansionOffer = {
   sourceDomain: 'Tears of the Kingdom - the Legend of Zelda',
   sourceDisplayName: 'Tears of the Kingdom',
   candidates: [
-    { label: 'Breath of the Wild', broadCategory: 'Video Games' },
-    { label: 'Ocarina of Time', broadCategory: 'Video Games' },
-    { label: "Majora's Mask", broadCategory: 'Video Games' },
-    { label: 'The Wind Waker', broadCategory: 'Video Games' },
+    { label: 'The Legend of Zelda series', broadCategory: 'Pop Culture', kind: 'broader' },
+    { label: 'Breath of the Wild', broadCategory: 'Pop Culture', kind: 'wider' },
+    { label: 'Ocarina of Time', broadCategory: 'Pop Culture', kind: 'wider' },
   ],
 }
 

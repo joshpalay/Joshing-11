@@ -12,7 +12,7 @@ import {
   users,
 } from '@/server/db';
 import { getPendingExpansionDomains } from '@/server/adaptive-difficulty';
-import { suggestAdjacentDomains } from '@/server/llm/interests';
+import { suggestAdjacentDomains, suggestBroaderDomains } from '@/server/llm/interests';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
@@ -51,12 +51,23 @@ export type DailySummaryView = {
   expansionOffer: ExpansionOffer | null;
 };
 
+/**
+ * One pickable target in the expansion offer. `kind` distinguishes a *wider*
+ * sibling (lateral neighbour) from a *broader* parent (one level up) so the card
+ * can group them (B-AREA-EXPANSION-01, R1/R3).
+ */
+export type ExpansionCandidate = {
+  label: string;
+  broadCategory: string | null;
+  kind: 'wider' | 'broader';
+};
+
 export type ExpansionOffer = {
   /** Canonical subcategory the player mastered (the offer's anchor). */
   sourceDomain: string;
   sourceDisplayName: string;
-  /** Specific adjacent domains the player can add to their rotation. */
-  candidates: { label: string; broadCategory: string | null }[];
+  /** Wider siblings and broader parents the player can add to their rotation. */
+  candidates: ExpansionCandidate[];
 };
 
 export type RecentFriendBridge = {
@@ -377,16 +388,33 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
     ))
     .limit(1);
 
-  const suggestions = await suggestAdjacentDomains(sourceDomain, mastery?.broadCategory ?? null);
-  if (suggestions.length === 0) return null;
+  // R1/R3: one offer carrying both a lateral "wider" set (siblings) and a
+  // vertical "broader" set (one level up). Both fail open to [] independently.
+  const broad = mastery?.broadCategory ?? null;
+  const [wider, broader] = await Promise.all([
+    suggestAdjacentDomains(sourceDomain, broad),
+    suggestBroaderDomains(sourceDomain, broad),
+  ]);
 
-  // Drop any sibling the player already follows so the offer is always net-new.
+  // Drop anything the player already follows so the offer is always net-new, and
+  // de-dupe by label across both lists (broader is listed first, so it wins ties).
   const activeInterests = await db
     .select({ domain: declaredInterests.domain })
     .from(declaredInterests)
     .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
   const have = new Set(activeInterests.map((row) => row.domain.trim().toLowerCase()));
-  const candidates = suggestions.filter((s) => !have.has(s.label.trim().toLowerCase()));
+  const seen = new Set<string>();
+  const tagged: ExpansionCandidate[] = [
+    ...broader.map((s) => ({ ...s, kind: 'broader' as const })),
+    ...wider.map((s) => ({ ...s, kind: 'wider' as const })),
+  ].filter((c) => {
+    const key = c.label.trim().toLowerCase();
+    if (have.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const candidates = capExpansionCandidates(tagged, 3);
   if (candidates.length === 0) return null;
 
   // Audit the expansion-offer funnel (eligible → shown → resolved). Fires each
@@ -396,6 +424,8 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
     userId,
     sourceDomain,
     candidateCount: candidates.length,
+    widerCount: candidates.filter((c) => c.kind === 'wider').length,
+    broaderCount: candidates.filter((c) => c.kind === 'broader').length,
   });
 
   return {
@@ -403,6 +433,25 @@ async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | nul
     sourceDisplayName: displayNameForDomain(sourceDomain),
     candidates,
   };
+}
+
+/**
+ * Cap the combined candidate list to a glanceable size while guaranteeing each
+ * flavour that exists is represented (at least one broader, at least one wider),
+ * then fill remaining slots broader-first. Keeps the chooser short without
+ * silently hiding one whole direction.
+ */
+function capExpansionCandidates(items: ExpansionCandidate[], limit: number): ExpansionCandidate[] {
+  const broader = items.filter((c) => c.kind === 'broader');
+  const wider = items.filter((c) => c.kind === 'wider');
+  const out: ExpansionCandidate[] = [];
+  if (broader.length > 0) out.push(broader[0]);
+  if (wider.length > 0 && out.length < limit) out.push(wider[0]);
+  for (const candidate of [...broader, ...wider]) {
+    if (out.length >= limit) break;
+    if (!out.includes(candidate)) out.push(candidate);
+  }
+  return out.slice(0, limit);
 }
 
 async function computeReminderPromptState(
