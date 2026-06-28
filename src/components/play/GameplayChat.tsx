@@ -1142,7 +1142,9 @@ function ResultRow({
                 {correctAnswer}
               </p>
             ) : null}
-            {explainerSentence ? <ExplainerLine text={explainerSentence} /> : null}
+            {/* The explainer is rendered once by the shared discovery block below
+                (showDiscoveryExplainer covers every !correct reveal, incl. gave_up).
+                Rendering it here too double-printed the answer on give-up. */}
           </>
         ) : (
           <>
