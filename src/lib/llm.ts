@@ -80,6 +80,12 @@ export const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const GRADING_MODEL = 'claude-haiku-4-5-20251001';
 // Exported so other LLM modules (e.g. interests.ts) use the same canonical ID.
 export const HAIKU_MODEL = GRADING_MODEL;
+// Player-facing commentary copy (the inside-joke aside and the factual reflection
+// explainer) is short creative/factual prose, not reasoning — Haiku handles it
+// well, and the per-answer breadcrumb (the same kind of work) already runs on
+// Haiku. Default to Haiku to cut these calls ~3x on output ($15→$5 per 1M).
+// Override COMMENTARY_MODEL=claude-sonnet-4-6 to restore Sonnet if quality dips.
+const COMMENTARY_MODEL = process.env.COMMENTARY_MODEL?.trim() || HAIKU_MODEL;
 const GENERIC_SUBCATEGORY_NORMALIZED = new Set([
   'pop culture',
   'music',
@@ -1007,9 +1013,9 @@ Write the aside. Return JSON only.`;
       return null;
     }
 
-    // ~280 tokens — below Sonnet cache threshold.
+    // ~280 tokens — below cache threshold.
     const response = await loggedMessagesCreate(client, 'inside-joke', {
-      model: ANTHROPIC_MODEL,
+      model: COMMENTARY_MODEL,
       max_tokens: 160,
       temperature: 0.7,
       system: systemPrompt,
@@ -1133,9 +1139,9 @@ Write 2–3 sentences of factual explanation.`;
       return fallbackFactualReflectionExplanation(canonicalAnswer);
     }
 
-    // ~140 tokens — below Sonnet cache threshold.
+    // ~140 tokens — below cache threshold.
     const response = await loggedMessagesCreate(client, 'reflection-explainer', {
-      model: ANTHROPIC_MODEL,
+      model: COMMENTARY_MODEL,
       max_tokens: 400,
       temperature: 0.45,
       system: systemPrompt,
