@@ -11,8 +11,17 @@ import {
   playerMastery,
   users,
 } from '@/server/db';
-import { getPendingExpansionDomains } from '@/server/adaptive-difficulty';
+import {
+  getExpansionOfferedDomains,
+  getPendingExpansionDomains,
+} from '@/server/adaptive-difficulty';
+import {
+  isAreaExpansionThinnessTriggerEnabled,
+  narrowKbThinnessThreshold,
+  selectThinnestEligibleArea,
+} from '@/server/daily/kb-exhaustion';
 import { suggestAdjacentDomains, suggestBroaderDomains } from '@/server/llm/interests';
+import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
@@ -248,6 +257,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
           broadCategory: playerMastery.broadCategory,
           totalPoints: playerMastery.totalPoints,
           tier: playerMastery.tier,
+          territoryType: playerMastery.territoryType,
         })
         .from(playerMastery)
         .where(and(
@@ -335,7 +345,11 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const refine: RefineSectionView = queue
     ? await buildRefineSection(userId, queue.id, slots)
     : { queueId: null, items: [] };
-  const expansionOffer = await buildExpansionOffer(userId);
+  const touchedForExpansion: TouchedDomainForExpansion[] = [...touchedDomains].map((domain) => ({
+    domain,
+    territoryType: masteryByDomain.get(domain)?.territoryType ?? null,
+  }));
+  const expansionOffer = await buildExpansionOffer(userId, touchedForExpansion);
 
   return {
     date: dateString,
@@ -366,19 +380,59 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   };
 }
 
-/**
- * Build the post-daily-Five expansion offer, or null when none is pending. Fires
- * for the most recently flagged domain (recalibrateDomainDifficultyToSupply set
- * expansionEligibleSince when the player topped its ladder yet still out-ran its
- * content). Asks Haiku for adjacent specific domains, drops any the player already
- * follows, and only returns an offer when at least one fresh candidate survives.
- * Fails soft to null — an LLM outage simply means no card this round.
- */
-async function buildExpansionOffer(userId: string): Promise<ExpansionOffer | null> {
-  const pending = await getPendingExpansionDomains(userId);
-  if (pending.length === 0) return null;
+type TouchedDomainForExpansion = {
+  domain: string;
+  territoryType: 'declared' | 'demonstrated' | null;
+};
 
-  const sourceDomain = pending[0].canonicalSubcategory;
+/**
+ * Choose the single area to offer expansion for this round, or null. Two triggers
+ * feed it (B-AREA-EXPANSION-01, A3 — one graduation per game):
+ *   1. A thin declared area touched this game (the "graduation" trigger) — gated
+ *      behind AREA_EXPANSION_THINNESS_TRIGGER_ENABLED, thinnest area wins.
+ *   2. The supply-ceiling pending domain (the original trigger) as a fallback.
+ * The thinness path honors the once-per-area stamp via getExpansionOfferedDomains.
+ */
+async function selectExpansionSource(
+  userId: string,
+  touched: readonly TouchedDomainForExpansion[],
+): Promise<string | null> {
+  if (isAreaExpansionThinnessTriggerEnabled()) {
+    const declared = touched.filter((t) => t.territoryType === 'declared').map((t) => t.domain);
+    if (declared.length > 0) {
+      const [depths, offered] = await Promise.all([
+        getDurablePoolDepthForDomains(declared),
+        getExpansionOfferedDomains(userId, declared),
+      ]);
+      const thinnest = selectThinnestEligibleArea(
+        declared.map((domain) => ({ domain, poolDepth: depths.get(domain) ?? 0 })),
+        narrowKbThinnessThreshold(),
+        offered,
+      );
+      if (thinnest) return thinnest;
+    }
+  }
+
+  // Fallback: the supply-ceiling trigger (already excludes resolved offers).
+  const pending = await getPendingExpansionDomains(userId);
+  return pending[0]?.canonicalSubcategory ?? null;
+}
+
+/**
+ * Build the post-daily-Five expansion offer, or null when none is pending. The
+ * source area comes from selectExpansionSource (a thin declared area touched this
+ * game, else the supply-ceiling domain). Asks Haiku for wider siblings + broader
+ * parents, drops any the player already follows, and only returns an offer when at
+ * least one fresh candidate survives. Fails soft to null — an LLM outage or no
+ * eligible area simply means no card this round.
+ */
+async function buildExpansionOffer(
+  userId: string,
+  touched: readonly TouchedDomainForExpansion[],
+): Promise<ExpansionOffer | null> {
+  const sourceDomain = await selectExpansionSource(userId, touched);
+  if (!sourceDomain) return null;
+
   const [mastery] = await db
     .select({ broadCategory: playerMastery.broadCategory })
     .from(playerMastery)

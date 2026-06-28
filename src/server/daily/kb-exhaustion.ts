@@ -48,6 +48,19 @@ export function isNarrowKbGuardEnabled(): boolean {
 }
 
 /**
+ * Whether a thin declared area touched in a completed round may trigger an
+ * expansion offer (B-AREA-EXPANSION-01, Phase 2). Off by default and INDEPENDENT
+ * of NARROW_KB_GUARD_ENABLED: the guard suppresses fabrication, whereas this only
+ * decides whether the player is *offered* broader/wider areas — a safe, additive,
+ * player-visible nudge. Kept dark until the expansion write path (Phases 3+) is
+ * reviewed, and so it can be flipped alongside the retrieval grounding work
+ * (docs/retrieval-flip-checklist.md) rather than silently changing prod.
+ */
+export function isAreaExpansionThinnessTriggerEnabled(): boolean {
+  return boolEnv('AREA_EXPANSION_THINNESS_TRIGGER_ENABLED', false);
+}
+
+/**
  * The pool depth (distinct durable facts) below which a domain counts as "thin".
  * Shared verbatim with grounding's poolDepthThreshold so the guard hands a domain
  * to grounded refill at exactly the boundary grounding considers it thin.
@@ -83,4 +96,25 @@ export function selectUngroundedExcludedDomains(
     }
   }
   return excluded;
+}
+
+export type ThinAreaCandidate = { domain: string; poolDepth: number };
+
+/**
+ * Pure. Pick the single thinnest declared area eligible for an expansion offer
+ * (B-AREA-EXPANSION-01, A3: one graduation per game, the thinnest area touched).
+ * A candidate qualifies when its pool is thin (depth strictly below the threshold,
+ * the SAME boundary as selectUngroundedExcludedDomains so the two never drift) and
+ * it has not already been offered. Ties break by lowest depth, then domain name
+ * for determinism. Returns null when nothing qualifies.
+ */
+export function selectThinnestEligibleArea(
+  candidates: readonly ThinAreaCandidate[],
+  threshold: number,
+  alreadyOffered: ReadonlySet<string>,
+): string | null {
+  const eligible = candidates
+    .filter((c) => c.poolDepth < threshold && !alreadyOffered.has(c.domain))
+    .sort((a, b) => a.poolDepth - b.poolDepth || a.domain.localeCompare(b.domain));
+  return eligible[0]?.domain ?? null;
 }
