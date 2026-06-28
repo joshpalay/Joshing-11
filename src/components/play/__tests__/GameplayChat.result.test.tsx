@@ -93,6 +93,22 @@ describe('GameplayChat correct-answer treatment (D-5 live thread)', () => {
     expect(rendered).not.toContain('“Angiosperms');
   });
 
+  it('renders the give-up explainer exactly once (regression: was double-printed)', () => {
+    // The gave_up branch used to render the explainer itself AND the shared
+    // discovery block rendered it again (showDiscoveryExplainer is true for every
+    // !correct reveal), so the answer's "why" printed twice on give-up.
+    const needle = 'feigned illness to expose the asylum';
+    const rendered = html([
+      resultMessage({
+        result: 'gave_up',
+        submitted: '',
+        correctAnswer: 'Nellie Bly',
+        explanation: `Nellie Bly ${needle}.`,
+      }),
+    ]);
+    expect(rendered.split(needle).length - 1).toBe(1);
+  });
+
   it('keeps the explainer and shows the "Between us!" wink below it on a discovery reveal', () => {
     const rendered = html([
       resultMessage({
