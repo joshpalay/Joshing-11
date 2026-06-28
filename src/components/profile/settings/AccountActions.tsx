@@ -15,6 +15,7 @@ import {
   Sparkles,
   Sprout,
   Sun,
+  Upload,
   UserPlus,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -285,6 +286,26 @@ export function AccountActions({
         },
       ],
     },
+    // Admin-only content ops. The /admin/bulk-upload route is itself gated by
+    // ADMIN_USER_IDS (404 for everyone else), so we only surface the link to
+    // admins — no point showing a non-admin a row that 404s. The rest of the
+    // dev-tools section stays ungated (see DEV_TOOLS_UNGATED).
+    ...(isAdmin
+      ? [
+          {
+            eyebrow: 'Admin',
+            tools: [
+              {
+                kind: 'link',
+                icon: <Upload className="size-5" />,
+                title: 'Bulk upload questions',
+                subtitle: 'Create questions in bulk from a CSV',
+                href: '/admin/bulk-upload',
+              },
+            ],
+          } satisfies DevToolGroup,
+        ]
+      : []),
   ];
 
   // null/undefined => the server couldn't run the route-exists check; fail open.

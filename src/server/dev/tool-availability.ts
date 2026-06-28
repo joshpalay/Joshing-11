@@ -38,6 +38,12 @@ export function getExistingDevToolHrefs(): string[] | null {
       hrefs.push('/daily/summary/expand-preview');
     }
 
+    // Admin-only content tool surfaced in the dev-tools section (the bulk CSV
+    // question upload lives under /admin, gated by ADMIN_USER_IDS).
+    if (hasPage(path.join(appDir, 'admin', 'bulk-upload'))) {
+      hrefs.push('/admin/bulk-upload');
+    }
+
     // Nested onboarding-harness stage. The /dev/onboarding hub page was
     // consolidated into the profile dev-tools section, so its parent folder no
     // longer has its own page — but the dev-tools UI still links straight to the
