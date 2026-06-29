@@ -37,6 +37,10 @@ const beat2Schema = z.object({
       domain: z.string(),
       questionCount: z.number(),
       correctCount: z.number(),
+      // The friend whose question(s) most opened this domain for the user.
+      // Additive (.optional()) so payloads written before the redesign — which
+      // had no friend attribution — still validate on read.
+      via: z.string().nullable().optional(),
     }),
   ),
   authored: z.array(z.object({ domain: z.string() })),
@@ -59,9 +63,21 @@ const beat4Schema = z.object({
 
 const beat5Schema = z.object({
   totalCreatorPoints: z.number(),
+  // Total times the user's questions were answered by friends this cycle (one
+  // per author-credit event). Additive (.optional()) for read-lenience on the
+  // pre-redesign corpus.
+  totalAnswered: z.number().optional(),
   topQuestion: z
     .object({ text: z.string(), answeredCount: z.number() })
     .nullable(),
+});
+
+// Opener stats for the ceremony's first room. Additive + nullable().optional()
+// so the pre-redesign corpus (no opener) still validates on read.
+const openerSchema = z.object({
+  weekIndex: z.number(),
+  questionsRight: z.number(),
+  sessionsPlayed: z.number(),
 });
 
 // Friend-fallback shapes: when a user has zero activity for Beat1/Beat5 in the
@@ -93,6 +109,7 @@ const beat6Schema = z.array(
 export const beatsPayloadSchema = z.object({
   cycleStart: z.string(),
   cycleEnd: z.string(),
+  opener: openerSchema.nullable().optional(),
   mode: z.enum(['solo', 'duo', 'group']).optional(),
   mergeNote: z
     .object({
@@ -117,7 +134,12 @@ export const beatsPayloadSchema = z.object({
 });
 
 export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
-export type Beat2DiscoveredItem = { domain: string; questionCount: number; correctCount: number };
+export type Beat2DiscoveredItem = {
+  domain: string;
+  questionCount: number;
+  correctCount: number;
+  via?: string | null;
+};
 export type Beat2Discovered = {
   friendMediated: Beat2DiscoveredItem[];
   authored: { domain: string }[];
@@ -127,7 +149,13 @@ export type Beat3Shaped = { userId: string; displayName: string; contributionCou
 export type Beat4Alignment = { userId: string; displayName: string; sharedDomains: string[] };
 export type Beat5Gave = {
   totalCreatorPoints: number;
+  totalAnswered?: number;
   topQuestion: { text: string; answeredCount: number } | null;
+};
+export type CeremonyOpener = {
+  weekIndex: number;
+  questionsRight: number;
+  sessionsPlayed: number;
 };
 
 export type Beat1FriendFallback = { friendName: string; count: number; domains: string[] };
@@ -138,6 +166,9 @@ export type Beat6Learned = Beat6LearnedItem[];
 export type BeatsPayload = {
   cycleStart: string;
   cycleEnd: string;
+  /** Stats for the ceremony opener room (week number, correct answers, days
+   * played in the cycle). Optional so the pre-redesign corpus stays valid. */
+  opener?: CeremonyOpener | null;
   /**
    * F3.2: classifies the ceremony as solo / duo / group based on the count
    * of friends who actively answered in the cycle. Drives copy variants and
@@ -239,7 +270,7 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
         lt(joshingGameResponses.answeredAt, cycleEndExclusive),
       )),
     db
-      .select({ question: questions })
+      .select({ question: questions, sourceUserId: feedItems.sourceUserId })
       .from(feedItems)
       .innerJoin(questions, eq(feedItems.questionId, questions.id))
       .where(and(
@@ -270,24 +301,54 @@ async function computeBeat2(userId: string, cycleStart: Date, cycleEndExclusive:
   ]);
 
   const byDomain = new Map<string, { domain: string; questionCount: number; correctCount: number }>();
-  const add = (domain: string, correct: boolean) => {
+  // domain → (contributorId → count): the friend whose question(s) opened each
+  // domain. Self-authored questions don't count as a "via" (you didn't discover
+  // it from a friend), so the user's own id is skipped.
+  const contributorsByDomain = new Map<string, Map<string, number>>();
+  const add = (domain: string, correct: boolean, contributorId: string | null) => {
     if (declaredDomains.has(domain)) return;
     const current = byDomain.get(domain) ?? { domain, questionCount: 0, correctCount: 0 };
     current.questionCount += 1;
     if (correct) current.correctCount += 1;
     byDomain.set(domain, current);
+    if (contributorId && contributorId !== userId) {
+      const counts = contributorsByDomain.get(domain) ?? new Map<string, number>();
+      counts.set(contributorId, (counts.get(contributorId) ?? 0) + 1);
+      contributorsByDomain.set(domain, counts);
+    }
   };
 
   gameAnswers.forEach((row) => {
     const domain = domainFor(row.question);
-    if (domain) add(domain, row.isCorrect === true);
+    if (domain) add(domain, row.isCorrect === true, row.question.creatorId);
   });
   feedAnswers.forEach((row) => {
     const domain = domainFor(row.question);
-    if (domain) add(domain, correctQuestionIds.has(row.question.id));
+    if (domain) add(domain, correctQuestionIds.has(row.question.id), row.sourceUserId);
   });
 
-  const friendMediated = [...byDomain.values()].sort((a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain));
+  // Resolve the top contributor per domain to a display name in one batch query.
+  const topContributorByDomain = new Map<string, string>();
+  for (const [domain, counts] of contributorsByDomain) {
+    const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (top) topContributorByDomain.set(domain, top[0]);
+  }
+  const viaIds = [...new Set(topContributorByDomain.values())];
+  const viaNameById = new Map<string, string>();
+  if (viaIds.length > 0) {
+    const viaRows = await db
+      .select({ id: users.id, displayName: users.displayName })
+      .from(users)
+      .where(inArray(users.id, viaIds));
+    viaRows.forEach((row) => viaNameById.set(row.id, row.displayName?.trim() || 'A friend'));
+  }
+
+  const friendMediated = [...byDomain.values()]
+    .sort((a, b) => b.questionCount - a.questionCount || a.domain.localeCompare(b.domain))
+    .map((item) => {
+      const viaId = topContributorByDomain.get(item.domain);
+      return { ...item, via: viaId ? (viaNameById.get(viaId) ?? null) : null };
+    });
 
   const seenAuthored = new Set<string>();
   const authored = authoredDeclared
@@ -438,6 +499,9 @@ async function computeBeat5(userId: string, cycleStart: Date, cycleEndExclusive:
 
   if (rows.length === 0) return null;
   const totalCreatorPoints = Math.round(rows.reduce((sum, row) => sum + Number(row.awardedPoints ?? 0), 0) * 10) / 10;
+  // One author_credit row == one friend answering one of your questions, so the
+  // row count is the total times your questions were answered this cycle.
+  const totalAnswered = rows.length;
   const byQuestion = new Map<string, { text: string; answeredCount: number }>();
   rows.forEach((row) => {
     if (!row.questionId || !row.questionText) return;
@@ -446,7 +510,7 @@ async function computeBeat5(userId: string, cycleStart: Date, cycleEndExclusive:
     byQuestion.set(row.questionId, current);
   });
   const [topQuestion] = [...byQuestion.values()].sort((a, b) => b.answeredCount - a.answeredCount);
-  return { totalCreatorPoints, topQuestion: topQuestion ?? null };
+  return { totalCreatorPoints, totalAnswered, topQuestion: topQuestion ?? null };
 }
 
 /**
@@ -715,9 +779,52 @@ async function countActiveAnsweringPlayers(
   return rows.length + 1;
 }
 
+/**
+ * Opener room stats: the user's week number (since signup), distinct questions
+ * answered correctly this cycle, and distinct days played. `weekIndex` derives
+ * from the account age in 7-day steps (cadence is weekly — see fire-ceremony.ts).
+ */
+async function computeOpener(
+  userId: string,
+  cycleStart: Date,
+  cycleEndExclusive: Date,
+  cycleEnd: Date,
+): Promise<CeremonyOpener> {
+  const [userRow] = await db
+    .select({ createdAt: users.createdAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const [stats] = await db
+    .select({
+      questionsRight: sql<number>`count(distinct ${masteryEvents.questionId}) filter (where ${masteryEvents.answerState} in ('first_correct', 'first_correct_after_wrong', 'repeat_correct'))`,
+      sessionsPlayed: sql<number>`count(distinct date_trunc('day', ${masteryEvents.createdAt}))`,
+    })
+    .from(masteryEvents)
+    .where(and(
+      eq(masteryEvents.userId, userId),
+      gte(masteryEvents.createdAt, cycleStart),
+      lt(masteryEvents.createdAt, cycleEndExclusive),
+    ));
+
+  const createdAt = userRow?.createdAt ?? cycleEnd;
+  const weekIndex = Math.max(
+    1,
+    Math.floor((cycleEnd.getTime() - createdAt.getTime()) / (7 * 86_400_000)) + 1,
+  );
+
+  return {
+    weekIndex,
+    questionsRight: Number(stats?.questionsRight ?? 0),
+    sessionsPlayed: Number(stats?.sessionsPlayed ?? 0),
+  };
+}
+
 export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: Date): Promise<BeatsPayload> {
   const cycleEndExclusive = endExclusive(cycleEnd);
-  const [beat1, beat2, beat3, beat4, beat5, beat6, activeAnsweringPlayers] = await Promise.all([
+  const [opener, beat1, beat2, beat3, beat4, beat5, beat6, activeAnsweringPlayers] = await Promise.all([
+    computeOpener(userId, cycleStart, cycleEndExclusive, cycleEnd),
     computeBeat1(userId, cycleStart, cycleEndExclusive),
     computeBeat2(userId, cycleStart, cycleEndExclusive),
     computeBeat3(userId, cycleStart, cycleEndExclusive),
@@ -744,6 +851,7 @@ export async function computeBeats(userId: string, cycleStart: Date, cycleEnd: D
   return {
     cycleStart: toIsoDate(cycleStart),
     cycleEnd: toIsoDate(cycleEnd),
+    opener,
     mode,
     beat1,
     beat1FriendFallback,

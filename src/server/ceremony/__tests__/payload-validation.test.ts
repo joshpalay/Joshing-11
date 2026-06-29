@@ -129,4 +129,35 @@ describe('beatsPayloadSchema (F3.5)', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('accepts the redesign fields: opener, friendMediated.via, beat5.totalAnswered', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      opener: { weekIndex: 14, questionsRight: 22, sessionsPlayed: 6 },
+      beat2: {
+        friendMediated: [{ domain: 'jazz', questionCount: 3, correctCount: 2, via: 'Maya' }],
+        authored: [],
+        promoted: [],
+      },
+      beat5: {
+        totalCreatorPoints: 42,
+        totalAnswered: 9,
+        topQuestion: { text: 'Q?', answeredCount: 7 },
+      },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('still accepts payloads omitting the redesign fields (pre-redesign corpus)', () => {
+    // WELL_FORMED has no opener, no via on friendMediated, no totalAnswered.
+    expect(beatsPayloadSchema.safeParse(WELL_FORMED).success).toBe(true)
+  })
+
+  it('rejects a malformed opener (questionsRight must be a number)', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      opener: { weekIndex: 14, questionsRight: 'lots', sessionsPlayed: 6 },
+    })
+    expect(result.success).toBe(false)
+  })
 })

@@ -303,6 +303,53 @@
     --exploring-accent-red:  #c9564d;
     --exploring-accent-gold: #a98a4c;
     --exploring-accent-blue: #65a8bb;
+    /* ── Weekly ceremony — full-bleed editorial "rooms" (D-CEREMONY-WEEKLY-…) ──
+       Each ceremony beat renders as its own saturated, full-bleed ground with
+       reversed (cream/light) type. Ink-on-cream is BROKEN here on purpose — that
+       single-surface rule was the source of the old presentation's anemia. These
+       are NOT category hues (--cat-*) and carry no category meaning; they are
+       per-beat presentation grounds. One token group per room:
+         -bg     full-bleed ground
+         -fg     on-color body/heading text
+         -accent highlight (numbers, arrows, lead domain)
+         -sub    muted on-color (eyebrow detail, captions)
+       The previous page hardcoded this palette inline (the CEREMONY_CIRCLE_COLORS
+       hex array + a literal gradient — the color-ratchet's named top offender);
+       tokenizing here is the single source of truth. Fallback rooms reuse the
+       mastered / gave groups. */
+    --ceremony-paper:            #f5f0e8;  /* shared light surface (closer)        */
+    --ceremony-open-bg:          var(--brand-ink);     /* navy #0a1f3d            */
+    --ceremony-open-fg:          var(--ceremony-paper);
+    --ceremony-open-accent:      #c08a2e;   /* ochre                              */
+    --ceremony-open-sub:         rgba(245, 240, 232, 0.72);
+    --ceremony-mastered-bg:      #b5432a;   /* terracotta                         */
+    --ceremony-mastered-fg:      #fff4e8;
+    --ceremony-mastered-accent:  #ffd9a0;
+    --ceremony-mastered-sub:     rgba(255, 244, 232, 0.78);
+    --ceremony-discovered-bg:     #1f4a37;  /* forest                             */
+    --ceremony-discovered-fg:     #eaf5ee;
+    --ceremony-discovered-accent: #a8e0bb;
+    --ceremony-discovered-sub:    rgba(234, 245, 238, 0.78);
+    --ceremony-learned-bg:        #5a2e2a;  /* deep umber — beat6 "worked through" */
+    --ceremony-learned-fg:        #f7ece8;
+    --ceremony-learned-accent:    #e8b59c;
+    --ceremony-learned-sub:       rgba(247, 236, 232, 0.78);
+    --ceremony-shaped-bg:         #3a1d4d;  /* plum                               */
+    --ceremony-shaped-fg:         #f3ecf7;
+    --ceremony-shaped-accent:     #e0b8f0;
+    --ceremony-shaped-sub:        rgba(243, 236, 247, 0.78);
+    --ceremony-alignment-bg:      #10324a;  /* deep teal-navy                     */
+    --ceremony-alignment-fg:      #e8f2f8;
+    --ceremony-alignment-accent:  #8fd0ec;
+    --ceremony-alignment-sub:     rgba(232, 242, 248, 0.78);
+    --ceremony-gave-bg:           #c08a2e;  /* ochre (ink-on-color)               */
+    --ceremony-gave-fg:           #1f1404;
+    --ceremony-gave-accent:       var(--brand-ink);
+    --ceremony-gave-sub:          rgba(31, 20, 4, 0.7);
+    --ceremony-close-bg:          var(--ceremony-paper);
+    --ceremony-close-fg:          var(--brand-ink);
+    --ceremony-close-accent:      #b5432a;
+    --ceremony-close-sub:         rgba(10, 31, 61, 0.62);
     --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
     /* System voice (STYLE-GUIDE-TYPE §2). The typewriter face (Courier New) was
        retired app-wide — the System voice now shares the sans (Montserrat) and is
@@ -566,6 +613,11 @@
   .result-reveal {
     animation: none !important;
   }
+
+  .ceremony-room-in,
+  .ceremony-hint-pulse {
+    animation: none !important;
+  }
 }
 
 /* Safari/Chrome paint autofilled fields with their own UA background — a muddy
@@ -595,6 +647,26 @@ select:-webkit-autofill {
     0% { transform: translate3d(0, 8px, 0) scale(0.96); opacity: 0; }
     45% { transform: translate3d(0, -3px, 0) scale(1.02); opacity: 1; }
     100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+}
+
+/* Weekly ceremony rooms (D-CEREMONY-WEEKLY-…). `ceremony-room-in` cross-fades a
+   beat's saturated ground as it mounts; `ceremony-hint-pulse` breathes the
+   "tap to continue" cue. The per-element staggered reveal is handled inline in
+   the page (opacity/transform transitions), so only these two live here. Both
+   are disabled under prefers-reduced-motion below. */
+@keyframes ceremony-room-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.ceremony-room-in {
+  animation: ceremony-room-in 0.45s ease;
+}
+@keyframes ceremony-hint-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.15; }
+}
+.ceremony-hint-pulse {
+  animation: ceremony-hint-pulse 2s infinite;
 }
 
 /* TESTING ONLY — flat mode (driven by the dev design bar's "Flat" toggle; see
