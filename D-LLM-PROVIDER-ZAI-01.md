@@ -1,6 +1,9 @@
 # D-LLM-PROVIDER-ZAI-01 — Evaluate z.ai (GLM) as a third LLM provider
 
-**Status:** OPEN — decisions A–E carry recommendations below; awaiting owner ratification.
+**Status:** DEFERRED (2026-06-29) — parked, not ratified. Revisit if LLM spend climbs
+(`getMonthToDateLlmSpendUsd()` is the trigger metric). The cost upside is concentrated on the
+generation path (~8×); grading already runs on the cheap Haiku tier, so little is left on the table
+at current volume. Decisions A–E carry recommendations below for whoever picks this back up.
 **Precedes:** `B-LLM-PROVIDER-ZAI-01` (no build prompt until ratified).
 **Depends on:** `D-LLM-COST-LATENCY-REPORT-01` (per-call / monthly tables stay blank until its telemetry lands).
 **Related:** `B-LLM-PROVIDER-AB-SWITCH`, `D-LLM-PROVIDER-AB-AND-GATE-TIER-01`, `src/server/llm/provider.ts`, `src/server/llm/pricing.ts`.
