@@ -32,10 +32,6 @@ import {
   type RetrievalConfig,
 } from '@/server/daily/retrieval-config';
 
-// Web search adds round-trips inside the single (server-tool) generation call,
-// so it tolerates more latency than a plain generation batch. Still bounded so a
-// stalled call can't eat the cron's whole budget.
-const RETRIEVAL_CALL_TIMEOUT_MS = 60_000;
 // Durable pool content (B1 §5.1, D8): machine bank no longer expires by age, so
 // seed rows get a far-future expiry rather than the per-user daily-reset value —
 // the bank ignores expiry for serving, and this keeps any age-based cleanup from
@@ -120,8 +116,12 @@ async function generateGroundedForDomain(
     tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: maxUses }],
   } as unknown as Anthropic.MessageCreateParamsNonStreaming;
 
+  // Web search adds round-trips inside the single (server-tool) generation call,
+  // so it tolerates more latency than a plain batch. Configurable + bounded
+  // (config.callTimeoutMs) so a stalled call can't eat the cron's whole budget,
+  // but isn't so tight that every domain aborts (the 2026-06 outage).
   const response = await loggedMessagesCreate(client, 'pool-refill-generate', params, {
-    timeoutMs: RETRIEVAL_CALL_TIMEOUT_MS,
+    timeoutMs: config.callTimeoutMs,
   });
 
   const usage = response.usage as

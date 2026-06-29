@@ -38,8 +38,16 @@ export type RetrievalConfig = {
   /** Searches the model may run per generated question (maps to web_search
    *  max_uses, multiplied by questions-per-call). */
   maxSearchesPerQuestion: number;
-  /** How many questions to ask for per domain in a single grounded call. */
+  /** How many questions to ask for per domain in a single grounded call. Kept
+   *  low by default: each call must finish within callTimeoutMs, and an agentic
+   *  web-search loop scales with maxSearchesPerQuestion * questionsPerDomain. */
   questionsPerDomain: number;
+  /** Per-call timeout (ms) for the grounded generation request. A web-search
+   *  generation does multiple search round-trips inside one call, so it needs
+   *  far more than a plain batch; too tight and EVERY domain aborts with
+   *  "Request was aborted" and persists nothing (the 2026-06 outage). Must stay
+   *  comfortably under the route's maxDuration (300s) so several domains fit. */
+  callTimeoutMs: number;
   /** A domain is "thin" (eligible for refill) when its durable pool depth — the
    *  count of non-duplicate, fact-keyed machine rows — is below this. */
   poolDepthThreshold: number;
@@ -74,7 +82,14 @@ export function getRetrievalConfig(): RetrievalConfig {
     dailyUsdCeiling: numEnv('RETRIEVAL_DAILY_USD_CEILING', 2),
     monthlyUsdCeiling: numEnv('LLM_MONTHLY_USD_CEILING', 0),
     maxSearchesPerQuestion: Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_SEARCHES_PER_QUESTION', 3))),
-    questionsPerDomain: Math.max(1, Math.round(numEnv('RETRIEVAL_QUESTIONS_PER_DOMAIN', 3))),
+    // Default 1 (was 3): a 3-question call issued up to 9 web searches and blew
+    // past the old 60s timeout on every domain (2026-06 outage — 0 persisted).
+    // One corroborated question per domain per run is the reliable unit; the
+    // backlog mechanism spreads domains across runs and depth accrues over runs.
+    questionsPerDomain: Math.max(1, Math.round(numEnv('RETRIEVAL_QUESTIONS_PER_DOMAIN', 1))),
+    // Default 120s (was a hardcoded 60s): a web-search generation needs room for
+    // several search round-trips. Floored at 10s; keep under maxDuration (300s).
+    callTimeoutMs: Math.min(290_000, Math.max(10_000, Math.round(numEnv('RETRIEVAL_CALL_TIMEOUT_MS', 120_000)))),
     poolDepthThreshold: Math.max(1, Math.round(numEnv('RETRIEVAL_POOL_DEPTH_THRESHOLD', 8))),
     activeLookbackDays: Math.max(1, Math.round(numEnv('RETRIEVAL_ACTIVE_LOOKBACK_DAYS', 14))),
     maxDomainsPerRun: Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_DOMAINS_PER_RUN', 50))),
