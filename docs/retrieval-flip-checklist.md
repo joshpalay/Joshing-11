@@ -33,10 +33,18 @@ If thin+active domains and frequent fall-throughs show up in those numbers, flip
       currently scheduled only by Vercel Hobby's best-effort cron (09:00 UTC) — the
       unreliability the workflow exists to avoid. The route is idempotent and capped, so
       dual scheduling is safe.
-- [ ] Sanity-check spend knobs (all pre-set with safe defaults, `retrieval-config.ts`):
-      `RETRIEVAL_DAILY_USD_CEILING` ($2 hard stop), `RETRIEVAL_MAX_SEARCHES_PER_QUESTION`
-      (3), `RETRIEVAL_QUESTIONS_PER_DOMAIN` (3), `RETRIEVAL_POOL_DEPTH_THRESHOLD` (8),
-      `RETRIEVAL_MAX_DOMAINS_PER_RUN` (50).
+- [ ] Sanity-check spend / throughput knobs (all pre-set with safe defaults,
+      `retrieval-config.ts`): `RETRIEVAL_DAILY_USD_CEILING` ($2 hard stop),
+      `RETRIEVAL_MAX_SEARCHES_PER_QUESTION` (3), `RETRIEVAL_QUESTIONS_PER_DOMAIN` (1),
+      `RETRIEVAL_POOL_DEPTH_THRESHOLD` (8), `RETRIEVAL_MAX_DOMAINS_PER_RUN` (50),
+      `RETRIEVAL_CALL_TIMEOUT_MS` (120000). **Per-call latency note:** a grounded
+      call runs `MAX_SEARCHES_PER_QUESTION * QUESTIONS_PER_DOMAIN` web searches in
+      one request and must finish within `RETRIEVAL_CALL_TIMEOUT_MS`; too-tight a
+      timeout (or too-high a per-call search count) aborts EVERY domain and
+      persists nothing — the 2026-06 outage. Keep the timeout comfortably under the
+      route's 300s `maxDuration` so several domains still fit per run, and only
+      raise `QUESTIONS_PER_DOMAIN` once you've confirmed real call latencies leave
+      headroom (watch `[llm] error … scope: 'pool-refill-generate'`).
 - [ ] **Spend caps (do this BEFORE flipping `RETRIEVAL_GROUNDING_ENABLED`):**
       - **Hard global cap — set an Anthropic Console org monthly spend limit.** This is
         the only cap that bounds *everything* (per-user generation + gates + grounding
