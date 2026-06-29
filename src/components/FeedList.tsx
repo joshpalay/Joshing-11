@@ -1012,6 +1012,7 @@ function FeedListContent({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hideToast, setHideToast] = useState<{ category: string } | null>(null)
+  const [freqToast, setFreqToast] = useState<{ domain: string } | null>(null)
   // "From Friends" starts capped to its most recent few milestone cards; each
   // "View more" reveals another batch. View-state only — never persisted.
   const [fromFriendsVisibleCount, setFromFriendsVisibleCount] = useState(
@@ -1352,6 +1353,39 @@ function FeedListContent({
         caught instanceof Error
           ? caught.message
           : 'Could not hide that category.'
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
+  // Gentle down-weight (owner direction): nudge this domain to "Blue Moon" in the
+  // Daily Five so it shows up rarely, instead of a hard hide. Unlike hideCategory
+  // this leaves the feed card in place — it changes future Daily Five frequency,
+  // not feed membership. The API merges server-side and rebuilds untouched queues.
+  const seeLessOften = useCallback(async (item: FeedApiItem) => {
+    const domain = item.domain_pill
+    if (!domain) return
+    setBusyId(item.id)
+    setError(null)
+    try {
+      const response = await fetch('/api/daily/preferences/domain-frequency', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ domain, frequency: 'blue_moon' }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message ?? 'Could not update that preference.')
+      }
+      setFreqToast({ domain })
+      window.setTimeout(() => {
+        setFreqToast((current) => (current?.domain === domain ? null : current))
+      }, 4500)
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : 'Could not update that preference.'
       )
     } finally {
       setBusyId(null)
@@ -1868,7 +1902,7 @@ function FeedListContent({
         }
         isInBank={item.is_in_bank}
         disabled={isBusy}
-        onHideCategory={() => void hideCategory(item)}
+        onSeeLessOften={() => void seeLessOften(item)}
         onHidePerson={() => void hidePerson(item)}
         onReportIncorrect={() => setReportSheet({ item, category: 'incorrect' })}
         onReportInappropriate={() =>
@@ -2018,6 +2052,25 @@ function FeedListContent({
             className="text-foreground text-xs font-medium not-italic underline-offset-4 hover:underline"
           >
             Manage on your knowledge page →
+          </Link>
+        </div>
+      ) : null}
+
+      {freqToast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2 text-sm italic"
+        >
+          <span>
+            You&apos;ll see questions about{' '}
+            {visibleFeedCategory(freqToast.domain) ?? freqToast.domain} less often.
+          </span>
+          <Link
+            href="/daily/setup"
+            className="text-foreground text-xs font-medium not-italic underline-offset-4 hover:underline"
+          >
+            Adjust in Game settings →
           </Link>
         </div>
       ) : null}
