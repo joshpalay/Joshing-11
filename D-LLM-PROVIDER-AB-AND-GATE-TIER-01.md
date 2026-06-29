@@ -68,16 +68,53 @@ A complementary run to the gate-compare audit above, asking a *different* questi
 - Beethoven sonata "**unusual** four-movement structure" (four movements is not unusual) — `4c257d42-6675-4037-9f50-1ff987bb5633`
 - **Duplicate:** Theodore Roosevelt "trust-buster" generated twice in one batch (~4s apart — a dedup escape); kept `3bcb96fa-ba74-4ff7-a773-e4c2d572b46d`, suppressed `afb817c3-ddeb-4afb-a2b0-5dfabd82f91b`.
 
+## Third finding — the gate was on Sonnet but still failed open (2026-06-29) — [fixed]
+
+A Harry Potter question shipped to production with a false premise: *"Which student receives **fifty points — the largest single award in that sequence** — for the most exceptional display of courage?"* → Neville. In *Philosopher's Stone* Neville received **ten** points (the decisive award) and the **largest** single award was Harry's **sixty**. Classic answer-right / premise-false — exactly this gate's job.
+
+The twist: telemetry (`LlmUsageEvent`, scope `factual-gate`) showed the gate **was** running on **Sonnet** at the generation timestamp, and Sonnet flags this question **5/5** in isolation. So it was neither a tier miss nor a prompt gap. Root cause: **the gate sends the whole over-provisioned batch in one call but capped the response at `max_tokens: 500`.** A single verbose drop reason runs ~270 output tokens; a batch flagging 2+ questions truncates the JSON mid-structure, `parseFactualGateResponse` can't parse it and returns an **empty drop set**, and the entire batch ships **ungated**. Reproduced: a 3-defect batch emits **495** output tokens — right against the old cap. And because `loggedMessagesCreate` logs *after* a successful response, a truncation/timeout fail-open leaves **no usage row** — invisible.
+
+Fix (PR-pending): `FACTUAL_GATE_MAX_TOKENS = 2000` (output is billed per token emitted, so the headroom is free), plus a `stop_reason === 'max_tokens'` guard that logs **"batch passed UNGATED"** loudly so any future truncation is observable instead of silent. Unit tests cover multi-drop parsing and the truncated-JSON fail-open. Sharpening the prompt remains a non-lever (the prompt already catches this on Sonnet). Open follow-up: the catch-block fail-open (timeout/API error) is still silent-but-warned; consider failing **closed** (drop the batch, let the orchestrator top up) since the over-provision makes that recoverable.
+
+**Pool cleanup (done — production writes, reversible, flag-never-delete pattern):**
+- HP "fifty points / largest single award" false premise — bank `17b0f389-a497-4039-9306-a3539f149d15` suppressed (`is_duplicate=true`); promoted live `Question 0417b3b0-4d4c-4ccc-941f-c4a3e569b466` soft-deleted (`deleted_at`). Script: `scripts/suppress-hp-points-false-premise.ts`.
+
+## Fourth finding — false premises live in asserted setup side-facts, not in length (2026-06-29) — [measured; generation rule added]
+
+Prompted by Josh's question — *"would shorter questions help?"* — we turned it into a number rather than guessing. Harness `scripts/audit-assertion-density.ts` (read-only): over a question's `question_text` (the SETUP) it counts an **assertion score** = digits + number-words + years + superlative/exclusivity words, runs the **fixed** Sonnet gate (batched at 6, exercising the raised `max_tokens`) to label flagged/not, and compares. n=120 most-recent non-suppressed bank rows.
+
+| Signal | Result |
+|---|---|
+| Flagged by the fixed gate | **8/120 (6.7%)** — false premises the *truncated* gate had let through (a second, independent cost-of-fail-open readout) |
+| Flag rate, **low** assertion-density tertile (score 0) | **2.5%** (1/40) |
+| Flag rate, **high** assertion-density tertile (score ≥ 1) | **12.5%** (5/40) — **~5× higher** |
+| Mean **words**, flagged vs not | 43.0 vs 36.7 — only ~6 words apart |
+| Mean **assertion score**, flagged vs not | 1.38 vs 1.04 |
+| Confirmed offenders, mean assertion score vs sample median | **2.60 vs 1** |
+
+Conclusions:
+1. **Assertion density beats raw length as a risk signal.** A setup carrying ≥1 asserted side-fact is flagged **~5×** as often; but flagged questions are barely longer (≈6 words), so "make questions shorter" is the wrong instruction — it targets a weak proxy.
+2. **Counts/superlatives are only half the story.** 2 of 5 confirmed offenders (tennis "volley before the net", Beethoven "unusual four-movement structure") score **low** on the quantitative metric — their false premise is **qualitative / relational** (a characterization or asserted link), which a numbers-and-superlatives metric can't see. So the lever must cover BOTH quantitative and qualitative asserted side-facts.
+3. **The HP case is the extreme:** assertion score 7 (p100), 66 words (p100) — both the most assertion-dense and the longest in the sample.
+
+Caveat: single-run LLM-as-judge over post-gate survivors; the 6.7% includes possible judge false positives (the doc's standing caveat) and a human spot-check would prune them. The tertile *contrast* is robust to that since false positives aren't density-correlated.
+
+**Generation-prompt rule added** (`SYSTEM_PROMPT`, "NO GRATUITOUS SIDE-FACTS IN THE SETUP", after TRIVIA-OF-TRIVIA): assert in the setup only what the ask needs AND you are certain of; cut decorative counts/superlatives AND characterization/derivation claims; prefer atmospheric framing (no factual claim) over claim-dense framing; with the HP BAD→GOOD pair. This is **defense in depth upstream of the gate**, not a replacement — it lowers the defect *rate*; the (now un-truncated) gate remains the catch-all. Consistent with "do not rewrite the *gate* prompt" — this changes the **generation** prompt, a different lever.
+
 ## Decisions
 
 - **The provider A/B switch is test instrumentation; default stays Anthropic.** [built] It is *not* the lever for question quality. Keep for measuring generation/grading provider quality at equal tier later, but don't treat a provider flip as a quality fix.
 - **The factual gate defaults to Sonnet**, env-overridable via **`FACTUAL_GATE_MODEL`** (`claude-haiku-4-5-*` to revert, an Opus id for max recall). Temperature omitted for sampling-param-free models (Opus 4.7/4.8, Fable); timeout raised for non-Haiku so a slower gate can't time out and fail open. [decided; PR #1221 open] Rationale: the gate runs once per generation **batch**, so a stronger model on this single high-leverage check is a small cost delta — the cheapest place in the pipeline to spend a stronger model.
 - **Do not rewrite the gate prompt to fix this** — measured non-lever.
+- **The factual gate's `max_tokens` is sized for the whole batch (`FACTUAL_GATE_MAX_TOKENS = 2000`), and `max_tokens` truncation is logged loudly.** [fixed, 2026-06-29] The 500-token cap silently truncated multi-drop responses → parse-fail → empty drop set → batch shipped ungated (the HP false premise's actual root cause). Output is billed per token emitted, so the headroom costs nothing. Do not lower this without re-checking batch-size × per-drop token cost.
+- **Reduce false-premise *rate* at generation, not just at the gate** — the `SYSTEM_PROMPT` "NO GRATUITOUS SIDE-FACTS IN THE SETUP" rule bans non-load-bearing asserted side-facts (quantitative AND qualitative). [added, 2026-06-29] Measured: assertion-density ≈ 5× the flag rate; length is a weak proxy (Fourth finding). Defense-in-depth, not a gate replacement.
+- **"Make questions shorter" is NOT the lever** — measured non-lever (flagged vs clean differ by ~6 words). The lever is *fewer asserted side-facts*, which is what the rule targets.
 - **OpenAI flagship default = gpt-4.1** (see Cost finding). [decided; PR #1219 open]
 
 ## Open / not done
 
 - **Quality gate (`findQualityFailures`) is still Haiku.** Possible follow-up to give it the same `FACTUAL_GATE_MODEL`-style treatment.
+- **The gate's catch-block fail-open (timeout / API error) is still silent-but-warned.** Now that truncation is fixed, consider failing **closed** (drop the batch and let the over-provisioning orchestrator top up) so a transient gate outage can't ship an un-vetted batch. Not done — it changes long-standing fail-open behavior; wants its own decision.
 - **Provider quality A/B at equal tier is still unmeasured.** The switch covers generation/grading, not the gate; the gate is not on the provider switch.
 - **OpenAI gate-tier untested locally** — `OPENAI_API_KEY` is in Vercel only, not `.env.local`, so the audit ran Anthropic tiers (Haiku/Sonnet/Opus) only.
 - **Audit caveats:** n=80, single-run, LLM-as-judge with real false positives; estimated genuine major-defect rate ~low-single-digit % to ~6% of the pool. The audited rows were legacy (`generated_by_provider = null`), i.e. the accumulated pool, not freshly-gated output. A human spot-check would prune judge false positives before banking a rate.

@@ -140,6 +140,14 @@ GOOD (open recall):
 TRIVIA-OF-TRIVIA RULE:
 Prefer questions of substance — "what is X", "what does X mean", "why does X matter", "who did X" — over questions of mere recall — "what year", "what number", "what label". A date, a count, or a name is worth asking only when that specific fact is itself meaningful; a question that lands on substance is almost always the better question. Lead with the idea, not the index card.
 
+NO GRATUITOUS SIDE-FACTS IN THE SETUP (false-premise floor — ALL tiers):
+The single largest source of broken questions is a FALSE CLAIM smuggled into the setup as decorative scaffolding — a claim the player never has to use, that exists only to sound authoritative. These are dangerous precisely because they are confident and unnecessary: every one is an independently-checkable fact that can be wrong while your asked answer is still right. They come in two forms, BOTH banned unless load-bearing AND certain:
+- QUANTITATIVE — a count, date, year, ordinal, or superlative/exclusivity claim ("fifty points", "the largest", "the first", "the only", "exactly three", "founded", "premiered in 1888").
+- QUALITATIVE / RELATIONAL — a characterization or causal/derivational link asserted as fact ("its unusual four-movement structure", "a rule that bars volleying before the ball crosses the net", "a transformation that draws on the ancient dragon").
+RULE: assert in the setup ONLY what the question actually needs the player to lean on, and only what you are certain is true. If a fact is not essential to the ask, CUT it. When you must include framing, prefer evocative, atmospheric description (which carries no factual claim) over a pile of stated counts, superlatives, and attributions. Setup length is not the problem — asserted side-facts are; a long atmospheric question is safe, a short one with a wrong number is not.
+- BAD (false, unnecessary superlative): "Dumbledore makes last-minute point awards that overturn Slytherin's lead. Which student receives fifty points — the largest single award in that sequence — for standing up to his friends?" → the "fifty points / largest single award" claim is both decorative and false (it was ten points, and the largest award went to someone else); the question works without it.
+- GOOD (same answer, no asserted side-fact): "At the end-of-year feast in Harry's first year, which student does Dumbledore award points to 'for standing up to his friends'?" → "Neville Longbottom"
+
 FAN-SALIENCE RULE (Rule 1 — tier-dependent):
 Do NOT default to the most nameable entity in a work — the character roster, the title, the principal location. Those are wiki-salient (easy to look up, dull to be asked). Chase fan-salient facts instead: the thing a devoted fan of THIS specific work would be delighted to be recognized for knowing — the rewatch-catch, the running joke, the exact wording of a famous line, the specific beat or object fans hold onto. Apply by difficulty tier:
 - specialist and moderate: the question MUST clear fan-salience. A generic "name the entity" question is a FAILURE at these tiers, even if factually correct.
@@ -852,6 +860,18 @@ function gateModelRejectsTemperature(model: string): boolean {
 // Haiku gate timeout is tuned for Haiku's speed; a heavier gate model needs more
 // headroom or it times out and fails open (silently disabling the gate).
 const FACTUAL_GATE_TIMEOUT_MS = FACTUAL_GATE_MODEL === HAIKU_MODEL ? HAIKU_GATE_TIMEOUT_MS : 20_000;
+// Output budget for the gate's JSON verdict. The whole over-provisioned batch is
+// gated in ONE call, and the response lists every dropped index + a one-line
+// reason. A single verbose drop already runs ~270 output tokens, so the old
+// 500-token cap truncated as soon as a batch flagged 2+ questions: the JSON cut
+// off mid-structure, parseFactualGateResponse failed to parse it, and the gate
+// SILENTLY returned an empty drop set — shipping the entire un-vetted batch
+// (this is how the "fifty points" Harry Potter false-premise question reached
+// production despite the gate running on Sonnet, which flags it deterministically).
+// Output is billed per token actually emitted, so this headroom is free unless a
+// response genuinely needs it; the truncation guard below catches any remaining
+// overflow loudly instead of silently.
+const FACTUAL_GATE_MAX_TOKENS = 2000;
 
 export function parseFactualGateResponse(
   raw: string,
@@ -911,12 +931,22 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
   try {
     const response = await loggedMessagesCreate(client, 'factual-gate', {
       model: FACTUAL_GATE_MODEL,
-      max_tokens: 500,
+      max_tokens: FACTUAL_GATE_MAX_TOKENS,
       // Omit temperature on models that reject sampling params (Opus 4.7/4.8/Fable).
       ...(gateModelRejectsTemperature(FACTUAL_GATE_MODEL) ? {} : { temperature: 0 }),
       system: FACTUAL_GATE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     }, { timeoutMs: FACTUAL_GATE_TIMEOUT_MS });
+    // A max_tokens stop means the JSON verdict was cut off: the parse below will
+    // fail and return an empty set, so the whole batch passes UNGATED. That used
+    // to be invisible. Surface it loudly so the cap can be raised before it
+    // silently disables the gate again.
+    if (response.stop_reason === 'max_tokens') {
+      console.warn(
+        '[daily/generate-questions] factual gate response truncated at max_tokens — batch passed UNGATED',
+        { batchSize: generated.length, maxTokens: FACTUAL_GATE_MAX_TOKENS },
+      );
+    }
     return parseFactualGateResponse(extractTextContent(response.content), generated.length);
   } catch (err) {
     // Fail open: a Haiku outage should not block the daily queue. A wrong
