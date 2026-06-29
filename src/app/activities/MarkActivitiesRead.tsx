@@ -18,10 +18,10 @@ export function MarkActivitiesRead() {
       }),
     ]).then(() => {
       // Refresh the server components on this route so the activity list
-      // reflects the just-written read/opened state. (The nav bell badge now
-      // counts only pending friend requests, sourced from /api/nav — it is
-      // unaffected by opening the bell and clears when a request is accepted
-      // or declined.)
+      // reflects the just-written read/opened state. Opening Lately also
+      // advances lastActivityBellOpenedAt (via /api/activities/opened), which
+      // is the floor getBellBadgeCount uses — so the nav bell badge clears once
+      // /api/nav refetches.
       router.refresh();
     });
   }, [router]);
