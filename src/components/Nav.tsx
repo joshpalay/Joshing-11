@@ -53,11 +53,13 @@ export function Nav({
   initialUserId = null,
   initialDisplayName = null,
   bellBadgeCount = 0,
+  friendRequestCount = 0,
   friendsDotVisible = false,
 }: {
   initialUserId?: string | null;
   initialDisplayName?: string | null;
   bellBadgeCount?: number;
+  friendRequestCount?: number;
   friendsDotVisible?: boolean;
 }) {
   const pathname = usePathname();
@@ -71,6 +73,7 @@ export function Nav({
   // them from GET /api/nav once mounted. Badges pop in slightly late by design.
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [badgeCount, setBadgeCount] = useState(bellBadgeCount);
+  const [friendRequests, setFriendRequests] = useState(friendRequestCount);
   const [friendsDot, setFriendsDot] = useState(friendsDotVisible);
 
   useEffect(() => {
@@ -78,12 +81,22 @@ export function Nav({
     let active = true;
     fetch('/api/nav', { credentials: 'include' })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { displayName?: string | null; bellBadgeCount?: number; friendsDotVisible?: boolean } | null) => {
-        if (!active || !data) return;
-        setDisplayName(data.displayName ?? null);
-        setBadgeCount(typeof data.bellBadgeCount === 'number' ? data.bellBadgeCount : 0);
-        setFriendsDot(Boolean(data.friendsDotVisible));
-      })
+      .then(
+        (
+          data: {
+            displayName?: string | null;
+            bellBadgeCount?: number;
+            friendRequestCount?: number;
+            friendsDotVisible?: boolean;
+          } | null,
+        ) => {
+          if (!active || !data) return;
+          setDisplayName(data.displayName ?? null);
+          setBadgeCount(typeof data.bellBadgeCount === 'number' ? data.bellBadgeCount : 0);
+          setFriendRequests(typeof data.friendRequestCount === 'number' ? data.friendRequestCount : 0);
+          setFriendsDot(Boolean(data.friendsDotVisible));
+        },
+      )
       .catch(() => {});
     return () => {
       active = false;
@@ -179,11 +192,11 @@ export function Nav({
           </Link>
           <div className="flex items-center gap-1">
             <Link
-              href="/friends"
+              href="/activities"
               aria-label={
                 showBadge
-                  ? `Friend requests, ${badgeCount} pending`
-                  : 'Friend requests'
+                  ? `Lately, ${badgeCount} new update${badgeCount === 1 ? '' : 's'}`
+                  : 'Lately'
               }
               className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
@@ -248,10 +261,20 @@ export function Nav({
                 ? pathname === '/'
                 : pathname.startsWith(href);
 
+            // The Friends tab carries the pending friend-request count (the
+            // count the bell used to badge). Announce it to screen readers via
+            // an explicit label; otherwise the visible "Friends" text is the
+            // accessible name.
+            const showFriendRequests = label === 'Friends' && friendRequests > 0;
+            const tabAriaLabel = showFriendRequests
+              ? `Friends, ${friendRequests} pending friend request${friendRequests === 1 ? '' : 's'}`
+              : undefined;
+
             return (
               <Link
                 key={href}
                 href={href}
+                aria-label={tabAriaLabel}
                 aria-current={active ? 'page' : undefined}
                 role="listitem"
                 className={[
@@ -272,9 +295,20 @@ export function Nav({
                       fill={active && label === 'Home' ? 'currentColor' : 'none'}
                     />
                   )}
-                  {/* Discovery indicator for the Friends tab — muted neutral
-                      so it doesn't compete with the bell badge accent. */}
-                  {friendsDot && label === 'Friends' ? (
+                  {/* Friends-tab indicators. Pending friend requests are the
+                      actionable signal, so they take the accent count pill
+                      (mirrors the bell's old treatment). Otherwise the muted
+                      neutral discovery dot shows when there's someone new to
+                      find — never both, so the tab corner stays uncluttered. */}
+                  {showFriendRequests ? (
+                    <span
+                      className="absolute -right-2 -top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                      style={{ backgroundColor: 'var(--destructive)' }}
+                      aria-hidden="true"
+                    >
+                      {formatBadgeCount(friendRequests)}
+                    </span>
+                  ) : friendsDot && label === 'Friends' ? (
                     <span
                       className="absolute -right-1 -top-1 size-2 rounded-full"
                       style={{ backgroundColor: 'var(--brand-ink-400)' }}
