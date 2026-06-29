@@ -85,7 +85,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
       <div ref={ref} style={{ ...cardStyle, ...dimensions }}>
         <div style={topStyle}>
           <div>
-            <p style={kickerStyle}>JOSHING · TWO WEEKS</p>
+            <p style={kickerStyle}>JOSHING · THIS WEEK</p>
             <p style={dateStyle}>{formatRange(cycleStart, cycleEnd)}</p>
           </div>
           <p style={nameStyle}>{userName}</p>
