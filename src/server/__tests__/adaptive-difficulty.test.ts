@@ -12,6 +12,7 @@ import {
   applyAdaptiveLevelAdjustment,
   applyFocusFloor,
   computeDomainDifficultyStep,
+  computeStarvationStepDown,
   computeSupplyCorrection,
   focusDomainMinDifficulty,
   mapAdaptiveLevelToDifficultyHint,
@@ -250,6 +251,30 @@ describe('computeSupplyCorrection — supply-side overshoot correction', () => {
   it('returns null when the only correction would be below the floor (already floored)', () => {
     // Stored sits at the floor; an accessible delivery cannot pull it lower.
     expect(computeSupplyCorrection('moderate', 'accessible', 'moderate')).toBeNull();
+  });
+});
+
+describe('computeStarvationStepDown — empty-generation deadlock breaker', () => {
+  // The counterpart computeSupplyCorrection can't reach: when a domain's requested
+  // tier yields LITERALLY NOTHING there is no delivery to learn a ceiling from, so
+  // we step down one tier (bounded by the floor) to break the re-fail loop.
+
+  it('steps specialist down one tier to moderate (Buttkicker ToTK deadlock)', () => {
+    expect(computeStarvationStepDown('specialist', 'accessible')).toBe('moderate');
+  });
+
+  it('steps one tier at a time, not straight to the floor', () => {
+    // A second starvation (moderate still empty) is what reaches accessible.
+    expect(computeStarvationStepDown('moderate', 'accessible')).toBe('accessible');
+  });
+
+  it('respects a declared domain’s engaged-fan floor', () => {
+    expect(computeStarvationStepDown('specialist', 'moderate')).toBe('moderate');
+    expect(computeStarvationStepDown('moderate', 'moderate')).toBeNull();
+  });
+
+  it('returns null when already at or below the floor (nothing left to relax)', () => {
+    expect(computeStarvationStepDown('accessible', 'accessible')).toBeNull();
   });
 });
 

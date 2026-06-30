@@ -31,7 +31,10 @@ import {
   type GeneratedQuestionRow,
 } from '@/server/daily/generate-questions';
 import { GENERATION_TIMEOUT_MS } from '@/lib/llm';
-import { recalibrateDomainDifficultyToSupply } from '@/server/adaptive-difficulty';
+import {
+  recalibrateDomainDifficultyToSupply,
+  relaxDomainDifficultyOnStarvation,
+} from '@/server/adaptive-difficulty';
 import {
   DAILY_BONUS_SLOT_MAX,
   DAILY_QUEUE_MAX_PER_SUBCATEGORY,
@@ -833,6 +836,19 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       selectedDomains: preferences.selectedDomains.length,
       elapsedMs: Date.now() - startedAt,
     });
+    // Starvation deadlock-breaker. A sub-floor build means the requested palette
+    // couldn't field even the minimum — and when generation comes back empty
+    // (no under-difficulty reserve fills), recalibrateDomainDifficultyToSupply
+    // above had nothing to learn a ceiling from, so the served tier stays pinned
+    // and every retry re-fails at the same unserveable tier (the specialist
+    // deadlock). Step the requested domains down one tier so the client's
+    // auto-retry / tomorrow's cron asks for something serveable. Best-effort —
+    // never let it mask or replace the generation_failed the caller expects.
+    try {
+      await relaxDomainDifficultyOnStarvation(userId, [...allowedSubcategories]);
+    } catch (error) {
+      console.error('[daily orchestrator] starvation difficulty relax failed', error);
+    }
     throw new DailyQueueFillError(
       'generation_failed',
       "Today's Daily Five is taking longer than usual.",
