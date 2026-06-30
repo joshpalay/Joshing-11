@@ -22,6 +22,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/batch-verify-questions",
+      "schedule": "0 10 * * *"
+    },
+    {
       "path": "/api/cron/expire-friend-requests",
       "schedule": "30 6 * * *"
     },
@@ -36,6 +40,10 @@
     {
       "path": "/api/cron/domain-fragmentation-report",
       "schedule": "30 13 * * 1"
+    },
+    {
+      "path": "/api/cron/quality-aggregation",
+      "schedule": "0 14 * * 1"
     }
   ]
 }
