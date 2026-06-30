@@ -74,9 +74,26 @@ export const publicStatusEnum = pgEnum('PublicStatus', [
   'opted_out',
   'migrated',
   'rejected',
+  // B-QUESTION-QUALITY-AGENTS-01 (0096) — batch verification demote target: a
+  // wrong answer / false premise was caught, so the question is pulled out of
+  // circulation and surfaced to its owner. Appended last to match the
+  // ALTER TYPE ... ADD VALUE ordering in the migration.
+  'needs_review',
 ]);
 export const answerSourceEnum = pgEnum('AnswerSource', ['llm_suggested', 'creator_written', 'llm_edited']);
 export const questionStatusEnum = pgEnum('QuestionStatus', ['verified', 'unverified']);
+// B-QUESTION-QUALITY-AGENTS-01 — outcome of the batch verification sweep, stamped
+// on BOTH Question and GeneratedQuestion. `demoted` = a wrong answer / false
+// premise was caught (Question → publicStatus 'needs_review'; GeneratedQuestion →
+// is_duplicate = true); `unverifiable` = couldn't settle even with the web
+// fallback; `skipped` = the pure pre-filter judged it non-claim-bearing; `ok` =
+// checked and clean.
+export const questionVerificationVerdictEnum = pgEnum('QuestionVerificationVerdict', [
+  'ok',
+  'demoted',
+  'unverifiable',
+  'skipped',
+]);
 export const questionTypeEnum = pgEnum('QuestionType', [
   'factual',
   'personal',
@@ -388,6 +405,12 @@ export const questions = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // B-QUESTION-QUALITY-AGENTS-01 Phase 1 — batch-verification stamp. verifiedAt
+    // null = not yet swept (the sweep selects these and never re-processes a
+    // stamped row); verificationVerdict records the outcome. A demote also sets
+    // publicStatus = 'needs_review' alongside verdict = 'demoted'.
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verificationVerdict: questionVerificationVerdictEnum('verification_verdict'),
   },
   (table) => [
     index('Question_creator_id_idx').on(table.creatorId),
@@ -711,6 +734,11 @@ export const generatedQuestions = pgTable(
     // row is the loser: is_duplicate=true, suppressed_by=<human id>. Never deleted.
     isDuplicate: boolean('is_duplicate').notNull().default(false),
     suppressedBy: text('suppressed_by'),
+    // B-QUESTION-QUALITY-AGENTS-01 Phase 1 — batch-verification stamp (same shape
+    // as Question). A demote on this table suppresses via is_duplicate = true; the
+    // verdict is recorded here. verifiedAt null = not yet swept.
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verificationVerdict: questionVerificationVerdictEnum('verification_verdict'),
     // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
     embedding: vector('embedding', { dimensions: 1024 }),
     // B-LLM-PROVIDER-AB-SWITCH B3: which provider GENERATED this row
