@@ -994,9 +994,10 @@ export async function markActivityBellOpened(userId: string): Promise<void> {
 }
 
 /**
- * The nav bell badge count (consumed by /api/nav). The bell links to
- * /activities ("Lately"); pending friend requests are badged separately on the
- * Friends tab (see getIncomingFollowRequestCount in queries/friends.ts).
+ * NOTE: Not currently rendered anywhere. The nav bell links to /activities
+ * ("Lately") but carries no badge; pending friend requests are badged on the
+ * Friends tab (see getIncomingFollowRequestCount in queries/friends.ts). This
+ * "unseen rolled-off-Home activity" count is retained for potential reuse.
  *
  * Semantics: events that have rolled off Home's top-3 RecentActivity AND fired
  * since the user last opened the bell — "there's value here you can't see from

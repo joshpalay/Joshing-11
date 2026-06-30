@@ -52,13 +52,11 @@ function AccountIcon({
 export function Nav({
   initialUserId = null,
   initialDisplayName = null,
-  bellBadgeCount = 0,
   friendRequestCount = 0,
   friendsDotVisible = false,
 }: {
   initialUserId?: string | null;
   initialDisplayName?: string | null;
-  bellBadgeCount?: number;
   friendRequestCount?: number;
   friendsDotVisible?: boolean;
 }) {
@@ -72,7 +70,6 @@ export function Nav({
   // streaming on these DB queries — it passes only initialUserId — so Nav pulls
   // them from GET /api/nav once mounted. Badges pop in slightly late by design.
   const [displayName, setDisplayName] = useState(initialDisplayName);
-  const [badgeCount, setBadgeCount] = useState(bellBadgeCount);
   const [friendRequests, setFriendRequests] = useState(friendRequestCount);
   const [friendsDot, setFriendsDot] = useState(friendsDotVisible);
 
@@ -85,14 +82,12 @@ export function Nav({
         (
           data: {
             displayName?: string | null;
-            bellBadgeCount?: number;
             friendRequestCount?: number;
             friendsDotVisible?: boolean;
           } | null,
         ) => {
           if (!active || !data) return;
           setDisplayName(data.displayName ?? null);
-          setBadgeCount(typeof data.bellBadgeCount === 'number' ? data.bellBadgeCount : 0);
           setFriendRequests(typeof data.friendRequestCount === 'number' ? data.friendRequestCount : 0);
           setFriendsDot(Boolean(data.friendsDotVisible));
         },
@@ -173,9 +168,6 @@ export function Nav({
     return false;
   }
 
-  const showBadge = badgeCount > 0;
-  const badgeText = formatBadgeCount(badgeCount);
-
   return (
     <>
       <header
@@ -193,23 +185,10 @@ export function Nav({
           <div className="flex items-center gap-1">
             <Link
               href="/activities"
-              aria-label={
-                showBadge
-                  ? `Lately, ${badgeCount} new update${badgeCount === 1 ? '' : 's'}`
-                  : 'Lately'
-              }
+              aria-label="Lately"
               className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <Bell className="size-5" strokeWidth={1.9} />
-              {showBadge ? (
-                <span
-                  className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
-                  style={{ backgroundColor: 'var(--destructive)' }}
-                  aria-hidden="true"
-                >
-                  {badgeText}
-                </span>
-              ) : null}
             </Link>
             <Link
               href="/users/me"
