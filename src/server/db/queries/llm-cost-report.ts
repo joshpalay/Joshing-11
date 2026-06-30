@@ -63,6 +63,9 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
       'difficulty',
       'batch-dedupe',
       'history-dedupe',
+      // D-QUESTION-QUALITY-AGENTS-01: nightly batch-verify sweep + prompt-diff proposal
+      'batch-verify',
+      'prompt-improvement',
     ],
   },
   {

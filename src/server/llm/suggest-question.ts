@@ -37,7 +37,10 @@ export type QuestionSuggestion = {
   explanation: string;
 };
 
-const GENERATION_SYSTEM_PROMPT = `You are helping someone write a trivia question. Given a question, you supply the single correct answer, a few accepted alternate phrasings, and a short educational explanation.
+// Exported for the prompt-improvement proposer (D-QUESTION-QUALITY-AGENTS-01),
+// which reads the live prompt fresh rather than keeping a stale copy.
+// No write path exists from the proposer back to this constant.
+export const GENERATION_SYSTEM_PROMPT = `You are helping someone write a trivia question. Given a question, you supply the single correct answer, a few accepted alternate phrasings, and a short educational explanation.
 
 The most important rule: answer the EXACT thing the question asks about. A question names an entity and asks about one specific attribute or property of it. Identify that attribute precisely and answer THAT — never substitute a different, more famous, or adjacent fact about the same entity.
   Example: "The surrey with the fringe on top has what kind of dashboard?" asks about the surrey's DASHBOARD (genuine leather), not its windows/curtains (isinglass). Answering "isinglass" would be wrong because it answers a different attribute.

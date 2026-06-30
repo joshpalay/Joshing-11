@@ -1791,6 +1791,28 @@ export async function register() {
       // Fresh databases may not have User/Question yet — migrate() creates all
       // three in normal migration order.
     }
+
+    // D-QUESTION-QUALITY-AGENTS-01 (migration 0096): batch-verification stamp.
+    // verifiedAt + verificationVerdict added after the initial Question schema
+    // to support the nightly batch-verify sweep without revisiting stamped rows.
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."VerificationVerdict" AS ENUM('ok', 'demoted', 'unverifiable', 'skipped');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "verified_at" timestamptz
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "verification_verdict" "public"."VerificationVerdict"
+      `);
+    } catch {
+      // Question table may not exist yet on a fresh database — migrate() creates it.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

@@ -77,6 +77,11 @@ export const publicStatusEnum = pgEnum('PublicStatus', [
 ]);
 export const answerSourceEnum = pgEnum('AnswerSource', ['llm_suggested', 'creator_written', 'llm_edited']);
 export const questionStatusEnum = pgEnum('QuestionStatus', ['verified', 'unverified']);
+// D-QUESTION-QUALITY-AGENTS-01 — batch verification verdict.
+// ok: verified clean. demoted: found a false premise or wrong-attribute answer,
+// pulled to needs_review. unverifiable: model couldn't assess from training data.
+// skipped: personal or non-factual question — model cannot be the arbiter.
+export const verificationVerdictEnum = pgEnum('VerificationVerdict', ['ok', 'demoted', 'unverifiable', 'skipped']);
 export const questionTypeEnum = pgEnum('QuestionType', [
   'factual',
   'personal',
@@ -385,6 +390,11 @@ export const questions = pgTable(
     // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
     // Nullable: populated at insert and by the batched backfill (B3).
     embedding: vector('embedding', { dimensions: 1024 }),
+    // D-QUESTION-QUALITY-AGENTS-01: batch-verification stamp. verifiedAt is set
+    // once when the nightly sweep processes this row; the sweep WHERE-filters on
+    // verifiedAt IS NULL so each question is verified exactly once.
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verificationVerdict: verificationVerdictEnum('verification_verdict'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

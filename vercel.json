@@ -36,6 +36,14 @@
     {
       "path": "/api/cron/domain-fragmentation-report",
       "schedule": "30 13 * * 1"
+    },
+    {
+      "path": "/api/cron/batch-verify-questions",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/prompt-improvement-report",
+      "schedule": "30 14 * * 1"
     }
   ]
 }
