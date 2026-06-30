@@ -90,6 +90,14 @@ Whichever is chosen, the invariant below holds on **one** shared effective-depth
 
 **Build interface:** the quality-agents Phase 1 carries a one-line pointer at the demote site. This ladder's refill-flip build owns landing the shared effective-depth definition (per the table-boundary resolution above), so both systems read one definition.
 
+**Build correction — `B-SUPPLY-REFILL-FLIP-01` (2026-06-30): flip 1 changes the metric NOTHING, and here is why that is correct, not a punt.** The depth metric refill *and* the narrow-KB guard actually read (`getDurablePoolDepthForDomains` / `getThinActiveDomains`, `retrieval-demand.ts`) is **already correct** for its purpose:
+
+1. It counts `count(distinct fact_key)` over `generatedQuestions` where `is_duplicate = false ∧ fact_key is not null`. `generatedQuestions` has **no `deletedAt`** — machine rows are flagged, never deleted (`schema.ts:710-713`, comment: *"Never deleted."*).
+2. Every `suppressed_by` loser is a **strict subset** of `is_duplicate = true`: the only writer, `markPoolDuplicate` (`pool.ts:286-302`), sets `{ is_duplicate: true, suppressed_by: survivorId }` together. So the existing `is_duplicate = false` predicate already excludes every suppressed loser — **no not-live machine row is counted as supply.**
+3. The §4 tripwire *"never count a demoted (`needs_review`) question as supply"* concerns **`Question`** rows. The refill metric counts **zero** `Question` rows (the machine pool has no `publicStatus`/`needs_review`), so the tripwire is **trivially satisfied and not actionable on this metric** — there is no predicate to add and nothing currently mis-counted.
+
+What remains genuinely open — options (i)/(ii)/(iii) above, i.e. whether a human-side `needs_review` demote of a *promoted* machine fact should retroactively lower the machine pool's supply depth — is a **cross-pool accounting** question that does **not** block refill and is **explicitly out of scope for flip 1** (see this flip's DO-NOT: *no `questions.publicStatus` join on the `generatedQuestions` aggregate on the D-doc's say-so*). It is deferred to `B-SUPPLY-EXPANSION-EXHAUSTION-REFINE-01`, which owns the content-exhaustion definition. The §9 done-when *"a single effective-depth helper excludes `needs_review` across the boundary"* is therefore **not required for, and not delivered by, flip 1** — reframe it as a refinement-build obligation (or drop it if the two pools are deemed independent at that point). No filter change, no new test in this flip.
+
 ---
 
 ## 5. Open decisions (RATIFY THESE)
