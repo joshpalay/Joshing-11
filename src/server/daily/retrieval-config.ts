@@ -57,6 +57,13 @@ export type RetrievalConfig = {
   /** Cap on domains processed in a single run (belt-and-braces alongside the
    *  USD ceiling). */
   maxDomainsPerRun: number;
+  /** How many domains to refill CONCURRENTLY (B-SUPPLY-REFILL-THROUGHPUT-01). The
+   *  agentic web-search call runs 60-120s, so a sequential run drains only ~2-3
+   *  domains inside the route's 300s budget. Running several at once keeps the
+   *  budget productive. Capped low to stay within the Postgres pool (max:5 in
+   *  src/server/db/index.ts) — each in-flight domain borrows a connection for its
+   *  reads/writes. */
+  maxConcurrentDomains: number;
   /** Minimum distinct non-denied source hosts required to keep a grounded
    *  question (corroboration floor; Drift Risk 2). */
   minCorroboratingSources: number;
@@ -93,6 +100,10 @@ export function getRetrievalConfig(): RetrievalConfig {
     poolDepthThreshold: Math.max(1, Math.round(numEnv('RETRIEVAL_POOL_DEPTH_THRESHOLD', 8))),
     activeLookbackDays: Math.max(1, Math.round(numEnv('RETRIEVAL_ACTIVE_LOOKBACK_DAYS', 14))),
     maxDomainsPerRun: Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_DOMAINS_PER_RUN', 50))),
+    // Default 4: keeps one connection of headroom under the max:5 Postgres pool
+    // while turning the sequential ~2-3 domains/run into ~4× the throughput.
+    // Floored at 1 (degrades to sequential); capped at 8 to never starve the pool.
+    maxConcurrentDomains: Math.min(8, Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_CONCURRENT_DOMAINS', 4)))),
     minCorroboratingSources: Math.max(1, Math.round(numEnv('RETRIEVAL_MIN_CORROBORATING_SOURCES', 2))),
     minReputableSources: Math.max(1, Math.round(numEnv('RETRIEVAL_MIN_REPUTABLE_SOURCES', 1))),
   };

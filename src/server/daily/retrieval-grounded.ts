@@ -18,6 +18,8 @@ import {
   type GroundedLlmQuestion,
 } from '@/server/daily/generate-questions';
 import { askToAnswerBatch, resolveMachineTrustTier } from '@/server/daily/ask-to-answer';
+import { enrichAcceptableVariants, mergeVariants } from '@/server/daily/enrich-variants';
+import { runBudgetedConcurrent } from '@/server/daily/budgeted-concurrency';
 import { getMonthToDateLlmSpendUsd } from '@/server/db/queries/llm-provider-experiment';
 import { assessCorroboration, getReputationLists } from '@/server/daily/source-reputation';
 import { resolveDailyBasePoints } from '@/server/daily/types';
@@ -203,6 +205,12 @@ async function refillDomain(
   );
   result.droppedQualityGate += askResult.toDrop.size;
 
+  // Answer-key enrichment (Fix 3): additional genuinely-correct answers for
+  // multi-answer questions, merged into acceptable_variants below. Fail-open.
+  const enrichByIndex = await enrichAcceptableVariants(
+    screened.map((q) => ({ questionText: q.question_text, answer: q.answer, explainer: q.explainer })),
+  );
+
   const seenFactKeys = new Set<string>();
   for (let i = 0; i < screened.length; i += 1) {
     const q = screened[i];
@@ -239,7 +247,10 @@ async function refillDomain(
           sourceRefs: q.source_refs,
           trustTier,
           askToAnswerVerified,
-          acceptableVariants: askResult.variantsByIndex.get(i) ?? [],
+          acceptableVariants: mergeVariants(
+            askResult.variantsByIndex.get(i),
+            enrichByIndex.get(i),
+          ),
           expiresAt: DURABLE_EXPIRY,
           usedInQueue: false,
         })
@@ -331,19 +342,30 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
   const maxSearchesPerCall = config.maxSearchesPerQuestion * config.questionsPerDomain;
   const perCallWorstCaseUsd = maxSearchesPerCall * USD_PER_WEB_SEARCH;
 
-  for (let i = 0; i < domains.length; i += 1) {
-    if (report.usdSpent + perCallWorstCaseUsd > config.dailyUsdCeiling) {
-      // Ceiling reached — everything still in the list is unserved demand.
-      report.backlogRemaining = domains.length - i;
-      break;
-    }
+  // Fold one settled domain (success or failure) into the run report. In the real
+  // path this runs over the worker results AFTER they settle (not concurrently),
+  // so the report totals are assembled in one pass.
+  const accumulate = (r: DomainRefillResult): void => {
+    report.perDomain.push(r);
+    report.domainsProcessed += 1;
+    report.usdSpent += r.usd;
+    report.webSearches += r.webSearches;
+    report.questionsPersisted += r.persisted;
+    report.dropped.uncorroborated += r.droppedUncorroborated;
+    report.dropped.qualityGate += r.droppedQualityGate;
+    report.dropped.duplicateFact += r.droppedDuplicateFact;
+  };
 
-    const { domain } = domains[i];
-
-    if (dryRun) {
-      // Preview only: project this call's worst-case search spend, issue nothing.
-      report.perDomain.push({
-        domain,
+  if (dryRun) {
+    // Preview only: project each call's worst-case search spend sequentially,
+    // issue nothing, and stop at the ceiling like a real run would.
+    for (let i = 0; i < domains.length; i += 1) {
+      if (report.usdSpent + perCallWorstCaseUsd > config.dailyUsdCeiling) {
+        report.backlogRemaining = domains.length - i;
+        break;
+      }
+      accumulate({
+        domain: domains[i].domain,
         persisted: 0,
         webSearches: maxSearchesPerCall,
         usd: perCallWorstCaseUsd,
@@ -352,32 +374,36 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
         droppedQualityGate: 0,
         droppedDuplicateFact: 0,
       });
-      report.domainsProcessed += 1;
-      report.usdSpent += perCallWorstCaseUsd;
-      report.webSearches += maxSearchesPerCall;
-      continue;
     }
+    return report;
+  }
 
-    // Preconditions are guaranteed by the early return above on a real run;
-    // narrow them for the type checker (and stay defensive).
-    if (!client || !config.systemUserId) continue;
-    try {
-      const domainResult = await refillDomain(client, domain, config, config.systemUserId);
-      report.perDomain.push(domainResult);
-      report.domainsProcessed += 1;
-      report.usdSpent += domainResult.usd;
-      report.webSearches += domainResult.webSearches;
-      report.questionsPersisted += domainResult.persisted;
-      report.dropped.uncorroborated += domainResult.droppedUncorroborated;
-      report.dropped.qualityGate += domainResult.droppedQualityGate;
-      report.dropped.duplicateFact += domainResult.droppedDuplicateFact;
-    } catch (err) {
+  // Real run. Preconditions are guaranteed by the blocker early-return above;
+  // narrow them here for the type checker (and stay defensive).
+  if (!client || !config.systemUserId) return report;
+  const liveClient = client;
+  const systemUserId = config.systemUserId;
+
+  // Bounded-concurrency domain processing (B-SUPPLY-REFILL-THROUGHPUT-01). A
+  // sequential run drained only ~2-3 domains inside the route's 300s budget and
+  // slow domains starved (verification 2026-06-30, ~65% of domains time out at
+  // callTimeoutMs). Running a few at once keeps the budget productive.
+  const { results, backlog } = await runBudgetedConcurrent(
+    domains.map((d) => d.domain),
+    {
+      concurrency: config.maxConcurrentDomains,
+      perItemReservation: perCallWorstCaseUsd,
+      ceiling: config.dailyUsdCeiling,
+      costOf: (r: DomainRefillResult) => r.usd,
+    },
+    (domain) => refillDomain(liveClient, domain, config, systemUserId),
+    (domain, err): DomainRefillResult => {
       // A single domain failing (timeout / parse / API) must not sink the run.
       console.warn('[pool-refill] domain refill failed', {
         domain,
         error: err instanceof Error ? err.message : String(err),
       });
-      report.perDomain.push({
+      return {
         domain,
         persisted: 0,
         webSearches: 0,
@@ -386,9 +412,11 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
         droppedUncorroborated: 0,
         droppedQualityGate: 0,
         droppedDuplicateFact: 0,
-      });
-    }
-  }
+      };
+    },
+  );
+  results.forEach(accumulate);
+  report.backlogRemaining = backlog;
 
   return report;
 }
