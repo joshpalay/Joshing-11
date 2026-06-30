@@ -22,6 +22,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/batch-verify-questions",
+      "schedule": "0 10 * * *"
+    },
+    {
       "path": "/api/cron/expire-friend-requests",
       "schedule": "30 6 * * *"
     },
