@@ -77,6 +77,7 @@ import { embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
 import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
+import { enrichAcceptableVariants, mergeVariants } from './enrich-variants';
 
 // Cap the recent question-text block at this many entries inside the prompt.
 // The full recent history (up to 200) is still used to derive the fact-key
@@ -1726,7 +1727,11 @@ export async function generateDailyQuestions(
   // one they corroborate earns machine_verified. Runs in parallel with the aside
   // precompute; fails open (drops/verifies nothing on an LLM outage). Scoped to
   // the rows we will actually persist rather than the full generated batch.
-  const [, askResult] = await Promise.all([
+  // Answer-key enrichment (Fix 3): enumerate OTHER genuinely-correct answers for
+  // multi-answer questions and merge them into acceptable_variants at persist.
+  // Distinct from ask-to-answer (which captures the same answer rephrased);
+  // additive, batched, and fail-open. Runs in the same parallel wave.
+  const [, askResult, enrichByIndex] = await Promise.all([
     Promise.all(
       toPersist.map(async (question) => {
         const aside = await generateInsideJoke({
@@ -1740,6 +1745,9 @@ export async function generateDailyQuestions(
     ),
     askToAnswerBatch(
       toPersist.map((q) => ({ questionText: q.question_text, answer: q.answer })),
+    ),
+    enrichAcceptableVariants(
+      toPersist.map((q) => ({ questionText: q.question_text, answer: q.answer, explainer: q.explainer })),
     ),
   ]);
   if (askResult.toDrop.size > 0) {
@@ -1823,7 +1831,12 @@ export async function generateDailyQuestions(
         generatedByProvider: provider,
         trustTier,
         askToAnswerVerified,
-        acceptableVariants: askResult.variantsByIndex.get(persistIndex) ?? [],
+        // Union the ask-to-answer rephrasings (judge-verified equivalent) with the
+        // enrichment gate's additional distinct-but-correct answers (Fix 3).
+        acceptableVariants: mergeVariants(
+          askResult.variantsByIndex.get(persistIndex),
+          enrichByIndex.get(persistIndex),
+        ),
         expiresAt,
         usedInQueue: false,
       })

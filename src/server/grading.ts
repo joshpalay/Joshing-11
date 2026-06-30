@@ -62,7 +62,7 @@ export type GradeOutcome = ScoredGrade | UnscoredGrade;
  * article is dropped (e.g. "The Eroica" ≡ "Eroica") but interior articles are
  * kept so distinct answers like "Vitamin A" don't collapse onto "Vitamin".
  */
-function normalizeForMatch(value: string): string {
+export function normalizeForMatch(value: string): string {
   return value
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '') // strip diacritics: "Beyoncé" → "Beyonce"

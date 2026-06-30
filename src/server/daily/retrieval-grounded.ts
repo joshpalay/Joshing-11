@@ -18,6 +18,7 @@ import {
   type GroundedLlmQuestion,
 } from '@/server/daily/generate-questions';
 import { askToAnswerBatch, resolveMachineTrustTier } from '@/server/daily/ask-to-answer';
+import { enrichAcceptableVariants, mergeVariants } from '@/server/daily/enrich-variants';
 import { runBudgetedConcurrent } from '@/server/daily/budgeted-concurrency';
 import { getMonthToDateLlmSpendUsd } from '@/server/db/queries/llm-provider-experiment';
 import { assessCorroboration, getReputationLists } from '@/server/daily/source-reputation';
@@ -204,6 +205,12 @@ async function refillDomain(
   );
   result.droppedQualityGate += askResult.toDrop.size;
 
+  // Answer-key enrichment (Fix 3): additional genuinely-correct answers for
+  // multi-answer questions, merged into acceptable_variants below. Fail-open.
+  const enrichByIndex = await enrichAcceptableVariants(
+    screened.map((q) => ({ questionText: q.question_text, answer: q.answer, explainer: q.explainer })),
+  );
+
   const seenFactKeys = new Set<string>();
   for (let i = 0; i < screened.length; i += 1) {
     const q = screened[i];
@@ -240,7 +247,10 @@ async function refillDomain(
           sourceRefs: q.source_refs,
           trustTier,
           askToAnswerVerified,
-          acceptableVariants: askResult.variantsByIndex.get(i) ?? [],
+          acceptableVariants: mergeVariants(
+            askResult.variantsByIndex.get(i),
+            enrichByIndex.get(i),
+          ),
           expiresAt: DURABLE_EXPIRY,
           usedInQueue: false,
         })

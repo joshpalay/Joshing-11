@@ -11,6 +11,7 @@ import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/serve
 import { suggestAnswer } from '@/lib/llm';
 import { getProviderSettings } from '@/server/llm/settings';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 
@@ -257,6 +258,15 @@ export async function POST(request: NextRequest) {
 
     let masteryDelta = null;
     if (accepted) {
+      // Fix 2: fold the accepted alternative into the answer key (canonical row,
+      // plus the originating generated row for the live daily grade path) so the
+      // same correct-but-unlisted answer is never wronged again. Best-effort.
+      await recordAcceptedAlternative({
+        canonicalQuestionId,
+        generatedQuestionId: question.generatedId,
+        alternative: review.acceptedAlternative,
+      });
+
       masteryDelta = await writeMasteryEvent({
         userId: session.userId,
         questionId: question.generatedId ?? question.canonicalId ?? canonicalQuestionId ?? `${queue.id}:${parsed.slotIndex}`,

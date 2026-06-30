@@ -7,6 +7,7 @@ import { db, feedItems, gradeDisputes, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 
 export const dynamic = 'force-dynamic';
 
@@ -131,6 +132,14 @@ export async function POST(request: NextRequest) {
     // so it was retired (2026-06-25). Mirrors feed/recheck and daily/recheck.
 
     if (accepted) {
+      // Fix 2: fold the accepted alternative into the question's answer key so
+      // the same correct-but-unlisted answer is never wronged again.
+      await recordAcceptedAlternative({
+        canonicalQuestionId: question.id,
+        generatedQuestionId: question.generatedQuestionId,
+        alternative: review.acceptedAlternative,
+      });
+
       await writeMasteryEvent({
         userId: session.userId,
         questionId: question.id,
