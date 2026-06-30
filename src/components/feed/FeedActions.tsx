@@ -26,7 +26,9 @@ export type FeedOverflowMenuProps = {
   question?: FeedOverflowQuestion | null
   isInBank?: boolean
   disabled?: boolean
-  onHideCategory?: () => void
+  // Gentle down-weight: nudge this domain to "Blue Moon" (see it rarely) instead
+  // of a hard hide. Replaces the old onHideCategory per owner direction.
+  onSeeLessOften?: () => void
   onHidePerson?: () => void
   // PRD-D-6 §6.6: the two problem-named items replace the old generic "Report".
   // Both require a question target, so they only render when `question` is set.
@@ -48,7 +50,7 @@ export function getFeedOverflowMenuLabels({
 }) {
   const visibleCategory = visibleFeedCategory(category)
   return [
-    ...(visibleCategory ? [`Hide questions about ${visibleCategory}`] : []),
+    ...(visibleCategory ? [`See questions about ${visibleCategory} less often`] : []),
     `Hide questions from ${sourceName || 'this person'}`,
     ...(hasQuestion && !isInBank ? ['Add to bank'] : []),
     ...(hasQuestion ? ['Send to friend'] : []),
@@ -86,7 +88,7 @@ export function FeedOverflowMenu({
   question,
   isInBank = false,
   disabled = false,
-  onHideCategory,
+  onSeeLessOften,
   onHidePerson,
   onReportIncorrect,
   onReportInappropriate,
@@ -171,9 +173,9 @@ export function FeedOverflowMenu({
             {visibleCategory ? (
               <MenuButton
                 disabled={disabled}
-                onClick={wrapAction(onHideCategory)}
+                onClick={wrapAction(onSeeLessOften)}
               >
-                Hide questions about {visibleCategory}
+                See questions about {visibleCategory} less often
               </MenuButton>
             ) : null}
             <MenuButton disabled={disabled} onClick={wrapAction(onHidePerson)}>

@@ -31,7 +31,10 @@ import {
   type GeneratedQuestionRow,
 } from '@/server/daily/generate-questions';
 import { GENERATION_TIMEOUT_MS } from '@/lib/llm';
-import { recalibrateDomainDifficultyToSupply } from '@/server/adaptive-difficulty';
+import {
+  recalibrateDomainDifficultyToSupply,
+  relaxDomainDifficultyOnStarvation,
+} from '@/server/adaptive-difficulty';
 import {
   DAILY_BONUS_SLOT_MAX,
   DAILY_QUEUE_MAX_PER_SUBCATEGORY,
@@ -418,21 +421,35 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
         )
       : DAILY_QUEUE_SIZE;
 
-  // In concert with the Game settings page: a subcategory the player explicitly
-  // marked "often" is EXEMPT from the diversity cap (bounded only by the queue
-  // size), so the cap never throttles a topic the player deliberately asked to see
-  // a lot of. The cap exists to break up runs the player did NOT request — and an
-  // explicit "often" IS that request, so it wins. ("resting" is already removed from
-  // allowedSubcategories upstream; "sometimes"/"blue_moon"/unset keep the base cap.)
+  // In concert with the Game settings page, the diversity cap is frequency-aware
+  // at both ends:
+  //   • "often"    → EXEMPT (bounded only by queue size). The cap exists to break
+  //                  up runs the player did NOT request; an explicit "often" IS
+  //                  that request, so it wins.
+  //   • "blue_moon"→ capped at 1 per round. "See rarely" must mean a Blue Moon
+  //                  domain can't take two of the five slots — and because THIS
+  //                  shared gate also runs over friend-authored picks (unlike the
+  //                  frequency *weighting*, which only steers generated domains),
+  //                  this is the one lever that stops a friend's questions in a
+  //                  Blue Moon domain from doubling up. Starvation is impossible:
+  //                  a deflected 2nd pick goes to the reserve and is backfilled if
+  //                  the queue would otherwise come up short.
+  //   • "sometimes"/unset → the base cap (2, scaled up only for very thin KBs).
+  //   • "resting"  → already removed from allowedSubcategories upstream.
   // Keys are lowercased to match how restingDomains is built above and how the gate
   // normalizes each subcategory.
+  const freqEntries = Object.entries(preferences.domainPreferenceFrequency ?? {});
   const oftenDomains = new Set(
-    Object.entries(preferences.domainPreferenceFrequency ?? {})
-      .filter(([, frequency]) => frequency === 'often')
-      .map(([domain]) => domain.toLowerCase()),
+    freqEntries.filter(([, frequency]) => frequency === 'often').map(([domain]) => domain.toLowerCase()),
   );
-  const capForSubcategory = (normalizedSubcategory: string): number =>
-    oftenDomains.has(normalizedSubcategory) ? DAILY_QUEUE_SIZE : baseDiversityCap;
+  const blueMoonDomains = new Set(
+    freqEntries.filter(([, frequency]) => frequency === 'blue_moon').map(([domain]) => domain.toLowerCase()),
+  );
+  const capForSubcategory = (normalizedSubcategory: string): number => {
+    if (oftenDomains.has(normalizedSubcategory)) return DAILY_QUEUE_SIZE;
+    if (blueMoonDomains.has(normalizedSubcategory)) return 1;
+    return baseDiversityCap;
+  };
   const diversityGate = makeSubcategoryDiversityGate(capForSubcategory);
 
   // Answer-cooldown gate (B-DEDUP-ANSWER-COOLDOWN, Tier 1). Deflects any pick —
@@ -819,6 +836,19 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       selectedDomains: preferences.selectedDomains.length,
       elapsedMs: Date.now() - startedAt,
     });
+    // Starvation deadlock-breaker. A sub-floor build means the requested palette
+    // couldn't field even the minimum — and when generation comes back empty
+    // (no under-difficulty reserve fills), recalibrateDomainDifficultyToSupply
+    // above had nothing to learn a ceiling from, so the served tier stays pinned
+    // and every retry re-fails at the same unserveable tier (the specialist
+    // deadlock). Step the requested domains down one tier so the client's
+    // auto-retry / tomorrow's cron asks for something serveable. Best-effort —
+    // never let it mask or replace the generation_failed the caller expects.
+    try {
+      await relaxDomainDifficultyOnStarvation(userId, [...allowedSubcategories]);
+    } catch (error) {
+      console.error('[daily orchestrator] starvation difficulty relax failed', error);
+    }
     throw new DailyQueueFillError(
       'generation_failed',
       "Today's Daily Five is taking longer than usual.",

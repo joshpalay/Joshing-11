@@ -7,6 +7,33 @@ import { effectiveTier } from '@/server/mastery/tiers';
 import type { LlmProvider } from '@/server/llm/provider';
 import type { AnswerState, MasteryTier } from '@/types/db';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
+import { domainKey } from '@/lib/knowledge/domain-key';
+
+/**
+ * Converge the incoming demonstrated domain onto an existing territory that is
+ * the SAME topic up to case / punctuation / connector spelling, returning the
+ * already-established canonical label to write against (or the input unchanged
+ * when nothing matches).
+ *
+ * The declare path runs convergeDomain so a typed interest folds onto an
+ * existing canonical; the demonstrated path (answering questions) upserts
+ * PLAYER_MASTERY keyed on the raw `canonical_subcategory` text and historically
+ * ran no convergence — so a question pipeline that emitted "Early 20th century
+ * American History" minted a SECOND row alongside the declared "Early 20th
+ * Century American History" (identical under domainKey, split mastery). This
+ * closes that gap with the only merge that's safe to auto-apply: an exact
+ * domainKey match against the user's own territories (the same bar
+ * converge-domain.ts uses — fuzzy stays suggestion-only and never auto-merges).
+ * Word-order permutations are intentionally NOT merged (domainKey doesn't
+ * reorder words, to avoid false merges).
+ */
+function resolveToExistingTerritory(
+  incoming: string,
+  existingCanonicals: readonly string[],
+): string {
+  const key = domainKey(incoming);
+  return existingCanonicals.find((label) => domainKey(label) === key) ?? incoming;
+}
 
 type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit' | 'curator_credit';
 
@@ -148,24 +175,29 @@ export async function runMasteryWriteSideEffects(params: {
 }
 
 export async function writeMasteryEvent(params: WriteMasteryEventParams): Promise<MasteryEventWriteResult> {
-  const [existingMastery, authorCredit] = await Promise.all([
-    db
-      .select({
-        broadCategory: playerMastery.broadCategory,
-        totalPoints: playerMastery.totalPoints,
-        tier: playerMastery.tier,
-        tierReachedAt: playerMastery.tierReachedAt,
-      })
-      .from(playerMastery)
-      .where(and(
-        eq(playerMastery.userId, params.userId),
-        eq(playerMastery.canonicalSubcategory, params.domain),
-      ))
-      .limit(1),
-    readAuthorCredit(params.userId, params.domain),
-  ]);
+  // Converge the incoming domain onto an existing same-topic territory before any
+  // read/write, so a case/punctuation variant from the question pipeline folds
+  // onto the established canonical instead of opening a duplicate territory. We
+  // read ALL of the user's territories (few per user) to match on domainKey; the
+  // exact-text row among them is the `existing` mastery this write updates.
+  const userTerritories = await db
+    .select({
+      canonicalSubcategory: playerMastery.canonicalSubcategory,
+      broadCategory: playerMastery.broadCategory,
+      totalPoints: playerMastery.totalPoints,
+      tier: playerMastery.tier,
+      tierReachedAt: playerMastery.tierReachedAt,
+    })
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, params.userId));
 
-  const existing = existingMastery[0];
+  const domain = resolveToExistingTerritory(
+    params.domain,
+    userTerritories.map((row) => row.canonicalSubcategory),
+  );
+  const existing = userTerritories.find((row) => row.canonicalSubcategory === domain);
+  const authorCredit = await readAuthorCredit(params.userId, domain);
+
   const broadCategory = normalizeBroadCategory(params.broadCategory ?? existing?.broadCategory);
   const previousTier: MasteryTier = existing?.tier ?? 'establishing';
   const nextTotalPoints = (existing?.totalPoints ?? 0) + params.pointsAwarded;
@@ -199,7 +231,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         "llm_provider"
       ) values (
         ${params.userId},
-        ${params.domain},
+        ${domain},
         ${
           params.sourceType === 'author_credit' || params.sourceType === 'curator_credit'
             ? params.sourceType
@@ -228,7 +260,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
         .insert(playerMastery)
         .values({
           userId: params.userId,
-          canonicalSubcategory: params.domain,
+          canonicalSubcategory: domain,
           broadCategory,
           totalPoints: params.pointsAwarded,
           tier: nextTier,
@@ -260,7 +292,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
 
   if (!eventInserted) {
     return {
-      domain: params.domain,
+      domain,
       broadCategory: broadCategory ?? null,
       points: 0,
       previousTier,
@@ -278,7 +310,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   if (!params.deferSideEffects) {
     await runMasteryWriteSideEffects({
       userId: params.userId,
-      domain: params.domain,
+      domain,
       eventQuestionId: params.eventQuestionId,
       sourceType: params.sourceType,
       previousTier,
@@ -288,7 +320,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   }
 
   return {
-    domain: params.domain,
+    domain,
     broadCategory: broadCategory ?? null,
     points: params.pointsAwarded,
     previousTier,

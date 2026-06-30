@@ -107,6 +107,15 @@ export const queueSlotSchema = z.object({
   recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */
   recheck_reason: z.string().nullish(),
+  /**
+   * Catch-up appeal state — kept SEPARATE from the live `recheck_status` above,
+   * mirroring how `catchup_answer_state` is kept separate from `answer_state`. A
+   * catch-up attempt graded wrong can be appealed once; an 'accepted' verdict
+   * flips `catchup_answer_state` to 'correct' (the live verdict stays put).
+   */
+  catchup_recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
+  /** Short player-facing explanation from the catch-up recheck reviewer. */
+  catchup_recheck_reason: z.string().nullish(),
 });
 
 export type QueueSlotSource = z.infer<typeof queueSlotSourceSchema>;

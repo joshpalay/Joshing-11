@@ -224,6 +224,42 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     expect(totalSlots).toBe(DAILY_QUEUE_SIZE);
   });
 
+  it('caps a "blue_moon" subcategory at 1 per round, including friend questions', async () => {
+    // Blue Moon means "see rarely" — a friend authoring two questions in a Blue
+    // Moon domain must not take two of the five slots. The shared diversity gate
+    // runs over authored/friend picks (unlike the frequency weighting, which only
+    // steers generated domains), so the cap of 1 reaches them.
+    mocks.getDailyPreferences.mockResolvedValue({
+      difficulty: 'adaptive',
+      domainMode: 'random',
+      selectedDomains: [],
+      domainPreferenceFrequency: { Hamlet: 'blue_moon' },
+    });
+    mocks.pickEligibleAuthoredQuestions.mockResolvedValue([
+      authoredPick('h1', 'Hamlet'),
+      authoredPick('h2', 'Hamlet'),
+    ]);
+    // Distinct generated domains finish the diverse five around the single Hamlet.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('j1', 'Jazz'),
+      genq('a1', 'Astronomy'),
+      genq('c1', 'Cartography'),
+      genq('b1', 'Botany'),
+    ]);
+
+    await fillDailyQueueForUser(USER);
+
+    const hamletSlots = persistedSlots().filter(
+      (slot) => slot.source === 'friend' && slot.domain === 'Hamlet',
+    );
+    // Only ONE Hamlet slot — the 2nd was deflected (Blue Moon cap = 1), not two as
+    // the base cap would allow.
+    expect(hamletSlots).toHaveLength(1);
+    // The queue is still full; generation backfilled the slot the cap freed.
+    const core = persistedSlots().filter((slot) => !slot.presence_source_id);
+    expect(core).toHaveLength(DAILY_QUEUE_SIZE);
+  });
+
   it('exempts an "often"-marked subcategory from the cap (Game settings honored)', async () => {
     // The player explicitly asked to see lots of Botany. The diversity cap must NOT
     // throttle a topic the player deliberately requested — "often" is exempt, so a

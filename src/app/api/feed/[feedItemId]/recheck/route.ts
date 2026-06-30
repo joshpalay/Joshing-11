@@ -6,6 +6,7 @@ import { db, feedItems, gradeDisputes, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,6 +113,15 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     // notifying the author; this brings feed/recheck in line.
 
     if (accepted) {
+      // Fix 2: fold the accepted alternative into the question's answer key so
+      // the same correct-but-unlisted answer is never wronged (and re-appealed)
+      // again. Best-effort; never throws.
+      await recordAcceptedAlternative({
+        canonicalQuestionId: question.id,
+        generatedQuestionId: question.generatedQuestionId,
+        alternative: review.acceptedAlternative,
+      });
+
       await writeMasteryEvent({
         userId: session.userId,
         questionId: question.id,

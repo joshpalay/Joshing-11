@@ -46,6 +46,27 @@ describe('parseFactualGateResponse', () => {
     }
   });
 
+  it('parses a multi-drop response intact (the case the raised max_tokens cap protects)', () => {
+    const result = parseFactualGateResponse(
+      '{"drop_indices":[0,2,4],"reasons":{"0":"wrong count","2":"wrong attribution","4":"false premise"}}',
+      5,
+    );
+    expect([...result.toDrop].sort()).toEqual([0, 2, 4]);
+    expect(result.reasons[0]).toBe('wrong count');
+    expect(result.reasons[4]).toBe('false premise');
+  });
+
+  it('returns empty when the JSON is truncated mid-structure (the silent fail-open the token cap prevents)', () => {
+    // A response cut off at max_tokens: every flagged index is silently lost and
+    // the whole batch ships ungated. Raising FACTUAL_GATE_MAX_TOKENS + the
+    // stop_reason guard in findFactualFailures keep this from happening unseen.
+    const truncated =
+      '{"drop_indices":[0,1,2],"reasons":{"0":"Neville received ten points not fifty","1":"the choral finale is the Ninth not the Thi';
+    const result = parseFactualGateResponse(truncated, 3);
+    expect(result.toDrop.size).toBe(0);
+    expect(result.reasons).toEqual({});
+  });
+
   it('truncates very long reason strings', () => {
     const long = 'x'.repeat(500);
     const result = parseFactualGateResponse(
