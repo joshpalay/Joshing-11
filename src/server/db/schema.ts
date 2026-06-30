@@ -1456,3 +1456,19 @@ export const llmCostReport = pgTable(
   },
   (table) => [index('LlmCostReport_created_at_idx').on(table.createdAt)],
 );
+
+// B-QUESTION-QUALITY-AGENTS-01 Phase 4 — stored weekly quality-aggregation digest.
+// Mirrors LlmCostReport: one row per generated digest, the rendered markdown is the
+// durable artifact. Read-and-report only (no LLM on this path in v1).
+export const qualityReport = pgTable(
+  'QualityReport',
+  {
+    id: id(),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+    windowDays: integer('window_days').notNull().default(30),
+    markdown: text('markdown').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('QualityReport_created_at_idx').on(table.createdAt)],
+);

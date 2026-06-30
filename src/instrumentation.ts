@@ -247,6 +247,29 @@ export async function register() {
       // DB — migrate() creates them and 0096 adds these pieces.
     }
 
+    // B-QUESTION-QUALITY-AGENTS-01 (migration 0097): the stored quality-aggregation
+    // digest table. New + isolated; RLS-enabled with no policies (owner role
+    // bypasses RLS) per B-SECURITY-RLS-01. Idempotent so a partially-recorded DB
+    // still boots before the weekly cron's insert (precedent: 0092 LlmCostReport).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "QualityReport" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "period_start" timestamp with time zone NOT NULL,
+          "period_end" timestamp with time zone NOT NULL,
+          "window_days" integer NOT NULL DEFAULT 30,
+          "markdown" text NOT NULL,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "QualityReport" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "QualityReport_created_at_idx" ON "QualityReport" ("created_at")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
     // Migration 0043 renames PlayerMastery.season_points_start to
     // lifetime_points_baseline. If a preview/production database has 0043
     // recorded without the rename actually applied, Drizzle selects against
