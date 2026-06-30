@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/domain-fragmentation-report",
       "schedule": "30 13 * * 1"
+    },
+    {
+      "path": "/api/cron/quality-aggregation",
+      "schedule": "0 14 * * 1"
     }
   ]
 }
