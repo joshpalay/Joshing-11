@@ -264,7 +264,13 @@ export default function LoadingScreen({
           <div className="relative mx-auto mt-4 flex h-24 w-full max-w-[17rem] flex-col items-center justify-center text-center">
             <div
               key={index}
-              className={`flex w-full flex-col items-center justify-center ${rotating ? "loading-message" : ""}`}
+              className={`flex w-full flex-col items-center justify-center ${
+                rotating
+                  ? currentItem.kind === "moment"
+                    ? "loading-card"
+                    : "loading-message"
+                  : ""
+              }`}
             >
               {currentItem.kind === "moment" ? (
                 <>
