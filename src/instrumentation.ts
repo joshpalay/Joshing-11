@@ -217,6 +217,36 @@ export async function register() {
       // PLAYER_MASTERY may not exist yet — migrate() handles initial creation.
     }
 
+    // B-QUESTION-QUALITY-AGENTS-01 (migration 0096): batch-verification stamp on
+    // both question stores + the needs_review demote status. All additive and
+    // nullable, so pre-applying is a no-op on a fully-migrated DB and repairs a
+    // partially-recorded one before migrate() / app reads touch the columns
+    // (precedent: the territory_type + DomainExclusionScope guards above/below).
+    try {
+      await db.execute(sql`
+        DO $$ BEGIN
+          CREATE TYPE "public"."QuestionVerificationVerdict" AS ENUM('ok', 'demoted', 'unverifiable', 'skipped');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await db.execute(sql`
+        ALTER TYPE "public"."PublicStatus" ADD VALUE IF NOT EXISTS 'needs_review'
+      `);
+      await db.execute(sql`
+        ALTER TABLE "Question"
+          ADD COLUMN IF NOT EXISTS "verified_at" timestamptz,
+          ADD COLUMN IF NOT EXISTS "verification_verdict" "public"."QuestionVerificationVerdict"
+      `);
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion"
+          ADD COLUMN IF NOT EXISTS "verified_at" timestamptz,
+          ADD COLUMN IF NOT EXISTS "verification_verdict" "public"."QuestionVerificationVerdict"
+      `);
+    } catch {
+      // Question / GeneratedQuestion / PublicStatus may not exist yet on a fresh
+      // DB — migrate() creates them and 0096 adds these pieces.
+    }
+
     // Migration 0043 renames PlayerMastery.season_points_start to
     // lifetime_points_baseline. If a preview/production database has 0043
     // recorded without the rename actually applied, Drizzle selects against
