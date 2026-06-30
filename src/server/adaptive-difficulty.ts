@@ -446,6 +446,25 @@ export function computeSupplyCorrection(
 }
 
 /**
+ * Pure decision for the STARVATION fallback. computeSupplyCorrection can only act
+ * when the under-difficulty reserve caught a below-tier question to reveal the
+ * supply ceiling; a domain whose requested tier yields LITERALLY NOTHING produces
+ * no delivery to learn from. This steps such a domain DOWN one tier — but never
+ * below its erosion floor — so the next build asks for something serveable.
+ * Returns the tier to pin to, or `null` when the domain is already at/below the
+ * floor (nothing left to relax).
+ */
+export function computeStarvationStepDown(
+  current: ServedDifficulty,
+  floor: ServedDifficulty,
+): ServedDifficulty | null {
+  const curIdx = DIFFICULTY_LADDER.indexOf(current);
+  const floorIdx = DIFFICULTY_LADDER.indexOf(floor);
+  if (curIdx <= floorIdx) return null;
+  return DIFFICULTY_LADDER[Math.max(floorIdx, curIdx - 1)];
+}
+
+/**
  * Supply-side difficulty correction — the counterpart to the demand-side streak
  * ladder in updateDomainDifficultyOnAnswer. A streak step-up is *optimistic*: it can
  * raise a domain to a tier the generator can't actually field (there is, for example,
@@ -563,6 +582,72 @@ export async function recalibrateDomainDifficultyToSupply(
         deliveredTier: delivered,
       });
     }
+  }
+}
+
+/**
+ * Starvation fallback — the deadlock-breaker recalibrateDomainDifficultyToSupply
+ * CAN'T cover. That correction only fires when the under-difficulty reserve caught
+ * a below-tier question; a domain whose requested tier yields nothing (0 generated,
+ * empty reserve) produces no delivery to learn from, so its tier stays pinned and
+ * every retry re-asks the same unserveable tier — the deadlock that stranded
+ * Buttkicker's `specialist` Tears-of-the-Kingdom (generator returned 0-1 in ~70s,
+ * the build fell below the floor and 503'd, indefinitely). Called from the
+ * orchestrator when a build fails below the minimum: steps each requested domain
+ * DOWN one tier (respecting the declared/demonstrated erosion floor, leaving frozen
+ * "Ease off" domains alone) so the NEXT build — the client's auto-retry, or
+ * tomorrow's cron — requests a serveable tier. Step-down only; never promotes, so
+ * it can't fight the streak ladder. Only touches domains with a PERSISTED row (the
+ * streak-ratchet case); a freshly-seeded high tier with no row is governed by the
+ * global adaptive level instead. Bounded by the ladder depth — at most two
+ * failures converge a specialist domain to accessible. Best-effort by contract:
+ * the caller swallows errors so this never masks the underlying generation_failed.
+ */
+export async function relaxDomainDifficultyOnStarvation(
+  userId: string,
+  domains: string[],
+): Promise<void> {
+  if (domains.length === 0) return;
+
+  const now = new Date();
+  const [rows, declaredDomains] = await Promise.all([
+    db
+      .select()
+      .from(userDomainDifficulties)
+      .where(and(
+        eq(userDomainDifficulties.userId, userId),
+        inArray(userDomainDifficulties.canonicalSubcategory, domains),
+      )),
+    getDeclaredDomainSet(userId, domains),
+  ]);
+
+  for (const existing of rows) {
+    if (isFrozen(existing.freezeUntil, now)) continue;
+    const floor: ServedDifficulty = declaredDomains.has(existing.canonicalSubcategory)
+      ? focusDomainMinDifficulty()
+      : 'accessible';
+    const relaxed = computeStarvationStepDown(
+      existing.servedDifficulty as ServedDifficulty,
+      floor,
+    );
+    if (!relaxed) continue;
+
+    await db
+      .update(userDomainDifficulties)
+      .set({
+        servedDifficulty: relaxed,
+        consecutiveCorrect: 0,
+        consecutiveIncorrect: 0,
+        lastUpdated: now,
+      })
+      .where(eq(userDomainDifficulties.id, existing.id));
+
+    console.info('[adaptive-difficulty] starvation step-down', {
+      userId,
+      domain: existing.canonicalSubcategory,
+      from: existing.servedDifficulty,
+      to: relaxed,
+    });
   }
 }
 

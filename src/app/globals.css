@@ -530,6 +530,20 @@
   will-change: opacity, transform;
 }
 
+/* Same fade/centering as .loading-message, but for the Loading Moment card,
+   whose Editorial artifact is a full sentence that must wrap to up to 3 lines.
+   `white-space: nowrap` (used for the short craft phrases) would force the
+   sentence onto one line and clip it; here we pin an explicit width to the
+   fixed copy slot so the text wraps within the card instead. */
+.loading-card {
+  position: absolute;
+  left: 50%;
+  width: 100%;
+  transform: translateX(-50%);
+  animation: loading-message 3.2s ease-in-out forwards;
+  will-change: opacity, transform;
+}
+
 /* B-GRADE-PERCEIVED-1 — the "Grading…" indicator while an answer is checked
    (GameplayChat TypingRow). Three dots pulse on the shared loading-dot
    keyframe so the wait reads as alive, not frozen. Delays are set inline. */
@@ -594,6 +608,7 @@
   .triangle-loader-tri,
   .triangle-loader-dot,
   .loading-message,
+  .loading-card,
   .skeleton {
     animation: none !important;
   }
