@@ -78,9 +78,9 @@ type CatchupLoadResponse = {
   introCopy?: string;
 };
 
-// Shape returned by POST /api/daily/recheck. Catch-up reuses that route for
-// daily-queue-backed items (their dailyQueueItemId is `${queueId}:${slotIndex}`,
-// exactly the route's inputs); feed-backed catch-up items are not rechecked here.
+// Shape returned by POST /api/daily/catchup/recheck (daily-queue-backed items
+// only; feed-backed catch-up items carry no recheck affordance). Mirrors the
+// /api/daily/recheck response shape.
 type DailyRecheckResponse = {
   accepted?: boolean;
   status?: string;
@@ -598,10 +598,13 @@ export function useCatchupFlow() {
     }
   }, [advancePast, applyCatchupSubmitFailure, currentItem, isResolvingTurn, items.length, submitting, undismissItem]);
 
-  // Re-grade a wrong daily-slot answer via the shared /api/daily/recheck route.
-  // On accept we flip this turn's tally + recap entry to correct; GameplayChat's
-  // ResultRow surfaces the returned message inline. Feed-backed items never reach
-  // here (their recheckAction is null), so the daily route's queue lookup holds.
+  // Re-grade a wrong CATCH-UP answer via /api/daily/catchup/recheck. The live
+  // /api/daily/recheck route operates on a slot's live-round fields and bails on
+  // a catch-up-only slot (`!slot.answered` → "answer it first"), so it could not
+  // appeal a catch-up mis-grade at all; the catch-up route reads the catchup_*
+  // fields instead. On accept we flip this turn's tally + recap entry to correct;
+  // GameplayChat's ResultRow surfaces the returned message inline. Feed-backed
+  // items never reach here (their recheckAction is null).
   const requestRecheck = useCallback(
     async (item: CatchupQueueItem): Promise<RecheckActionResult> => {
       const parsed = parseCatchupItemId(item.dailyQueueItemId);
@@ -611,11 +614,11 @@ export function useCatchupFlow() {
 
       let response: Response;
       try {
-        response = await fetch('/api/daily/recheck', {
+        response = await fetch('/api/daily/catchup/recheck', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ queue_id: parsed.queueId, slot_index: parsed.slotIndex }),
+          body: JSON.stringify({ dailyQueueItemId: item.dailyQueueItemId }),
         });
       } catch {
         return { accepted: false, message: 'Could not recheck that answer.' };
@@ -679,7 +682,7 @@ export function useCatchupFlow() {
       const resultMessageId = newMessageId();
       resultPostedItemIdsRef.current.add(item.dailyQueueItemId);
       // Only wrong, daily-queue-backed answers get a recheck button — feed-backed
-      // catch-up items aren't supported by /api/daily/recheck.
+      // catch-up items aren't supported by /api/daily/catchup/recheck.
       const recheckAction: RecheckAction | null =
         !isCorrect && parseCatchupItemId(item.dailyQueueItemId)?.surface === 'daily'
           ? { onSubmit: () => requestRecheck(item) }
