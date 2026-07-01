@@ -1,5 +1,7 @@
 # D-SUPPLY-LADDER-UNIFY-01 — Decision Record
 
+> **⚠ Under revision — see `docs/decisions-pending/D-SUPPLY-FINITE-SET-01-PENDING.md`.** This ladder assumes **infinite-topup** domains; a **finite-completable-set** reframe under review may reshape rungs 2, 3, and 5. **Do not write build prompts from this doc until that decision lands.**
+
 **Status:** DRAFT — open decisions **A, D, E** require ratification before any build prompt is written. (Decisions **B** and **C** are effectively resolved by live canon — see the Reconciliation note and §5.)
 **Coordinates with (does NOT couple to):** `D-AREA-EXPANSION-01` (now **SETTLED + §9-amended + largely built**) and `D-QUESTION-QUALITY-AGENTS-01` / `B-QUESTION-QUALITY-AGENTS-01`. Shared seams only — see §4 and §7.
 **Migration head at draft:** `0095_player_mastery_rotation_eligible` (live head; `ls drizzle/*.sql | sort | tail -1`). This doc's *flips* introduce no migration; the §4 `needs_review` seam and the §5-A refill-recovery signal may each require a small storage/derivation decision settled at build time (§8) — so "no migration" is no longer an unconditional promise.

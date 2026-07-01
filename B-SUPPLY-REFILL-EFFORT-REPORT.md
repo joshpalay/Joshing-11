@@ -1,8 +1,29 @@
 # Grounded Pool-Refill — Full Effort Report (B-SUPPLY-REFILL-*)
 
 **Period:** 2026-06-30 → 2026-07-01
-**Status:** **PAUSED** at 18-user scale (see Disposition). `RETRIEVAL_GROUNDING_ENABLED` remains **`false`** in prod. Verification, the throughput build, adaptive exclusion, a real prod flip + revert, a root-cause diagnostic, and a latency-lever sweep are all complete; the true blocker and the only viable fix are now identified.
+**Status:** **technically UN-BLOCKED, strategically PAUSED** (2026-07-01) — see the **UPDATE** section immediately below, which supersedes the original TL;DR / Disposition. `RETRIEVAL_GROUNDING_ENABLED` remains **`false`** in prod.
 **Supersedes / extends:** `B-SUPPLY-REFILL-FLIP-01-FINDINGS.md` (the mid-effort snapshot). This is the authoritative end-to-end record.
+
+---
+
+## UPDATE (2026-07-01) — technically un-blocked, strategically PAUSED
+
+> **This section supersedes the "PAUSED / async Batch API is the only fix" conclusion in the TL;DR and Disposition below.** Those are preserved **unchanged, as the Sonnet-4.6-era historical record** — read them as history, not as the current disposition.
+
+**1. Throughput is solved — by MODEL, not by architecture. The Batch-API rebuild is RETRACTED.**
+The 65%-timeout catastrophe was a **Sonnet 4.6** phenomenon: the heavy structured-JSON refill call sat at the 120s per-call ceiling, and the same call swung ~25s→>220s within an hour. On **Sonnet 5** (prod generation model since 2026-07-01 via `ANTHROPIC_MODEL`) a full **41-domain run drained in ~165s with ZERO timeouts**. **Do NOT rebuild refill on the async Batch API to "fix throughput" — that conclusion is explicitly withdrawn.** (`B-SUPPLY-REFILL-THROUGHPUT-01` bounded-concurrency also shipped and helps, but the decisive factor was the model.)
+
+**2. Yield is healthy on a FUNDED Sonnet 5 run.**
+The apparent "yield collapse" (34/41 domains persisting nothing) was **credit exhaustion mid-run** (HTTP 400 `CREDITS_EXHAUSTED`), NOT a never-searched (provenance) or parse-failure bug. A funded instrumented diagnostic showed **every domain searched (2–3×) and parsed (1 question each)**. Persist funnel on a broad-domain-heavy slice: 11 generated → 1 uncorroborated, 7 quality-gate drops, **3 persisted (~27%)**. That extrapolates over the ≥5-fact bar — but the ≥5 is still an extrapolation from BROAD domains, which persist more easily than the narrow domains refill exists to serve (see the confirmation gate).
+
+**3. STRATEGIC PAUSE — pending the finite-set product decision (`D-SUPPLY-FINITE-SET-01`, TBD).**
+The refill *works*; it is paused for a **product** reason, not a technical one. A reframe under review may replace *infinite daily top-up* with *finite completable sets* (fill a domain's ~15–30 fan-salient questions once, earn a designation, then graduate/broaden by choice, with opt-in difficulty tiers). That would change what refill is FOR — and change what a confirmation run even confirms. **Do not flip `RETRIEVAL_GROUNDING_ENABLED`, and do not run the ~$2 paid AC-1 confirmation, until `D-SUPPLY-FINITE-SET-01` lands.** Marker: `docs/decisions-pending/D-SUPPLY-FINITE-SET-01-PENDING.md`.
+
+**4. AC-1 confirmation bar (when un-paused):** ≥12 domains **AND** ≥5 persisted facts in one funded run — **with narrow/niche domains (e.g. Spy School Books 1–6) represented among the persisted facts**, not only broad ones (Shakespeare/WTC/Rent persist more easily and would give a false pass). Gated note in `docs/retrieval-flip-checklist.md`.
+
+**5. Two telemetry gaps to close before ANY soak** (see `docs/findings/ledger-telemetry-gaps.md`): (a) web-search spend is not in `LlmUsageEvent` at all (~$1.80 on the 2026-07-01 spike day, invisible); (b) timed-out calls bill tokens Anthropic charges, but `LlmUsageEvent` records only successful responses — on the spike day the ledger saw ~$3 of the ~$7.56 actual. On Sonnet 5 gap (b) largely self-closes (no timeouts); gap (a) is permanent and material.
+
+**6. Model-dependency note for the provider thread.** Refill's **viability** — not just its per-token cost — is model-dependent: Sonnet 5 made a paused feature operable by removing its structural blocker. This belongs in `D-LLM-PROVIDER-ZAI-01`'s evidence: provider choice trades off feature-operability, not only price. Coordinated-but-decoupled — do not merge the threads.
 
 ---
 
