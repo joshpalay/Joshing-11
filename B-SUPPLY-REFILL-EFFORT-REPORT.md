@@ -1,18 +1,18 @@
 # Grounded Pool-Refill — Full Effort Report (B-SUPPLY-REFILL-*)
 
 **Period:** 2026-06-30 → 2026-07-01
-**Outcome:** Grounded pool-refill is **NOT production-ready**; `RETRIEVAL_GROUNDING_ENABLED` remains **`false`** in prod. The verification, throughput build, adaptive exclusion, a real prod flip, its revert, and a root-cause diagnostic are all complete. The true blocker is now correctly identified.
+**Status:** **PAUSED** at 18-user scale (see Disposition). `RETRIEVAL_GROUNDING_ENABLED` remains **`false`** in prod. Verification, the throughput build, adaptive exclusion, a real prod flip + revert, a root-cause diagnostic, and a latency-lever sweep are all complete; the true blocker and the only viable fix are now identified.
 **Supersedes / extends:** `B-SUPPLY-REFILL-FLIP-01-FINDINGS.md` (the mid-effort snapshot). This is the authoritative end-to-end record.
 
 ---
 
 ## TL;DR
 
-We set out to flip on the grounded pool-refill cron (rung 1 of the supply ladder, `D-SUPPLY-LADDER-UNIFY-01`). Verification proved the *quality* path is healthy but the cron **times out**. We built bounded concurrency (throughput) and an adaptive timeout-exclusion, flipped prod, and the first real run produced **0 persists / 8 timeouts / a 504**. Reverting, we fixed a real bug in the exclusion and ran a controlled diagnostic. The diagnostic's verdict:
+We set out to flip on the grounded pool-refill cron (rung 1 of the supply ladder, `D-SUPPLY-LADDER-UNIFY-01`). Verification proved the *quality* path is healthy but the cron **times out**. We built bounded concurrency and an adaptive timeout-exclusion, flipped prod, and the first real run produced **0 persists / 8 timeouts / a 504**. Reverting, we fixed a real bug in the exclusion, then ran two diagnostics. The verdicts:
 
-> **Neither web search nor concurrency is the bottleneck. The refill's own heavy generation call is** — a simple web-search prompt returns in **~25s**, but the refill's structured-JSON-with-avoid-lists prompt (3 searches, 3000 max_tokens) takes **~100–120s**, right at the per-call timeout, so a large fraction of domains abort every run regardless of concurrency.
+> **Neither web search nor concurrency is the bottleneck** (§8). And **the per-call latency is not fixable by config tuning** (§9): the *same* grounded call swings from ~25s to >220s within an hour — temporal variance in Anthropic's agentic web-search — so any synchronous per-call timeout is regularly blown regardless of prompt weight, search count, or output cap.
 
-**The lever is per-call latency (leaner prompt / fewer searches / simpler output schema), not throughput.** All infrastructure built along the way (concurrency, incremental health-recording, adaptive exclusion) is sound and merged, but insufficient on its own.
+**The only structural fix is to move refill to the async Batch API** (no per-call/300s ceiling), gated on a check that `web_search` runs inside a Batch. At 18-user scale the ROI of that re-architecture is low, so the effort is **paused** with the path documented. All infra built along the way (concurrency, incremental health-recording, adaptive exclusion) is sound and merged, but insufficient on its own.
 
 ---
 
@@ -86,22 +86,39 @@ Concurrent is ~10% slower and all four completed — **no contention**. But note
 
 1. **The quality/grounding path works.** When a call completes, ~57% persist and the only rejections are correct corroboration failures. This is not a quality problem.
 2. **Concurrency and the exclusion are sound infra, but they don't fix the real problem.** They drain *more* domains per run and stop wasting budget on chronic-timeouts — good, and merged — but if each real call is ~100–120s (borderline), a large fraction still abort.
-3. **The real blocker is per-call generation latency**, driven by the heavy prompt/output (structured JSON + avoid-lists + 3 searches + 3000 output tokens) — not web search, not concurrency, not the DB.
-4. **Region caveat unresolved:** even the prod cron's 504 error showed region `cle1` (may be edge vs function region; the `us-west-2` pin's application to this cron is unconfirmed). Worth checking, but it does not explain a 4× prompt-weight gap.
+3. **The real blocker is per-call generation latency — and it is VARIABLE and UNBOUNDED, not config-tunable** (see §9). The heavy structured prompt makes the call slower than a simple one, but the decisive factor is temporal variance in Anthropic's agentic web-search latency: the *same* call swings from ~25s to >220s within an hour, so any synchronous per-call timeout is regularly blown regardless of prompt weight.
+4. **Region caveat unresolved:** even the prod cron's 504 error showed region `cle1` (may be edge vs function region; the `us-west-2` pin's application to this cron is unconfirmed). It does not explain the latency variance.
+
+### 9. Latency-lever sweep — config tuning does NOT fix it
+To test recommendation "lighten the call," we ran the *real* refill generation call with one knob changed at a time (searches 3→2, avoid-list 60→15, `max_tokens` 3000→1500) on a domain that completes (Beethoven) and a broad one (Shakespeare), with a generous 220s timeout to measure true durations:
+
+| domain / config | result |
+|---|---|
+| Beethoven — baseline (3 / 60 / 3000) | **timed out (>220s)** |
+| Beethoven — searches=2 | **timed out** |
+| Beethoven — avoid=15 | **timed out** |
+| Beethoven — lean (2 / 15 / 1500) | **timed out** |
+| Shakespeare — baseline | ✅ **133s**, 1 question |
+| Shakespeare — lean | **timed out** |
+
+**The config knobs made no reliable difference.** The leanest config still timed out; Beethoven — which returned in ~25s an hour earlier — timed out on *all four* configs, while "broad" Shakespeare *completed*. That is not a config or domain effect; it is **temporal variance in agentic web-search latency**. Conclusion: **you cannot make a synchronous cron reliable against this by tuning the prompt.**
 
 ---
 
-## Recommended next steps (before any re-flip)
+## Disposition: PAUSED (at 18-user scale), path documented
 
-Attack **per-call latency** — in rough order of leverage:
+**Decision (2026-07-01): pause the refill effort.** The prior product call already paused retrieval grounding at 18-user scale ("revisit at scale, needs throughput fix first"); this effort *did* the throughput investigation and its conclusion is that a working refill is not a tweak but an **async re-architecture**. At current scale the ROI of that build is low, so we stop here with the path recorded. Grounding stays **`false`**; all infra is merged.
 
-1. **Lighten the grounded generation call.** The ~4× gap between the simple (~25s) and refill (~100–120s) prompts is the headline. Options: shrink the avoid-lists fed into the prompt, reduce `max_tokens`, simplify the output schema, or split "search + extract" from "format to schema" into two cheaper calls.
-2. **Reduce searches per call** (`RETRIEVAL_MAX_SEARCHES_PER_QUESTION` 3→2). Faster, but corroboration needs ≥2 sources — measure the yield hit.
-3. **Consider the Batch API** for refill (it's off the user's critical path). Batches tolerate minutes-long calls with no 300s ceiling and cost 50% less — a structurally better fit than a 300s cron for a slow agentic call. This may be the cleanest real fix.
-4. **Keep** concurrency (cap 4) and the incremental adaptive exclusion — they're validated and help, just aren't sufficient alone.
-5. **Then** re-run the yield characterization; only flip when a real run shows `questionsPersisted > 0` sustainably within the cron budget.
+**The only structural fix (for when this is revisited at scale): move refill to the Anthropic Batch API.**
+- Batches have **no per-call / 300s ceiling** — a call that takes 220s simply completes instead of aborting, which is exactly what the variance demands. They are async (refill is off the critical path) and cost ~50% less.
+- Shape: a **submit** step batches one grounded-generation request per thin-active domain; a **harvest** step polls the batch and runs the *existing* corroborate → screen → ask-to-answer → persist pipeline on each result (reusing everything built here). The concurrency worker-pool becomes unnecessary; the adaptive timeout-exclusion is largely moot (batches don't time out) but harmless.
+- **Gating feasibility check before any build:** confirm the **`web_search` server tool actually runs inside a Batch request**. If it does not, the Batch approach is dead and refill needs a fundamentally different retrieval design. Do this 5-minute check *first*.
 
-Also still open: the *Spy School* niche-completion check was never run directly; refill's **web-search spend is not in `LlmUsageEvent`** (token-only ledger) — Phase-3 spend must be read from cron reports.
+**Refuted / de-prioritized:** lightening the prompt or cutting searches (§9 — no reliable effect); tuning concurrency (§8 — not the bottleneck).
+
+**Still open (for the revisit):** the *Spy School* niche-completion check was never run directly; refill's **web-search spend is not in `LlmUsageEvent`** (token-only ledger) — Phase-3 spend must be read from cron reports.
+
+**Higher-leverage work at this scale instead:** the **domain-fragmentation** bug (the same game split across two `canonical_subcategory` strings, e.g. "Tears of the Kingdom - the Legend of Zelda" vs "The Legend of Zelda: Tears of the Kingdom", so bank depth never accumulates under one key) is independent of refill and flagged as the highest-leverage small supply fix.
 
 ---
 
