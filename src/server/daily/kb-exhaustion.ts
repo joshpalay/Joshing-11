@@ -74,6 +74,16 @@ export function isAreaExpansionParentOverflowEnabled(): boolean {
 }
 
 /**
+ * Master switch for the hybrid near-ness tree (D-NEARNESS-LADDER-HYBRID-01). Off
+ * by default: the lazy Haiku tree call never fires and nothing reads the cache
+ * until an operator enables it. Gates both the build side (populate
+ * DomainRelation) and, later, the supply/expansion read side.
+ */
+export function isNearnessTreeEnabled(): boolean {
+  return boolEnv('NEARNESS_TREE_ENABLED', false);
+}
+
+/**
  * The pool depth (distinct durable facts) below which a domain counts as "thin".
  * Shared verbatim with grounding's poolDepthThreshold so the guard hands a domain
  * to grounded refill at exactly the boundary grounding considers it thin.

@@ -292,6 +292,32 @@ export async function register() {
       // Best-effort pre-create; migrate() creates it on a fresh DB.
     }
 
+    // D-NEARNESS-LADDER-HYBRID-01 (migration 0099): the global near-ness tree cache.
+    // New + isolated; RLS-enabled with no policies (owner role bypasses RLS).
+    // Idempotent so a partially-recorded DB boots before the first tree write.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DomainRelation" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "child_domain" text NOT NULL,
+          "related_domain" text NOT NULL,
+          "broad_category" text,
+          "rung" text NOT NULL CHECK ("rung" IN ('sibling', 'cousin', 'parent', 'grandparent')),
+          "source" text NOT NULL CHECK ("source" IN ('curated', 'llm')),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "DomainRelation" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "DomainRelation_child_related_key" ON "DomainRelation" ("child_domain", "related_domain")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "DomainRelation_child_domain_idx" ON "DomainRelation" ("child_domain")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
     // Migration 0043 renames PlayerMastery.season_points_start to
     // lifetime_points_baseline. If a preview/production database has 0043
     // recorded without the rename actually applied, Drizzle selects against
