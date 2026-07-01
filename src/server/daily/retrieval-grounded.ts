@@ -26,6 +26,7 @@ import { resolveDailyBasePoints } from '@/server/daily/types';
 import {
   getDomainPoolAvoidLists,
   getThinActiveDomains,
+  recordDomainRefillHealth,
 } from '@/server/db/queries/retrieval-demand';
 import {
   USD_PER_WEB_SEARCH,
@@ -42,6 +43,23 @@ const DURABLE_EXPIRY = new Date('2999-01-01T00:00:00.000Z');
 // How many existing pool facts per domain to feed the avoid list.
 const AVOID_LIST_LIMIT = 60;
 
+// Whether an error thrown by the grounded generation call is a per-call TIMEOUT
+// (the AbortSignal.timeout in loggedMessagesCreate) rather than a parse/API error.
+// Only timeouts feed the adaptive timeout-exclusion counter; a transient API error
+// should not mark a domain chronically-slow. Exported for unit testing.
+export function isTimeoutError(err: unknown): boolean {
+  if (!err) return false;
+  const e = err as { name?: unknown; message?: unknown };
+  const name = typeof e.name === 'string' ? e.name : '';
+  const message = typeof e.message === 'string' ? e.message : String(err);
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    /\baborted\b/i.test(message) ||
+    /\btimed?[\s-]?out\b/i.test(message)
+  );
+}
+
 export type DomainRefillResult = {
   domain: string;
   persisted: number;
@@ -51,6 +69,9 @@ export type DomainRefillResult = {
   droppedUncorroborated: number;
   droppedQualityGate: number;
   droppedDuplicateFact: number;
+  /** True when the grounded generation call aborted on the per-call timeout — feeds
+   *  the adaptive timeout-exclusion health record (B-SUPPLY-REFILL-THROUGHPUT-01). */
+  timedOut?: boolean;
 };
 
 export type PoolRefillReport = {
@@ -332,6 +353,8 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
     depthThreshold: config.poolDepthThreshold,
     activeLookbackDays: config.activeLookbackDays,
     limit: config.maxDomainsPerRun,
+    excludeTimeoutThreshold: config.timeoutExcludeThreshold,
+    timeoutCooldownDays: config.timeoutCooldownDays,
   });
   report.domainsConsidered = domains.length;
 
@@ -412,11 +435,19 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
         droppedUncorroborated: 0,
         droppedQualityGate: 0,
         droppedDuplicateFact: 0,
+        timedOut: isTimeoutError(err),
       };
     },
   );
   results.forEach(accumulate);
   report.backlogRemaining = backlog;
+
+  // Adaptive timeout exclusion (B-SUPPLY-REFILL-THROUGHPUT-01 follow-up): record
+  // each processed domain's outcome so chronically-timing-out domains drop out of
+  // getThinActiveDomains next run. Best-effort — never sinks the run.
+  await recordDomainRefillHealth(
+    results.map((r) => ({ domain: r.domain, timedOut: r.timedOut === true, completed: r.generated > 0 })),
+  ).catch(() => undefined);
 
   return report;
 }
