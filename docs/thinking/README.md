@@ -2,9 +2,13 @@
 
 **What this folder is:** a home for *thinking artifacts* and *session records* — snapshots of a design direction while it settles. **Nothing here is ratified or a build instruction.** Live code is the source of truth; treat every doc below as a record to react to, not a spec to build from. Ratified decisions live in `DECISIONS.md` and the `PRD-D-*` series.
 
+## Latest summary — read this first
+
+- **`SESSION-SUMMARY-quality-cost-human-authored.md`** — the most recent, data-grounded record of the arc: cost is modest and located (concentrated in deep niche domains), the pivot is justified by quality/anti-fabrication (not cost), and the last real unknown is the offline "Robyn test." **This supersedes some earlier framing below** — notably: reactions are RETIRED (the `QuestionReaction` residue is dead, not a bug to fix), reaction-rate is NOT the north star (a daily-play → invite → author funnel is), and the "curation is 90× cheaper" cost argument is retired. Includes the one shipped change (the `DAILY_TOPUP_CARRYFORWARD_ENABLED` flip).
+
 ## The human-authored pivot (2026 session) — reading order
 
-Read top to bottom: the summary is the map, then the model, then the test suite, then the first proposed build, then the validation gate.
+Read top to bottom: the summary is the map, then the model, then the test suite, then the first proposed build, then the validation gate. (Where this earlier record and the latest summary above disagree, the latest summary wins.)
 
 1. **`SESSION-SUMMARY-human-authored-pivot.md`** — START HERE. The map of the whole session: how it traveled (cost spike → human-authored pivot), what was decided (un-ratified), the open questions, and the critical caveat (mostly design, little evidence — validate before building).
 2. **`CONCEPT-master-authored-canonical-sets.md`** — the full model: the authority inversion (human authors, LLM is staff), finite sets, performance-based mastery, the contribution→mastery→evaluation loop, the optional domain tree, the authorship-exclusion invariant. Thinking-in-progress; not a decision record.
