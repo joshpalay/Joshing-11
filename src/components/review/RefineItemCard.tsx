@@ -17,11 +17,10 @@ const actionStyle: CSSProperties = {
 const ACTION_CLASS =
   'inline-flex min-h-11 cursor-pointer items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto';
 
-// Action verb sits on the left on the sm+ row (flex-row-reverse puts the
-// trailing button at the start), while mobile keeps the natural text-then-action
-// stack.
+// Action verb sits on the right on the sm+ row (the trailing button keeps its
+// natural end position), while mobile keeps the natural text-then-action stack.
 const ROW_CLASS =
-  'flex flex-col gap-3 py-4 sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-4';
+  'flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4';
 
 export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: string }) {
   // Navigational nudge (add_territories): links out instead of staging a
