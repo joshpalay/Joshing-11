@@ -64,6 +64,14 @@ export type RetrievalConfig = {
    *  src/server/db/index.ts) — each in-flight domain borrows a connection for its
    *  reads/writes. */
   maxConcurrentDomains: number;
+  /** Adaptive timeout exclusion (B-SUPPLY-REFILL-THROUGHPUT-01 follow-up). A domain
+   *  that times out this many times CONSECUTIVELY is skipped from refill demand for
+   *  timeoutCooldownDays — so the budget stops being spent on chronically-slow
+   *  (broad) domains that never complete. 0 disables the exclusion. */
+  timeoutExcludeThreshold: number;
+  /** How long (days) a chronically-timing-out domain stays excluded before it is
+   *  retried once more. A completed generation resets its timeout counter. */
+  timeoutCooldownDays: number;
   /** Minimum distinct non-denied source hosts required to keep a grounded
    *  question (corroboration floor; Drift Risk 2). */
   minCorroboratingSources: number;
@@ -104,6 +112,11 @@ export function getRetrievalConfig(): RetrievalConfig {
     // while turning the sequential ~2-3 domains/run into ~4× the throughput.
     // Floored at 1 (degrades to sequential); capped at 8 to never starve the pool.
     maxConcurrentDomains: Math.min(8, Math.max(1, Math.round(numEnv('RETRIEVAL_MAX_CONCURRENT_DOMAINS', 4)))),
+    // Default 3: after 3 consecutive timeouts a domain is skipped for the cooldown.
+    // Broad domains (Shakespeare, etc.) time out reliably; niche ones complete, so
+    // this focuses the budget on domains that actually persist. 0 disables it.
+    timeoutExcludeThreshold: Math.max(0, Math.round(numEnv('RETRIEVAL_TIMEOUT_EXCLUDE_THRESHOLD', 3))),
+    timeoutCooldownDays: Math.max(1, Math.round(numEnv('RETRIEVAL_TIMEOUT_COOLDOWN_DAYS', 7))),
     minCorroboratingSources: Math.max(1, Math.round(numEnv('RETRIEVAL_MIN_CORROBORATING_SOURCES', 2))),
     minReputableSources: Math.max(1, Math.round(numEnv('RETRIEVAL_MIN_REPUTABLE_SOURCES', 1))),
   };

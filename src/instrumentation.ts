@@ -270,6 +270,28 @@ export async function register() {
       // Best-effort pre-create; migrate() creates it on a fresh DB.
     }
 
+    // B-SUPPLY-REFILL-THROUGHPUT-01 follow-up (migration 0098): per-domain refill
+    // health for adaptive timeout exclusion. New + isolated; RLS-enabled with no
+    // policies (owner role bypasses RLS). Idempotent so a partially-recorded DB
+    // still boots before runPoolRefill's first upsert (precedent: 0097).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "RetrievalDomainHealth" (
+          "domain" text PRIMARY KEY,
+          "consecutive_timeouts" integer NOT NULL DEFAULT 0,
+          "last_timeout_at" timestamp with time zone,
+          "last_success_at" timestamp with time zone,
+          "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "RetrievalDomainHealth" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "RetrievalDomainHealth_cooldown_idx" ON "RetrievalDomainHealth" ("consecutive_timeouts", "last_timeout_at")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
     // Migration 0043 renames PlayerMastery.season_points_start to
     // lifetime_points_baseline. If a preview/production database has 0043
     // recorded without the rename actually applied, Drizzle selects against

@@ -759,6 +759,26 @@ export const generatedQuestions = pgTable(
   ],
 );
 
+// Per-domain retrieval-refill health (migration 0098, B-SUPPLY-REFILL-THROUGHPUT-01
+// follow-up). runPoolRefill records whether each domain's grounded call completed
+// or timed out; getThinActiveDomains skips domains that have timed out
+// consecutively >= a threshold and are still within a cooldown, so the capped cron
+// budget stops being spent on chronically-slow (broad) domains that never complete.
+export const retrievalDomainHealth = pgTable(
+  'RetrievalDomainHealth',
+  {
+    // canonical_subcategory of the domain (matches generatedQuestions.canonicalSubcategory).
+    domain: text('domain').primaryKey(),
+    consecutiveTimeouts: integer('consecutive_timeouts').notNull().default(0),
+    lastTimeoutAt: timestamp('last_timeout_at', { withTimezone: true }),
+    lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('RetrievalDomainHealth_cooldown_idx').on(table.consecutiveTimeouts, table.lastTimeoutAt),
+  ],
+);
+
 export const questionFeedback = pgTable(
   'QuestionFeedback',
   {
