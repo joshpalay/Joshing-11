@@ -779,6 +779,30 @@ export const retrievalDomainHealth = pgTable(
   ],
 );
 
+// Global near-ness tree cache (migration 0099, D-NEARNESS-LADDER-HYBRID-01 B2).
+// Structural, player-independent domain relations: for a child_domain, the
+// related_domains one step away by rung (sibling/cousin/parent/grandparent),
+// source-tagged (curated | llm). Computed once per domain by a lazy Haiku call on
+// the shared thinness boundary; read by supply (route to held near rungs) and
+// expansion (offer unheld near rungs). NB: rows are keyed on canonical_subcategory
+// strings — a domain merge/rename must rewrite them (add to the merge routine).
+export const domainRelations = pgTable(
+  'DomainRelation',
+  {
+    id: id(),
+    childDomain: text('child_domain').notNull(),
+    relatedDomain: text('related_domain').notNull(),
+    broadCategory: text('broad_category'),
+    rung: text('rung').$type<'sibling' | 'cousin' | 'parent' | 'grandparent'>().notNull(),
+    source: text('source').$type<'curated' | 'llm'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('DomainRelation_child_related_key').on(table.childDomain, table.relatedDomain),
+    index('DomainRelation_child_domain_idx').on(table.childDomain),
+  ],
+);
+
 export const questionFeedback = pgTable(
   'QuestionFeedback',
   {
