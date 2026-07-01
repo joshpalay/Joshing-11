@@ -53,11 +53,14 @@ import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
 import {
   isAreaExpansionParentOverflowEnabled,
   isNarrowKbGuardEnabled,
+  isNearnessTreeEnabled,
   narrowKbThinnessThreshold,
   selectOverflowParents,
   selectUngroundedExcludedDomains,
 } from '@/server/daily/kb-exhaustion';
 import { getExpansionParents } from '@/server/knowledge/open-domain';
+import { getOrBuildDomainRungs } from '@/server/knowledge/nearness-tree';
+import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { reconcileProposedDomain } from '@/lib/questions/categorization';
 import { domainKey } from '@/lib/knowledge/domain-key';
@@ -2256,6 +2259,39 @@ export async function generateDailyQuestionsFromKnowledgeBase(
             console.info('[daily/kb-exhaustion] routed thin domains to expansion parents', {
               userId,
               parents: routed,
+            });
+          }
+        }
+
+        // Near-ness ladder routing (D-NEARNESS-LADDER-HYBRID-01, D2). Route each
+        // thin domain's freed slot to a NEAR domain the player already HOLDS
+        // (sibling/cousin/parent/grandparent from the cached tree, filtered by the
+        // C2 overlay: territory ∪ answer-history ∪ declared). Unheld near rungs are
+        // NOT borrowed here — they surface as game-end expansion offers instead. The
+        // lazy tree build fires here, on the thin-crossing (decision E1). Gated
+        // independently; already inside the guard's fail-open try/catch.
+        if (isNearnessTreeEnabled()) {
+          const heldKeys = await getHeldDomainKeys(userId);
+          const isHeld = (domain: string) =>
+            heldKeys.has(domainKey(domain)) || territoryByDomain.has(domain);
+          const nearRouted: string[] = [];
+          for (const thin of excluded) {
+            const rungs = await getOrBuildDomainRungs(thin);
+            const routed = selectOverflowParents(
+              rungs.map((r) => r.domain),
+              isHeld,
+              (domain) =>
+                bankFilledDomains.has(domain)
+                || domainsForLlm.includes(domain)
+                || nearRouted.includes(domain),
+            );
+            nearRouted.push(...routed);
+          }
+          if (nearRouted.length > 0) {
+            domainsForLlm.push(...nearRouted);
+            console.info('[daily/nearness] routed thin domains to held near rungs', {
+              userId,
+              near: nearRouted,
             });
           }
         }
