@@ -75,7 +75,28 @@ export type AnswerSuggestionResult = {
   suggested_phrasings?: string[];
 };
 
-export const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+// Generation/gate model. Env-overridable so the Sonnet 5 upgrade is a single,
+// reversible env flip (ANTHROPIC_MODEL=claude-sonnet-5) after validating on
+// preview — Sonnet 5 is same price at standard ($3/$15), cheaper until 2026-08-31.
+// loggedMessagesCreate sanitizes params per model, so the newer Sonnet-5/Opus-4.7+
+// line (which rejects temperature and defaults thinking ON) is safe to select here
+// without touching the ~15 call sites that pass temperature.
+export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6';
+
+// Models in the Opus-4.7+ / Sonnet-5 / Fable line REJECT temperature/top_p/top_k
+// (HTTP 400). Callers may keep passing temperature; loggedMessagesCreate strips it
+// for these models. Exported for the param-sanitizer test.
+export function modelRejectsSamplingParams(model: string): boolean {
+  return /opus-4-[78]|sonnet-5|fable|mythos/.test(model);
+}
+// Models that default ADAPTIVE THINKING ON when `thinking` is omitted (Sonnet 5,
+// Mythos 5). Our deterministic structured-output calls don't set `thinking`, and
+// thinking shares the max_tokens budget — leaving it on risks truncating the JSON.
+// loggedMessagesCreate defaults it OFF for these unless a caller opts in. (Fable
+// rejects an explicit `disabled`, but we never select Fable here.)
+export function modelDefaultsThinkingOn(model: string): boolean {
+  return /sonnet-5|mythos/.test(model);
+}
 // Grading is a simple binary task — Haiku is ~5-10x faster than Sonnet with adequate accuracy.
 const GRADING_MODEL = 'claude-haiku-4-5-20251001';
 // Exported so other LLM modules (e.g. interests.ts) use the same canonical ID.
@@ -247,6 +268,33 @@ export const INSTRUCTION_SCOPING_QUALIFIER = `\n\nSCOPING QUALIFIERS: When a que
  * options.timeoutMs for latency-sensitive scopes (grading) or larger replies
  * (batch generation).
  */
+// Make a request payload safe for its target model without touching call sites:
+// strip temperature/top_p/top_k for models that reject them, and default thinking
+// OFF for models that would otherwise turn adaptive thinking on (which shares the
+// max_tokens budget and can truncate structured output). A no-op for the current
+// Sonnet 4.6 / Haiku 4.5 defaults; the fix engages when ANTHROPIC_MODEL is flipped
+// to claude-sonnet-5. Exported for testing.
+export function sanitizeParamsForModel(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Anthropic.MessageCreateParamsNonStreaming {
+  const model = String(params.model ?? '');
+  const p = params as unknown as Record<string, unknown>;
+  const needsSamplingStrip = modelRejectsSamplingParams(model)
+    && (p.temperature !== undefined || p.top_p !== undefined || p.top_k !== undefined);
+  const needsThinkingDefault = p.thinking === undefined && modelDefaultsThinkingOn(model);
+  if (!needsSamplingStrip && !needsThinkingDefault) return params;
+  const next = { ...p };
+  if (needsSamplingStrip) {
+    delete next.temperature;
+    delete next.top_p;
+    delete next.top_k;
+  }
+  if (needsThinkingDefault) {
+    next.thinking = { type: 'disabled' };
+  }
+  return next as unknown as Anthropic.MessageCreateParamsNonStreaming;
+}
+
 export async function loggedMessagesCreate(
   client: Anthropic,
   scope: string,
@@ -256,7 +304,7 @@ export async function loggedMessagesCreate(
   const startedAt = Date.now();
   const timeoutMs = options?.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
   try {
-    const response = await client.messages.create(params, {
+    const response = await client.messages.create(sanitizeParamsForModel(params), {
       signal: AbortSignal.timeout(timeoutMs),
     });
     // Telemetry is a side effect — never let a missing/partial usage block
