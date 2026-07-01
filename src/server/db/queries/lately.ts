@@ -140,11 +140,24 @@ export async function getLatelyMoments(
     .limit(200);
 
   const moments: LatelyMoment[] = [];
+  // A moment is a fact about a (direction, friend, question) triple — "this
+  // friend got your question" / "you got this friend's question" — not about
+  // each individual answering event. A question can be answered correctly more
+  // than once (re-sent as a direct question, replayed, encountered organically
+  // again), producing multiple correct masteryEvents for the same triple; left
+  // as-is they render as the SAME moment twice in Recent Activity, each picking
+  // a different copy line off its distinct momentId (claude/duplicate-recent-
+  // activity). Collapse to the most recent event per triple — rows are ordered
+  // createdAt desc, so the first one seen is the keeper.
+  const seen = new Set<string>();
   for (const row of rows) {
     if (!row.answeredAt) continue;
     if (!row.friendId) continue;
     const dir: LatelyDirection =
       row.creatorId === userId ? 'they_got_you' : 'you_got_them';
+    const dedupKey = `${dir}:${row.friendId}:${row.questionId}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
     const friendName = row.friendDisplayName?.trim() || 'A friend';
     moments.push({
       momentId: row.momentId,
