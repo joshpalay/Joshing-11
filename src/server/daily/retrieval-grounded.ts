@@ -438,16 +438,18 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
         timedOut: isTimeoutError(err),
       };
     },
+    // Adaptive timeout exclusion (B-SUPPLY-REFILL-THROUGHPUT-01 follow-up): record
+    // each domain's outcome AS IT SETTLES, not at end-of-run — the run is killed at
+    // the route's 300s maxDuration long before a batched end-of-run write could
+    // fire (2 waves x ~120s > 300s), so a chronically-timing-out domain would never
+    // accumulate the timeouts that eventually exclude it. Per-domain + best-effort.
+    (domain, result) =>
+      recordDomainRefillHealth([
+        { domain, timedOut: result.timedOut === true, completed: result.generated > 0 },
+      ]),
   );
   results.forEach(accumulate);
   report.backlogRemaining = backlog;
-
-  // Adaptive timeout exclusion (B-SUPPLY-REFILL-THROUGHPUT-01 follow-up): record
-  // each processed domain's outcome so chronically-timing-out domains drop out of
-  // getThinActiveDomains next run. Best-effort — never sinks the run.
-  await recordDomainRefillHealth(
-    results.map((r) => ({ domain: r.domain, timedOut: r.timedOut === true, completed: r.generated > 0 })),
-  ).catch(() => undefined);
 
   return report;
 }

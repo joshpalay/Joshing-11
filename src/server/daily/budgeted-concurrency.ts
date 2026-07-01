@@ -34,6 +34,13 @@ export async function runBudgetedConcurrent<T, R>(
   },
   run: (item: T) => Promise<R>,
   onError: (item: T, err: unknown) => R,
+  // Called after each item settles (success or error), BEFORE the worker pulls the
+  // next item. Use this for per-item side effects that must survive an abrupt
+  // caller timeout (e.g. a serverless 300s maxDuration) — a batched
+  // record-at-the-end never runs when the run is killed mid-flight. Awaited so the
+  // side effect completes before the slot is reused; must be best-effort itself
+  // (a throw here is swallowed so one bad write never sinks the run).
+  onSettle?: (item: T, result: R) => void | Promise<void>,
 ): Promise<BudgetedRunResult<R>> {
   const results: R[] = [];
   let committed = 0;
@@ -63,6 +70,13 @@ export async function runBudgetedConcurrent<T, R>(
       }
       committed += opts.costOf(result);
       results.push(result);
+      if (onSettle) {
+        try {
+          await onSettle(item, result);
+        } catch {
+          // Best-effort per-item side effect — never sink the run.
+        }
+      }
     }
   };
 
