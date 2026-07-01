@@ -137,4 +137,53 @@ describe('runBudgetedConcurrent', () => {
     expect(results).toHaveLength(0);
     expect(backlog).toBe(0);
   });
+
+  it('calls onSettle once per item with its settled result (survives a mid-run kill)', async () => {
+    const settled: Array<{ item: string; usd: number }> = [];
+    await runBudgetedConcurrent(
+      ['a', 'b', 'c'],
+      { concurrency: 2, perItemReservation: 0, ceiling: 100, costOf: (r) => r.usd },
+      async (item) => okResult(item === 'b' ? 0.2 : 0.1),
+      errResult,
+      (item, result) => {
+        // Fires per item as it settles — so on an abrupt caller timeout, the items
+        // that already settled have been recorded even though the run never returns.
+        settled.push({ item, usd: result.usd });
+      },
+    );
+    expect(settled).toHaveLength(3);
+    expect(settled.map((s) => s.item).sort()).toEqual(['a', 'b', 'c']);
+    expect(settled.find((s) => s.item === 'b')?.usd).toBe(0.2);
+  });
+
+  it('onSettle receives the onError-mapped result for a failed item', async () => {
+    const settled: Array<{ item: string; failed: boolean }> = [];
+    await runBudgetedConcurrent(
+      ['ok', 'boom'],
+      { concurrency: 2, perItemReservation: 0, ceiling: 100, costOf: (r) => r.usd },
+      async (item) => {
+        if (item === 'boom') throw new Error('kaboom');
+        return okResult(0.1);
+      },
+      () => errResult(),
+      (item, result) => {
+        settled.push({ item, failed: 'failed' in result && result.failed === true });
+      },
+    );
+    expect(settled.find((s) => s.item === 'boom')?.failed).toBe(true);
+    expect(settled.find((s) => s.item === 'ok')?.failed).toBe(false);
+  });
+
+  it('a throwing onSettle never sinks the run', async () => {
+    const { results } = await runBudgetedConcurrent(
+      ITEMS,
+      { concurrency: 3, perItemReservation: 0, ceiling: 100, costOf: (r) => r.usd },
+      async () => okResult(0.1),
+      errResult,
+      () => {
+        throw new Error('onSettle blew up');
+      },
+    );
+    expect(results).toHaveLength(ITEMS.length);
+  });
 });
