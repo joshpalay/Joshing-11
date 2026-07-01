@@ -216,6 +216,46 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
     expect(rendered).not.toContain('Dismiss')
   })
 
+  it('renders the View Answer peek link (with a divider) next to Dismiss when onViewAnswer is provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+        onDismiss={() => undefined}
+        onViewAnswer={() => undefined}
+      />
+    )
+    expect(rendered).toContain('Dismiss')
+    expect(rendered).toContain('View Answer')
+  })
+
+  it('omits the View Answer link when onViewAnswer is not provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+        onDismiss={() => undefined}
+      />
+    )
+    expect(rendered).not.toContain('View Answer')
+  })
+
+  it('renders the revealed answer inline (front of card) when revealedAnswer is provided', () => {
+    const rendered = html(
+      <DirectSentCard
+        item={feedCardPreviewFixtures.directSentUnanswered}
+        onAnswer={() => undefined}
+        onDismiss={() => undefined}
+        revealedAnswer={<span>Answer: Adaptogens</span>}
+      />
+    )
+    // The peek keeps the card answerable: the Answer action is still present.
+    expect(rendered).toContain('Answer: Adaptogens')
+    expect(rendered).toContain('btn-primary')
+    // Not dismissed — the back-of-card "Dismissed" bar must not appear.
+    expect(rendered).not.toContain('Dismissed')
+  })
+
   it('shows Dismissed, Undo, and the category mute affordance in the inline bar', () => {
     const rendered = html(
       <DismissedFeedBar

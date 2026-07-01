@@ -236,6 +236,40 @@ function ThumbsdownConfirmRow({
   )
 }
 
+// The inline "View Answer" reveal, shown on the front of an unanswered card
+// (above the actions) once the peek link is tapped. Mirrors the answer styling
+// of the dismissed card back (serif, dimmed ink) so the two reveals read the
+// same, and carries the loading/error states of the on-demand fetch.
+function RevealedAnswerLine({
+  state,
+}: {
+  state: { status: 'loading' | 'loaded' | 'error'; answer?: string | null }
+}) {
+  if (state.status === 'loading') {
+    return (
+      <span className="text-muted-foreground text-[13px] italic">Revealing answer…</span>
+    )
+  }
+  if (state.status === 'error') {
+    return (
+      <span className="text-muted-foreground text-[13px] italic">Answer unavailable</span>
+    )
+  }
+  if (!state.answer) {
+    return (
+      <span className="text-muted-foreground text-[13px] italic">No answer available</span>
+    )
+  }
+  return (
+    <p
+      className="text-[13px] italic"
+      style={{ fontFamily: 'var(--font-serif)', color: 'var(--ink)', opacity: 0.7 }}
+    >
+      Answer: {state.answer}
+    </p>
+  )
+}
+
 function FeedPersonLink({
   href,
   name,
@@ -993,6 +1027,13 @@ function FeedListContent({
   const [dismissedAnswers, setDismissedAnswers] = useState<
     Record<string, { status: 'loading' | 'loaded' | 'error'; answer?: string | null }>
   >({})
+  // "View Answer" peek — the correct answer revealed inline on the front of the
+  // card, WITHOUT dismissing it (the card stays answerable). Keyed by feed-item
+  // id. Distinct from `dismissedAnswers` (the back-of-card reveal) so a peek and
+  // a later dismiss don't interfere.
+  const [revealedAnswers, setRevealedAnswers] = useState<
+    Record<string, { status: 'loading' | 'loaded' | 'error'; answer?: string | null }>
+  >({})
   // Mirrors dismissPhase so async answer fetches can drop stale writes after an
   // undo / re-dismiss race.
   const dismissPhaseRef = useRef(dismissPhase)
@@ -1499,6 +1540,49 @@ function FeedListContent({
     })()
   }, [])
 
+  // "View Answer" — reveal the correct answer inline without dismissing the
+  // card. Mirrors loadDismissedAnswer's fetch (already-answered cards carry the
+  // answer; answerless items short-circuit; only errors retry) but writes to the
+  // separate `revealedAnswers` store and has no dismiss-phase guard, since the
+  // card stays in place.
+  const revealAnswer = useCallback((item: FeedApiItem) => {
+    if (item.correct_answer) {
+      setRevealedAnswers((c) => ({
+        ...c,
+        [item.id]: { status: 'loaded', answer: item.correct_answer },
+      }))
+      return
+    }
+    if (!item.question_id) {
+      setRevealedAnswers((c) => ({ ...c, [item.id]: { status: 'loaded', answer: null } }))
+      return
+    }
+    let shouldFetch = true
+    setRevealedAnswers((c) => {
+      const existing = c[item.id]
+      if (existing && existing.status !== 'error') {
+        shouldFetch = false
+        return c
+      }
+      return { ...c, [item.id]: { status: 'loading' } }
+    })
+    if (!shouldFetch) return
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/feed/${item.id}/answer`, { method: 'GET' })
+        if (!res.ok) throw new Error(String(res.status))
+        const data = (await res.json()) as { answer: string | null }
+        setRevealedAnswers((c) => ({
+          ...c,
+          [item.id]: { status: 'loaded', answer: data.answer },
+        }))
+      } catch {
+        setRevealedAnswers((c) => ({ ...c, [item.id]: { status: 'error' } }))
+      }
+    })()
+  }, [])
+
   // Persist a dismiss (or its undo) so the card stays gone — or comes back —
   // across reloads, not just in this session's view-state. The server filters
   // the feed to active/skipped, so a 'dismissed' row never returns; 'active'
@@ -1947,6 +2031,15 @@ function FeedListContent({
         }
       : undefined
     const onDismiss = dismissible ? () => requestDismiss(item) : undefined
+    // "View Answer" reveals the answer inline without dismissing. Hide the link
+    // once revealed (the answer itself replaces it), and render the reveal above
+    // the card actions.
+    const peekedAnswer = revealedAnswers[item.id]
+    const onViewAnswer =
+      dismissible && !peekedAnswer ? () => revealAnswer(item) : undefined
+    const revealedAnswer = peekedAnswer ? (
+      <RevealedAnswerLine state={peekedAnswer} />
+    ) : undefined
 
     // B-VIA-ATTRIBUTION-01: the "Via [friend]" answerer line, rendered above the
     // Answer action. Only on questions with a non-empty follow-gated answerer
@@ -1975,6 +2068,8 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          onViewAnswer={onViewAnswer}
+          revealedAnswer={revealedAnswer}
           viaAttribution={viaAttribution}
           discoveryAttribution={discoveryAttribution}
           elevated={homeZoneCards}
@@ -1987,6 +2082,8 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          onViewAnswer={onViewAnswer}
+          revealedAnswer={revealedAnswer}
           viaAttribution={viaAttribution}
           discoveryAttribution={discoveryAttribution}
           elevated={homeZoneCards}
@@ -1999,6 +2096,8 @@ function FeedListContent({
           overflow={overflow}
           onAnswer={onAnswer}
           onDismiss={onDismiss}
+          onViewAnswer={onViewAnswer}
+          revealedAnswer={revealedAnswer}
           viaAttribution={viaAttribution}
           discoveryAttribution={discoveryAttribution}
           elevated={homeZoneCards}
