@@ -6,6 +6,7 @@ import {
   dailyPreferences,
   db,
   declaredInterests,
+  domainRelations,
   feedDismissedDomains,
   generatedQuestions,
   masteryEvents,
@@ -602,6 +603,20 @@ export async function applyMergesForUser(
         .update(skippedDailyQuestions)
         .set({ canonicalSubcategory: target })
         .where(and(eq(skippedDailyQuestions.userId, userId), inArray(skippedDailyQuestions.canonicalSubcategory, sourceDomains)));
+
+      // D-NEARNESS-LADDER-HYBRID-01 (B2): the merged-away domains' cached near-ness
+      // rungs are now stale — drop any DomainRelation referencing them (as child OR
+      // related). The survivor's tree rebuilds lazily on its next thin-crossing.
+      // DomainRelation is a GLOBAL cache (not user-scoped); deleting here is
+      // idempotent — a later user's merge of the same pair simply finds none.
+      if (sourceDomains.length > 0) {
+        await tx
+          .delete(domainRelations)
+          .where(or(
+            inArray(domainRelations.childDomain, sourceDomains),
+            inArray(domainRelations.relatedDomain, sourceDomains),
+          ));
+      }
 
       const declaredSourceRows = await tx
         .select({ isActive: declaredInterests.isActive })
