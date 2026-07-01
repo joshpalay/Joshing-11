@@ -240,20 +240,24 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
     expect(rendered).not.toContain('View Answer')
   })
 
-  it('renders the revealed answer inline (front of card) when revealedAnswer is provided', () => {
+  it('renders the revealed answer inline (front of card), no longer answerable', () => {
+    // Once the answer is revealed the card is consumed like the game's "Show me
+    // the answer": FeedList stops passing onAnswer, so the Answer action drops
+    // away while the card itself stays in place (not the dismissed back-of-card).
     const rendered = html(
       <DirectSentCard
         item={feedCardPreviewFixtures.directSentUnanswered}
-        onAnswer={() => undefined}
         onDismiss={() => undefined}
         revealedAnswer={<span>Answer: Adaptogens</span>}
       />
     )
-    // The peek keeps the card answerable: the Answer action is still present.
     expect(rendered).toContain('Answer: Adaptogens')
-    expect(rendered).toContain('btn-primary')
+    // No Answer button (the filled primary) once the answer has been seen.
+    expect(rendered).not.toContain('btn-primary')
     // Not dismissed — the back-of-card "Dismissed" bar must not appear.
     expect(rendered).not.toContain('Dismissed')
+    // Dismiss stays available so the consumed card can be cleared.
+    expect(rendered).toContain('Dismiss')
   })
 
   it('shows Dismissed, Undo, and the category mute affordance in the inline bar', () => {

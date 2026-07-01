@@ -2024,19 +2024,25 @@ function FeedListContent({
 
     const typedItem = toTypedFeedItem(item, homeZoneCards)
     const dismissible = !item.viewer_is_author
-    const onAnswer = dismissible
-      ? () => {
-          setAnswerNotice(null)
-          setAnswerSheetId(item.id)
-        }
-      : undefined
-    const onDismiss = dismissible ? () => requestDismiss(item) : undefined
-    // "View Answer" reveals the answer inline without dismissing. Hide the link
-    // once revealed (the answer itself replaces it), and render the reveal above
-    // the card actions.
+    // "View Answer" reveals the answer inline. Seeing the answer consumes the
+    // card just like the game's "Show me the answer" (play-client's
+    // consumeCurrentAndAdvance): once revealed it is no longer answerable, so the
+    // Answer action drops away. View-state only, like the game's client-side
+    // give-up — nothing is persisted.
     const peekedAnswer = revealedAnswers[item.id]
+    const answerRevealed = Boolean(peekedAnswer)
+    const onAnswer =
+      dismissible && !answerRevealed
+        ? () => {
+            setAnswerNotice(null)
+            setAnswerSheetId(item.id)
+          }
+        : undefined
+    const onDismiss = dismissible ? () => requestDismiss(item) : undefined
+    // Hide the peek link once revealed (the answer itself replaces it); render
+    // the reveal above the card actions.
     const onViewAnswer =
-      dismissible && !peekedAnswer ? () => revealAnswer(item) : undefined
+      dismissible && !answerRevealed ? () => revealAnswer(item) : undefined
     const revealedAnswer = peekedAnswer ? (
       <RevealedAnswerLine state={peekedAnswer} />
     ) : undefined
