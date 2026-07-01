@@ -16,6 +16,14 @@ type FeedCardProps = {
   onAnswer?: () => void
   /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
   onDismiss?: () => void
+  /**
+   * "View Answer" — a quiet secondary link sitting next to Dismiss (divided by a
+   * pipe) that reveals the correct answer inline without dismissing the card.
+   * The revealed answer is rendered via `revealedAnswer`. View-state only.
+   */
+  onViewAnswer?: () => void
+  /** The revealed answer node, shown above the actions once View Answer is tapped. */
+  revealedAnswer?: ReactNode
   footer?: ReactNode
   className?: string
   headerContent?: ReactNode
@@ -71,6 +79,8 @@ export function FeedCard({
   overflow,
   onAnswer,
   onDismiss,
+  onViewAnswer,
+  revealedAnswer,
   footer,
   className,
   headerContent,
@@ -161,15 +171,31 @@ export function FeedCard({
 
         {viaAttribution ? <div className="mt-3">{viaAttribution}</div> : null}
 
-        {onAnswer ? (
+        {revealedAnswer ? <div className="mt-3">{revealedAnswer}</div> : null}
+
+        {onAnswer || onDismiss || onViewAnswer ? (
           <div
             className={cn(
               'mt-3 flex items-center gap-3',
-              onDismiss ? 'justify-between' : 'justify-end',
+              onDismiss || onViewAnswer ? 'justify-between' : 'justify-end',
             )}
           >
-            {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
-            <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink>
+            {onDismiss || onViewAnswer ? (
+              <div className="flex items-center gap-2">
+                {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
+                {onDismiss && onViewAnswer ? (
+                  <span aria-hidden className="text-muted-foreground/50 text-sm">
+                    |
+                  </span>
+                ) : null}
+                {onViewAnswer ? (
+                  <FeedActionLink onClick={onViewAnswer} size="sm">
+                    View Answer
+                  </FeedActionLink>
+                ) : null}
+              </div>
+            ) : null}
+            {onAnswer ? <FeedActionLink onClick={onAnswer}>Answer →</FeedActionLink> : null}
           </div>
         ) : footer ? (
           <div className="mt-3">{footer}</div>
