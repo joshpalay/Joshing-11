@@ -235,6 +235,96 @@ export async function ratifyProposedParent(
   );
 }
 
+// Tree-editor verb: attach a child under a parent (substantive), optionally
+// moving it FROM its current parent in the same act. Ordering is
+// create-before-delete so a fault can duplicate an edge but never orphan the
+// child. Filing something under a LEAF promotes that leaf to 'both' (D-doc §3
+// — Bach is masterable AND parent of WTC); its leaf mastery is untouched.
+export async function attachChild(
+  input: {
+    childDomainKey: string;
+    toParentDomainKey: string;
+    /** Present = MOVE (the old home edge is removed); absent = COPY (§7 multi-parent). */
+    moveFromParentDomainKey?: string | null;
+  },
+  actorUserId: string,
+): Promise<EdgeResult> {
+  if (input.childDomainKey === input.toParentDomainKey) {
+    return { ok: false, reason: 'self_edge' };
+  }
+
+  // Reject a move/copy that would create a cycle: the destination must not be
+  // a descendant of the child (walking all substantive edges).
+  const allEdges = await db
+    .select({
+      childDomainKey: knowledgeEdges.childDomainKey,
+      parentDomainKey: knowledgeEdges.parentDomainKey,
+      edgeType: knowledgeEdges.edgeType,
+    })
+    .from(knowledgeEdges);
+  const childrenByParent = new Map<string, string[]>();
+  for (const edge of allEdges) {
+    if (edge.edgeType !== 'substantive') continue;
+    const list = childrenByParent.get(edge.parentDomainKey);
+    if (list) list.push(edge.childDomainKey);
+    else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
+  }
+  const seen = new Set<string>();
+  const queue = [input.childDomainKey];
+  while (queue.length > 0) {
+    const next = queue.pop()!;
+    if (seen.has(next)) continue;
+    seen.add(next);
+    if (next === input.toParentDomainKey && next !== input.childDomainKey) {
+      return { ok: false, reason: 'self_edge' }; // destination is inside the child's subtree
+    }
+    queue.push(...(childrenByParent.get(next) ?? []));
+  }
+
+  const created = await createKnowledgeEdge(
+    {
+      childDomainKey: input.childDomainKey,
+      parentDomainKey: input.toParentDomainKey,
+      edgeType: 'substantive',
+    },
+    actorUserId,
+  );
+  // A duplicate edge on COPY/MOVE is fine — the relationship already exists;
+  // continue so a MOVE still removes the old home.
+  if (!created.ok && created.reason !== 'duplicate') return created;
+
+  // Promote a leaf destination to 'both' — it just became a parent.
+  await db
+    .update(knowledgeNodes)
+    .set({ nodeKind: 'both' })
+    .where(and(eq(knowledgeNodes.domainKey, input.toParentDomainKey), eq(knowledgeNodes.nodeKind, 'leaf')));
+
+  if (input.moveFromParentDomainKey && input.moveFromParentDomainKey !== input.toParentDomainKey) {
+    await deleteKnowledgeEdge(
+      {
+        childDomainKey: input.childDomainKey,
+        parentDomainKey: input.moveFromParentDomainKey,
+      },
+      actorUserId,
+    );
+  }
+
+  console.info('[knowledge-admin] child attached', { actorUserId, ...input });
+  if (created.ok) return created;
+  // Duplicate-create path: fetch the existing edge for a uniform return.
+  const [existing] = await db
+    .select()
+    .from(knowledgeEdges)
+    .where(
+      and(
+        eq(knowledgeEdges.childDomainKey, input.childDomainKey),
+        eq(knowledgeEdges.parentDomainKey, input.toParentDomainKey),
+      ),
+    )
+    .limit(1);
+  return existing ? { ok: true, edge: existing } : { ok: false, reason: 'not_found' };
+}
+
 // Structure-suggester ratify (§4: the Accept click IS the human commit): mint
 // the parent (kind 'parent', human-tuned threshold), ensure a leaf node for
 // each accepted child (they're REAL corpus labels — the node is the label's

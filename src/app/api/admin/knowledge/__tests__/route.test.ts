@@ -28,6 +28,9 @@ const {
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/auth/admin', () => ({ isAdminUser: isAdminUserMock }));
+const { attachChildMock } = vi.hoisted(() => ({
+  attachChildMock: vi.fn(async () => ({ ok: true as const, edge: { id: 'e3' } })),
+}));
 vi.mock('@/server/db/queries/knowledge-graph', () => ({
   createKnowledgeNode: createNodeMock,
   updateKnowledgeNode: updateNodeMock,
@@ -35,6 +38,7 @@ vi.mock('@/server/db/queries/knowledge-graph', () => ({
   deleteKnowledgeEdge: deleteEdgeMock,
   ratifyProposedParent: ratifyMock,
   ratifyStructureGroup: ratifyGroupMock,
+  attachChild: attachChildMock,
 }));
 vi.mock('@/server/knowledge/nearness-tree', () => ({ getOrBuildDomainRungs: rungsMock }));
 const { proposeStructureMock, ratifyGroupMock } = vi.hoisted(() => ({
@@ -166,6 +170,48 @@ describe('POST /api/admin/knowledge', () => {
     const res = await post({ action: 'propose', childLabel: 'Medici Family' });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { proposals: unknown[] }).proposals).toEqual([]);
+  });
+
+  // ─── the tree editor ───
+
+  it('attach_child MOVE passes the from-parent for removal', async () => {
+    const res = await post({
+      action: 'attach_child',
+      childDomainKey: 'beethoven piano sonatas',
+      toParentDomainKey: 'beethoven',
+      moveFromParentDomainKey: 'classical music',
+    });
+    expect(res.status).toBe(201);
+    expect(attachChildMock).toHaveBeenCalledWith(
+      {
+        childDomainKey: 'beethoven piano sonatas',
+        toParentDomainKey: 'beethoven',
+        moveFromParentDomainKey: 'classical music',
+      },
+      'admin-1',
+    );
+  });
+
+  it('attach_child COPY omits the from-parent — the node lives under both', async () => {
+    await post({
+      action: 'attach_child',
+      childDomainKey: 'hamlet',
+      toParentDomainKey: 'branagh films',
+    });
+    expect(attachChildMock).toHaveBeenCalledWith(
+      { childDomainKey: 'hamlet', toParentDomainKey: 'branagh films', moveFromParentDomainKey: null },
+      'admin-1',
+    );
+  });
+
+  it('a cycle/self placement maps to 400', async () => {
+    attachChildMock.mockResolvedValueOnce({ ok: false, reason: 'self_edge' });
+    const res = await post({
+      action: 'attach_child',
+      childDomainKey: 'classical music',
+      toParentDomainKey: 'beethoven',
+    });
+    expect(res.status).toBe(400);
   });
 
   // ─── the structure suggester ───
