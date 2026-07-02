@@ -12,6 +12,7 @@ import { getSeededPlayQuestions } from '@/server/db/queries/lately';
 import { parseQuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 import { gradeAnswer } from '@/server/grading';
+import type { LlmProvider } from '@/server/llm/provider';
 import { promoteDeclaredToDemonstrated } from '@/server/knowledge/open-domain';
 import { awardAuthorCredit } from '@/server/mastery/author-credit';
 import { canonicalPointsForAnswer } from '@/lib/game-constants';
@@ -30,10 +31,19 @@ type MasteryTier = 'establishing' | 'familiar' | 'solid' | 'mastery';
 // which scores 0 base points. There is no FeedItem row to update (a milestone is
 // not a feed item for the viewer), so this route does everything the feed answer
 // route does EXCEPT that feedItems write.
-const answerSchema = z.object({
-  questionId: z.string().trim().min(1),
-  submitted_answer: z.string().trim().min(1),
-});
+// A normal answer carries a non-empty submission. A "View Answer" give-up
+// (parity with the Daily Five's "Show me the answer") carries gave_up:true and
+// no submission: it isn't graded, records as a miss with no points, and does
+// NOT open a catch-up second swing — seeing the answer consumes the question.
+const answerSchema = z
+  .object({
+    questionId: z.string().trim().min(1),
+    submitted_answer: z.string().trim().min(1).optional(),
+    gave_up: z.boolean().optional(),
+  })
+  .refine((d) => d.gave_up === true || (d.submitted_answer?.length ?? 0) > 0, {
+    message: 'submitted_answer or gave_up is required',
+  });
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -46,7 +56,8 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const submittedAnswer = parsed.data.submitted_answer;
+  const gaveUp = parsed.data.gave_up === true;
+  const submittedAnswer = parsed.data.submitted_answer ?? '';
 
   // Authorization is by construction: getSeededPlayQuestions only resolves
   // questions that appear in THIS viewer's own derived milestones. A tampered
@@ -71,25 +82,32 @@ export async function POST(request: NextRequest) {
   }
 
   const domain = question.canonicalSubcategory || question.broadCategory || question.category;
-  const grade = await gradeAnswer(
-    submittedAnswer,
-    question.answerText,
-    question.acceptedAlternatives,
-    question.questionText,
-    question.questionType,
-  );
-  // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
-  if (grade.status === 'unscored') {
-    return NextResponse.json(
-      {
-        error: 'grader_unavailable',
-        message:
-          "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
-      },
-      { status: 503 },
+  // A give-up ("View Answer") isn't graded — it records as a miss with no
+  // points, exactly like the Daily Five's "Show me the answer".
+  let isCorrect = false;
+  let gradedProvider: LlmProvider | null = null;
+  if (!gaveUp) {
+    const grade = await gradeAnswer(
+      submittedAnswer,
+      question.answerText,
+      question.acceptedAlternatives,
+      question.questionText,
+      question.questionType,
     );
+    // Fail toward the player (B4 Phase 4 / Drift Risk 2): hold a grader outage for retry.
+    if (grade.status === 'unscored') {
+      return NextResponse.json(
+        {
+          error: 'grader_unavailable',
+          message:
+            "Our answer-checker is taking a quick breather. Your answer wasn't scored — give it another go in a moment.",
+        },
+        { status: 503 },
+      );
+    }
+    isCorrect = grade.result === 'correct';
+    gradedProvider = grade.gradedProvider;
   }
-  const isCorrect = grade.result === 'correct';
 
   // F2.3 parity with the feed route: state-adjusted credit against prior history
   // on this canonical question — full for first_correct, 0.25x for recovery,
@@ -127,8 +145,9 @@ export async function POST(request: NextRequest) {
     eventQuestionId: question.id,
     basePoints,
     weight: awardsMasteryCredit ? 1 : 0,
-    // B-LLM-PROVIDER-AB-SWITCH B3: grader provenance (grade is scored here).
-    llmProvider: grade.gradedProvider,
+    // B-LLM-PROVIDER-AB-SWITCH B3: grader provenance (null on a give-up, which
+    // is never graded).
+    llmProvider: gradedProvider,
   }).catch((error: unknown) => {
     console.warn('[lately/milestone/answer] failed to write mastery event', {
       error: error instanceof Error ? error.message : 'unknown',
@@ -193,11 +212,14 @@ export async function POST(request: NextRequest) {
       'correct',
       `milestone:${question.id}:${session.userId}`,
     ));
-  } else {
+  } else if (!gaveUp) {
     // A milestone is a read-derived roll-up, not a feed card, so a wrong answer
     // here leaves no FeedItem — and catch up only surfaces incorrect, unresolved
     // FeedItem rows (getFeedCatchupItems). Write a synthetic answered/incorrect
     // row so the existing feed catch-up pipeline gives the viewer a second swing.
+    // A give-up is skipped: seeing the answer consumes the question, so it must
+    // not come back as a catch-up second swing (parity with the Daily Five,
+    // where "Show me the answer" offers no recheck).
     // state='answered' keeps it OUT of the actionable feed (which only shows
     // active/skipped), and the deterministic sourceAnswerId + onConflictDoNothing
     // guarantees one row per (viewer, question): re-missing never resets the

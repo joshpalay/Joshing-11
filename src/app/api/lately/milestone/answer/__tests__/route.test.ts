@@ -223,6 +223,36 @@ describe('POST /api/lately/milestone/answer', () => {
     })
   })
 
+  it('give-up (View Answer): not graded, zero points, no catch-up row, returns the answer', async () => {
+    setupDbChain()
+
+    const res = await POST(
+      jsonRequest({ questionId: 'canonical-q-1', gave_up: true }) as never,
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.isCorrect).toBe(false)
+    expect(body.pointsAwarded).toBe(0)
+    expect(body.correctAnswer).toBe('A')
+    // Never graded — the reveal isn't an attempt.
+    expect(gradeAnswerMock).not.toHaveBeenCalled()
+    // Persists as a miss so priorResult flips and the card can't be re-answered…
+    expect(writeMasteryEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ answerState: 'incorrect', pointsAwarded: 0 }),
+    )
+    // …but opens NO catch-up second swing (parity with the Daily Five give-up).
+    expect(insertedRows).toHaveLength(0)
+    expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty submission with no give-up flag', async () => {
+    setupDbChain()
+    const res = await POST(
+      jsonRequest({ questionId: 'canonical-q-1', submitted_answer: '' }) as never,
+    )
+    expect(res.status).toBe(400)
+  })
+
   it('grader outage: 503 hold, nothing persisted', async () => {
     setupDbChain()
     gradeAnswerMock.mockResolvedValueOnce({ status: 'unscored', reason: 'llm_error' })
