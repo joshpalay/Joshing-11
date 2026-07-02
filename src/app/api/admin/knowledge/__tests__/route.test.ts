@@ -34,8 +34,31 @@ vi.mock('@/server/db/queries/knowledge-graph', () => ({
   createKnowledgeEdge: createEdgeMock,
   deleteKnowledgeEdge: deleteEdgeMock,
   ratifyProposedParent: ratifyMock,
+  ratifyStructureGroup: ratifyGroupMock,
 }));
 vi.mock('@/server/knowledge/nearness-tree', () => ({ getOrBuildDomainRungs: rungsMock }));
+const { proposeStructureMock, ratifyGroupMock } = vi.hoisted(() => ({
+  proposeStructureMock: vi.fn(async () => ({
+    ok: true as const,
+    groups: [
+      {
+        parentLabel: 'Renaissance Italy',
+        broadCategory: 'History',
+        suggestedThreshold: 1200,
+        children: [
+          { label: 'Medici Family', machineDepth: 9, humanAuthored: 0 },
+          { label: 'Florentine Art', machineDepth: 4, humanAuthored: 0 },
+        ],
+      },
+    ],
+    corpusSize: 12,
+    alreadyStructured: 3,
+  })),
+  ratifyGroupMock: vi.fn(async () => ({ ok: true as const, parentKey: 'renaissance italy', edgesCreated: 2 })),
+}));
+vi.mock('@/server/knowledge/propose-structure', () => ({
+  proposeKnowledgeStructure: proposeStructureMock,
+}));
 
 import { POST } from '@/app/api/admin/knowledge/route';
 
@@ -143,6 +166,45 @@ describe('POST /api/admin/knowledge', () => {
     const res = await post({ action: 'propose', childLabel: 'Medici Family' });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { proposals: unknown[] }).proposals).toEqual([]);
+  });
+
+  // ─── the structure suggester ───
+
+  it('propose_structure returns draft groups and commits NOTHING', async () => {
+    const res = await post({ action: 'propose_structure' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { groups: Array<{ parentLabel: string }> };
+    expect(body.groups[0].parentLabel).toBe('Renaissance Italy');
+    expect(createNodeMock).not.toHaveBeenCalled();
+    expect(createEdgeMock).not.toHaveBeenCalled();
+    expect(ratifyGroupMock).not.toHaveBeenCalled(); // suggestions never auto-commit (§4)
+  });
+
+  it('ratify_structure_group is the human commit, with the tuned threshold', async () => {
+    const res = await post({
+      action: 'ratify_structure_group',
+      parentLabel: 'Renaissance Italy',
+      broadCategory: 'History',
+      masteryThreshold: 1500, // human tuned it up from the suggested 1200
+      childLabels: ['Medici Family', 'Florentine Art'],
+    });
+    expect(res.status).toBe(201);
+    expect(ratifyGroupMock).toHaveBeenCalledWith(
+      {
+        parentLabel: 'Renaissance Italy',
+        broadCategory: 'History',
+        masteryThreshold: 1500,
+        childLabels: ['Medici Family', 'Florentine Art'],
+      },
+      'admin-1',
+    );
+  });
+
+  it('non-admins get 404 from the suggester too', async () => {
+    isAdminUserMock.mockReturnValue(false);
+    const res = await post({ action: 'propose_structure' });
+    expect(res.status).toBe(404);
+    expect(proposeStructureMock).not.toHaveBeenCalled();
   });
 
   it('ratify creates exactly one edge with the HUMAN-chosen edge type', async () => {
