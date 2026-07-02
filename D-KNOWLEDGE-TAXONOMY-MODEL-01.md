@@ -41,7 +41,7 @@ Joshing's edge is that you can go **very** specific and get real, terminal maste
 
 1. **Leaves are enterable and completable.** You can select a leaf, get only its questions, and reach mastery — no forced graduation, no minimum-breadth requirement. Depth alone is a win.
 2. **Leaf mastery is displayed at leaf grain.** The knowledge page keeps the fine node. Mastering WTC never collapses it into "Bach" on the portrait — the specificity *is* the trophy.
-3. **Roll-up is one-directional and fractional.** Leaf → parent credit exists (so you're not blank at the parent), but parent mastery **cannot** be achieved from a single leaf, and a leaf's mastery is **never** recomputed or diluted by what the parent does.
+3. **Points are points everywhere; mastery differs by threshold.** A question credits its finest node **and every ancestor at full value** — no diminishment (see §5.1). Parent mastery **cannot** be achieved from a single leaf (the ≥2-corner gate), and a leaf's mastery is **never** recomputed or diluted by what the parent does.
 
 A node can be **both** an enterable territory **and** a parent of finer nodes (Bach = leaf you can master *and* parent of WTC, Goldberg Variations, etc.). The model must not force every specific thing to justify itself as a fraction of something bigger.
 
@@ -66,7 +66,15 @@ The LLM (the existing `nearness-tree.ts` Haiku call) may **propose** pairings/ed
 
 **Consequence — the "Shakespeare relative to Hamlet" problem:** the system cannot infer that Shakespeare's Plays should be "extra large" from Hamlet alone. So a human assigns the parent an absolute threshold (e.g. Hamlet mastery = 100 pts; Shakespeare's Plays mastery = 2000 pts) — a size class / threshold the human judges. This is the coarse dial human judgment enters through.
 
-**Open (§9-A):** exact mechanic of *partial* parent progress display given an absolute threshold and a not-yet-complete leaf roster (so a deep-but-narrow player doesn't read as permanently stuck at 15%).
+### 5.1 Points are points — no diminishment; the parent's bar is just longer
+
+**Decision (settled in chat, supersedes the earlier fractional-roll-up idea):** a question credits **every node it belongs to at full value** — its finest node and every ancestor. No diminished roll-up.
+
+This fixes an entry-grain fairness bug: under diminishment, Josh answering a Medici question *filed as Medici* got full Medici + reduced Italian Renaissance, while Jaime answering the *same question* at her entry grain (Italian Renaissance) got full credit — same knowledge, unequal points, purely because of where each entered. **Credit lands at the question's true finest node regardless of who plays it**, then rolls up at full value identically for everyone. Josh's parent total climbs through depth; Jaime's through breadth of roll-up; neither is penalized.
+
+**Mastery differentiates by threshold, not by point size.** Medici masters at ~100; Italian Renaissance at ~2000. The parent is "bigger" purely because its bar is longer. Josh's 500 all-Medici points = Medici mastery but only 500/2000 toward the parent — and the **≥2-corner gate** (§9-A) means he can't master the parent on one leaf no matter how many points. The threshold is the bar; the corner gate enforces breadth.
+
+**Consequence:** parent totals are pure roll-up of full-value points; the "diminished amount" machinery is deleted from the model.
 
 ---
 
@@ -114,10 +122,10 @@ The flat list is retired; it cannot express a graph and it buries the vanity pay
 
 ## 9. Resolved decisions (A–E) — ratified in chat
 
-**A. Partial parent-progress — fractional credit, hard-capped below mastery until breadth exists.**
-- Substantive parent progress = `min(rolled_up_credit, CAP)`, where `CAP` (≈60%) holds until the player has lit ≥2 corners. All-Medici toward Renaissance Italy climbs to ~40–50% and **stops** — visibly "a corner lit, more field ahead" — never creeping toward mastery off one leaf.
-- **Crossing into substantive-parent mastery requires BOTH:** (1) the absolute point threshold (§5) **and** (2) **≥2 substantive corners lit.** Points alone cannot confer parent mastery — this is the mechanism that enforces "all-Hamlet ≠ master of Shakespearean Tragedy." Breadth gates depth here and only here.
-- Collection parents are exempt from the point/cap logic — they are pure coverage already (§7); their "progress" is simply members-covered / roster-size.
+**A. Parent progress — full points against a high threshold, gated by ≥2 corners.** (Revised per §5.1 — no fractional cap.)
+- Parent progress = **full rolled-up points / the parent's absolute threshold** (§5). Josh all-Medici shows real movement (e.g. 500/2000) — honest, not stuck-at-15%, not capped.
+- **Crossing into substantive-parent mastery requires BOTH:** (1) points ≥ the parent's absolute threshold **and** (2) **≥2 substantive corners lit.** The threshold is a long bar; the corner gate is what enforces "all-Hamlet ≠ master of Shakespearean Tragedy." Points alone (from one deep leaf) can approach the bar but never cross without breadth.
+- Collection parents: pure coverage (§7) — progress = members-covered / roster-size, no threshold logic.
 
 **B. Roster is a fixed human-authored list; growth only adds unlit corners, never revokes.**
 - A parent's child roster is authored, not emergent (avoids the drift §5 rejected).
@@ -137,14 +145,14 @@ The flat list is retired; it cannot express a graph and it buries the vanity pay
 | Pool depth / exhaustion (`getDurablePoolDepthForDomains`) | **cluster** | fixes "Florence is shallow" — depth = leaf + descendants |
 | Crafter heat | **cluster** | stop flagging "thin" when siblings hold the questions |
 | Mastery — leaf | **leaf-exact** | the trophy is the leaf; never rolled |
-| Mastery — parent | **roll-up** (per §A) | fractional credit + ≥2-corner gate |
+| Mastery — parent | **roll-up** (per §A) | full points / high threshold + ≥2-corner gate |
 | Ceremony Beat 1 (promotions) | **both** | leaf *and* parent promotions fire, labeled distinctly |
 | Ceremony Beat 4 (alignment/overlap) | **cluster** | **the original complaint** — Josh/Ari share a *cluster*, not an exact string. Highest-value flip. |
 
 Coordinate with `D-SUPPLY-FINITE-SET-01`: the finite set's territory boundary = the cluster unit defined here.
 
 **E. Graph-at-read for credit; one home-parent for layout.**
-- **Credit:** walk **all** substantive edges up from a leaf; apply full fractional roll-up to **each** substantive parent (full credit to each, not split — a Hamlet question genuinely teaches Tragedies *and* Elizabethan drama). **Collection edges are skipped for depth credit** but light their coverage slot.
+- **Credit:** walk **all** substantive edges up from a leaf; apply full-value point credit to **each** substantive parent (full credit to each, not split — a Hamlet question genuinely teaches Tragedies *and* Elizabethan drama). **Collection edges are skipped for depth credit** but light their coverage slot.
 - **Layout:** each leaf has a `homeParent` (first substantive edge) for gallery clustering; other memberships surface only on traversal into that parent (prototype behavior — Hamlet clusters under Tragedies, appears under Branagh only when you tap there).
 
 ---
