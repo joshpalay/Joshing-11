@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Crafter admin — two panels</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.47.0/tabler-icons.min.css" />
+<style>
+  :root{
+    --surface-2:#ffffff; --surface-1:#f4f2ec; --surface-0:#faf9f5;
+    --text-primary:#0a1f3d; --text-secondary:#5f5e5a; --text-muted:#9a9891;
+    --text-accent:#185fa5; --bg-accent:#e6f1fb; --border-accent:#85b7eb;
+    --text-warning:#854f0b; --bg-warning:#faeeda;
+    --text-success:#0f6e56; --bg-success:#e1f5ee;
+    --text-danger:#a32d2d; --bg-danger:#fcebeb;
+    --border:#e2e0d8; --border-strong:#cfccc2; --radius:8px;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-2:#2a2a28; --surface-1:#1f1f1d; --surface-0:#191917;
+      --text-primary:#f0eee8; --text-secondary:#b4b2a9; --text-muted:#78766f;
+      --text-accent:#85b7eb; --bg-accent:#0c447c; --border-accent:#378add;
+      --text-warning:#fac775; --bg-warning:#633806;
+      --text-success:#5dcaa5; --bg-success:#085041;
+      --text-danger:#f09595; --bg-danger:#791f1f;
+      --border:#3a3a37; --border-strong:#4a4a46;
+    }
+  }
+  body{font-family:var(--font-sans); background:var(--surface-0); color:var(--text-primary); max-width:760px; margin:2rem auto; padding:0 1.25rem; line-height:1.5;}
+  button{font-family:inherit;}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+  .tab{border:0.5px solid var(--border-strong); background:transparent; border-radius:var(--radius); padding:8px 16px; font-size:14px; cursor:pointer; color:var(--text-secondary);}
+  .tab.on{background:var(--surface-2); color:var(--text-primary); font-weight:500;}
+  .panel{display:none;}
+  .panel.on{display:block;}
+</style>
+</head>
+<body>
+<h2 class="sr-only">A crafter admin view with two panels: a flag queue merging player reports and machine demotions, and a demand panel ranking domains by player demand and shallowness.</h2>
+
+<div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px;">
+  <div style="font-size:19px; font-weight:500;">Crafter</div>
+  <div style="font-size:13px; color:var(--text-muted);">Josh &amp; Robyn</div>
+</div>
+
+<div style="display:flex; gap:10px; margin-bottom:22px;">
+  <button class="tab on" data-p="flags"><i class="ti ti-flag" style="font-size:15px; vertical-align:-2px; margin-right:6px;" aria-hidden="true"></i>Questions needing you <span id="flagcount" style="color:var(--text-danger);">· 4</span></button>
+  <button class="tab" data-p="demand"><i class="ti ti-sparkles" style="font-size:15px; vertical-align:-2px; margin-right:6px;" aria-hidden="true"></i>Where your craft is wanted</button>
+</div>
+
+<!-- PANEL A -->
+<div class="panel on" id="flags">
+  <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px; line-height:1.6;">
+    Two streams, one queue: <span style="color:var(--text-accent);">players</span> reported these, or the <span style="color:var(--text-warning);">verifier</span> pulled them pending your call. Nothing is deleted — flagged questions are out of circulation until you act, so no one is graded on them meanwhile. About three a day.
+  </div>
+  <div id="queue" style="display:flex; flex-direction:column; gap:12px;"></div>
+</div>
+
+<!-- PANEL B -->
+<div class="panel" id="demand">
+  <div style="font-size:13px; color:var(--text-secondary); margin-bottom:6px; line-height:1.6;">
+    Where players are active <em>and</em> the set is still thin — ranked by where your authoring would matter most. An invitation, not a to-do list: make what you love; this just shows where love and need overlap.
+  </div>
+  <div style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">A player hitting the bottom of a domain is what lights it up here.</div>
+  <div id="demandlist" style="display:flex; flex-direction:column; gap:10px;"></div>
+</div>
+
+<script>
+(function(){
+  // ---- tabs ----
+  var tabs=document.querySelectorAll('.tab'), panels=document.querySelectorAll('.panel');
+  tabs.forEach(function(t){ t.onclick=function(){
+    tabs.forEach(function(x){x.classList.remove('on');}); t.classList.add('on');
+    var p=t.getAttribute('data-p');
+    panels.forEach(function(x){ x.classList.toggle('on', x.id===p); });
+  };});
+
+  // ---- Panel A: flag queue ----
+  var items=[
+    {src:'machine',srcLabel:'Verifier',sc:'warning',tag:'Answer key',cat:'incorrect',
+     q:'In Paradise Lost, which fallen angel argues for open war against Heaven at Pandemonium?',a:'Moloch',
+     meta:'Demoted to needs_review by the batch verifier',
+     concern:'Web sources attribute the argument for open war to Moloch, but the explainer names Belial. Possible answer/explainer mismatch.'},
+    {src:'player',srcLabel:'Player report',sc:'accent',tag:'False premise',cat:'incorrect',
+     q:'Paradise Lost was originally printed in twelve books — which opens with the invocation to Urania?',a:'Book 7',
+     meta:'Reported by a reader who declared Milton', suggested:'Fix premise: 1667 first ed. had ten books',
+     concern:'The 1667 first edition had ten books; the twelve-book structure is the 1674 second edition. Premise is wrong.'},
+    {src:'player',srcLabel:'Player report',sc:'accent',tag:'Inappropriate',cat:'inappropriate',
+     q:'Which of Satan’s techniques in Book 1 most resembles modern political demagoguery?',a:'Appeals to grievance and lost glory',
+     meta:'Reported by a player',
+     concern:'Reader felt the framing forces a contemporary political reading and could feel partisan. Flagged inappropriate, not incorrect.'},
+    {src:'machine',srcLabel:'Verifier',sc:'warning',tag:'Adjacent fact',cat:'incorrect',
+     q:'Who is the only seraph to refuse Satan’s rebellion and stay faithful?',a:'Abdiel',
+     meta:'Demoted to needs_review by the batch verifier',
+     concern:'Answer is correct. The explainer’s claim “the only named seraph in the poem” looks false — other seraphim are named. Explainer may need a trim.'}
+  ];
+  var queue=document.getElementById('queue');
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function renderQueue(){
+    queue.innerHTML='';
+    items.forEach(function(it){
+      var srcText = it.sc==='accent'?'var(--text-accent)':'var(--text-warning)';
+      var srcBg   = it.sc==='accent'?'var(--bg-accent)':'var(--bg-warning)';
+      var inappr = it.cat==='inappropriate';
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;padding:1rem 1.15rem;';
+      card.innerHTML=
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">'
+        +'<span style="font-size:12px;font-weight:500;color:'+srcText+';background:'+srcBg+';padding:3px 9px;border-radius:20px;">'+it.srcLabel+'</span>'
+        +'<span style="font-size:12px;color:'+(inappr?'var(--text-danger)':'var(--text-secondary)')+';background:'+(inappr?'var(--bg-danger)':'var(--surface-1)')+';padding:3px 9px;border-radius:20px;">'+it.tag+'</span>'
+        +'<span style="font-size:12px;color:var(--text-muted);margin-left:auto;">'+esc(it.meta)+'</span></div>'
+        +'<div style="font-size:15px;line-height:1.5;margin-bottom:6px;">'+esc(it.q)+'</div>'
+        +'<div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Answer: <span style="color:var(--text-primary);">'+esc(it.a)+'</span>'
+        +(it.suggested?'  ·  <span style="color:var(--text-muted);">reader suggests: '+esc(it.suggested)+'</span>':'')+'</div>'
+        +'<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;background:var(--surface-1);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;"><span style="color:var(--text-muted);">The concern &mdash; </span>'+esc(it.concern)+'</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        +'<button class="act" data-a="fix" style="border:0.5px solid var(--border-strong);background:var(--bg-success);color:var(--text-success);border-radius:var(--radius);padding:7px 14px;font-size:13px;cursor:pointer;"><i class="ti ti-check" style="font-size:15px;vertical-align:-2px;margin-right:5px;" aria-hidden="true"></i>Uphold &amp; fix</button>'
+        +'<button class="act" data-a="edit" style="border:0.5px solid var(--border-strong);background:transparent;color:var(--text-primary);border-radius:var(--radius);padding:7px 14px;font-size:13px;cursor:pointer;"><i class="ti ti-edit" style="font-size:15px;vertical-align:-2px;margin-right:5px;" aria-hidden="true"></i>Edit</button>'
+        +'<button class="act" data-a="restore" style="border:0.5px solid var(--border-strong);background:transparent;color:var(--text-primary);border-radius:var(--radius);padding:7px 14px;font-size:13px;cursor:pointer;"><i class="ti ti-arrow-back-up" style="font-size:15px;vertical-align:-2px;margin-right:5px;" aria-hidden="true"></i>Dismiss, restore</button>'
+        +'<button class="act" data-a="retire" style="border:0.5px solid var(--border-strong);background:transparent;color:var(--text-danger);border-radius:var(--radius);padding:7px 14px;font-size:13px;cursor:pointer;"><i class="ti ti-archive" style="font-size:15px;vertical-align:-2px;margin-right:5px;" aria-hidden="true"></i>Retire</button>'
+        +'</div>';
+      card.querySelectorAll('.act').forEach(function(b){
+        b.onclick=function(){
+          var a=b.getAttribute('data-a');
+          var word=a==='fix'?'upheld &amp; queued for fix':a==='edit'?'opened for editing':a==='restore'?'restored to circulation':'retired (recoverable)';
+          card.style.opacity='0.55';
+          card.innerHTML='<div style="font-size:13px;color:var(--text-muted);padding:2px 0;">'+word+'</div>';
+        };
+      });
+      queue.appendChild(card);
+    });
+  }
+  renderQueue();
+
+  // ---- Panel B: demand x shallowness ----
+  var domains=[
+    {name:'Tears of the Kingdom', players:8, depth:14, human:2, note:'Ari just hit the bottom', heat:'high'},
+    {name:'Tennis', players:5, depth:22, human:11, note:'steady demand, half-authored', heat:'mid'},
+    {name:'Taylor Swift lyrics', players:6, depth:9, human:0, note:'popular, machine floor only', heat:'high'},
+    {name:'Spy School Books', players:2, depth:7, human:4, note:'niche — author only if you love it', heat:'low'},
+    {name:'Paradise Lost', players:3, depth:38, human:31, note:'well covered', heat:'done'}
+  ];
+  var dl=document.getElementById('demandlist');
+  domains.forEach(function(d){
+    var heatColor = d.heat==='high'?'var(--text-danger)':d.heat==='mid'?'var(--text-warning)':d.heat==='low'?'var(--text-muted)':'var(--text-success)';
+    var heatBg = d.heat==='high'?'var(--bg-danger)':d.heat==='mid'?'var(--bg-warning)':d.heat==='done'?'var(--bg-success)':'var(--surface-1)';
+    var heatLabel = d.heat==='high'?'wanted & thin':d.heat==='mid'?'getting there':d.heat==='low'?'niche':'covered';
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 14px;border:0.5px solid var(--border);border-radius:12px;background:var(--surface-2);';
+    row.innerHTML=
+      '<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:15px;font-weight:500;margin-bottom:3px;">'+d.name+'</div>'
+      +'<div style="font-size:12px;color:var(--text-muted);">'+d.players+' players active · '+d.depth+' questions · '+d.human+' human-authored · '+d.note+'</div>'
+      +'</div>'
+      +'<span style="font-size:12px;color:'+heatColor+';background:'+heatBg+';padding:4px 10px;border-radius:20px;white-space:nowrap;">'+heatLabel+'</span>'
+      +(d.heat==='done'?'' :'<button class="craftbtn" style="border:0.5px solid var(--border-strong);background:var(--bg-accent);color:var(--text-accent);border-radius:var(--radius);padding:7px 12px;font-size:13px;cursor:pointer;white-space:nowrap;"><i class="ti ti-pencil" style="font-size:14px;vertical-align:-2px;margin-right:5px;" aria-hidden="true"></i>Author</button>');
+    var b=row.querySelector('.craftbtn');
+    if(b) b.onclick=function(){
+      b.outerHTML='<span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">→ opens '+d.name+' coverage map</span>';
+    };
+    dl.appendChild(row);
+  });
+})();
+</script>
+</body>
+</html>

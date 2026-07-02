@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Crafter's workbench — deep tree mockup</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.47.0/tabler-icons.min.css" />
+<style>
+  :root{
+    --surface-2:#ffffff; --surface-1:#f4f2ec; --surface-0:#faf9f5;
+    --text-primary:#0a1f3d; --text-secondary:#5f5e5a; --text-muted:#9a9891;
+    --text-accent:#185fa5; --bg-accent:#e6f1fb; --border-accent:#85b7eb;
+    --text-warning:#854f0b; --bg-warning:#faeeda;
+    --text-success:#0f6e56; --bg-success:#e1f5ee;
+    --text-danger:#a32d2d; --bg-danger:#fcebeb;
+    --border:#e2e0d8; --border-strong:#cfccc2; --radius:8px;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-2:#2a2a28; --surface-1:#1f1f1d; --surface-0:#191917;
+      --text-primary:#f0eee8; --text-secondary:#b4b2a9; --text-muted:#78766f;
+      --text-accent:#85b7eb; --bg-accent:#0c447c; --border-accent:#378add;
+      --text-warning:#fac775; --bg-warning:#633806;
+      --text-success:#5dcaa5; --bg-success:#085041;
+      --text-danger:#f09595; --bg-danger:#791f1f;
+      --border:#3a3a37; --border-strong:#4a4a46;
+    }
+  }
+  body{font-family:var(--font-sans); background:var(--surface-0); color:var(--text-primary); max-width:720px; margin:2rem auto; padding:0 1.25rem; line-height:1.5;}
+  input[type=number]{height:34px; border:0.5px solid var(--border-strong); border-radius:var(--radius); background:var(--surface-2); color:var(--text-primary); padding:0 8px; font-size:14px;}
+  button{font-family:inherit;}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+</style>
+</head>
+<body>
+<h2 class="sr-only">A crafter's authoring workbench: a four-level domain tree with per-node coverage, a commission control, and a coverage cap.</h2>
+
+<div style="padding:0.5rem 0;">
+  <div style="font-size:13px; color:var(--text-secondary); margin-bottom:14px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+    <span style="color:var(--text-muted);">Modern Fantasy</span>
+    <i class="ti ti-chevron-right" style="font-size:13px; color:var(--text-muted);" aria-hidden="true"></i>
+    <span style="color:var(--text-muted);">J.K. Rowling</span>
+    <i class="ti ti-chevron-right" style="font-size:13px; color:var(--text-muted);" aria-hidden="true"></i>
+    <span style="color:var(--text-muted);">Harry Potter series</span>
+    <i class="ti ti-chevron-right" style="font-size:13px; color:var(--text-muted);" aria-hidden="true"></i>
+    <span style="color:var(--text-primary); font-weight:500;">Book 3 · Prisoner of Azkaban</span>
+  </div>
+
+  <div style="font-size:13px; color:var(--text-secondary); line-height:1.6; margin-bottom:18px;">
+    Every node is its own domain — masterable, coverable, and part of the one above it. Coverage lives per node; pick a level to work.
+  </div>
+
+  <div id="tree" style="display:flex; flex-direction:column; gap:8px; margin-bottom:22px;"></div>
+
+  <div style="border:0.5px solid var(--border); border-radius:12px; padding:1.1rem 1.25rem; background:var(--surface-2);">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px;">
+      <div id="paneltitle" style="font-size:16px; font-weight:500;">Book 3 · Prisoner of Azkaban</div>
+    </div>
+    <div id="coverline" style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;"></div>
+    <div style="height:8px; background:var(--surface-1); border-radius:20px; overflow:hidden; margin-bottom:16px;">
+      <div id="bar" style="height:100%; width:0%; background:var(--text-accent); border-radius:20px; transition:width 0.4s;"></div>
+    </div>
+    <div id="commissionrow" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+      <label style="font-size:13px; color:var(--text-secondary);">Commission</label>
+      <input id="num" type="number" value="10" min="1" max="40" step="1" style="width:64px;" />
+      <span style="font-size:13px; color:var(--text-secondary);">more questions here</span>
+      <button id="commission" style="border:0.5px solid var(--border-strong); background:var(--bg-accent); color:var(--text-accent); border-radius:var(--radius); padding:7px 14px; font-size:13px; cursor:pointer;"><i class="ti ti-wand" style="font-size:15px; vertical-align:-2px; margin-right:5px;" aria-hidden="true"></i>Find them</button>
+    </div>
+    <div id="dryobs" style="font-size:12px; color:var(--text-secondary); padding-top:14px; border-top:0.5px solid var(--border); line-height:1.6;">
+      <i class="ti ti-info-circle" style="font-size:14px; vertical-align:-2px; margin-right:5px; color:var(--text-muted);" aria-hidden="true"></i>
+      Commission a few and watch what comes back. No cap, no target — a node is done when nothing new clears your bar. The machine can note when it looks well-mined; the call is yours.
+    </div>
+  </div>
+
+  <div id="commissioned" style="margin-top:16px;"></div>
+</div>
+
+<script>
+(function(){
+  var nodes = [
+    {name:'Modern Fantasy Books', depth:0, kind:'genre', have:0, cap:null, note:'no master yet'},
+    {name:'J.K. Rowling', depth:1, kind:'author', have:31, cap:null, note:'you craft'},
+    {name:'Harry Potter series', depth:2, kind:'series', have:118, cap:null, note:'you craft'},
+    {name:'Book 3 · Prisoner of Azkaban', depth:3, kind:'book', have:42, cap:null, note:'you craft'}
+  ];
+  var active = nodes[3];
+  var tree=document.getElementById('tree'),paneltitle=document.getElementById('paneltitle'),
+      coverline=document.getElementById('coverline'),bar=document.getElementById('bar'),
+      dryobs=document.getElementById('dryobs'),
+      commissionrow=document.getElementById('commissionrow'),commissioned=document.getElementById('commissioned');
+  function kindIcon(k){return k==='genre'?'ti-books':k==='author'?'ti-user':k==='series'?'ti-stack-2':'ti-book';}
+  function renderTree(){
+    tree.innerHTML='';
+    nodes.forEach(function(n){
+      var row=document.createElement('div'); var a=n===active;
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px;border:0.5px solid '+(a?'var(--border-accent)':'var(--border)')+';border-radius:var(--radius);background:'+(a?'var(--bg-accent)':'var(--surface-2)')+';cursor:pointer;margin-left:'+(n.depth*20)+'px;';
+      var rt=n.note==='no master yet'?'<span style="font-size:12px;color:var(--text-warning);">no master yet · machine floor</span>':'<span style="font-size:12px;color:var(--text-muted);">'+n.have+' questions</span>';
+      row.innerHTML='<i class="ti '+kindIcon(n.kind)+'" style="font-size:17px;color:'+(a?'var(--text-accent)':'var(--text-secondary)')+';" aria-hidden="true"></i><span style="font-size:14px;color:'+(a?'var(--text-accent)':'var(--text-primary)')+';font-weight:'+(a?'500':'400')+';flex:1;">'+n.name+'</span>'+rt;
+      row.onclick=function(){active=n;renderTree();renderPanel();};
+      tree.appendChild(row);
+    });
+  }
+  function renderPanel(){
+    paneltitle.textContent=active.name; commissioned.innerHTML='';
+    if(active.note==='no master yet'){
+      coverline.innerHTML='Machine-drafted floor only — this node has no master. Claiming it means becoming its crafter.';
+      bar.style.width='8%';bar.style.background='var(--text-warning)';
+      dryobs.style.display='none';commissionrow.style.opacity='0.5';return;
+    }
+    dryobs.style.display='';commissionrow.style.opacity='1';
+    bar.style.width='72%';bar.style.background='var(--text-accent)';
+    coverline.innerHTML=active.have+' questions authored · growing';
+  }
+  document.getElementById('commission').onclick=function(){
+    if(active.note==='no master yet')return;
+    var n=parseInt(document.getElementById('num').value)||10;
+    commissioned.innerHTML='<div style="font-size:13px;color:var(--text-secondary);background:var(--surface-1);border-radius:var(--radius);padding:12px 14px;line-height:1.6;"><i class="ti ti-wand" style="font-size:15px;vertical-align:-2px;margin-right:6px;color:var(--text-accent);" aria-hidden="true"></i>Drafting '+n+' candidates for <span style="color:var(--text-primary);">'+active.name+'</span> — they’ll arrive in your keep / kill / tweak queue. The machine drafts into this narrow frame; you decide which are worth keeping.</div>';
+  };
+  renderTree();renderPanel();
+})();
+</script>
+</body>
+</html>

@@ -22,6 +22,14 @@ type SparkleEnvelopeProps = {
   onAnswer?: () => void
   /** Quiet, secondary dismiss control (bottom-left, opposite Answer). View-state only. */
   onDismiss?: () => void
+  /**
+   * "View Answer" — a quiet secondary link sitting next to Dismiss (divided by a
+   * pipe) that reveals the correct answer inline without dismissing the card.
+   * The revealed answer is rendered via `revealedAnswer`. View-state only.
+   */
+  onViewAnswer?: () => void
+  /** The revealed answer node, shown above the actions once View Answer is tapped. */
+  revealedAnswer?: ReactNode
   answerLabel?: string
   /** Render the answer action as a filled primary button (used by direct sends) instead of the inline text link. */
   answerAsButton?: boolean
@@ -67,6 +75,8 @@ export function SparkleEnvelope({
   overflow,
   onAnswer,
   onDismiss,
+  onViewAnswer,
+  revealedAnswer,
   answerLabel = 'Answer →',
   answerAsButton = false,
   viaAttribution,
@@ -116,14 +126,32 @@ export function SparkleEnvelope({
             <div className="w-full text-left">{viaAttribution}</div>
           ) : null}
 
-          {onAnswer || onDismiss ? (
+          {revealedAnswer ? (
+            <div className="w-full text-left">{revealedAnswer}</div>
+          ) : null}
+
+          {onAnswer || onDismiss || onViewAnswer ? (
             <div
               className={cn(
                 'flex w-full items-center gap-3',
-                onDismiss ? 'justify-between' : 'justify-end',
+                onDismiss || onViewAnswer ? 'justify-between' : 'justify-end',
               )}
             >
-              {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
+              {onDismiss || onViewAnswer ? (
+                <div className="flex items-center gap-2">
+                  {onDismiss ? <FeedDismissButton onClick={onDismiss} /> : null}
+                  {onDismiss && onViewAnswer ? (
+                    <span aria-hidden className="text-muted-foreground/50 text-sm">
+                      |
+                    </span>
+                  ) : null}
+                  {onViewAnswer ? (
+                    <FeedActionLink onClick={onViewAnswer} size="sm">
+                      View Answer
+                    </FeedActionLink>
+                  ) : null}
+                </div>
+              ) : null}
               {onAnswer ? (
                 answerAsButton ? (
                   <button type="button" onClick={onAnswer} className="btn-primary">

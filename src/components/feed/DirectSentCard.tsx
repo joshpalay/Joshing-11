@@ -11,12 +11,14 @@ type DirectSentCardProps = {
   overflow?: ReactNode
   onAnswer?: () => void
   onDismiss?: () => void
+  onViewAnswer?: () => void
+  revealedAnswer?: ReactNode
   viaAttribution?: ReactNode
   discoveryAttribution?: ReactNode
   elevated?: boolean
 }
 
-export function DirectSentCard({ item, overflow, onAnswer, onDismiss, viaAttribution, discoveryAttribution, elevated }: DirectSentCardProps) {
+export function DirectSentCard({ item, overflow, onAnswer, onDismiss, onViewAnswer, revealedAnswer, viaAttribution, discoveryAttribution, elevated }: DirectSentCardProps) {
   const senderName = item.senderName || item.avatarName || 'A friend'
   const senderHref = item.senderHref ?? item.authorHref ?? null
   const authoredBySender = item.authoredBySender === true
@@ -70,6 +72,8 @@ export function DirectSentCard({ item, overflow, onAnswer, onDismiss, viaAttribu
       // Direct sends present Answer as a filled primary button (not the inline link).
       answerAsButton
       onDismiss={item.viewerIsAuthor ? undefined : onDismiss}
+      onViewAnswer={item.viewerIsAuthor ? undefined : onViewAnswer}
+      revealedAnswer={revealedAnswer}
       // Directed wins: the "Sent directly to you" attribution leads; the "Via"
       // answerer line renders below it and must not compete with the sender.
       viaAttribution={viaAttribution}
