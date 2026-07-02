@@ -266,6 +266,30 @@ function StreakQuestionCard({
   const answer = useMilestoneAnswer(question, onResolved);
   // Dismiss is view-state only ("pass"): collapse the card to an undo bar.
   const [passed, setPassed] = useState(false);
+  // "View Answer" peek — reveal the correct answer inline. Seeing it consumes
+  // the card exactly like the game's "Show me the answer" (play-client's
+  // consumeCurrentAndAdvance): once revealed the card is no longer answerable.
+  // View-state only, like the game's client-side give-up — nothing is persisted.
+  const [revealed, setRevealed] = useState<
+    { status: 'loading' | 'loaded' | 'error'; answer?: string | null } | null
+  >(null);
+
+  function revealAnswer() {
+    if (revealed) return;
+    setRevealed({ status: 'loading' });
+    void (async () => {
+      try {
+        const res = await fetch(`/api/questions/${question.questionId}/answer`, {
+          method: 'GET',
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { answer: string | null };
+        setRevealed({ status: 'loaded', answer: data.answer });
+      } catch {
+        setRevealed({ status: 'error' });
+      }
+    })();
+  }
   // Forwarding a settled question: the "Send onward" affordance opens the same
   // SendQuestionDrawer the convergence / your-question reveals use.
   const [sendOpen, setSendOpen] = useState(false);
@@ -388,14 +412,43 @@ function StreakQuestionCard({
         </p>
 
         {spent ? null : (
-          <CardRow
-            left={<FeedDismissButton onClick={() => setPassed(true)} />}
-            right={
-              <button type="button" className="btn-primary" onClick={answer.open}>
-                Answer
-              </button>
-            }
-          />
+          <>
+            {/* The revealed answer sits above the actions once View Answer is
+                tapped; the card then reads like a spent "gave up" card. */}
+            {revealed ? (
+              <div style={{ marginBottom: 12 }}>
+                <RevealedAnswer state={revealed} />
+              </div>
+            ) : null}
+            <CardRow
+              left={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <FeedDismissButton onClick={() => setPassed(true)} />
+                  {/* Once the answer is seen the card is consumed, so the peek
+                      link drops away with the Answer button. */}
+                  {revealed ? null : (
+                    <>
+                      <span aria-hidden style={{ color: INK3, fontSize: 14 }}>
+                        |
+                      </span>
+                      <FeedActionLink size="sm" onClick={revealAnswer}>
+                        View Answer
+                      </FeedActionLink>
+                    </>
+                  )}
+                </span>
+              }
+              right={
+                revealed ? (
+                  <span />
+                ) : (
+                  <button type="button" className="btn-primary" onClick={answer.open}>
+                    Answer
+                  </button>
+                )
+              }
+            />
+          </>
         )}
       </div>
       {spent ? null : answer.sheets}
@@ -405,6 +458,51 @@ function StreakQuestionCard({
         question={{ id: question.questionId, text: question.text, domain: question.domain ?? '' }}
       />
     </>
+  );
+}
+
+// The inline "View Answer" reveal on an unanswered streak card — the serif,
+// dimmed-ink answer line, carrying the on-demand fetch's loading/error states.
+// Mirrors the feed's RevealedAnswerLine so the peek reads the same everywhere.
+function RevealedAnswer({
+  state,
+}: {
+  state: { status: 'loading' | 'loaded' | 'error'; answer?: string | null };
+}) {
+  if (state.status === 'loading') {
+    return (
+      <span style={{ fontFamily: FF, fontSize: 13, fontStyle: 'italic', color: INK3 }}>
+        Revealing answer…
+      </span>
+    );
+  }
+  if (state.status === 'error') {
+    return (
+      <span style={{ fontFamily: FF, fontSize: 13, fontStyle: 'italic', color: INK3 }}>
+        Answer unavailable
+      </span>
+    );
+  }
+  if (!state.answer) {
+    return (
+      <span style={{ fontFamily: FF, fontSize: 13, fontStyle: 'italic', color: INK3 }}>
+        No answer available
+      </span>
+    );
+  }
+  return (
+    <p
+      style={{
+        margin: 0,
+        fontFamily: FS,
+        fontSize: 15,
+        fontStyle: 'italic',
+        color: INK,
+        opacity: 0.72,
+      }}
+    >
+      Answer: {state.answer}
+    </p>
   );
 }
 

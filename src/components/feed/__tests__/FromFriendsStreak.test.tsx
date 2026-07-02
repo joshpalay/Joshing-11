@@ -154,6 +154,26 @@ describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', 
   });
 });
 
+describe('FromFriendsStreak — View Answer peek', () => {
+  it('renders a Dismiss | View Answer pair on each still-answerable card', () => {
+    const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('a'), q('b')])} />);
+    expect(html).toContain('Dismiss');
+    // One peek link per answerable card.
+    expect((html.match(/View Answer/g) ?? []).length).toBe(2);
+    // Both cards are still answerable before any reveal.
+    expect(answerCardCount(html)).toBe(2);
+  });
+
+  it('omits the View Answer link on a settled (spent) card', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak item={streakItem([q('done', { priorResult: 'correct' })])} />,
+    );
+    // A card the viewer already answered is not answerable and offers no peek.
+    expect(html).not.toContain('View Answer');
+    expect(answerCardCount(html)).toBe(0);
+  });
+});
+
 describe('FromFriendsStreak — report affordance + author placement', () => {
   it('renders a report (⋯) control in the upper-right corner of every card', () => {
     const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('a'), q('b')])} />);
