@@ -54,3 +54,59 @@ describe('domainKey', () => {
     );
   });
 });
+
+// B-DOMAIN-KEY-NORMALIZE-01 — pinned against the real fragmented rows the bank
+// audit (finding ③b) surfaced, so the repair backfill and the lookup can never
+// silently drift apart on the cases that actually cost money.
+describe('domainKey — ③b bank-fragmentation regressions', () => {
+  it('collapses the case / connector variants that fragmented real domains', () => {
+    // Case-only variants that split into separate territories in the pool.
+    expect(domainKey('American lesbian history')).toBe(domainKey('American Lesbian History'));
+    expect(domainKey('Early 20th Century American History')).toBe(
+      domainKey('Early 20th century American History'),
+    );
+    // "&" vs "and" spellings of the same domain.
+    expect(domainKey('Food Chemistry & Cooking Science')).toBe(
+      domainKey('Food Chemistry and Cooking Science'),
+    );
+    expect(domainKey('Human Anatomy & Physiology')).toBe(
+      domainKey('Human Anatomy and Physiology'),
+    );
+    expect(domainKey('Parliamentary Procedure & Governance Rules')).toBe(
+      domainKey('Parliamentary Procedure and Governance Rules'),
+    );
+  });
+
+  it('keeps genuinely distinct bank displays apart (no false merge)', () => {
+    // Bare title vs a more specific sibling, and sub-angle-decorated displays:
+    // these are different rows in the pool and must not be merged by the fold.
+    expect(domainKey('Star Trek')).not.toBe(domainKey('Star Trek: The Next Generation'));
+    expect(domainKey('Shakespeare')).not.toBe(domainKey('Shakespearean Tragedy'));
+    expect(domainKey('Bach')).not.toBe(domainKey("Bach's Fugal Technique"));
+    expect(domainKey('Plant Biology & Botany')).not.toBe(domainKey('Plant Biology & Taxonomy'));
+    expect(domainKey('Plant Biology & Botany')).not.toBe(
+      domainKey('Plant Taxonomy & Classification'),
+    );
+    // Mrs. Dalloway and its sub-angle variants (word-bearing suffixes) stay
+    // distinct — collapsing them would drop words. That is a categorization
+    // concern upstream, not the fold's job.
+    expect(domainKey('Mrs. Dalloway')).not.toBe(
+      domainKey('Mrs. Dalloway – Character & Consciousness'),
+    );
+    expect(domainKey('Mrs. Dalloway')).not.toBe(
+      domainKey('Narrative Technique & Time in Mrs. Dalloway'),
+    );
+  });
+
+  it('documents the residuals the fold deliberately does NOT fix', () => {
+    // Word-ORDER divergence (a request arriving under a reordered phrasing):
+    // the fold never reorders words, so this stays a miss. Recovering it needs
+    // request-side canonicalization upstream, tracked separately.
+    expect(domainKey('The Legend of Zelda: Tears of the Kingdom')).not.toBe(
+      domainKey('Tears of the Kingdom - the Legend of Zelda'),
+    );
+    // Period-spacing in initialisms (H3): unified by normalizeCanonicalSubcategory
+    // at write time, not by the fold — so these keys still differ here.
+    expect(domainKey('T.S. Eliot')).not.toBe(domainKey('T. S. Eliot'));
+  });
+});
