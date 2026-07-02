@@ -125,7 +125,11 @@ export async function verifyQuestion(input: VerifyInput): Promise<VerifyResult |
         model: ANTHROPIC_MODEL,
         max_tokens: 1024,
         temperature: 0,
-        system: SYSTEM_PROMPT,
+        // Ephemeral cache breakpoint: the same ~1k-token system prompt is re-sent
+        // on every one of the cron's ≤50 calls/day, so re-billing it uncached is
+        // pure waste (batch-verify-cost-characterization.md). A no-op below the
+        // model's minimum cacheable prefix size — never an error.
+        system: [{ type: 'text' as const, text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } }],
         messages: [{ role: 'user', content: buildUserMessage(input) }],
         ...(tools ? { tools } : {}),
       },

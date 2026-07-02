@@ -736,6 +736,13 @@
       "when": 1785542400000,
       "tag": "0104_knowledge_parent_mastery",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1785628800000,
+      "tag": "0105_llm_usage_web_search",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,16 @@
 # `LlmUsageEvent` under-reporting gaps — fix before any refill soak
 
+> **UPDATE (2026-07-02): gap (a) is CLOSED.** Migration `0105` adds
+> `web_search_requests` to `LlmUsageEvent`; `loggedMessagesCreate` populates it from
+> `usage.server_tool_use.web_search_requests`, and `estimateCostUsd` prices it at
+> $0.01/request — so `getMonthToDateLlmSpendUsd`, the weekly cost report, and the
+> admin readout now include web-search $ for rows written after 0105. (Pre-0105 rows
+> read as 0 — historical months remain a token-only floor.) The same change added a
+> `claude-sonnet-5` price row, closing a third, undocumented gap: since the
+> 2026-07-01 model flip every Sonnet 5 call had been "unpriced" ($0) in the ledger.
+> Gap (b) below (aborted-call tokens) remains open but largely self-closes on
+> Sonnet 5.
+
 **Date:** 2026-07-01. **Basis:** the 2026-07-01 spend spike (Anthropic dashboard **\$7.56** token cost + **\$1.80** web search) vs. what our own ledger could see (~\$3). Two structural gaps make `LlmUsageEvent` under-report real spend. **Fix both before the refill soak starts — the soak's weekly \$ number is otherwise a token-only undercount.**
 
 ## Gap (a) — web-search spend is uncaptured

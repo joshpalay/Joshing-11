@@ -1605,6 +1605,11 @@ export const llmUsageEvent = pgTable(
     outputTokens: integer('output_tokens').notNull().default(0),
     cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
     cacheCreateTokens: integer('cache_create_tokens').notNull().default(0),
+    // Anthropic server-side web_search request count (billed ~$0.01/request, a
+    // separate meter from tokens). 0105 closes ledger gap (a) from
+    // docs/findings/ledger-telemetry-gaps.md: refill + batch-verify search spend
+    // was previously invisible to every ledger-derived $ number.
+    webSearchRequests: integer('web_search_requests').notNull().default(0),
     durationMs: integer('duration_ms'),
     createdAt: createdAt(),
   },

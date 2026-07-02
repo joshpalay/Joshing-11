@@ -312,6 +312,13 @@ export async function loggedMessagesCreate(
     // silently degrades callers to their fallback path). Real non-streaming
     // responses always include usage; guarding keeps logging robust.
     const usage = response.usage;
+    // Server-side web_search count (0105): billed ~$0.01/request on a separate
+    // meter from tokens; without ledgering it, batch-verify/refill spend
+    // under-reports (ledger-telemetry-gaps.md gap (a)). Defensive read — the
+    // field is absent entirely when the request declared no server tools.
+    const webSearchRequests =
+      (usage as { server_tool_use?: { web_search_requests?: number } } | undefined)
+        ?.server_tool_use?.web_search_requests ?? 0;
     console.info('[llm]', {
       scope,
       model: params.model,
@@ -320,6 +327,7 @@ export async function loggedMessagesCreate(
       output_tokens: usage?.output_tokens ?? 0,
       cache_read_tokens: usage?.cache_read_input_tokens ?? 0,
       cache_create_tokens: usage?.cache_creation_input_tokens ?? 0,
+      web_search_requests: webSearchRequests,
     });
     // B-LLM-PROVIDER-AB-METRICS Part 2: persist the same usage to a queryable
     // table for the cost rollup. Fire-and-forget — recordLlmUsage swallows its
@@ -332,6 +340,7 @@ export async function loggedMessagesCreate(
       outputTokens: usage?.output_tokens ?? 0,
       cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
       cacheCreateTokens: usage?.cache_creation_input_tokens ?? 0,
+      webSearchRequests,
       durationMs: Date.now() - startedAt,
     });
     return response;
