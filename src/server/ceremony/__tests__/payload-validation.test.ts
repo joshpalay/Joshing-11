@@ -31,6 +31,28 @@ describe('beatsPayloadSchema (F3.5)', () => {
     expect(beatsPayloadSchema.safeParse(WELL_FORMED).success).toBe(true)
   })
 
+  // B-KNOWLEDGE-TAXONOMY-01 P6: grain is additive — the pre-graph corpus (no
+  // grain, as in WELL_FORMED above) must keep validating, and both-grain
+  // payloads validate too.
+  it('accepts beat1 items with the P6 grain field, leaf and parent', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      beat1: [
+        { domain: 'Medici Family', fromTier: 'solid', toTier: 'mastery', grain: 'leaf' },
+        { domain: 'Renaissance Italy', fromTier: 'solid', toTier: 'mastery', grain: 'parent' },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects an unknown grain value', () => {
+    const result = beatsPayloadSchema.safeParse({
+      ...WELL_FORMED,
+      beat1: [{ domain: 'jazz', fromTier: 'solid', toTier: 'mastery', grain: 'cluster' }],
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('accepts a payload with all beats null (no activity this cycle)', () => {
     const result = beatsPayloadSchema.safeParse({
       cycleStart: '2026-05-01',

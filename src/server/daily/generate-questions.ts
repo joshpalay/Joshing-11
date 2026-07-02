@@ -62,7 +62,8 @@ import { getExpansionParents } from '@/server/knowledge/open-domain';
 import { getOrBuildDomainRungs } from '@/server/knowledge/nearness-tree';
 import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
-import { reconcileProposedDomain } from '@/lib/questions/categorization';
+import { getBankLabelIndex, reconcileBankDomain } from '@/server/questions/reconcile-bank-domain';
+import { resolveFinestNode } from '@/server/knowledge/graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeBroadCategory } from '@/server/questions/broad-category';
 import {
@@ -633,7 +634,9 @@ function normalizeSubjectEntity(value: unknown): string | null {
   return str.replace(/^(the|a|an)\s+/i, '').slice(0, 80).trim() || null;
 }
 
-function parseQuestions(raw: string): LlmQuestion[] {
+// Exported for the crafter draft path (B-CRAFTER-LIFECYCLE-01 Phase 2), which
+// mirrors callLlmOnce without the persist/gate machinery — same parse contract.
+export function parseQuestions(raw: string): LlmQuestion[] {
   const parsed = parseJsonObject(raw);
   if (!parsed) return [];
   const rawList = parsed.questions;
@@ -1762,12 +1765,14 @@ export async function generateDailyQuestions(
     });
   }
 
-  // Memoize domain reconciliation within the batch: reconcileProposedDomain is
+  // Memoize domain reconciliation within the batch: reconcileBankDomain is
   // an LLM-backed lookup, and a pool-mode batch often emits several questions
   // under the same proposed domain. One call per distinct string saves the
   // duplicate Haiku calls AND guarantees identical proposals can't reconcile
-  // to different canonical domains within one batch.
+  // to different canonical domains within one batch. The corpus label index
+  // (B-CATEGORY-BANK-RECONCILE-01) is likewise fetched once for the batch.
   const reconciledByProposed = new Map<string, string>();
+  const bankLabelIndex = await getBankLabelIndex();
 
   for (let persistIndex = 0; persistIndex < toPersist.length; persistIndex += 1) {
     const question = toPersist[persistIndex];
@@ -1777,9 +1782,9 @@ export async function generateDailyQuestions(
     const proposed = question.canonical_subcategory;
     let canonicalDomain = reconciledByProposed.get(proposed);
     if (canonicalDomain === undefined) {
-      ({ canonicalDomain } = await reconcileProposedDomain(proposed, userId).catch(
-        () => ({ canonicalDomain: proposed, reconciled: false }),
-      ));
+      ({ canonicalDomain } = await reconcileBankDomain(proposed, userId, {
+        labelIndex: bankLabelIndex,
+      }).catch(() => ({ canonicalDomain: proposed, reconciled: false })));
       reconciledByProposed.set(proposed, canonicalDomain);
     }
 
@@ -1807,6 +1812,9 @@ export async function generateDailyQuestions(
     }
 
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
+    // B-KNOWLEDGE-TAXONOMY-01 P3: normalize to the finest existing
+    // KnowledgeNode's label (flag-off pass-through — byte-identical to today).
+    const taggedDomain = await resolveFinestNode(canonicalDomain);
     // Trust tier (B4 Phase 1 / §6): ask-to-answer corroboration promotes to
     // machine_verified. This non-grounded path has no retrieval corroboration,
     // so the tier hinges on the ask-to-answer verdict; an unevaluated row (gate
@@ -1817,9 +1825,9 @@ export async function generateDailyQuestions(
       .insert(generatedQuestions)
       .values({
         userId,
-        canonicalSubcategory: canonicalDomain,
+        canonicalSubcategory: taggedDomain,
         // Folded lookup key (BP-7 / C5) — all pool write paths set this.
-        domainKey: domainKey(canonicalDomain),
+        domainKey: domainKey(taggedDomain),
         broadCategory: question.broad_category,
         questionText: question.question_text,
         answer: question.answer,

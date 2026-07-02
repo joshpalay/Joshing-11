@@ -8,6 +8,7 @@ import {
 } from '@/lib/llm';
 import { db, generatedQuestions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { resolveFinestNode } from '@/server/knowledge/graph';
 import { embedAndResolveDuplicate } from '@/server/pool/dedup';
 import {
   GROUNDING_SYSTEM_ADDENDUM,
@@ -250,13 +251,16 @@ async function refillDomain(
     const askToAnswerVerified = askResult.verified.has(i);
     const trustTier = resolveMachineTrustTier({ askToAnswerVerified, corroborated: true });
     try {
+      // B-KNOWLEDGE-TAXONOMY-01 P3: normalize to the finest existing
+      // KnowledgeNode's label (flag-off pass-through — byte-identical to today).
+      const taggedDomain = await resolveFinestNode(q.canonical_subcategory);
       const [row] = await db
         .insert(generatedQuestions)
         .values({
           userId: systemUserId,
-          canonicalSubcategory: q.canonical_subcategory,
+          canonicalSubcategory: taggedDomain,
           // Folded lookup key (BP-7 / C5) — all pool write paths set this.
-          domainKey: domainKey(q.canonical_subcategory),
+          domainKey: domainKey(taggedDomain),
           broadCategory: q.broad_category,
           questionText: q.question_text,
           answer: q.answer,

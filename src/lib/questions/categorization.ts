@@ -51,10 +51,14 @@ export async function reconcileProposedDomain(
     const existingDomains = [...userDomains, ...extraDomains];
     if (existingDomains.length === 0) return fallback;
 
-    // If the proposed domain exactly matches an existing one (case-insensitive), no LLM needed.
-    const exactMatch = existingDomains.find(
-      (d) => d.toLowerCase() === proposedDomain.toLowerCase(),
-    );
+    // If the proposed domain folds to an existing one's domainKey (the same
+    // typographic fold the territory layer groups by — apostrophes, connectors,
+    // case), no LLM needed: adopt the existing spelling so the corpus converges
+    // instead of minting "Star Trek – TNG" alongside "Star Trek: TNG". User-KB
+    // labels precede additionalDomains in existingDomains, so the player's own
+    // spelling wins a collision.
+    const proposedKey = domainKey(proposedDomain);
+    const exactMatch = existingDomains.find((d) => domainKey(d) === proposedKey);
     if (exactMatch) return { canonicalDomain: exactMatch, reconciled: false };
 
     const client = getAnthropicClient();

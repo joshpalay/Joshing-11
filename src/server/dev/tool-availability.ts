@@ -38,10 +38,13 @@ export function getExistingDevToolHrefs(): string[] | null {
       hrefs.push('/daily/summary/expand-preview');
     }
 
-    // Admin-only content tool surfaced in the dev-tools section (the bulk CSV
-    // question upload lives under /admin, gated by ADMIN_USER_IDS).
-    if (hasPage(path.join(appDir, 'admin', 'bulk-upload'))) {
-      hrefs.push('/admin/bulk-upload');
+    // Admin-only tools surfaced in the dev-tools section (each /admin/<name>
+    // page is itself gated by ADMIN_USER_IDS — this only drives link dimming).
+    const adminDir = path.join(appDir, 'admin');
+    for (const entry of readdirSync(adminDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && hasPage(path.join(adminDir, entry.name))) {
+        hrefs.push(`/admin/${entry.name}`);
+      }
     }
 
     // Nested onboarding-harness stage. The /dev/onboarding hub page was

@@ -328,14 +328,20 @@ export async function getUpheldInappropriateForAuthor(
 // active incorrect reports (open OR upheld — an admin-upheld "wrong answer" is also
 // cleared by the fix). status → 'dismissed' lifts B-Report-3 suppression (which reads
 // open|upheld); reviewDecision='author_edited' distinguishes this from a moderator
-// dismissal. Returns the number of reports resolved.
-export async function resolveActiveIncorrectReportsForQuestion(questionId: string): Promise<number> {
+// dismissal. The admin edit path (B-CRAFTER-LIFECYCLE-01 Phase 1) reuses this with
+// decision='admin_edited' so the audit trail names who actually made the fix.
+// Returns the number of reports resolved.
+export async function resolveActiveIncorrectReportsForQuestion(
+  questionId: string,
+  decision: 'author_edited' | 'admin_edited' = 'author_edited',
+): Promise<number> {
   const updated = await db
     .update(contentReports)
     .set({
       status: 'dismissed',
-      reviewDecision: 'author_edited',
-      reviewReason: 'Author edited the answer key',
+      reviewDecision: decision,
+      reviewReason:
+        decision === 'admin_edited' ? 'Admin edited the question' : 'Author edited the answer key',
       reviewedAt: new Date(),
     })
     .where(

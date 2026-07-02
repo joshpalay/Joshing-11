@@ -2,11 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NextRequest } from 'next/server';
 
-const { getSessionMock, isAdminUserMock, upholdMock, dismissMock } = vi.hoisted(() => ({
+const {
+  getSessionMock,
+  isAdminUserMock,
+  upholdMock,
+  dismissMock,
+  reverseMock,
+  resolveReportsMock,
+  restoreDemotedMock,
+  retireDemotedMock,
+  editContentMock,
+} = vi.hoisted(() => ({
   getSessionMock: vi.fn(async () => ({ userId: 'admin-1', id: 's-1' }) as { userId: string; id: string } | null),
   isAdminUserMock: vi.fn(() => true),
   upholdMock: vi.fn(async () => ({ ok: true, action: 'upheld', category: 'inappropriate', hardRemoved: true })),
   dismissMock: vi.fn(async () => ({ ok: true, action: 'dismissed', category: 'incorrect', hardRemoved: false })),
+  reverseMock: vi.fn(async () => ({ ok: true, action: 'reversed', table: 'question', restoredVisibility: 'public' })),
+  resolveReportsMock: vi.fn(async () => 1),
+  restoreDemotedMock: vi.fn(async () => ({ ok: true, action: 'restored' })),
+  retireDemotedMock: vi.fn(async () => ({ ok: true, action: 'retired' })),
+  editContentMock: vi.fn(async () => ({ ok: true, action: 'edited' })),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
@@ -14,6 +29,13 @@ vi.mock('@/server/auth/admin', () => ({ isAdminUser: isAdminUserMock }));
 vi.mock('@/server/db/queries/content-reports', () => ({
   upholdReport: upholdMock,
   dismissReport: dismissMock,
+  reverseBlock: reverseMock,
+  resolveActiveIncorrectReportsForQuestion: resolveReportsMock,
+}));
+vi.mock('@/server/db/queries/machine-demotions', () => ({
+  restoreDemotedQuestion: restoreDemotedMock,
+  retireDemotedQuestion: retireDemotedMock,
+  editQuestionContent: editContentMock,
 }));
 
 import { POST } from '@/app/api/admin/content-reports/route';
@@ -70,5 +92,61 @@ describe('POST /api/admin/content-reports', () => {
     upholdMock.mockResolvedValueOnce({ ok: false, reason: 'already_resolved' });
     const res = await post({ reportId: 'r1', action: 'uphold' });
     expect(res.status).toBe(409);
+  });
+
+  // ─── B-CRAFTER-LIFECYCLE-01 Phase 1: machine-demotion actions ───
+
+  it('restores a demoted question for an admin', async () => {
+    const res = await post({ action: 'restore_demoted', questionId: 'q1' });
+    expect(res.status).toBe(200);
+    expect(restoreDemotedMock).toHaveBeenCalledWith('q1');
+  });
+
+  it('retires a demoted question for an admin', async () => {
+    const res = await post({ action: 'retire_demoted', questionId: 'q1' });
+    expect(res.status).toBe(200);
+    expect(retireDemotedMock).toHaveBeenCalledWith('q1');
+  });
+
+  it('maps a not-demoted restore to 409', async () => {
+    restoreDemotedMock.mockResolvedValueOnce({ ok: false, reason: 'not_demoted' });
+    const res = await post({ action: 'restore_demoted', questionId: 'q1' });
+    expect(res.status).toBe(409);
+  });
+
+  it('edit updates content and resolves active incorrect reports as admin_edited', async () => {
+    const res = await post({
+      action: 'edit',
+      questionId: 'q1',
+      questionText: 'Fixed question?',
+      answerText: 'Fixed answer',
+    });
+    expect(res.status).toBe(200);
+    expect(editContentMock).toHaveBeenCalledWith('q1', {
+      questionText: 'Fixed question?',
+      answerText: 'Fixed answer',
+      factualExplanation: undefined,
+    });
+    expect(resolveReportsMock).toHaveBeenCalledWith('q1', 'admin_edited');
+  });
+
+  it('rejects an edit that changes nothing', async () => {
+    const res = await post({ action: 'edit', questionId: 'q1' });
+    expect(res.status).toBe(400);
+    expect(editContentMock).not.toHaveBeenCalled();
+  });
+
+  it('does not resolve reports when the edit itself fails', async () => {
+    editContentMock.mockResolvedValueOnce({ ok: false, reason: 'not_found' });
+    const res = await post({ action: 'edit', questionId: 'missing', questionText: 'x?' });
+    expect(res.status).toBe(404);
+    expect(resolveReportsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for demotion actions from a non-admin', async () => {
+    isAdminUserMock.mockReturnValue(false);
+    const res = await post({ action: 'restore_demoted', questionId: 'q1' });
+    expect(res.status).toBe(404);
+    expect(restoreDemotedMock).not.toHaveBeenCalled();
   });
 });
