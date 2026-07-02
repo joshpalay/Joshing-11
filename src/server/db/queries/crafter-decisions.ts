@@ -58,6 +58,82 @@ export type RecentDraftDecisions = {
   killed: DraftDecisionExemplar[];
 };
 
+// ─── Gate calibration (flags vs verdicts) ────────────────────────────────────
+
+export type GateCalibrationRow = {
+  kind: string;
+  /** Candidates that carried this flag when the human decided. */
+  shown: number;
+  /** ...and the human kept anyway (the gate over-doubted). */
+  keptDespite: number;
+  /** ...and the human killed (the gate agreed with the human). */
+  killed: number;
+};
+
+export type GateCalibration = {
+  totalKept: number;
+  totalKilled: number;
+  /** Kills where the machine saw nothing wrong — the gates' blind spots. */
+  cleanKills: number;
+  byKind: GateCalibrationRow[];
+};
+
+/**
+ * Pure aggregation of ledger rows into the flags-vs-verdicts readout. A keep
+ * DESPITE a flag and a kill WITHOUT one are both corrections of the machine's
+ * judgment — this is the evidence base any future auto-keep must clear.
+ * Exported for unit tests.
+ */
+export function aggregateGateCalibration(
+  rows: ReadonlyArray<{ decision: 'kept' | 'killed'; flags: DraftDecisionFlag[] }>,
+): GateCalibration {
+  const byKind = new Map<string, GateCalibrationRow>();
+  let totalKept = 0;
+  let totalKilled = 0;
+  let cleanKills = 0;
+  for (const row of rows) {
+    if (row.decision === 'kept') totalKept += 1;
+    else {
+      totalKilled += 1;
+      if (row.flags.length === 0) cleanKills += 1;
+    }
+    // A card can carry several flags of the same kind — count each kind once
+    // per verdict so a doubled note doesn't double the calibration weight.
+    const kinds = new Set(row.flags.map((f) => f.kind));
+    for (const kind of kinds) {
+      const entry = byKind.get(kind) ?? { kind, shown: 0, keptDespite: 0, killed: 0 };
+      entry.shown += 1;
+      if (row.decision === 'kept') entry.keptDespite += 1;
+      else entry.killed += 1;
+      byKind.set(kind, entry);
+    }
+  }
+  return {
+    totalKept,
+    totalKilled,
+    cleanKills,
+    byKind: [...byKind.values()].sort((a, b) => b.shown - a.shown),
+  };
+}
+
+// Bounded window: calibration is about the gates' CURRENT hit rate, and the
+// admin page shouldn't scan an unbounded ledger.
+const CALIBRATION_WINDOW = 500;
+
+export async function getGateCalibration(): Promise<GateCalibration> {
+  const rows = await db
+    .select({
+      decision: crafterDraftDecisions.decision,
+      flags: crafterDraftDecisions.flags,
+    })
+    .from(crafterDraftDecisions)
+    .orderBy(desc(crafterDraftDecisions.createdAt))
+    .limit(CALIBRATION_WINDOW);
+  return aggregateGateCalibration(
+    rows.map((r) => ({ decision: r.decision, flags: r.flags ?? [] })),
+  );
+}
+
 /**
  * The most recent verdicts in a domain, split by decision, newest first —
  * the in-context teaching set for the draft prompt. Bounded per verdict so

@@ -407,11 +407,14 @@ describe('POST /api/friend-invitations', () => {
     expect(body.state).toBe('pending_existing')
   })
 
-  it('auto-approves the follow when the invitee is a public account', async () => {
+  it('a public invitee still gets a PENDING request — Phase 1 gates auto-approve off', async () => {
+    // Friend = bidirectional with an explicit accept (product decision
+    // 2026-06-26; ALLOW_PUBLIC_AUTO_APPROVE=false in friendships.ts). The
+    // auto-approve path is retained for following's return but must not fire.
     state.existingUser = { id: 'user-invitee' }
     state.existingFriendship = null
     state.targetFollowPrivacy = 'public'
-    state.insertedFriendship = { id: 'friendship-1', state: 'approved' }
+    state.insertedFriendship = { id: 'friendship-1', state: 'pending' }
 
     const response = await POST(
       jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' })
@@ -420,10 +423,7 @@ describe('POST /api/friend-invitations', () => {
 
     expect(response.status).toBe(200)
     expect(dbMock.insert).toHaveBeenCalled()
-    expect(body.state).toBe('auto_approved')
-    expect(body.friendshipRequest).toEqual(
-      expect.objectContaining({ id: 'friendship-1', status: 'approved', state: 'auto_approved' }),
-    )
+    expect(body.state).toBe('created')
   })
 
   it('rejects 4 interests', async () => {

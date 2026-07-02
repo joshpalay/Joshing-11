@@ -266,25 +266,32 @@ function StreakQuestionCard({
   const answer = useMilestoneAnswer(question, onResolved);
   // Dismiss is view-state only ("pass"): collapse the card to an undo bar.
   const [passed, setPassed] = useState(false);
-  // "View Answer" peek — reveal the correct answer inline. Seeing it consumes
-  // the card exactly like the game's "Show me the answer" (play-client's
-  // consumeCurrentAndAdvance): once revealed the card is no longer answerable.
-  // View-state only, like the game's client-side give-up — nothing is persisted.
+  // "View Answer" — reveal the correct answer inline. Seeing it consumes the
+  // question exactly like the Daily Five's "Show me the answer": it PERSISTS as a
+  // give-up (a miss with no points, no catch-up second swing) via the milestone
+  // answer route, so on reload the card comes back settled — never answerable
+  // again. The same POST returns the answer we show inline. The card is consumed
+  // only on a successful give-up; an error leaves it answerable so the viewer can
+  // retry or just answer it.
   const [revealed, setRevealed] = useState<
     { status: 'loading' | 'loaded' | 'error'; answer?: string | null } | null
   >(null);
+  const consumed = revealed !== null && revealed.status !== 'error';
 
   function revealAnswer() {
-    if (revealed) return;
+    if (revealed && revealed.status !== 'error') return;
     setRevealed({ status: 'loading' });
     void (async () => {
       try {
-        const res = await fetch(`/api/questions/${question.questionId}/answer`, {
-          method: 'GET',
+        const res = await fetch('/api/lately/milestone/answer', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ questionId: question.questionId, gave_up: true }),
         });
         if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as { answer: string | null };
-        setRevealed({ status: 'loaded', answer: data.answer });
+        const data = (await res.json()) as { correctAnswer?: string | null };
+        setRevealed({ status: 'loaded', answer: data.correctAnswer ?? null });
       } catch {
         setRevealed({ status: 'error' });
       }
@@ -425,8 +432,9 @@ function StreakQuestionCard({
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   <FeedDismissButton onClick={() => setPassed(true)} />
                   {/* Once the answer is seen the card is consumed, so the peek
-                      link drops away with the Answer button. */}
-                  {revealed ? null : (
+                      link drops away with the Answer button. An errored reveal
+                      keeps the link so the viewer can retry. */}
+                  {consumed ? null : (
                     <>
                       <span aria-hidden style={{ color: INK3, fontSize: 14 }}>
                         |
@@ -439,7 +447,7 @@ function StreakQuestionCard({
                 </span>
               }
               right={
-                revealed ? (
+                consumed ? (
                   <span />
                 ) : (
                   <button type="button" className="btn-primary" onClick={answer.open}>

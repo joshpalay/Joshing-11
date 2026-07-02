@@ -1,6 +1,8 @@
-import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, or, sql } from 'drizzle-orm';
 
 import { db, generatedQuestions, retrievalDomainHealth } from '@/server/db';
+import { domainKey } from '@/lib/knowledge/domain-key';
+import { getClusterContext, substantiveDescendants } from '@/server/knowledge/graph';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import type { RecentDailyQuestionEntry, RecentFactKeyEntry } from '@/server/db/queries/daily';
 
@@ -125,6 +127,13 @@ export async function recordDomainRefillHealth(
 // thing on both the grounding (supply) and the guard (suppress-fabrication)
 // side. Domains with no pooled facts are simply absent from the map (caller
 // treats a miss as depth 0).
+//
+// GRAPH-AWARE (B-SUPPLY-GRAPH-DEPTH-01): when a requested domain has an
+// authored KnowledgeNode, its depth counts distinct facts across its
+// substantive descendant subtree too — questions filed under "Medici Family"
+// count toward "Renaissance Florence" once that edge is authored. With an
+// empty graph (or on any graph fault) the exact-label counts below are the
+// whole answer, byte-identical to the pre-graph behavior.
 export async function getDurablePoolDepthForDomains(
   domains: readonly string[],
 ): Promise<Map<string, number>> {
@@ -145,6 +154,68 @@ export async function getDurablePoolDepthForDomains(
     .groupBy(generatedQuestions.canonicalSubcategory);
 
   for (const row of rows) result.set(row.domain, Number(row.depth));
+
+  try {
+    const ctx = await getClusterContext();
+    if (ctx.nodeKeys.size === 0 || ctx.edges.length === 0) return result;
+
+    // Requested domains that are authored nodes with at least one substantive
+    // descendant — the only ones whose depth can differ from the base count.
+    const descendantsByDomain = new Map<string, Set<string>>();
+    for (const domain of domains) {
+      const key = domainKey(domain);
+      if (!ctx.nodeKeys.has(key)) continue;
+      const descendants = substantiveDescendants(key, ctx.edges);
+      if (descendants.size > 0) descendantsByDomain.set(domain, descendants);
+    }
+    if (descendantsByDomain.size === 0) return result;
+
+    const involvedKeys = new Set<string>();
+    for (const [domain, descendants] of descendantsByDomain) {
+      involvedKeys.add(domainKey(domain));
+      for (const key of descendants) involvedKeys.add(key);
+    }
+    const involvedLabels = [...involvedKeys]
+      .map((key) => ctx.labelByKey.get(key))
+      .filter((label): label is string => Boolean(label));
+
+    // Distinct (label, key, fact) triples over the involved subtrees, deduped
+    // in memory per cluster — summing per-label distinct counts would double-
+    // count a fact minted under two sibling labels. Rows whose stored
+    // domain_key is NULL (pre-backfill) fall back to folding the label here.
+    const pairRows = await db
+      .selectDistinct({
+        label: generatedQuestions.canonicalSubcategory,
+        storedKey: generatedQuestions.domainKey,
+        factKey: generatedQuestions.factKey,
+      })
+      .from(generatedQuestions)
+      .where(and(
+        eq(generatedQuestions.isDuplicate, false),
+        isNotNull(generatedQuestions.factKey),
+        or(
+          inArray(generatedQuestions.domainKey, [...involvedKeys]),
+          inArray(generatedQuestions.canonicalSubcategory, involvedLabels),
+        ),
+      ));
+
+    for (const [domain, descendants] of descendantsByDomain) {
+      const clusterKeys = new Set([domainKey(domain), ...descendants]);
+      const facts = new Set<string>();
+      for (const row of pairRows) {
+        if (!row.factKey) continue;
+        const rowKey = row.storedKey ?? domainKey(row.label);
+        if (clusterKeys.has(rowKey)) facts.add(row.factKey);
+      }
+      // Never below the base exact-label count: the roll-up only adds.
+      if (facts.size > (result.get(domain) ?? 0)) result.set(domain, facts.size);
+    }
+  } catch (err) {
+    console.warn('[pool-depth] graph roll-up skipped (non-fatal)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   return result;
 }
 

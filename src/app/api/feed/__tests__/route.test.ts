@@ -16,10 +16,15 @@ const { checkBankedQuestionsMock, dbMock, getDismissedDomainsMock, getFeedForUse
     userRows: [] as Array<{ id: string; displayName: string | null }>,
   };
 
-  function thenable(rows: unknown[]) {
+  // Self-similar chain: every step exposes every verb again, so any
+  // where/innerJoin/orderBy/limit ordering (incl. via-answerers'
+  // triple-innerJoin + orderBy + limit) resolves to the staged rows.
+  function thenable(rows: unknown[]): Record<string, unknown> {
     return {
       where: vi.fn(() => thenable(rows)),
-      innerJoin: vi.fn(() => ({ where: vi.fn(() => thenable(rows)) })),
+      innerJoin: vi.fn(() => thenable(rows)),
+      orderBy: vi.fn(() => thenable(rows)),
+      limit: vi.fn(() => thenable(rows)),
       then: (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(rows).then(resolve, reject),
     };
   }
@@ -44,8 +49,10 @@ const { checkBankedQuestionsMock, dbMock, getDismissedDomainsMock, getFeedForUse
 vi.mock('drizzle-orm', () => ({
   and: vi.fn((...parts) => ({ op: 'and', parts })),
   count: vi.fn(() => ({ expression: 'count' })),
+  desc: vi.fn((column) => ({ op: 'desc', column })),
   eq: vi.fn((column, value) => ({ op: 'eq', column, value })),
   inArray: vi.fn((column, values) => ({ op: 'inArray', column, values })),
+  isNotNull: vi.fn((column) => ({ op: 'isNotNull', column })),
   isNull: vi.fn((column) => ({ op: 'isNull', column })),
   ne: vi.fn((column, value) => ({ op: 'ne', column, value })),
   notExists: vi.fn((query) => ({ op: 'notExists', query })),

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import { getCrafterWorklist } from '@/server/db/queries/crafter-demand';
+import { getGateCalibration } from '@/server/db/queries/crafter-decisions';
 import { getOpenReportsForReview } from '@/server/db/queries/content-reports';
 import { getMachineDemotionsForReview } from '@/server/db/queries/machine-demotions';
 
@@ -23,10 +24,13 @@ export default async function AdminCrafterPage({
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
-  const [worklist, reports, demotions, params] = await Promise.all([
+  const [worklist, reports, demotions, calibration, params] = await Promise.all([
     getCrafterWorklist(session.userId),
     getOpenReportsForReview(),
     getMachineDemotionsForReview(),
+    // Flags-vs-verdicts readout (B-CRAFTER-DECISION-LEDGER-01 follow-up) —
+    // best-effort: a ledger fault costs the readout, never the page.
+    getGateCalibration().catch(() => null),
     searchParams,
   ]);
 
@@ -35,6 +39,7 @@ export default async function AdminCrafterPage({
       worklist={worklist}
       needingReviewCount={reports.length + demotions.length}
       initialDomain={params.domain ?? null}
+      calibration={calibration}
     />
   );
 }

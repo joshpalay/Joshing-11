@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { CrafterWorklistRow } from '@/server/db/queries/crafter-demand';
+import type { GateCalibration } from '@/server/db/queries/crafter-decisions';
 import { CreationSurface } from '@/components/craft/CreationSurface';
 import { AdminTabs } from '@/app/admin/AdminTabs';
 
@@ -17,10 +18,12 @@ export function CrafterClient({
   worklist,
   needingReviewCount,
   initialDomain,
+  calibration,
 }: {
   worklist: CrafterWorklistRow[];
   needingReviewCount: number;
   initialDomain?: string | null;
+  calibration?: GateCalibration | null;
 }) {
   const router = useRouter();
   const [crafting, setCrafting] = useState<CrafterWorklistRow | null>(
@@ -71,11 +74,75 @@ export function CrafterClient({
               ))
             )}
           </div>
+          <GateCalibrationReadout calibration={calibration ?? null} />
         </>
       )}
     </main>
   );
 }
+
+// How often the machine's doubts agree with the human's verdicts — the
+// evidence base any future auto-keep must clear. Kinds reuse the card-chip
+// vocabulary (FLAG_LABEL) so this reads in the crafter's own language.
+function GateCalibrationReadout({ calibration }: { calibration: GateCalibration | null }) {
+  if (!calibration) return null;
+  const totalVerdicts = calibration.totalKept + calibration.totalKilled;
+  return (
+    <section className="mt-8">
+      <h2 className="mb-1 font-serif text-lg font-semibold text-[var(--brand-ink)]">
+        Machine doubt calibration
+      </h2>
+      {totalVerdicts === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Appears once you keep or kill drafts — every verdict teaches the machine, and this
+          shows how often its doubts were right.
+        </p>
+      ) : (
+        <>
+          <p className="text-muted-foreground mb-2 text-xs">
+            {calibration.totalKept} kept · {calibration.totalKilled} killed
+            {calibration.totalKilled > 0
+              ? ` · ${calibration.cleanKills} kill${calibration.cleanKills === 1 ? '' : 's'} the machine saw nothing wrong with`
+              : ''}
+          </p>
+          {calibration.byKind.length === 0 ? (
+            <p className="text-muted-foreground text-xs">
+              No flagged candidates decided yet — the gates haven&apos;t been tested against your
+              judgment.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {calibration.byKind.map((row) => {
+                const overruledPct = Math.round((row.keptDespite / row.shown) * 100);
+                return (
+                  <li key={row.kind} className="text-xs text-[var(--brand-ink-700)]">
+                    <span className="font-medium">
+                      {FLAG_LABEL[row.kind as keyof typeof FLAG_LABEL] ?? row.kind}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {' '}
+                      — flagged {row.shown}: you kept {row.keptDespite} anyway ({overruledPct}%
+                      overruled), killed {row.killed}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+// Mirror of CreationSurface's card-chip labels — the calibration readout
+// speaks the same vocabulary the crafter saw on the cards.
+const FLAG_LABEL: Record<string, string> = {
+  factual_suspect: 'machine may be fabricating',
+  quality: 'quality gate',
+  answer_leak: 'answer appears in the question',
+  tier_mismatch: 'tier mismatch',
+};
 
 const HEAT_LABEL: Record<CrafterWorklistRow['heat'], string> = {
   high: 'wanted & thin',
