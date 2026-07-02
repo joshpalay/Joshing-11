@@ -63,6 +63,7 @@ import { getOrBuildDomainRungs } from '@/server/knowledge/nearness-tree';
 import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { getBankLabelIndex, reconcileBankDomain } from '@/server/questions/reconcile-bank-domain';
+import { resolveFinestNode } from '@/server/knowledge/graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeBroadCategory } from '@/server/questions/broad-category';
 import {
@@ -1811,6 +1812,9 @@ export async function generateDailyQuestions(
     }
 
     const basePoints = resolveDailyBasePoints(question.difficulty_estimate);
+    // B-KNOWLEDGE-TAXONOMY-01 P3: normalize to the finest existing
+    // KnowledgeNode's label (flag-off pass-through — byte-identical to today).
+    const taggedDomain = await resolveFinestNode(canonicalDomain);
     // Trust tier (B4 Phase 1 / §6): ask-to-answer corroboration promotes to
     // machine_verified. This non-grounded path has no retrieval corroboration,
     // so the tier hinges on the ask-to-answer verdict; an unevaluated row (gate
@@ -1821,9 +1825,9 @@ export async function generateDailyQuestions(
       .insert(generatedQuestions)
       .values({
         userId,
-        canonicalSubcategory: canonicalDomain,
+        canonicalSubcategory: taggedDomain,
         // Folded lookup key (BP-7 / C5) — all pool write paths set this.
-        domainKey: domainKey(canonicalDomain),
+        domainKey: domainKey(taggedDomain),
         broadCategory: question.broad_category,
         questionText: question.question_text,
         answer: question.answer,

@@ -125,6 +125,96 @@ describe('parentProgress — §9-A revised (threshold bar + ≥2-corner gate)', 
   });
 });
 
+describe('resolveFinestNode — P3 tagging (flag-gated, fail-open, no minting)', () => {
+  const NODE = {
+    id: 'n1',
+    label: 'Renaissance Florence',
+    domainKey: 'renaissance florence',
+    nodeKind: 'leaf' as const,
+    masteryThreshold: null,
+    broadCategory: null,
+    fieldHue: null,
+    createdAt: new Date(),
+  };
+
+  const flagsOn = () => {
+    process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
+    process.env.KNOWLEDGE_GRAPH_TAGGING = 'true';
+  };
+  const flagsOff = () => {
+    delete process.env.KNOWLEDGE_GRAPH_ENABLED;
+    delete process.env.KNOWLEDGE_GRAPH_TAGGING;
+  };
+
+  it('flag-off (default): returns the label unchanged and never looks up', async () => {
+    flagsOff();
+    let lookups = 0;
+    const out = await mod.resolveFinestNode('Renaissance – Florence', {
+      lookup: async () => {
+        lookups += 1;
+        return NODE;
+      },
+    });
+    expect(out).toBe('Renaissance – Florence'); // byte-identical
+    expect(lookups).toBe(0);
+  });
+
+  it('flag-on: a label folding onto an existing node tags to that node', async () => {
+    flagsOn();
+    try {
+      // en-dash variant folds to the same domainKey as the node
+      const out = await mod.resolveFinestNode('Renaissance – Florence', {
+        lookup: async (key) => (key === 'renaissance florence' ? NODE : null),
+      });
+      expect(out).toBe('Renaissance Florence');
+    } finally {
+      flagsOff();
+    }
+  });
+
+  it('flag-on, no node: label persists as today — never mints a node', async () => {
+    flagsOn();
+    try {
+      const out = await mod.resolveFinestNode('NBA Playoffs', { lookup: async () => null });
+      expect(out).toBe('NBA Playoffs');
+    } finally {
+      flagsOff();
+    }
+  });
+
+  it('fail-open: a lookup fault returns the label unchanged (writes never break)', async () => {
+    flagsOn();
+    try {
+      const out = await mod.resolveFinestNode('Tennis', {
+        lookup: async () => {
+          throw new Error('db down');
+        },
+      });
+      expect(out).toBe('Tennis');
+    } finally {
+      flagsOff();
+    }
+  });
+
+  it('the master flag alone is not enough — both flags must be on', async () => {
+    process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
+    delete process.env.KNOWLEDGE_GRAPH_TAGGING;
+    try {
+      let lookups = 0;
+      const out = await mod.resolveFinestNode('Renaissance – Florence', {
+        lookup: async () => {
+          lookups += 1;
+          return NODE;
+        },
+      });
+      expect(out).toBe('Renaissance – Florence');
+      expect(lookups).toBe(0);
+    } finally {
+      flagsOff();
+    }
+  });
+});
+
 describe('collectionCoverage — §7 coverage-only', () => {
   const H_SHELF: Edge[] = [
     col('hamlet', 'plays starting with h'),

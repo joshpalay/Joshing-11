@@ -21,6 +21,21 @@
 import { eq } from 'drizzle-orm';
 
 import { db, knowledgeEdges, knowledgeNodes } from '@/server/db';
+import { domainKey } from '@/lib/knowledge/domain-key';
+
+// Local boolEnv per repo idiom (kb-exhaustion.ts / retrieval-config.ts).
+function boolEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (raw === undefined || raw === '') return fallback;
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+// P3 gate: finest-node tagging is live only when BOTH the master flag and the
+// phase flag are on. Default off — flag-off write paths are byte-identical to
+// today (B-KNOWLEDGE-TAXONOMY-01 P3 done-when).
+export function isKnowledgeGraphTaggingEnabled(): boolean {
+  return boolEnv('KNOWLEDGE_GRAPH_ENABLED', false) && boolEnv('KNOWLEDGE_GRAPH_TAGGING', false);
+}
 
 export type KnowledgeNodeRow = typeof knowledgeNodes.$inferSelect;
 export type KnowledgeEdgeRow = typeof knowledgeEdges.$inferSelect;
@@ -60,6 +75,36 @@ export async function getRoster(parentKey: string): Promise<KnowledgeEdgeRow[]> 
 // parents, and the type decides how credit accrues).
 export async function getParents(childKey: string): Promise<KnowledgeEdgeRow[]> {
   return db.select().from(knowledgeEdges).where(eq(knowledgeEdges.childDomainKey, childKey));
+}
+
+// ─── P3: finest-node tagging at question write ───────────────────────────────
+
+/**
+ * Normalize a proposed domain label to the finest EXISTING KnowledgeNode
+ * (D-doc §6): fold to domainKey; if a node exists there, the stored tag
+ * becomes the node's label — the canonical display form of that key (label ↔
+ * domainKey is 1:1 via the unique index; storing the lowercase key itself
+ * would break every surface that renders canonicalSubcategory directly). No
+ * node → the label persists exactly as today: node creation is the human
+ * authoring path (§4), NEVER a side effect of a question write. No
+ * retroactive re-sort — this touches new writes only.
+ *
+ * Fail-open and flag-gated: flag-off (default) or any lookup fault returns
+ * the input unchanged, so a graph problem can never break a question write.
+ * `deps.lookup` is injectable for pure unit tests.
+ */
+export async function resolveFinestNode(
+  label: string,
+  deps: { lookup?: (key: string) => Promise<KnowledgeNodeRow | null> } = {},
+): Promise<string> {
+  if (!isKnowledgeGraphTaggingEnabled()) return label;
+  try {
+    const lookup = deps.lookup ?? getNode;
+    const node = await lookup(domainKey(label));
+    return node ? node.label : label;
+  } catch {
+    return label;
+  }
 }
 
 // ─── pure credit math (no DB — unit-tested with D-doc §2 fixtures) ───────────
