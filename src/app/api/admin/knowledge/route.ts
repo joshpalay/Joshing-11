@@ -7,8 +7,10 @@ import {
   createKnowledgeEdge,
   createKnowledgeNode,
   deleteKnowledgeEdge,
+  ratifyProposedParent,
   updateKnowledgeNode,
 } from '@/server/db/queries/knowledge-graph';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +52,18 @@ const bodySchema = z.discriminatedUnion('action', [
     action: z.literal('delete_edge'),
     childDomainKey: keySchema,
     parentDomainKey: keySchema,
+  }),
+  // P3: ask the near-ness tree for PROPOSED parent edges for a leaf. Proposals
+  // are suggestions only — nothing persists until a human ratifies.
+  z.object({ action: z.literal('propose'), childLabel: z.string().trim().min(1).max(120) }),
+  // P3: the human commit. Creates the parent node if it doesn't exist yet
+  // (part of the deliberate ratify act, §4) and draws the typed edge.
+  z.object({
+    action: z.literal('ratify'),
+    childDomainKey: keySchema,
+    parentLabel: z.string().trim().min(1).max(120),
+    parentBroadCategory: z.string().trim().max(80).nullable().optional(),
+    edgeType: edgeTypeSchema,
   }),
 ]);
 
@@ -125,6 +139,45 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: result.reason }, { status: 404 });
       }
       return NextResponse.json({ ok: true });
+    }
+
+    case 'propose': {
+      // Graceful degrade (slate P3): if the near-ness module is unavailable or
+      // has nothing cached, the queue is simply empty — manual authoring is
+      // always sufficient. Never an error the author has to care about.
+      try {
+        const { getOrBuildDomainRungs } = await import('@/server/knowledge/nearness-tree');
+        const rungs = await getOrBuildDomainRungs(data.childLabel);
+        const proposals = rungs
+          .filter((r) => r.rung === 'parent' || r.rung === 'grandparent')
+          .map((r) => ({
+            label: r.domain,
+            broadCategory: r.broadCategory,
+            rung: r.rung,
+            parentDomainKey: domainKey(r.domain),
+          }));
+        return NextResponse.json({ proposals });
+      } catch {
+        return NextResponse.json({ proposals: [] });
+      }
+    }
+
+    case 'ratify': {
+      const result = await ratifyProposedParent(
+        {
+          childDomainKey: data.childDomainKey,
+          parentLabel: data.parentLabel,
+          parentBroadCategory: data.parentBroadCategory ?? null,
+          edgeType: data.edgeType,
+        },
+        session.userId,
+      );
+      if (!result.ok) {
+        const status =
+          result.reason === 'self_edge' ? 400 : result.reason === 'unknown_node' ? 422 : 409;
+        return NextResponse.json({ error: result.reason }, { status });
+      }
+      return NextResponse.json({ edge: result.edge }, { status: 201 });
     }
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { KnowledgeEdgeRow, KnowledgeNodeRow } from '@/server/db/queries/knowledge-graph';
@@ -98,6 +98,8 @@ export function KnowledgeAdminClient({
 
       <NodeForm onDone={() => router.refresh()} />
 
+      <OrphanCheck nodes={nodes} edges={edges} />
+
       <section className="mt-6">
         <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">
           Nodes ({nodes.length})
@@ -153,6 +155,60 @@ export function KnowledgeAdminClient({
         )}
       </section>
     </main>
+  );
+}
+
+// ADMIN P2 — the orphan check: structural gaps an author should see before
+// they matter. A leaf with no substantive parent earns no roll-up anywhere; a
+// parent with an empty roster has nothing to serve or gate on.
+function OrphanCheck({
+  nodes,
+  edges,
+}: {
+  nodes: KnowledgeNodeRow[];
+  edges: KnowledgeEdgeRow[];
+}) {
+  const childrenOfParent = new Map<string, number>();
+  const substantiveParentsOfChild = new Map<string, number>();
+  for (const edge of edges) {
+    childrenOfParent.set(edge.parentDomainKey, (childrenOfParent.get(edge.parentDomainKey) ?? 0) + 1);
+    if (edge.edgeType === 'substantive') {
+      substantiveParentsOfChild.set(
+        edge.childDomainKey,
+        (substantiveParentsOfChild.get(edge.childDomainKey) ?? 0) + 1,
+      );
+    }
+  }
+  const orphanLeaves = nodes.filter(
+    (n) => n.nodeKind !== 'parent' && !substantiveParentsOfChild.has(n.domainKey),
+  );
+  const emptyParents = nodes.filter(
+    (n) => n.nodeKind !== 'leaf' && !childrenOfParent.has(n.domainKey),
+  );
+
+  if (orphanLeaves.length === 0 && emptyParents.length === 0) return null;
+
+  return (
+    <section className="mt-4 rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
+      <h2 className="mb-1 font-serif text-base font-semibold text-[var(--brand-ink)]">Orphans</h2>
+      {orphanLeaves.length > 0 ? (
+        <p className="text-muted-foreground text-[13px] leading-relaxed">
+          <span style={{ color: 'var(--warning)' }}>
+            {orphanLeaves.length} leaf{orphanLeaves.length === 1 ? '' : 'ves'} with no substantive
+            parent
+          </span>{' '}
+          (candidates needing an edge): {orphanLeaves.map((n) => n.label).join(' · ')}
+        </p>
+      ) : null}
+      {emptyParents.length > 0 ? (
+        <p className="text-muted-foreground mt-1 text-[13px] leading-relaxed">
+          <span style={{ color: 'var(--warning)' }}>
+            {emptyParents.length} parent{emptyParents.length === 1 ? '' : 's'} with an empty roster
+          </span>{' '}
+          (nothing to serve): {emptyParents.map((n) => n.label).join(' · ')}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -255,6 +311,7 @@ function NodeForm({ onDone }: { onDone: () => void }) {
 
 function NodeRow({ node, onDone }: { node: KnowledgeNodeRow; onDone: () => void }) {
   const [editing, setEditing] = useState(false);
+  const [proposalsOpen, setProposalsOpen] = useState(false);
   const [label, setLabel] = useState(node.label);
   const [nodeKind, setNodeKind] = useState(node.nodeKind);
   const [threshold, setThreshold] = useState(node.masteryThreshold?.toString() ?? '');
@@ -292,24 +349,37 @@ function NodeRow({ node, onDone }: { node: KnowledgeNodeRow; onDone: () => void 
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-3 rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
-        <div className="min-w-0 flex-1">
-          <span className="font-medium text-[var(--brand-ink)]">{node.label}</span>
-          <span className="text-muted-foreground">
-            {' '}
-            · {node.nodeKind} ·{' '}
-            {node.masteryThreshold ? `bar ${node.masteryThreshold} pts` : 'bar unset'}
-          </span>{' '}
-          {hueSwatch(node.fieldHue)}
+      <div className="rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <span className="font-medium text-[var(--brand-ink)]">{node.label}</span>
+            <span className="text-muted-foreground">
+              {' '}
+              · {node.nodeKind} ·{' '}
+              {node.masteryThreshold ? `bar ${node.masteryThreshold} pts` : 'bar unset'}
+            </span>{' '}
+            {hueSwatch(node.fieldHue)}
+          </div>
+          {node.nodeKind !== 'parent' ? (
+            <button
+              type="button"
+              onClick={() => setProposalsOpen((v) => !v)}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium"
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            >
+              Propose parents
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
+            style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+          >
+            Edit
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium"
-          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-        >
-          Edit
-        </button>
+        {proposalsOpen ? <ProposalQueue node={node} onDone={onDone} /> : null}
       </div>
     );
   }
@@ -361,11 +431,139 @@ function NodeRow({ node, onDone }: { node: KnowledgeNodeRow; onDone: () => void 
         </button>
       </div>
       <p className="text-muted-foreground mt-1.5 text-[0.7rem]">
-        Renaming keeps the node&apos;s edges (they follow the new key). Lowering a bar never revokes
-        anyone&apos;s earned mastery.
+        Renaming keeps the node&apos;s edges (they follow the new key).
       </p>
+      {/* ADMIN P2 — threshold-edit warning: lowering can only let players
+          cross sooner; it never revokes (§5 — the P4 freeze is terminal). */}
+      {node.masteryThreshold !== null &&
+      threshold.trim() &&
+      Number(threshold) < node.masteryThreshold ? (
+        <p
+          className="mt-1.5 rounded-md px-3 py-2 text-[13px] leading-relaxed"
+          style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
+        >
+          Lowering the bar from {node.masteryThreshold} to {Number(threshold)}: players past the
+          new bar may cross on their next play; nobody&apos;s earned mastery is ever revoked.
+        </p>
+      ) : null}
       {error ? (
         <p className="mt-1.5 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ADMIN P3 — the LLM proposal queue: the near-ness tree PROPOSES parent edges
+// for a leaf; a human ratifies (picking the edge type — the machine never
+// decides how credit accrues) or rejects (writes nothing, client-side
+// discard). Empty when nothing is cached — manual authoring is always enough.
+type Proposal = {
+  label: string;
+  broadCategory: string | null;
+  rung: string;
+  parentDomainKey: string;
+};
+
+function ProposalQueue({ node, onDone }: { node: KnowledgeNodeRow; onDone: () => void }) {
+  const [proposals, setProposals] = useState<Proposal[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [typeByKey, setTypeByKey] = useState<Record<string, 'substantive' | 'collection'>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const loaded = useRef(false);
+  useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+    void (async () => {
+      setLoading(true);
+      const res = await post({ action: 'propose', childLabel: node.label });
+      setLoading(false);
+      if (!res.ok) {
+        setError(`Proposals failed (${res.status}).`);
+        return;
+      }
+      setProposals(((res.body as { proposals?: Proposal[] } | null)?.proposals ?? []) as Proposal[]);
+    })();
+  }, [node.label]);
+
+  async function ratify(proposal: Proposal) {
+    const res = await post({
+      action: 'ratify',
+      childDomainKey: node.domainKey,
+      parentLabel: proposal.label,
+      parentBroadCategory: proposal.broadCategory,
+      edgeType: typeByKey[proposal.parentDomainKey] ?? 'substantive',
+    });
+    if (!res.ok && res.status !== 409) {
+      setError(`Ratify failed (${res.status}).`);
+      return;
+    }
+    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
+    onDone();
+  }
+
+  function reject(proposal: Proposal) {
+    // Reject writes nothing — the proposal simply leaves the queue.
+    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
+  }
+
+  return (
+    <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+      <p className="text-muted-foreground mb-2 text-xs">
+        Machine-proposed parents for <strong>{node.label}</strong> — suggestions only; nothing is
+        committed until you ratify, and you pick how credit accrues.
+      </p>
+      {loading || proposals === null ? (
+        <p className="text-muted-foreground text-xs">Asking the near-ness tree…</p>
+      ) : proposals.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          Nothing proposed (no cached near-ness for this domain) — draw an edge manually above.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {proposals.map((proposal) => (
+            <li key={proposal.parentDomainKey} className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[var(--brand-ink)]">{proposal.label}</span>
+              <span className="text-muted-foreground">({proposal.rung})</span>
+              <select
+                value={typeByKey[proposal.parentDomainKey] ?? 'substantive'}
+                onChange={(e) =>
+                  setTypeByKey((prev) => ({
+                    ...prev,
+                    [proposal.parentDomainKey]: e.target.value as 'substantive' | 'collection',
+                  }))
+                }
+                className="rounded-md border bg-[var(--brand-field)] px-1.5 py-1 text-xs"
+                style={{ borderColor: 'var(--border)' }}
+                aria-label={`Edge type for ${proposal.label}`}
+              >
+                <option value="substantive">substantive</option>
+                <option value="collection">collection</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void ratify(proposal)}
+                className="rounded-md border px-2.5 py-1 text-xs font-medium"
+                style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+              >
+                Ratify
+              </button>
+              <button
+                type="button"
+                onClick={() => reject(proposal)}
+                className="rounded-md border px-2.5 py-1 text-xs font-medium"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+              >
+                Reject
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error ? (
+        <p className="mt-1.5 text-xs" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
@@ -453,9 +651,21 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
       </div>
       <p className="text-muted-foreground mt-1.5 text-[0.7rem]">
         substantive = depth counts toward understanding the parent · collection = each member covered
-        lights one slot. Adding a child only adds an unlit corner — it never recomputes anyone&apos;s
-        mastery.
+        lights one slot.
       </p>
+      {/* ADMIN P2 — the impact preview: the §B guarantee stated to the author
+          before the commit, with the actual names in it. */}
+      {childKey && parentKey && childKey !== parentKey ? (
+        <p
+          className="mt-2 rounded-md px-3 py-2 text-[13px] leading-relaxed"
+          style={{ background: 'var(--surface-2)', color: 'var(--brand-ink-700)' }}
+        >
+          Adding <strong>{nodes.find((n) => n.domainKey === childKey)?.label ?? childKey}</strong> to{' '}
+          <strong>{nodes.find((n) => n.domainKey === parentKey)?.label ?? parentKey}</strong> adds an
+          unlit corner — it will NOT change any player&apos;s existing mastery. Non-masters see the
+          field grow honestly; masters stay masters.
+        </p>
+      ) : null}
       {notice ? (
         <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
           {notice}

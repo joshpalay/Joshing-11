@@ -190,6 +190,51 @@ export async function createKnowledgeEdge(
   }
 }
 
+// B-KNOWLEDGE-ADMIN-01 P3 — ratify an LLM-proposed parent edge. The ratify
+// click IS the human commit (§4): if no node exists at the proposed parent's
+// key, one is minted HERE (as part of the deliberate ratify act, never by the
+// proposal itself), nodeKind 'parent' with a null threshold for the human to
+// set later. Then the typed edge is drawn on the normal rails.
+export async function ratifyProposedParent(
+  input: {
+    childDomainKey: string;
+    parentLabel: string;
+    parentBroadCategory: string | null;
+    edgeType: EdgeType;
+  },
+  actorUserId: string,
+): Promise<EdgeResult> {
+  const parentKey = domainKey(input.parentLabel);
+
+  const [existing] = await db
+    .select({ id: knowledgeNodes.id })
+    .from(knowledgeNodes)
+    .where(eq(knowledgeNodes.domainKey, parentKey))
+    .limit(1);
+  if (!existing) {
+    const created = await createKnowledgeNode(
+      {
+        label: input.parentLabel,
+        nodeKind: 'parent',
+        masteryThreshold: null,
+        broadCategory: input.parentBroadCategory,
+        fieldHue: null,
+      },
+      actorUserId,
+    );
+    // A collision here means the node raced into existence — fine, the edge
+    // below targets it either way.
+    if (!created.ok && created.reason === 'not_found') {
+      return { ok: false, reason: 'unknown_node' };
+    }
+  }
+
+  return createKnowledgeEdge(
+    { childDomainKey: input.childDomainKey, parentDomainKey: parentKey, edgeType: input.edgeType },
+    actorUserId,
+  );
+}
+
 // Deleting an edge is structure-editing, not content removal — the hard delete
 // is intentional (the no-hard-delete canon protects player content; an edge is
 // an authored relation a human may retract). Exactly the (child, parent) pair.

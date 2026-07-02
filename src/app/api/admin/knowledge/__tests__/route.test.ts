@@ -2,15 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NextRequest } from 'next/server';
 
-const { getSessionMock, isAdminUserMock, createNodeMock, updateNodeMock, createEdgeMock, deleteEdgeMock } =
-  vi.hoisted(() => ({
-    getSessionMock: vi.fn(async () => ({ userId: 'admin-1', id: 's-1' }) as { userId: string; id: string } | null),
-    isAdminUserMock: vi.fn(() => true),
-    createNodeMock: vi.fn(async () => ({ ok: true as const, node: { id: 'n1', label: 'Renaissance Italy' } })),
-    updateNodeMock: vi.fn(async () => ({ ok: true as const, node: { id: 'n1', label: 'Renaissance Italy' } })),
-    createEdgeMock: vi.fn(async () => ({ ok: true as const, edge: { id: 'e1' } })),
-    deleteEdgeMock: vi.fn(async () => ({ ok: true as const })),
-  }));
+const {
+  getSessionMock,
+  isAdminUserMock,
+  createNodeMock,
+  updateNodeMock,
+  createEdgeMock,
+  deleteEdgeMock,
+  ratifyMock,
+  rungsMock,
+} = vi.hoisted(() => ({
+  getSessionMock: vi.fn(async () => ({ userId: 'admin-1', id: 's-1' }) as { userId: string; id: string } | null),
+  isAdminUserMock: vi.fn(() => true),
+  createNodeMock: vi.fn(async () => ({ ok: true as const, node: { id: 'n1', label: 'Renaissance Italy' } })),
+  updateNodeMock: vi.fn(async () => ({ ok: true as const, node: { id: 'n1', label: 'Renaissance Italy' } })),
+  createEdgeMock: vi.fn(async () => ({ ok: true as const, edge: { id: 'e1' } })),
+  deleteEdgeMock: vi.fn(async () => ({ ok: true as const })),
+  ratifyMock: vi.fn(async () => ({ ok: true as const, edge: { id: 'e2' } })),
+  rungsMock: vi.fn(async () => [
+    { domain: 'Renaissance Italy', broadCategory: 'History', rung: 'parent' },
+    { domain: 'European History', broadCategory: 'History', rung: 'grandparent' },
+    { domain: 'Tudor England', broadCategory: 'History', rung: 'sibling' }, // filtered out
+  ]),
+}));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/auth/admin', () => ({ isAdminUser: isAdminUserMock }));
@@ -19,7 +33,9 @@ vi.mock('@/server/db/queries/knowledge-graph', () => ({
   updateKnowledgeNode: updateNodeMock,
   createKnowledgeEdge: createEdgeMock,
   deleteKnowledgeEdge: deleteEdgeMock,
+  ratifyProposedParent: ratifyMock,
 }));
+vi.mock('@/server/knowledge/nearness-tree', () => ({ getOrBuildDomainRungs: rungsMock }));
 
 import { POST } from '@/app/api/admin/knowledge/route';
 
@@ -107,5 +123,41 @@ describe('POST /api/admin/knowledge', () => {
     const res = await post({ action: 'create_edge', childDomainKey: 'a', parentDomainKey: 'b', edgeType: 'friendly' });
     expect(res.status).toBe(400);
     expect(createEdgeMock).not.toHaveBeenCalled();
+  });
+
+  // ─── ADMIN P3: the LLM proposal queue ───
+
+  it('propose returns parent/grandparent rungs only, and commits NOTHING', async () => {
+    const res = await post({ action: 'propose', childLabel: 'Medici Family' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { proposals: Array<{ label: string; rung: string }> };
+    expect(body.proposals.map((p) => p.label)).toEqual(['Renaissance Italy', 'European History']);
+    expect(body.proposals.some((p) => p.rung === 'sibling')).toBe(false);
+    expect(createNodeMock).not.toHaveBeenCalled();
+    expect(createEdgeMock).not.toHaveBeenCalled();
+    expect(ratifyMock).not.toHaveBeenCalled(); // proposals never auto-commit (§4)
+  });
+
+  it('propose degrades to an empty queue when the near-ness module fails', async () => {
+    rungsMock.mockRejectedValueOnce(new Error('no cache'));
+    const res = await post({ action: 'propose', childLabel: 'Medici Family' });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { proposals: unknown[] }).proposals).toEqual([]);
+  });
+
+  it('ratify creates exactly one edge with the HUMAN-chosen edge type', async () => {
+    const res = await post({
+      action: 'ratify',
+      childDomainKey: 'medici family',
+      parentLabel: 'Renaissance Italy',
+      parentBroadCategory: 'History',
+      edgeType: 'collection',
+    });
+    expect(res.status).toBe(201);
+    expect(ratifyMock).toHaveBeenCalledTimes(1);
+    expect(ratifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ edgeType: 'collection', parentLabel: 'Renaissance Italy' }),
+      'admin-1',
+    );
   });
 });
