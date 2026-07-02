@@ -108,31 +108,41 @@ function buildUserMessage(input: VerifyInput): string {
     .join('\n');
 }
 
-export async function verifyQuestion(input: VerifyInput): Promise<VerifyResult | null> {
-  const client = getAnthropicClient();
-  if (!client) return null; // fail-open: leave unstamped, retry next sweep
-
+/**
+ * The exact Messages request the verifier sends for one row — shared by the
+ * synchronous path (below) and the Batch API path (verify-batch.ts) so the two
+ * can never drift. NOTE: the sync path's loggedMessagesCreate sanitizes params
+ * for the target model itself; the batch path must apply sanitizeParamsForModel
+ * per request before submission (it bypasses loggedMessagesCreate).
+ */
+export function buildVerifyRequestParams(input: VerifyInput): Anthropic.MessageCreateParamsNonStreaming {
   const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] = isWebSearchEnabled()
     ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: WEB_SEARCH_MAX_USES }]
     : undefined;
+  return {
+    model: ANTHROPIC_MODEL,
+    max_tokens: 1024,
+    temperature: 0,
+    // Ephemeral cache breakpoint: the same ~1k-token system prompt is re-sent
+    // on every one of the cron's calls, so re-billing it uncached is pure waste
+    // (batch-verify-cost-characterization.md). A no-op below the model's minimum
+    // cacheable prefix size — never an error. (In a batch, hits are best-effort.)
+    system: [{ type: 'text' as const, text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } }],
+    messages: [{ role: 'user', content: buildUserMessage(input) }],
+    ...(tools ? { tools } : {}),
+  };
+}
+
+export async function verifyQuestion(input: VerifyInput): Promise<VerifyResult | null> {
+  const client = getAnthropicClient();
+  if (!client) return null; // fail-open: leave unstamped, retry next sweep
 
   let response: Anthropic.Message;
   try {
     response = await loggedMessagesCreate(
       client,
       'batch-verify',
-      {
-        model: ANTHROPIC_MODEL,
-        max_tokens: 1024,
-        temperature: 0,
-        // Ephemeral cache breakpoint: the same ~1k-token system prompt is re-sent
-        // on every one of the cron's ≤50 calls/day, so re-billing it uncached is
-        // pure waste (batch-verify-cost-characterization.md). A no-op below the
-        // model's minimum cacheable prefix size — never an error.
-        system: [{ type: 'text' as const, text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } }],
-        messages: [{ role: 'user', content: buildUserMessage(input) }],
-        ...(tools ? { tools } : {}),
-      },
+      buildVerifyRequestParams(input),
       { timeoutMs: VERIFY_TIMEOUT_MS },
     );
   } catch (error) {

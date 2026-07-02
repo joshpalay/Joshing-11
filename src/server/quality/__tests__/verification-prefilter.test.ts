@@ -80,6 +80,45 @@ describe('prefilterForVerification — EXTRA / ADJACENT FACT routing', () => {
   });
 });
 
+describe('prefilterForVerification — tightened extra_fact answer heuristic (2026-07)', () => {
+  it('no longer routes a bundled answer that asserts nothing checkable', () => {
+    // Separators without an assertion signal: a list is structure, not a claim.
+    // Under the legacy heuristic the comma + "and" routed this to a paid verify.
+    const d = decide('What items does Ben buy at the store?', 'Bread, eggs and milk');
+    expect(d.needsVerification).toBe(false);
+  });
+
+  it('still routes a bundled answer whose descriptor carries a signal', () => {
+    // "1804" (year) inside the bundle = a checkable adjacent claim.
+    const d = decide(
+      'Which symphony did Beethoven dedicate to a patron?',
+      'Eroica (composed 1804)',
+    );
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('extra_fact');
+  });
+
+  it('claim-bearing explanations still route regardless of the answer shape', () => {
+    // The explanation path is untouched by the tightening.
+    const d = decide(
+      'Who painted the ceiling of the Sistine Chapel?',
+      'Michelangelo',
+      'Michelangelo painted it between 1508 and 1512, commissioned by Pope Julius II.',
+    );
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('extra_fact');
+  });
+
+  it('the legacy escape hatch restores the old routing', () => {
+    const input = { questionText: 'What items does Ben buy at the store?', answer: 'Bread, eggs and milk' };
+    const strict = prefilterForVerification(input);
+    const legacy = prefilterForVerification(input, { legacyExtraFact: true });
+    expect(strict.needsVerification).toBe(false);
+    expect(legacy.needsVerification).toBe(true);
+    if (legacy.needsVerification) expect(legacy.dimensions).toContain('extra_fact');
+  });
+});
+
 describe('prefilterForVerification — purity / determinism', () => {
   it('returns the same decision on repeated calls (no hidden state)', () => {
     const input = { questionText: 'What is the capital of France?', answer: 'Paris' };

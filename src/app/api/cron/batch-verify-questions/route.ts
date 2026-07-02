@@ -2,9 +2,19 @@ import { and, eq, gt, isNull, ne } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db, generatedQuestions, questions } from '@/server/db';
+import { getAnthropicClient } from '@/lib/llm';
 import { isCronAuthorized } from '@/server/auth/cron';
 import { runWithConcurrency } from '@/server/lib/concurrency';
-import { prefilterForVerification } from '@/server/quality/verification-prefilter';
+import {
+  prefilterForVerification,
+  type PrefilterOptions,
+} from '@/server/quality/verification-prefilter';
+import {
+  harvestVerifyBatches,
+  isBatchVerifyAsyncEnabled,
+  submitVerifyBatch,
+  type BatchRowInput,
+} from '@/server/quality/verify-batch';
 import {
   verdictToGeneratedPatch,
   verdictToQuestionPatch,
@@ -15,12 +25,25 @@ import {
 export const dynamic = 'force-dynamic';
 // Each row may make a Sonnet call plus an occasional web search; mirror the
 // vet-questions ceiling so a batch completes instead of being platform-killed.
+// (Async mode never holds an LLM call open — harvest + submit are quick HTTP.)
 export const maxDuration = 300;
 
-const BATCH_SIZE = 25; // per store
+const BATCH_SIZE = 25; // per store (sync mode)
+// Async mode scans more per day: batch tokens bill at 50%, there is no per-call
+// timeout pressure, and 25/day sat under GeneratedQuestion's ~26/day inflow so
+// its unstamped backlog crept ~1/day (batch-verify-cost-characterization.md §1/§4).
+const ASYNC_BATCH_SIZE = Math.max(1, Number(process.env.BATCH_VERIFY_ASYNC_BATCH_SIZE ?? 40));
 // One below the 5-cap DB pool (see src/server/db/index.ts), matching VET_CONCURRENCY.
 // Each worker holds an LLM (and maybe a web-search) call in flight.
 const VERIFY_CONCURRENCY = 4;
+
+// Operational escape hatch for the 2026-07 extra_fact tightening: set
+// PREFILTER_EXTRA_FACT_LEGACY=true to restore the pre-tightening routing
+// (any comma/paren/"and" in the answer routes) without a deploy.
+function prefilterOptions(): PrefilterOptions {
+  const raw = process.env.PREFILTER_EXTRA_FACT_LEGACY?.trim().toLowerCase();
+  return { legacyExtraFact: raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on' };
+}
 
 type PendingRow = {
   id: string;
@@ -37,28 +60,8 @@ function emptyTally(scanned: number): Tally {
   return { scanned, skipped: 0, ok: 0, demoted: 0, unverifiable: 0, failed: 0 };
 }
 
-/**
- * Batch verification sweep (B-QUESTION-QUALITY-AGENTS-01 Phase 3). Demote-only,
- * batch-only — NEVER a write-time gate, NEVER overwrites an author's answer.
- *
- * Sweeps both question stores for rows not yet stamped (verified_at IS NULL):
- *   - Question        — eligible, not blocked, not deleted; a demote sets
- *                       publicStatus = 'needs_review'.
- *   - GeneratedQuestion — not already suppressed, not expired; a demote sets
- *                       is_duplicate = true (the only suppress flag the bank honors).
- * Per row: pure pre-filter (Phase 2) decides skip vs verify; verify runs the
- * grounded verifier (knowledge-first, web fallback). Every outcome stamps
- * verified_at + verification_verdict so the row is never re-processed. A verifier
- * FAILURE (null) leaves the row unstamped so the next sweep retries it (fail-open).
- */
-export async function GET(request: NextRequest) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
-  const now = new Date();
-
-  const [pendingQuestions, pendingGenerated] = await Promise.all([
+function selectPending(limit: number, now: Date): Promise<[PendingRow[], PendingRow[]]> {
+  return Promise.all([
     db
       .select({
         id: questions.id,
@@ -74,7 +77,7 @@ export async function GET(request: NextRequest) {
         ne(questions.visibility, 'blocked'),
         isNull(questions.deletedAt),
       ))
-      .limit(BATCH_SIZE),
+      .limit(limit),
     db
       .select({
         id: generatedQuestions.id,
@@ -90,8 +93,164 @@ export async function GET(request: NextRequest) {
         eq(generatedQuestions.isDuplicate, false),
         gt(generatedQuestions.expiresAt, now),
       ))
-      .limit(BATCH_SIZE),
-  ]);
+      .limit(limit),
+  ]) as Promise<[PendingRow[], PendingRow[]]>;
+}
+
+async function stampQuestion(rowId: string, verdict: VerificationVerdict, now: Date, reason?: string) {
+  await db
+    .update(questions)
+    .set(verdictToQuestionPatch(verdict, now, reason))
+    .where(eq(questions.id, rowId));
+}
+
+async function stampGenerated(rowId: string, verdict: VerificationVerdict, now: Date, reason?: string) {
+  await db
+    .update(generatedQuestions)
+    .set(verdictToGeneratedPatch(verdict, now, reason))
+    .where(eq(generatedQuestions.id, rowId));
+}
+
+/**
+ * Batch verification sweep (B-QUESTION-QUALITY-AGENTS-01 Phase 3). Demote-only,
+ * batch-only — NEVER a write-time gate, NEVER overwrites an author's answer.
+ *
+ * Sweeps both question stores for rows not yet stamped (verified_at IS NULL):
+ *   - Question        — eligible, not blocked, not deleted; a demote sets
+ *                       publicStatus = 'needs_review'.
+ *   - GeneratedQuestion — not already suppressed, not expired; a demote sets
+ *                       is_duplicate = true (the only suppress flag the bank honors).
+ * Per row: pure pre-filter (Phase 2) decides skip vs verify; verify runs the
+ * grounded verifier (knowledge-first, web fallback). Every outcome stamps
+ * verified_at + verification_verdict so the row is never re-processed. A verifier
+ * FAILURE (null) leaves the row unstamped so the next sweep retries it (fail-open).
+ *
+ * Two execution modes:
+ *   - sync (default): verify each routed row inline, VERIFY_CONCURRENCY at a time.
+ *   - async (BATCH_VERIFY_ASYNC_ENABLED): two-phase over the Message Batches API —
+ *     harvest yesterday's batch (apply verdicts), then submit today's rows as a
+ *     new batch. 50% token pricing, ~24h verdict latency (acceptable: this is a
+ *     background quality net, not a serving-path gate). Verdicts are applied with
+ *     the SAME patch helpers, so demote semantics are identical across modes.
+ */
+export async function GET(request: NextRequest) {
+  if (!isCronAuthorized(request)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const now = new Date();
+  const options = prefilterOptions();
+
+  if (isBatchVerifyAsyncEnabled()) {
+    return runAsyncSweep(now, options);
+  }
+  return runSyncSweep(now, options);
+}
+
+// ─── Async mode (Batch API) ──────────────────────────────────────────────────
+
+async function runAsyncSweep(now: Date, options: PrefilterOptions) {
+  const client = getAnthropicClient();
+  if (!client) {
+    // Unlike the sync path (which degrades per-row), async mode can do nothing
+    // useful without a client — report loudly and let the next pass retry.
+    return NextResponse.json({ mode: 'async', error: 'anthropic client unavailable' }, { status: 503 });
+  }
+
+  // Phase 1 — harvest ended batches; apply verdicts with the shared patch helpers.
+  const harvest = await harvestVerifyBatches(client, now);
+  const harvested = { question: emptyTally(0), generated: emptyTally(0), stampFailures: 0 };
+  for (const v of harvest.verdicts) {
+    try {
+      if (v.store === 'q') {
+        await stampQuestion(v.rowId, v.outcome, now, v.reason);
+        harvested.question[v.outcome] += 1;
+      } else {
+        await stampGenerated(v.rowId, v.outcome, now, v.reason);
+        harvested.generated[v.outcome] += 1;
+      }
+    } catch (error) {
+      harvested.stampFailures += 1; // row stays unstamped → re-picked next submit
+      console.warn('[cron/batch-verify-questions] async stamp failed', {
+        store: v.store,
+        rowId: v.rowId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Phase 2 — submit a new batch, but only when nothing is still in flight:
+  // rows inside a processing batch are still unstamped, and re-selecting them
+  // here would double-bill the same verification.
+  let submitted: { providerBatchId: string; requestCount: number } | null = null;
+  const submitTallies = { question: emptyTally(0), generated: emptyTally(0) };
+  if (harvest.runsStillProcessing === 0) {
+    const [pendingQuestions, pendingGenerated] = await selectPending(ASYNC_BATCH_SIZE, now);
+    submitTallies.question.scanned = pendingQuestions.length;
+    submitTallies.generated.scanned = pendingGenerated.length;
+
+    const routed: BatchRowInput[] = [];
+    const routeOrSkip = async (row: PendingRow, store: 'q' | 'g', tally: Tally) => {
+      const decision = prefilterForVerification(
+        { questionText: row.questionText, answer: row.answer, explanation: row.explanation },
+        options,
+      );
+      if (!decision.needsVerification) {
+        // Skips never need the LLM — stamp immediately, exactly like sync mode.
+        try {
+          if (store === 'q') await stampQuestion(row.id, 'skipped', now);
+          else await stampGenerated(row.id, 'skipped', now);
+          tally.skipped += 1;
+        } catch {
+          tally.failed += 1;
+        }
+        return;
+      }
+      routed.push({
+        store,
+        rowId: row.id,
+        questionText: row.questionText,
+        answer: row.answer,
+        explanation: row.explanation,
+        canonicalSubcategory: row.canonicalSubcategory,
+        broadCategory: row.broadCategory,
+        dimensions: decision.dimensions,
+      });
+    };
+    for (const row of pendingQuestions) await routeOrSkip(row, 'q', submitTallies.question);
+    for (const row of pendingGenerated) await routeOrSkip(row, 'g', submitTallies.generated);
+
+    if (routed.length > 0) {
+      try {
+        submitted = await submitVerifyBatch(client, routed);
+      } catch (error) {
+        console.error('[cron/batch-verify-questions] batch submit failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  return NextResponse.json({
+    mode: 'async',
+    harvest: {
+      runsChecked: harvest.runsChecked,
+      runsHarvested: harvest.runsHarvested,
+      runsStillProcessing: harvest.runsStillProcessing,
+      runsFailed: harvest.runsFailed,
+      resultFailures: harvest.resultFailures,
+      question: harvested.question,
+      generated: harvested.generated,
+      stampFailures: harvested.stampFailures,
+    },
+    submit: { ...submitTallies, batch: submitted },
+  });
+}
+
+// ─── Sync mode (the original inline path) ────────────────────────────────────
+
+async function runSyncSweep(now: Date, options: PrefilterOptions) {
+  const [pendingQuestions, pendingGenerated] = await selectPending(BATCH_SIZE, now);
 
   const questionTally = emptyTally(pendingQuestions.length);
   const generatedTally = emptyTally(pendingGenerated.length);
@@ -106,7 +265,7 @@ export async function GET(request: NextRequest) {
       questionText: row.questionText,
       answer: row.answer,
       explanation: row.explanation,
-    });
+    }, options);
     if (!decision.needsVerification) return { verdict: 'skipped' };
 
     const result = await verifyQuestion({
@@ -133,10 +292,7 @@ export async function GET(request: NextRequest) {
         questionTally.failed += 1;
         return;
       }
-      await db
-        .update(questions)
-        .set(verdictToQuestionPatch(resolved.verdict, now, resolved.reason))
-        .where(eq(questions.id, row.id));
+      await stampQuestion(row.id, resolved.verdict, now, resolved.reason);
       tally(questionTally, resolved.verdict);
     } catch (error) {
       questionTally.failed += 1;
@@ -154,10 +310,7 @@ export async function GET(request: NextRequest) {
         generatedTally.failed += 1;
         return;
       }
-      await db
-        .update(generatedQuestions)
-        .set(verdictToGeneratedPatch(resolved.verdict, now, resolved.reason))
-        .where(eq(generatedQuestions.id, row.id));
+      await stampGenerated(row.id, resolved.verdict, now, resolved.reason);
       tally(generatedTally, resolved.verdict);
     } catch (error) {
       generatedTally.failed += 1;

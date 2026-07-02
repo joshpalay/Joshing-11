@@ -115,16 +115,47 @@ function explanationCarriesClaims(
 // The answer bundles an extra descriptor ("Eroica (Beethoven's Third, dedicated to
 // Napoleon)") rather than a single clean token — a place an adjacent claim can be
 // wrong even when the headline answer is right.
-function answerIsMultiFact(answer: string): boolean {
+//
+// LEGACY (pre-tightening, 2026-07): any structural separator routed. Measured
+// over-broad — 91% of rows routed, extra_fact on ~90%, because "a comma + a word"
+// matches most multi-word answers (batch-verify-cost-characterization.md §2).
+// Kept callable for the legacy escape hatch and the before/after measurement
+// script; the default is answerCarriesAdjacentClaim below.
+export function answerIsMultiFact(answer: string): boolean {
   return /[(;]/.test(answer) || /,\s+\w/.test(answer) || /\s+and\s+/i.test(answer);
 }
+
+// TIGHTENED (2026-07): bundling alone is structure, not a claim — "Bread, Eggs
+// and Milk" separates items; it asserts nothing checkable. Route only when the
+// bundled answer ALSO carries an assertion signal (year/count/ordinal/superlative/
+// attribution/…): the same signal taxonomy false_premise uses on the stem. This is
+// the "stronger adjacent-claim signal" the cost characterization recommended; the
+// explanation path (explanationCarriesClaims) is unchanged, so claim-bearing
+// explainers still route regardless of the answer's shape.
+export function answerCarriesAdjacentClaim(answer: string): boolean {
+  if (!answerIsMultiFact(answer)) return false;
+  return signalKinds(answer).size >= 1;
+}
+
+export type PrefilterOptions = {
+  /**
+   * Use the pre-2026-07 answer heuristic (any comma/paren/"and" routes extra_fact).
+   * Operational escape hatch only — the cron passes this from
+   * PREFILTER_EXTRA_FACT_LEGACY; the measurement script uses it for the
+   * before/after comparison. Default false (tightened heuristic).
+   */
+  legacyExtraFact?: boolean;
+};
 
 /**
  * Decide, purely, whether a question needs verification and on which dimension(s).
  * Never performs I/O. A `needsVerification: false` result MUST short-circuit the
  * caller before any LLM / web call (the spend guarantee Phase 2's tests enforce).
  */
-export function prefilterForVerification(input: PrefilterInput): PrefilterDecision {
+export function prefilterForVerification(
+  input: PrefilterInput,
+  options?: PrefilterOptions,
+): PrefilterDecision {
   const stem = input.questionText ?? '';
   const answer = input.answer ?? '';
 
@@ -146,8 +177,13 @@ export function prefilterForVerification(input: PrefilterInput): PrefilterDecisi
   const premiseBearing = (hasSetupClause(stem) && stemSignals.size >= 1) || stemSignals.size >= 2;
   if (premiseBearing) dimensions.push('false_premise');
 
-  // extra_fact: the explanation or the answer carries adjacent claims.
-  if (explanationCarriesClaims(input.explanation, answer) || answerIsMultiFact(answer)) {
+  // extra_fact: the explanation or the answer carries adjacent claims. The answer
+  // side requires bundling + an assertion signal (tightened 2026-07) unless the
+  // legacy escape hatch is on.
+  const answerRoutes = options?.legacyExtraFact
+    ? answerIsMultiFact(answer)
+    : answerCarriesAdjacentClaim(answer);
+  if (explanationCarriesClaims(input.explanation, answer) || answerRoutes) {
     dimensions.push('extra_fact');
   }
 

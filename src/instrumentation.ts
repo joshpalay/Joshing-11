@@ -1990,6 +1990,27 @@ export async function register() {
       await db.execute(sql`
         ALTER TABLE "LlmUsageEvent" ADD COLUMN IF NOT EXISTS "web_search_requests" integer NOT NULL DEFAULT 0
       `);
+      // Migration 0106: batch-verify async mode — the VerifyBatchRun tracking
+      // table (the cron would 42P01 on harvest/submit if the migration recorded
+      // without the table) + the is_batch discount marker on LlmUsageEvent.
+      // Same rationale as the 0090/0091 guards above.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "VerifyBatchRun" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "provider_batch_id" text NOT NULL,
+          "status" text NOT NULL DEFAULT 'submitted',
+          "request_count" integer NOT NULL DEFAULT 0,
+          "harvested_at" timestamp with time zone,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "VerifyBatchRun_status_valid" CHECK (status IN ('submitted', 'harvested', 'failed'))
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "VerifyBatchRun" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "VerifyBatchRun_provider_batch_id_key" ON "VerifyBatchRun" ("provider_batch_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "VerifyBatchRun_status_idx" ON "VerifyBatchRun" ("status")`);
+      await db.execute(sql`
+        ALTER TABLE "LlmUsageEvent" ADD COLUMN IF NOT EXISTS "is_batch" boolean NOT NULL DEFAULT false
+      `);
       // Migration 0092 (B-LLM-COST-LATENCY-REPORT-01) stores the weekly cost &
       // latency digest. The llm-cost-report cron would 42P01 on insert if the
       // migration recorded without the table present. Self-contained; precedent: 0091.
