@@ -16,8 +16,9 @@ const { dbMock, state, QUESTIONS, GENERATED, USERS, FEED_ITEMS } = vi.hoisted(()
   };
 
   // `where()` returns a Promise (awaited directly by aggregate queries like the
-  // 24h send-count) that also carries a `.limit()` method (used by the
-  // single-row lookups). This keeps both call shapes working off one mock.
+  // 24h send-count) that also carries `.limit()` (single-row lookups) and
+  // `.orderBy()` (the via-attribution feedItems lookup chains
+  // .orderBy().limit()). This keeps all three call shapes working off one mock.
   const rowsFor = (table: unknown): unknown[] => {
     if (table === QUESTIONS) return state.existingQuestion ? [state.existingQuestion] : [];
     if (table === GENERATED) return state.generated ? [state.generated] : [];
@@ -30,8 +31,12 @@ const { dbMock, state, QUESTIONS, GENERATED, USERS, FEED_ITEMS } = vi.hoisted(()
       from: vi.fn((table: unknown) => ({
         where: vi.fn(() => {
           const rows = rowsFor(table);
-          const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: ReturnType<typeof vi.fn> };
+          const result = Promise.resolve(rows) as Promise<unknown[]> & {
+            limit: ReturnType<typeof vi.fn>;
+            orderBy: ReturnType<typeof vi.fn>;
+          };
           result.limit = vi.fn(async () => rows);
+          result.orderBy = vi.fn(() => ({ limit: vi.fn(async () => rows) }));
           return result;
         }),
       })),

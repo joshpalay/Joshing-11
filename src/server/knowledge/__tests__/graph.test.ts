@@ -298,3 +298,42 @@ describe('collectionCoverage — §7 coverage-only', () => {
     expect(mod.collectionCoverage(0, 0).pct).toBe(0);
   });
 });
+
+describe('substantiveDescendants — B-SUPPLY-GRAPH-DEPTH-01 (supply depth walk)', () => {
+  it('walks transitively downward and excludes the node itself', () => {
+    const edges = [
+      ...RENAISSANCE_EDGES,
+      sub('cosimo de medici', 'medici family'),
+    ];
+    const descendants = mod.substantiveDescendants('renaissance italy', edges);
+    expect(descendants.has('medici family')).toBe(true);
+    expect(descendants.has('cosimo de medici')).toBe(true); // grandchild
+    expect(descendants.has('renaissance italy')).toBe(false);
+    expect(descendants.size).toBe(6);
+  });
+
+  it('never walks collection edges (members are coverage, not depth)', () => {
+    const edges = [sub('medici family', 'renaissance italy'), col('mona lisa', 'renaissance italy')];
+    const descendants = mod.substantiveDescendants('renaissance italy', edges);
+    expect(descendants.has('mona lisa')).toBe(false);
+    expect(descendants.size).toBe(1);
+  });
+
+  it('is cycle-safe and diamond-safe', () => {
+    const cyclic = [sub('a', 'b'), sub('b', 'a'), sub('c', 'a'), sub('c', 'b')];
+    expect([...mod.substantiveDescendants('a', cyclic)].sort()).toEqual(['b', 'c']);
+  });
+
+  it('a leaf has no descendants', () => {
+    expect(mod.substantiveDescendants('medici family', RENAISSANCE_EDGES).size).toBe(0);
+  });
+
+  it('is the exact inverse of substantiveAncestors', () => {
+    const edges = [...RENAISSANCE_EDGES, sub('cosimo de medici', 'medici family')];
+    for (const node of ['cosimo de medici', 'medici family', 'machiavelli']) {
+      for (const ancestor of mod.substantiveAncestors(node, edges)) {
+        expect(mod.substantiveDescendants(ancestor, edges).has(node)).toBe(true);
+      }
+    }
+  });
+});

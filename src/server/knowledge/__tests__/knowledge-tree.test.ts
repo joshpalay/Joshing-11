@@ -124,4 +124,85 @@ describe('buildKnowledgeTree', () => {
     expect(ghost?.value).toBe(mod.GHOST_FOOTPRINT);
     expect(mod.sumRealPoints(ghost!)).toBe(0);
   });
+
+  it('includeGhosts:false (friend variant) renders only held territory — no invitations', () => {
+    const tree = mod.buildKnowledgeTree(OWNED, NODES, EDGES, new Set(), { includeGhosts: false });
+    const parent = findNode(tree, 'renaissance italy');
+    expect((parent!.children ?? []).some((c) => c.ghost)).toBe(false);
+    expect(findNode(tree, 'machiavelli')).toBeNull();
+    expect(mod.sumRealPoints(tree)).toBe(500); // real totals identical either way
+  });
+});
+
+describe('grow-rim — unheld same-field roots as ghost invitations', () => {
+  const nodesWithRim = [
+    ...NODES,
+    node('Tudor England', 'parent', 1500), // unheld root, same 'history' hue
+    node('Baroque Opera', 'parent', 1500), // unheld root, DIFFERENT field
+  ];
+  // Baroque Opera gets a music hue — the rim only invites into fields you
+  // already inhabit.
+  nodesWithRim[nodesWithRim.length - 1] = {
+    ...nodesWithRim[nodesWithRim.length - 1],
+    fieldHue: 'music',
+  };
+
+  it('shows unheld roots sharing a held field, as ghosts, and skips other fields', () => {
+    const tree = mod.buildKnowledgeTree(OWNED, nodesWithRim, EDGES);
+    const tudor = findNode(tree, 'tudor england');
+    expect(tudor?.ghost).toBe(true);
+    expect(tudor?.value).toBe(mod.GHOST_FOOTPRINT);
+    expect(findNode(tree, 'baroque opera')).toBeNull(); // music not inhabited
+  });
+
+  it('the rim is capped and never inflates totals', () => {
+    const many = [
+      ...NODES,
+      ...Array.from({ length: 6 }, (_, i) => node(`History Field ${i}`, 'parent', 1000)),
+    ];
+    const tree = mod.buildKnowledgeTree(OWNED, many, EDGES);
+    const rimGhosts = (tree.children ?? []).filter((c) => c.ghost);
+    expect(rimGhosts.length).toBeLessThanOrEqual(mod.GROW_RIM_CAP);
+    expect(mod.sumRealPoints(tree)).toBe(500);
+  });
+
+  it('friend variant has no rim', () => {
+    const tree = mod.buildKnowledgeTree(OWNED, nodesWithRim, EDGES, new Set(), {
+      includeGhosts: false,
+    });
+    expect(findNode(tree, 'tudor england')).toBeNull();
+  });
+});
+
+describe('collectCollections — §7 coverage strip', () => {
+  const H_NODES = [
+    node('Plays Starting With H', 'parent', null),
+    node('Hamlet'),
+    node('Henry V'),
+    node('Hedda Gabler'),
+  ];
+  const H_EDGES: Edge[] = [
+    { childDomainKey: 'hamlet', parentDomainKey: 'plays starting with h', edgeType: 'collection' },
+    { childDomainKey: 'henry v', parentDomainKey: 'plays starting with h', edgeType: 'collection' },
+    { childDomainKey: 'hedda gabler', parentDomainKey: 'plays starting with h', edgeType: 'collection' },
+  ];
+
+  it('depth in one member lights exactly one slot', () => {
+    const collections = mod.collectCollections(
+      [{ domain: 'Hamlet', points: 2500, mastered: true, broadCategory: 'Literature' }],
+      H_NODES,
+      H_EDGES,
+    );
+    expect(collections).toEqual([{ label: 'Plays Starting With H', covered: 1, rosterSize: 3 }]);
+  });
+
+  it('untouched collections do not appear; collections never enter the packed tree', () => {
+    expect(mod.collectCollections(OWNED, H_NODES, H_EDGES)).toEqual([]);
+    const tree = mod.buildKnowledgeTree(
+      [{ domain: 'Hamlet', points: 2500, mastered: true, broadCategory: 'Literature' }],
+      H_NODES,
+      H_EDGES,
+    );
+    expect(findNode(tree, 'plays starting with h')).toBeNull(); // §7: not a container
+  });
 });

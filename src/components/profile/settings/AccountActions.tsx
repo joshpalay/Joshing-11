@@ -269,6 +269,13 @@ export function AccountActions({
         },
         {
           kind: 'link',
+          icon: <Network className="size-5" />,
+          title: 'Knowledge map (bubbles)',
+          subtitle: 'Preview the nested circle-pack knowledge page before the flag flips',
+          href: '/dev/knowledge-map',
+        },
+        {
+          kind: 'link',
           icon: <BarChart3 className="size-5" />,
           title: 'Points diagnostic',
           subtitle: "Inspect a user's mastery events and where points came from",
