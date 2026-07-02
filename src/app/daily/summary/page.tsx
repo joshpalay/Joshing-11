@@ -28,6 +28,7 @@ import type {
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
 import { RoundReminderCard } from './RoundReminderCard'
+import { InvitationTakeoverGate } from './InvitationTakeoverGate'
 import { ExpandDomainOfferCard } from './ExpandDomainOfferCard'
 import { FirstSessionPanel } from './FirstSessionPanel'
 import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
@@ -167,6 +168,9 @@ export default function DailySummaryPage() {
 
   return (
     <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
+      {/* B-CRAFTER-LIFECYCLE-01: an unseen author invitation takes over the
+          screen once (full-screen /invited), before the recap. */}
+      <InvitationTakeoverGate />
       <div className="relative mx-auto max-w-3xl">
         <Link
           href="/"

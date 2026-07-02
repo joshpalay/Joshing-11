@@ -524,7 +524,17 @@ export async function getSeededPlayQuestions(
     })
     .from(questions)
     .leftJoin(users, eq(users.id, questions.creatorId))
-    .where(inArray(questions.id, authorizedIds));
+    .where(
+      and(
+        inArray(questions.id, authorizedIds),
+        // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3): a
+        // question is never served to its own author. Friend-activity scoping
+        // already makes this structurally unlikely here, but with player
+        // authoring live the explicit predicate is load-bearing. NULL creators
+        // (house/LLM rows) must still pass — hence the isNull arm.
+        or(isNull(questions.creatorId), ne(questions.creatorId, userId)),
+      ),
+    );
 
   const byId = new Map(rows.map((row) => [row.id, row]));
 

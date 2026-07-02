@@ -411,6 +411,10 @@ export const questions = pgTable(
     // publicStatus = 'needs_review' alongside verdict = 'demoted'.
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     verificationVerdict: questionVerificationVerdictEnum('verification_verdict'),
+    // B-CRAFTER-LIFECYCLE-01 Phase 1 (0100) — the verifier's short verdict reason,
+    // shown on the admin review queue's machine-demotion cards. Nullable; rows
+    // verified before 0100 stay null (the reason was previously discarded).
+    verificationReason: text('verification_reason'),
   },
   (table) => [
     index('Question_creator_id_idx').on(table.creatorId),
@@ -739,6 +743,9 @@ export const generatedQuestions = pgTable(
     // verdict is recorded here. verifiedAt null = not yet swept.
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     verificationVerdict: questionVerificationVerdictEnum('verification_verdict'),
+    // B-CRAFTER-LIFECYCLE-01 Phase 1 (0100) — same shape as Question: the
+    // verifier's short verdict reason for the admin review queue. Nullable.
+    verificationReason: text('verification_reason'),
     // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
     embedding: vector('embedding', { dimensions: 1024 }),
     // B-LLM-PROVIDER-AB-SWITCH B3: which provider GENERATED this row
@@ -756,6 +763,113 @@ export const generatedQuestions = pgTable(
     // Bank lookup path (BP-7 / C5): pickBankSource matches folded domain +
     // difficulty tier.
     index('GeneratedQuestion_domain_key_difficulty_idx').on(table.domainKey, table.difficultyEstimate),
+  ],
+);
+
+// Per-domain retrieval-refill health (migration 0098, B-SUPPLY-REFILL-THROUGHPUT-01
+// follow-up). runPoolRefill records whether each domain's grounded call completed
+// or timed out; getThinActiveDomains skips domains that have timed out
+// consecutively >= a threshold and are still within a cooldown, so the capped cron
+// budget stops being spent on chronically-slow (broad) domains that never complete.
+export const retrievalDomainHealth = pgTable(
+  'RetrievalDomainHealth',
+  {
+    // canonical_subcategory of the domain (matches generatedQuestions.canonicalSubcategory).
+    domain: text('domain').primaryKey(),
+    consecutiveTimeouts: integer('consecutive_timeouts').notNull().default(0),
+    lastTimeoutAt: timestamp('last_timeout_at', { withTimezone: true }),
+    lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('RetrievalDomainHealth_cooldown_idx').on(table.consecutiveTimeouts, table.lastTimeoutAt),
+  ],
+);
+
+// Global near-ness tree cache (migration 0099, D-NEARNESS-LADDER-HYBRID-01 B2).
+// Structural, player-independent domain relations: for a child_domain, the
+// related_domains one step away by rung (sibling/cousin/parent/grandparent),
+// source-tagged (curated | llm). Computed once per domain by a lazy Haiku call on
+// the shared thinness boundary; read by supply (route to held near rungs) and
+// expansion (offer unheld near rungs). NB: rows are keyed on canonical_subcategory
+// strings — a domain merge/rename must rewrite them (add to the merge routine).
+export const domainRelations = pgTable(
+  'DomainRelation',
+  {
+    id: id(),
+    childDomain: text('child_domain').notNull(),
+    relatedDomain: text('related_domain').notNull(),
+    broadCategory: text('broad_category'),
+    rung: text('rung').$type<'sibling' | 'cousin' | 'parent' | 'grandparent'>().notNull(),
+    source: text('source').$type<'curated' | 'llm'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('DomainRelation_child_related_key').on(table.childDomain, table.relatedDomain),
+    index('DomainRelation_child_domain_idx').on(table.childDomain),
+  ],
+);
+
+// B-KNOWLEDGE-TAXONOMY-01 P1 (migration 0102) — the leaf/parent knowledge
+// graph (D-KNOWLEDGE-TAXONOMY-MODEL-01). Structure only, human-authored
+// (B-KNOWLEDGE-ADMIN-01 populates it); dark until KNOWLEDGE_GRAPH_* flags.
+// domainKey is UNIQUE — the anti-fragmentation tripwire: a label folding onto
+// an existing node surfaces that node, never mints a sibling. A node can be
+// leaf AND parent ('both' — Bach is masterable and parent of WTC, §3).
+// masteryThreshold is the human-set absolute bar (§5); NULL → code default.
+export const knowledgeNodes = pgTable(
+  'KnowledgeNode',
+  {
+    id: id(),
+    label: text('label').notNull(),
+    domainKey: text('domain_key').notNull(),
+    nodeKind: text('node_kind').$type<'leaf' | 'parent' | 'both'>().notNull().default('leaf'),
+    masteryThreshold: integer('mastery_threshold'),
+    broadCategory: text('broad_category'),
+    fieldHue: text('field_hue'),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
+);
+
+// Typed child→parent membership (§7): 'substantive' = depth-eligible credit
+// (you understand the subject); 'collection' = coverage-only (you've covered
+// the set). A leaf may have many parents. Deliberately SEPARATE from
+// DomainRelation above — that is the serving-side near-ness cache keyed on raw
+// canonical_subcategory strings; this is the authored taxonomy keyed on
+// domainKey. Keyed by domain_key, not node id, so edges survive label edits.
+export const knowledgeEdges = pgTable(
+  'KnowledgeEdge',
+  {
+    id: id(),
+    childDomainKey: text('child_domain_key').notNull(),
+    parentDomainKey: text('parent_domain_key').notNull(),
+    edgeType: text('edge_type').$type<'substantive' | 'collection'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('KnowledgeEdge_child_parent_key').on(table.childDomainKey, table.parentDomainKey),
+    index('KnowledgeEdge_parent_domain_key_idx').on(table.parentDomainKey),
+    index('KnowledgeEdge_child_domain_key_idx').on(table.childDomainKey),
+  ],
+);
+
+// B-KNOWLEDGE-TAXONOMY-01 P4 (migration 0104) — the parent-mastery freeze
+// ledger (D-doc §B). A row = the moment a player crossed a substantive
+// parent's bar; mastery is terminal from then on — roster growth or threshold
+// edits never re-open it. Derived progress lives at read time; only the
+// crossing is stored. Dark until KNOWLEDGE_GRAPH_MASTERY.
+export const knowledgeParentMastery = pgTable(
+  'KnowledgeParentMastery',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    parentDomainKey: text('parent_domain_key').notNull(),
+    masteredAt: timestamp('mastered_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('KnowledgeParentMastery_user_parent_key').on(table.userId, table.parentDomainKey),
+    index('KnowledgeParentMastery_user_id_idx').on(table.userId),
   ],
 );
 
@@ -1050,6 +1164,68 @@ export const declaredInterests = pgTable(
   (table) => [
     unique('DeclaredInterest_userId_domain_key').on(table.userId, table.domain),
     index('DeclaredInterest_userId_isActive_idx').on(table.userId, table.isActive),
+  ],
+);
+
+// B-CRAFTER-LIFECYCLE-01 Phase 3 (0101) — the manual "invitation to author"
+// checkbox. A crafter flips a per-(player, domain) invitation from Panel B; the
+// player sees the full-screen completion takeover ONCE (seenAt), picks a door
+// (doorChoice: 'author' | 'expand' | 'wait'), and the invitation also gates the
+// player's access to the creation surface for that domain. reason keeps this
+// generic — 'domain_exhausted' is the first of a couple of invitation
+// categories. resolvedAt closes without deleting; one ACTIVE row per
+// (user, domain) via the partial unique index.
+export const authorInvitations = pgTable(
+  'AuthorInvitation',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    domain: text('domain').notNull(),
+    reason: text('reason').notNull().default('domain_exhausted'),
+    invitedBy: text('invited_by').notNull().references(() => users.id),
+    createdAt: createdAt(),
+    seenAt: timestamp('seen_at', { withTimezone: true }),
+    doorChoice: text('door_choice'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('AuthorInvitation_active_user_domain_key')
+      .on(table.userId, table.domain)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    index('AuthorInvitation_user_id_idx').on(table.userId),
+  ],
+);
+
+// B-CRAFTER-DECISION-LEDGER-01 — every keep/kill verdict a human passes on a
+// machine draft candidate, recorded durably so (a) the draft prompt can learn
+// the human's bar in-context (kept exemplars, killed anti-exemplars — see
+// draft-candidates.ts) and (b) the machine's own doubts can be graded against
+// the human verdicts (flags vs decision = gate calibration). Kills previously
+// evaporated as client-side state; this ledger is the durable half of "the
+// machine learns from you". Rows are append-only teaching data — never served,
+// never joined into play paths.
+export const crafterDraftDecisions = pgTable(
+  'CrafterDraftDecision',
+  {
+    id: id(),
+    deciderId: text('decider_id').notNull().references(() => users.id),
+    domain: text('domain').notNull(),
+    tier: text('tier').$type<'shallow' | 'deep'>().notNull(),
+    questionText: text('question_text').notNull(),
+    answer: text('answer').notNull(),
+    decision: text('decision').$type<'kept' | 'killed'>().notNull(),
+    // The machine's doubts as shown at decision time ({kind, note} pairs) —
+    // a kill WITHOUT flags and a keep DESPITE flags are both gate corrections.
+    flags: jsonb('flags').$type<Array<{ kind: string; note: string }>>().notNull().default([]),
+    // On a keep where the human corrected the machine's answer.
+    editedAnswer: text('edited_answer'),
+    // The Question a keep created (null for kills).
+    questionId: text('question_id').references(() => questions.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('CrafterDraftDecision_domain_idx').on(table.domain),
+    index('CrafterDraftDecision_decider_id_idx').on(table.deciderId),
   ],
 );
 

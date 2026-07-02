@@ -8,6 +8,7 @@ import {
 } from '@/lib/llm';
 import { db, generatedQuestions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { resolveFinestNode } from '@/server/knowledge/graph';
 import { embedAndResolveDuplicate } from '@/server/pool/dedup';
 import {
   GROUNDING_SYSTEM_ADDENDUM,
@@ -26,6 +27,7 @@ import { resolveDailyBasePoints } from '@/server/daily/types';
 import {
   getDomainPoolAvoidLists,
   getThinActiveDomains,
+  recordDomainRefillHealth,
 } from '@/server/db/queries/retrieval-demand';
 import {
   USD_PER_WEB_SEARCH,
@@ -42,6 +44,23 @@ const DURABLE_EXPIRY = new Date('2999-01-01T00:00:00.000Z');
 // How many existing pool facts per domain to feed the avoid list.
 const AVOID_LIST_LIMIT = 60;
 
+// Whether an error thrown by the grounded generation call is a per-call TIMEOUT
+// (the AbortSignal.timeout in loggedMessagesCreate) rather than a parse/API error.
+// Only timeouts feed the adaptive timeout-exclusion counter; a transient API error
+// should not mark a domain chronically-slow. Exported for unit testing.
+export function isTimeoutError(err: unknown): boolean {
+  if (!err) return false;
+  const e = err as { name?: unknown; message?: unknown };
+  const name = typeof e.name === 'string' ? e.name : '';
+  const message = typeof e.message === 'string' ? e.message : String(err);
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    /\baborted\b/i.test(message) ||
+    /\btimed?[\s-]?out\b/i.test(message)
+  );
+}
+
 export type DomainRefillResult = {
   domain: string;
   persisted: number;
@@ -51,6 +70,9 @@ export type DomainRefillResult = {
   droppedUncorroborated: number;
   droppedQualityGate: number;
   droppedDuplicateFact: number;
+  /** True when the grounded generation call aborted on the per-call timeout — feeds
+   *  the adaptive timeout-exclusion health record (B-SUPPLY-REFILL-THROUGHPUT-01). */
+  timedOut?: boolean;
 };
 
 export type PoolRefillReport = {
@@ -229,13 +251,16 @@ async function refillDomain(
     const askToAnswerVerified = askResult.verified.has(i);
     const trustTier = resolveMachineTrustTier({ askToAnswerVerified, corroborated: true });
     try {
+      // B-KNOWLEDGE-TAXONOMY-01 P3: normalize to the finest existing
+      // KnowledgeNode's label (flag-off pass-through — byte-identical to today).
+      const taggedDomain = await resolveFinestNode(q.canonical_subcategory);
       const [row] = await db
         .insert(generatedQuestions)
         .values({
           userId: systemUserId,
-          canonicalSubcategory: q.canonical_subcategory,
+          canonicalSubcategory: taggedDomain,
           // Folded lookup key (BP-7 / C5) — all pool write paths set this.
-          domainKey: domainKey(q.canonical_subcategory),
+          domainKey: domainKey(taggedDomain),
           broadCategory: q.broad_category,
           questionText: q.question_text,
           answer: q.answer,
@@ -332,6 +357,8 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
     depthThreshold: config.poolDepthThreshold,
     activeLookbackDays: config.activeLookbackDays,
     limit: config.maxDomainsPerRun,
+    excludeTimeoutThreshold: config.timeoutExcludeThreshold,
+    timeoutCooldownDays: config.timeoutCooldownDays,
   });
   report.domainsConsidered = domains.length;
 
@@ -412,8 +439,18 @@ export async function runPoolRefill(opts: { dryRun?: boolean } = {}): Promise<Po
         droppedUncorroborated: 0,
         droppedQualityGate: 0,
         droppedDuplicateFact: 0,
+        timedOut: isTimeoutError(err),
       };
     },
+    // Adaptive timeout exclusion (B-SUPPLY-REFILL-THROUGHPUT-01 follow-up): record
+    // each domain's outcome AS IT SETTLES, not at end-of-run — the run is killed at
+    // the route's 300s maxDuration long before a batched end-of-run write could
+    // fire (2 waves x ~120s > 300s), so a chronically-timing-out domain would never
+    // accumulate the timeouts that eventually exclude it. Per-domain + best-effort.
+    (domain, result) =>
+      recordDomainRefillHealth([
+        { domain, timedOut: result.timedOut === true, completed: result.generated > 0 },
+      ]),
   );
   results.forEach(accumulate);
   report.backlogRemaining = backlog;

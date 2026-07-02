@@ -242,6 +242,15 @@ export async function register() {
           ADD COLUMN IF NOT EXISTS "verified_at" timestamptz,
           ADD COLUMN IF NOT EXISTS "verification_verdict" "public"."QuestionVerificationVerdict"
       `);
+      // B-CRAFTER-LIFECYCLE-01 (migration 0100): the verifier's verdict reason,
+      // shown on the admin review queue's machine-demotion cards. Additive +
+      // nullable — same repair rationale as the 0096 columns above.
+      await db.execute(sql`
+        ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "verification_reason" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "verification_reason" text
+      `);
     } catch {
       // Question / GeneratedQuestion / PublicStatus may not exist yet on a fresh
       // DB — migrate() creates them and 0096 adds these pieces.
@@ -265,6 +274,179 @@ export async function register() {
       await db.execute(sql`ALTER TABLE "QualityReport" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS "QualityReport_created_at_idx" ON "QualityReport" ("created_at")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
+    // B-CRAFTER-LIFECYCLE-01 (migration 0101): the per-(player, domain) manual
+    // author-invitation table. New + isolated; RLS-enabled with no policies
+    // (owner role bypasses RLS) per B-SECURITY-RLS-01. Idempotent (precedent:
+    // the 0097 QualityReport guard above).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AuthorInvitation" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id"),
+          "domain" text NOT NULL,
+          "reason" text NOT NULL DEFAULT 'domain_exhausted',
+          "invited_by" text NOT NULL REFERENCES "User"("id"),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "seen_at" timestamp with time zone,
+          "door_choice" text,
+          "resolved_at" timestamp with time zone
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "AuthorInvitation" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "AuthorInvitation_active_user_domain_key"
+          ON "AuthorInvitation" ("user_id", "domain") WHERE "resolved_at" IS NULL
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "AuthorInvitation_user_id_idx" ON "AuthorInvitation" ("user_id")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
+    // B-CRAFTER-DECISION-LEDGER-01 (migration 0103): the keep/kill teaching
+    // ledger for machine draft candidates. New + isolated; RLS-enabled with no
+    // policies (owner role bypasses RLS) per B-SECURITY-RLS-01. Idempotent
+    // (precedent: the 0101 AuthorInvitation guard above).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "CrafterDraftDecision" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "decider_id" text NOT NULL REFERENCES "User"("id"),
+          "domain" text NOT NULL,
+          "tier" text NOT NULL CHECK ("tier" IN ('shallow', 'deep')),
+          "question_text" text NOT NULL,
+          "answer" text NOT NULL,
+          "decision" text NOT NULL CHECK ("decision" IN ('kept', 'killed')),
+          "flags" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "edited_answer" text,
+          "question_id" text REFERENCES "Question"("id"),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "CrafterDraftDecision" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CrafterDraftDecision_domain_idx" ON "CrafterDraftDecision" ("domain")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CrafterDraftDecision_decider_id_idx" ON "CrafterDraftDecision" ("decider_id")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
+    // B-KNOWLEDGE-TAXONOMY-01 P1 (migration 0102_knowledge_graph): the
+    // leaf/parent knowledge-graph tables (KnowledgeNode + KnowledgeEdge). New +
+    // isolated; RLS-enabled with no policies (owner role bypasses RLS) per
+    // B-SECURITY-RLS-01. Idempotent (precedent: 0097/0101 guards above).
+    // Structure only — dark until KNOWLEDGE_GRAPH_* flags flip.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeNode" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "label" text NOT NULL,
+          "domain_key" text NOT NULL,
+          "node_kind" text NOT NULL DEFAULT 'leaf' CHECK ("node_kind" IN ('leaf', 'parent', 'both')),
+          "mastery_threshold" integer,
+          "broad_category" text,
+          "field_hue" text,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeNode" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeNode_domain_key_key" ON "KnowledgeNode" ("domain_key")
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeEdge" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "child_domain_key" text NOT NULL,
+          "parent_domain_key" text NOT NULL,
+          "edge_type" text NOT NULL CHECK ("edge_type" IN ('substantive', 'collection')),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeEdge" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeEdge_child_parent_key"
+          ON "KnowledgeEdge" ("child_domain_key", "parent_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeEdge_parent_domain_key_idx" ON "KnowledgeEdge" ("parent_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeEdge_child_domain_key_idx" ON "KnowledgeEdge" ("child_domain_key")
+      `);
+      // B-KNOWLEDGE-TAXONOMY-01 P4 (migration 0104): the parent-mastery freeze
+      // ledger — same idempotent shape.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeParentMastery" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id"),
+          "parent_domain_key" text NOT NULL,
+          "mastered_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeParentMastery" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeParentMastery_user_parent_key"
+          ON "KnowledgeParentMastery" ("user_id", "parent_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeParentMastery_user_id_idx" ON "KnowledgeParentMastery" ("user_id")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates them on a fresh DB.
+    }
+
+    // B-SUPPLY-REFILL-THROUGHPUT-01 follow-up (migration 0098): per-domain refill
+    // health for adaptive timeout exclusion. New + isolated; RLS-enabled with no
+    // policies (owner role bypasses RLS). Idempotent so a partially-recorded DB
+    // still boots before runPoolRefill's first upsert (precedent: 0097).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "RetrievalDomainHealth" (
+          "domain" text PRIMARY KEY,
+          "consecutive_timeouts" integer NOT NULL DEFAULT 0,
+          "last_timeout_at" timestamp with time zone,
+          "last_success_at" timestamp with time zone,
+          "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "RetrievalDomainHealth" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "RetrievalDomainHealth_cooldown_idx" ON "RetrievalDomainHealth" ("consecutive_timeouts", "last_timeout_at")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
+    // D-NEARNESS-LADDER-HYBRID-01 (migration 0099): the global near-ness tree cache.
+    // New + isolated; RLS-enabled with no policies (owner role bypasses RLS).
+    // Idempotent so a partially-recorded DB boots before the first tree write.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DomainRelation" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "child_domain" text NOT NULL,
+          "related_domain" text NOT NULL,
+          "broad_category" text,
+          "rung" text NOT NULL CHECK ("rung" IN ('sibling', 'cousin', 'parent', 'grandparent')),
+          "source" text NOT NULL CHECK ("source" IN ('curated', 'llm')),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "DomainRelation" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "DomainRelation_child_related_key" ON "DomainRelation" ("child_domain", "related_domain")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "DomainRelation_child_domain_idx" ON "DomainRelation" ("child_domain")
       `);
     } catch {
       // Best-effort pre-create; migrate() creates it on a fresh DB.

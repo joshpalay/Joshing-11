@@ -51,6 +51,14 @@ describe('verdictToQuestionPatch — demote-only, always stamps', () => {
       expect(patch.verifiedAt).toBe(now);
     }
   });
+
+  it('stamps the verifier reason when provided, omits it when absent/blank (0100)', () => {
+    expect(mod.verdictToQuestionPatch('demoted', now, 'Belial, not Moloch').verificationReason).toBe(
+      'Belial, not Moloch',
+    );
+    expect('verificationReason' in mod.verdictToQuestionPatch('demoted', now)).toBe(false);
+    expect('verificationReason' in mod.verdictToQuestionPatch('skipped', now, '  ')).toBe(false);
+  });
 });
 
 describe('verdictToGeneratedPatch — demote suppresses via is_duplicate', () => {
@@ -70,6 +78,13 @@ describe('verdictToGeneratedPatch — demote suppresses via is_duplicate', () =>
       expect(patch.verificationVerdict).toBe(v);
       expect(patch.verifiedAt).toBe(now);
     }
+  });
+
+  it('stamps the verifier reason when provided (0100)', () => {
+    expect(mod.verdictToGeneratedPatch('demoted', now, 'wrong adjacent fact').verificationReason).toBe(
+      'wrong adjacent fact',
+    );
+    expect('verificationReason' in mod.verdictToGeneratedPatch('demoted', now)).toBe(false);
   });
 });
 

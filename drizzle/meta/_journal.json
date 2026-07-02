@@ -687,6 +687,55 @@
       "when": 1784937600000,
       "tag": "0097_quality_report",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1785024000000,
+      "tag": "0098_retrieval_domain_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1785110400000,
+      "tag": "0099_domain_relation",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1785196800000,
+      "tag": "0100_verification_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1785283200000,
+      "tag": "0101_author_invitation",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1785369600000,
+      "tag": "0102_knowledge_graph",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1785456000000,
+      "tag": "0103_crafter_draft_decision",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1785542400000,
+      "tag": "0104_knowledge_parent_mastery",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,7 @@ import {
 import { broadCategoryDisplayName } from '@/lib/question-categorization';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { embedAndResolveDuplicate } from '@/server/pool/dedup';
+import { resolveFinestNode } from '@/server/knowledge/graph';
 import {
   getActiveIncorrectReportsForAuthor,
   getUpheldInappropriateForAuthor,
@@ -150,9 +151,10 @@ type QuestionViewNonViewKey =
   | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding'
   // categorizeProvider: B3 provenance, not surfaced in the question view.
   | 'authorDeleted' | 'subjectEntity' | 'categorizeProvider'
-  // B-QUESTION-QUALITY-AGENTS-01 (0096): batch-verification stamp, not part of the
-  // rendered view — partial selects need not fetch it.
-  | 'verifiedAt' | 'verificationVerdict';
+  // B-QUESTION-QUALITY-AGENTS-01 (0096) + B-CRAFTER-LIFECYCLE-01 (0100): batch-
+  // verification stamp + reason, not part of the rendered view — partial selects
+  // need not fetch them.
+  | 'verifiedAt' | 'verificationVerdict' | 'verificationReason';
 type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
   & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 
@@ -554,6 +556,11 @@ export async function createQuestion(params: {
 }): Promise<{ id: string }> {
   const visibility = params.visibility ?? 'public';
 
+  // B-KNOWLEDGE-TAXONOMY-01 P3: normalize to the finest existing
+  // KnowledgeNode's label (flag-off pass-through — byte-identical to today).
+  // Covers every canonical write: authored, crafter keep, future callers.
+  const canonicalSubcategory = await resolveFinestNode(params.canonicalSubcategory);
+
   const difficulty = numberToDifficulty(params.difficulty);
   const baseValues = {
     creatorId: params.authorId,
@@ -566,7 +573,7 @@ export async function createQuestion(params: {
     category: params.category as typeof questions.$inferInsert.category,
     broadCategory: params.broadCategory,
     subcategory: params.subcategory,
-    canonicalSubcategory: params.canonicalSubcategory,
+    canonicalSubcategory,
     categoryOverridden: false,
     categorizeProvider: params.categorizeProvider ?? null,
     difficultyEstimate: difficulty,

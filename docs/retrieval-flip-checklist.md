@@ -1,5 +1,15 @@
 # Retrieval-grounded pool refill — flip checklist (C6)
 
+> ## ⏸ AC-1 confirmation run — **PAUSED (not just deferred)** — pending the finite-set product decision (`D-SUPPLY-FINITE-SET-01`, TBD)
+>
+> The ~\$2 paid AC-1 confirmation run is **on hold**. The reason is **NOT throughput or yield** — both are resolved: on **Sonnet 5** a full 41-domain run drains in ~165s with **zero timeouts**, and a funded diagnostic showed healthy yield (every domain searched + parsed; ~27% persist on a broad slice). The reason is that this confirmation would validate **infinite-topup** refill, and a **product reframe under review** (`docs/decisions-pending/D-SUPPLY-FINITE-SET-01-PENDING.md`) may replace that with **finite completable sets** (fill once → designation → graduate). Running the confirmation now risks proving a capability we may not want.
+>
+> **Un-pause condition:** the finite-set decision is made.
+> - If it **KEEPS infinite refill** → run the confirmation as specified below. **Bar:** one funded full run, **≥12 domains AND ≥5 persisted facts**, **with narrow/niche domains (e.g. Spy School Books 1–6) represented among the persisted facts** — not only broad domains (Shakespeare/WTC/Rent), which persist more easily and would give a false pass. Watch per-domain persist for the niche targets. Additional precondition: run on a **low-baseline spend day** (a normal ~\$0.30/day baseline observed first — do not stack a paid run on a burn day like the 2026-07-01 \$7.56 spike).
+> - If it **adopts finite sets** → this note is **rewritten**: the bar becomes "one complete set assembled + graduates cleanly," not "backlog drains."
+>
+> On pass (infinite branch) → proceed with the rest of this checklist and flip `RETRIEVAL_GROUNDING_ENABLED` (env only). On fail (niche domains don't persist) → that's a narrow-domain yield problem, not throughput; diagnose before flipping. **Do not run until un-paused.**
+
 The retrieval/embeddings stack (PRD-D-5 B3) is **built and off by default**. BP-7 made the
 off→on transition clean and added the telemetry to read before flipping. This is the
 operational checklist for turning it on — an explicit post-merge decision, never flipped

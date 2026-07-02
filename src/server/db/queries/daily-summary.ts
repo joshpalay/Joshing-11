@@ -17,10 +17,15 @@ import {
 } from '@/server/adaptive-difficulty';
 import {
   isAreaExpansionThinnessTriggerEnabled,
+  isNearnessTreeEnabled,
   narrowKbThinnessThreshold,
   selectThinnestEligibleArea,
 } from '@/server/daily/kb-exhaustion';
+import type { AdjacentDomainSuggestion } from '@/server/llm/interests';
 import { suggestAdjacentDomains, suggestBroaderDomains } from '@/server/llm/interests';
+import { getCachedDomainRungs } from '@/server/knowledge/nearness-tree';
+import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import { resolveTier } from '@/server/mastery/tiers';
 import { checkBankedQuestions } from '@/server/db/queries/bank';
@@ -446,12 +451,35 @@ async function buildExpansionOffer(
     .limit(1);
 
   // R1/R3: one offer carrying both a lateral "wider" set (siblings) and a
-  // vertical "broader" set (one level up). Both fail open to [] independently.
+  // vertical "broader" set (one level up).
   const broad = mastery?.broadCategory ?? null;
-  const [wider, broader] = await Promise.all([
-    suggestAdjacentDomains(sourceDomain, broad),
-    suggestBroaderDomains(sourceDomain, broad),
-  ]);
+
+  // Prefer the cached near-ness tree (D-NEARNESS-LADDER-HYBRID-01 D2 + §7). Its
+  // siblings/cousins are the "wider" set, parents/grandparents the "broader" set,
+  // and reading the cache replaces the two per-offer Haiku calls. D2: only surface
+  // UNHELD near rungs — the held ones are already borrowed by supply (getHeldDomainKeys
+  // is the C2 overlay). Falls back to the live suggest* calls when the tree is
+  // empty or the flag is off, preserving today's behavior. All paths fail open to [].
+  let wider: AdjacentDomainSuggestion[];
+  let broader: AdjacentDomainSuggestion[];
+  const cachedRungs = isNearnessTreeEnabled()
+    ? await getCachedDomainRungs(sourceDomain).catch(() => [])
+    : [];
+  if (cachedRungs.length > 0) {
+    const held = await getHeldDomainKeys(userId).catch(() => new Set<string>());
+    const unheld = cachedRungs.filter((r) => !held.has(domainKey(r.domain)));
+    const toSuggestion = (r: (typeof unheld)[number]): AdjacentDomainSuggestion => ({
+      label: r.domain,
+      broadCategory: r.broadCategory,
+    });
+    wider = unheld.filter((r) => r.rung === 'sibling' || r.rung === 'cousin').map(toSuggestion);
+    broader = unheld.filter((r) => r.rung === 'parent' || r.rung === 'grandparent').map(toSuggestion);
+  } else {
+    [wider, broader] = await Promise.all([
+      suggestAdjacentDomains(sourceDomain, broad),
+      suggestBroaderDomains(sourceDomain, broad),
+    ]);
+  }
 
   // Drop anything the player already follows so the offer is always net-new, and
   // de-dupe by label across both lists (broader is listed first, so it wins ties).
@@ -484,6 +512,9 @@ async function buildExpansionOffer(
     candidateCount: candidates.length,
     widerCount: candidates.filter((c) => c.kind === 'wider').length,
     broaderCount: candidates.filter((c) => c.kind === 'broader').length,
+    // 'nearness-tree' = served from the cache (no per-offer Haiku calls, §7);
+    // 'llm' = fell back to the live suggest* calls.
+    candidateSource: cachedRungs.length > 0 ? 'nearness-tree' : 'llm',
   });
 
   return {

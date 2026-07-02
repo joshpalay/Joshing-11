@@ -586,7 +586,10 @@ const VIRTUE_PARENTS: AdjacentDomainSuggestion[] = [
   { label: 'Moral Philosophy', broadCategory: 'Philosophy' },
   { label: 'Virtue Ethics', broadCategory: 'Philosophy' },
 ];
-const CURATED_BROADER_PARENTS: Record<string, AdjacentDomainSuggestion[]> = {
+// Exported so the near-ness tree cache (D-NEARNESS-LADDER-HYBRID-01) can seed its
+// PARENT rung deterministically for these known-small domains before falling back
+// to the LLM (curated-first, decision E1).
+export const CURATED_BROADER_PARENTS: Record<string, AdjacentDomainSuggestion[]> = {
   ...Object.fromEntries(SEVEN_DEADLY_SINS.map((s) => [s.toLowerCase(), SIN_PARENTS])),
   ...Object.fromEntries(SEVEN_HEAVENLY_VIRTUES.map((v) => [v.toLowerCase(), VIRTUE_PARENTS])),
 };

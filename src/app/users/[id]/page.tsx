@@ -1,4 +1,4 @@
-import { Brain, Globe, type LucideIcon, Pencil, RotateCcw, Users as UsersIcon } from 'lucide-react';
+import { Brain, Flag, Globe, type LucideIcon, Pencil, RotateCcw, Users as UsersIcon } from 'lucide-react';
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -309,6 +309,28 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
             phone={formatUsPhoneInput(reminderState.phoneNumber)}
           />
         </section>
+
+        {/* B-CRAFTER-LIFECYCLE-01: crafter surfaces, ADMIN_USER_IDS only (same
+            gate the pages themselves enforce — non-admins 404 there anyway). */}
+        {isOwner ? (
+          <section className="mb-8">
+            <h2 className="mb-3 font-serif text-2xl font-semibold">Crafting</h2>
+            <SettingsGroup>
+              <SettingsRow
+                icon={<Pencil className="size-5" />}
+                title="Crafter"
+                subtitle="Where your craft is wanted — draft, keep, and invite."
+                href="/admin/crafter"
+              />
+              <SettingsRow
+                icon={<Flag className="size-5" />}
+                title="Questions needing you"
+                subtitle="Player reports and verifier demotions, one queue."
+                href="/admin/reports"
+              />
+            </SettingsGroup>
+          </section>
+        ) : null}
 
         {llmProviders ? <LlmProviderPanel initial={llmProviders} /> : null}
         {llmExperimentData ? <LlmExperimentReadout data={llmExperimentData} /> : null}

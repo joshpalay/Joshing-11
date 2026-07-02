@@ -158,23 +158,48 @@ export async function verifyQuestion(input: VerifyInput): Promise<VerifyResult |
  * Pure: the column patch for a Question, given the final verdict. Demote-only
  * (Decision A) — sets publicStatus = 'needs_review' but NEVER touches answerText.
  * Always stamps verifiedAt + verificationVerdict so the row is not re-swept.
+ * `reason` (0100) is the verifier's short verdict reason, surfaced on the admin
+ * review queue's machine-demotion cards; omitted for pre-filter 'skipped' rows.
  */
 export function verdictToQuestionPatch(
   verdict: VerificationVerdict,
   now: Date,
-): { verificationVerdict: VerificationVerdict; verifiedAt: Date; updatedAt: Date; publicStatus?: 'needs_review' } {
-  const base = { verificationVerdict: verdict, verifiedAt: now, updatedAt: now };
+  reason?: string,
+): {
+  verificationVerdict: VerificationVerdict;
+  verifiedAt: Date;
+  updatedAt: Date;
+  publicStatus?: 'needs_review';
+  verificationReason?: string;
+} {
+  const base = {
+    verificationVerdict: verdict,
+    verifiedAt: now,
+    updatedAt: now,
+    ...(reason?.trim() ? { verificationReason: reason.trim() } : {}),
+  };
   return verdict === 'demoted' ? { ...base, publicStatus: 'needs_review' as const } : base;
 }
 
 /**
  * Pure: the column patch for a GeneratedQuestion. Demote suppresses via the one
  * flag the bank honors (is_duplicate); ok/unverifiable/skipped just stamp.
+ * `reason` mirrors the Question patch (0100).
  */
 export function verdictToGeneratedPatch(
   verdict: VerificationVerdict,
   now: Date,
-): { verificationVerdict: VerificationVerdict; verifiedAt: Date; isDuplicate?: true } {
-  const base = { verificationVerdict: verdict, verifiedAt: now };
+  reason?: string,
+): {
+  verificationVerdict: VerificationVerdict;
+  verifiedAt: Date;
+  isDuplicate?: true;
+  verificationReason?: string;
+} {
+  const base = {
+    verificationVerdict: verdict,
+    verifiedAt: now,
+    ...(reason?.trim() ? { verificationReason: reason.trim() } : {}),
+  };
   return verdict === 'demoted' ? { ...base, isDuplicate: true as const } : base;
 }

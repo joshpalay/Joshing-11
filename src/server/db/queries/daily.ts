@@ -697,10 +697,15 @@ async function getDailyCatchupItems(
           .where(and(
             inArray(canonicalQuestions.id, canonicalIds),
             // Safety hard-block: a question blocked after assignment (cron re-vet,
-            // upheld report) must not resurface in catch-up. Bare form — catch-up
-            // is an answer surface and never carries the viewer's own authored
-            // question (you aren't assigned your own questions to answer).
+            // upheld report) must not resurface in catch-up.
             notBlocked(),
+            // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3):
+            // never serve the viewer their own authored question. Structurally
+            // catch-up replays the viewer's own assigned slots (you aren't
+            // assigned your own questions), but with player authoring live the
+            // explicit predicate is load-bearing. NULL creators (house/LLM)
+            // must still pass — hence the isNull arm.
+            or(isNull(canonicalQuestions.creatorId), ne(canonicalQuestions.creatorId, userId)),
           ))
       : Promise.resolve<typeof canonicalQuestions.$inferSelect[]>([]),
   ]);
@@ -825,6 +830,10 @@ async function getFeedCatchupItems(
         // Safety hard-block: a question blocked after the original answer
         // (cron re-vet, upheld report) must not resurface in catch-up.
         ne(canonicalQuestions.visibility, 'blocked'),
+        // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3):
+        // never serve the viewer their own authored question, even via a feed
+        // replay. NULL creators (house/LLM) still pass.
+        or(isNull(canonicalQuestions.creatorId), ne(canonicalQuestions.creatorId, userId)),
       ))
       .orderBy(desc(feedItems.sourceEventAt));
   } catch (error) {
