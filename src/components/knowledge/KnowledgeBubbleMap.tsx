@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { hierarchy, pack, type HierarchyCircularNode } from 'd3-hierarchy';
 
-import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
+import type { CollectionSummary, KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 
 // B-KNOWLEDGE-TAXONOMY-01 P5 — the nested circle-pack knowledge map, ported
 // from the ratified knowledge-bubbles prototype onto the repo's design
@@ -16,6 +16,12 @@ type PackedNode = HierarchyCircularNode<KnowledgeTreeNode>;
 
 function fieldColor(field: string | null | undefined): string {
   return field ? `var(--cat-${field}, var(--brand-ink-400))` : 'var(--brand-ink-400)';
+}
+
+function subscribeReducedMotion(callback: () => void): () => void {
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  mq.addEventListener('change', callback);
+  return () => mq.removeEventListener('change', callback);
 }
 
 // Adopt endpoint (the territory-adopt path): sets the ghost domain's Daily
@@ -34,7 +40,19 @@ async function adoptDomain(domain: string): Promise<boolean> {
   }
 }
 
-export function KnowledgeBubbleMap({ data }: { data: KnowledgeTreeNode }) {
+export function KnowledgeBubbleMap({
+  data,
+  collections = [],
+  // 'own' = interactive (ghost tap adopts); 'friend' = read-only portrait —
+  // the tree already carries no ghosts, and nothing here mutates their state.
+  variant = 'own',
+  rootTitle = 'Your peaks',
+}: {
+  data: KnowledgeTreeNode;
+  collections?: CollectionSummary[];
+  variant?: 'own' | 'friend';
+  rootTitle?: string;
+}) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 720, h: 520 });
   const [tree, setTree] = useState<KnowledgeTreeNode>(data);
@@ -42,15 +60,13 @@ export function KnowledgeBubbleMap({ data }: { data: KnowledgeTreeNode }) {
   const [flashId, setFlashId] = useState<string | null>(null);
   const [listMode, setListMode] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  // Media-query state via useSyncExternalStore: correct initial value on the
+  // client, false during SSR, no setState-in-effect cascade.
+  const reducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    () => false,
+  );
 
   useEffect(() => {
     const el = stageRef.current;
@@ -176,7 +192,7 @@ export function KnowledgeBubbleMap({ data }: { data: KnowledgeTreeNode }) {
                 {i > 0 ? <span aria-hidden style={{ color: 'var(--border)' }}>›</span> : null}
                 {i === crumb.length - 1 ? (
                   <span className="font-medium text-[var(--brand-ink)]">
-                    {node.data.id === 'root' ? 'Your peaks' : node.data.name}
+                    {node.data.id === 'root' ? rootTitle : node.data.name}
                   </span>
                 ) : (
                   <button
@@ -185,7 +201,7 @@ export function KnowledgeBubbleMap({ data }: { data: KnowledgeTreeNode }) {
                     className="font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     style={{ color: 'var(--brand-ink-700)' }}
                   >
-                    {node.data.id === 'root' ? 'Your peaks' : node.data.name}
+                    {node.data.id === 'root' ? rootTitle : node.data.name}
                   </button>
                 )}
               </span>
@@ -273,14 +289,14 @@ export function KnowledgeBubbleMap({ data }: { data: KnowledgeTreeNode }) {
                     style={{ cursor: 'pointer', outlineOffset: 2 }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (d.data.ghost) void addGhost(d);
+                      if (d.data.ghost) { if (variant === 'own') void addGhost(d); }
                       else zoomTo(d);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (d.data.ghost) void addGhost(d);
+                        if (d.data.ghost) { if (variant === 'own') void addGhost(d); }
                         else zoomTo(d);
                       }
                     }}
@@ -366,6 +382,23 @@ export function KnowledgeBubbleMap({ data }: { data: KnowledgeTreeNode }) {
           ))}
         </div>
       )}
+
+      {/* Collection parents (§7) are coverage, not containers — they live in a
+          strip, never in the pack. "You've covered N of M" is the honest voice. */}
+      {collections.length > 0 ? (
+        <div className="flex gap-2 overflow-x-auto py-1.5" role="list" aria-label="Collections covered">
+          {collections.map((c) => (
+            <span
+              key={c.label}
+              role="listitem"
+              className="flex-none whitespace-nowrap rounded-full border px-3 py-1 text-[11px]"
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' }}
+            >
+              {c.label} · {c.covered} of {c.rosterSize} covered
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <p className="min-h-5 pt-1.5 text-center font-serif text-[11px] italic text-[var(--text-muted)]" aria-live="polite">
         {notice ?? (!listMode ? hint : '')}

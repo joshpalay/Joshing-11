@@ -1,9 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { KnowledgeBubbleMap } from '@/components/knowledge/KnowledgeBubbleMap'
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { PortraitCircles } from '@/components/knowledge/PortraitCircles'
 import { getSession } from '@/server/auth/session'
+import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree'
+import { isKnowledgeMapPageEnabled } from '@/server/knowledge/map-page-flag'
 import {
   getKnowledgePageData,
   getUserMasteryOverview,
@@ -57,6 +60,12 @@ export default async function FriendKnowledgePage({
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
   ])
+
+  // P5 follow-up: behind the same KNOWLEDGE_MAP_PAGE flag as the own page —
+  // flag off renders the flat portrait exactly as before.
+  const mapData = isKnowledgeMapPageEnabled()
+    ? await getKnowledgeMapData(portrait.user.id, { includeGhosts: false })
+    : null
 
   const visibleDomains = isOwner
     ? pageData.allDomains
@@ -128,7 +137,21 @@ export default async function FriendKnowledgePage({
 
       {hasKnowledge ? (
         <div className="mt-6">
-          <PortraitCircles entries={portraitEntries} />
+          {mapData ? (
+            // P5 follow-up: flag-on, the friend's map renders as the same
+            // nested bubbles — read-only variant (no ghosts, no adopt; their
+            // hidden domains already filtered by the loader).
+            <div className="flex h-[60vh] min-h-80 flex-col">
+              <KnowledgeBubbleMap
+                data={mapData.tree}
+                collections={mapData.collections}
+                variant="friend"
+                rootTitle={`${friendFirstName}'s peaks`}
+              />
+            </div>
+          ) : (
+            <PortraitCircles entries={portraitEntries} />
+          )}
         </div>
       ) : null}
     </main>
