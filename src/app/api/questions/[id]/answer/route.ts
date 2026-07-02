@@ -44,6 +44,29 @@ function parseBody(value: unknown): { submittedAnswer: string } | null {
   return submittedAnswer ? { submittedAnswer } : null;
 }
 
+// Reveal a public question's answer for the "View Answer" peek on a From
+// Friends streak card (which is keyed by questionId, not a feed-item id, so the
+// feed answer-reveal GET doesn't apply). No body — the path param is the only
+// input, matching the sibling feed reveal GET. Gated to public, non-deleted,
+// non-blocked questions: the same visibility the streak surface itself requires,
+// so this exposes nothing the viewer couldn't already be shown.
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const { id: questionId } = await context.params;
+  const [question] = await db
+    .select({ answerText: questions.answerText, visibility: questions.visibility })
+    .from(questions)
+    .where(and(eq(questions.id, questionId), isNull(questions.deletedAt)))
+    .limit(1);
+
+  if (!question || question.visibility !== 'public') {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+  return NextResponse.json({ answer: question.answerText });
+}
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
