@@ -26,6 +26,10 @@ import {
   rollUpCredit,
   type GraphEdge,
 } from '@/server/knowledge/graph';
+import {
+  getParentMasteryForUser,
+  isKnowledgeGraphMasteryEnabled,
+} from '@/server/knowledge/parent-mastery';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 export type KnowledgeTreeNode = {
@@ -96,6 +100,11 @@ export function buildKnowledgeTree(
   owned: readonly OwnedLeaf[],
   nodes: readonly AuthoredNode[],
   edges: readonly GraphEdge[],
+  // P4: terminal parent masteries from the freeze ledger (§B). A frozen parent
+  // reads as mastered even when roster growth or a threshold edit would place
+  // today's computed value below the bar — mastery is never revoked. Empty /
+  // omitted (flag off) → pure computation, P5 behavior unchanged.
+  frozenParents: ReadonlySet<string> = new Set(),
 ): KnowledgeTreeNode {
   const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
   const ownedByKey = new Map(owned.map((leaf) => [domainKey(leaf.domain), leaf]));
@@ -161,10 +170,12 @@ export function buildKnowledgeTree(
     }
 
     // Mastery grain (§D): leaf-exact for owned leaves; threshold + ≥2 corners
-    // for parents. A 'both' node can be leaf-mastered on its own points.
+    // for parents — with the P4 freeze winning before recomputation (§B).
+    // A 'both' node can be leaf-mastered on its own points.
     const isParentKind = node.nodeKind !== 'leaf' && children.length > 0;
     const parentMastered = isParentKind
-      ? parentProgress(totals.get(key) ?? 0, litCorners(key, totals, edges), node.masteryThreshold)
+      ? frozenParents.has(key) ||
+        parentProgress(totals.get(key) ?? 0, litCorners(key, totals, edges), node.masteryThreshold)
           .isMaster
       : false;
     const mastered = Boolean(ownedLeaf?.mastered) || parentMastered;
@@ -243,5 +254,21 @@ export async function getKnowledgeTree(userId: string): Promise<KnowledgeTreeNod
     edgeType: e.edgeType,
   }));
 
-  return buildKnowledgeTree(owned, nodes, edges);
+  // P4: frozen-aware parent mastery + terminal stamping of fresh crossings.
+  // Flag off → empty frozen set, no writes — P5's pure behavior.
+  let frozenParents: ReadonlySet<string> = new Set();
+  if (isKnowledgeGraphMasteryEnabled()) {
+    const credits = new Map<string, number>();
+    for (const leaf of owned) {
+      if (leaf.points > 0) credits.set(domainKey(leaf.domain), leaf.points);
+    }
+    const totals = rollUpCredit(credits, edges);
+    const parents = nodes.filter((n) => n.nodeKind !== 'leaf');
+    const resolved = await getParentMasteryForUser(userId, parents, totals, edges);
+    frozenParents = new Set(
+      [...resolved.entries()].filter(([, entry]) => entry.isMaster).map(([key]) => key),
+    );
+  }
+
+  return buildKnowledgeTree(owned, nodes, edges, frozenParents);
 }

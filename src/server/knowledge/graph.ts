@@ -194,6 +194,29 @@ export function parentProgress(
   return { pct: bar > 0 ? Math.min(rolledPoints / bar, 1) : 0, isMaster };
 }
 
+export type RosterCoverage = { lit: number; total: number };
+
+/**
+ * §B display fraction for a NON-mastered parent: lit corners over the full
+ * authored roster. Live until mastery — roster growth honestly grows the
+ * denominator (1/5 → 1/6). Once mastered the fraction freezes (P4 reads the
+ * freeze ledger before ever recomputing).
+ */
+export function rosterCoverage(
+  parentKey: string,
+  totals: ReadonlyMap<string, number>,
+  edges: readonly GraphEdge[],
+): RosterCoverage {
+  let total = 0;
+  let lit = 0;
+  for (const edge of edges) {
+    if (edge.parentDomainKey !== parentKey || edge.edgeType !== 'substantive') continue;
+    total += 1;
+    if ((totals.get(edge.childDomainKey) ?? 0) > 0) lit += 1;
+  }
+  return { lit, total };
+}
+
 export type CollectionCoverage = {
   covered: number;
   rosterSize: number;

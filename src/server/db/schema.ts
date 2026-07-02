@@ -854,6 +854,25 @@ export const knowledgeEdges = pgTable(
   ],
 );
 
+// B-KNOWLEDGE-TAXONOMY-01 P4 (migration 0104) — the parent-mastery freeze
+// ledger (D-doc §B). A row = the moment a player crossed a substantive
+// parent's bar; mastery is terminal from then on — roster growth or threshold
+// edits never re-open it. Derived progress lives at read time; only the
+// crossing is stored. Dark until KNOWLEDGE_GRAPH_MASTERY.
+export const knowledgeParentMastery = pgTable(
+  'KnowledgeParentMastery',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    parentDomainKey: text('parent_domain_key').notNull(),
+    masteredAt: timestamp('mastered_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('KnowledgeParentMastery_user_parent_key').on(table.userId, table.parentDomainKey),
+    index('KnowledgeParentMastery_user_id_idx').on(table.userId),
+  ],
+);
+
 export const questionFeedback = pgTable(
   'QuestionFeedback',
   {

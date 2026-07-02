@@ -382,6 +382,24 @@ export async function register() {
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS "KnowledgeEdge_child_domain_key_idx" ON "KnowledgeEdge" ("child_domain_key")
       `);
+      // B-KNOWLEDGE-TAXONOMY-01 P4 (migration 0104): the parent-mastery freeze
+      // ledger — same idempotent shape.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeParentMastery" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id"),
+          "parent_domain_key" text NOT NULL,
+          "mastered_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeParentMastery" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeParentMastery_user_parent_key"
+          ON "KnowledgeParentMastery" ("user_id", "parent_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeParentMastery_user_id_idx" ON "KnowledgeParentMastery" ("user_id")
+      `);
     } catch {
       // Best-effort pre-create; migrate() creates them on a fresh DB.
     }
