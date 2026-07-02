@@ -411,6 +411,10 @@ export const questions = pgTable(
     // publicStatus = 'needs_review' alongside verdict = 'demoted'.
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     verificationVerdict: questionVerificationVerdictEnum('verification_verdict'),
+    // B-CRAFTER-LIFECYCLE-01 Phase 1 (0100) — the verifier's short verdict reason,
+    // shown on the admin review queue's machine-demotion cards. Nullable; rows
+    // verified before 0100 stay null (the reason was previously discarded).
+    verificationReason: text('verification_reason'),
   },
   (table) => [
     index('Question_creator_id_idx').on(table.creatorId),
@@ -739,6 +743,9 @@ export const generatedQuestions = pgTable(
     // verdict is recorded here. verifiedAt null = not yet swept.
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     verificationVerdict: questionVerificationVerdictEnum('verification_verdict'),
+    // B-CRAFTER-LIFECYCLE-01 Phase 1 (0100) — same shape as Question: the
+    // verifier's short verdict reason for the admin review queue. Nullable.
+    verificationReason: text('verification_reason'),
     // Voyage voyage-3.5-lite embedding (1024-dim) — semantic-dedup backstop.
     embedding: vector('embedding', { dimensions: 1024 }),
     // B-LLM-PROVIDER-AB-SWITCH B3: which provider GENERATED this row
@@ -1094,6 +1101,35 @@ export const declaredInterests = pgTable(
   (table) => [
     unique('DeclaredInterest_userId_domain_key').on(table.userId, table.domain),
     index('DeclaredInterest_userId_isActive_idx').on(table.userId, table.isActive),
+  ],
+);
+
+// B-CRAFTER-LIFECYCLE-01 Phase 3 (0101) — the manual "invitation to author"
+// checkbox. A crafter flips a per-(player, domain) invitation from Panel B; the
+// player sees the full-screen completion takeover ONCE (seenAt), picks a door
+// (doorChoice: 'author' | 'expand' | 'wait'), and the invitation also gates the
+// player's access to the creation surface for that domain. reason keeps this
+// generic — 'domain_exhausted' is the first of a couple of invitation
+// categories. resolvedAt closes without deleting; one ACTIVE row per
+// (user, domain) via the partial unique index.
+export const authorInvitations = pgTable(
+  'AuthorInvitation',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    domain: text('domain').notNull(),
+    reason: text('reason').notNull().default('domain_exhausted'),
+    invitedBy: text('invited_by').notNull().references(() => users.id),
+    createdAt: createdAt(),
+    seenAt: timestamp('seen_at', { withTimezone: true }),
+    doorChoice: text('door_choice'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('AuthorInvitation_active_user_domain_key')
+      .on(table.userId, table.domain)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    index('AuthorInvitation_user_id_idx').on(table.userId),
   ],
 );
 

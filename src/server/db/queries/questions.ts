@@ -150,9 +150,10 @@ type QuestionViewNonViewKey =
   | 'trustTier' | 'perishable' | 'sourceRefs' | 'isDuplicate' | 'suppressedBy' | 'embedding'
   // categorizeProvider: B3 provenance, not surfaced in the question view.
   | 'authorDeleted' | 'subjectEntity' | 'categorizeProvider'
-  // B-QUESTION-QUALITY-AGENTS-01 (0096): batch-verification stamp, not part of the
-  // rendered view — partial selects need not fetch it.
-  | 'verifiedAt' | 'verificationVerdict';
+  // B-QUESTION-QUALITY-AGENTS-01 (0096) + B-CRAFTER-LIFECYCLE-01 (0100): batch-
+  // verification stamp + reason, not part of the rendered view — partial selects
+  // need not fetch them.
+  | 'verifiedAt' | 'verificationVerdict' | 'verificationReason';
 type QuestionViewRow = Omit<QuestionRow, QuestionViewNonViewKey>
   & Partial<Pick<QuestionRow, QuestionViewNonViewKey>>;
 

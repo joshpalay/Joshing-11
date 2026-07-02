@@ -242,6 +242,15 @@ export async function register() {
           ADD COLUMN IF NOT EXISTS "verified_at" timestamptz,
           ADD COLUMN IF NOT EXISTS "verification_verdict" "public"."QuestionVerificationVerdict"
       `);
+      // B-CRAFTER-LIFECYCLE-01 (migration 0100): the verifier's verdict reason,
+      // shown on the admin review queue's machine-demotion cards. Additive +
+      // nullable — same repair rationale as the 0096 columns above.
+      await db.execute(sql`
+        ALTER TABLE "Question" ADD COLUMN IF NOT EXISTS "verification_reason" text
+      `);
+      await db.execute(sql`
+        ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "verification_reason" text
+      `);
     } catch {
       // Question / GeneratedQuestion / PublicStatus may not exist yet on a fresh
       // DB — migrate() creates them and 0096 adds these pieces.
@@ -265,6 +274,36 @@ export async function register() {
       await db.execute(sql`ALTER TABLE "QualityReport" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS "QualityReport_created_at_idx" ON "QualityReport" ("created_at")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
+    // B-CRAFTER-LIFECYCLE-01 (migration 0101): the per-(player, domain) manual
+    // author-invitation table. New + isolated; RLS-enabled with no policies
+    // (owner role bypasses RLS) per B-SECURITY-RLS-01. Idempotent (precedent:
+    // the 0097 QualityReport guard above).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "AuthorInvitation" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id"),
+          "domain" text NOT NULL,
+          "reason" text NOT NULL DEFAULT 'domain_exhausted',
+          "invited_by" text NOT NULL REFERENCES "User"("id"),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "seen_at" timestamp with time zone,
+          "door_choice" text,
+          "resolved_at" timestamp with time zone
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "AuthorInvitation" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "AuthorInvitation_active_user_domain_key"
+          ON "AuthorInvitation" ("user_id", "domain") WHERE "resolved_at" IS NULL
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "AuthorInvitation_user_id_idx" ON "AuthorInvitation" ("user_id")
       `);
     } catch {
       // Best-effort pre-create; migrate() creates it on a fresh DB.

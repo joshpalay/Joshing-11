@@ -96,15 +96,18 @@ export async function GET(request: NextRequest) {
   const questionTally = emptyTally(pendingQuestions.length);
   const generatedTally = emptyTally(pendingGenerated.length);
 
-  // Resolve a row to a verdict, then apply the store-appropriate patch. Returns
-  // the verdict tally key, or 'failed' (left unstamped → retried next sweep).
-  async function resolveVerdict(row: PendingRow): Promise<VerificationVerdict | 'failed'> {
+  // Resolve a row to a verdict (+ the verifier's reason, persisted since 0100 so
+  // the admin review queue can show WHY a row was demoted), then apply the
+  // store-appropriate patch. 'failed' = left unstamped → retried next sweep.
+  async function resolveVerdict(
+    row: PendingRow,
+  ): Promise<{ verdict: VerificationVerdict; reason?: string } | 'failed'> {
     const decision = prefilterForVerification({
       questionText: row.questionText,
       answer: row.answer,
       explanation: row.explanation,
     });
-    if (!decision.needsVerification) return 'skipped';
+    if (!decision.needsVerification) return { verdict: 'skipped' };
 
     const result = await verifyQuestion({
       questionText: row.questionText,
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
       dimensions: decision.dimensions,
     });
     if (!result) return 'failed'; // fail-open: no stamp
-    return result.outcome;
+    return { verdict: result.outcome, reason: result.reason };
   }
 
   function tally(into: Tally, verdict: VerificationVerdict | 'failed') {
@@ -125,13 +128,16 @@ export async function GET(request: NextRequest) {
 
   await runWithConcurrency(pendingQuestions, VERIFY_CONCURRENCY, async (row) => {
     try {
-      const verdict = await resolveVerdict(row);
-      if (verdict === 'failed') {
+      const resolved = await resolveVerdict(row);
+      if (resolved === 'failed') {
         questionTally.failed += 1;
         return;
       }
-      await db.update(questions).set(verdictToQuestionPatch(verdict, now)).where(eq(questions.id, row.id));
-      tally(questionTally, verdict);
+      await db
+        .update(questions)
+        .set(verdictToQuestionPatch(resolved.verdict, now, resolved.reason))
+        .where(eq(questions.id, row.id));
+      tally(questionTally, resolved.verdict);
     } catch (error) {
       questionTally.failed += 1;
       console.warn('[cron/batch-verify-questions] Question row failed', {
@@ -143,16 +149,16 @@ export async function GET(request: NextRequest) {
 
   await runWithConcurrency(pendingGenerated, VERIFY_CONCURRENCY, async (row) => {
     try {
-      const verdict = await resolveVerdict(row);
-      if (verdict === 'failed') {
+      const resolved = await resolveVerdict(row);
+      if (resolved === 'failed') {
         generatedTally.failed += 1;
         return;
       }
       await db
         .update(generatedQuestions)
-        .set(verdictToGeneratedPatch(verdict, now))
+        .set(verdictToGeneratedPatch(resolved.verdict, now, resolved.reason))
         .where(eq(generatedQuestions.id, row.id));
-      tally(generatedTally, verdict);
+      tally(generatedTally, resolved.verdict);
     } catch (error) {
       generatedTally.failed += 1;
       console.warn('[cron/batch-verify-questions] GeneratedQuestion row failed', {
