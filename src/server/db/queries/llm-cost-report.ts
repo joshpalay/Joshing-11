@@ -175,6 +175,7 @@ export async function readSurfaceCost(startDaysAgo: number, endDaysAgo = 0): Pro
       outputTokens: sql<number>`coalesce(sum(${llmUsageEvent.outputTokens}), 0)::float8`,
       cacheReadTokens: sql<number>`coalesce(sum(${llmUsageEvent.cacheReadTokens}), 0)::float8`,
       cacheCreateTokens: sql<number>`coalesce(sum(${llmUsageEvent.cacheCreateTokens}), 0)::float8`,
+      webSearchRequests: sql<number>`coalesce(sum(${llmUsageEvent.webSearchRequests}), 0)::float8`,
     })
     .from(llmUsageEvent)
     .where(inWindow(startDaysAgo, endDaysAgo))
@@ -187,6 +188,7 @@ export async function readSurfaceCost(startDaysAgo: number, endDaysAgo = 0): Pro
       outputTokens: Number(r.outputTokens),
       cacheReadTokens: Number(r.cacheReadTokens),
       cacheCreateTokens: Number(r.cacheCreateTokens),
+      webSearchRequests: Number(r.webSearchRequests),
     });
     const cur = acc.get(r.bucket) ?? { calls: 0, costUsd: 0, unpriced: false };
     cur.calls += Number(r.calls);

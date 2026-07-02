@@ -1983,6 +1983,13 @@ export async function register() {
       `);
       await db.execute(sql`ALTER TABLE "LlmUsageEvent" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS "LlmUsageEvent_provider_created_at_idx" ON "LlmUsageEvent" ("provider", "created_at")`);
+      // Migration 0105: per-call web-search request count, so search spend
+      // (~$0.01/request, a separate Anthropic meter) is ledgered instead of
+      // invisible (ledger-telemetry-gaps.md gap (a)). Additive with a DEFAULT —
+      // same repair rationale as the 0100 verification_reason guard.
+      await db.execute(sql`
+        ALTER TABLE "LlmUsageEvent" ADD COLUMN IF NOT EXISTS "web_search_requests" integer NOT NULL DEFAULT 0
+      `);
       // Migration 0092 (B-LLM-COST-LATENCY-REPORT-01) stores the weekly cost &
       // latency digest. The llm-cost-report cron would 42P01 on insert if the
       // migration recorded without the table present. Self-contained; precedent: 0091.

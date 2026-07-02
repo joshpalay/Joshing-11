@@ -1,5 +1,28 @@
 # LLM cost — action plan
 
+> ## ⚠️ STATUS (2026-07-02) — partially SUPERSEDED; do not execute below-the-line steps blindly
+>
+> - **Step 0 (spend caps):** `LLM_MONTHLY_USD_CEILING=42` is set in prod, but the code
+>   enforces it **only on the retrieval-grounded refill run** (`retrieval-grounded.ts`),
+>   which is paused/off — the daily generation chain and batch-verify have **no runtime
+>   cap**. The Anthropic Console org-level hard limit (this step's second half) has no
+>   recorded confirmation — verify it exists; it is the only backstop independent of
+>   ledger bugs.
+> - **Step 1 (commentary → Haiku):** ✅ shipped (`ae6d12e`, `COMMENTARY_MODEL`).
+> - **Step 2 (carry-forward):** coded, default-off (`DAILY_TOPUP_CARRYFORWARD_ENABLED`);
+>   confirm the prod env var is actually set.
+> - **Step 4 (pool-refill flip):** ❌ **SUPERSEDED — do not flip.** Attempted 2026-07-01,
+>   reverted, and strategically PAUSED behind `D-SUPPLY-FINITE-SET-01`
+>   (`docs/decisions-pending/D-SUPPLY-FINITE-SET-01-PENDING.md`,
+>   `B-SUPPLY-REFILL-EFFORT-REPORT.md`). `RETRIEVAL_GROUNDING_ENABLED` stays `false`.
+> - **Step 5 (monitor threshold):** moot until a hit-rate lever actually lands.
+> - **What the plan missed:** the **batch-verify cron** is now the single largest
+>   *recurring* LLM line (~$2/day ≈ $60/mo at 18 users — above the $42 ceiling, uncapped)
+>   — see `docs/findings/batch-verify-cost-characterization.md`. Its two dials
+>   (tighten `extra_fact` routing; system-prompt caching — the caching landed 2026-07-02)
+>   and the ledger gaps (`docs/findings/ledger-telemetry-gaps.md`; web-search ledgering
+>   landed 2026-07-02 as migration 0105) supersede this plan's remaining steps.
+
 One-day-startable plan to bend the LLM cost curve, sequenced so each change is
 verified before the next. Generation is ~68% of spend and today runs ~73%
 fall-through to fresh Sonnet (measured 2026-06-28); the goal is to (a) cap

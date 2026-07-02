@@ -102,6 +102,7 @@ Run this (Supabase) on a representative quiet day (no manual refill testing) —
 
 ```sql
 with pricing (model, in_rate, out_rate, cread_rate, cwrite_rate) as (values
+  ('claude-sonnet-5',3.0,15.0,0.30,3.75),  -- prod model since 2026-07-01; sticker rate (intro $2/$10 through 2026-08-31)
   ('claude-sonnet-4-6',3.0,15.0,0.30,3.75),('claude-haiku-4-5-20251001',1.0,5.0,0.10,1.25),
   ('gpt-4o',2.5,10.0,0.0,0.0),('gpt-4o-mini',0.15,0.6,0.0,0.0),('gpt-4.1',2.0,8.0,0.0,0.0),
   ('gpt-4.1-mini',0.4,1.6,0.0,0.0),('gpt-4.1-nano',0.1,0.4,0.0,0.0)),

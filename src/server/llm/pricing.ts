@@ -38,6 +38,17 @@ export type ModelPrice = {
 // Keyed by the exact model string passed to the provider SDK.
 export const MODEL_PRICING: Record<string, ModelPrice> = {
   // ── Anthropic (verified, claude-api skill model table) ──
+  // Sonnet 5 — prod generation model since the 2026-07-01 ANTHROPIC_MODEL flip.
+  // Sticker price ($3/$15); Anthropic bills an introductory $2/$10 through
+  // 2026-08-31, so ledger-derived $ slightly OVER-estimates the actual bill until
+  // then — the safe direction for the monthly spend cap. Without this row every
+  // Sonnet 5 call was "unpriced" ($0 in getMonthToDateLlmSpendUsd and the readout).
+  'claude-sonnet-5': {
+    inputPerMtok: 3.0,
+    outputPerMtok: 15.0,
+    cacheReadPerMtok: 0.3, // ~0.1x input
+    cacheWritePerMtok: 3.75, // ~1.25x input (5m TTL)
+  },
   // Sonnet 4.6 — generation.
   'claude-sonnet-4-6': {
     inputPerMtok: 3.0,
@@ -92,11 +103,21 @@ export const MODEL_PRICING: Record<string, ModelPrice> = {
   },
 };
 
+/**
+ * Anthropic server-side web_search: $10 per 1,000 requests (a separate meter from
+ * tokens; verified against the Anthropic pricing page, 2026-07). Provider-flat —
+ * the rate does not vary by model.
+ */
+export const WEB_SEARCH_USD_PER_REQUEST = 0.01;
+
 export type UsageTokens = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreateTokens: number;
+  /** Anthropic server-side web_search request count (0105). Optional: older call
+   *  sites and OpenAI rows simply omit it. */
+  webSearchRequests?: number;
 };
 
 export type CostEstimate = {
@@ -109,7 +130,9 @@ export type CostEstimate = {
 /**
  * Estimate the USD cost of a single call's token usage. Returns `unpriced: true`
  * (and `usd: null`) for a model absent from MODEL_PRICING so the readout can show
- * "tokens known, $ unknown" rather than a misleading $0.
+ * "tokens known, $ unknown" rather than a misleading $0. (An unpriced row's
+ * web-search $ is also withheld — the row's total is unknown, so a partial figure
+ * would read as complete.)
  */
 export function estimateCostUsd(model: string, tokens: UsageTokens): CostEstimate {
   const price = MODEL_PRICING[model];
@@ -118,6 +141,7 @@ export function estimateCostUsd(model: string, tokens: UsageTokens): CostEstimat
     (tokens.inputTokens / 1_000_000) * price.inputPerMtok +
     (tokens.outputTokens / 1_000_000) * price.outputPerMtok +
     (tokens.cacheReadTokens / 1_000_000) * price.cacheReadPerMtok +
-    (tokens.cacheCreateTokens / 1_000_000) * price.cacheWritePerMtok;
+    (tokens.cacheCreateTokens / 1_000_000) * price.cacheWritePerMtok +
+    (tokens.webSearchRequests ?? 0) * WEB_SEARCH_USD_PER_REQUEST;
   return { usd, unpriced: false };
 }
