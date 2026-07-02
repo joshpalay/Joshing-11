@@ -6,10 +6,13 @@ import {
   Code2,
   Compass,
   FileText,
+  Flag,
   FlaskConical,
+  Hammer,
   Hourglass,
   Loader2,
   LogOut,
+  Network,
   PlayCircle,
   RefreshCw,
   Smartphone,
@@ -294,8 +297,8 @@ export function AccountActions({
         },
       ],
     },
-    // Admin-only content ops. The /admin/bulk-upload route is itself gated by
-    // ADMIN_USER_IDS (404 for everyone else), so we only surface the link to
+    // Admin-only content ops. Each /admin/* route is itself gated by
+    // ADMIN_USER_IDS (404 for everyone else), so we only surface the links to
     // admins — no point showing a non-admin a row that 404s. The rest of the
     // dev-tools section stays ungated (see DEV_TOOLS_UNGATED).
     ...(isAdmin
@@ -303,6 +306,27 @@ export function AccountActions({
           {
             eyebrow: 'Admin',
             tools: [
+              {
+                kind: 'link',
+                icon: <Hammer className="size-5" />,
+                title: 'Crafter',
+                subtitle: 'Where your craft is wanted — draft, keep, and invite authors',
+                href: '/admin/crafter',
+              },
+              {
+                kind: 'link',
+                icon: <Flag className="size-5" />,
+                title: 'Review queue',
+                subtitle: 'Content reports and machine demotions awaiting a human',
+                href: '/admin/reports',
+              },
+              {
+                kind: 'link',
+                icon: <Network className="size-5" />,
+                title: 'Knowledge graph',
+                subtitle: 'Author the leaf/parent taxonomy — nodes, edges, thresholds',
+                href: '/admin/knowledge',
+              },
               {
                 kind: 'link',
                 icon: <Upload className="size-5" />,

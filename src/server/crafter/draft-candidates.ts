@@ -32,6 +32,10 @@ import {
 } from '@/server/daily/generate-questions';
 import { getDomainPoolAvoidLists } from '@/server/db/queries/retrieval-demand';
 import { getAuthoredQuestionEntriesForDomain } from '@/server/db/queries/crafter-demand';
+import {
+  getRecentDraftDecisions,
+  type RecentDraftDecisions,
+} from '@/server/db/queries/crafter-decisions';
 
 // The crafter surface's two tiers map onto the generation prompt's fixed
 // difficulty vocabulary: shallow = 'normal' (accessible — everyone who plays
@@ -70,6 +74,44 @@ export type DraftResult =
   | { ok: true; candidates: DraftCandidate[] }
   | { ok: false; reason: 'llm_unavailable' | 'nothing_parsed' };
 
+/**
+ * B-CRAFTER-DECISION-LEDGER-01 — the in-context teaching section: the human's
+ * recent keep/kill verdicts in this domain, appended to the draft prompt so
+ * the machine drafts toward the bar the human has actually been setting.
+ * Kept exemplars show the spirit to draft in (an answer the human corrected is
+ * called out — the correction IS the lesson); killed ones are anti-exemplars.
+ * The avoid-lists already forbid re-asking these exact facts, so the section
+ * teaches TASTE, not novelty. Pure; exported for unit tests. Empty ledger →
+ * empty string (prompt unchanged — day-one behavior).
+ */
+export function buildTasteSection(decisions: RecentDraftDecisions): string {
+  const { kept, killed } = decisions;
+  if (kept.length === 0 && killed.length === 0) return '';
+  const lines: string[] = [
+    '',
+    'THE HUMAN CURATOR\'S RECENT VERDICTS in this domain — learn their bar from these:',
+  ];
+  if (kept.length > 0) {
+    lines.push('KEPT (draft in this spirit — angle, specificity, tone):');
+    for (const d of kept) {
+      const corrected =
+        d.editedAnswer && d.editedAnswer !== d.answer
+          ? ` [the human corrected the answer to: ${d.editedAnswer}]`
+          : '';
+      lines.push(`- ${d.questionText} → ${d.answer}${corrected}`);
+    }
+  }
+  if (killed.length > 0) {
+    lines.push(
+      'KILLED (the human rejected these — do not draft questions with the same flaws):',
+    );
+    for (const d of killed) {
+      lines.push(`- ${d.questionText} → ${d.answer}`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export async function draftCandidatesForDomain(opts: {
   domain: string;
   tier: DraftTier;
@@ -80,20 +122,25 @@ export async function draftCandidatesForDomain(opts: {
 
   // Avoid both pools: the machine bank's texts/fact-keys AND the human-authored
   // canonical questions in this domain (which carry no fact_key, so text is the
-  // only channel that catches them).
-  const [{ questionTexts, factKeys }, authoredEntries] = await Promise.all([
+  // only channel that catches them). The decision ledger rides along —
+  // best-effort, an empty result just means no taste section.
+  const [{ questionTexts, factKeys }, authoredEntries, decisions] = await Promise.all([
     getDomainPoolAvoidLists(opts.domain, AVOID_LIST_LIMIT),
     getAuthoredQuestionEntriesForDomain(opts.domain, AVOID_LIST_LIMIT),
+    getRecentDraftDecisions(opts.domain).catch(
+      (): RecentDraftDecisions => ({ kept: [], killed: [] }),
+    ),
   ]);
 
-  const userPrompt = buildUserPrompt(
-    [opts.domain],
-    opts.count,
-    [...questionTexts, ...authoredEntries],
-    factKeys,
-    undefined,
-    TIER_TO_PREFERENCE[opts.tier],
-  );
+  const userPrompt =
+    buildUserPrompt(
+      [opts.domain],
+      opts.count,
+      [...questionTexts, ...authoredEntries],
+      factKeys,
+      undefined,
+      TIER_TO_PREFERENCE[opts.tier],
+    ) + buildTasteSection(decisions);
 
   // Mirrors callLlmOnce's Anthropic branch (generate-questions.ts:1396) —
   // same model, sampling, and cacheable system prefix; distinct usage scope.

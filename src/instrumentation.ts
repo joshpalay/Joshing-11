@@ -309,6 +309,37 @@ export async function register() {
       // Best-effort pre-create; migrate() creates it on a fresh DB.
     }
 
+    // B-CRAFTER-DECISION-LEDGER-01 (migration 0103): the keep/kill teaching
+    // ledger for machine draft candidates. New + isolated; RLS-enabled with no
+    // policies (owner role bypasses RLS) per B-SECURITY-RLS-01. Idempotent
+    // (precedent: the 0101 AuthorInvitation guard above).
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "CrafterDraftDecision" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "decider_id" text NOT NULL REFERENCES "User"("id"),
+          "domain" text NOT NULL,
+          "tier" text NOT NULL CHECK ("tier" IN ('shallow', 'deep')),
+          "question_text" text NOT NULL,
+          "answer" text NOT NULL,
+          "decision" text NOT NULL CHECK ("decision" IN ('kept', 'killed')),
+          "flags" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "edited_answer" text,
+          "question_id" text REFERENCES "Question"("id"),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "CrafterDraftDecision" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CrafterDraftDecision_domain_idx" ON "CrafterDraftDecision" ("domain")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "CrafterDraftDecision_decider_id_idx" ON "CrafterDraftDecision" ("decider_id")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates it on a fresh DB.
+    }
+
     // B-KNOWLEDGE-TAXONOMY-01 P1 (migration 0102_knowledge_graph): the
     // leaf/parent knowledge-graph tables (KnowledgeNode + KnowledgeEdge). New +
     // isolated; RLS-enabled with no policies (owner role bypasses RLS) per

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NextRequest } from 'next/server';
 
-const { getSessionMock, isAdminUserMock, draftMock, createQuestionMock, vetMock } = vi.hoisted(() => ({
+const { getSessionMock, isAdminUserMock, draftMock, createQuestionMock, vetMock, recordDecisionMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(async () => ({ userId: 'admin-1', id: 's-1' }) as { userId: string; id: string } | null),
   isAdminUserMock: vi.fn(() => true),
   draftMock: vi.fn(async () => ({
@@ -22,6 +22,7 @@ const { getSessionMock, isAdminUserMock, draftMock, createQuestionMock, vetMock 
   })),
   createQuestionMock: vi.fn(async () => ({ id: 'q-new' })),
   vetMock: vi.fn(async () => ({ status: 'approved' as const, score: 0.9, reason: 'clean' })),
+  recordDecisionMock: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
@@ -29,6 +30,7 @@ vi.mock('@/server/auth/admin', () => ({ isAdminUser: isAdminUserMock }));
 vi.mock('@/server/crafter/draft-candidates', () => ({ draftCandidatesForDomain: draftMock }));
 vi.mock('@/server/db/queries/questions', () => ({ createQuestion: createQuestionMock }));
 vi.mock('@/server/llm/vet-question', () => ({ vetQuestion: vetMock }));
+vi.mock('@/server/db/queries/crafter-decisions', () => ({ recordDraftDecision: recordDecisionMock }));
 
 import { POST } from '@/app/api/admin/craft/route';
 
@@ -135,5 +137,83 @@ describe('POST /api/admin/craft', () => {
   it('rejects an invalid body', async () => {
     const res = await post({ action: 'draft', tier: 'deep' });
     expect(res.status).toBe(400);
+  });
+
+  // B-CRAFTER-DECISION-LEDGER-01 — the human's verdicts become teaching data.
+
+  it('kill records the verdict to the decision ledger and persists nothing else', async () => {
+    const res = await post({
+      action: 'kill',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin',
+      flags: [{ kind: 'tier_mismatch', note: 'reads as accessible' }],
+    });
+    expect(res.status).toBe(200);
+    expect(recordDecisionMock).toHaveBeenCalledWith({
+      deciderId: 'admin-1',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin',
+      decision: 'killed',
+      flags: [{ kind: 'tier_mismatch', note: 'reads as accessible' }],
+    });
+    expect(createQuestionMock).not.toHaveBeenCalled(); // still nothing servable
+  });
+
+  it('keep records a kept verdict, with the human correction as editedAnswer', async () => {
+    await post({
+      action: 'keep',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin of the Rito',
+      machineDraftAnswer: 'Tulin',
+      difficultyEstimate: 'specialist',
+      broadCategory: 'Video Games',
+    });
+    expect(recordDecisionMock).toHaveBeenCalledTimes(1);
+    const record = recordDecisionMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(record.decision).toBe('kept');
+    expect(record.editedAnswer).toBe('Tulin of the Rito'); // corrected → the lesson
+    expect(record.questionId).toBe('q-new');
+  });
+
+  it('an unchanged keep records editedAnswer=null', async () => {
+    await post({
+      action: 'keep',
+      domain: 'Tennis',
+      tier: 'shallow',
+      questionText: 'Who won the 2023 Wimbledon men’s final?',
+      answer: 'Carlos Alcaraz',
+      machineDraftAnswer: 'Carlos Alcaraz',
+      difficultyEstimate: 'accessible',
+      broadCategory: 'Sports',
+    });
+    const record = recordDecisionMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(record.editedAnswer).toBeNull();
+  });
+
+  it('a vet-blocked keep is still ledgered as kept (the human’s verdict stands)', async () => {
+    vetMock.mockResolvedValueOnce({
+      status: 'rejected',
+      score: 0,
+      reason: 'unsafe',
+      rejectionKind: 'safety',
+    });
+    const res = await post({
+      action: 'keep',
+      domain: 'Tennis',
+      tier: 'shallow',
+      questionText: 'bad question',
+      answer: 'bad',
+      difficultyEstimate: 'accessible',
+      broadCategory: 'Sports',
+    });
+    expect(res.status).toBe(422);
+    expect(recordDecisionMock).toHaveBeenCalledTimes(1);
+    expect((recordDecisionMock.mock.calls[0][0] as Record<string, unknown>).decision).toBe('kept');
   });
 });

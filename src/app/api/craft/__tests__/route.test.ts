@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NextRequest } from 'next/server';
 
-const { getSessionMock, hasInvitationMock, draftMock, keepMock } = vi.hoisted(() => ({
+const { getSessionMock, hasInvitationMock, draftMock, keepMock, recordDecisionMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(async () => ({ userId: 'player-1', id: 's-1' }) as { userId: string; id: string } | null),
   hasInvitationMock: vi.fn(async () => true),
   draftMock: vi.fn(async () => ({ ok: true as const, candidates: [] })),
@@ -12,12 +12,14 @@ const { getSessionMock, hasInvitationMock, draftMock, keepMock } = vi.hoisted(()
     publicStatus: 'eligible_pending',
     vetReason: 'clean',
   })),
+  recordDecisionMock: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/db/queries/author-invitations', () => ({ hasActiveInvitation: hasInvitationMock }));
 vi.mock('@/server/crafter/draft-candidates', () => ({ draftCandidatesForDomain: draftMock }));
 vi.mock('@/server/crafter/keep-candidate', () => ({ keepCandidate: keepMock }));
+vi.mock('@/server/db/queries/crafter-decisions', () => ({ recordDraftDecision: recordDecisionMock }));
 
 import { POST } from '@/app/api/craft/route';
 
@@ -91,5 +93,54 @@ describe('POST /api/craft (player creation surface)', () => {
       broadCategory: 'Sports',
     });
     expect(res.status).toBe(422);
+  });
+
+  // B-CRAFTER-DECISION-LEDGER-01 — invited players teach the machine too.
+
+  it('kill records the verdict to the decision ledger, still behind the invitation gate', async () => {
+    const res = await post({
+      action: 'kill',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin',
+      flags: [],
+    });
+    expect(res.status).toBe(200);
+    expect(recordDecisionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ deciderId: 'player-1', decision: 'killed' }),
+    );
+    expect(keepMock).not.toHaveBeenCalled();
+
+    hasInvitationMock.mockResolvedValueOnce(false);
+    const gated = await post({
+      action: 'kill',
+      domain: 'Chess',
+      tier: 'deep',
+      questionText: 'q',
+      answer: 'a',
+    });
+    expect(gated.status).toBe(404);
+    expect(recordDecisionMock).toHaveBeenCalledTimes(1); // gated kill records nothing
+  });
+
+  it('keep records a kept verdict with the correction as editedAnswer', async () => {
+    await post({
+      action: 'keep',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin of the Rito',
+      machineDraftAnswer: 'Tulin',
+      difficultyEstimate: 'specialist',
+      broadCategory: 'Video Games',
+    });
+    expect(recordDecisionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: 'kept',
+        editedAnswer: 'Tulin of the Rito',
+        questionId: 'q-new',
+      }),
+    );
   });
 });

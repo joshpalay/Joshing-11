@@ -1177,6 +1177,39 @@ export const authorInvitations = pgTable(
   ],
 );
 
+// B-CRAFTER-DECISION-LEDGER-01 — every keep/kill verdict a human passes on a
+// machine draft candidate, recorded durably so (a) the draft prompt can learn
+// the human's bar in-context (kept exemplars, killed anti-exemplars — see
+// draft-candidates.ts) and (b) the machine's own doubts can be graded against
+// the human verdicts (flags vs decision = gate calibration). Kills previously
+// evaporated as client-side state; this ledger is the durable half of "the
+// machine learns from you". Rows are append-only teaching data — never served,
+// never joined into play paths.
+export const crafterDraftDecisions = pgTable(
+  'CrafterDraftDecision',
+  {
+    id: id(),
+    deciderId: text('decider_id').notNull().references(() => users.id),
+    domain: text('domain').notNull(),
+    tier: text('tier').$type<'shallow' | 'deep'>().notNull(),
+    questionText: text('question_text').notNull(),
+    answer: text('answer').notNull(),
+    decision: text('decision').$type<'kept' | 'killed'>().notNull(),
+    // The machine's doubts as shown at decision time ({kind, note} pairs) —
+    // a kill WITHOUT flags and a keep DESPITE flags are both gate corrections.
+    flags: jsonb('flags').$type<Array<{ kind: string; note: string }>>().notNull().default([]),
+    // On a keep where the human corrected the machine's answer.
+    editedAnswer: text('edited_answer'),
+    // The Question a keep created (null for kills).
+    questionId: text('question_id').references(() => questions.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('CrafterDraftDecision_domain_idx').on(table.domain),
+    index('CrafterDraftDecision_decider_id_idx').on(table.deciderId),
+  ],
+);
+
 export const friendships = pgTable(
   'Friendship',
   {

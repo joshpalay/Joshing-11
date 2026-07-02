@@ -5,6 +5,7 @@ import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import { draftCandidatesForDomain, flagDraftCandidates } from '@/server/crafter/draft-candidates';
 import { keepCandidate } from '@/server/crafter/keep-candidate';
+import { recordDraftDecision } from '@/server/db/queries/crafter-decisions';
 import {
   getDomainPlayersWithInvitationState,
   inviteToAuthor,
@@ -31,6 +32,13 @@ export const maxDuration = 120;
 
 const tierSchema = z.enum(['shallow', 'deep']);
 const domainSchema = z.string().trim().min(1).max(120);
+// The machine doubts shown on the card at decision time — recorded with the
+// verdict so gate calibration can compare flags against human decisions
+// (B-CRAFTER-DECISION-LEDGER-01).
+const decisionFlagsSchema = z
+  .array(z.object({ kind: z.string().trim().min(1).max(40), note: z.string().trim().max(500) }))
+  .max(8)
+  .optional();
 
 const bodySchema = z.discriminatedUnion('action', [
   z.object({
@@ -51,6 +59,18 @@ const bodySchema = z.discriminatedUnion('action', [
     machineDraftAnswer: z.string().trim().max(500).optional(),
     difficultyEstimate: z.enum(['accessible', 'moderate', 'specialist']),
     broadCategory: z.string().trim().min(1).max(120),
+    flags: decisionFlagsSchema,
+  }),
+  // The kill verdict, recorded to the decision ledger. Nothing else persists —
+  // an unkept candidate still never exists as a servable question; this is
+  // teaching data only (what the human rejected, with the flags they saw).
+  z.object({
+    action: z.literal('kill'),
+    domain: domainSchema,
+    tier: tierSchema,
+    questionText: z.string().trim().min(1).max(2000),
+    answer: z.string().trim().min(1).max(500),
+    flags: decisionFlagsSchema,
   }),
   // The deferred LLM doubt pass: run the factual/quality gates over candidates
   // the client already rendered, so drafts appear fast and flags stream in.
@@ -110,6 +130,20 @@ export async function POST(request: NextRequest) {
         difficultyEstimate: data.difficultyEstimate,
         broadCategory: data.broadCategory,
       });
+      // Ledger the human's verdict either way — a keep the vet then blocked is
+      // still a keep for teaching purposes. Best-effort by contract.
+      await recordDraftDecision({
+        deciderId: session.userId,
+        domain: data.domain,
+        tier: data.tier,
+        questionText: data.questionText,
+        answer: data.answer,
+        decision: 'kept',
+        flags: data.flags,
+        editedAnswer:
+          data.machineDraftAnswer && data.machineDraftAnswer !== data.answer ? data.answer : null,
+        questionId: result.id,
+      });
       if (!result.ok) {
         // Safety-fail: saved but hard-blocked from every surface (same contract
         // as the authoring route's failed_content_check).
@@ -119,6 +153,19 @@ export async function POST(request: NextRequest) {
         { id: result.id, publicStatus: result.publicStatus, vetReason: result.vetReason },
         { status: 201 },
       );
+    }
+
+    case 'kill': {
+      await recordDraftDecision({
+        deciderId: session.userId,
+        domain: data.domain,
+        tier: data.tier,
+        questionText: data.questionText,
+        answer: data.answer,
+        decision: 'killed',
+        flags: data.flags,
+      });
+      return NextResponse.json({ ok: true });
     }
 
     case 'flags': {

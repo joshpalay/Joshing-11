@@ -238,6 +238,28 @@ function CandidateCard({
   const [answer, setAnswer] = useState(candidate.answer);
   const [explainer, setExplainer] = useState(candidate.explainer);
 
+  // The kill is instant client-side (the card collapses immediately) and the
+  // verdict is reported to the decision ledger fire-and-forget — teaching data
+  // only (B-CRAFTER-DECISION-LEDGER-01), so a failed report never resurrects
+  // the card. The current field values ride along: killing an edited draft
+  // records what the human actually saw and rejected.
+  function kill() {
+    onChange({ ...state, status: 'killed', error: undefined });
+    void fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        action: 'kill',
+        domain,
+        tier,
+        questionText: questionText.trim() || candidate.questionText,
+        answer: answer.trim() || candidate.answer,
+        flags: candidate.flags,
+      }),
+    }).catch(() => {});
+  }
+
   async function keep() {
     if (status !== 'open') return;
     onChange({ ...state, status: 'keeping', error: undefined });
@@ -256,6 +278,7 @@ function CandidateCard({
           machineDraftAnswer: candidate.answer,
           difficultyEstimate: candidate.difficultyEstimate,
           broadCategory: candidate.broadCategory,
+          flags: candidate.flags,
         }),
       });
       if (res.status === 422) {
@@ -378,7 +401,7 @@ function CandidateCard({
         </button>
         <button
           type="button"
-          onClick={() => onChange({ ...state, status: 'killed', error: undefined })}
+          onClick={kill}
           disabled={status === 'keeping'}
           className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
