@@ -6,6 +6,8 @@ import {
   declaredInterests,
   feedItems,
   joshingGameResponses,
+  knowledgeNodes,
+  knowledgeParentMastery,
   masteryEvents,
   playerMastery,
   profileDomainVisibility,
@@ -13,6 +15,11 @@ import {
   users,
 } from '@/server/db';
 import { getFriends } from '@/server/db/queries/friends';
+import {
+  buildClusterMatcher,
+  getClusterContext,
+  isKnowledgeGraphCeremonyEnabled,
+} from '@/server/knowledge/graph';
 import { ceremonyModeFromAnsweringCount, type CeremonyMode } from '@/lib/ceremony/mode';
 import { djb2 } from '@/lib/lately';
 import type { MasteryTier } from '@/types/db';
@@ -28,6 +35,10 @@ const beat1Schema = z.array(
     domain: z.string(),
     fromTier: masteryTierSchema,
     toTier: masteryTierSchema,
+    // B-KNOWLEDGE-TAXONOMY-01 P6: which grain the promotion fired at. Additive
+    // (.optional()) — pre-graph payloads (and flag-off writes) carry no grain
+    // and still validate.
+    grain: z.enum(['leaf', 'parent']).optional(),
   }),
 );
 
@@ -133,7 +144,14 @@ export const beatsPayloadSchema = z.object({
   beat6: beat6Schema.nullable().optional(),
 });
 
-export type Beat1Mastered = { domain: string; fromTier: MasteryTier; toTier: MasteryTier }[];
+export type Beat1Mastered = {
+  domain: string;
+  fromTier: MasteryTier;
+  toTier: MasteryTier;
+  // P6: leaf vs parent promotion, labeled distinctly (§D). Absent on flag-off
+  // writes and the pre-graph corpus.
+  grain?: 'leaf' | 'parent';
+}[];
 export type Beat2DiscoveredItem = {
   domain: string;
   questionCount: number;
@@ -228,12 +246,45 @@ async function computeBeat1(userId: string, cycleStart: Date, cycleEndExclusive:
     ))
     .orderBy(desc(playerMastery.tierReachedAt));
 
-  if (rows.length === 0) return null;
-  return rows.map((row) => ({
-    domain: row.domain,
-    fromTier: previousTier(row.toTier),
-    toTier: row.toTier,
-  }));
+  // B-KNOWLEDGE-TAXONOMY-01 P6 (§D: Beat 1 fires BOTH grains, labeled
+  // distinctly). Flag-off = today's exact output — no grain fields, no parent
+  // query. Flag-on: leaf rows carry grain 'leaf'; parent crossings come from
+  // the P4 freeze ledger (the crossing moment IS the promotion event).
+  if (!isKnowledgeGraphCeremonyEnabled()) {
+    if (rows.length === 0) return null;
+    return rows.map((row) => ({
+      domain: row.domain,
+      fromTier: previousTier(row.toTier),
+      toTier: row.toTier,
+    }));
+  }
+
+  const parentRows = await db
+    .select({ label: knowledgeNodes.label })
+    .from(knowledgeParentMastery)
+    .innerJoin(knowledgeNodes, eq(knowledgeNodes.domainKey, knowledgeParentMastery.parentDomainKey))
+    .where(and(
+      eq(knowledgeParentMastery.userId, userId),
+      gte(knowledgeParentMastery.masteredAt, cycleStart),
+      lt(knowledgeParentMastery.masteredAt, cycleEndExclusive),
+    ))
+    .orderBy(desc(knowledgeParentMastery.masteredAt));
+
+  const items: Beat1Mastered = [
+    ...rows.map((row) => ({
+      domain: row.domain,
+      fromTier: previousTier(row.toTier),
+      toTier: row.toTier,
+      grain: 'leaf' as const,
+    })),
+    ...parentRows.map((row) => ({
+      domain: row.label,
+      fromTier: previousTier('mastery'),
+      toTier: 'mastery' as const,
+      grain: 'parent' as const,
+    })),
+  ];
+  return items.length > 0 ? items : null;
 }
 
 async function readCorrectQuestionIds(userId: string, cycleStart: Date, cycleEndExclusive: Date): Promise<Set<string>> {
@@ -461,17 +512,35 @@ async function computeBeat4(userId: string, cycleStart: Date, cycleEndExclusive:
     )
     .where(sql`${playerMastery.totalPoints} > 0`);
 
-  const viewerDomains = new Set(rows.filter((row) => row.userId === userId).map((row) => row.domain));
-  if (viewerDomains.size === 0) return null;
+  const viewerDomainList = rows.filter((row) => row.userId === userId).map((row) => row.domain);
+  if (viewerDomainList.length === 0) return null;
+
+  // B-KNOWLEDGE-TAXONOMY-01 P6 (§D — the original complaint): flag-on, overlap
+  // is computed at CLUSTER grain — two different strings align when their
+  // clusters (folded key + substantive ancestors in the authored graph)
+  // intersect, and the shared territory shows under the authored node's label.
+  // Flag-off = today's exact-string behavior, byte-identical.
+  let sharedLabelFor: (friendDomain: string) => string | null;
+  if (isKnowledgeGraphCeremonyEnabled()) {
+    const ctx = await getClusterContext();
+    sharedLabelFor = buildClusterMatcher(viewerDomainList, ctx);
+  } else {
+    const viewerDomains = new Set(viewerDomainList);
+    sharedLabelFor = (domain) => (viewerDomains.has(domain) ? domain : null);
+  }
 
   const candidates = new Map<string, { displayName: string; sharedDomains: string[] }>();
   rows.forEach((row) => {
-    if (row.userId === userId || !activeFriendIds.has(row.userId) || !viewerDomains.has(row.domain)) return;
+    if (row.userId === userId || !activeFriendIds.has(row.userId)) return;
     // A friend marked this domain private — do not surface it to anyone
-    // else's ceremony, even if both share points there.
+    // else's ceremony, even if both share points there. (Checked BEFORE any
+    // cluster resolution — privacy outranks alignment.)
     if (row.visibility === 'private') return;
+    const shared = sharedLabelFor(row.domain);
+    if (shared === null) return;
     const current = candidates.get(row.userId) ?? { displayName: row.displayName?.trim() || 'Someone', sharedDomains: [] };
-    current.sharedDomains.push(row.domain);
+    // Cluster mode can resolve two friend strings to one territory — dedupe.
+    if (!current.sharedDomains.includes(shared)) current.sharedDomains.push(shared);
     candidates.set(row.userId, current);
   });
 

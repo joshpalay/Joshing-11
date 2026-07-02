@@ -37,6 +37,11 @@ export function isKnowledgeGraphTaggingEnabled(): boolean {
   return boolEnv('KNOWLEDGE_GRAPH_ENABLED', false) && boolEnv('KNOWLEDGE_GRAPH_TAGGING', false);
 }
 
+// P6 gate: ceremony reads (Beat 1 both-grain, Beat 4 cluster overlap).
+export function isKnowledgeGraphCeremonyEnabled(): boolean {
+  return boolEnv('KNOWLEDGE_GRAPH_ENABLED', false) && boolEnv('KNOWLEDGE_GRAPH_CEREMONY', false);
+}
+
 export type KnowledgeNodeRow = typeof knowledgeNodes.$inferSelect;
 export type KnowledgeEdgeRow = typeof knowledgeEdges.$inferSelect;
 
@@ -192,6 +197,76 @@ export function parentProgress(
   const bar = threshold ?? DEFAULT_PARENT_MASTERY_THRESHOLD;
   const isMaster = rolledPoints >= bar && corners >= MIN_CORNERS_FOR_PARENT_MASTERY;
   return { pct: bar > 0 ? Math.min(rolledPoints / bar, 1) : 0, isMaster };
+}
+
+// ─── P6: cluster identity (the §D territory unit) ────────────────────────────
+
+export type ClusterContext = {
+  nodeKeys: Set<string>;
+  labelByKey: Map<string, string>;
+  edges: GraphEdge[];
+};
+
+/**
+ * A domain string's CLUSTER: its folded key plus — when an authored node exists
+ * there — every substantive ancestor. Two different strings share a cluster
+ * when these sets intersect (Josh's "Renaissance Florence" and Ari's "Medici
+ * Family" both reach "Renaissance Italy"). No node → the fold alone, which is
+ * exactly today's domainKey behavior.
+ */
+export function clusterKeysFor(label: string, ctx: Pick<ClusterContext, 'nodeKeys' | 'edges'>): Set<string> {
+  const key = domainKey(label);
+  const keys = new Set([key]);
+  if (ctx.nodeKeys.has(key)) {
+    for (const ancestor of substantiveAncestors(key, ctx.edges)) keys.add(ancestor);
+  }
+  return keys;
+}
+
+/**
+ * Pure alignment matcher for ceremony Beat 4: given the viewer's domains,
+ * returns friendDomain → the shared territory's display label (the authored
+ * node's label when the overlap is via the graph), or null when unaligned.
+ */
+export function buildClusterMatcher(
+  viewerDomains: readonly string[],
+  ctx: ClusterContext,
+): (friendDomain: string) => string | null {
+  const viewerKeyToLabel = new Map<string, string>();
+  for (const domain of viewerDomains) {
+    for (const key of clusterKeysFor(domain, ctx)) {
+      if (!viewerKeyToLabel.has(key)) {
+        viewerKeyToLabel.set(key, ctx.labelByKey.get(key) ?? domain);
+      }
+    }
+  }
+  return (friendDomain: string) => {
+    for (const key of clusterKeysFor(friendDomain, ctx)) {
+      const label = viewerKeyToLabel.get(key);
+      if (label !== undefined) return label;
+    }
+    return null;
+  };
+}
+
+// The whole authored graph is small (dozens of nodes) — one load per ceremony
+// compute is fine.
+export async function getClusterContext(): Promise<ClusterContext> {
+  const [nodes, edges] = await Promise.all([
+    db.select({ domainKey: knowledgeNodes.domainKey, label: knowledgeNodes.label }).from(knowledgeNodes),
+    db
+      .select({
+        childDomainKey: knowledgeEdges.childDomainKey,
+        parentDomainKey: knowledgeEdges.parentDomainKey,
+        edgeType: knowledgeEdges.edgeType,
+      })
+      .from(knowledgeEdges),
+  ]);
+  return {
+    nodeKeys: new Set(nodes.map((n) => n.domainKey)),
+    labelByKey: new Map(nodes.map((n) => [n.domainKey, n.label])),
+    edges,
+  };
 }
 
 export type RosterCoverage = { lit: number; total: number };

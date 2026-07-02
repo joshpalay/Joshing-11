@@ -215,6 +215,55 @@ describe('resolveFinestNode — P3 tagging (flag-gated, fail-open, no minting)',
   });
 });
 
+describe('buildClusterMatcher — P6 Beat 4 cluster overlap (the Josh/Ari fix)', () => {
+  const CTX = {
+    nodeKeys: new Set(['medici family', 'renaissance florence', 'renaissance italy']),
+    labelByKey: new Map([
+      ['medici family', 'Medici Family'],
+      ['renaissance florence', 'Renaissance Florence'],
+      ['renaissance italy', 'Renaissance Italy'],
+    ]),
+    edges: [
+      { childDomainKey: 'medici family', parentDomainKey: 'renaissance italy', edgeType: 'substantive' as const },
+      { childDomainKey: 'renaissance florence', parentDomainKey: 'renaissance italy', edgeType: 'substantive' as const },
+    ],
+  };
+
+  it('flag-on semantics: same-cluster different-string domains align under the shared label', () => {
+    // Josh holds "Renaissance Florence"; Ari holds "Medici Family" — different
+    // strings, same authored territory via the common parent.
+    const match = mod.buildClusterMatcher(['Renaissance Florence'], CTX);
+    expect(match('Medici Family')).toBe('Renaissance Italy'); // the shared cluster's label
+    expect(match('NBA Playoffs')).toBeNull(); // unrelated stays unrelated
+  });
+
+  it('flag-off semantics: the same pair is UNALIGNED under exact-string matching', () => {
+    const viewerDomains = new Set(['Renaissance Florence']);
+    expect(viewerDomains.has('Medici Family')).toBe(false); // today's behavior, preserved off-flag
+  });
+
+  it('exact same string still aligns, graph or no graph', () => {
+    const match = mod.buildClusterMatcher(['Renaissance Florence'], CTX);
+    expect(match('Renaissance – Florence')).toBe('Renaissance Florence'); // typographic variant folds
+    const noGraph = mod.buildClusterMatcher(['Tennis'], { nodeKeys: new Set(), labelByKey: new Map(), edges: [] });
+    expect(noGraph('Tennis')).toBe('Tennis');
+    expect(noGraph('Chess')).toBeNull();
+  });
+
+  it('collection edges never create alignment', () => {
+    const ctx = {
+      nodeKeys: new Set(['hamlet', 'plays starting with h', 'henry v']),
+      labelByKey: new Map([['plays starting with h', 'Plays Starting With H']]),
+      edges: [
+        { childDomainKey: 'hamlet', parentDomainKey: 'plays starting with h', edgeType: 'collection' as const },
+        { childDomainKey: 'henry v', parentDomainKey: 'plays starting with h', edgeType: 'collection' as const },
+      ],
+    };
+    const match = mod.buildClusterMatcher(['Hamlet'], ctx);
+    expect(match('Henry V')).toBeNull(); // knowing Hamlet says nothing about Henry V (§7)
+  });
+});
+
 describe('collectionCoverage — §7 coverage-only', () => {
   const H_SHELF: Edge[] = [
     col('hamlet', 'plays starting with h'),
