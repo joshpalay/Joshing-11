@@ -96,6 +96,8 @@ export function KnowledgeAdminClient({
         </p>
       </header>
 
+      <StructureSuggester graphIsEmpty={nodes.length === 0} onDone={() => router.refresh()} />
+
       <NodeForm onDone={() => router.refresh()} />
 
       <OrphanCheck nodes={nodes} edges={edges} />
@@ -155,6 +157,228 @@ export function KnowledgeAdminClient({
         )}
       </section>
     </main>
+  );
+}
+
+// The structure suggester — the answer to "I don't even know what to do":
+// one click asks the machine to DRAFT a grouping of the real corpus (the
+// domains players actually hold), and each proposed group becomes a reviewable
+// card — tune the bar, untick children that don't belong, Accept or Dismiss.
+// §4 holds: proposals persist nothing; every node/edge is minted by Accept.
+type SuggestedGroup = {
+  parentLabel: string;
+  broadCategory: string | null;
+  suggestedThreshold: number;
+  children: Array<{ label: string; machineDepth: number; humanAuthored: number }>;
+};
+
+function StructureSuggester({
+  graphIsEmpty,
+  onDone,
+}: {
+  graphIsEmpty: boolean;
+  onDone: () => void;
+}) {
+  const [groups, setGroups] = useState<SuggestedGroup[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{ corpusSize: number; alreadyStructured: number } | null>(null);
+
+  async function suggest() {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    const res = await post({ action: 'propose_structure' });
+    setLoading(false);
+    if (!res.ok) {
+      setError(
+        res.status === 503
+          ? 'The machine is unavailable right now — try again shortly.'
+          : `Suggestion failed (${res.status}).`,
+      );
+      return;
+    }
+    const body = res.body as unknown as {
+      groups: SuggestedGroup[];
+      corpusSize: number;
+      alreadyStructured: number;
+    } | null;
+    setGroups(body?.groups ?? []);
+    setMeta(body ? { corpusSize: body.corpusSize, alreadyStructured: body.alreadyStructured } : null);
+  }
+
+  return (
+    <section
+      className="rounded-md border p-4 text-sm"
+      style={{ borderColor: graphIsEmpty ? 'var(--brand-navy)' : 'var(--border)' }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-serif text-lg font-semibold text-[var(--brand-ink)]">
+            {graphIsEmpty ? 'Start here' : 'Suggest more structure'}
+          </h2>
+          <p className="text-muted-foreground mt-0.5 text-[13px] leading-relaxed">
+            {graphIsEmpty
+              ? 'The machine drafts a structure from the territories players actually hold; you review each group — tune the bar, untick what doesn’t belong, accept or dismiss. Nothing is saved until you accept.'
+              : 'Draft groupings for territories not yet in the graph. You verify every group before anything is saved.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void suggest()}
+          disabled={loading}
+          className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+        >
+          {loading ? 'Drafting a structure…' : groups === null ? 'Suggest a structure' : 'Suggest again'}
+        </button>
+      </div>
+      {loading ? (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Reading the corpus and grouping territories — this takes up to a minute.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+      {groups !== null && !loading ? (
+        groups.length === 0 ? (
+          <p className="text-muted-foreground mt-2 text-[13px]">
+            Nothing left to group{meta && meta.alreadyStructured > 0 ? ` — ${meta.alreadyStructured} labels are already structured` : ''}.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {meta ? (
+              <p className="text-muted-foreground text-xs">
+                {groups.length} group{groups.length === 1 ? '' : 's'} proposed from {meta.corpusSize}{' '}
+                unstructured territories. Accept the ones that ring true.
+              </p>
+            ) : null}
+            {groups.map((group) => (
+              <SuggestedGroupCard
+                key={group.parentLabel}
+                group={group}
+                onResolved={() => {
+                  setGroups((prev) => prev?.filter((g) => g.parentLabel !== group.parentLabel) ?? null);
+                  onDone();
+                }}
+                onDismiss={() =>
+                  setGroups((prev) => prev?.filter((g) => g.parentLabel !== group.parentLabel) ?? null)
+                }
+              />
+            ))}
+          </div>
+        )
+      ) : null}
+    </section>
+  );
+}
+
+function SuggestedGroupCard({
+  group,
+  onResolved,
+  onDismiss,
+}: {
+  group: SuggestedGroup;
+  onResolved: () => void;
+  onDismiss: () => void;
+}) {
+  const [threshold, setThreshold] = useState(String(group.suggestedThreshold));
+  const [checked, setChecked] = useState<Record<string, boolean>>(
+    Object.fromEntries(group.children.map((c) => [c.label, true])),
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selectedCount = group.children.filter((c) => checked[c.label]).length;
+
+  async function accept() {
+    if (pending || selectedCount === 0) return;
+    setPending(true);
+    setError(null);
+    const res = await post({
+      action: 'ratify_structure_group',
+      parentLabel: group.parentLabel,
+      broadCategory: group.broadCategory,
+      masteryThreshold: threshold.trim() ? Number(threshold) : null,
+      childLabels: group.children.filter((c) => checked[c.label]).map((c) => c.label),
+    });
+    setPending(false);
+    if (!res.ok) {
+      setError(`Accept failed (${res.status}).`);
+      return;
+    }
+    onResolved();
+  }
+
+  return (
+    <div className="rounded-md border p-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-serif text-base font-semibold text-[var(--brand-ink)]">
+          {group.parentLabel}
+        </span>
+        {group.broadCategory ? (
+          <span className="text-muted-foreground text-xs">· {group.broadCategory}</span>
+        ) : null}
+        <label className="ml-auto flex items-center gap-1.5 text-xs text-[var(--brand-ink-700)]">
+          Mastery bar
+          <input
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value.replace(/[^0-9]/g, ''))}
+            className="w-20 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]"
+            inputMode="numeric"
+            aria-label={`Mastery threshold for ${group.parentLabel}`}
+          />
+          pts
+        </label>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {group.children.map((child) => (
+          <li key={child.label} className="flex items-center gap-2 text-[13px]">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={checked[child.label] ?? false}
+                onChange={(e) => setChecked((prev) => ({ ...prev, [child.label]: e.target.checked }))}
+              />
+              <span className="text-[var(--brand-ink)]">{child.label}</span>
+            </label>
+            <span className="text-muted-foreground text-xs">
+              {child.machineDepth + child.humanAuthored} questions
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void accept()}
+          disabled={pending || selectedCount < 1}
+          className="inline-flex min-h-9 items-center rounded-md border px-3 py-1 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+        >
+          {pending ? 'Accepting…' : `Accept ${selectedCount} of ${group.children.length}`}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          disabled={pending}
+          className="inline-flex min-h-9 items-center rounded-md border px-3 py-1 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        >
+          Dismiss
+        </button>
+        <span className="text-muted-foreground text-xs">
+          accepting creates the parent, its leaves, and substantive edges
+        </span>
+      </div>
+      {error ? (
+        <p className="mt-1.5 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

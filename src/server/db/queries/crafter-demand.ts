@@ -72,7 +72,9 @@ function heatFor(activePlayers: number, machineDepth: number, humanAuthored: num
 // machine = distinct durable fact keys (same as getDurablePoolDepthForDomains),
 // human = live creator-authored canonical questions. One scan each — the corpus
 // is ~250 labels at current scale, so clustering happens in memory.
-async function getCorpusLabelDepths(): Promise<ClusterLabel[]> {
+// Exported for the knowledge-structure suggester (propose-structure.ts), which
+// drafts taxonomy groups over the same corpus this worklist reads.
+export async function getCorpusLabelDepths(): Promise<ClusterLabel[]> {
   const [machineRows, humanRows] = await Promise.all([
     db
       .select({

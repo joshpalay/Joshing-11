@@ -8,8 +8,10 @@ import {
   createKnowledgeNode,
   deleteKnowledgeEdge,
   ratifyProposedParent,
+  ratifyStructureGroup,
   updateKnowledgeNode,
 } from '@/server/db/queries/knowledge-graph';
+import { proposeKnowledgeStructure } from '@/server/knowledge/propose-structure';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +66,18 @@ const bodySchema = z.discriminatedUnion('action', [
     parentLabel: z.string().trim().min(1).max(120),
     parentBroadCategory: z.string().trim().max(80).nullable().optional(),
     edgeType: edgeTypeSchema,
+  }),
+  // The structure suggester: one LLM pass drafts a full grouping of the real
+  // corpus; NOTHING persists (suggestions live only in the response).
+  z.object({ action: z.literal('propose_structure') }),
+  // The human's Accept on one proposed group — mints parent + child nodes and
+  // substantive edges on the normal rails, with the human-tuned threshold.
+  z.object({
+    action: z.literal('ratify_structure_group'),
+    parentLabel: z.string().trim().min(1).max(120),
+    broadCategory: z.string().trim().max(80).nullable().optional(),
+    masteryThreshold: z.number().int().min(100).max(1_000_000).nullable().optional(),
+    childLabels: z.array(z.string().trim().min(1).max(120)).min(1).max(12),
   }),
 ]);
 
@@ -160,6 +174,37 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json({ proposals: [] });
       }
+    }
+
+    case 'propose_structure': {
+      const result = await proposeKnowledgeStructure();
+      if (!result.ok) {
+        const status = result.reason === 'corpus_empty' ? 200 : 503;
+        return NextResponse.json(
+          result.reason === 'corpus_empty'
+            ? { groups: [], corpusSize: 0, alreadyStructured: 0 }
+            : { error: result.reason },
+          { status },
+        );
+      }
+      return NextResponse.json({
+        groups: result.groups,
+        corpusSize: result.corpusSize,
+        alreadyStructured: result.alreadyStructured,
+      });
+    }
+
+    case 'ratify_structure_group': {
+      const result = await ratifyStructureGroup(
+        {
+          parentLabel: data.parentLabel,
+          broadCategory: data.broadCategory ?? null,
+          masteryThreshold: data.masteryThreshold ?? null,
+          childLabels: data.childLabels,
+        },
+        session.userId,
+      );
+      return NextResponse.json(result, { status: 201 });
     }
 
     case 'ratify': {

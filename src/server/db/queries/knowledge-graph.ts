@@ -235,6 +235,62 @@ export async function ratifyProposedParent(
   );
 }
 
+// Structure-suggester ratify (§4: the Accept click IS the human commit): mint
+// the parent (kind 'parent', human-tuned threshold), ensure a leaf node for
+// each accepted child (they're REAL corpus labels — the node is the label's
+// entry into the graph), and draw substantive edges. Existing nodes are reused
+// via the collision path — never duplicated.
+export async function ratifyStructureGroup(
+  input: {
+    parentLabel: string;
+    broadCategory: string | null;
+    masteryThreshold: number | null;
+    childLabels: string[];
+  },
+  actorUserId: string,
+): Promise<{ ok: true; parentKey: string; edgesCreated: number }> {
+  const ensureNode = async (
+    label: string,
+    nodeKind: NodeKind,
+    masteryThreshold: number | null,
+    broadCategory: string | null,
+  ): Promise<string> => {
+    const created = await createKnowledgeNode(
+      { label, nodeKind, masteryThreshold, broadCategory, fieldHue: null },
+      actorUserId,
+    );
+    if (created.ok) return created.node.domainKey;
+    if (created.reason === 'domain_key_collision') return created.existing.domainKey;
+    return domainKey(label);
+  };
+
+  const parentKey = await ensureNode(
+    input.parentLabel,
+    'parent',
+    input.masteryThreshold,
+    input.broadCategory,
+  );
+
+  let edgesCreated = 0;
+  for (const childLabel of input.childLabels) {
+    const childKey = await ensureNode(childLabel, 'leaf', null, input.broadCategory);
+    if (childKey === parentKey) continue;
+    const edge = await createKnowledgeEdge(
+      { childDomainKey: childKey, parentDomainKey: parentKey, edgeType: 'substantive' },
+      actorUserId,
+    );
+    if (edge.ok) edgesCreated += 1; // duplicates are fine — already ratified
+  }
+
+  console.info('[knowledge-admin] structure group ratified', {
+    actorUserId,
+    parent: input.parentLabel,
+    children: input.childLabels.length,
+    edgesCreated,
+  });
+  return { ok: true, parentKey, edgesCreated };
+}
+
 // Deleting an edge is structure-editing, not content removal — the hard delete
 // is intentional (the no-hard-delete canon protects player content; an edge is
 // an authored relation a human may retract). Exactly the (child, parent) pair.
