@@ -139,6 +139,34 @@ export function substantiveAncestors(nodeKey: string, edges: readonly GraphEdge[
 }
 
 /**
+ * All substantive descendants of a node (transitive, cycle-safe, excludes the
+ * node itself) — the inverse walk of substantiveAncestors. Supply-side depth
+ * accounting reads this (B-SUPPLY-GRAPH-DEPTH-01): questions filed under
+ * "Medici Family" count toward "Renaissance Florence"'s pool depth once the
+ * human has authored that edge. Substantive edges only, matching the D-doc's
+ * "depth-eligible" wording — a collection's members are coverage, not depth.
+ */
+export function substantiveDescendants(nodeKey: string, edges: readonly GraphEdge[]): Set<string> {
+  const childrenByParent = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.edgeType !== 'substantive') continue;
+    const list = childrenByParent.get(edge.parentDomainKey);
+    if (list) list.push(edge.childDomainKey);
+    else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
+  }
+
+  const descendants = new Set<string>();
+  const queue = [...(childrenByParent.get(nodeKey) ?? [])];
+  while (queue.length > 0) {
+    const next = queue.pop()!;
+    if (next === nodeKey || descendants.has(next)) continue; // cycle guard
+    descendants.add(next);
+    queue.push(...(childrenByParent.get(next) ?? []));
+  }
+  return descendants;
+}
+
+/**
  * Total points per node: its own direct credits + full-value roll-up from
  * every descendant reachable by substantive edges (§5.1 — points are points).
  * Diamond-safe: each credited node adds its points to each ancestor exactly

@@ -65,10 +65,16 @@ import {
   carryForwardUntouchedDailyQueue,
 } from '@/server/db/queries/daily';
 
+// Fixtures must satisfy queueSlotSchema — asQueueSlots zod-validates the JSONB
+// and silently drops invalid slots (`source` is required), which would make
+// every queue read as empty and invert these assertions.
 const slots = (n: number, opts: { answered?: boolean; skipped?: boolean } = {}) =>
   Array.from({ length: n }, (_, i) => ({
     slot_index: i,
+    source: 'bot' as const,
+    generated_question_id: `gq-${i}`,
     domain: `Domain ${i}`,
+    question_text: `Question ${i}?`,
     answered: opts.answered ?? false,
     skipped: opts.skipped ?? false,
   }));
