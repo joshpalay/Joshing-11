@@ -18,10 +18,14 @@
 > - **Step 5 (monitor threshold):** moot until a hit-rate lever actually lands.
 > - **What the plan missed:** the **batch-verify cron** is now the single largest
 >   *recurring* LLM line (~$2/day ≈ $60/mo at 18 users — above the $42 ceiling, uncapped)
->   — see `docs/findings/batch-verify-cost-characterization.md`. Its two dials
->   (tighten `extra_fact` routing; system-prompt caching — the caching landed 2026-07-02)
->   and the ledger gaps (`docs/findings/ledger-telemetry-gaps.md`; web-search ledgering
->   landed 2026-07-02 as migration 0105) supersede this plan's remaining steps.
+>   — see `docs/findings/batch-verify-cost-characterization.md`. Its dials all
+>   landed 2026-07-02: system-prompt caching, the `extra_fact` tightening (escape
+>   hatch `PREFILTER_EXTRA_FACT_LEGACY`; measure with
+>   `scripts/measure-prefilter-skip-rate.ts`), and a flag-off Batch API mode
+>   (`BATCH_VERIFY_ASYNC_ENABLED` — 50% off tokens). The ledger gaps
+>   (`docs/findings/ledger-telemetry-gaps.md`; web-search ledgering landed
+>   2026-07-02 as migration 0105) are closed go-forward. These supersede this
+>   plan's remaining steps.
 
 One-day-startable plan to bend the LLM cost curve, sequenced so each change is
 verified before the next. Generation is ~68% of spend and today runs ~73%

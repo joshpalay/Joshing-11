@@ -170,6 +170,7 @@ export async function readSurfaceCost(startDaysAgo: number, endDaysAgo = 0): Pro
     .select({
       bucket: bucketCaseSql.mapWith(String).as('bucket'),
       model: llmUsageEvent.model,
+      isBatch: llmUsageEvent.isBatch,
       calls: sql<number>`count(*)::int`,
       inputTokens: sql<number>`coalesce(sum(${llmUsageEvent.inputTokens}), 0)::float8`,
       outputTokens: sql<number>`coalesce(sum(${llmUsageEvent.outputTokens}), 0)::float8`,
@@ -179,7 +180,7 @@ export async function readSurfaceCost(startDaysAgo: number, endDaysAgo = 0): Pro
     })
     .from(llmUsageEvent)
     .where(inWindow(startDaysAgo, endDaysAgo))
-    .groupBy(bucketCaseSql, llmUsageEvent.model);
+    .groupBy(bucketCaseSql, llmUsageEvent.model, llmUsageEvent.isBatch);
 
   const acc = new Map<string, { calls: number; costUsd: number; unpriced: boolean }>();
   for (const r of rows) {
@@ -189,6 +190,7 @@ export async function readSurfaceCost(startDaysAgo: number, endDaysAgo = 0): Pro
       cacheReadTokens: Number(r.cacheReadTokens),
       cacheCreateTokens: Number(r.cacheCreateTokens),
       webSearchRequests: Number(r.webSearchRequests),
+      isBatch: Boolean(r.isBatch),
     });
     const cur = acc.get(r.bucket) ?? { calls: 0, costUsd: 0, unpriced: false };
     cur.calls += Number(r.calls);

@@ -1610,12 +1610,40 @@ export const llmUsageEvent = pgTable(
     // docs/findings/ledger-telemetry-gaps.md: refill + batch-verify search spend
     // was previously invisible to every ledger-derived $ number.
     webSearchRequests: integer('web_search_requests').notNull().default(0),
+    // True when the call ran through the Message Batches API (0106; batch-verify
+    // async mode) — tokens bill at 50%, and estimateCostUsd applies that discount
+    // so the ledger doesn't over-report batch spend 2x.
+    isBatch: boolean('is_batch').notNull().default(false),
     durationMs: integer('duration_ms'),
     createdAt: createdAt(),
   },
   (table) => [
     check('LlmUsageEvent_provider_valid', sql`provider IN ('anthropic', 'openai')`),
     index('LlmUsageEvent_provider_created_at_idx').on(table.provider, table.createdAt),
+  ],
+);
+
+// Batch-verify async mode (0106): one row per Anthropic Message Batch of
+// verification requests submitted by /api/cron/batch-verify-questions when
+// BATCH_VERIFY_ASYNC_ENABLED is on. The daily cron harvests 'submitted' runs
+// (applying verdicts + stamping question rows) before submitting a new batch.
+// Rows inside an errored/expired batch result stay UNSTAMPED, so the next
+// submission re-picks them — the same fail-open contract as the sync path.
+// Removable as a unit with the flag.
+export const verifyBatchRun = pgTable(
+  'VerifyBatchRun',
+  {
+    id: id(),
+    providerBatchId: text('provider_batch_id').notNull(),
+    status: text('status').notNull().default('submitted'),
+    requestCount: integer('request_count').notNull().default(0),
+    harvestedAt: timestamp('harvested_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check('VerifyBatchRun_status_valid', sql`status IN ('submitted', 'harvested', 'failed')`),
+    uniqueIndex('VerifyBatchRun_provider_batch_id_key').on(table.providerBatchId),
+    index('VerifyBatchRun_status_idx').on(table.status),
   ],
 );
 
