@@ -96,6 +96,15 @@ export function hueForBroadCategory(broadCategory: string | null): string | null
  * with no authored node land directly under the root — the graph starts
  * nearly empty, and every real territory must still show.
  */
+export type BuildTreeOptions = {
+  /**
+   * Ghosts + grow-rim are OWN-map affordances (tap-to-adopt). A friend's map
+   * is read-only: false renders only what they actually hold — no invitations
+   * on someone else's behalf.
+   */
+  includeGhosts?: boolean;
+};
+
 export function buildKnowledgeTree(
   owned: readonly OwnedLeaf[],
   nodes: readonly AuthoredNode[],
@@ -105,7 +114,9 @@ export function buildKnowledgeTree(
   // today's computed value below the bar — mastery is never revoked. Empty /
   // omitted (flag off) → pure computation, P5 behavior unchanged.
   frozenParents: ReadonlySet<string> = new Set(),
+  options: BuildTreeOptions = {},
 ): KnowledgeTreeNode {
+  const includeGhosts = options.includeGhosts ?? true;
   const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
   const ownedByKey = new Map(owned.map((leaf) => [domainKey(leaf.domain), leaf]));
 
@@ -154,7 +165,7 @@ export function buildKnowledgeTree(
       if (isHeld(childKey)) {
         const built = buildGraphNode(childKey);
         if (built) children.push(built);
-      } else {
+      } else if (includeGhosts) {
         // Unheld sibling → ghost: dashed, footprint-only, zero real points.
         const childNode = nodeByKey.get(childKey);
         if (childNode) {
@@ -215,7 +226,89 @@ export function buildKnowledgeTree(
     });
   }
 
+  // The GROW RIM: unheld authored ROOTS in fields the player already inhabits,
+  // rendered as ghost invitations at the home view — the wider world beyond
+  // what they hold, without promising unbuilt areas (only authored nodes ever
+  // appear). Capped so the rim stays an edge, not a crowd. Own-map only.
+  if (includeGhosts) {
+    const heldFields = new Set(
+      rootChildren.map((child) => child.field).filter((f): f is string => Boolean(f)),
+    );
+    // Collection-only parents never rim (§7 — a set to cover, not a territory
+    // to enter): a parent whose child edges are all collection-type.
+    const substantiveParents = new Set(substantive.map((e) => e.parentDomainKey));
+    const collectionOnlyParents = new Set(
+      edges
+        .filter((e) => e.edgeType === 'collection')
+        .map((e) => e.parentDomainKey)
+        .filter((key) => !substantiveParents.has(key)),
+    );
+    const rimCandidates = [...nodeByKey.values()].filter((node) => {
+      if (homeParentByChild.has(node.domainKey) || isHeld(node.domainKey)) return false;
+      if (collectionOnlyParents.has(node.domainKey)) return false;
+      const field = node.fieldHue ?? hueForBroadCategory(node.broadCategory);
+      return field !== null && heldFields.has(field);
+    });
+    for (const node of rimCandidates.slice(0, GROW_RIM_CAP)) {
+      rootChildren.push({
+        id: node.domainKey,
+        name: node.label,
+        field: node.fieldHue ?? hueForBroadCategory(node.broadCategory),
+        value: GHOST_FOOTPRINT,
+        ghost: true,
+      });
+    }
+  }
+
   return { id: 'root', name: 'Everything', field: null, children: rootChildren };
+}
+
+// The rim invites, it doesn't crowd — at most this many unheld roots at home.
+export const GROW_RIM_CAP = 3;
+
+export type CollectionSummary = {
+  label: string;
+  covered: number;
+  rosterSize: number;
+};
+
+/**
+ * Collection parents (§7) are NOT containers of points, so they never enter
+ * the packed view — they render as a coverage strip ("You've covered 2 of 3
+ * Plays Starting With 'H'"). Only collections where the player has covered at
+ * least one member appear; a wall of untouched sets isn't an invitation, it's
+ * noise. Pure; unit-tested.
+ */
+export function collectCollections(
+  owned: readonly OwnedLeaf[],
+  nodes: readonly AuthoredNode[],
+  edges: readonly GraphEdge[],
+): CollectionSummary[] {
+  const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
+  const ownedKeys = new Set(
+    owned.filter((leaf) => leaf.points > 0).map((leaf) => domainKey(leaf.domain)),
+  );
+
+  const rosters = new Map<string, { total: number; covered: number }>();
+  for (const edge of edges) {
+    if (edge.edgeType !== 'collection') continue;
+    if (!nodeByKey.has(edge.parentDomainKey)) continue;
+    const entry = rosters.get(edge.parentDomainKey) ?? { total: 0, covered: 0 };
+    entry.total += 1;
+    // Coverage-only: any credit in a member lights ONE slot; depth never
+    // over-credits (§7).
+    if (ownedKeys.has(edge.childDomainKey)) entry.covered += 1;
+    rosters.set(edge.parentDomainKey, entry);
+  }
+
+  return [...rosters.entries()]
+    .filter(([, r]) => r.covered > 0)
+    .map(([key, r]) => ({
+      label: nodeByKey.get(key)?.label ?? key,
+      covered: r.covered,
+      rosterSize: r.total,
+    }))
+    .sort((a, b) => b.covered / b.rosterSize - a.covered / a.rosterSize);
 }
 
 /** Sum of REAL points in a subtree — ghosts excluded (unit-test hook). */
@@ -225,20 +318,40 @@ export function sumRealPoints(node: KnowledgeTreeNode): number {
   return own + (node.children ?? []).reduce((sum, child) => sum + sumRealPoints(child), 0);
 }
 
-export async function getKnowledgeTree(userId: string): Promise<KnowledgeTreeNode> {
+export type KnowledgeMapData = {
+  tree: KnowledgeTreeNode;
+  collections: CollectionSummary[];
+  /** The owned, visible domains behind the tree — reused for share-card props. */
+  ownedDomains: Array<{
+    domain: string;
+    displayName: string;
+    points: number;
+    tier: string;
+    iconKey: string;
+    broadCategory: string | null;
+  }>;
+};
+
+// The full map payload for a user. `includeGhosts: false` is the friend/read-
+// only variant: what they hold, nothing tap-to-adopt. Hidden domains are
+// excluded for BOTH variants (the map is a portrait surface, same posture as
+// the flat page's portrait grid).
+export async function getKnowledgeMapData(
+  userId: string,
+  options: BuildTreeOptions = {},
+): Promise<KnowledgeMapData> {
   const [pageData, graph] = await Promise.all([
     getKnowledgePageData(userId),
     listKnowledgeGraph(),
   ]);
 
-  const owned: OwnedLeaf[] = pageData.allDomains
-    .filter((d) => d.points > 0 && !d.isHidden)
-    .map((d) => ({
-      domain: d.displayName || d.domain,
-      points: d.points,
-      mastered: d.tier === 'mastery',
-      broadCategory: d.broadCategory,
-    }));
+  const visible = pageData.allDomains.filter((d) => d.points > 0 && !d.isHidden);
+  const owned: OwnedLeaf[] = visible.map((d) => ({
+    domain: d.displayName || d.domain,
+    points: d.points,
+    mastered: d.tier === 'mastery',
+    broadCategory: d.broadCategory,
+  }));
 
   const nodes: AuthoredNode[] = graph.nodes.map((n) => ({
     domainKey: n.domainKey,
@@ -254,8 +367,6 @@ export async function getKnowledgeTree(userId: string): Promise<KnowledgeTreeNod
     edgeType: e.edgeType,
   }));
 
-  // P4: frozen-aware parent mastery + terminal stamping of fresh crossings.
-  // Flag off → empty frozen set, no writes — P5's pure behavior.
   let frozenParents: ReadonlySet<string> = new Set();
   if (isKnowledgeGraphMasteryEnabled()) {
     const credits = new Map<string, number>();
@@ -270,5 +381,20 @@ export async function getKnowledgeTree(userId: string): Promise<KnowledgeTreeNod
     );
   }
 
-  return buildKnowledgeTree(owned, nodes, edges, frozenParents);
+  return {
+    tree: buildKnowledgeTree(owned, nodes, edges, frozenParents, options),
+    collections: collectCollections(owned, nodes, edges),
+    ownedDomains: visible.map((d) => ({
+      domain: d.domain,
+      displayName: d.displayName || d.domain,
+      points: d.points,
+      tier: d.tier,
+      iconKey: d.iconKey,
+      broadCategory: d.broadCategory,
+    })),
+  };
+}
+
+export async function getKnowledgeTree(userId: string): Promise<KnowledgeTreeNode> {
+  return (await getKnowledgeMapData(userId)).tree;
 }
