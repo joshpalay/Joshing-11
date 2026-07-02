@@ -1,5 +1,25 @@
 # batch-verify cron — cost characterization (read-only, no LLM calls)
 
+> **UPDATE (2026-07-02): the three cost dials this doc named have landed.**
+> 1. **System-prompt caching** — `buildVerifyRequestParams` now sends the system
+>    prompt with an ephemeral `cache_control` breakpoint (live in both modes).
+> 2. **`extra_fact` tightening** — the answer heuristic now requires bundling
+>    **plus** an assertion signal (`answerCarriesAdjacentClaim`), not just a
+>    comma/"and"; the explanation path is unchanged. Live by default; escape
+>    hatch `PREFILTER_EXTRA_FACT_LEGACY=true`. **Measure the actual skip-rate
+>    lift with `npx tsx scripts/measure-prefilter-skip-rate.ts` (read-only, zero
+>    spend) and record the numbers here** — the 9%-skip baseline below is the
+>    before.
+> 3. **Batch API mode** — `BATCH_VERIFY_ASYNC_ENABLED=true` (flag-off default)
+>    runs the cron two-phase over the Message Batches API: 50% off all token
+>    usage, no per-call timeout, verdicts land ~24h later. Docs confirm
+>    `web_search` runs inside a batch (the batch worker throttles + retries it
+>    org-wide). Async scans `BATCH_VERIFY_ASYNC_BATCH_SIZE` (default 40)/store,
+>    fixing §1/§4's ~26/day GeneratedQuestion creep. Ledger rows carry
+>    `is_batch` (0106) so the discount prices honestly.
+> The §3 web-fallback measurability gap also closed: `web_search_requests` is
+> ledgered per call since 0105.
+
 **Date:** 2026-07-01 · **Method:** live code + read-only `LlmUsageEvent` queries + the PURE `prefilterForVerification` run over a 600-row recent sample (zero LLM spend). · **Scope:** `/api/cron/batch-verify-questions` (`B-QUESTION-QUALITY-AGENTS-01` Phase 3). **The code is sound** (unstamped-only selection, stamp-on-every-outcome, pure pre-filter, web-as-fallback). The question is **steady-state daily rate and right-sizing**, not correctness.
 
 ## Config (confirmed in code)

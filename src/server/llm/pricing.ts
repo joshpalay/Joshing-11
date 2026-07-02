@@ -118,7 +118,16 @@ export type UsageTokens = {
   /** Anthropic server-side web_search request count (0105). Optional: older call
    *  sites and OpenAI rows simply omit it. */
   webSearchRequests?: number;
+  /** True when the tokens billed through the Message Batches API (0106) — all
+   *  token usage is charged at 50% of list. The web-search per-request fee is a
+   *  separate meter and is NOT discounted here (the 50% applies to token usage;
+   *  charging the search fee in full is the safe direction if Anthropic does
+   *  discount it). */
+  isBatch?: boolean;
 };
+
+/** Message Batches API: all token usage bills at 50% of standard prices. */
+export const BATCH_TOKEN_DISCOUNT = 0.5;
 
 export type CostEstimate = {
   /** Total estimated USD, or null when the model isn't in MODEL_PRICING. */
@@ -137,11 +146,13 @@ export type CostEstimate = {
 export function estimateCostUsd(model: string, tokens: UsageTokens): CostEstimate {
   const price = MODEL_PRICING[model];
   if (!price) return { usd: null, unpriced: true };
+  const tokenMultiplier = tokens.isBatch ? BATCH_TOKEN_DISCOUNT : 1;
   const usd =
-    (tokens.inputTokens / 1_000_000) * price.inputPerMtok +
-    (tokens.outputTokens / 1_000_000) * price.outputPerMtok +
-    (tokens.cacheReadTokens / 1_000_000) * price.cacheReadPerMtok +
-    (tokens.cacheCreateTokens / 1_000_000) * price.cacheWritePerMtok +
+    ((tokens.inputTokens / 1_000_000) * price.inputPerMtok +
+      (tokens.outputTokens / 1_000_000) * price.outputPerMtok +
+      (tokens.cacheReadTokens / 1_000_000) * price.cacheReadPerMtok +
+      (tokens.cacheCreateTokens / 1_000_000) * price.cacheWritePerMtok) *
+      tokenMultiplier +
     (tokens.webSearchRequests ?? 0) * WEB_SEARCH_USD_PER_REQUEST;
   return { usd, unpriced: false };
 }
