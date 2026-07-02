@@ -810,6 +810,50 @@ export const domainRelations = pgTable(
   ],
 );
 
+// B-KNOWLEDGE-TAXONOMY-01 P1 (migration 0102) — the leaf/parent knowledge
+// graph (D-KNOWLEDGE-TAXONOMY-MODEL-01). Structure only, human-authored
+// (B-KNOWLEDGE-ADMIN-01 populates it); dark until KNOWLEDGE_GRAPH_* flags.
+// domainKey is UNIQUE — the anti-fragmentation tripwire: a label folding onto
+// an existing node surfaces that node, never mints a sibling. A node can be
+// leaf AND parent ('both' — Bach is masterable and parent of WTC, §3).
+// masteryThreshold is the human-set absolute bar (§5); NULL → code default.
+export const knowledgeNodes = pgTable(
+  'KnowledgeNode',
+  {
+    id: id(),
+    label: text('label').notNull(),
+    domainKey: text('domain_key').notNull(),
+    nodeKind: text('node_kind').$type<'leaf' | 'parent' | 'both'>().notNull().default('leaf'),
+    masteryThreshold: integer('mastery_threshold'),
+    broadCategory: text('broad_category'),
+    fieldHue: text('field_hue'),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
+);
+
+// Typed child→parent membership (§7): 'substantive' = depth-eligible credit
+// (you understand the subject); 'collection' = coverage-only (you've covered
+// the set). A leaf may have many parents. Deliberately SEPARATE from
+// DomainRelation above — that is the serving-side near-ness cache keyed on raw
+// canonical_subcategory strings; this is the authored taxonomy keyed on
+// domainKey. Keyed by domain_key, not node id, so edges survive label edits.
+export const knowledgeEdges = pgTable(
+  'KnowledgeEdge',
+  {
+    id: id(),
+    childDomainKey: text('child_domain_key').notNull(),
+    parentDomainKey: text('parent_domain_key').notNull(),
+    edgeType: text('edge_type').$type<'substantive' | 'collection'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('KnowledgeEdge_child_parent_key').on(table.childDomainKey, table.parentDomainKey),
+    index('KnowledgeEdge_parent_domain_key_idx').on(table.parentDomainKey),
+    index('KnowledgeEdge_child_domain_key_idx').on(table.childDomainKey),
+  ],
+);
+
 export const questionFeedback = pgTable(
   'QuestionFeedback',
   {

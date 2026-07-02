@@ -715,6 +715,13 @@
       "when": 1785283200000,
       "tag": "0101_author_invitation",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1785369600000,
+      "tag": "0102_knowledge_graph",
+      "breakpoints": true
     }
   ]
 }

@@ -309,6 +309,52 @@ export async function register() {
       // Best-effort pre-create; migrate() creates it on a fresh DB.
     }
 
+    // B-KNOWLEDGE-TAXONOMY-01 P1 (migration 0102_knowledge_graph): the
+    // leaf/parent knowledge-graph tables (KnowledgeNode + KnowledgeEdge). New +
+    // isolated; RLS-enabled with no policies (owner role bypasses RLS) per
+    // B-SECURITY-RLS-01. Idempotent (precedent: 0097/0101 guards above).
+    // Structure only — dark until KNOWLEDGE_GRAPH_* flags flip.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeNode" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "label" text NOT NULL,
+          "domain_key" text NOT NULL,
+          "node_kind" text NOT NULL DEFAULT 'leaf' CHECK ("node_kind" IN ('leaf', 'parent', 'both')),
+          "mastery_threshold" integer,
+          "broad_category" text,
+          "field_hue" text,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeNode" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeNode_domain_key_key" ON "KnowledgeNode" ("domain_key")
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeEdge" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "child_domain_key" text NOT NULL,
+          "parent_domain_key" text NOT NULL,
+          "edge_type" text NOT NULL CHECK ("edge_type" IN ('substantive', 'collection')),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeEdge" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeEdge_child_parent_key"
+          ON "KnowledgeEdge" ("child_domain_key", "parent_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeEdge_parent_domain_key_idx" ON "KnowledgeEdge" ("parent_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeEdge_child_domain_key_idx" ON "KnowledgeEdge" ("child_domain_key")
+      `);
+    } catch {
+      // Best-effort pre-create; migrate() creates them on a fresh DB.
+    }
+
     // B-SUPPLY-REFILL-THROUGHPUT-01 follow-up (migration 0098): per-domain refill
     // health for adaptive timeout exclusion. New + isolated; RLS-enabled with no
     // policies (owner role bypasses RLS). Idempotent so a partially-recorded DB
