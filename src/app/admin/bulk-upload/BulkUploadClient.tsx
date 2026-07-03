@@ -78,7 +78,7 @@ export function BulkUploadClient({
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
+    <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
       <header className="mb-5">
         <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">Bulk upload questions</h1>
         <p className="text-muted-foreground mt-1 text-sm">
