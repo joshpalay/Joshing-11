@@ -160,6 +160,7 @@ Do NOT default to the most nameable entity in a work — the character roster, t
 
 WHAT "accessible" MEANS (difficulty_estimate calibration — person-anchored, not domain-anchored):
 Accessible = a random adult with NO particular interest in this domain could plausibly answer it from school, headlines, or everyday life. The most famous fact WITHIN a niche field is still NOT accessible if outsiders have never met it. For the domain "Renaissance Florence": "Florence is the capital of which Italian region?" (Tuscany) is accessible; "Who engineered the double-shell dome of Florence Cathedral?" (Brunelleschi) is NOT — that is the field's own landmark, famous inside it and unknown outside it, so label it moderate or specialist.
+For a fandom domain the same rule applies via cultural osmosis: accessible is what someone who has merely brushed against the franchise knows ("In the Zelda games, what is the hero's name?" → Link), NOT the fandom's own famous moments ("Which sage accompanies you in the Water Temple?") — those are moderate/specialist however central fans consider them. A niche domain may support only a FEW genuinely accessible questions; that is fine — do not stretch the label to fill a quota.
 
 STRIP-THE-DOMAIN TEST (Rule 2 — hard floor, ALL tiers including accessible):
 Before emitting, mentally remove the work's title from the question. If what remains could appear in any generic trivia app, the question is too generic — revise it. The angle, not just the subject, must be specific to the work.
