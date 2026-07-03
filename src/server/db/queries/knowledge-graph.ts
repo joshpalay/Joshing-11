@@ -1,6 +1,6 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 
-import { db, knowledgeEdges, knowledgeNodes } from '@/server/db';
+import { db, generatedQuestions, knowledgeEdges, knowledgeNodes, questions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // B-KNOWLEDGE-ADMIN-01 P1 — write layer for the human-authored knowledge graph
@@ -37,6 +37,69 @@ export async function listKnowledgeGraph(): Promise<{
     db.select().from(knowledgeEdges).orderBy(asc(knowledgeEdges.parentDomainKey)),
   ]);
   return { nodes, edges };
+}
+
+export type DomainQuestionPeek = {
+  text: string;
+  answer: string;
+  source: 'canonical' | 'bank';
+  suppressed: boolean;
+};
+
+// A read-only peek at what actually lives in a territory — the admin sanity
+// check before moving/merging it. Canonical rows match on the node's exact
+// label; bank rows match on domain_key (the folded form), so spelling variants
+// still show. Newest first, canonical before bank, capped.
+export async function listQuestionsForDomain(
+  key: string,
+  limit = 20,
+): Promise<{ label: string; questions: DomainQuestionPeek[] } | null> {
+  const [node] = await db
+    .select({ label: knowledgeNodes.label })
+    .from(knowledgeNodes)
+    .where(eq(knowledgeNodes.domainKey, key))
+    .limit(1);
+  if (!node) return null;
+
+  const [canonical, bank] = await Promise.all([
+    db
+      .select({
+        text: questions.questionText,
+        answer: questions.answerText,
+        status: questions.publicStatus,
+      })
+      .from(questions)
+      .where(and(eq(questions.canonicalSubcategory, node.label), isNull(questions.deletedAt)))
+      .orderBy(desc(questions.createdAt))
+      .limit(limit),
+    db
+      .select({
+        text: generatedQuestions.questionText,
+        answer: generatedQuestions.answer,
+        isDuplicate: generatedQuestions.isDuplicate,
+      })
+      .from(generatedQuestions)
+      .where(eq(generatedQuestions.domainKey, key))
+      .orderBy(desc(generatedQuestions.createdAt))
+      .limit(limit),
+  ]);
+
+  const rows: DomainQuestionPeek[] = [
+    ...canonical.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'canonical' as const,
+      suppressed: q.status === 'needs_review' || q.status === 'rejected',
+    })),
+    ...bank.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'bank' as const,
+      suppressed: q.isDuplicate,
+    })),
+  ].slice(0, limit);
+
+  return { label: node.label, questions: rows };
 }
 
 export type CreateNodeInput = {
@@ -240,6 +303,73 @@ export async function ratifyProposedParent(
 // create-before-delete so a fault can duplicate an edge but never orphan the
 // child. Filing something under a LEAF promotes that leaf to 'both' (D-doc §3
 // — Bach is masterable AND parent of WTC); its leaf mastery is untouched.
+// Flip a child above its own parent ("drag Shakespeare so it is the parent of
+// Shakespearean Drama"): the child takes the parent's memberships, the parent
+// files under the child, everything else stays put. Create-before-delete
+// ordering — a fault can leave a transient extra edge, never an orphan.
+export async function invertKnowledgeEdge(
+  input: { childDomainKey: string; parentDomainKey: string },
+  actorUserId: string,
+): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'self_edge' }> {
+  if (input.childDomainKey === input.parentDomainKey) return { ok: false, reason: 'self_edge' };
+  const [edge] = await db
+    .select({ id: knowledgeEdges.id })
+    .from(knowledgeEdges)
+    .where(
+      and(
+        eq(knowledgeEdges.childDomainKey, input.childDomainKey),
+        eq(knowledgeEdges.parentDomainKey, input.parentDomainKey),
+      ),
+    )
+    .limit(1);
+  if (!edge) return { ok: false, reason: 'not_found' };
+
+  // The child inherits the parent's own memberships (grandparents). Drop the
+  // parent's membership rows the child already holds, then re-point the rest.
+  const [childParentEdges, parentParentEdges] = await Promise.all([
+    db
+      .select({ parentDomainKey: knowledgeEdges.parentDomainKey })
+      .from(knowledgeEdges)
+      .where(eq(knowledgeEdges.childDomainKey, input.childDomainKey)),
+    db
+      .select({ id: knowledgeEdges.id, parentDomainKey: knowledgeEdges.parentDomainKey })
+      .from(knowledgeEdges)
+      .where(eq(knowledgeEdges.childDomainKey, input.parentDomainKey)),
+  ]);
+  const childAlreadyUnder = new Set(childParentEdges.map((e) => e.parentDomainKey));
+  for (const grand of parentParentEdges) {
+    if (childAlreadyUnder.has(grand.parentDomainKey) || grand.parentDomainKey === input.childDomainKey) {
+      await db.delete(knowledgeEdges).where(eq(knowledgeEdges.id, grand.id));
+    } else {
+      await db
+        .update(knowledgeEdges)
+        .set({ childDomainKey: input.childDomainKey })
+        .where(eq(knowledgeEdges.id, grand.id));
+    }
+  }
+
+  // The parent files under the child; the child becomes a parent-ish node.
+  const created = await createKnowledgeEdge(
+    {
+      childDomainKey: input.parentDomainKey,
+      parentDomainKey: input.childDomainKey,
+      edgeType: 'substantive',
+    },
+    actorUserId,
+  );
+  if (!created.ok && created.reason !== 'duplicate') return { ok: false, reason: 'not_found' };
+  await db
+    .update(knowledgeNodes)
+    .set({ nodeKind: 'both' })
+    .where(and(eq(knowledgeNodes.domainKey, input.childDomainKey), eq(knowledgeNodes.nodeKind, 'leaf')));
+
+  // Last: sever the old downward edge (create-before-delete).
+  await db.delete(knowledgeEdges).where(eq(knowledgeEdges.id, edge.id));
+
+  console.info('[knowledge-admin] edge inverted', { actorUserId, ...input });
+  return { ok: true };
+}
+
 export async function attachChild(
   input: {
     childDomainKey: string;

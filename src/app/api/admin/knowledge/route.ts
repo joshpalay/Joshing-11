@@ -8,6 +8,8 @@ import {
   createKnowledgeEdge,
   createKnowledgeNode,
   deleteKnowledgeEdge,
+  invertKnowledgeEdge,
+  listQuestionsForDomain,
   ratifyProposedParent,
   ratifyStructureGroup,
   updateKnowledgeNode,
@@ -77,6 +79,16 @@ const bodySchema = z.discriminatedUnion('action', [
     childDomainKey: keySchema,
     toParentDomainKey: keySchema,
     moveFromParentDomainKey: keySchema.nullable().optional(),
+  }),
+  // Read-only peek at a territory's actual questions — the sanity check before
+  // moving or merging it.
+  z.object({ action: z.literal('list_questions'), domainKey: keySchema }),
+  // Flip a child above its own parent (the child inherits the parent's
+  // memberships; the parent files under the child).
+  z.object({
+    action: z.literal('invert_edge'),
+    childDomainKey: keySchema,
+    parentDomainKey: keySchema,
   }),
   // Fold one territory into another — questions, mastery, and history move to
   // the target; the source ceases to exist. Irreversible; for SAME-SCOPE
@@ -210,6 +222,26 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: result.reason }, { status });
       }
       return NextResponse.json({ edge: result.edge }, { status: 201 });
+    }
+
+    case 'list_questions': {
+      const result = await listQuestionsForDomain(data.domainKey);
+      if (!result) return NextResponse.json({ error: 'unknown_node' }, { status: 422 });
+      return NextResponse.json(result);
+    }
+
+    case 'invert_edge': {
+      const result = await invertKnowledgeEdge(
+        { childDomainKey: data.childDomainKey, parentDomainKey: data.parentDomainKey },
+        session.userId,
+      );
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.reason },
+          { status: result.reason === 'self_edge' ? 400 : 404 },
+        );
+      }
+      return NextResponse.json(result);
     }
 
     case 'merge_node': {
