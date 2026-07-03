@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { AdminReviewReport, BlockedReviewItem } from '@/server/db/queries/content-reports';
@@ -23,26 +23,35 @@ export function AdminReportsClient({
   blocked: BlockedReviewItem[];
 }) {
   const [view, setView] = useState<'open' | 'blocked'>('open');
+  // Optimistic clear: an actioned card leaves immediately and the count ticks
+  // down, while router.refresh() reconciles with the server in the background.
+  // Keyed by the card's stable id ('report:<id>' / 'demotion:<qid>').
+  const [cleared, setCleared] = useState<Set<string>>(new Set());
+  const clear = (key: string) => setCleared((prev) => new Set(prev).add(key));
 
   // One queue, two streams. Player inappropriate reports stay pinned first
   // (high-priority, matching the query's ordering); everything else — incorrect
   // reports and machine demotions — merges oldest-first so the longest-suppressed
   // content is reviewed soonest.
-  const inappropriate = reports.filter((r) => r.category === 'inappropriate');
+  const inappropriate = reports.filter(
+    (r) => r.category === 'inappropriate' && !cleared.has(`report:${r.id}`),
+  );
   const rest: Array<
     | { kind: 'report'; at: number; report: AdminReviewReport }
     | { kind: 'demotion'; at: number; item: MachineDemotionReviewItem }
   > = [
     ...reports
-      .filter((r) => r.category !== 'inappropriate')
+      .filter((r) => r.category !== 'inappropriate' && !cleared.has(`report:${r.id}`))
       .map((report) => ({ kind: 'report' as const, at: new Date(report.createdAt).getTime(), report })),
-    ...demotions.map((item) => ({
-      kind: 'demotion' as const,
-      at: item.verifiedAt ? new Date(item.verifiedAt).getTime() : 0,
-      item,
-    })),
+    ...demotions
+      .filter((item) => !cleared.has(`demotion:${item.questionId}`))
+      .map((item) => ({
+        kind: 'demotion' as const,
+        at: item.verifiedAt ? new Date(item.verifiedAt).getTime() : 0,
+        item,
+      })),
   ].sort((a, b) => a.at - b.at);
-  const openCount = reports.length + demotions.length;
+  const openCount = inappropriate.length + rest.length;
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
@@ -72,13 +81,21 @@ export function AdminReportsClient({
           ) : (
             <>
               {inappropriate.map((report) => (
-                <ReportRow key={report.id} report={report} />
+                <ReportRow key={report.id} report={report} onCleared={() => clear(`report:${report.id}`)} />
               ))}
               {rest.map((entry) =>
                 entry.kind === 'report' ? (
-                  <ReportRow key={entry.report.id} report={entry.report} />
+                  <ReportRow
+                    key={entry.report.id}
+                    report={entry.report}
+                    onCleared={() => clear(`report:${entry.report.id}`)}
+                  />
                 ) : (
-                  <DemotionRow key={entry.item.questionId} item={entry.item} />
+                  <DemotionRow
+                    key={entry.item.questionId}
+                    item={entry.item}
+                    onCleared={() => clear(`demotion:${entry.item.questionId}`)}
+                  />
                 ),
               )}
             </>
@@ -121,6 +138,67 @@ function TabButton({
     >
       {children}
     </button>
+  );
+}
+
+// Clamp a long block to a few lines with a show-more toggle — keeps review
+// cards short enough to scan a full queue without endless scrolling.
+function ClampText({ text, lines = 3 }: { text: string; lines?: number }) {
+  const [open, setOpen] = useState(false);
+  // Only offer the toggle when it's plausibly long enough to clamp.
+  const longish = text.length > 180;
+  return (
+    <span>
+      <span
+        className="block"
+        style={
+          open || !longish
+            ? undefined
+            : {
+                display: '-webkit-box',
+                WebkitLineClamp: lines,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }
+        }
+      >
+        {text}
+      </span>
+      {longish ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-muted-foreground mt-0.5 text-xs underline-offset-2 hover:underline"
+        >
+          {open ? 'show less' : 'show more'}
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+// A rotating progress line for the ~60s re-run (answer generation + grounded
+// verify) so the wait reads as work, not a freeze — same idiom as the daily
+// loading screen.
+const RERUN_PHRASES = [
+  'Generating a fresh answer…',
+  'Checking it against sources…',
+  'Weighing the premise…',
+  'Almost there…',
+];
+
+function RerunProgress() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setI((n) => (n + 1) % RERUN_PHRASES.length), 2200);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="rounded-md px-3 py-2 text-[13px]" style={{ background: 'var(--surface-2)' }}>
+      <span className="animate-pulse text-[var(--brand-ink-700)]">{RERUN_PHRASES[i]}</span>
+      <span className="mt-2 block h-3 w-2/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
+      <span className="mt-1.5 block h-3 w-1/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
+    </div>
   );
 }
 
@@ -356,7 +434,9 @@ function EditPanel({
       ) : null}
 
       {/* The re-run verdict — the machine's read on the reworked question. */}
-      {rerun ? (
+      {pending === 'rerun' ? (
+        <RerunProgress />
+      ) : rerun ? (
         <div className="rounded-md px-3 py-2 text-[13px] leading-relaxed" style={verdictTone}>
           <span className="font-semibold">
             {rerun.verdict === 'ok'
@@ -366,7 +446,9 @@ function EditPanel({
                 : '? Verifier: couldn’t settle'}
           </span>
           {rerun.usedWeb ? <span className="text-muted-foreground"> · web-checked</span> : null}
-          <span className="block">{rerun.reason}</span>
+          <span className="block">
+            <ClampText text={rerun.reason} />
+          </span>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[var(--brand-ink-700)]">
             <span>
               LLM answer: <strong>{rerun.suggestedAnswer}</strong>
@@ -446,12 +528,19 @@ function EditPanel({
   );
 }
 
-function ReportRow({ report }: { report: AdminReviewReport }) {
+function ReportRow({ report, onCleared }: { report: AdminReviewReport; onCleared: () => void }) {
   const router = useRouter();
   const [reviewReason, setReviewReason] = useState('');
   const [pending, setPending] = useState<'uphold' | 'dismiss' | null>(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // On success the card leaves the list immediately (optimistic), then a
+  // background refresh reconciles with the server.
+  function resolved() {
+    onCleared();
+    router.refresh();
+  }
 
   async function act(action: 'uphold' | 'dismiss') {
     if (pending) return;
@@ -467,7 +556,7 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
       setPending(null);
       return;
     }
-    router.refresh();
+    resolved();
   }
 
   const kindLabel =
@@ -510,7 +599,9 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
         <p className="text-muted-foreground mt-0.5">Answer: {report.correctAnswer}</p>
       ) : null}
 
-      <p className="mt-2 italic text-[var(--brand-ink-700)]">&ldquo;{report.note}&rdquo;</p>
+      <div className="mt-2 italic text-[var(--brand-ink-700)]">
+        <ClampText text={`“${report.note}”`} />
+      </div>
       {report.suggestedAnswer ? (
         <p className="text-muted-foreground mt-0.5">Suggested: {report.suggestedAnswer}</p>
       ) : null}
@@ -530,7 +621,7 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
           canonicalSubcategory={null}
           broadCategory={null}
           concern={`${report.note}${report.suggestedAnswer ? ` (reader suggests: ${report.suggestedAnswer})` : ''}`}
-          onDone={() => router.refresh()}
+          onDone={resolved}
           onCancel={() => setEditing(false)}
         />
       ) : (
@@ -586,11 +677,16 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
 // the verifier and the "concern" block is the verifier's stored reason instead
 // of a reporter note. Actions: restore (verifier was wrong), edit (verifier was
 // right — fix it), retire (right, not worth fixing; soft/reversible).
-function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
+function DemotionRow({ item, onCleared }: { item: MachineDemotionReviewItem; onCleared: () => void }) {
   const router = useRouter();
   const [pending, setPending] = useState<'restore' | 'retire' | null>(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function resolved() {
+    onCleared();
+    router.refresh();
+  }
 
   async function act(action: 'restore_demoted' | 'retire_demoted') {
     if (pending) return;
@@ -602,7 +698,7 @@ function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
       setPending(null);
       return;
     }
-    router.refresh();
+    resolved();
   }
 
   const authorLabel = item.authorIsHouse
@@ -635,7 +731,9 @@ function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
       <p className="mt-2 font-medium text-[var(--brand-ink)]">{item.questionText}</p>
       <p className="text-muted-foreground mt-0.5">Answer: {item.correctAnswer}</p>
       {item.explanation ? (
-        <p className="text-muted-foreground mt-0.5 text-[13px]">{item.explanation}</p>
+        <div className="text-muted-foreground mt-0.5 text-[13px]">
+          <ClampText text={item.explanation} />
+        </div>
       ) : null}
 
       <p
@@ -656,7 +754,7 @@ function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
           canonicalSubcategory={item.canonicalSubcategory}
           broadCategory={item.broadCategory}
           concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
-          onDone={() => router.refresh()}
+          onDone={resolved}
           onCancel={() => setEditing(false)}
         />
       ) : (
