@@ -12,6 +12,8 @@ const {
   restoreDemotedMock,
   retireDemotedMock,
   editContentMock,
+  approveMock,
+  rerunMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(async () => ({ userId: 'admin-1', id: 's-1' }) as { userId: string; id: string } | null),
   isAdminUserMock: vi.fn(() => true),
@@ -22,6 +24,16 @@ const {
   restoreDemotedMock: vi.fn(async () => ({ ok: true, action: 'restored' })),
   retireDemotedMock: vi.fn(async () => ({ ok: true, action: 'retired' })),
   editContentMock: vi.fn(async () => ({ ok: true, action: 'edited' })),
+  approveMock: vi.fn(async () => ({ ok: true, resolvedReports: 1 })),
+  rerunMock: vi.fn(async () => ({
+    suggestedAnswer: 'Demon Dragon',
+    alternateAnswers: [],
+    explanation: 'His draconification form.',
+    verdict: 'ok',
+    reason: 'verified',
+    usedWeb: true,
+    verifiedAnswer: 'Demon Dragon',
+  })),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
@@ -36,7 +48,9 @@ vi.mock('@/server/db/queries/machine-demotions', () => ({
   restoreDemotedQuestion: restoreDemotedMock,
   retireDemotedQuestion: retireDemotedMock,
   editQuestionContent: editContentMock,
+  approveEditedQuestion: approveMock,
 }));
+vi.mock('@/server/quality/rerun-question', () => ({ rerunQuestion: rerunMock }));
 
 import { POST } from '@/app/api/admin/content-reports/route';
 
@@ -92,6 +106,62 @@ describe('POST /api/admin/content-reports', () => {
     upholdMock.mockResolvedValueOnce({ ok: false, reason: 'already_resolved' });
     const res = await post({ reportId: 'r1', action: 'uphold' });
     expect(res.status).toBe(409);
+  });
+
+  // ─── B-REVIEW-RERUN-01: re-run + approve ───
+
+  it('rerun_verify runs the LLM and persists NOTHING', async () => {
+    const res = await post({
+      action: 'rerun_verify',
+      questionText: 'What dragon form does Ganondorf become?',
+    });
+    expect(res.status).toBe(200);
+    expect(rerunMock).toHaveBeenCalledWith(
+      expect.objectContaining({ questionText: 'What dragon form does Ganondorf become?' }),
+    );
+    expect(approveMock).not.toHaveBeenCalled(); // preview only
+    const body = (await res.json()) as { verdict: string; suggestedAnswer: string };
+    expect(body.verdict).toBe('ok');
+    expect(body.suggestedAnswer).toBe('Demon Dragon');
+  });
+
+  it('rerun_verify maps an unavailable LLM to 503', async () => {
+    rerunMock.mockResolvedValueOnce(null);
+    const res = await post({ action: 'rerun_verify', questionText: 'q?' });
+    expect(res.status).toBe(503);
+  });
+
+  it('approve persists the edit + verified stamp for a GENERATED target', async () => {
+    const res = await post({
+      action: 'approve',
+      target: { table: 'generated', id: 'g1' },
+      questionText: 'Fixed question?',
+      answerText: 'Demon Dragon',
+      explanation: 'His draconification form.',
+    });
+    expect(res.status).toBe(200);
+    expect(approveMock).toHaveBeenCalledWith(
+      { table: 'generated', id: 'g1' },
+      { questionText: 'Fixed question?', answerText: 'Demon Dragon', explanation: 'His draconification form.' },
+    );
+  });
+
+  it('approve maps a missing target to 404', async () => {
+    approveMock.mockResolvedValueOnce({ ok: false, reason: 'not_found' });
+    const res = await post({
+      action: 'approve',
+      target: { table: 'question', id: 'gone' },
+      questionText: 'q?',
+      answerText: 'a',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('rerun + approve are gated to admins (404, no LLM call)', async () => {
+    isAdminUserMock.mockReturnValue(false);
+    const res = await post({ action: 'rerun_verify', questionText: 'q?' });
+    expect(res.status).toBe(404);
+    expect(rerunMock).not.toHaveBeenCalled();
   });
 
   // ─── B-CRAFTER-LIFECYCLE-01 Phase 1: machine-demotion actions ───

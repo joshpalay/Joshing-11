@@ -355,6 +355,33 @@ export async function resolveActiveIncorrectReportsForQuestion(
   return updated.length;
 }
 
+// The generated-store twin of the above (B-REVIEW-RERUN-01): resolves active
+// incorrect reports keyed on a GeneratedQuestion, so an admin re-running and
+// approving a generated question clears its reports too. Same 'admin_edited'
+// audit trail.
+export async function resolveActiveIncorrectReportsForGenerated(
+  generatedQuestionId: string,
+  decision: 'admin_edited' = 'admin_edited',
+): Promise<number> {
+  const updated = await db
+    .update(contentReports)
+    .set({
+      status: 'dismissed',
+      reviewDecision: decision,
+      reviewReason: 'Admin edited the question',
+      reviewedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(contentReports.generatedQuestionId, generatedQuestionId),
+        eq(contentReports.category, 'incorrect'),
+        inArray(contentReports.status, ['open', 'upheld']),
+      ),
+    )
+    .returning({ id: contentReports.id });
+  return updated.length;
+}
+
 // ─── B-Report-5: admin review queue ─────────────────────────────────────────
 //
 // Admin-only (ADMIN_USER_IDS allowlist, enforced at the route/page). The review list

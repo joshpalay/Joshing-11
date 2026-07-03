@@ -139,19 +139,30 @@ async function postAdminAction(body: Record<string, unknown>): Promise<string | 
   }
 }
 
-// Inline content editor shared by both streams. Saving posts the 'edit' action:
-// the server clears the verification stamp (the batch sweep re-fact-checks the
-// edit), returns the row to circulation if it was demoted, and resolves any
-// active incorrect reports as admin_edited.
+type RerunVerdict = {
+  suggestedAnswer: string;
+  alternateAnswers: string[];
+  explanation: string;
+  verdict: 'ok' | 'demoted' | 'unverifiable';
+  reason: string;
+  usedWeb: boolean;
+  verifiedAnswer: string;
+};
+
+// Inline editor with the full loop (B-REVIEW-RERUN-01): edit the question →
+// re-run it through the LLM for a fresh answer + grounded verdict → approve it
+// back into circulation. "Save & re-verify" (edit + async sweep, canonical
+// only) stays as the lighter option. Works on both question stores.
 function EditPanel({
-  questionId,
+  target,
   initialQuestion,
   initialAnswer,
   initialExplanation,
   // Report-stream cards don't load the explanation, so the field is hidden and
-  // OMITTED from the payload — otherwise saving would null an explanation the
-  // admin never saw. Demotion cards carry it and may edit it.
+  // OMITTED from the async-edit payload. Demotion cards carry it.
   showExplanation,
+  canonicalSubcategory,
+  broadCategory,
   // The reason this question is being edited (verifier reason / reporter note)
   // — repeated inside the panel so the one thing the admin needs while fixing
   // it never scrolls out of sight.
@@ -159,11 +170,13 @@ function EditPanel({
   onDone,
   onCancel,
 }: {
-  questionId: string;
+  target: { table: 'question' | 'generated'; id: string };
   initialQuestion: string;
   initialAnswer: string;
   initialExplanation: string | null;
   showExplanation: boolean;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
   concern?: string | null;
   onDone: () => void;
   onCancel: () => void;
@@ -171,27 +184,119 @@ function EditPanel({
   const [questionText, setQuestionText] = useState(initialQuestion);
   const [answerText, setAnswerText] = useState(initialAnswer);
   const [explanation, setExplanation] = useState(initialExplanation ?? '');
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<'save' | 'rerun' | 'approve' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rerun, setRerun] = useState<RerunVerdict | null>(null);
+  const [dirtySinceRerun, setDirtySinceRerun] = useState(false);
 
+  // Any content edit invalidates a prior verdict — the machine vouched for the
+  // old text, not this one. Approve stays gated until a fresh re-run.
+  function edited<T>(setter: (v: T) => void) {
+    return (v: T) => {
+      setter(v);
+      if (rerun) setDirtySinceRerun(true);
+    };
+  }
+
+  async function rerunNow() {
+    if (pending) return;
+    if (!questionText.trim()) {
+      setError('Question is required.');
+      return;
+    }
+    setPending('rerun');
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/content-reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'rerun_verify',
+          questionText: questionText.trim(),
+          answerText: answerText.trim() || undefined,
+          canonicalSubcategory,
+          broadCategory,
+        }),
+      });
+      if (!res.ok) {
+        setError(
+          res.status === 503
+            ? 'The machine is unavailable right now — try again shortly.'
+            : `Re-run failed (${res.status}).`,
+        );
+        return;
+      }
+      const body = (await res.json()) as RerunVerdict;
+      setRerun(body);
+      setDirtySinceRerun(false);
+    } catch {
+      setError('Re-run failed.');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  function adoptSuggestion() {
+    if (!rerun) return;
+    setAnswerText(rerun.suggestedAnswer);
+    if (showExplanation) setExplanation(rerun.explanation);
+    setDirtySinceRerun(true); // adopting changes the answer → re-run to re-verify
+  }
+
+  async function approve() {
+    if (pending) return;
+    if (!questionText.trim() || !answerText.trim()) {
+      setError('Question and answer are required.');
+      return;
+    }
+    setPending('approve');
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/content-reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'approve',
+          target,
+          questionText: questionText.trim(),
+          answerText: answerText.trim(),
+          explanation: showExplanation ? explanation.trim() || null : undefined,
+        }),
+      });
+      if (!res.ok) {
+        setError(`Approve failed (${res.status}).`);
+        setPending(null);
+        return;
+      }
+      onDone();
+    } catch {
+      setError('Approve failed.');
+      setPending(null);
+    }
+  }
+
+  // Async edit (canonical only — the generated store's report resolver runs via
+  // approve). Clears the stamp; the batch sweep re-checks later.
   async function save() {
     if (pending) return;
     if (!questionText.trim() || !answerText.trim()) {
       setError('Question and answer are required.');
       return;
     }
-    setPending(true);
+    setPending('save');
     setError(null);
     const err = await postAdminAction({
       action: 'edit',
-      questionId,
+      questionId: target.id,
       questionText: questionText.trim(),
       answerText: answerText.trim(),
       ...(showExplanation ? { factualExplanation: explanation.trim() || null } : {}),
     });
     if (err) {
       setError(err);
-      setPending(false);
+      setPending(null);
       return;
     }
     onDone();
@@ -199,6 +304,13 @@ function EditPanel({
 
   const fieldClass =
     'w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]';
+  const verdictTone =
+    rerun?.verdict === 'ok'
+      ? { color: 'var(--success)', background: 'var(--success-surface)' }
+      : rerun?.verdict === 'demoted'
+        ? { color: 'var(--danger)', background: 'var(--destructive-surface)' }
+        : { color: 'var(--warning)', background: 'var(--warning-surface)' };
+  const canApprove = rerun !== null && !dirtySinceRerun;
 
   return (
     <div className="mt-3 space-y-2">
@@ -215,7 +327,7 @@ function EditPanel({
         <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Question</span>
         <textarea
           value={questionText}
-          onChange={(e) => setQuestionText(e.target.value)}
+          onChange={(e) => edited(setQuestionText)(e.target.value)}
           rows={2}
           className={fieldClass}
         />
@@ -225,7 +337,7 @@ function EditPanel({
         <input
           type="text"
           value={answerText}
-          onChange={(e) => setAnswerText(e.target.value)}
+          onChange={(e) => edited(setAnswerText)(e.target.value)}
           className={fieldClass}
         />
       </label>
@@ -236,29 +348,89 @@ function EditPanel({
           </span>
           <textarea
             value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
+            onChange={(e) => edited(setExplanation)(e.target.value)}
             rows={2}
             className={fieldClass}
           />
         </label>
       ) : null}
-      <p className="text-muted-foreground text-[0.7rem]">
-        Saving returns it to circulation and queues it for machine re-verification.
-      </p>
+
+      {/* The re-run verdict — the machine's read on the reworked question. */}
+      {rerun ? (
+        <div className="rounded-md px-3 py-2 text-[13px] leading-relaxed" style={verdictTone}>
+          <span className="font-semibold">
+            {rerun.verdict === 'ok'
+              ? '✓ Verifier: looks correct'
+              : rerun.verdict === 'demoted'
+                ? '✗ Verifier: still wrong'
+                : '? Verifier: couldn’t settle'}
+          </span>
+          {rerun.usedWeb ? <span className="text-muted-foreground"> · web-checked</span> : null}
+          <span className="block">{rerun.reason}</span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[var(--brand-ink-700)]">
+            <span>
+              LLM answer: <strong>{rerun.suggestedAnswer}</strong>
+            </span>
+            {rerun.suggestedAnswer.trim().toLowerCase() !== answerText.trim().toLowerCase() ? (
+              <button
+                type="button"
+                onClick={adoptSuggestion}
+                className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)', background: 'var(--brand-card)' }}
+              >
+                Use this answer
+              </button>
+            ) : null}
+          </div>
+          {dirtySinceRerun ? (
+            <span className="mt-1 block text-xs text-[var(--brand-ink-700)]">
+              You’ve edited since this check — re-run before approving.
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-[0.7rem]">
+          Re-run the machine to get a fresh answer and a fact-check, then approve it back into
+          circulation.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => void save()}
-          disabled={pending}
+          onClick={() => void rerunNow()}
+          disabled={pending !== null}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
         >
-          {pending ? 'Saving…' : 'Save & re-verify'}
+          {pending === 'rerun' ? 'Re-running…' : rerun ? 'Re-run again' : 'Re-run through the LLM'}
         </button>
         <button
           type="button"
+          onClick={() => void approve()}
+          disabled={pending !== null || !canApprove}
+          title={canApprove ? undefined : 'Re-run the machine first, then approve'}
+          className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+        >
+          {pending === 'approve' ? 'Approving…' : 'Approve & circulate'}
+        </button>
+        {target.table === 'question' ? (
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={pending !== null}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            title="Save the edit and let the nightly sweep re-verify (no immediate check)"
+          >
+            {pending === 'save' ? 'Saving…' : 'Save & re-verify later'}
+          </button>
+        ) : null}
+        <button
+          type="button"
           onClick={onCancel}
-          disabled={pending}
+          disabled={pending !== null}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--border)' }}
         >
@@ -350,11 +522,13 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
 
       {editing ? (
         <EditPanel
-          questionId={report.target.id}
+          target={report.target}
           initialQuestion={report.questionText ?? ''}
           initialAnswer={report.correctAnswer ?? ''}
           initialExplanation={null}
           showExplanation={false}
+          canonicalSubcategory={null}
+          broadCategory={null}
           concern={`${report.note}${report.suggestedAnswer ? ` (reader suggests: ${report.suggestedAnswer})` : ''}`}
           onDone={() => router.refresh()}
           onCancel={() => setEditing(false)}
@@ -377,19 +551,17 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
           >
             {pending === 'uphold' ? 'Upholding…' : 'Uphold'}
           </button>
-          {/* Edit reworks canonical questions only — generated bank rows are
-              machine substrate; fix supply at the creation surface instead. */}
-          {report.target.table === 'question' ? (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              disabled={pending !== null}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-            >
-              Edit
-            </button>
-          ) : null}
+          {/* Edit → re-run → approve works on BOTH stores now (B-REVIEW-RERUN-01):
+              a reworked generated question re-verifies and returns to the bank. */}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            disabled={pending !== null}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+          >
+            Edit &amp; re-run
+          </button>
           <button
             type="button"
             onClick={() => void act('dismiss')}
@@ -476,11 +648,13 @@ function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
 
       {editing ? (
         <EditPanel
-          questionId={item.questionId}
+          target={{ table: 'question', id: item.questionId }}
           initialQuestion={item.questionText}
           initialAnswer={item.correctAnswer}
           initialExplanation={item.explanation}
           showExplanation
+          canonicalSubcategory={item.canonicalSubcategory}
+          broadCategory={item.broadCategory}
           concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
           onDone={() => router.refresh()}
           onCancel={() => setEditing(false)}
