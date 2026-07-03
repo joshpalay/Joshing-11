@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import {
+  attachChild,
   createKnowledgeEdge,
   createKnowledgeNode,
   deleteKnowledgeEdge,
@@ -66,6 +67,15 @@ const bodySchema = z.discriminatedUnion('action', [
     parentLabel: z.string().trim().min(1).max(120),
     parentBroadCategory: z.string().trim().max(80).nullable().optional(),
     edgeType: edgeTypeSchema,
+  }),
+  // Tree-editor verb: attach child under parent — MOVE when moveFrom present
+  // (old home edge removed), COPY otherwise (§7 multi-parent). Filing under a
+  // leaf promotes it to 'both'.
+  z.object({
+    action: z.literal('attach_child'),
+    childDomainKey: keySchema,
+    toParentDomainKey: keySchema,
+    moveFromParentDomainKey: keySchema.nullable().optional(),
   }),
   // The structure suggester: one LLM pass drafts a full grouping of the real
   // corpus; NOTHING persists (suggestions live only in the response).
@@ -174,6 +184,23 @@ export async function POST(request: NextRequest) {
       } catch {
         return NextResponse.json({ proposals: [] });
       }
+    }
+
+    case 'attach_child': {
+      const result = await attachChild(
+        {
+          childDomainKey: data.childDomainKey,
+          toParentDomainKey: data.toParentDomainKey,
+          moveFromParentDomainKey: data.moveFromParentDomainKey ?? null,
+        },
+        session.userId,
+      );
+      if (!result.ok) {
+        const status =
+          result.reason === 'self_edge' ? 400 : result.reason === 'unknown_node' ? 422 : 409;
+        return NextResponse.json({ error: result.reason }, { status });
+      }
+      return NextResponse.json({ edge: result.edge }, { status: 201 });
     }
 
     case 'propose_structure': {

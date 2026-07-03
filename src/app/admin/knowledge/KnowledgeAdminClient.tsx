@@ -98,65 +98,605 @@ export function KnowledgeAdminClient({
 
       <StructureSuggester graphIsEmpty={nodes.length === 0} onDone={() => router.refresh()} />
 
-      <NodeForm onDone={() => router.refresh()} />
+      <KnowledgeTreeEditor nodes={nodes} edges={edges} onDone={() => router.refresh()} />
 
-      <OrphanCheck nodes={nodes} edges={edges} />
-
-      <section className="mt-6">
-        <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">
-          Nodes ({nodes.length})
-        </h2>
-        {nodes.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Nothing authored yet — the graph is empty until you add the first node.
-          </p>
-        ) : (
+      {/* The form-based tools remain for edge-type work (collection edges),
+          per-node LLM parent proposals, and bulk inspection — tucked away so
+          the tree is the primary surface. */}
+      <details className="mt-6">
+        <summary className="text-muted-foreground cursor-pointer text-sm font-medium">
+          Advanced tools (forms, collection edges, proposals, orphan check)
+        </summary>
+        <div className="mt-3 space-y-4">
+          <NodeForm onDone={() => router.refresh()} />
+          <OrphanCheck nodes={nodes} edges={edges} />
           <div className="space-y-2">
             {nodes.map((node) => (
               <NodeRow key={node.id} node={node} onDone={() => router.refresh()} />
             ))}
           </div>
-        )}
-      </section>
-
-      <EdgeComposer nodes={nodes} onDone={() => router.refresh()} />
-
-      <section className="mt-6">
-        <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">
-          Rosters ({edges.length} edge{edges.length === 1 ? '' : 's'})
-        </h2>
-        {edgesByParent.size === 0 ? (
-          <p className="text-muted-foreground text-sm">No edges yet — draw the first one above.</p>
-        ) : (
-          <div className="space-y-3">
-            {[...edgesByParent.entries()].map(([parentKey, rows]) => (
-              <div key={parentKey} className="rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
-                <p className="font-medium text-[var(--brand-ink)]">
-                  {nodeByKey.get(parentKey)?.label ?? parentKey}
-                  <span className="text-muted-foreground font-normal">
-                    {' '}
-                    · {rows.length} child{rows.length === 1 ? '' : 'ren'}
-                    {nodeByKey.get(parentKey)?.masteryThreshold
-                      ? ` · bar ${nodeByKey.get(parentKey)!.masteryThreshold} pts`
-                      : ' · bar unset (code default)'}
-                  </span>
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {rows.map((edge) => (
-                    <EdgeRow
-                      key={edge.id}
-                      edge={edge}
-                      childLabel={nodeByKey.get(edge.childDomainKey)?.label ?? edge.childDomainKey}
-                      onDone={() => router.refresh()}
-                    />
-                  ))}
-                </ul>
+          <EdgeComposer nodes={nodes} onDone={() => router.refresh()} />
+          <section>
+            <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">
+              Rosters ({edges.length} edge{edges.length === 1 ? '' : 's'})
+            </h2>
+            {edgesByParent.size === 0 ? (
+              <p className="text-muted-foreground text-sm">No edges yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {[...edgesByParent.entries()].map(([parentKey, rows]) => (
+                  <div key={parentKey} className="rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
+                    <p className="font-medium text-[var(--brand-ink)]">
+                      {nodeByKey.get(parentKey)?.label ?? parentKey}
+                      <span className="text-muted-foreground font-normal">
+                        {' '}
+                        · {rows.length} child{rows.length === 1 ? '' : 'ren'}
+                        {nodeByKey.get(parentKey)?.masteryThreshold
+                          ? ` · bar ${nodeByKey.get(parentKey)!.masteryThreshold} pts`
+                          : ' · bar unset (code default)'}
+                      </span>
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {rows.map((edge) => (
+                        <EdgeRow
+                          key={edge.id}
+                          edge={edge}
+                          childLabel={nodeByKey.get(edge.childDomainKey)?.label ?? edge.childDomainKey}
+                          onDone={() => router.refresh()}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            )}
+          </section>
+        </div>
+      </details>
     </main>
+  );
+}
+
+// ─── the tree editor ─────────────────────────────────────────────────────────
+// The primary authoring surface (Josh, 2026-07-02: "a modified tree format
+// where you can expand categories and drag things up and down"). Tap-first —
+// Move/Copy put the editor in placement mode and every eligible node grows a
+// "Place here" target (drag-and-drop is miserable on mobile Safari; this is
+// three taps and works everywhere). Copy = the §7 multi-parent case: the node
+// then lives under BOTH parents. Moving under a leaf promotes it to 'both'
+// server-side (Beethoven becomes masterable AND a parent).
+
+type PickState = {
+  mode: 'move' | 'copy';
+  childKey: string;
+  childLabel: string;
+  fromParentKey: string | null;
+} | null;
+
+function KnowledgeTreeEditor({
+  nodes,
+  edges,
+  onDone,
+}: {
+  nodes: KnowledgeNodeRow[];
+  edges: KnowledgeEdgeRow[];
+  onDone: () => void;
+}) {
+  const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
+
+  const { childrenByParent, parentCountByChild, roots, descendantsOf } = useMemo(() => {
+    const childrenByParent = new Map<string, string[]>();
+    const parentCountByChild = new Map<string, number>();
+    for (const edge of edges) {
+      if (edge.edgeType !== 'substantive') continue;
+      if (!nodeByKey.has(edge.childDomainKey) || !nodeByKey.has(edge.parentDomainKey)) continue;
+      const list = childrenByParent.get(edge.parentDomainKey);
+      if (list) list.push(edge.childDomainKey);
+      else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
+      parentCountByChild.set(
+        edge.childDomainKey,
+        (parentCountByChild.get(edge.childDomainKey) ?? 0) + 1,
+      );
+    }
+    const byLabel = (a: string, b: string) =>
+      (nodeByKey.get(a)?.label ?? a).localeCompare(nodeByKey.get(b)?.label ?? b);
+    for (const list of childrenByParent.values()) list.sort(byLabel);
+
+    const roots = nodes
+      .map((n) => n.domainKey)
+      .filter((key) => !parentCountByChild.has(key))
+      .sort((a, b) => {
+        // Territories with children first, then alphabetical — scannability.
+        const aKids = childrenByParent.has(a) ? 0 : 1;
+        const bKids = childrenByParent.has(b) ? 0 : 1;
+        return aKids - bKids || byLabel(a, b);
+      });
+
+    const descendantsOf = (key: string): Set<string> => {
+      const out = new Set<string>();
+      const queue = [...(childrenByParent.get(key) ?? [])];
+      while (queue.length > 0) {
+        const next = queue.pop()!;
+        if (out.has(next)) continue;
+        out.add(next);
+        queue.push(...(childrenByParent.get(next) ?? []));
+      }
+      return out;
+    };
+
+    return { childrenByParent, parentCountByChild, roots, descendantsOf };
+  }, [nodes, edges, nodeByKey]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(roots.filter((key) => childrenByParent.has(key))),
+  );
+  const [picking, setPicking] = useState<PickState>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newTopLabel, setNewTopLabel] = useState('');
+
+  const pickedSubtree = useMemo(
+    () => (picking ? descendantsOf(picking.childKey) : new Set<string>()),
+    [picking, descendantsOf],
+  );
+
+  async function act(body: Record<string, unknown>, keepPicking = false) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await post(body);
+    setBusy(false);
+    if (!res.ok) {
+      setError(
+        res.body?.error === 'self_edge'
+          ? "Can't place a territory inside its own subtree."
+          : `That didn't save (${res.status}).`,
+      );
+      return;
+    }
+    if (!keepPicking) setPicking(null);
+    onDone();
+  }
+
+  function placeInto(toParentKey: string) {
+    if (!picking) return;
+    void act({
+      action: 'attach_child',
+      childDomainKey: picking.childKey,
+      toParentDomainKey: toParentKey,
+      ...(picking.mode === 'move' && picking.fromParentKey
+        ? { moveFromParentDomainKey: picking.fromParentKey }
+        : {}),
+    });
+  }
+
+  function makeTopLevel() {
+    if (!picking || !picking.fromParentKey) return;
+    void act({
+      action: 'delete_edge',
+      childDomainKey: picking.childKey,
+      parentDomainKey: picking.fromParentKey,
+    });
+  }
+
+  async function addTopLevel() {
+    const label = newTopLabel.trim();
+    if (!label || busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await post({ action: 'create_node', label, nodeKind: 'parent' });
+    setBusy(false);
+    if (!res.ok && res.status !== 409) {
+      setError(`Couldn't create "${label}" (${res.status}).`);
+      return;
+    }
+    setNewTopLabel('');
+    onDone();
+  }
+
+  return (
+    <section className="mt-6">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-serif text-lg font-semibold text-[var(--brand-ink)]">
+          The tree ({nodes.length} territories)
+        </h2>
+        <div className="flex items-center gap-1.5">
+          <input
+            value={newTopLabel}
+            onChange={(e) => setNewTopLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void addTopLevel();
+            }}
+            placeholder="New top-level territory…"
+            className="w-44 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1.5 text-sm focus:border-[var(--brand-navy)]"
+            aria-label="New top-level territory"
+          />
+          <button
+            type="button"
+            onClick={() => void addTopLevel()}
+            disabled={busy || !newTopLabel.trim()}
+            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+            style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      {picking ? (
+        <div
+          className="mb-2 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[13px]"
+          style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
+          aria-live="polite"
+        >
+          <span>
+            {picking.mode === 'move' ? 'Moving' : 'Copying'} <strong>{picking.childLabel}</strong> —
+            tap “Place here” on the destination.
+            {picking.mode === 'copy' ? ' It will live under both parents.' : ''}
+          </span>
+          {picking.mode === 'move' && picking.fromParentKey ? (
+            <button
+              type="button"
+              onClick={makeTopLevel}
+              disabled={busy}
+              className="rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-50"
+              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+            >
+              Make top-level
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setPicking(null)}
+            className="rounded-md border px-2 py-0.5 text-xs font-medium"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground mb-2 text-xs">
+          Expand with ▸ · Move re-files a territory · Copy files it under a second parent too ·
+          +&nbsp;Child adds a finer level (Beethoven under Classical Music, Sonatas under Beethoven).
+        </p>
+      )}
+      {error ? (
+        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+
+      <div className="rounded-md border py-1" style={{ borderColor: 'var(--border)' }}>
+        {roots.length === 0 ? (
+          <p className="text-muted-foreground px-3 py-2 text-sm">
+            Nothing in the tree yet — accept a suggested group above or add a territory.
+          </p>
+        ) : (
+          roots.map((key) => (
+            <TreeRow
+              key={key}
+              nodeKey={key}
+              parentKey={null}
+              depth={0}
+              ancestors={new Set()}
+              nodeByKey={nodeByKey}
+              childrenByParent={childrenByParent}
+              parentCountByChild={parentCountByChild}
+              expanded={expanded}
+              setExpanded={setExpanded}
+              picking={picking}
+              pickedSubtree={pickedSubtree}
+              busy={busy}
+              onPick={setPicking}
+              onPlace={placeInto}
+              onAct={act}
+              onDone={onDone}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function TreeRow({
+  nodeKey,
+  parentKey,
+  depth,
+  ancestors,
+  nodeByKey,
+  childrenByParent,
+  parentCountByChild,
+  expanded,
+  setExpanded,
+  picking,
+  pickedSubtree,
+  busy,
+  onPick,
+  onPlace,
+  onAct,
+  onDone,
+}: {
+  nodeKey: string;
+  parentKey: string | null;
+  depth: number;
+  ancestors: Set<string>;
+  nodeByKey: Map<string, KnowledgeNodeRow>;
+  childrenByParent: Map<string, string[]>;
+  parentCountByChild: Map<string, number>;
+  expanded: Set<string>;
+  setExpanded: (updater: (prev: Set<string>) => Set<string>) => void;
+  picking: PickState;
+  pickedSubtree: Set<string>;
+  busy: boolean;
+  onPick: (pick: PickState) => void;
+  onPlace: (toParentKey: string) => void;
+  onAct: (body: Record<string, unknown>) => Promise<void> | void;
+  onDone: () => void;
+}) {
+  const [addingChild, setAddingChild] = useState(false);
+  const [childLabel, setChildLabel] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState('');
+  const [editBar, setEditBar] = useState('');
+  const [rowError, setRowError] = useState<string | null>(null);
+
+  const node = nodeByKey.get(nodeKey);
+  if (!node || ancestors.has(nodeKey)) return null; // cycle guard
+
+  const children = childrenByParent.get(nodeKey) ?? [];
+  const isOpen = expanded.has(nodeKey);
+  const parentCount = parentCountByChild.get(nodeKey) ?? 0;
+  const isParentish = node.nodeKind !== 'leaf' || children.length > 0;
+
+  const placeDisabled =
+    !picking ||
+    busy ||
+    nodeKey === picking.childKey ||
+    pickedSubtree.has(nodeKey) ||
+    (picking.mode === 'move' && nodeKey === picking.fromParentKey);
+
+  async function submitChild() {
+    const label = childLabel.trim();
+    if (!label) return;
+    setRowError(null);
+    const created = await post({ action: 'create_node', label, nodeKind: 'leaf' });
+    let childKey: string | null = null;
+    if (created.ok) {
+      childKey = (created.body as unknown as { node?: { domainKey?: string } } | null)?.node?.domainKey ?? null;
+    } else if (created.status === 409) {
+      childKey =
+        (created.body as unknown as { existing?: { domainKey?: string } } | null)?.existing?.domainKey ?? null;
+    }
+    if (!childKey) {
+      setRowError(`Couldn't create "${label}" (${created.status}).`);
+      return;
+    }
+    await onAct({ action: 'attach_child', childDomainKey: childKey, toParentDomainKey: nodeKey });
+    setChildLabel('');
+    setAddingChild(false);
+  }
+
+  async function saveEdit() {
+    setRowError(null);
+    const res = await post({
+      action: 'edit_node',
+      id: node!.id,
+      label: editLabel.trim() || undefined,
+      masteryThreshold: editBar.trim() ? Number(editBar) : null,
+    });
+    if (!res.ok) {
+      setRowError(
+        res.status === 409
+          ? `That label folds onto "${res.body?.existing?.label ?? 'another territory'}".`
+          : `Save failed (${res.status}).`,
+      );
+      return;
+    }
+    setEditing(false);
+    onDone();
+  }
+
+  const smallBtn =
+    'rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-40';
+
+  return (
+    <div>
+      <div
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-1.5 text-sm last:border-b-0"
+        style={{ borderColor: 'var(--border)', paddingLeft: `${8 + depth * 18}px` }}
+      >
+        {children.length > 0 ? (
+          <button
+            type="button"
+            onClick={() =>
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                if (next.has(nodeKey)) next.delete(nodeKey);
+                else next.add(nodeKey);
+                return next;
+              })
+            }
+            aria-expanded={isOpen}
+            aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${node.label}`}
+            className="w-4 text-[var(--brand-ink-700)]"
+          >
+            {isOpen ? '▾' : '▸'}
+          </button>
+        ) : (
+          <span className="w-4" aria-hidden />
+        )}
+
+        {editing ? (
+          <span className="flex flex-wrap items-center gap-1.5">
+            <input
+              value={editLabel}
+              onChange={(e) => setEditLabel(e.target.value)}
+              className="w-44 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-0.5 text-sm"
+              aria-label="Label"
+            />
+            <input
+              value={editBar}
+              onChange={(e) => setEditBar(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="bar"
+              inputMode="numeric"
+              className="w-16 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-0.5 text-sm"
+              aria-label="Mastery bar"
+            />
+            <button type="button" onClick={() => void saveEdit()} className={smallBtn} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
+              Save
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className={smallBtn} style={{ borderColor: 'var(--border)' }}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <>
+            <span className={isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]'}>
+              {node.label}
+            </span>
+            <span className="text-muted-foreground text-xs">
+              {node.nodeKind !== 'leaf'
+                ? node.masteryThreshold
+                  ? `bar ${node.masteryThreshold}`
+                  : 'bar unset'
+                : ''}
+              {parentCount > 1 ? ` · in ${parentCount} trees` : ''}
+            </span>
+          </>
+        )}
+
+        <span className="ml-auto flex flex-wrap items-center gap-1">
+          {picking ? (
+            <button
+              type="button"
+              onClick={() => onPlace(nodeKey)}
+              disabled={placeDisabled}
+              className={smallBtn}
+              style={
+                placeDisabled
+                  ? { borderColor: 'var(--border)', color: 'var(--text-muted)' }
+                  : { borderColor: 'var(--success)', color: 'var(--success)' }
+              }
+            >
+              Place here
+            </button>
+          ) : (
+            !editing && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onPick({ mode: 'move', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey })
+                  }
+                  className={smallBtn}
+                  style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                >
+                  Move
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onPick({ mode: 'copy', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey })
+                  }
+                  className={smallBtn}
+                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddingChild((v) => !v);
+                    setRowError(null);
+                  }}
+                  className={smallBtn}
+                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                >
+                  + Child
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(true);
+                    setEditLabel(node.label);
+                    setEditBar(node.masteryThreshold?.toString() ?? '');
+                  }}
+                  className={smallBtn}
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                >
+                  Edit
+                </button>
+                {parentKey ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void onAct({ action: 'delete_edge', childDomainKey: nodeKey, parentDomainKey: parentKey })
+                    }
+                    className={smallBtn}
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                    aria-label={`Remove ${node.label} from this parent`}
+                    title="Remove from this parent (the territory itself is kept)"
+                  >
+                    ✕
+                  </button>
+                ) : null}
+              </>
+            )
+          )}
+        </span>
+
+        {addingChild ? (
+          <span className="flex w-full items-center gap-1.5 pl-6 pt-1">
+            <input
+              value={childLabel}
+              onChange={(e) => setChildLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submitChild();
+              }}
+              placeholder={`New child of ${node.label}…`}
+              className="w-52 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm"
+              aria-label={`New child of ${node.label}`}
+            />
+            <button type="button" onClick={() => void submitChild()} disabled={!childLabel.trim()} className={smallBtn} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
+              Add
+            </button>
+            <button type="button" onClick={() => setAddingChild(false)} className={smallBtn} style={{ borderColor: 'var(--border)' }}>
+              Cancel
+            </button>
+          </span>
+        ) : null}
+        {rowError ? (
+          <span className="w-full pl-6 text-xs" style={{ color: 'var(--danger)' }}>
+            {rowError}
+          </span>
+        ) : null}
+      </div>
+
+      {isOpen
+        ? children.map((childKey) => (
+            <TreeRow
+              key={`${nodeKey}:${childKey}`}
+              nodeKey={childKey}
+              parentKey={nodeKey}
+              depth={depth + 1}
+              ancestors={new Set([...ancestors, nodeKey])}
+              nodeByKey={nodeByKey}
+              childrenByParent={childrenByParent}
+              parentCountByChild={parentCountByChild}
+              expanded={expanded}
+              setExpanded={setExpanded}
+              picking={picking}
+              pickedSubtree={pickedSubtree}
+              busy={busy}
+              onPick={onPick}
+              onPlace={onPlace}
+              onAct={onAct}
+              onDone={onDone}
+            />
+          ))
+        : null}
+    </div>
   );
 }
 
