@@ -8,11 +8,11 @@
 
 The investigations turned most open questions into numbers you can fetch now. Before any doc work or build:
 
-1. **V2 north-star query (Supabase)** — is reaction-rate-on-wrong-answers >25%? The single most important number in the plan. Query in §2. → **❌ UNCOMPUTABLE — zero reactions exist; see §2.**
+1. **V2 north-star query (Supabase)** — is reaction-rate-on-wrong-answers >25%? Query in §2. → **🪦 RETIRED — reactions are removed product surface (Josh, 2026-07-03); the metric is gone with them; see §2.**
 2. **V1 by-tier query (Axiom)** — is the hit-rate drop a harmless tier-mix shift, or an all-tier collapse (a real break)? Query in §1. → **✅ Neither — blended hit-rate is UP; see §1.**
 3. **V3 Query A (Supabase, on a quiet non-testing day)** — actual daily run-rate, by scope. The cost number the session argued about and never had. Query in §3. → **✅ Quiet-day base ~$0.35–0.70/day; see §3.**
 
-Then the one thing no query can do: **§ hand-author 20, watch Robyn play** (step 3-offline). **With V2 unmeasurable (§2), this evening is now the ONLY north-star evidence available — it carries the finite-set decision alone.**
+Then the one thing no query can do: **§ hand-author 20, watch Robyn play** (step 3-offline). **With the reaction metric retired (§2), this evening is the north-star evidence — it carries the finite-set decision along with product judgment.**
 
 The session produced a coherent, largely-designed model on very little new evidence. These steps put cheap, real contact with reality under the plan. Every investigation run so far has corrected something — run the rest before building.
 
@@ -52,26 +52,19 @@ Cross-check player impact — search `vercel` for a coincident spike in `"[daily
 > With blended at ~29%, consider nudging the hit-rate regression monitor
 > threshold up from 20 once carry-forward is confirmed on (action-plan Step 5).
 
-### 2. What is the north-star number RIGHT NOW? — ❌ BLOCKED (measured 2026-07-03): ZERO reactions exist
+### 2. What is the north-star number RIGHT NOW? — 🪦 RETIRED (Josh, 2026-07-03): reactions are removed product surface
 
-> **The gate cannot turn green: `QuestionReaction` has 0 rows, ever**
-> (`max(created_at)` is null) — the reaction write path has never landed a row
-> in production. The single most important number in the plan is unmeasurable
-> until (a) the write path is fixed and (b) reactions accumulate for a few
-> weeks of real play. Two consequences:
-> 1. **Fixing the reaction write path jumps the build queue** — it is the
->    north-star's only instrument, and every week it stays broken is a week of
->    evidence lost.
-> 2. **Until then, the Robyn hand-authoring evening (§3) is the only
->    north-star evidence** — the finite-set decision rests on it plus product
->    judgment, not on the 25% bar.
+> **This gate no longer exists.** The 2026-07-03 measurement found
+> `QuestionReaction` has 0 rows ever, and Josh's call is that reactions are
+> **removed from the product** — the table is dead surface, not a broken write
+> path to fix. The reaction-rate-on-wrong-answers metric is retired with it.
+> **Do not fix the write path, rewrite the query below, or build against the
+> table** (recorded in `CLAUDE.md` → Conventions).
 >
-> Also: the query below is **schema-stale** — `contextType`/`contextId`/
-> `senderUserId` no longer exist; the table now carries `answerer_id` /
-> `question_id` / `game_id` / **`answer_id`**. (The `answer_id` column also
-> supersedes V2's earlier "reactions have no answer-level FK" caveat — per-answer
-> attribution is now structurally possible.) Rewrite the query against the new
-> columns when the write path lands.
+> What replaces the gate: **the Robyn hand-authoring evening (§3) plus product
+> judgment** carry the finite-set decision. The query below is kept only as a
+> historical record of what was going to be measured; it is also schema-stale
+> and will not run.
 
 V2 result: the number is capturable today — the query must be assembled (no reaction-rate query landed as code), but the data exists. One structural note: reactions have no answer-level foreign key — they attach at `(question, context)`, not to a specific answer. Fine for measuring (feed's `contextId` is the answer, 1:1); a schema change only if you ever want per-answer attribution later. Caveats: `answerResult` mutates on recheck (wrong-then-corrected drops out — usually right); daily solo answers aren't reactable (correctly excluded).
 
