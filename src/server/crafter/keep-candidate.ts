@@ -31,6 +31,20 @@ export type KeepCandidateInput = {
   machineDraftAnswer?: string | null;
   difficultyEstimate: 'accessible' | 'moderate' | 'specialist';
   broadCategory: string;
+  /**
+   * Public byline (crafter surface only; the player surface always keeps
+   * 'self'). 'machine' → Maid Acasa, 'house' → Joshing. The keeper still
+   * signs the decision ledger either way; with a non-self attribution the
+   * keeper CAN be served the question (author-exclusion keys on creatorId).
+   */
+  attribution?: 'self' | 'machine' | 'house';
+  /**
+   * 'own' = the human WROTE this question (no machine draft behind it) —
+   * answerSource records creator_written. Verification is identical either
+   * way: inline vet now, batch fact-check before it's vouched for (the
+   * 2026-07-01 decision: nothing added skips LLM verification).
+   */
+  origin?: 'machine_draft' | 'own';
 };
 
 export type KeepCandidateResult =
@@ -58,6 +72,7 @@ export async function keepCandidate(input: KeepCandidateInput): Promise<KeepCand
   const publicScoring = verdictToPublicStatus(verdict);
   const blockedVisibility = verdictToBlockedVisibility(verdict);
 
+  const ownWrite = input.origin === 'own';
   const created = await createQuestion({
     authorId: input.keeperUserId,
     text: input.questionText,
@@ -72,10 +87,16 @@ export async function keepCandidate(input: KeepCandidateInput): Promise<KeepCand
     difficulty: DIFFICULTY_TO_NUMBER[input.difficultyEstimate],
     // verified reflects whether the kept answer is still the machine's
     // suggestion — createQuestion derives answerSource from this pair:
-    // unchanged → 'llm_suggested', keeper-corrected → 'llm_edited'.
-    verified: !input.machineDraftAnswer || input.machineDraftAnswer === input.answer,
-    llmSuggestedAnswer: input.machineDraftAnswer ?? input.answer,
+    // unchanged → 'llm_suggested', keeper-corrected → 'llm_edited'. An
+    // own-written question carries NO machine suggestion → creator_written.
+    verified: !ownWrite && (!input.machineDraftAnswer || input.machineDraftAnswer === input.answer),
+    llmSuggestedAnswer: ownWrite ? null : (input.machineDraftAnswer ?? input.answer),
     critiqueIterations: 0,
+    ...(input.attribution === 'machine'
+      ? { attributedSource: 'daily_generated' as const }
+      : input.attribution === 'house'
+        ? { attributedSource: 'house_authored' as const }
+        : {}),
     publicStatus: publicScoring.publicStatus,
     publicEligibilityScore: publicScoring.publicEligibilityScore,
     publicEligibilityReason: publicScoring.publicEligibilityReason,
