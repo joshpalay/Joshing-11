@@ -37,12 +37,17 @@ type FriendOption = { id: string; displayName: string };
 
 type Stage = 'WRITING' | 'CRITIQUING' | 'CRITIQUED' | 'ANSWERING' | 'SUBMITTING' | 'DONE';
 
-// Provenance of the current correct-answer value. 'author' = the author typed it
-// themselves; 'suggestion' = they accepted Joshing's suggested answer verbatim.
-// This gates "verified": only an author-supplied answer that independently agrees
-// with the suggestion earns the badge — passively accepting the machine's guess
-// never self-certifies (see isVerifiedAnswer).
-type AnswerSource = 'author' | 'suggestion' | null;
+// Provenance of the current correct-answer value:
+//   'author'     — the author typed it themselves.
+//   'suggestion' — a human passively accepted Joshing's suggested answer in the
+//                  manual composer. NOT independent corroboration → unverified.
+//   'auto'       — the fully-automated autoSubmit flow adopted the suggestion,
+//                  which was already fact-checked by the suggestion verifier. No
+//                  human is present to anchor, so this counts as verified.
+// This gates "verified" (see isVerifiedAnswer): an author-typed answer that agrees
+// with the suggestion, or an 'auto' adoption, earns the badge; a manual passive
+// accept does not.
+type AnswerSource = 'author' | 'suggestion' | 'auto' | null;
 
 type Props = {
   mode?: 'create' | 'edit';
@@ -104,7 +109,7 @@ type Action =
   | { type: 'ANSWERING' }
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_RESULT'; questionText: string; suggestion: SuggestionResponse }
-  | { type: 'USE_SUGGESTION' }
+  | { type: 'USE_SUGGESTION'; asVerified?: boolean }
   | { type: 'SUGGESTION_ERROR'; questionText?: string; value: string | null }
   | { type: 'SUBMITTING' }
   | { type: 'DONE' }
@@ -215,14 +220,15 @@ function reducer(state: State, action: Action): State {
     }
     case 'USE_SUGGESTION': {
       if (!state.llmSuggestedAnswer) return state;
-      // The author adopted Joshing's suggested answer verbatim. Fill the supporting
-      // fields (without clobbering anything they already typed), but mark the source
-      // 'suggestion' so it does not count as independent verification.
+      // Adopt Joshing's suggested answer verbatim and fill the supporting fields
+      // (without clobbering anything already typed). asVerified marks the automated
+      // autoSubmit adoption ('auto' → verified); a manual passive accept stays
+      // 'suggestion' → unverified.
       return {
         ...state,
         error: null,
         userAnswer: state.llmSuggestedAnswer,
-        answerSource: 'suggestion',
+        answerSource: action.asVerified ? 'auto' : 'suggestion',
         alternateText: state.alternateText.trim() ? state.alternateText : state.suggestedAlternates.join(', '),
         explanation: state.explanation.trim() ? state.explanation : state.suggestedExplanation,
       };
@@ -292,12 +298,14 @@ function answersMatch(a: string, b: string | null): boolean {
 }
 
 // "Verified" means the answer is independently corroborated, NOT merely that the
-// author didn't override the LLM. It is earned only when the author *typed their
-// own* answer and it agrees with Joshing's independent suggestion. Passively
-// accepting the suggestion (answerSource 'suggestion') is deference to the machine,
-// not corroboration, so it stays unverified — this is what stops a confidently
-// wrong auto-suggestion from self-certifying and becoming broadcast-eligible.
-// With no suggestion to check against, we fall back to verified (unchanged
+// author didn't override the LLM. In the manual composer it is earned only when the
+// author *typed their own* answer and it agrees with Joshing's independent
+// suggestion. Passively accepting the suggestion ('suggestion') is deference to the
+// machine, not corroboration, so it stays unverified — this is what stops a
+// confidently wrong auto-suggestion from self-certifying and becoming
+// broadcast-eligible. The fully-automated autoSubmit adoption ('auto') is verified:
+// no human is present to anchor and the answer already passed the suggestion
+// verifier. With no suggestion to check against, we fall back to verified (unchanged
 // behaviour for when the suggestion is unavailable, or edit mode without one).
 export function isVerifiedAnswer(params: {
   suggestedAnswer: string | null;
@@ -305,6 +313,7 @@ export function isVerifiedAnswer(params: {
   answerSource: AnswerSource;
 }): boolean {
   if (!params.suggestedAnswer) return true;
+  if (params.answerSource === 'auto') return true;
   return params.answerSource === 'author' && answersMatch(params.userAnswer, params.suggestedAnswer);
 }
 
@@ -604,15 +613,18 @@ export function QuestionForm({
 
   // autoSubmit leg 2: once we're answering and the suggested answer has landed,
   // save without a manual click. Since the suggestion no longer pre-fills the
-  // answer field, adopt it explicitly here (the reader "wrote" the question but
-  // did not supply an answer, so it saves as unverified — machine-sourced, not
-  // author-corroborated). A failed suggestion (no suggested answer) leaves the
-  // author in the normal manual flow rather than blocking.
+  // answer field, adopt it explicitly here as verified ('auto' — the verifier
+  // vouched for it and there is no human to anchor). A failed suggestion (no
+  // suggested answer) leaves the author in the normal manual flow rather than
+  // blocking.
   useEffect(() => {
     if (!autoSubmit || mode !== 'create' || autoSubmittedRef.current) return;
     if (state.stage !== 'ANSWERING' || state.suggesting) return;
     if (!state.userAnswer.trim()) {
-      if (state.llmSuggestedAnswer) dispatch({ type: 'USE_SUGGESTION' });
+      // Adopt the verifier-vouched suggestion as the answer, verified: this is an
+      // automated flow with no human to independently corroborate, and the answer
+      // already passed the suggestion verifier.
+      if (state.llmSuggestedAnswer) dispatch({ type: 'USE_SUGGESTION', asVerified: true });
       return;
     }
     autoSubmittedRef.current = true;

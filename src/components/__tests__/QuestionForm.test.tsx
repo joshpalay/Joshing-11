@@ -22,6 +22,10 @@ describe('isVerifiedAnswer (anti self-certification)', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '', answerSource: null })).toBe(false);
   });
 
+  it('verifies an automated (autoSubmit) adoption of the verifier-vouched suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'auto' })).toBe(true);
+  });
+
   it('does NOT verify when the author typed a different answer than the suggestion', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Balthazar Getty', answerSource: 'author' })).toBe(false);
   });
