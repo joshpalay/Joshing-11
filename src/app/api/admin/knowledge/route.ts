@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
           { status: result.reason === 'not_found' ? 404 : 409 },
         );
       }
-      return NextResponse.json({ node: result.node });
+      return NextResponse.json({ node: result.node, corpusWarning: result.corpusWarning ?? null });
     }
 
     case 'create_edge': {

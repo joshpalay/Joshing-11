@@ -23,22 +23,6 @@ import { AdminTabs } from '@/app/admin/AdminTabs';
 // human act (D-doc §4); the collision path surfaces the existing node instead
 // of minting a sibling — the whole model exists to kill that failure mode.
 
-const FIELD_HUES = [
-  'literature',
-  'music',
-  'film-tv',
-  'history',
-  'science',
-  'sports',
-  'technology',
-  'philosophy',
-  'pop-culture',
-  'food',
-  'architecture',
-  'language',
-] as const;
-
-const NODE_KINDS = ['leaf', 'parent', 'both'] as const;
 const EDGE_TYPES = ['substantive', 'collection'] as const;
 
 async function post(body: Record<string, unknown>): Promise<{
@@ -59,19 +43,6 @@ async function post(body: Record<string, unknown>): Promise<{
   }
 }
 
-function hueSwatch(hue: string | null) {
-  if (!hue) return null;
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-      <span
-        className="inline-block size-3 rounded-full border"
-        style={{ background: `var(--cat-${hue}, var(--border))`, borderColor: 'var(--border)' }}
-        aria-hidden
-      />
-      {hue}
-    </span>
-  );
-}
 
 export function KnowledgeAdminClient({
   nodes,
@@ -83,16 +54,6 @@ export function KnowledgeAdminClient({
   depthByKey: Record<string, number>;
 }) {
   const router = useRouter();
-  const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
-  const edgesByParent = useMemo(() => {
-    const map = new Map<string, KnowledgeEdgeRow[]>();
-    for (const edge of edges) {
-      const list = map.get(edge.parentDomainKey);
-      if (list) list.push(edge);
-      else map.set(edge.parentDomainKey, [edge]);
-    }
-    return map;
-  }, [edges]);
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
@@ -119,57 +80,23 @@ export function KnowledgeAdminClient({
         onDone={() => router.refresh()}
       />
 
-      {/* The form-based tools remain for edge-type work (collection edges),
-          per-node LLM parent proposals, and bulk inspection — tucked away so
-          the tree is the primary surface. */}
+      {/* Only the two tools with NO tree equivalent live here: the orphan
+          check (structural gaps at a glance) and the edge composer (typed
+          COLLECTION edges — the tree only draws substantive ones). Everything
+          else the old forms did — create, rename, re-parent, thresholds,
+          proposals — happens in the tree above. */}
       <details className="mt-6">
         <summary className="text-muted-foreground cursor-pointer text-sm font-medium">
-          Advanced tools (forms, collection edges, proposals, orphan check)
+          Advanced: orphan check &amp; collection edges
         </summary>
         <div className="mt-3 space-y-4">
-          <NodeForm onDone={() => router.refresh()} />
+          <p className="text-muted-foreground text-xs">
+            You rarely need this section. The orphan check lists structural gaps; the composer
+            below draws <em>collection</em> edges (coverage-only groupings like “Bach’s Music” —
+            the tree’s drag always draws <em>substantive</em> ones).
+          </p>
           <OrphanCheck nodes={nodes} edges={edges} />
-          <div className="space-y-2">
-            {nodes.map((node) => (
-              <NodeRow key={node.id} node={node} onDone={() => router.refresh()} />
-            ))}
-          </div>
           <EdgeComposer nodes={nodes} onDone={() => router.refresh()} />
-          <section>
-            <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">
-              Rosters ({edges.length} edge{edges.length === 1 ? '' : 's'})
-            </h2>
-            {edgesByParent.size === 0 ? (
-              <p className="text-muted-foreground text-sm">No edges yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {[...edgesByParent.entries()].map(([parentKey, rows]) => (
-                  <div key={parentKey} className="rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
-                    <p className="font-medium text-[var(--brand-ink)]">
-                      {nodeByKey.get(parentKey)?.label ?? parentKey}
-                      <span className="text-muted-foreground font-normal">
-                        {' '}
-                        · {rows.length} child{rows.length === 1 ? '' : 'ren'}
-                        {nodeByKey.get(parentKey)?.masteryThreshold
-                          ? ` · bar ${nodeByKey.get(parentKey)!.masteryThreshold} pts`
-                          : ' · bar unset (code default)'}
-                      </span>
-                    </p>
-                    <ul className="mt-2 space-y-1">
-                      {rows.map((edge) => (
-                        <EdgeRow
-                          key={edge.id}
-                          edge={edge}
-                          childLabel={nodeByKey.get(edge.childDomainKey)?.label ?? edge.childDomainKey}
-                          onDone={() => router.refresh()}
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
       </details>
     </main>
@@ -1697,365 +1624,6 @@ function OrphanCheck({
   );
 }
 
-function NodeForm({ onDone }: { onDone: () => void }) {
-  const [label, setLabel] = useState('');
-  const [nodeKind, setNodeKind] = useState<(typeof NODE_KINDS)[number]>('leaf');
-  const [threshold, setThreshold] = useState('');
-  const [fieldHue, setFieldHue] = useState('');
-  const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  async function submit() {
-    if (pending || !label.trim()) return;
-    setPending(true);
-    setNotice(null);
-    const res = await post({
-      action: 'create_node',
-      label: label.trim(),
-      nodeKind,
-      masteryThreshold: threshold.trim() ? Number(threshold) : null,
-      fieldHue: fieldHue || null,
-    });
-    setPending(false);
-    if (res.status === 409) {
-      // The fragmentation tripwire — surface the existing node, offer edit.
-      setNotice(
-        `"${label.trim()}" folds onto the existing node "${res.body?.existing?.label ?? 'unknown'}" — edit that one below instead of minting a duplicate.`,
-      );
-      return;
-    }
-    if (!res.ok) {
-      setNotice(`Create failed (${res.status}).`);
-      return;
-    }
-    setLabel('');
-    setThreshold('');
-    onDone();
-  }
-
-  const fieldClass =
-    'rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1.5 text-sm focus:border-[var(--brand-navy)]';
-
-  return (
-    <section className="rounded-md border p-4 text-sm" style={{ borderColor: 'var(--border)' }}>
-      <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">Add a node</h2>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-40 flex-1 flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Label</span>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} className={fieldClass} placeholder="Renaissance Italy" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Kind</span>
-          <select value={nodeKind} onChange={(e) => setNodeKind(e.target.value as (typeof NODE_KINDS)[number])} className={fieldClass}>
-            {NODE_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex w-32 flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Mastery bar (pts)</span>
-          <input
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value.replace(/[^0-9]/g, ''))}
-            className={fieldClass}
-            placeholder="2000"
-            inputMode="numeric"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Field hue</span>
-          <select value={fieldHue} onChange={(e) => setFieldHue(e.target.value)} className={fieldClass}>
-            <option value="">(none)</option>
-            {FIELD_HUES.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={pending || !label.trim()}
-          className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50"
-          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-        >
-          {pending ? 'Adding…' : 'Add node'}
-        </button>
-      </div>
-      {notice ? (
-        <p className="mt-2 rounded-md px-3 py-2 text-[13px]" style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}>
-          {notice}
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function NodeRow({ node, onDone }: { node: KnowledgeNodeRow; onDone: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [proposalsOpen, setProposalsOpen] = useState(false);
-  const [label, setLabel] = useState(node.label);
-  const [nodeKind, setNodeKind] = useState(node.nodeKind);
-  const [threshold, setThreshold] = useState(node.masteryThreshold?.toString() ?? '');
-  const [fieldHue, setFieldHue] = useState(node.fieldHue ?? '');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    if (pending) return;
-    setPending(true);
-    setError(null);
-    const res = await post({
-      action: 'edit_node',
-      id: node.id,
-      label: label.trim() || undefined,
-      nodeKind,
-      masteryThreshold: threshold.trim() ? Number(threshold) : null,
-      fieldHue: fieldHue || null,
-    });
-    setPending(false);
-    if (res.status === 409) {
-      setError(`That label folds onto "${res.body?.existing?.label ?? 'another node'}" — pick a distinct one.`);
-      return;
-    }
-    if (!res.ok) {
-      setError(`Save failed (${res.status}).`);
-      return;
-    }
-    setEditing(false);
-    onDone();
-  }
-
-  const fieldClass =
-    'rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]';
-
-  if (!editing) {
-    return (
-      <div className="rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <span className="font-medium text-[var(--brand-ink)]">{node.label}</span>
-            <span className="text-muted-foreground">
-              {' '}
-              · {node.nodeKind} ·{' '}
-              {node.masteryThreshold ? `bar ${node.masteryThreshold} pts` : 'bar unset'}
-            </span>{' '}
-            {hueSwatch(node.fieldHue)}
-          </div>
-          {node.nodeKind !== 'parent' ? (
-            <button
-              type="button"
-              onClick={() => setProposalsOpen((v) => !v)}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium"
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-            >
-              Propose parents
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium"
-            style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-          >
-            Edit
-          </button>
-        </div>
-        {proposalsOpen ? <ProposalQueue node={node} onDone={onDone} /> : null}
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-md border p-3 text-sm" style={{ borderColor: 'var(--brand-navy)' }}>
-      <div className="flex flex-wrap items-end gap-2">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} className={`${fieldClass} min-w-40 flex-1`} aria-label="Label" />
-        <select value={nodeKind} onChange={(e) => setNodeKind(e.target.value as typeof node.nodeKind)} className={fieldClass} aria-label="Kind">
-          {NODE_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
-        <input
-          value={threshold}
-          onChange={(e) => setThreshold(e.target.value.replace(/[^0-9]/g, ''))}
-          className={`${fieldClass} w-28`}
-          placeholder="bar (pts)"
-          inputMode="numeric"
-          aria-label="Mastery threshold"
-        />
-        <select value={fieldHue} onChange={(e) => setFieldHue(e.target.value)} className={fieldClass} aria-label="Field hue">
-          <option value="">(none)</option>
-          {FIELD_HUES.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={pending}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-        >
-          {pending ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditing(false)}
-          disabled={pending}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          Cancel
-        </button>
-      </div>
-      <p className="text-muted-foreground mt-1.5 text-[0.7rem]">
-        Renaming keeps the node&apos;s edges (they follow the new key).
-      </p>
-      {/* ADMIN P2 — threshold-edit warning: lowering can only let players
-          cross sooner; it never revokes (§5 — the P4 freeze is terminal). */}
-      {node.masteryThreshold !== null &&
-      threshold.trim() &&
-      Number(threshold) < node.masteryThreshold ? (
-        <p
-          className="mt-1.5 rounded-md px-3 py-2 text-[13px] leading-relaxed"
-          style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
-        >
-          Lowering the bar from {node.masteryThreshold} to {Number(threshold)}: players past the
-          new bar may cross on their next play; nobody&apos;s earned mastery is ever revoked.
-        </p>
-      ) : null}
-      {error ? (
-        <p className="mt-1.5 text-[13px]" style={{ color: 'var(--danger)' }}>
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-// ADMIN P3 — the LLM proposal queue: the near-ness tree PROPOSES parent edges
-// for a leaf; a human ratifies (picking the edge type — the machine never
-// decides how credit accrues) or rejects (writes nothing, client-side
-// discard). Empty when nothing is cached — manual authoring is always enough.
-type Proposal = {
-  label: string;
-  broadCategory: string | null;
-  rung: string;
-  parentDomainKey: string;
-};
-
-function ProposalQueue({ node, onDone }: { node: KnowledgeNodeRow; onDone: () => void }) {
-  const [proposals, setProposals] = useState<Proposal[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [typeByKey, setTypeByKey] = useState<Record<string, 'substantive' | 'collection'>>({});
-  const [error, setError] = useState<string | null>(null);
-
-  const loaded = useRef(false);
-  useEffect(() => {
-    if (loaded.current) return;
-    loaded.current = true;
-    void (async () => {
-      setLoading(true);
-      const res = await post({ action: 'propose', childLabel: node.label });
-      setLoading(false);
-      if (!res.ok) {
-        setError(`Proposals failed (${res.status}).`);
-        return;
-      }
-      setProposals(((res.body as { proposals?: Proposal[] } | null)?.proposals ?? []) as Proposal[]);
-    })();
-  }, [node.label]);
-
-  async function ratify(proposal: Proposal) {
-    const res = await post({
-      action: 'ratify',
-      childDomainKey: node.domainKey,
-      parentLabel: proposal.label,
-      parentBroadCategory: proposal.broadCategory,
-      edgeType: typeByKey[proposal.parentDomainKey] ?? 'substantive',
-    });
-    if (!res.ok && res.status !== 409) {
-      setError(`Ratify failed (${res.status}).`);
-      return;
-    }
-    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
-    onDone();
-  }
-
-  function reject(proposal: Proposal) {
-    // Reject writes nothing — the proposal simply leaves the queue.
-    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
-  }
-
-  return (
-    <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-      <p className="text-muted-foreground mb-2 text-xs">
-        Machine-proposed parents for <strong>{node.label}</strong> — suggestions only; nothing is
-        committed until you ratify, and you pick how credit accrues.
-      </p>
-      {loading || proposals === null ? (
-        <p className="text-muted-foreground text-xs">Asking the near-ness tree…</p>
-      ) : proposals.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Nothing proposed (no cached near-ness for this domain) — draw an edge manually above.
-        </p>
-      ) : (
-        <ul className="space-y-1.5">
-          {proposals.map((proposal) => (
-            <li key={proposal.parentDomainKey} className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-[var(--brand-ink)]">{proposal.label}</span>
-              <span className="text-muted-foreground">({proposal.rung})</span>
-              <select
-                value={typeByKey[proposal.parentDomainKey] ?? 'substantive'}
-                onChange={(e) =>
-                  setTypeByKey((prev) => ({
-                    ...prev,
-                    [proposal.parentDomainKey]: e.target.value as 'substantive' | 'collection',
-                  }))
-                }
-                className="rounded-md border bg-[var(--brand-field)] px-1.5 py-1 text-xs"
-                style={{ borderColor: 'var(--border)' }}
-                aria-label={`Edge type for ${proposal.label}`}
-              >
-                <option value="substantive">substantive</option>
-                <option value="collection">collection</option>
-              </select>
-              <button
-                type="button"
-                onClick={() => void ratify(proposal)}
-                className="rounded-md border px-2.5 py-1 text-xs font-medium"
-                style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-              >
-                Ratify
-              </button>
-              <button
-                type="button"
-                onClick={() => reject(proposal)}
-                className="rounded-md border px-2.5 py-1 text-xs font-medium"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-              >
-                Reject
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {error ? (
-        <p className="mt-1.5 text-xs" style={{ color: 'var(--danger)' }}>
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: () => void }) {
   const [childKey, setChildKey] = useState('');
   const [parentKey, setParentKey] = useState('');
@@ -2160,51 +1728,3 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
   );
 }
 
-function EdgeRow({
-  edge,
-  childLabel,
-  onDone,
-}: {
-  edge: KnowledgeEdgeRow;
-  childLabel: string;
-  onDone: () => void;
-}) {
-  const [pending, setPending] = useState(false);
-
-  async function remove() {
-    if (pending) return;
-    setPending(true);
-    const res = await post({
-      action: 'delete_edge',
-      childDomainKey: edge.childDomainKey,
-      parentDomainKey: edge.parentDomainKey,
-    });
-    setPending(false);
-    if (res.ok) onDone();
-  }
-
-  return (
-    <li className="flex items-center gap-2">
-      <span className="text-[var(--brand-ink)]">{childLabel}</span>
-      <span
-        className="rounded-full px-2 py-0.5 text-[0.65rem]"
-        style={
-          edge.edgeType === 'substantive'
-            ? { color: 'var(--brand-navy)', background: 'var(--surface-2)' }
-            : { color: 'var(--warning)', background: 'var(--warning-surface)' }
-        }
-      >
-        {edge.edgeType}
-      </span>
-      <button
-        type="button"
-        onClick={() => void remove()}
-        disabled={pending}
-        className="text-muted-foreground ml-auto text-xs underline-offset-2 hover:underline disabled:opacity-50"
-        aria-label={`Remove ${childLabel} from this roster`}
-      >
-        {pending ? 'removing…' : 'remove'}
-      </button>
-    </li>
-  );
-}
