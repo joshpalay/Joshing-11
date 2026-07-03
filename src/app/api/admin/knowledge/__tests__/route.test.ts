@@ -63,6 +63,16 @@ const { proposeStructureMock, ratifyGroupMock } = vi.hoisted(() => ({
 vi.mock('@/server/knowledge/propose-structure', () => ({
   proposeKnowledgeStructure: proposeStructureMock,
 }));
+const { mergeDomainMock } = vi.hoisted(() => ({
+  mergeDomainMock: vi.fn(async () => ({
+    ok: true as const,
+    targetLabel: 'Shakespearean Drama',
+    sourceLabels: ['Shakespeare'],
+    retargeted: 3,
+    consolidated: 2,
+  })),
+}));
+vi.mock('@/server/knowledge/merge-domain', () => ({ mergeDomainIntoTarget: mergeDomainMock }));
 
 import { POST } from '@/app/api/admin/knowledge/route';
 
@@ -211,6 +221,39 @@ describe('POST /api/admin/knowledge', () => {
       childDomainKey: 'classical music',
       toParentDomainKey: 'beethoven',
     });
+    expect(res.status).toBe(400);
+  });
+
+  // ─── merge (fold a duplicate territory into its twin) ───
+
+  it('merge_node folds source into target as the admin', async () => {
+    const res = await post({
+      action: 'merge_node',
+      sourceDomainKey: 'shakespeare',
+      targetDomainKey: 'shakespearean drama',
+    });
+    expect(res.status).toBe(200);
+    expect(mergeDomainMock).toHaveBeenCalledWith(
+      { sourceDomainKey: 'shakespeare', targetDomainKey: 'shakespearean drama' },
+      'admin-1',
+    );
+  });
+
+  it('merge_node maps census-abort to 409 with the unhandled tables', async () => {
+    mergeDomainMock.mockResolvedValueOnce({
+      ok: false,
+      reason: 'unhandled_tables',
+      detail: ['SomeNewTable.domain (4 rows)'],
+    } as never);
+    const res = await post({ action: 'merge_node', sourceDomainKey: 'a', targetDomainKey: 'b' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { detail: string[] };
+    expect(body.detail[0]).toContain('SomeNewTable');
+  });
+
+  it('merge_node self-merge maps to 400', async () => {
+    mergeDomainMock.mockResolvedValueOnce({ ok: false, reason: 'self_merge' } as never);
+    const res = await post({ action: 'merge_node', sourceDomainKey: 'a', targetDomainKey: 'a' });
     expect(res.status).toBe(400);
   });
 

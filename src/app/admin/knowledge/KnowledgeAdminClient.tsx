@@ -185,8 +185,10 @@ export function KnowledgeAdminClient({
 // then lives under BOTH parents. Moving under a leaf promotes it to 'both'
 // server-side (Beethoven becomes masterable AND a parent).
 
+// 'merge' folds the picked territory INTO the destination (questions, mastery,
+// history move; the source ceases to exist) — same-scope duplicates only.
 type PickState = {
-  mode: 'move' | 'copy';
+  mode: 'move' | 'copy' | 'merge';
   childKey: string;
   childLabel: string;
   fromParentKey: string | null;
@@ -277,6 +279,14 @@ function KnowledgeTreeEditor({
     fromParentKey: string | null;
     toParentKey: string | null;
     toParentLabel: string;
+  } | null>(null);
+  // The one-way gate before a domain merge commits (questions/mastery move,
+  // the source ceases to exist — there is no undo).
+  const [confirmMerge, setConfirmMerge] = useState<{
+    sourceKey: string;
+    sourceLabel: string;
+    targetKey: string;
+    targetLabel: string;
   } | null>(null);
 
   // A tap must still expand / open the ⋯ menu — only a real drag (>8px) grabs.
@@ -427,6 +437,17 @@ function KnowledgeTreeEditor({
 
   function placeInto(toParentKey: string) {
     if (!picking) return;
+    if (picking.mode === 'merge') {
+      // Irreversible data merge — one explicit confirmation before commit.
+      setConfirmMerge({
+        sourceKey: picking.childKey,
+        sourceLabel: picking.childLabel,
+        targetKey: toParentKey,
+        targetLabel: nodeByKey.get(toParentKey)?.label ?? toParentKey,
+      });
+      setPicking(null);
+      return;
+    }
     void act({
       action: 'attach_child',
       childDomainKey: picking.childKey,
@@ -537,6 +558,43 @@ function KnowledgeTreeEditor({
           </div>
         </div>
       ) : null}
+      {confirmMerge ? (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+          <div
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            style={{ background: 'var(--brand-card)', borderColor: 'var(--danger)', color: 'var(--brand-ink-700)' }}
+            aria-live="polite"
+          >
+            <span className="w-full">
+              Fold <strong>{confirmMerge.sourceLabel}</strong> into{' '}
+              <strong>{confirmMerge.targetLabel}</strong>? Its questions, player progress, and
+              history move over, and <strong>{confirmMerge.sourceLabel}</strong> ceases to exist.
+              This cannot be undone.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const m = confirmMerge;
+                setConfirmMerge(null);
+                void act({ action: 'merge_node', sourceDomainKey: m.sourceKey, targetDomainKey: m.targetKey });
+              }}
+              disabled={busy}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+            >
+              Merge them
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmMerge(null)}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       {picking ? (
         <div
           className="mb-2 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[13px]"
@@ -544,8 +602,11 @@ function KnowledgeTreeEditor({
           aria-live="polite"
         >
           <span>
-            {picking.mode === 'move' ? 'Moving' : 'Copying'} <strong>{picking.childLabel}</strong> —
-            tap “Place here” on the destination.
+            {picking.mode === 'move' ? 'Moving' : picking.mode === 'copy' ? 'Copying' : 'Merging'}{' '}
+            <strong>{picking.childLabel}</strong> —{' '}
+            {picking.mode === 'merge'
+              ? 'tap the territory that absorbs it. For same-scope duplicates only; you confirm before anything changes.'
+              : 'tap “Place here” on the destination.'}
             {picking.mode === 'copy' ? ' It will live under both parents.' : ''}
           </span>
           {picking.mode === 'move' && picking.fromParentKey ? (
@@ -629,7 +690,10 @@ function KnowledgeTreeEditor({
         <DragOverlay>
           {drag ? (
             <div
-              className="rounded-md border px-3 py-1.5 text-sm font-medium shadow-[var(--shadow-card)]"
+              // w-max: the overlay container is sized to the DRAG HANDLE (a
+              // ~36px button), so without an explicit content width the label
+              // smooshes into a vertical sliver.
+              className="w-max max-w-[80vw] truncate whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium shadow-[var(--shadow-card)]"
               style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink)' }}
             >
               {drag.label}
@@ -815,6 +879,9 @@ function TreeRow({
           borderRadius: isOver || dropEligible ? 6 : undefined,
         }}
       >
+        {/* Left group is ONE non-wrapping line (min-w-0 + truncate) so a long
+            label can never shove the ⋯ button onto its own row. */}
+        <span className="flex min-w-0 flex-1 items-center gap-x-2">
         {/* Drag handle — a real 44px control, not a bare glyph. Drag it to
             re-file; a plain TAP falls back to pick-up mode (big "Place here"
             buttons on every destination). */}
@@ -884,10 +951,15 @@ function TreeRow({
           </span>
         ) : (
           <>
-            <span className={isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]'}>
+            <span
+              className={
+                (isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]') +
+                ' min-w-0 truncate'
+              }
+            >
               {node.label}
             </span>
-            <span className="text-muted-foreground text-xs">
+            <span className="text-muted-foreground shrink-0 whitespace-nowrap text-xs">
               {node.nodeKind !== 'leaf'
                 ? node.masteryThreshold
                   ? `bar ${node.masteryThreshold}`
@@ -899,7 +971,7 @@ function TreeRow({
                 condense-me candidate (Move it under a parent). */}
             {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
               <span
-                className="rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
                 style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
                 title="Too few questions to stand alone — Move it under a broader parent"
               >
@@ -908,21 +980,24 @@ function TreeRow({
             ) : null}
           </>
         )}
+        </span>
 
-        <span className="ml-auto flex items-center gap-1">
+        <span className="ml-auto flex shrink-0 items-center gap-1">
           {picking ? (
             <button
               type="button"
               onClick={() => onPlace(nodeKey)}
               disabled={placeDisabled}
-              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40"
+              className="inline-flex min-h-9 items-center whitespace-nowrap rounded-md border px-3 text-sm font-medium disabled:opacity-40"
               style={
                 placeDisabled
                   ? { borderColor: 'var(--border)', color: 'var(--text-muted)' }
-                  : { borderColor: 'var(--success)', color: 'var(--success)' }
+                  : picking.mode === 'merge'
+                    ? { borderColor: 'var(--danger)', color: 'var(--danger)' }
+                    : { borderColor: 'var(--success)', color: 'var(--success)' }
               }
             >
-              Place here
+              {picking.mode === 'merge' ? 'Merge here' : 'Place here'}
             </button>
           ) : !editing ? (
             // Actions collapse behind one comfortably-tappable toggle — the five
@@ -994,6 +1069,18 @@ function TreeRow({
               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
             >
               Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActionsOpen(false);
+                onPick({ mode: 'merge', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey });
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              title="Fold this territory into another that names the SAME scope — questions and progress move, this one ceases to exist"
+            >
+              Merge into…
             </button>
             {parentKey ? (
               <button

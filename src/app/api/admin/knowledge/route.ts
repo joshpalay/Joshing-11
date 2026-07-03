@@ -13,6 +13,7 @@ import {
   updateKnowledgeNode,
 } from '@/server/db/queries/knowledge-graph';
 import { proposeKnowledgeStructure } from '@/server/knowledge/propose-structure';
+import { mergeDomainIntoTarget } from '@/server/knowledge/merge-domain';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 export const dynamic = 'force-dynamic';
@@ -76,6 +77,14 @@ const bodySchema = z.discriminatedUnion('action', [
     childDomainKey: keySchema,
     toParentDomainKey: keySchema,
     moveFromParentDomainKey: keySchema.nullable().optional(),
+  }),
+  // Fold one territory into another — questions, mastery, and history move to
+  // the target; the source ceases to exist. Irreversible; for SAME-SCOPE
+  // duplicates only (containment is an edge, never a merge).
+  z.object({
+    action: z.literal('merge_node'),
+    sourceDomainKey: keySchema,
+    targetDomainKey: keySchema,
   }),
   // The structure suggester: one LLM pass drafts a full grouping of the real
   // corpus; NOTHING persists (suggestions live only in the response).
@@ -201,6 +210,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: result.reason }, { status });
       }
       return NextResponse.json({ edge: result.edge }, { status: 201 });
+    }
+
+    case 'merge_node': {
+      const result = await mergeDomainIntoTarget(
+        { sourceDomainKey: data.sourceDomainKey, targetDomainKey: data.targetDomainKey },
+        session.userId,
+      );
+      if (!result.ok) {
+        const status =
+          result.reason === 'self_merge' ? 400 : result.reason === 'unknown_node' ? 422 : 409;
+        return NextResponse.json({ error: result.reason, detail: result.detail }, { status });
+      }
+      return NextResponse.json(result);
     }
 
     case 'propose_structure': {
