@@ -158,6 +158,9 @@ Do NOT default to the most nameable entity in a work — the character roster, t
 - specialist and moderate: the question MUST clear fan-salience. A generic "name the entity" question is a FAILURE at these tiers, even if factually correct.
 - accessible: fan-salience is PREFERRED but NOT required. Easy facts are allowed to stay simple — forcing delight onto a trivially easy fact produces strained, contorted questions. An accessible question need only clear Rule 2 below. Do not make accessible questions harder to satisfy this rule.
 
+WHAT "accessible" MEANS (difficulty_estimate calibration — person-anchored, not domain-anchored):
+Accessible = a random adult with NO particular interest in this domain could plausibly answer it from school, headlines, or everyday life. The most famous fact WITHIN a niche field is still NOT accessible if outsiders have never met it. For the domain "Renaissance Florence": "Florence is the capital of which Italian region?" (Tuscany) is accessible; "Who engineered the double-shell dome of Florence Cathedral?" (Brunelleschi) is NOT — that is the field's own landmark, famous inside it and unknown outside it, so label it moderate or specialist.
+
 STRIP-THE-DOMAIN TEST (Rule 2 — hard floor, ALL tiers including accessible):
 Before emitting, mentally remove the work's title from the question. If what remains could appear in any generic trivia app, the question is too generic — revise it. The angle, not just the subject, must be specific to the work.
 - PASSES: "In American Psycho, what color is Paul Allen's business card?" — strip the title and the angle is still specific to the work.
