@@ -108,6 +108,8 @@ export type CreateNodeInput = {
   masteryThreshold: number | null;
   broadCategory: string | null;
   fieldHue: string | null;
+  /** Wikidata provenance (ADMIN-01 P3) — set when the node is ratified from a Wikidata proposal. */
+  wikidataQid?: string | null;
 };
 
 export type NodeResult =
@@ -141,6 +143,7 @@ export async function createKnowledgeNode(
         masteryThreshold: input.masteryThreshold,
         broadCategory: input.broadCategory,
         fieldHue: input.fieldHue,
+        wikidataQid: input.wikidataQid ?? null,
       })
       .returning();
     console.info('[knowledge-admin] node created', { actorUserId, label: input.label, key });
@@ -281,17 +284,28 @@ export async function ratifyProposedParent(
     parentLabel: string;
     parentBroadCategory: string | null;
     edgeType: EdgeType;
+    /** Present when the proposal came from Wikidata — stored on the parent node for provenance/re-query. */
+    wikidataQid?: string | null;
   },
   actorUserId: string,
 ): Promise<EdgeResult> {
   const parentKey = domainKey(input.parentLabel);
 
   const [existing] = await db
-    .select({ id: knowledgeNodes.id })
+    .select({ id: knowledgeNodes.id, wikidataQid: knowledgeNodes.wikidataQid })
     .from(knowledgeNodes)
     .where(eq(knowledgeNodes.domainKey, parentKey))
     .limit(1);
-  if (!existing) {
+  if (existing) {
+    // The node predates this ratify (manual or LLM-minted) — a Wikidata-backed
+    // ratify is the moment we LEARN its QID, so record it. Never overwrite one.
+    if (input.wikidataQid && !existing.wikidataQid) {
+      await db
+        .update(knowledgeNodes)
+        .set({ wikidataQid: input.wikidataQid })
+        .where(eq(knowledgeNodes.id, existing.id));
+    }
+  } else {
     const created = await createKnowledgeNode(
       {
         label: input.parentLabel,
@@ -299,6 +313,7 @@ export async function ratifyProposedParent(
         masteryThreshold: null,
         broadCategory: input.parentBroadCategory,
         fieldHue: null,
+        wikidataQid: input.wikidataQid ?? null,
       },
       actorUserId,
     );

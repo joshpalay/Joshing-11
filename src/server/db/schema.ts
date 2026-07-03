@@ -827,6 +827,9 @@ export const knowledgeNodes = pgTable(
     masteryThreshold: integer('mastery_threshold'),
     broadCategory: text('broad_category'),
     fieldHue: text('field_hue'),
+    // Wikidata provenance (ADMIN-01 P3): the QID this node was ratified from.
+    // NULL for manually-authored / LLM-proposed nodes.
+    wikidataQid: text('wikidata_qid'),
     createdAt: createdAt(),
   },
   (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
