@@ -111,7 +111,7 @@ export type CreateNodeInput = {
 };
 
 export type NodeResult =
-  | { ok: true; node: KnowledgeNodeRow }
+  | { ok: true; node: KnowledgeNodeRow; corpusWarning?: string }
   | { ok: false; reason: 'domain_key_collision'; existing: KnowledgeNodeRow }
   | { ok: false; reason: 'not_found' };
 
@@ -213,12 +213,29 @@ export async function updateKnowledgeNode(
       .where(eq(knowledgeEdges.parentDomainKey, node.domainKey));
   }
 
+  // Rename follow-through: the territory's QUESTIONS (and player progress)
+  // carry the old label, so move them along — otherwise the renamed node
+  // shows 0 Qs while the corpus sits stranded under the old spelling (the
+  // Bikini Bottom → SpongeBob lesson, 2026-07-03). Dynamic import to keep
+  // this module free of a static pg dependency in unit tests.
+  let corpusWarning: string | undefined;
+  if (nextLabel !== node.label) {
+    const { retargetRenamedDomain } = await import('@/server/knowledge/merge-domain');
+    const moved = await retargetRenamedDomain(
+      { oldLabel: node.label, newLabel: nextLabel },
+      actorUserId,
+    );
+    if (!moved.ok) {
+      corpusWarning = `Renamed, but ${moved.detail.join(', ')} still hold the old label — extend the merge tables before re-running.`;
+    }
+  }
+
   console.info('[knowledge-admin] node updated', {
     actorUserId,
     id: input.id,
     renamed: nextKey !== node.domainKey ? { from: node.domainKey, to: nextKey } : false,
   });
-  return { ok: true, node: updated };
+  return { ok: true, node: updated, ...(corpusWarning ? { corpusWarning } : {}) };
 }
 
 export type EdgeResult =
