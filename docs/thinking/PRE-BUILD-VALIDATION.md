@@ -8,9 +8,9 @@
 
 The investigations turned most open questions into numbers you can fetch now. Before any doc work or build:
 
-1. **V2 north-star query (Supabase)** — is reaction-rate-on-wrong-answers >25%? The single most important number in the plan. Query in §2.
-2. **V1 by-tier query (Axiom)** — is the hit-rate drop a harmless tier-mix shift, or an all-tier collapse (a real break)? Query in §1.
-3. **V3 Query A (Supabase, on a quiet non-testing day)** — actual daily run-rate, by scope. The cost number the session argued about and never had. Query in §3.
+1. **V2 north-star query (Supabase)** — 🛑 RAN 2026-07-03: **UNCOMPUTABLE — `QuestionReaction` has 0 rows, ever.** The single most important number in the plan can't be read until the reaction write-path lands data. Details in §2.
+2. **V1 by-tier query (Axiom)** — ✅ RAN 2026-07-03: **not a break.** Blended bank hit-rate *rose* (24%→29% recent 3d vs prior 11d); only the low-volume `accessible` tier dipped (43.6→21.1, n=19), offset by moderate/specialist gains; `generation_failed` flat (~2.5→3.3/day). No emergency. Details in §1.
+3. **V3 Query A (Supabase, on a quiet non-testing day)** — ✅ RAN 2026-07-03: quiet-day floor **~$0.35–0.70/day**; representative day (07-02) **~$3.41** (`generate-questions` $1.87 + `batch-verify` $1.20). Details in §3.
 
 Then the one thing no query can do: **§ hand-author 20, watch Robyn play** (step 3-offline).
 
@@ -42,9 +42,13 @@ vercel
 
 Cross-check player impact — search `vercel` for a coincident spike in `"[daily/queue-orchestrator] generation_failed"` or `"persisted short queue"`. Flat = players fine, purely a spend regression.
 
-### 2. What is the north-star number RIGHT NOW? — ✅ QUERY READY (V2): run it
+### 2. What is the north-star number RIGHT NOW? — 🛑 RAN 2026-07-03 (V2): UNCOMPUTABLE — zero reactions exist
 
-V2 result: the number is capturable today — the query must be assembled (no reaction-rate query landed as code), but the data exists. One structural note: reactions have no answer-level foreign key — they attach at `(question, context)`, not to a specific answer. Fine for measuring (feed's `contextId` is the answer, 1:1); a schema change only if you ever want per-answer attribution later. Caveats: `answerResult` mutates on recheck (wrong-then-corrected drops out — usually right); daily solo answers aren't reactable (correctly excluded).
+**RESULT (2026-07-03): the north-star cannot be measured. `QuestionReaction` has 0 rows, ever** (`SELECT count(*)` = 0, `max(created_at)` = null). The write path has never landed a reaction, so there is no wrong-answer reaction rate to compute — this is a hard blocker on the single most important number in the plan, not a "well below 25%" reading. **This gate stays RED until reactions are actually being written and have accumulated enough volume to compute a rate.** Fixing the reaction write-path is the prerequisite; see the `reaction-writepath-broken` note (deprioritized as a feature, but it is the thing standing between you and the north-star).
+
+The shipped query also targets columns that don't exist: it assumes the **post-`0006`** schema (`contextType`/`contextId`/`senderUserId`), but the live table is stuck in its **pre-`0006`** shape (`answerer_id`/`question_id`/`game_id`/`answer_id`) because migration `0006` is recorded-but-never-ran (see `reaction-writepath-broken` memory — this is the same root cause as the 0-rows blocker: `createReaction()` writes the new columns, which don't exist, so every write throws). Rewrite the query against whichever schema is live *after* the `0006` drift is fixed — don't rewrite it against the current dead columns.
+
+V2 result (original, now superseded by the zero-rows finding): the number was believed capturable today — the query must be assembled (no reaction-rate query landed as code), and the data was assumed to exist. One structural note: reactions were thought to have no answer-level foreign key — attaching at `(question, context)`, not to a specific answer. (Now false: `answer_id` exists.) Caveats: `answerResult` mutates on recheck (wrong-then-corrected drops out — usually right); daily solo answers aren't reactable (correctly excluded).
 
 Run this (Supabase SQL editor) — the `ALL` row vs the >25% target is your north-star:
 
@@ -90,7 +94,17 @@ The entire human-authored pivot rests on one belief validated by zero experiment
 
 The pivot IS justified — but precisely. What was proven: grounded refill as a primary supply mechanism costs ~$0.39 per kept question (high because of the ~73% gate drop rate, not because generating is expensive — cheap batch generation was ~$0.004/question, ~100× less). What was NOT proven: that this is your actual current spend, or that the machine floor needs the expensive path.
 
-### 4. Measure actual current recurring spend — ✅ QUERY READY (V3): run on a quiet day
+### 4. Measure actual current recurring spend — ✅ RAN 2026-07-03 (V3): measured below
+
+**RESULT (2026-07-03).** Note: the doc's default `2026-06-30` is NOT quiet (401 calls — a testing day), and `2026-07-01` was the refill-testing spike. The genuinely quiet, non-testing days are **06-28 (71 calls)** and **06-29 (103 calls)** — both *predate* the batch-verify cron. `2026-07-02` (219 calls) is the best representative day *with* batch-verify running.
+
+| day | day total | top scopes |
+|---|---|---|
+| 06-28 (quiet, pre-batch-verify) | **~$0.34** | `generate-questions` $0.19 |
+| 06-29 (quiet, pre-batch-verify) | **~$0.69** | `generate-questions` $0.32 · `factual-gate` $0.18 · 1× `pool-refill-generate` $0.09 |
+| 07-02 (representative, post-batch-verify) | **~$3.41** | `generate-questions` **$1.87** · `batch-verify` **$1.20** · `factual-gate` $0.09 |
+
+Confirms the V3 thesis directionally — the recurring bill is the daily CRON: **Sonnet `generate-questions` + `batch-verify`**. Two corrections to the characterization doc: (a) on 07-02 generation ($1.87) **exceeded** batch-verify ($1.20), so batch-verify is not automatically the largest line — generation volume swings hard ($0.19 quiet → $1.87 busy); (b) **`factual-gate` is a consistent top-3 line** ($0.18 / $0.09) — the Sonnet-default gate (`FACTUAL_GATE_MODEL`). Quiet-day floor (no generation burst, pre-batch-verify) is **~$0.35–0.70/day**.
 
 V3 result (with corrections):
 
