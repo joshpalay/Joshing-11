@@ -6,10 +6,18 @@
 > 2. **`extra_fact` tightening** — the answer heuristic now requires bundling
 >    **plus** an assertion signal (`answerCarriesAdjacentClaim`), not just a
 >    comma/"and"; the explanation path is unchanged. Live by default; escape
->    hatch `PREFILTER_EXTRA_FACT_LEGACY=true`. **Measure the actual skip-rate
->    lift with `npx tsx scripts/measure-prefilter-skip-rate.ts` (read-only, zero
->    spend) and record the numbers here** — the 9%-skip baseline below is the
->    before.
+>    hatch `PREFILTER_EXTRA_FACT_LEGACY=true`.
+>    **MEASURED 2026-07-03 (600-row sample): a near-NO-OP.** Skip 9.3% → 9.8%;
+>    only 3/600 rows flipped route→skip, all safe structural bundles
+>    ("St. Olaf, Minnesota"-style city/state pairs + a compound verb — nothing
+>    checkable leaked; hatch stays OFF). **§2's "single biggest cost dial" claim
+>    is hereby RETRACTED:** extra_fact routing is dominated by the *explanation*
+>    path (`explanationCarriesClaims` routes ~90% on its own — 539 of the 542
+>    legacy answer-routes still route via the explanation), so the answer
+>    heuristic was never the driver. Arguably that's correct behavior — explainers
+>    genuinely carry adjacent claims; that's what the dimension exists to check.
+>    The operative batch-verify cost dials are therefore #3 below (Batch API 50%)
+>    and the web-search-frequency posture (the ~11.3k avg input tokens/call line).
 > 3. **Batch API mode** — `BATCH_VERIFY_ASYNC_ENABLED=true` (flag-off default)
 >    runs the cron two-phase over the Message Batches API: 50% off all token
 >    usage, no per-call timeout, verdicts land ~24h later. Docs confirm

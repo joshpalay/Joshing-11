@@ -4,15 +4,15 @@
 
 **Status: action checklist. UPDATED with V1/V2/V3/V4 investigation results.**
 
-## ⚡ RUN THESE THREE QUERIES FIRST (highest leverage, ~15 min total)
+## ⚡ RUN THESE THREE QUERIES FIRST — ✅ ALL THREE RAN 2026-07-03 (results inline below)
 
 The investigations turned most open questions into numbers you can fetch now. Before any doc work or build:
 
-1. **V2 north-star query (Supabase)** — is reaction-rate-on-wrong-answers >25%? The single most important number in the plan. Query in §2.
-2. **V1 by-tier query (Axiom)** — is the hit-rate drop a harmless tier-mix shift, or an all-tier collapse (a real break)? Query in §1.
-3. **V3 Query A (Supabase, on a quiet non-testing day)** — actual daily run-rate, by scope. The cost number the session argued about and never had. Query in §3.
+1. **V2 north-star query (Supabase)** — is reaction-rate-on-wrong-answers >25%? The single most important number in the plan. Query in §2. → **❌ UNCOMPUTABLE — zero reactions exist; see §2.**
+2. **V1 by-tier query (Axiom)** — is the hit-rate drop a harmless tier-mix shift, or an all-tier collapse (a real break)? Query in §1. → **✅ Neither — blended hit-rate is UP; see §1.**
+3. **V3 Query A (Supabase, on a quiet non-testing day)** — actual daily run-rate, by scope. The cost number the session argued about and never had. Query in §3. → **✅ Quiet-day base ~$0.35–0.70/day; see §3.**
 
-Then the one thing no query can do: **§ hand-author 20, watch Robyn play** (step 3-offline).
+Then the one thing no query can do: **§ hand-author 20, watch Robyn play** (step 3-offline). **With V2 unmeasurable (§2), this evening is now the ONLY north-star evidence available — it carries the finite-set decision alone.**
 
 The session produced a coherent, largely-designed model on very little new evidence. These steps put cheap, real contact with reality under the plan. Every investigation run so far has corrected something — run the rest before building.
 
@@ -42,7 +42,36 @@ vercel
 
 Cross-check player impact — search `vercel` for a coincident spike in `"[daily/queue-orchestrator] generation_failed"` or `"persisted short queue"`. Flat = players fine, purely a spend regression.
 
-### 2. What is the north-star number RIGHT NOW? — ✅ QUERY READY (V2): run it
+> **✅ MEASURED 2026-07-03 — RESOLVED, no emergency; the earlier alarm has effectively cleared.**
+> Recent 3d vs prior 11d: accessible 43.6%→21.1% ↓ (n=19 recent — low volume),
+> moderate 28.3%→39.4% ↑, specialist 16.2%→25.0% ↑, **blended 24.0%→29.2% ↑**.
+> Neither decision-tree branch applies: not an all-tier collapse (2 of 3 tiers
+> rose) and not a deeper-mix shift (the mix got *shallower*). Player-impact
+> cross-check flat (~2.5→3.3 generation-failure lines/day — same order, no
+> spike). The accessible-tier dip is a **low-volume watch item**, not a break.
+> With blended at ~29%, consider nudging the hit-rate regression monitor
+> threshold up from 20 once carry-forward is confirmed on (action-plan Step 5).
+
+### 2. What is the north-star number RIGHT NOW? — ❌ BLOCKED (measured 2026-07-03): ZERO reactions exist
+
+> **The gate cannot turn green: `QuestionReaction` has 0 rows, ever**
+> (`max(created_at)` is null) — the reaction write path has never landed a row
+> in production. The single most important number in the plan is unmeasurable
+> until (a) the write path is fixed and (b) reactions accumulate for a few
+> weeks of real play. Two consequences:
+> 1. **Fixing the reaction write path jumps the build queue** — it is the
+>    north-star's only instrument, and every week it stays broken is a week of
+>    evidence lost.
+> 2. **Until then, the Robyn hand-authoring evening (§3) is the only
+>    north-star evidence** — the finite-set decision rests on it plus product
+>    judgment, not on the 25% bar.
+>
+> Also: the query below is **schema-stale** — `contextType`/`contextId`/
+> `senderUserId` no longer exist; the table now carries `answerer_id` /
+> `question_id` / `game_id` / **`answer_id`**. (The `answer_id` column also
+> supersedes V2's earlier "reactions have no answer-level FK" caveat — per-answer
+> attribution is now structurally possible.) Rewrite the query against the new
+> columns when the write path lands.
 
 V2 result: the number is capturable today — the query must be assembled (no reaction-rate query landed as code), but the data exists. One structural note: reactions have no answer-level foreign key — they attach at `(question, context)`, not to a specific answer. Fine for measuring (feed's `contextId` is the answer, 1:1); a schema change only if you ever want per-answer attribution later. Caveats: `answerResult` mutates on recheck (wrong-then-corrected drops out — usually right); daily solo answers aren't reactable (correctly excluded).
 
@@ -119,6 +148,25 @@ group by e.scope order by usd desc;
 ```
 
 The top line — almost certainly a Sonnet generation scope — owns your monthly bill. (Query B for batch-verify backlog-vs-steady-state is in `PRE-BUILD-VALIDATION-PROMPTS.md`.)
+
+> **✅ MEASURED 2026-07-03.** (06-30, the query's original suggested day, is
+> actually a heavy 401-call day — don't use it as a baseline.)
+>
+> | day | total | top lines |
+> |---|---|---|
+> | 06-28 (quiet, pre-batch-verify) | ~$0.34 | generate-questions $0.19 |
+> | 06-29 (quiet, pre-batch-verify) | ~$0.69 | generate-questions $0.32, factual-gate $0.18, 1× pool-refill $0.09 |
+> | 07-02 (representative, post-batch-verify) | ~$3.41 | generate-questions $1.87, batch-verify $1.20, factual-gate $0.09 |
+>
+> Confirms the V3 thesis directionally — the recurring bill is the daily cron
+> chain — with two corrections: **(a)** generation and batch-verify are the two
+> dominant lines and *either* can lead ($1.87 vs $1.20 on 07-02; generation
+> swings ~10× with volume, $0.19 quiet → $1.87 busy), so "batch-verify is the
+> single largest line" is not always true; **(b)** the **factual gate** is a
+> consistent top-3 line ($0.09–0.18/day — the measured-exception Sonnet gate;
+> cheap in absolute terms and it's the quality backstop — leave it). Genuinely
+> quiet-day base: **~$0.35–0.70/day**. Re-run after BATCH_VERIFY_ASYNC_ENABLED
+> flips to record the batch-discount after.
 
 ### 5. Decide what the machine floor costs — cheap generation or grounded? — ✅ ANSWERED (V4): CHEAP
 
