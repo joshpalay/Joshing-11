@@ -139,9 +139,11 @@ function KnowledgeTreeEditor({
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
 
-  const { childrenByParent, parentCountByChild, roots, descendantsOf } = useMemo(() => {
+  const { childrenByParent, parentCountByChild, parentsByChild, roots, descendantsOf } = useMemo(() => {
     const childrenByParent = new Map<string, string[]>();
     const parentCountByChild = new Map<string, number>();
+    // All substantive parents per child — powers the "in N trees" jump list.
+    const parentsByChild = new Map<string, string[]>();
     for (const edge of edges) {
       if (edge.edgeType !== 'substantive') continue;
       if (!nodeByKey.has(edge.childDomainKey) || !nodeByKey.has(edge.parentDomainKey)) continue;
@@ -152,6 +154,9 @@ function KnowledgeTreeEditor({
         edge.childDomainKey,
         (parentCountByChild.get(edge.childDomainKey) ?? 0) + 1,
       );
+      const parents = parentsByChild.get(edge.childDomainKey);
+      if (parents) parents.push(edge.parentDomainKey);
+      else parentsByChild.set(edge.childDomainKey, [edge.parentDomainKey]);
     }
     const byLabel = (a: string, b: string) =>
       (nodeByKey.get(a)?.label ?? a).localeCompare(nodeByKey.get(b)?.label ?? b);
@@ -179,7 +184,9 @@ function KnowledgeTreeEditor({
       return out;
     };
 
-    return { childrenByParent, parentCountByChild, roots, descendantsOf };
+    for (const list of parentsByChild.values()) list.sort(byLabel);
+
+    return { childrenByParent, parentCountByChild, parentsByChild, roots, descendantsOf };
   }, [nodes, edges, nodeByKey]);
 
   const [expanded, setExpanded] = useState<Set<string>>(
@@ -238,6 +245,36 @@ function KnowledgeTreeEditor({
     () => (picking ? descendantsOf(picking.childKey) : new Set<string>()),
     [picking, descendantsOf],
   );
+
+  // "Show all the places and I can go to any of them" — jump to a specific
+  // instance of a multi-parent node: expand every ancestor path of the target
+  // parent, scroll its row into view, and flash it.
+  const [flashInstance, setFlashInstance] = useState<string | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  function jumpToInstance(childKey: string, parentKey: string) {
+    const toExpand = new Set<string>([parentKey]);
+    const queue = [parentKey];
+    while (queue.length > 0) {
+      const next = queue.pop()!;
+      for (const grand of parentsByChild.get(next) ?? []) {
+        if (!toExpand.has(grand)) {
+          toExpand.add(grand);
+          queue.push(grand);
+        }
+      }
+    }
+    setExpanded((prev) => new Set([...prev, ...toExpand]));
+    const instanceId = `${parentKey}::${childKey}`;
+    setFlashInstance(instanceId);
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlashInstance(null), 2000);
+    // Let the expansion render before scrolling to the (possibly new) row.
+    window.setTimeout(() => {
+      document
+        .getElementById(`tree-row-${instanceId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  }
   // While a drag is live, rows inside the dragged subtree (or the node itself)
   // are the only ILLEGAL targets — everything else lights up as a landing spot.
   const dragSubtree = useMemo(
@@ -675,6 +712,9 @@ function KnowledgeTreeEditor({
                 depthByKey={depthByKey}
                 childrenByParent={childrenByParent}
                 parentCountByChild={parentCountByChild}
+                parentsByChild={parentsByChild}
+                onJump={jumpToInstance}
+                flashInstance={flashInstance}
                 expanded={expanded}
                 setExpanded={setExpanded}
                 picking={picking}
@@ -737,6 +777,9 @@ function TreeRow({
   depthByKey,
   childrenByParent,
   parentCountByChild,
+  parentsByChild,
+  onJump,
+  flashInstance,
   expanded,
   setExpanded,
   picking,
@@ -757,6 +800,9 @@ function TreeRow({
   depthByKey: Record<string, number>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
+  parentsByChild: Map<string, string[]>;
+  onJump: (childKey: string, parentKey: string) => void;
+  flashInstance: string | null;
   expanded: Set<string>;
   setExpanded: (updater: (prev: Set<string>) => Set<string>) => void;
   picking: PickState;
@@ -771,6 +817,7 @@ function TreeRow({
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [peekOpen, setPeekOpen] = useState(false);
+  const [placesOpen, setPlacesOpen] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [childLabel, setChildLabel] = useState('');
   const [editing, setEditing] = useState(false);
@@ -861,24 +908,29 @@ function TreeRow({
   // inside its subtree (a same-parent drop is simply ignored on release).
   const dropEligible = dragKey !== null && nodeKey !== dragKey && !dragSubtree.has(nodeKey);
 
+  const isFlashed = flashInstance === instanceId;
+
   return (
     <div>
       <div
         ref={setDropRef}
+        id={`tree-row-${instanceId}`}
         className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-1.5 text-sm transition-colors last:border-b-0"
         style={{
           borderColor: 'var(--border)',
           paddingLeft: `${8 + depth * 18}px`,
           opacity: isDragging ? 0.4 : 1,
-          // During a drag every legal target is visibly a landing zone; the one
-          // under the finger lights up stronger.
-          background: isOver ? 'var(--surface-2)' : undefined,
-          boxShadow: isOver
-            ? 'inset 0 0 0 2px var(--brand-navy)'
-            : dropEligible
-              ? 'inset 0 0 0 1px var(--brand-navy)'
-              : undefined,
-          borderRadius: isOver || dropEligible ? 6 : undefined,
+          // Jump landing flash > drag states; during a drag every legal target
+          // is visibly a landing zone, the one under the finger stronger.
+          background: isFlashed ? 'var(--warning-surface)' : isOver ? 'var(--surface-2)' : undefined,
+          boxShadow: isFlashed
+            ? 'inset 0 0 0 2px var(--accent-gold)'
+            : isOver
+              ? 'inset 0 0 0 2px var(--brand-navy)'
+              : dropEligible
+                ? 'inset 0 0 0 1px var(--brand-navy)'
+                : undefined,
+          borderRadius: isFlashed || isOver || dropEligible ? 6 : undefined,
         }}
       >
         {/* Left group is ONE non-wrapping line (min-w-0 + truncate) so a long
@@ -972,8 +1024,22 @@ function TreeRow({
                   ? `bar ${node.masteryThreshold}`
                   : 'bar unset'
                 : `${depthByKey[nodeKey] ?? 0} Qs`}
-              {parentCount > 1 ? ` · in ${parentCount} trees` : ''}
             </span>
+            {/* Multi-parent chip: tap to see every place this territory lives
+                and jump to any of them. */}
+            {parentCount > 1 ? (
+              <button
+                type="button"
+                onClick={() => setPlacesOpen((v) => !v)}
+                aria-expanded={placesOpen}
+                aria-label={`${node.label} is in ${parentCount} places — show them`}
+                title="This territory lives in more than one place — tap to see and jump"
+                className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs font-medium"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              >
+                ⧉ {parentCount}
+              </button>
+            ) : null}
             {/* "This is too small" — a thin leaf that isn't already nested is a
                 condense-me candidate (Move it under a parent). */}
             {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
@@ -1118,6 +1184,43 @@ function TreeRow({
           </div>
         ) : null}
 
+        {/* Every place this territory lives; tap one to expand + scroll +
+            flash that instance. The row you're on is marked, not linked. */}
+        {placesOpen && parentCount > 1 ? (
+          <div
+            className="mt-1 w-full rounded-md border p-2 text-[13px]"
+            style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+          >
+            <p className="text-muted-foreground mb-1 text-xs">
+              {node.label} lives in {parentCount} places:
+            </p>
+            <ul className="space-y-1">
+              {(parentsByChild.get(nodeKey) ?? []).map((pKey) => (
+                <li key={pKey} className="flex items-center gap-2">
+                  <span className="min-w-0 truncate text-[var(--brand-ink)]">
+                    {nodeByKey.get(pKey)?.label ?? pKey}
+                  </span>
+                  {pKey === parentKey ? (
+                    <span className="text-muted-foreground shrink-0 text-xs">(you’re here)</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacesOpen(false);
+                        onJump(nodeKey, pKey);
+                      }}
+                      className="inline-flex min-h-7 shrink-0 items-center rounded-md border px-2 text-xs font-medium"
+                      style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                    >
+                      go there →
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {peekOpen ? <QuestionsPeek domainKeyValue={nodeKey} onClose={() => setPeekOpen(false)} /> : null}
 
         {addingChild ? (
@@ -1159,6 +1262,9 @@ function TreeRow({
               depthByKey={depthByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
+              parentsByChild={parentsByChild}
+              onJump={onJump}
+              flashInstance={flashInstance}
               expanded={expanded}
               setExpanded={setExpanded}
               picking={picking}
