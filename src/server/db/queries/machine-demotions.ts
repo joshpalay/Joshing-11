@@ -1,7 +1,11 @@
 import { and, asc, eq, isNull, ne } from 'drizzle-orm';
 
-import { db, questions, users } from '@/server/db';
-import { notSuppressedByContentReport } from '@/server/db/queries/content-reports';
+import { db, generatedQuestions, questions, users } from '@/server/db';
+import {
+  notSuppressedByContentReport,
+  resolveActiveIncorrectReportsForGenerated,
+  resolveActiveIncorrectReportsForQuestion,
+} from '@/server/db/queries/content-reports';
 import { type QuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 
 // B-CRAFTER-LIFECYCLE-01 Phase 1 — the MACHINE stream of the admin review queue.
@@ -174,6 +178,67 @@ export async function editQuestionContent(
     .where(eq(questions.id, questionId));
 
   return { ok: true, action: 'edited' };
+}
+
+export type ReviewTarget = { table: 'question' | 'generated'; id: string };
+
+export type ApproveResult =
+  | { ok: true; resolvedReports: number }
+  | { ok: false; reason: 'not_found' };
+
+// B-REVIEW-RERUN-01 — "pass it, OK to go back in circulation." Persists the
+// admin's edited content AND stamps a passing, human-validated verification,
+// returning the row to circulation immediately. This is legitimately verified,
+// not the exempt 'restore' override: it's called AFTER rerunQuestion has fact-
+// checked the reworked question (the route requires the reviewer to have seen a
+// verdict). Works on BOTH stores. Any active incorrect reports on the target
+// are resolved as admin_edited.
+export async function approveEditedQuestion(
+  target: ReviewTarget,
+  input: { questionText: string; answerText: string; explanation?: string | null },
+): Promise<ApproveResult> {
+  const now = new Date();
+
+  if (target.table === 'question') {
+    const updated = await db
+      .update(questions)
+      .set({
+        questionText: input.questionText,
+        answerText: input.answerText,
+        ...(input.explanation !== undefined ? { factualExplanation: input.explanation } : {}),
+        // Back to circulation, verified by the re-run + a human's approval.
+        publicStatus: 'not_scored',
+        verificationVerdict: 'ok',
+        verifiedAt: now,
+        verificationReason: 'admin re-verified',
+        trustTier: 'human_validated',
+        updatedAt: now,
+      })
+      .where(and(eq(questions.id, target.id), isNull(questions.deletedAt)))
+      .returning({ id: questions.id });
+    if (updated.length === 0) return { ok: false, reason: 'not_found' };
+    const resolvedReports = await resolveActiveIncorrectReportsForQuestion(target.id, 'admin_edited');
+    return { ok: true, resolvedReports };
+  }
+
+  const updated = await db
+    .update(generatedQuestions)
+    .set({
+      questionText: input.questionText,
+      answer: input.answerText,
+      ...(input.explanation ? { explainer: input.explanation } : {}),
+      // Un-suppress (is_duplicate is the generated store's suppress flag) and
+      // stamp the passing verification.
+      isDuplicate: false,
+      verificationVerdict: 'ok',
+      verifiedAt: now,
+      verificationReason: 'admin re-verified',
+    })
+    .where(eq(generatedQuestions.id, target.id))
+    .returning({ id: generatedQuestions.id });
+  if (updated.length === 0) return { ok: false, reason: 'not_found' };
+  const resolvedReports = await resolveActiveIncorrectReportsForGenerated(target.id);
+  return { ok: true, resolvedReports };
 }
 
 // Distinguish "no such question" from "someone already actioned it" for the
