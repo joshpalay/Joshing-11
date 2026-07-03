@@ -16,8 +16,10 @@
 >   (`docs/decisions-pending/D-SUPPLY-FINITE-SET-01-PENDING.md`,
 >   `B-SUPPLY-REFILL-EFFORT-REPORT.md`). `RETRIEVAL_GROUNDING_ENABLED` stays `false`.
 > - **Step 5 (monitor threshold):** moot until a hit-rate lever actually lands.
-> - **What the plan missed:** the **batch-verify cron** is now the single largest
->   *recurring* LLM line (~$2/day ≈ $60/mo at 18 users — above the $42 ceiling, uncapped)
+> - **What the plan missed:** the **batch-verify cron** is one of the two dominant
+>   recurring LLM lines (~$1.20/day measured 07-02; generation is the other and
+>   swings $0.19–1.87/day with volume — either can lead. Both uncapped; quiet-day
+>   base ~$0.35–0.70/day, measured 2026-07-03 in `PRE-BUILD-VALIDATION.md` §3)
 >   — see `docs/findings/batch-verify-cost-characterization.md`. Its dials all
 >   landed 2026-07-02: system-prompt caching, the `extra_fact` tightening (escape
 >   hatch `PREFILTER_EXTRA_FACT_LEGACY`; measure with
