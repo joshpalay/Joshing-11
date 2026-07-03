@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
 
 import type { KnowledgeEdgeRow, KnowledgeNodeRow } from '@/server/db/queries/knowledge-graph';
 import { AdminTabs } from '@/app/admin/AdminTabs';
@@ -249,10 +260,82 @@ function KnowledgeTreeEditor({
   const [error, setError] = useState<string | null>(null);
   const [newTopLabel, setNewTopLabel] = useState('');
 
+  // Drag-and-drop state: the label of the row being dragged (for the overlay),
+  // and the pending drop awaiting the human's Move-vs-Also-list choice.
+  const [dragLabel, setDragLabel] = useState<string | null>(null);
+  const [pendingDrop, setPendingDrop] = useState<{
+    childKey: string;
+    childLabel: string;
+    fromParentKey: string | null;
+    toParentKey: string;
+    toParentLabel: string;
+  } | null>(null);
+
+  // A tap must still expand / open the ⋯ menu — only a real drag (>8px) grabs.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
   const pickedSubtree = useMemo(
     () => (picking ? descendantsOf(picking.childKey) : new Set<string>()),
     [picking, descendantsOf],
   );
+
+  function onDragStart(event: DragStartEvent) {
+    const data = event.active.data.current as { label?: string } | undefined;
+    setDragLabel(data?.label ?? null);
+  }
+
+  function onDragEnd(event: DragEndEvent) {
+    setDragLabel(null);
+    const child = event.active.data.current as
+      | { childKey: string; fromParentKey: string | null; label: string }
+      | undefined;
+    const over = event.over?.data.current as
+      | { toParentKey: string | null; toParentLabel: string }
+      | undefined;
+    if (!child || over === undefined) return;
+
+    // Root zone → un-nest to top level (remove the current home edge).
+    if (over.toParentKey === null) {
+      if (!child.fromParentKey) return; // already top-level
+      void act({
+        action: 'delete_edge',
+        childDomainKey: child.childKey,
+        parentDomainKey: child.fromParentKey,
+      });
+      return;
+    }
+
+    const toParentKey = over.toParentKey;
+    if (toParentKey === child.childKey) return; // onto itself
+    if (child.fromParentKey === toParentKey) return; // already there
+    if (descendantsOf(child.childKey).has(toParentKey)) {
+      setError('Can’t place a territory inside its own subtree.');
+      return;
+    }
+    // Offer Move vs Also-list (the multi-parent choice) at the drop.
+    setError(null);
+    setPendingDrop({
+      childKey: child.childKey,
+      childLabel: child.label,
+      fromParentKey: child.fromParentKey,
+      toParentKey,
+      toParentLabel: over.toParentLabel,
+    });
+  }
+
+  function commitDrop(mode: 'move' | 'copy') {
+    if (!pendingDrop) return;
+    const drop = pendingDrop;
+    setPendingDrop(null);
+    void act({
+      action: 'attach_child',
+      childDomainKey: drop.childKey,
+      toParentDomainKey: drop.toParentKey,
+      ...(mode === 'move' && drop.fromParentKey
+        ? { moveFromParentDomainKey: drop.fromParentKey }
+        : {}),
+    });
+  }
 
   async function act(body: Record<string, unknown>, keepPicking = false) {
     if (busy) return;
@@ -337,6 +420,50 @@ function KnowledgeTreeEditor({
         </div>
       </div>
 
+      {/* Drop-choice — the multi-parent moment: Move re-files; Also list keeps
+          the old home AND adds the new one. Fixed to the bottom so it's in
+          reach no matter where in a long tree the drop happened. */}
+      {pendingDrop ? (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+          <div
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
+            aria-live="polite"
+          >
+            <span className="w-full sm:w-auto">
+              Put <strong>{pendingDrop.childLabel}</strong> under{' '}
+              <strong>{pendingDrop.toParentLabel}</strong>?
+            </span>
+            <button
+              type="button"
+              onClick={() => commitDrop('move')}
+              disabled={busy}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+            >
+              Move here
+            </button>
+            <button
+              type="button"
+              onClick={() => commitDrop('copy')}
+              disabled={busy}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              title="Keep it where it is and also list it here (lives under both)"
+            >
+              Also list here
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDrop(null)}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       {picking ? (
         <div
           className="mb-2 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[13px]"
@@ -370,8 +497,9 @@ function KnowledgeTreeEditor({
         </div>
       ) : (
         <p className="text-muted-foreground mb-2 text-xs">
-          Expand with ▸ · Move re-files a territory · Copy files it under a second parent too ·
-          +&nbsp;Child adds a finer level (Beethoven under Classical Music, Sonatas under Beethoven).
+          Drag a row by its ⠿ handle onto another to nest it (or onto “top level” to un-nest).
+          Dropping asks Move vs. Also-list (for territories that belong under two parents). Tap ⋯
+          for the same actions plus edit.
         </p>
       )}
       {error ? (
@@ -380,37 +508,68 @@ function KnowledgeTreeEditor({
         </p>
       ) : null}
 
-      <div className="rounded-md border py-1" style={{ borderColor: 'var(--border)' }}>
-        {roots.length === 0 ? (
-          <p className="text-muted-foreground px-3 py-2 text-sm">
-            Nothing in the tree yet — accept a suggested group above or add a territory.
-          </p>
-        ) : (
-          roots.map((key) => (
-            <TreeRow
-              key={key}
-              nodeKey={key}
-              parentKey={null}
-              depth={0}
-              ancestors={new Set()}
-              nodeByKey={nodeByKey}
-              depthByKey={depthByKey}
-              childrenByParent={childrenByParent}
-              parentCountByChild={parentCountByChild}
-              expanded={expanded}
-              setExpanded={setExpanded}
-              picking={picking}
-              pickedSubtree={pickedSubtree}
-              busy={busy}
-              onPick={setPicking}
-              onPlace={placeInto}
-              onAct={act}
-              onDone={onDone}
-            />
-          ))
-        )}
-      </div>
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <RootDropZone />
+        <div className="rounded-md border py-1" style={{ borderColor: 'var(--border)' }}>
+          {roots.length === 0 ? (
+            <p className="text-muted-foreground px-3 py-2 text-sm">
+              Nothing in the tree yet — accept a suggested group above or add a territory.
+            </p>
+          ) : (
+            roots.map((key) => (
+              <TreeRow
+                key={key}
+                nodeKey={key}
+                parentKey={null}
+                depth={0}
+                ancestors={new Set()}
+                nodeByKey={nodeByKey}
+                depthByKey={depthByKey}
+                childrenByParent={childrenByParent}
+                parentCountByChild={parentCountByChild}
+                expanded={expanded}
+                setExpanded={setExpanded}
+                picking={picking}
+                pickedSubtree={pickedSubtree}
+                busy={busy}
+                onPick={setPicking}
+                onPlace={placeInto}
+                onAct={act}
+                onDone={onDone}
+              />
+            ))
+          )}
+        </div>
+        <DragOverlay>
+          {dragLabel ? (
+            <div
+              className="rounded-md border px-3 py-1.5 text-sm font-medium shadow-[var(--shadow-card)]"
+              style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink)' }}
+            >
+              {dragLabel}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </section>
+  );
+}
+
+// The drop target for un-nesting: drag a nested row here to make it top-level.
+function RootDropZone() {
+  const { setNodeRef, isOver } = useDroppable({ id: 'root-zone', data: { toParentKey: null } });
+  return (
+    <div
+      ref={setNodeRef}
+      className="mb-1 rounded-md border border-dashed px-3 py-2 text-center text-xs transition-colors"
+      style={{
+        borderColor: isOver ? 'var(--brand-navy)' : 'var(--border)',
+        background: isOver ? 'var(--surface-2)' : 'transparent',
+        color: 'var(--text-muted)',
+      }}
+    >
+      top level — drop here to un-nest
+    </div>
   );
 }
 
@@ -459,7 +618,25 @@ function TreeRow({
   const [editBar, setEditBar] = useState('');
   const [rowError, setRowError] = useState<string | null>(null);
 
-  const node = nodeByKey.get(nodeKey);
+  const node = nodeByKey.get(nodeKey); // not a hook — safe before the hooks below
+  // Drag source (the ⠿ handle) + drop target (the whole row). Instance-unique
+  // ids so the same node under two parents drags/drops independently. Hooks run
+  // unconditionally, before the cycle-guard return below.
+  const instanceId = `${parentKey ?? 'root'}::${nodeKey}`;
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    isDragging,
+  } = useDraggable({
+    id: `drag::${instanceId}`,
+    data: { childKey: nodeKey, fromParentKey: parentKey, label: node?.label ?? nodeKey },
+  });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop::${instanceId}`,
+    data: { toParentKey: nodeKey, toParentLabel: node?.label ?? nodeKey },
+  });
+
   if (!node || ancestors.has(nodeKey)) return null; // cycle guard
 
   const children = childrenByParent.get(nodeKey) ?? [];
@@ -524,9 +701,30 @@ function TreeRow({
   return (
     <div>
       <div
+        ref={setDropRef}
         className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-1.5 text-sm last:border-b-0"
-        style={{ borderColor: 'var(--border)', paddingLeft: `${8 + depth * 18}px` }}
+        style={{
+          borderColor: 'var(--border)',
+          paddingLeft: `${8 + depth * 18}px`,
+          opacity: isDragging ? 0.4 : 1,
+          // Highlight a valid drop target as a drag hovers over it.
+          background: isOver ? 'var(--surface-2)' : undefined,
+          boxShadow: isOver ? 'inset 3px 0 0 var(--brand-navy)' : undefined,
+        }}
       >
+        {/* Drag handle — grab here to re-file the row. Its own control so a tap
+            elsewhere on the row still expands / opens ⋯. */}
+        <button
+          type="button"
+          ref={setDragRef}
+          {...listeners}
+          {...attributes}
+          aria-label={`Drag ${node.label}`}
+          className="cursor-grab touch-none text-[var(--text-muted)] active:cursor-grabbing"
+          style={{ touchAction: 'none' }}
+        >
+          ⠿
+        </button>
         {children.length > 0 ? (
           <button
             type="button"
