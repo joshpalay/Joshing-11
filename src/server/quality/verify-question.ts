@@ -86,7 +86,10 @@ export function parseVerifyVerdict(raw: string): { outcome: 'ok' | 'demoted' | '
   if (!parsed) return null;
   const v = parsed.verdict;
   if (v !== 'ok' && v !== 'demoted' && v !== 'unverifiable') return null;
-  const reason = typeof parsed.reason === 'string' ? parsed.reason.trim().slice(0, 200) : '';
+  // 500, not 200 — the old cap cut verdicts mid-word on the crafter flags and
+  // review queue ("…Tom Mooney and Warren Bil"), losing the reasoning the
+  // human needs to act on the flag.
+  const reason = typeof parsed.reason === 'string' ? parsed.reason.trim().slice(0, 500) : '';
   return { outcome: v, reason: reason || v };
 }
 

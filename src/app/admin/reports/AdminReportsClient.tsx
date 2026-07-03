@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
+
 import type { AdminReviewReport, BlockedReviewItem } from '@/server/db/queries/content-reports';
 import type { MachineDemotionReviewItem } from '@/server/db/queries/machine-demotions';
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
@@ -462,10 +464,9 @@ function EditPanel({
       ) : null}
       <label className="block">
         <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Question</span>
-        <textarea
+        <AutoGrowTextarea
           value={questionText}
           onChange={(e) => edited(setQuestionText)(e.target.value)}
-          rows={2}
           className={fieldClass}
         />
       </label>
@@ -483,10 +484,9 @@ function EditPanel({
           <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
             Explanation (optional)
           </span>
-          <textarea
+          <AutoGrowTextarea
             value={explanation}
             onChange={(e) => edited(setExplanation)(e.target.value)}
-            rows={2}
             className={fieldClass}
           />
         </label>
