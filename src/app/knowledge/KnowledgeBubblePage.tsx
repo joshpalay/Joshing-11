@@ -60,6 +60,7 @@ export async function KnowledgeBubblePage() {
           }))}
           overflowCount={Math.max(0, sorted.length - topDomains.length)}
           tierSignature={`${new Intl.NumberFormat().format(Math.round(totalPoints))} knowledge points across ${sorted.length} territories`}
+          existingLabels={sorted.map((d) => d.displayName)}
         />
       </header>
       <KnowledgeBubbleMap data={tree} collections={collections} />
