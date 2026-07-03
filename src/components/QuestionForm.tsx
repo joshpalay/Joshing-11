@@ -37,6 +37,13 @@ type FriendOption = { id: string; displayName: string };
 
 type Stage = 'WRITING' | 'CRITIQUING' | 'CRITIQUED' | 'ANSWERING' | 'SUBMITTING' | 'DONE';
 
+// Provenance of the current correct-answer value. 'author' = the author typed it
+// themselves; 'suggestion' = they accepted Joshing's suggested answer verbatim.
+// This gates "verified": only an author-supplied answer that independently agrees
+// with the suggestion earns the badge — passively accepting the machine's guess
+// never self-certifies (see isVerifiedAnswer).
+type AnswerSource = 'author' | 'suggestion' | null;
+
 type Props = {
   mode?: 'create' | 'edit';
   initialValues?: Partial<QuestionFormValues>;
@@ -59,6 +66,11 @@ type State = {
   questionText: string;
   lastCritiquedText: string | null;
   llmSuggestedAnswer: string | null;
+  // Joshing's suggested supporting fields, held separately so they only apply
+  // when the author actually adopts the suggestion (never auto-filled).
+  suggestedAlternates: string[];
+  suggestedExplanation: string;
+  answerSource: AnswerSource;
   userAnswer: string;
   alternateText: string;
   explanation: string;
@@ -92,6 +104,7 @@ type Action =
   | { type: 'ANSWERING' }
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_RESULT'; questionText: string; suggestion: SuggestionResponse }
+  | { type: 'USE_SUGGESTION' }
   | { type: 'SUGGESTION_ERROR'; questionText?: string; value: string | null }
   | { type: 'SUBMITTING' }
   | { type: 'DONE' }
@@ -110,6 +123,12 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     questionText: initialValues?.text ?? '',
     lastCritiquedText: null,
     llmSuggestedAnswer: initialValues?.llmSuggestedAnswer ?? null,
+    suggestedAlternates: [],
+    suggestedExplanation: '',
+    // In edit mode the stored answer is the author's own committed answer, so
+    // treat it as author-supplied — this preserves the prior verified state when
+    // re-opening a question. A fresh create starts with no answer and no source.
+    answerSource: (initialValues?.correctAnswer ?? '').trim() ? 'author' : null,
     userAnswer: initialValues?.correctAnswer ?? '',
     alternateText: (initialValues?.alternateAnswers ?? []).join(', '),
     explanation: initialValues?.explanation ?? '',
@@ -138,7 +157,26 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'RESET': return action.state;
-    case 'FIELD': return { ...state, [action.field]: action.value, error: null };
+    case 'FIELD': {
+      const next = { ...state, [action.field]: action.value, error: null };
+      if (action.field === 'userAnswer') {
+        // The author is typing their own answer — this is the independent signal
+        // "verified" is meant to capture. Mark it author-sourced.
+        next.answerSource = 'author';
+        // If their own answer happens to match Joshing's independent suggestion
+        // and they have no explanation yet, carry Joshing's over (it describes
+        // this same answer). Never clobber an explanation already present.
+        if (
+          state.suggestedExplanation
+          && !state.explanation.trim()
+          && action.value.trim()
+          && answersMatch(action.value, state.llmSuggestedAnswer)
+        ) {
+          next.explanation = state.suggestedExplanation;
+        }
+      }
+      return next;
+    }
     case 'ERROR': return { ...state, error: action.value };
     case 'START_CRITIQUE': return { ...state, stage: 'CRITIQUING', lastCritiquedText: action.text, error: null };
     case 'CRITIQUE_RESULT': {
@@ -160,14 +198,33 @@ function reducer(state: State, action: Action): State {
       if (state.questionText.trim() !== action.questionText) {
         return { ...state, suggesting: false };
       }
+      // Store the suggestion as an INDEPENDENT cross-check only. We deliberately do
+      // NOT fill userAnswer/alternateText/explanation here: auto-filling the answer
+      // made "verified" (author answer == suggestion) trivially true, so a
+      // confidently-wrong guess self-certified and became broadcast-eligible. The
+      // author supplies their own answer; the supporting fields apply only if they
+      // adopt the suggestion (USE_SUGGESTION) or type a matching answer (FIELD).
       return {
         ...state,
         suggesting: false,
         suggestionError: null,
-        userAnswer: action.suggestion.correctAnswer,
         llmSuggestedAnswer: action.suggestion.correctAnswer,
-        explanation: state.explanation.trim() ? state.explanation : action.suggestion.explanation,
-        alternateText: state.alternateText.trim() || action.suggestion.alternateAnswers.length === 0 ? state.alternateText : action.suggestion.alternateAnswers.join(', '),
+        suggestedAlternates: action.suggestion.alternateAnswers,
+        suggestedExplanation: action.suggestion.explanation,
+      };
+    }
+    case 'USE_SUGGESTION': {
+      if (!state.llmSuggestedAnswer) return state;
+      // The author adopted Joshing's suggested answer verbatim. Fill the supporting
+      // fields (without clobbering anything they already typed), but mark the source
+      // 'suggestion' so it does not count as independent verification.
+      return {
+        ...state,
+        error: null,
+        userAnswer: state.llmSuggestedAnswer,
+        answerSource: 'suggestion',
+        alternateText: state.alternateText.trim() ? state.alternateText : state.suggestedAlternates.join(', '),
+        explanation: state.explanation.trim() ? state.explanation : state.suggestedExplanation,
       };
     }
     case 'SUGGESTION_ERROR': {
@@ -234,8 +291,29 @@ function answersMatch(a: string, b: string | null): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+// "Verified" means the answer is independently corroborated, NOT merely that the
+// author didn't override the LLM. It is earned only when the author *typed their
+// own* answer and it agrees with Joshing's independent suggestion. Passively
+// accepting the suggestion (answerSource 'suggestion') is deference to the machine,
+// not corroboration, so it stays unverified — this is what stops a confidently
+// wrong auto-suggestion from self-certifying and becoming broadcast-eligible.
+// With no suggestion to check against, we fall back to verified (unchanged
+// behaviour for when the suggestion is unavailable, or edit mode without one).
+export function isVerifiedAnswer(params: {
+  suggestedAnswer: string | null;
+  userAnswer: string;
+  answerSource: AnswerSource;
+}): boolean {
+  if (!params.suggestedAnswer) return true;
+  return params.answerSource === 'author' && answersMatch(params.userAnswer, params.suggestedAnswer);
+}
+
 function computedVerified(state: State): boolean {
-  return !state.llmSuggestedAnswer || answersMatch(state.userAnswer, state.llmSuggestedAnswer);
+  return isVerifiedAnswer({
+    suggestedAnswer: state.llmSuggestedAnswer,
+    userAnswer: state.userAnswer,
+    answerSource: state.answerSource,
+  });
 }
 
 function validate(state: State): string | null {
@@ -369,6 +447,8 @@ export function QuestionForm({
   }, [state.friends, state.friendSearch]);
   const showDestinations = mode === 'create';
   const verified = computedVerified(state);
+  const hasAnswer = state.userAnswer.trim().length > 0;
+  const usedSuggestion = state.answerSource === 'suggestion';
   const submitDisabled = state.stage === 'SUBMITTING';
   const resolvedSubmitLabel = submitLabel ?? (mode === 'edit' ? 'Update question' : 'Save question');
 
@@ -523,15 +603,22 @@ export function QuestionForm({
   }, [autoSubmit, mode, state.stage, state.questionText]);
 
   // autoSubmit leg 2: once we're answering and the suggested answer has landed,
-  // save without a manual click. The userAnswer guard means a failed suggestion
-  // (no answer) leaves the author in the normal manual flow rather than blocking.
+  // save without a manual click. Since the suggestion no longer pre-fills the
+  // answer field, adopt it explicitly here (the reader "wrote" the question but
+  // did not supply an answer, so it saves as unverified — machine-sourced, not
+  // author-corroborated). A failed suggestion (no suggested answer) leaves the
+  // author in the normal manual flow rather than blocking.
   useEffect(() => {
     if (!autoSubmit || mode !== 'create' || autoSubmittedRef.current) return;
-    if (state.stage !== 'ANSWERING' || state.suggesting || !state.userAnswer.trim()) return;
+    if (state.stage !== 'ANSWERING' || state.suggesting) return;
+    if (!state.userAnswer.trim()) {
+      if (state.llmSuggestedAnswer) dispatch({ type: 'USE_SUGGESTION' });
+      return;
+    }
     autoSubmittedRef.current = true;
     void finalSave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSubmit, mode, state.stage, state.suggesting, state.userAnswer]);
+  }, [autoSubmit, mode, state.stage, state.suggesting, state.userAnswer, state.llmSuggestedAnswer]);
 
   const critique = state.critiqueResult;
   const counter = remainingCopy(state);
@@ -667,9 +754,10 @@ export function QuestionForm({
 
           {/* The explanation is written by Joshing's answer suggestion and is
               shown read-only — the author confirms it rather than editing it.
-              Hidden until there's something to show (e.g. before the
-              suggestion lands). */}
-          {state.explanation.trim() ? (
+              Hidden until there's something to show, and hidden again if the
+              chosen answer diverges from Joshing's (the explanation describes
+              Joshing's answer, so it would misdescribe a different one). */}
+          {state.explanation.trim() && answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
             <div>
               <p className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</p>
               <div className="w-full whitespace-pre-wrap rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2">{state.explanation}</div>
@@ -686,26 +774,48 @@ export function QuestionForm({
             </div>
           </div>
 
-          {state.llmSuggestedAnswer && !answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">LLM suggestion</p>
-              <p className="mt-1 line-through decoration-[var(--warning)]">{state.llmSuggestedAnswer}</p>
-            </div>
-          ) : null}
-
+          {/* Joshing's answer is an INDEPENDENT cross-check, never a pre-fill.
+              The author enters their own answer; agreement earns "verified". This
+              is what stops a confidently-wrong suggestion (e.g. "Keanu Reeves" for
+              a fact about Balthazar Getty) from self-certifying via auto-fill. */}
           {state.llmSuggestedAnswer ? (
-            verified ? (
-              <p className="text-sm text-[var(--success)]">✓ Verified — matches LLM suggestion</p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm text-[var(--warning)]">⚠ Unverified — your answer differs from the LLM&apos;s suggestion. Recipients will see this.</p>
+            !hasAnswer ? (
+              // Nothing entered yet — offer Joshing's answer as a cross-check, but
+              // do not fill the field (that would manufacture a false match).
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Joshing&apos;s answer</p>
+                <p className="mt-1 font-medium">{state.llmSuggestedAnswer}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Type the answer you have in mind above and we&apos;ll check it against this — or adopt Joshing&apos;s as-is.</p>
                 <button
                   type="button"
-                  onClick={() => dispatch({ type: 'FIELD', field: 'userAnswer', value: state.llmSuggestedAnswer ?? '' })}
+                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
                   disabled={state.stage === 'SUBMITTING'}
-                  className="rounded-md border border-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Use LLM answer
+                  Use Joshing&apos;s answer
+                </button>
+              </div>
+            ) : verified ? (
+              <p className="text-sm text-[var(--success)]">✓ Verified — your answer matches Joshing&apos;s independent answer.</p>
+            ) : usedSuggestion ? (
+              // Author adopted the suggestion without supplying their own answer.
+              // Coherent, but not independently corroborated — cannot broadcast.
+              <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
+                <p>⚠ Unverified — this is Joshing&apos;s suggested answer, not one you confirmed yourself. You can send it directly to specific friends, but it can&apos;t be shared with everyone. If you know it&apos;s right, type it into the answer field above.</p>
+              </div>
+            ) : (
+              // Author supplied their own answer and it differs from Joshing&apos;s.
+              <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
+                <p className="text-xs uppercase tracking-[0.1em]">Joshing suggested a different answer</p>
+                <p className="mt-1 line-through decoration-[var(--warning)]">{state.llmSuggestedAnswer}</p>
+                <p className="mt-2">⚠ Unverified — your answer differs from Joshing&apos;s. Double-check which is right; recipients will see it tagged unverified.</p>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
+                  disabled={state.stage === 'SUBMITTING'}
+                  className="mt-2 rounded-md border border-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Use Joshing&apos;s answer instead
                 </button>
               </div>
             )

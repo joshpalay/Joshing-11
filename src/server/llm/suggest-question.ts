@@ -9,13 +9,18 @@
  *   1. A Sonnet generation prompt that forces the model to first name the exact
  *      entity + attribute being asked about (in a `reasoning` field we discard)
  *      before committing to an answer.
- *   2. A Haiku verification pass that catches an answer aimed at the wrong
- *      attribute and, when confident, hands back the correct one so we can
- *      regenerate once.
+ *   2. A verification pass (Sonnet by default — see VERIFIER_MODEL) that catches
+ *      an answer aimed at the wrong attribute OR a confident misattribution (right
+ *      topic, wrong entity/person — the "Balthazar Getty → Keanu Reeves" class),
+ *      and when confident hands back the correct one so we can regenerate once.
  *
- * The verifier is strictly fail-open: any Haiku error/timeout/invalid output
- * leaves the original suggestion untouched, so an LLM hiccup never blocks the
- * form's auto-fill.
+ * The verifier is strictly fail-open: any error/timeout/invalid output leaves the
+ * original suggestion untouched, so an LLM hiccup never blocks the suggestion.
+ *
+ * The verifier is only half the defence: the form treats the suggestion as an
+ * INDEPENDENT cross-check the author confirms against, never a pre-filled answer,
+ * so a wrong guess that slips past the verifier still cannot self-certify as
+ * "verified". See QuestionForm's isVerifiedAnswer.
  */
 
 import {
@@ -27,9 +32,23 @@ import {
   extractTextContent,
   getAnthropicClient,
   loggedMessagesCreate,
+  modelRejectsSamplingParams,
   parseJsonObject,
   wrapUserInput,
 } from '@/lib/llm';
+
+// Verifier model. The verifier's whole job is to catch a confidently-wrong
+// suggestion before it reaches the author, and model tier is the dominant factor
+// in factual recall on obscure facts — the same finding that moved the daily
+// factual gate to Sonnet (see generate-questions.ts). Haiku silently passed the
+// "Balthazar Getty → Keanu Reeves" DFW miss because it does not know that fact
+// either; Sonnet catches that class. The verifier runs once per authored
+// question, so a stronger model here is a small cost on a high-leverage check.
+// Override SUGGEST_VERIFY_MODEL=claude-haiku-4-5-20251001 to revert without a deploy.
+const VERIFIER_MODEL = process.env.SUGGEST_VERIFY_MODEL?.trim() || ANTHROPIC_MODEL;
+// Haiku's 12s timeout is tuned for Haiku's speed; a heavier verifier needs more
+// headroom or it times out and fails open (silently disabling the check).
+const VERIFIER_TIMEOUT_MS = VERIFIER_MODEL === HAIKU_MODEL ? HAIKU_GATE_TIMEOUT_MS : 20_000;
 
 export type QuestionSuggestion = {
   correctAnswer: string;
@@ -55,7 +74,7 @@ const VERIFIER_SYSTEM_PROMPT = `You are fact-checking a single proposed answer t
 
 Decide one verdict:
 - "OK" — the proposed answer correctly and directly answers the SPECIFIC thing the question asks about.
-- "WRONG" — the answer is factually incorrect, OR it answers a different attribute than the one asked (e.g. the question asks about an entity's dashboard but the answer describes its windows). When you are confident, supply the correct answer in corrected_answer.
+- "WRONG" — the answer is factually incorrect, OR it names the wrong entity/person (a plausible but incorrect name — the question is about the right topic but the proposed answer is simply the wrong one, e.g. attributing a quote or role to the wrong celebrity), OR it answers a different attribute than the one asked (e.g. the question asks about an entity's dashboard but the answer describes its windows). When you are confident, supply the correct answer in corrected_answer.
 - "UNVERIFIABLE" — you genuinely cannot verify the fact (niche, recent, or personal). Treat as acceptable; do not flag.
 
 Flag "WRONG" only when you are confident. A high bar applies — when in doubt, return "OK".
@@ -137,18 +156,21 @@ async function verifySuggestion(
       client,
       'questions-suggest-verify',
       {
-        model: HAIKU_MODEL,
-        max_tokens: 200,
-        temperature: 0,
+        model: VERIFIER_MODEL,
+        max_tokens: 300,
+        // Opus 4.7/4.8 / Sonnet-5 / Fable reject sampling params (HTTP 400);
+        // Haiku 4.5 and Sonnet 4.6 accept temperature. Guard so a stronger
+        // verifier override does not 400.
+        ...(modelRejectsSamplingParams(VERIFIER_MODEL) ? {} : { temperature: 0 }),
         system: VERIFIER_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMessage }],
       },
-      { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
+      { timeoutMs: VERIFIER_TIMEOUT_MS },
     );
 
     return parseVerifierResponse(extractTextContent(response.content));
   } catch (error) {
-    // Fail open: never block the auto-fill on a verifier hiccup.
+    // Fail open: never block the suggestion on a verifier hiccup.
     console.warn('[suggestQuestionAnswer] verify_failed', {
       message: error instanceof Error ? error.message : String(error),
     });
@@ -173,4 +195,25 @@ export async function suggestQuestionAnswer(questionText: string): Promise<Quest
   // only if the retry fails to produce a usable suggestion.
   const corrected = await generateSuggestion(client, questionText, verdict.correctedAnswer);
   return corrected ?? suggestion;
+}
+
+/**
+ * Fact-check a single proposed answer against a question and return the verifier's
+ * verdict (plus a correction when it is confident the answer is wrong). This is the
+ * same verification pass suggestQuestionAnswer runs internally, exposed for surfaces
+ * where a human edits an answer and wants an on-demand "is this right?" check (e.g.
+ * the crafter keep/kill cards). Fail-open: with no client or on any verifier hiccup
+ * it returns UNVERIFIABLE rather than throwing, so the caller never blocks on it.
+ */
+export async function verifyAnswer(
+  questionText: string,
+  proposedAnswer: string,
+): Promise<VerifierVerdict> {
+  const client = getAnthropicClient();
+  if (!client) return { verdict: 'UNVERIFIABLE', correctedAnswer: null };
+  return verifySuggestion(client, questionText, {
+    correctAnswer: proposedAnswer,
+    alternateAnswers: [],
+    explanation: '',
+  });
 }
