@@ -362,6 +362,12 @@ export async function register() {
       await db.execute(sql`
         CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeNode_domain_key_key" ON "KnowledgeNode" ("domain_key")
       `);
+      // B-KNOWLEDGE-ADMIN-01 P3 (migration 0107): Wikidata provenance on
+      // ratified nodes. Additive nullable column — same repair rationale as
+      // the 0105 web_search_requests guard.
+      await db.execute(sql`
+        ALTER TABLE "KnowledgeNode" ADD COLUMN IF NOT EXISTS "wikidata_qid" text
+      `);
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS "KnowledgeEdge" (
           "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,

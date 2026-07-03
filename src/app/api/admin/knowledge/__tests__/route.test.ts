@@ -51,6 +51,19 @@ const { listQuestionsMock } = vi.hoisted(() => ({
   })),
 }));
 vi.mock('@/server/knowledge/nearness-tree', () => ({ getOrBuildDomainRungs: rungsMock }));
+const { wikidataStructureMock } = vi.hoisted(() => ({
+  wikidataStructureMock: vi.fn(async () => ({
+    entity: { qid: 'Q170173', label: 'Medici', description: 'Italian banking family' },
+    parents: [
+      { qid: 'Q4692', label: 'Italian Renaissance', description: 'cultural period' },
+      // Dedupe probe: the LLM proposes this same label below — Wikidata wins.
+      { qid: 'Q7787', label: 'European History', description: null },
+    ],
+    children: [],
+    siblings: [],
+  })),
+}));
+vi.mock('@/server/knowledge/wikidata', () => ({ getWikidataStructure: wikidataStructureMock }));
 const { proposeStructureMock, ratifyGroupMock } = vi.hoisted(() => ({
   proposeStructureMock: vi.fn(async () => ({
     ok: true as const,
@@ -175,23 +188,52 @@ describe('POST /api/admin/knowledge', () => {
     expect(createEdgeMock).not.toHaveBeenCalled();
   });
 
-  // ─── ADMIN P3: the LLM proposal queue ───
+  // ─── ADMIN P3: the two-source proposal queue (Wikidata primary, LLM secondary) ───
 
-  it('propose returns parent/grandparent rungs only, and commits NOTHING', async () => {
+  it('propose merges Wikidata first (with QID provenance), LLM after, deduped — and commits NOTHING', async () => {
     const res = await post({ action: 'propose', childLabel: 'Medici Family' });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { proposals: Array<{ label: string; rung: string }> };
-    expect(body.proposals.map((p) => p.label)).toEqual(['Renaissance Italy', 'European History']);
+    const body = (await res.json()) as {
+      proposals: Array<{ label: string; rung: string; source: string; qid: string | null }>;
+    };
+    // Wikidata's two parents lead; the LLM's 'European History' folds onto
+    // Wikidata's (dedupe), leaving its unique 'Renaissance Italy' last.
+    expect(body.proposals.map((p) => [p.label, p.source, p.qid])).toEqual([
+      ['Italian Renaissance', 'wikidata', 'Q4692'],
+      ['European History', 'wikidata', 'Q7787'],
+      ['Renaissance Italy', 'llm', null],
+    ]);
     expect(body.proposals.some((p) => p.rung === 'sibling')).toBe(false);
     expect(createNodeMock).not.toHaveBeenCalled();
     expect(createEdgeMock).not.toHaveBeenCalled();
     expect(ratifyMock).not.toHaveBeenCalled(); // proposals never auto-commit (§4)
   });
 
-  it('propose degrades to an empty queue when the near-ness module fails', async () => {
+  it('propose still serves the LLM source when Wikidata is unavailable', async () => {
+    wikidataStructureMock.mockResolvedValueOnce(null as never); // label unresolved / egress blocked
+    const res = await post({ action: 'propose', childLabel: 'Spy School Books 1-6' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { proposals: Array<{ label: string; source: string }> };
+    expect(body.proposals.map((p) => p.source)).toEqual(['llm', 'llm']);
+  });
+
+  it('propose degrades to an empty queue when BOTH sources fail — never an error', async () => {
+    wikidataStructureMock.mockRejectedValueOnce(new Error('egress blocked'));
     rungsMock.mockRejectedValueOnce(new Error('no cache'));
     const res = await post({ action: 'propose', childLabel: 'Medici Family' });
     expect(res.status).toBe(200);
+    expect(((await res.json()) as { proposals: unknown[] }).proposals).toEqual([]);
+  });
+
+  it('propose never proposes the child as its own parent', async () => {
+    wikidataStructureMock.mockResolvedValueOnce({
+      entity: { qid: 'Q1', label: 'Tennis', description: null },
+      parents: [{ qid: 'Q2', label: 'Tennis', description: null }], // self by domainKey fold
+      children: [],
+      siblings: [],
+    } as never);
+    rungsMock.mockResolvedValueOnce([]);
+    const res = await post({ action: 'propose', childLabel: 'Tennis' });
     expect(((await res.json()) as { proposals: unknown[] }).proposals).toEqual([]);
   });
 
@@ -347,5 +389,32 @@ describe('POST /api/admin/knowledge', () => {
       expect.objectContaining({ edgeType: 'collection', parentLabel: 'Renaissance Italy' }),
       'admin-1',
     );
+  });
+
+  it('ratify of a Wikidata proposal carries the QID for provenance', async () => {
+    const res = await post({
+      action: 'ratify',
+      childDomainKey: 'medici family',
+      parentLabel: 'Italian Renaissance',
+      edgeType: 'substantive',
+      wikidataQid: 'Q4692',
+    });
+    expect(res.status).toBe(201);
+    expect(ratifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ wikidataQid: 'Q4692', edgeType: 'substantive' }),
+      'admin-1',
+    );
+  });
+
+  it('ratify rejects a malformed QID', async () => {
+    const res = await post({
+      action: 'ratify',
+      childDomainKey: 'medici family',
+      parentLabel: 'Italian Renaissance',
+      edgeType: 'substantive',
+      wikidataQid: 'not-a-qid',
+    });
+    expect(res.status).toBe(400);
+    expect(ratifyMock).not.toHaveBeenCalled();
   });
 });
