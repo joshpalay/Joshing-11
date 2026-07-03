@@ -39,6 +39,16 @@ vi.mock('@/server/db/queries/knowledge-graph', () => ({
   ratifyProposedParent: ratifyMock,
   ratifyStructureGroup: ratifyGroupMock,
   attachChild: attachChildMock,
+  invertKnowledgeEdge: invertEdgeMock,
+  listQuestionsForDomain: listQuestionsMock,
+}));
+const { listQuestionsMock } = vi.hoisted(() => ({
+  listQuestionsMock: vi.fn(async () => ({
+    label: 'Shakespearean Drama',
+    questions: [
+      { text: 'Who wrote Hamlet?', answer: 'Shakespeare', source: 'canonical', suppressed: false },
+    ],
+  })),
 }));
 vi.mock('@/server/knowledge/nearness-tree', () => ({ getOrBuildDomainRungs: rungsMock }));
 const { proposeStructureMock, ratifyGroupMock } = vi.hoisted(() => ({
@@ -62,6 +72,9 @@ const { proposeStructureMock, ratifyGroupMock } = vi.hoisted(() => ({
 }));
 vi.mock('@/server/knowledge/propose-structure', () => ({
   proposeKnowledgeStructure: proposeStructureMock,
+}));
+const { invertEdgeMock } = vi.hoisted(() => ({
+  invertEdgeMock: vi.fn(async () => ({ ok: true as const })),
 }));
 const { mergeDomainMock } = vi.hoisted(() => ({
   mergeDomainMock: vi.fn(async () => ({
@@ -222,6 +235,30 @@ describe('POST /api/admin/knowledge', () => {
       toParentDomainKey: 'beethoven',
     });
     expect(res.status).toBe(400);
+  });
+
+  // ─── flip + peek ───
+
+  it('invert_edge flips a child above its own parent', async () => {
+    const res = await post({
+      action: 'invert_edge',
+      childDomainKey: 'shakespeare',
+      parentDomainKey: 'shakespearean drama',
+    });
+    expect(res.status).toBe(200);
+    expect(invertEdgeMock).toHaveBeenCalledWith(
+      { childDomainKey: 'shakespeare', parentDomainKey: 'shakespearean drama' },
+      'admin-1',
+    );
+  });
+
+  it('list_questions returns the peek read-only', async () => {
+    const res = await post({ action: 'list_questions', domainKey: 'shakespearean drama' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { questions: Array<{ text: string }> };
+    expect(body.questions[0].text).toContain('Hamlet');
+    expect(createNodeMock).not.toHaveBeenCalled();
+    expect(createEdgeMock).not.toHaveBeenCalled();
   });
 
   // ─── merge (fold a duplicate territory into its twin) ───

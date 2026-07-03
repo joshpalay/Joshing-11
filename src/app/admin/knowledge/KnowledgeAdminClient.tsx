@@ -288,6 +288,14 @@ function KnowledgeTreeEditor({
     targetKey: string;
     targetLabel: string;
   } | null>(null);
+  // Dropping a child onto its OWN parent used to be a silent no-op; now it
+  // offers the flip — "make Shakespeare the parent of Shakespearean Drama".
+  const [pendingFlip, setPendingFlip] = useState<{
+    childKey: string;
+    childLabel: string;
+    parentKey: string;
+    parentLabel: string;
+  } | null>(null);
 
   // A tap must still expand / open the ⋯ menu — only a real drag (>8px) grabs.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -316,6 +324,7 @@ function KnowledgeTreeEditor({
       | undefined;
     if (data?.childKey) {
       setPendingDrop(null); // a new drag supersedes the last drop's follow-up
+      setPendingFlip(null);
       setDrag({
         label: data.label ?? data.childKey,
         childKey: data.childKey,
@@ -356,7 +365,17 @@ function KnowledgeTreeEditor({
 
     const toParentKey = over.toParentKey;
     if (toParentKey === child.childKey) return; // onto itself
-    if (child.fromParentKey === toParentKey) return; // already there
+    if (child.fromParentKey === toParentKey) {
+      // Dropped onto its own parent — the one drop that can't mean "nest".
+      // Offer the flip: the child becomes the parent's parent.
+      setPendingFlip({
+        childKey: child.childKey,
+        childLabel: child.label,
+        parentKey: toParentKey,
+        parentLabel: nodeByKey.get(toParentKey)?.label ?? toParentKey,
+      });
+      return;
+    }
     if (descendantsOf(child.childKey).has(toParentKey)) {
       setError('Can’t place a territory inside its own subtree.');
       return;
@@ -437,6 +456,17 @@ function KnowledgeTreeEditor({
 
   function placeInto(toParentKey: string) {
     if (!picking) return;
+    if (picking.mode === 'move' && picking.fromParentKey === toParentKey) {
+      // Placing onto its own parent → offer the flip instead of a no-op.
+      setPendingFlip({
+        childKey: picking.childKey,
+        childLabel: picking.childLabel,
+        parentKey: toParentKey,
+        parentLabel: nodeByKey.get(toParentKey)?.label ?? toParentKey,
+      });
+      setPicking(null);
+      return;
+    }
     if (picking.mode === 'merge') {
       // Irreversible data merge — one explicit confirmation before commit.
       setConfirmMerge({
@@ -595,39 +625,85 @@ function KnowledgeTreeEditor({
           </div>
         </div>
       ) : null}
-      {picking ? (
-        <div
-          className="mb-2 flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[13px]"
-          style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
-          aria-live="polite"
-        >
-          <span>
-            {picking.mode === 'move' ? 'Moving' : picking.mode === 'copy' ? 'Copying' : 'Merging'}{' '}
-            <strong>{picking.childLabel}</strong> —{' '}
-            {picking.mode === 'merge'
-              ? 'tap the territory that absorbs it. For same-scope duplicates only; you confirm before anything changes.'
-              : 'tap “Place here” on the destination.'}
-            {picking.mode === 'copy' ? ' It will live under both parents.' : ''}
-          </span>
-          {picking.mode === 'move' && picking.fromParentKey ? (
+      {/* The flip offer — a child dropped/placed onto its OWN parent. */}
+      {pendingFlip ? (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+          <div
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
+            aria-live="polite"
+          >
+            <span className="w-full">
+              <strong>{pendingFlip.childLabel}</strong> is already inside{' '}
+              <strong>{pendingFlip.parentLabel}</strong> — flip them so{' '}
+              <strong>{pendingFlip.childLabel}</strong> is the parent?
+            </span>
             <button
               type="button"
-              onClick={makeTopLevel}
+              onClick={() => {
+                const f = pendingFlip;
+                setPendingFlip(null);
+                void act({
+                  action: 'invert_edge',
+                  childDomainKey: f.childKey,
+                  parentDomainKey: f.parentKey,
+                });
+              }}
               disabled={busy}
-              className="rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-50"
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
               style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
             >
-              Make top-level
+              ⇄ Flip — make it the parent
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setPicking(null)}
-            className="rounded-md border px-2 py-0.5 text-xs font-medium"
-            style={{ borderColor: 'var(--border)' }}
+            <button
+              type="button"
+              onClick={() => setPendingFlip(null)}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {/* Pick-up mode controls are FIXED to the bottom — Cancel must stay in
+          reach however deep in a long tree you've scrolled (the old top banner
+          left you stranded in "Place here" land). */}
+      {picking ? (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+          <div
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
+            aria-live="polite"
           >
-            Cancel
-          </button>
+            <span className="min-w-0 flex-1">
+              {picking.mode === 'move' ? 'Moving' : picking.mode === 'copy' ? 'Copying' : 'Merging'}{' '}
+              <strong>{picking.childLabel}</strong> —{' '}
+              {picking.mode === 'merge'
+                ? 'tap the territory that absorbs it.'
+                : 'tap “Place here” on the destination.'}
+              {picking.mode === 'copy' ? ' It will live under both parents.' : ''}
+            </span>
+            {picking.mode === 'move' && picking.fromParentKey ? (
+              <button
+                type="button"
+                onClick={makeTopLevel}
+                disabled={busy}
+                className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              >
+                Make top-level
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setPicking(null)}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       ) : (
         <p className="text-muted-foreground mb-2 text-xs">
@@ -767,6 +843,7 @@ function TreeRow({
   onDone: () => void;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [peekOpen, setPeekOpen] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [childLabel, setChildLabel] = useState('');
   const [editing, setEditing] = useState(false);
@@ -800,12 +877,10 @@ function TreeRow({
   const parentCount = parentCountByChild.get(nodeKey) ?? 0;
   const isParentish = node.nodeKind !== 'leaf' || children.length > 0;
 
+  // The picked row's CURRENT parent stays tappable — placing there offers the
+  // flip (child becomes the parent's parent) instead of a no-op.
   const placeDisabled =
-    !picking ||
-    busy ||
-    nodeKey === picking.childKey ||
-    pickedSubtree.has(nodeKey) ||
-    (picking.mode === 'move' && nodeKey === picking.fromParentKey);
+    !picking || busy || nodeKey === picking.childKey || pickedSubtree.has(nodeKey);
 
   async function submitChild() {
     const label = childLabel.trim();
@@ -891,7 +966,12 @@ function TreeRow({
           {...listeners}
           {...attributes}
           onClick={() =>
-            onPick({ mode: 'move', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey })
+            // Tapping the picked row's own handle again puts it back down.
+            onPick(
+              picking?.childKey === nodeKey
+                ? null
+                : { mode: 'move', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey },
+            )
           }
           aria-label={`Move ${node.label} (drag, or tap to pick up)`}
           title="Drag to re-file — or tap to pick up and choose a destination"
@@ -1073,6 +1153,18 @@ function TreeRow({
             <button
               type="button"
               onClick={() => {
+                setPeekOpen((v) => !v);
+                setActionsOpen(false);
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              title="See the questions that actually live in this territory"
+            >
+              Questions
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 setActionsOpen(false);
                 onPick({ mode: 'merge', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey });
               }}
@@ -1098,6 +1190,8 @@ function TreeRow({
             ) : null}
           </div>
         ) : null}
+
+        {peekOpen ? <QuestionsPeek domainKeyValue={nodeKey} onClose={() => setPeekOpen(false)} /> : null}
 
         {addingChild ? (
           <span className="flex w-full items-center gap-1.5 pl-6 pt-1">
@@ -1152,6 +1246,75 @@ function TreeRow({
             />
           ))
         : null}
+    </div>
+  );
+}
+
+// Read-only peek at a territory's actual questions — the sanity check Josh
+// asked for before moving/merging ("would be good to see some of the questions
+// in these areas"). Same load-once idiom as ProposalQueue.
+function QuestionsPeek({
+  domainKeyValue,
+  onClose,
+}: {
+  domainKeyValue: string;
+  onClose: () => void;
+}) {
+  const [items, setItems] = useState<Array<{
+    text: string;
+    answer: string;
+    source: 'canonical' | 'bank';
+    suppressed: boolean;
+  }> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+    void (async () => {
+      const res = await post({ action: 'list_questions', domainKey: domainKeyValue });
+      if (!res.ok) {
+        setError(`Couldn't load questions (${res.status}).`);
+        return;
+      }
+      const body = res.body as unknown as { questions: typeof items } | null;
+      setItems(body?.questions ?? []);
+    })();
+  }, [domainKeyValue]);
+
+  return (
+    <div
+      className="mt-1 w-full rounded-md border p-2 text-[13px]"
+      style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+    >
+      {error ? (
+        <p style={{ color: 'var(--danger)' }}>{error}</p>
+      ) : items === null ? (
+        <p className="text-muted-foreground animate-pulse text-xs">Loading questions…</p>
+      ) : items.length === 0 ? (
+        <p className="text-muted-foreground text-xs">No questions in this territory yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((q, i) => (
+            <li key={i} className="leading-snug">
+              <span className="text-[var(--brand-ink)]">{q.text}</span>{' '}
+              <span className="text-muted-foreground">
+                — {q.answer}
+                {q.source === 'bank' ? ' · bank' : ''}
+                {q.suppressed ? ' · out of circulation' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-muted-foreground mt-1.5 text-xs underline-offset-2 hover:underline"
+      >
+        close
+      </button>
     </div>
   );
 }
