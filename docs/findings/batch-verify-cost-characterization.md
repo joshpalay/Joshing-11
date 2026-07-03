@@ -42,6 +42,22 @@ Only two days of data (cron is new). 07-01's 46 calls is **near the ~50/day stru
 
 **Pre-filter skip rate (empirical, pure fn over 300 recent rows/store = 600):** **skip 55 (9%)**, route 545 (**91%**). Dimensions among routed: `false_premise` 266, **`extra_fact` 543**.
 
+### Before/after the `extra_fact` tightening — MEASURED 2026-07-03 (`measure-prefilter-skip-rate.ts`, 600-row recent sample)
+
+| variant | skip | route | false_premise | extra_fact |
+|---|---|---|---|---|
+| **legacy** (any comma/paren/"and") | 56 (9.3%) | 544 (90.7%) | 260 (43.3%) | 542 (90.3%) |
+| **strict** (bundling + assertion signal) | 59 (9.8%) | 541 (90.2%) | 260 (43.3%) | 539 (89.8%) |
+
+**The tightening is a near-no-op: skip 9.3% → 9.8% (+0.5pt), only 3/600 rows (0.5%) flip route→skip.** This *contradicts* §5's "biggest lever" expectation. Why: `extra_fact` routing is dominated by the **explanation path** (`explanationCarriesClaims`), not the answer heuristic. Of the 542 legacy `extra_fact` routes, 539 still route under strict — the explanation independently routes them — so tightening the *answer* heuristic only touches the 3 rows routed **solely** by it. The real dominant router is `explanationCarriesClaims` (fires on ~90% of rows: `trimmed.length >= 140` OR any one signal). **To move skip rate materially you must tighten the explanation path, not the answer path.**
+
+The 3 route→skip flips were eyeballed for leaked checkable claims — **none leaked**, so the legacy hatch stays OFF (tightened default):
+- `What does Yossarian decide to do at the novel's end?` → "Desert and flee to Sweden" (the compound verb IS the answer, correct)
+- `What is Rose's hometown?` → "St. Olaf, Minnesota" (city,state bundle, canonical, correct)
+- `In what city is The Golden Girls set?` → "Miami, Florida" (city,state bundle, canonical, correct)
+
+All three are exactly the structural bundling (`City, State` / `X and Y`) the tightening was designed to skip — no unasked adjacent claim that could independently be wrong. The tightening is *safe* but *not a cost lever*; the answer heuristic is nearly redundant with the explanation path.
+
 ## Answers to the five questions
 
 1. **Backlog vs steady state.** Too few days to see a clean first-run spike, but 07-01 ran at the cap (46/~50). Steady-state demand ≈ new-rows/day × route-rate ≈ 43 × 0.91 ≈ **~39 verification calls/day**, capped at 50/day. **Per-store is the catch:** `GeneratedQuestion` new-rate **~26/day ≈ its 25/day cap** → generated-question verification is **at/slightly over capacity** (its unstamped backlog does not drain and may creep up ~1/day). `Question` new-rate ~17/day < 25 → **keeps up and drains**.
@@ -49,7 +65,7 @@ Only two days of data (cron is new). 07-01's 46 calls is **near the ~50/day stru
 3. **Web-fallback rate — not directly measurable** (`usedWeb` is computed in `verifyQuestion` but **not persisted**; the ledger has no web-search column — see `ledger-telemetry-gaps.md`). **Strong indirect signal:** average **~11.3k input tokens/call** (07-01) is very high for a short question + verdict — consistent with **frequent web_search** (results injected into context add thousands of tokens). This suggests the knowledge-first gating is **firing web-search often** on Sonnet, i.e. the "search only when knowledge can't settle it" posture may be weaker in practice than intended. This is the main driver of both the token line and the separate web-search $.
 4. **The `BATCH_SIZE=25` ceiling.** For `Question` (17/day) it is comfortably above new volume (fine). For `GeneratedQuestion` (~26/day) it is **a floor at/under demand** → verification of generated questions never quite catches up. Not catastrophic (~1/day creep), but it means the newest generated rows wait, and a volume increase would widen the gap.
 5. **Right-sizing options (analysis only — nothing changed):**
-   - **Tighten `extra_fact` routing (biggest lever).** `answerIsMultiFact` is near-universal; requiring a stronger adjacent-claim signal (or gating `extra_fact` on the *explanation* carrying claims, not just a comma in the answer) would lift the 9% skip rate materially and cut calls/day the most.
+   - ~~**Tighten `extra_fact` routing (biggest lever).**~~ **RETRACTED — measured 2026-07-03 (see the before/after table above).** Tightening the *answer* heuristic lifted skip only 9.3%→9.8% (3/600 rows). The lever was misidentified: `explanationCarriesClaims` — not `answerIsMultiFact` — is the near-universal router (~90%). The real biggest lever is the **explanation path** (`trimmed.length >= 140` OR any signal routes it). Tighten that to move skip rate materially; the answer heuristic is already nearly redundant.
    - **Add prompt caching.** `verify-question.ts` passes `system: SYSTEM_PROMPT` as a plain string with **no `cache_control`** — every call re-bills the (~1k-token) system prompt uncached. An ephemeral cache breakpoint would shave input cost across all calls.
    - **Right-size the generated-store cap.** Either raise `BATCH_SIZE` for `GeneratedQuestion` to clear its ~26/day inflow, or accept the small lag deliberately.
    - **Confirm web behavior on Sonnet 5.** (a) verify `web_search_20250305` (the older tool version) is still accepted by `claude-sonnet-5` — the cron now runs on it; (b) re-check that knowledge-first gating actually holds on Sonnet 5, given the high average input.

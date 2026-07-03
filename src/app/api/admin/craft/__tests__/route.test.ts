@@ -97,6 +97,59 @@ describe('POST /api/admin/craft', () => {
     expect('verifiedAt' in params).toBe(false);
   });
 
+  it('attribution=machine keeps under Maid Acasa: creatorId null via daily_generated source', async () => {
+    await post({
+      action: 'keep',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin',
+      machineDraftAnswer: 'Tulin',
+      difficultyEstimate: 'specialist',
+      broadCategory: 'Video Games',
+      attribution: 'machine',
+    });
+    const params = createQuestionMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.attributedSource).toBe('daily_generated');
+    // The keeper still signs the decision ledger, byline notwithstanding.
+    expect(recordDecisionMock.mock.calls[0][0]).toMatchObject({ deciderId: 'admin-1' });
+  });
+
+  it('attribution=house keeps under Joshing (house_authored)', async () => {
+    await post({
+      action: 'keep',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'Which sage grants the vow of wind?',
+      answer: 'Tulin',
+      machineDraftAnswer: 'Tulin',
+      difficultyEstimate: 'specialist',
+      broadCategory: 'Video Games',
+      attribution: 'house',
+    });
+    const params = createQuestionMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.attributedSource).toBe('house_authored');
+  });
+
+  it("origin=own is a human-written question — creator_written, still on the vet + batch-verify rail", async () => {
+    const res = await post({
+      action: 'keep',
+      domain: 'Tears of the Kingdom',
+      tier: 'deep',
+      questionText: 'What does Purah call her age-shifting device?',
+      answer: 'The Purah Pad prototype rune',
+      difficultyEstimate: 'moderate',
+      broadCategory: 'Video Games',
+      origin: 'own',
+    });
+    expect(res.status).toBe(201);
+    expect(vetMock).toHaveBeenCalled(); // inline vet still runs
+    const params = createQuestionMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.llmSuggestedAnswer).toBeNull(); // creator_written provenance
+    expect(params.verified).toBe(false);
+    expect('verifiedAt' in params).toBe(false); // batch sweep still re-checks
+  });
+
   it('an edited answer keeps llm_edited provenance (verified=false)', async () => {
     await post({
       action: 'keep',

@@ -21,6 +21,7 @@
 import { getKnowledgePageData } from '@/server/db/queries/knowledge';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
 import {
+  DEFAULT_PARENT_MASTERY_THRESHOLD,
   litCorners,
   parentProgress,
   rollUpCredit,
@@ -32,6 +33,21 @@ import {
 } from '@/server/knowledge/parent-mastery';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
+// Gap-view framing for a substantive parent (D-KNOWLEDGE-MAP-USABILITY-01 C3):
+// everything here is the §9-A math the map already trusts for mastery, exposed
+// so the focus header can say "6 of 9 · 1,240/2,000 pts" instead of nothing.
+export type KnowledgeParentProgress = {
+  /** Full-value rolled-up points (§5.1). */
+  points: number;
+  /** The absolute mastery bar (human-set, or the deliberate default). */
+  threshold: number;
+  /** Direct substantive corners with any credit. */
+  corners: number;
+  /** Home-roster children the player holds (directly or via descendants). */
+  rosterCovered: number;
+  rosterSize: number;
+};
+
 export type KnowledgeTreeNode = {
   id: string;
   name: string;
@@ -39,6 +55,7 @@ export type KnowledgeTreeNode = {
   value?: number;
   mastered?: boolean;
   ghost?: boolean;
+  progress?: KnowledgeParentProgress;
   children?: KnowledgeTreeNode[];
 };
 
@@ -64,27 +81,36 @@ export const GHOST_FOOTPRINT = 40;
 
 // Broad-category display names → the --cat-* hue scale (always paired with the
 // node label in the UI — hue never carries meaning alone).
+const KNOWN_HUES = [
+  'literature',
+  'music',
+  'film-tv',
+  'history',
+  'science',
+  'sports',
+  'technology',
+  'philosophy',
+  'pop-culture',
+  'food',
+  'architecture',
+  'language',
+] as const;
+const KNOWN_HUE_SET: ReadonlySet<string> = new Set(KNOWN_HUES);
+
 export function hueForBroadCategory(broadCategory: string | null): string | null {
   if (!broadCategory) return null;
   const folded = broadCategory.trim().toLowerCase().replace(/\s*&\s*|\s+/g, '-');
-  const known = new Set([
-    'literature',
-    'music',
-    'film-tv',
-    'history',
-    'science',
-    'sports',
-    'technology',
-    'philosophy',
-    'pop-culture',
-    'food',
-    'architecture',
-    'language',
-  ]);
-  if (known.has(folded)) return folded;
+  if (KNOWN_HUE_SET.has(folded)) return folded;
   if (folded === 'film-television' || folded === 'film-tv-shows') return 'film-tv';
   if (folded === 'sport') return 'sports';
-  return null;
+  // A broad category outside the mapped set used to fall through to null →
+  // the gray --brand-ink-400 fallback, which reads as "disabled" when several
+  // large bubbles land there. Assign a stable hue from the scale instead;
+  // the label still carries the meaning (hue never does alone).
+  if (!folded) return null;
+  let hash = 0;
+  for (let i = 0; i < folded.length; i += 1) hash = (hash * 31 + folded.charCodeAt(i)) >>> 0;
+  return KNOWN_HUES[hash % KNOWN_HUES.length];
 }
 
 /**
@@ -184,12 +210,24 @@ export function buildKnowledgeTree(
     // for parents — with the P4 freeze winning before recomputation (§B).
     // A 'both' node can be leaf-mastered on its own points.
     const isParentKind = node.nodeKind !== 'leaf' && children.length > 0;
+    const corners = isParentKind ? litCorners(key, totals, edges) : 0;
     const parentMastered = isParentKind
       ? frozenParents.has(key) ||
-        parentProgress(totals.get(key) ?? 0, litCorners(key, totals, edges), node.masteryThreshold)
-          .isMaster
+        parentProgress(totals.get(key) ?? 0, corners, node.masteryThreshold).isMaster
       : false;
     const mastered = Boolean(ownedLeaf?.mastered) || parentMastered;
+
+    // Gap-view framing (C3) — the same numbers the mastery call just used,
+    // surfaced so the map can say "6 of 9 · 1,240/2,000 pts" on focus.
+    const progress: KnowledgeParentProgress | undefined = isParentKind
+      ? {
+          points: Math.round(totals.get(key) ?? 0),
+          threshold: node.masteryThreshold ?? DEFAULT_PARENT_MASTERY_THRESHOLD,
+          corners,
+          rosterCovered: roster.filter((childKey) => isHeld(childKey)).length,
+          rosterSize: roster.length,
+        }
+      : undefined;
 
     return {
       id: key,
@@ -197,6 +235,7 @@ export function buildKnowledgeTree(
       field: node.fieldHue ?? hueForBroadCategory(node.broadCategory ?? ownedLeaf?.broadCategory ?? null),
       ...(ownedLeaf && ownedLeaf.points > 0 ? { value: ownedLeaf.points } : {}),
       ...(mastered ? { mastered: true } : {}),
+      ...(progress ? { progress } : {}),
       ...(children.length > 0 ? { children } : {}),
     };
   };

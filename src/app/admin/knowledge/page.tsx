@@ -2,7 +2,9 @@ import { notFound } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
+import { getCorpusLabelDepths } from '@/server/db/queries/crafter-demand';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 import { KnowledgeAdminClient } from './KnowledgeAdminClient';
 
@@ -16,6 +18,16 @@ export default async function AdminKnowledgePage() {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
-  const { nodes, edges } = await listKnowledgeGraph();
-  return <KnowledgeAdminClient nodes={nodes} edges={edges} />;
+  const [{ nodes, edges }, corpusDepths] = await Promise.all([
+    listKnowledgeGraph(),
+    // Per-label question depth (machine + human), so the tree can flag
+    // territories too thin to stand alone ("this is too small — condense it").
+    getCorpusLabelDepths(),
+  ]);
+  const depthByKey: Record<string, number> = {};
+  for (const entry of corpusDepths) {
+    depthByKey[domainKey(entry.label)] = entry.machineDepth + entry.humanAuthored;
+  }
+
+  return <KnowledgeAdminClient nodes={nodes} edges={edges} depthByKey={depthByKey} />;
 }

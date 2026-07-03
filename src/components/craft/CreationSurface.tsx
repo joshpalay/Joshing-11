@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import type { DraftCandidate, DraftTier } from '@/server/crafter/draft-candidates';
 
 // B-CRAFTER-LIFECYCLE-01 — the creation surface, shared by BOTH audiences:
@@ -10,6 +11,18 @@ import type { DraftCandidate, DraftTier } from '@/server/crafter/draft-candidate
 // machine drafts, the human keeps/kills/edits inline; nothing unkept is ever
 // served; every kept question is fact-checked before reaching players. The
 // player just became a contributor — same tool, honest about it.
+// Public bylines a crafter can keep under. 'machine' and 'house' set
+// creatorId NULL server-side — the keeper still signs the decision ledger,
+// and (a real consequence) CAN then be served the question themselves,
+// since author-exclusion keys on creatorId.
+export type KeepAttribution = 'self' | 'machine' | 'house';
+
+const ATTRIBUTION_LABEL: Record<KeepAttribution, string> = {
+  self: 'me',
+  machine: 'Maid Acasa (the machine)',
+  house: 'Joshing (the house)',
+};
+
 export function CreationSurface({
   domain,
   statsLine,
@@ -27,6 +40,9 @@ export function CreationSurface({
   const [cards, setCards] = useState<CandidateState[]>([]);
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  // Crafter-only byline choice, applied to every keep on this surface. The
+  // player surface always keeps as themselves — that's its whole premise.
+  const [attribution, setAttribution] = useState<KeepAttribution>('self');
   const keptCount = cards.filter((c) => c.status === 'kept').length;
 
   // The deferred LLM doubt pass: candidates render the moment generation
@@ -161,10 +177,39 @@ export function CreationSurface({
           {keptCount} kept
         </span>
       </div>
+      {variant === 'crafter' ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label className="text-muted-foreground text-sm" htmlFor="attribution-select">
+            Questions by
+          </label>
+          <select
+            id="attribution-select"
+            value={attribution}
+            onChange={(e) => setAttribution(e.target.value as KeepAttribution)}
+            className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <option value="self">{ATTRIBUTION_LABEL.self}</option>
+            <option value="machine">{ATTRIBUTION_LABEL.machine}</option>
+            <option value="house">{ATTRIBUTION_LABEL.house}</option>
+          </select>
+          {attribution !== 'self' ? (
+            <span className="text-muted-foreground text-xs">
+              byline: {ATTRIBUTION_LABEL[attribution]} — and you can be served these yourself
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {draftError ? (
         <p className="mb-3 text-sm" style={{ color: 'var(--danger)' }}>
           {draftError}
         </p>
+      ) : null}
+
+      {/* Write your own — same rail as a kept draft: inline vet now, batch
+          fact-check before it's vouched for. Nothing enters unverified. */}
+      {variant === 'crafter' ? (
+        <OwnQuestionCard domain={domain} tier={tier} endpoint={endpoint} attribution={attribution} />
       ) : null}
 
       <div className="space-y-3">
@@ -175,6 +220,7 @@ export function CreationSurface({
             domain={domain}
             tier={tier}
             endpoint={endpoint}
+            attribution={variant === 'crafter' ? attribution : 'self'}
             onChange={(next) => setCards((prev) => prev.map((c, j) => (j === i ? next : c)))}
           />
         ))}
@@ -213,6 +259,165 @@ type CandidateState = {
   error?: string;
 };
 
+// "I also want the ability to add my own ones here — but still verified by
+// the LLM" (2026-07-03). A blank card on the SAME keep rail as machine
+// drafts: inline vet decides servability now, verifiedAt stays NULL so the
+// batch sweep fact-checks it before it's vouched for. origin='own' records
+// answerSource creator_written (no machine draft behind it).
+function OwnQuestionCard({
+  domain,
+  tier,
+  endpoint,
+  attribution,
+}: {
+  domain: string;
+  tier: DraftTier;
+  endpoint: string;
+  attribution: KeepAttribution;
+}) {
+  const [open, setOpen] = useState(false);
+  const [questionText, setQuestionText] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [explainer, setExplainer] = useState('');
+  const [difficulty, setDifficulty] = useState<'accessible' | 'moderate' | 'specialist'>(
+    tier === 'deep' ? 'specialist' : 'accessible',
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [keptCount, setKeptCount] = useState(0);
+
+  const fieldClass =
+    'w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]';
+
+  async function keepOwn() {
+    if (pending || !questionText.trim() || !answer.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'keep',
+          domain,
+          tier,
+          questionText: questionText.trim(),
+          answer: answer.trim(),
+          explainer: explainer.trim() || undefined,
+          difficultyEstimate: difficulty,
+          broadCategory: 'General Knowledge',
+          attribution,
+          origin: 'own',
+        }),
+      });
+      if (res.status === 422) {
+        setError('Failed the content check — not kept.');
+        return;
+      }
+      if (!res.ok) {
+        setError(`Keep failed (${res.status}).`);
+        return;
+      }
+      // Clear for the next one; the count is the receipt.
+      setQuestionText('');
+      setAnswer('');
+      setExplainer('');
+      setKeptCount((n) => n + 1);
+    } catch {
+      setError('Keep failed.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mb-3 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-dashed px-3 text-sm font-medium"
+        style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+      >
+        + Write your own question{keptCount > 0 ? ` (${keptCount} added)` : ''}
+      </button>
+    );
+  }
+
+  return (
+    <article className="mb-3 rounded-md border p-4 text-sm" style={{ borderColor: 'var(--brand-navy)' }}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+          your own question · still machine fact-checked before serving
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-muted-foreground text-xs underline-offset-2 hover:underline"
+        >
+          close
+        </button>
+      </div>
+      <AutoGrowTextarea
+        value={questionText}
+        onChange={(e) => setQuestionText(e.target.value)}
+        placeholder={`Ask something about ${domain}…`}
+        className={fieldClass}
+        aria-label="Your question"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-muted-foreground whitespace-nowrap text-xs">Answer</span>
+        <input
+          type="text"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          className={fieldClass}
+          aria-label="Answer"
+        />
+      </div>
+      <AutoGrowTextarea
+        value={explainer}
+        onChange={(e) => setExplainer(e.target.value)}
+        placeholder="Explainer (optional) — a sentence or two of context"
+        className={`${fieldClass} mt-2`}
+        aria-label="Explainer"
+      />
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <select
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}
+          className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)' }}
+          aria-label="Difficulty"
+        >
+          <option value="accessible">accessible (anyone could know)</option>
+          <option value="moderate">moderate (needs real interest)</option>
+          <option value="specialist">specialist (only a fan knows)</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => void keepOwn()}
+          disabled={pending || !questionText.trim() || !answer.trim()}
+          className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+        >
+          {pending ? 'Adding…' : 'Add — fact-check queued'}
+        </button>
+        {keptCount > 0 ? (
+          <span className="text-xs" style={{ color: 'var(--success)' }}>
+            {keptCount} added this session
+          </span>
+        ) : null}
+      </div>
+      {error ? (
+        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
 const FLAG_LABEL: Record<DraftCandidate['flags'][number]['kind'], string> = {
   factual_suspect: 'machine may be fabricating — verify',
   quality: 'quality gate flagged this',
@@ -225,12 +430,14 @@ function CandidateCard({
   domain,
   tier,
   endpoint,
+  attribution,
   onChange,
 }: {
   state: CandidateState;
   domain: string;
   tier: DraftTier;
   endpoint: string;
+  attribution: KeepAttribution;
   onChange: (next: CandidateState) => void;
 }) {
   const { candidate, status } = state;
@@ -279,6 +486,7 @@ function CandidateCard({
           difficultyEstimate: candidate.difficultyEstimate,
           broadCategory: candidate.broadCategory,
           flags: candidate.flags,
+          attribution,
         }),
       });
       if (res.status === 422) {
@@ -354,10 +562,9 @@ function CandidateCard({
         ))}
       </div>
 
-      <textarea
+      <AutoGrowTextarea
         value={questionText}
         onChange={(e) => setQuestionText(e.target.value)}
-        rows={2}
         className={fieldClass}
         aria-label="Question"
       />
@@ -371,10 +578,9 @@ function CandidateCard({
           aria-label="Answer"
         />
       </div>
-      <textarea
+      <AutoGrowTextarea
         value={explainer}
         onChange={(e) => setExplainer(e.target.value)}
-        rows={2}
         className={`${fieldClass} mt-2`}
         aria-label="Explainer"
       />

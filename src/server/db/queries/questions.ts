@@ -553,6 +553,13 @@ export async function createQuestion(params: {
   visibility?: 'public' | 'friends' | 'private' | 'blocked';
   // B-LLM-PROVIDER-AB-SWITCH B3: which provider categorized this question.
   categorizeProvider?: string | null;
+  // Attribution override (crafter keep): present the question as the machine's
+  // (source 'daily_generated' → "Maid Acasa") or the house's
+  // ('house_authored' → "Joshing") instead of the keeper's. Sets creatorId
+  // NULL — resolveQuestionAuthor treats any non-null creator as human. The
+  // authorId still names who performed the act (kept for the decision ledger
+  // by callers); it just stops being the public byline.
+  attributedSource?: 'daily_generated' | 'house_authored';
 }): Promise<{ id: string }> {
   const visibility = params.visibility ?? 'public';
 
@@ -563,7 +570,8 @@ export async function createQuestion(params: {
 
   const difficulty = numberToDifficulty(params.difficulty);
   const baseValues = {
-    creatorId: params.authorId,
+    creatorId: params.attributedSource ? null : params.authorId,
+    ...(params.attributedSource ? { source: params.attributedSource } : {}),
     questionText: params.text,
     answerText: params.correctAnswer,
     acceptedAlternatives: params.alternateAnswers,

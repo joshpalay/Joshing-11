@@ -132,6 +132,28 @@ describe('buildKnowledgeTree', () => {
     expect(findNode(tree, 'machiavelli')).toBeNull();
     expect(mod.sumRealPoints(tree)).toBe(500); // real totals identical either way
   });
+
+  // D-KNOWLEDGE-MAP-USABILITY-01 C3 — the gap-view framing on parents.
+  it('parents carry progress: roll-up points, threshold, corners, roster coverage', () => {
+    const tree = mod.buildKnowledgeTree(OWNED, NODES, EDGES);
+    const parent = findNode(tree, 'renaissance italy');
+    expect(parent?.progress).toEqual({
+      points: 500, // Medici roll-up (§5.1 full value)
+      threshold: 2000, // the human-set bar
+      corners: 1, // one lit corner
+      rosterCovered: 1,
+      rosterSize: 3, // Medici + Machiavelli + Venetian Trade
+    });
+    // Leaves never carry progress — the trophy is the leaf, not a fraction.
+    expect(findNode(tree, 'medici family')?.progress).toBeUndefined();
+  });
+
+  it('an unauthored broad category maps to a stable non-gray hue', () => {
+    const first = mod.hueForBroadCategory('Religion & Mythology');
+    expect(first).not.toBeNull(); // no gray fallback for a real category
+    expect(mod.hueForBroadCategory('Religion & Mythology')).toBe(first); // stable
+    expect(mod.hueForBroadCategory(null)).toBeNull(); // absence still means no hue
+  });
 });
 
 describe('grow-rim — unheld same-field roots as ghost invitations', () => {

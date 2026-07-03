@@ -1245,7 +1245,7 @@ Examples:
 List detection: If the question asks for multiple items, set is_list to true and suggest min_list_items.
 
 Difficulty estimate rules (for factual questions only; return null for personal/ambiguous):
-"accessible": Most educated adults would know this — common knowledge, cultural touchstone, or widely-known fact.
+"accessible": Most educated adults would know this — common knowledge, cultural touchstone, or widely-known fact. Person-anchored, not field-anchored: the most famous fact WITHIN a specialist field is still not accessible if outsiders have never met it.
 "moderate": Requires some specific interest or knowledge in the topic area.
 "specialist": Only enthusiasts or experts in a particular field would know this.
 

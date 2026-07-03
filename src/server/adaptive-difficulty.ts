@@ -128,7 +128,14 @@ export function mapAdaptiveLevelToDifficultyHint(level: number): AdaptiveDifficu
     return {
       targetCorrectRate: 0.78,
       difficultyLabel: 'approachable trivia',
-      promptHint: 'Target roughly a 78% correct rate. Write questions someone with a passing interest in the domain would recognize — lean on its well-known landmarks and the facts anyone who has encountered it would have met, not deep cuts.',
+      // Person-anchored, NOT domain-anchored (retooled 2026-07-03): the old
+      // "the domain's well-known landmarks" wording let the model treat the
+      // most famous fact WITHIN a niche as accessible (Brunelleschi's
+      // double-shell dome is the landmark of Renaissance architecture — and
+      // almost nobody off the street knows it). Accessible means the PERSON
+      // is ordinary, not that the fact ranks high within its field.
+      promptHint:
+        'Target roughly a 78% correct rate. Anchor to a random adult with NO particular interest in this domain — general cultural knowledge that happens to touch it, answerable from school, headlines, or everyday life. The most famous fact WITHIN a niche field is still not accessible if outsiders have never met it. Example for "Renaissance Florence": ✓ "Florence is the capital of which Italian region?" (Tuscany) · ✗ "Who engineered the double-shell dome of Florence Cathedral?" (Brunelleschi — famous within the field, unknown outside it; that is moderate at best).',
       estimate: 'accessible',
     };
   }

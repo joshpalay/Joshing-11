@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 
 import type { AdminReviewReport, BlockedReviewItem } from '@/server/db/queries/content-reports';
 import type { MachineDemotionReviewItem } from '@/server/db/queries/machine-demotions';
@@ -13,6 +15,28 @@ import { AdminTabs } from '@/app/admin/AdminTabs';
 // machine demotions merged into one list — same card shape, different provenance
 // chip and different "concern" source) and the BLOCKED / actioned list
 // (un-block / reverse). Both expose admin-only context.
+//
+// Undo (staged commit): the one-tap queue actions (uphold, dismiss, restore,
+// retire, un-block) have NO server-side inverse — dismiss can't re-open,
+// restore/retire can't re-demote — so a true undo can't be "act now, reverse
+// later." Instead the action is STAGED: the card hides optimistically, a toast
+// offers Undo, and the POST fires only when the window lapses — or immediately
+// when another action is staged or the page hides (keepalive), so nothing is
+// lost. Undo simply cancels the send. The modal's edit flows (re-run / approve
+// / save) stay immediate: they're deliberate multi-step acts with their own
+// gating, not mis-tappable one-liners.
+
+const UNDO_WINDOW_MS = 6000;
+
+type StagedAction = {
+  /** The card this hides while pending — 'report:'/'demotion:'/'blocked:' keyed. */
+  key: string;
+  /** Toast copy, e.g. "Report upheld". */
+  label: string;
+  /** The exact /api/admin/content-reports payload to send on commit. */
+  body: Record<string, unknown>;
+};
+
 export function AdminReportsClient({
   reports,
   demotions,
@@ -22,30 +46,124 @@ export function AdminReportsClient({
   demotions: MachineDemotionReviewItem[];
   blocked: BlockedReviewItem[];
 }) {
+  const router = useRouter();
   const [view, setView] = useState<'open' | 'blocked'>('open');
+  // Optimistic clear: an actioned card leaves immediately and the count ticks
+  // down, while router.refresh() reconciles with the server in the background.
+  // Keyed by the card's stable id ('report:<id>' / 'demotion:<qid>').
+  const [cleared, setCleared] = useState<Set<string>>(new Set());
+  const clear = (key: string) => setCleared((prev) => new Set(prev).add(key));
+  const unclear = (key: string) =>
+    setCleared((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+  // The one undoable action; its card is hidden while the toast counts down.
+  const [staged, setStaged] = useState<StagedAction | null>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
+  const timerRef = useRef<number | null>(null);
+  // Mirror for the pagehide flush — event handlers must not read stale state.
+  const stagedRef = useRef<StagedAction | null>(null);
+  useEffect(() => {
+    stagedRef.current = staged;
+  }, [staged]);
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  async function commitStaged(action: StagedAction) {
+    clearTimer();
+    setStaged((current) => (current?.key === action.key ? null : current));
+    clear(action.key); // stays hidden through the POST + background refresh
+    const err = await postAdminAction(action.body);
+    if (err) {
+      // Nothing changed server-side — surface the failure and bring the card
+      // back so the action isn't silently lost.
+      unclear(action.key);
+      setToastError(`${action.label} — ${err.toLowerCase().replace(/\.$/, '')} The card is back below.`);
+      return;
+    }
+    router.refresh();
+  }
+
+  function stageAction(action: StagedAction) {
+    setToastError(null);
+    // One pending action at a time: acting again flushes the previous one now.
+    const prior = stagedRef.current;
+    clearTimer();
+    if (prior) void commitStaged(prior);
+    setStaged(action);
+    timerRef.current = window.setTimeout(() => void commitStaged(action), UNDO_WINDOW_MS);
+  }
+
+  function undoStaged() {
+    clearTimer();
+    setStaged(null);
+  }
+
+  // Leaving the page must not swallow a staged action — send it keepalive.
+  // The ref is nulled and the timer killed FIRST: a client-side nav unmounts
+  // this component but leaves timers running, and the timer firing after the
+  // keepalive send would double-post.
+  useEffect(() => {
+    const flushOnHide = () => {
+      const pending = stagedRef.current;
+      if (!pending) return;
+      stagedRef.current = null;
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      setStaged(null);
+      void fetch('/api/admin/content-reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        keepalive: true,
+        body: JSON.stringify(pending.body),
+      });
+    };
+    window.addEventListener('pagehide', flushOnHide);
+    return () => {
+      window.removeEventListener('pagehide', flushOnHide);
+      flushOnHide(); // unmount (client-side nav) flushes too
+    };
+  }, []);
+
+  const hiddenKey = (key: string) => cleared.has(key) || staged?.key === key;
 
   // One queue, two streams. Player inappropriate reports stay pinned first
   // (high-priority, matching the query's ordering); everything else — incorrect
   // reports and machine demotions — merges oldest-first so the longest-suppressed
   // content is reviewed soonest.
-  const inappropriate = reports.filter((r) => r.category === 'inappropriate');
+  const inappropriate = reports.filter(
+    (r) => r.category === 'inappropriate' && !hiddenKey(`report:${r.id}`),
+  );
   const rest: Array<
     | { kind: 'report'; at: number; report: AdminReviewReport }
     | { kind: 'demotion'; at: number; item: MachineDemotionReviewItem }
   > = [
     ...reports
-      .filter((r) => r.category !== 'inappropriate')
+      .filter((r) => r.category !== 'inappropriate' && !hiddenKey(`report:${r.id}`))
       .map((report) => ({ kind: 'report' as const, at: new Date(report.createdAt).getTime(), report })),
-    ...demotions.map((item) => ({
-      kind: 'demotion' as const,
-      at: item.verifiedAt ? new Date(item.verifiedAt).getTime() : 0,
-      item,
-    })),
+    ...demotions
+      .filter((item) => !hiddenKey(`demotion:${item.questionId}`))
+      .map((item) => ({
+        kind: 'demotion' as const,
+        at: item.verifiedAt ? new Date(item.verifiedAt).getTime() : 0,
+        item,
+      })),
   ].sort((a, b) => a.at - b.at);
-  const openCount = reports.length + demotions.length;
+  const openCount = inappropriate.length + rest.length;
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6">
+    <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
       <header className="mb-5">
         <h1 className="mb-3 font-serif text-2xl font-semibold text-[var(--brand-ink)]">
           Review queue
@@ -72,13 +190,28 @@ export function AdminReportsClient({
           ) : (
             <>
               {inappropriate.map((report) => (
-                <ReportRow key={report.id} report={report} />
+                <ReportRow
+                  key={report.id}
+                  report={report}
+                  onCleared={() => clear(`report:${report.id}`)}
+                  onStage={stageAction}
+                />
               ))}
               {rest.map((entry) =>
                 entry.kind === 'report' ? (
-                  <ReportRow key={entry.report.id} report={entry.report} />
+                  <ReportRow
+                    key={entry.report.id}
+                    report={entry.report}
+                    onCleared={() => clear(`report:${entry.report.id}`)}
+                    onStage={stageAction}
+                  />
                 ) : (
-                  <DemotionRow key={entry.item.questionId} item={entry.item} />
+                  <DemotionRow
+                    key={entry.item.questionId}
+                    item={entry.item}
+                    onCleared={() => clear(`demotion:${entry.item.questionId}`)}
+                    onStage={stageAction}
+                  />
                 ),
               )}
             </>
@@ -89,12 +222,57 @@ export function AdminReportsClient({
           {blocked.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nothing blocked.</p>
           ) : (
-            blocked.map((item) => (
-              <BlockedRow key={`${item.target.table}:${item.target.id}`} item={item} />
-            ))
+            blocked.map((item) =>
+              hiddenKey(`blocked:${item.target.table}:${item.target.id}`) ? null : (
+                <BlockedRow
+                  key={`${item.target.table}:${item.target.id}`}
+                  item={item}
+                  onStage={stageAction}
+                />
+              ),
+            )
           )}
         </div>
       )}
+
+      {staged || toastError ? (
+        <div
+          className="fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="flex max-w-full items-center gap-3 rounded-full border px-4 py-2.5 text-sm shadow-lg"
+            style={{ background: 'var(--brand-card)', borderColor: 'var(--border)' }}
+          >
+            {toastError ? (
+              <>
+                <span style={{ color: 'var(--danger)' }}>{toastError}</span>
+                <button
+                  type="button"
+                  onClick={() => setToastError(null)}
+                  className="font-semibold underline underline-offset-2"
+                  style={{ color: 'var(--brand-ink-700)' }}
+                >
+                  Dismiss
+                </button>
+              </>
+            ) : staged ? (
+              <>
+                <span className="text-[var(--brand-ink)]">{staged.label}</span>
+                <button
+                  type="button"
+                  onClick={undoStaged}
+                  className="font-semibold underline underline-offset-2"
+                  style={{ color: 'var(--brand-navy)' }}
+                >
+                  Undo
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -124,6 +302,126 @@ function TabButton({
   );
 }
 
+// The edit/re-run flow opens here instead of expanding inline — a bottom sheet
+// on a phone, a centered dialog on desktop, so the form + verdict + actions get
+// real room and the queue behind it doesn't jump. Esc / ✕ / Cancel close it;
+// the scrim deliberately does NOT dismiss, so a mis-tap can't discard an edit
+// and a re-run mid-flight.
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+    >
+      <div
+        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-xl border sm:max-w-lg sm:rounded-xl"
+        style={{ background: 'var(--brand-card)', borderColor: 'var(--border)' }}
+      >
+        <div
+          className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-3"
+          style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+        >
+          <span className="font-serif text-base font-semibold text-[var(--brand-ink)]">{title}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="text-muted-foreground inline-flex size-9 items-center justify-center rounded-md hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// Clamp a long block to a few lines with a show-more toggle — keeps review
+// cards short enough to scan a full queue without endless scrolling.
+function ClampText({ text, lines = 3 }: { text: string; lines?: number }) {
+  const [open, setOpen] = useState(false);
+  // Only offer the toggle when it's plausibly long enough to clamp.
+  const longish = text.length > 180;
+  return (
+    <span>
+      <span
+        className="block"
+        style={
+          open || !longish
+            ? undefined
+            : {
+                display: '-webkit-box',
+                WebkitLineClamp: lines,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }
+        }
+      >
+        {text}
+      </span>
+      {longish ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-muted-foreground mt-0.5 text-xs underline-offset-2 hover:underline"
+        >
+          {open ? 'show less' : 'show more'}
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+// A rotating progress line for the ~60s re-run (answer generation + grounded
+// verify) so the wait reads as work, not a freeze — same idiom as the daily
+// loading screen.
+const RERUN_PHRASES = [
+  'Generating a fresh answer…',
+  'Checking it against sources…',
+  'Weighing the premise…',
+  'Almost there…',
+];
+
+function RerunProgress() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setI((n) => (n + 1) % RERUN_PHRASES.length), 2200);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="rounded-md px-3 py-2 text-[13px]" style={{ background: 'var(--surface-2)' }}>
+      <span className="animate-pulse text-[var(--brand-ink-700)]">{RERUN_PHRASES[i]}</span>
+      <span className="mt-2 block h-3 w-2/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
+      <span className="mt-1.5 block h-3 w-1/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
+    </div>
+  );
+}
+
 async function postAdminAction(body: Record<string, unknown>): Promise<string | null> {
   try {
     const res = await fetch('/api/admin/content-reports', {
@@ -139,19 +437,30 @@ async function postAdminAction(body: Record<string, unknown>): Promise<string | 
   }
 }
 
-// Inline content editor shared by both streams. Saving posts the 'edit' action:
-// the server clears the verification stamp (the batch sweep re-fact-checks the
-// edit), returns the row to circulation if it was demoted, and resolves any
-// active incorrect reports as admin_edited.
+type RerunVerdict = {
+  suggestedAnswer: string;
+  alternateAnswers: string[];
+  explanation: string;
+  verdict: 'ok' | 'demoted' | 'unverifiable';
+  reason: string;
+  usedWeb: boolean;
+  verifiedAnswer: string;
+};
+
+// Inline editor with the full loop (B-REVIEW-RERUN-01): edit the question →
+// re-run it through the LLM for a fresh answer + grounded verdict → approve it
+// back into circulation. "Save & re-verify" (edit + async sweep, canonical
+// only) stays as the lighter option. Works on both question stores.
 function EditPanel({
-  questionId,
+  target,
   initialQuestion,
   initialAnswer,
   initialExplanation,
   // Report-stream cards don't load the explanation, so the field is hidden and
-  // OMITTED from the payload — otherwise saving would null an explanation the
-  // admin never saw. Demotion cards carry it and may edit it.
+  // OMITTED from the async-edit payload. Demotion cards carry it.
   showExplanation,
+  canonicalSubcategory,
+  broadCategory,
   // The reason this question is being edited (verifier reason / reporter note)
   // — repeated inside the panel so the one thing the admin needs while fixing
   // it never scrolls out of sight.
@@ -159,11 +468,13 @@ function EditPanel({
   onDone,
   onCancel,
 }: {
-  questionId: string;
+  target: { table: 'question' | 'generated'; id: string };
   initialQuestion: string;
   initialAnswer: string;
   initialExplanation: string | null;
   showExplanation: boolean;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
   concern?: string | null;
   onDone: () => void;
   onCancel: () => void;
@@ -171,27 +482,119 @@ function EditPanel({
   const [questionText, setQuestionText] = useState(initialQuestion);
   const [answerText, setAnswerText] = useState(initialAnswer);
   const [explanation, setExplanation] = useState(initialExplanation ?? '');
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<'save' | 'rerun' | 'approve' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rerun, setRerun] = useState<RerunVerdict | null>(null);
+  const [dirtySinceRerun, setDirtySinceRerun] = useState(false);
 
+  // Any content edit invalidates a prior verdict — the machine vouched for the
+  // old text, not this one. Approve stays gated until a fresh re-run.
+  function edited<T>(setter: (v: T) => void) {
+    return (v: T) => {
+      setter(v);
+      if (rerun) setDirtySinceRerun(true);
+    };
+  }
+
+  async function rerunNow() {
+    if (pending) return;
+    if (!questionText.trim()) {
+      setError('Question is required.');
+      return;
+    }
+    setPending('rerun');
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/content-reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'rerun_verify',
+          questionText: questionText.trim(),
+          answerText: answerText.trim() || undefined,
+          canonicalSubcategory,
+          broadCategory,
+        }),
+      });
+      if (!res.ok) {
+        setError(
+          res.status === 503
+            ? 'The machine is unavailable right now — try again shortly.'
+            : `Re-run failed (${res.status}).`,
+        );
+        return;
+      }
+      const body = (await res.json()) as RerunVerdict;
+      setRerun(body);
+      setDirtySinceRerun(false);
+    } catch {
+      setError('Re-run failed.');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  function adoptSuggestion() {
+    if (!rerun) return;
+    setAnswerText(rerun.suggestedAnswer);
+    if (showExplanation) setExplanation(rerun.explanation);
+    setDirtySinceRerun(true); // adopting changes the answer → re-run to re-verify
+  }
+
+  async function approve() {
+    if (pending) return;
+    if (!questionText.trim() || !answerText.trim()) {
+      setError('Question and answer are required.');
+      return;
+    }
+    setPending('approve');
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/content-reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'approve',
+          target,
+          questionText: questionText.trim(),
+          answerText: answerText.trim(),
+          explanation: showExplanation ? explanation.trim() || null : undefined,
+        }),
+      });
+      if (!res.ok) {
+        setError(`Approve failed (${res.status}).`);
+        setPending(null);
+        return;
+      }
+      onDone();
+    } catch {
+      setError('Approve failed.');
+      setPending(null);
+    }
+  }
+
+  // Async edit (canonical only — the generated store's report resolver runs via
+  // approve). Clears the stamp; the batch sweep re-checks later.
   async function save() {
     if (pending) return;
     if (!questionText.trim() || !answerText.trim()) {
       setError('Question and answer are required.');
       return;
     }
-    setPending(true);
+    setPending('save');
     setError(null);
     const err = await postAdminAction({
       action: 'edit',
-      questionId,
+      questionId: target.id,
       questionText: questionText.trim(),
       answerText: answerText.trim(),
       ...(showExplanation ? { factualExplanation: explanation.trim() || null } : {}),
     });
     if (err) {
       setError(err);
-      setPending(false);
+      setPending(null);
       return;
     }
     onDone();
@@ -199,6 +602,13 @@ function EditPanel({
 
   const fieldClass =
     'w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]';
+  const verdictTone =
+    rerun?.verdict === 'ok'
+      ? { color: 'var(--success)', background: 'var(--success-surface)' }
+      : rerun?.verdict === 'demoted'
+        ? { color: 'var(--danger)', background: 'var(--destructive-surface)' }
+        : { color: 'var(--warning)', background: 'var(--warning-surface)' };
+  const canApprove = rerun !== null && !dirtySinceRerun;
 
   return (
     <div className="mt-3 space-y-2">
@@ -213,10 +623,12 @@ function EditPanel({
       ) : null}
       <label className="block">
         <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Question</span>
-        <textarea
+        {/* A generous starting canvas ("the edit area needs to be much larger",
+            2026-07-03) — auto-grow still takes over past six lines. */}
+        <AutoGrowTextarea
           value={questionText}
-          onChange={(e) => setQuestionText(e.target.value)}
-          rows={2}
+          minRows={6}
+          onChange={(e) => edited(setQuestionText)(e.target.value)}
           className={fieldClass}
         />
       </label>
@@ -225,7 +637,7 @@ function EditPanel({
         <input
           type="text"
           value={answerText}
-          onChange={(e) => setAnswerText(e.target.value)}
+          onChange={(e) => edited(setAnswerText)(e.target.value)}
           className={fieldClass}
         />
       </label>
@@ -234,31 +646,95 @@ function EditPanel({
           <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
             Explanation (optional)
           </span>
-          <textarea
+          <AutoGrowTextarea
             value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
-            rows={2}
+            minRows={3}
+            onChange={(e) => edited(setExplanation)(e.target.value)}
             className={fieldClass}
           />
         </label>
       ) : null}
-      <p className="text-muted-foreground text-[0.7rem]">
-        Saving returns it to circulation and queues it for machine re-verification.
-      </p>
+
+      {/* The re-run verdict — the machine's read on the reworked question. */}
+      {pending === 'rerun' ? (
+        <RerunProgress />
+      ) : rerun ? (
+        <div className="rounded-md px-3 py-2 text-[13px] leading-relaxed" style={verdictTone}>
+          <span className="font-semibold">
+            {rerun.verdict === 'ok'
+              ? '✓ Verifier: looks correct'
+              : rerun.verdict === 'demoted'
+                ? '✗ Verifier: still wrong'
+                : '? Verifier: couldn’t settle'}
+          </span>
+          {rerun.usedWeb ? <span className="text-muted-foreground"> · web-checked</span> : null}
+          <span className="block">
+            <ClampText text={rerun.reason} />
+          </span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[var(--brand-ink-700)]">
+            <span>
+              LLM answer: <strong>{rerun.suggestedAnswer}</strong>
+            </span>
+            {rerun.suggestedAnswer.trim().toLowerCase() !== answerText.trim().toLowerCase() ? (
+              <button
+                type="button"
+                onClick={adoptSuggestion}
+                className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)', background: 'var(--brand-card)' }}
+              >
+                Use this answer
+              </button>
+            ) : null}
+          </div>
+          {dirtySinceRerun ? (
+            <span className="mt-1 block text-xs text-[var(--brand-ink-700)]">
+              You’ve edited since this check — re-run before approving.
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-[0.7rem]">
+          Re-run the machine to get a fresh answer and a fact-check, then approve it back into
+          circulation.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => void save()}
-          disabled={pending}
+          onClick={() => void rerunNow()}
+          disabled={pending !== null}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
         >
-          {pending ? 'Saving…' : 'Save & re-verify'}
+          {pending === 'rerun' ? 'Re-running…' : rerun ? 'Re-run again' : 'Re-run through the LLM'}
         </button>
         <button
           type="button"
+          onClick={() => void approve()}
+          disabled={pending !== null || !canApprove}
+          title={canApprove ? undefined : 'Re-run the machine first, then approve'}
+          className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+        >
+          {pending === 'approve' ? 'Approving…' : 'Approve & circulate'}
+        </button>
+        {target.table === 'question' ? (
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={pending !== null}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            title="Save the edit and let the nightly sweep re-verify (no immediate check)"
+          >
+            {pending === 'save' ? 'Saving…' : 'Save & re-verify later'}
+          </button>
+        ) : null}
+        <button
+          type="button"
           onClick={onCancel}
-          disabled={pending}
+          disabled={pending !== null}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--border)' }}
         >
@@ -274,28 +750,43 @@ function EditPanel({
   );
 }
 
-function ReportRow({ report }: { report: AdminReviewReport }) {
+function ReportRow({
+  report,
+  onCleared,
+  onStage,
+}: {
+  report: AdminReviewReport;
+  onCleared: () => void;
+  onStage: (action: StagedAction) => void;
+}) {
   const router = useRouter();
   const [reviewReason, setReviewReason] = useState('');
-  const [pending, setPending] = useState<'uphold' | 'dismiss' | null>(null);
   const [editing, setEditing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function act(action: 'uphold' | 'dismiss') {
-    if (pending) return;
-    setPending(action);
-    setError(null);
-    const err = await postAdminAction({
-      reportId: report.id,
-      action,
-      reviewReason: reviewReason.trim() || undefined,
-    });
-    if (err) {
-      setError(err);
-      setPending(null);
-      return;
-    }
+  // Modal flows (approve / save) land immediately: the card leaves the list
+  // (optimistic), then a background refresh reconciles with the server.
+  function resolved() {
+    onCleared();
     router.refresh();
+  }
+
+  // One-tap actions stage instead of posting — the parent's undo toast owns
+  // the send (and any failure surfacing).
+  function act(action: 'uphold' | 'dismiss') {
+    onStage({
+      key: `report:${report.id}`,
+      label:
+        action === 'uphold'
+          ? report.category === 'inappropriate'
+            ? 'Report upheld — content removed'
+            : 'Report upheld'
+          : 'Report dismissed',
+      body: {
+        reportId: report.id,
+        action,
+        reviewReason: reviewReason.trim() || undefined,
+      },
+    });
   }
 
   const kindLabel =
@@ -338,7 +829,9 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
         <p className="text-muted-foreground mt-0.5">Answer: {report.correctAnswer}</p>
       ) : null}
 
-      <p className="mt-2 italic text-[var(--brand-ink-700)]">&ldquo;{report.note}&rdquo;</p>
+      <div className="mt-2 italic text-[var(--brand-ink-700)]">
+        <ClampText text={`“${report.note}”`} />
+      </div>
       {report.suggestedAnswer ? (
         <p className="text-muted-foreground mt-0.5">Suggested: {report.suggestedAnswer}</p>
       ) : null}
@@ -349,17 +842,22 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
       </p>
 
       {editing ? (
-        <EditPanel
-          questionId={report.target.id}
-          initialQuestion={report.questionText ?? ''}
-          initialAnswer={report.correctAnswer ?? ''}
-          initialExplanation={null}
-          showExplanation={false}
-          concern={`${report.note}${report.suggestedAnswer ? ` (reader suggests: ${report.suggestedAnswer})` : ''}`}
-          onDone={() => router.refresh()}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
+        <Modal title="Edit &amp; re-run" onClose={() => setEditing(false)}>
+          <EditPanel
+            target={report.target}
+            initialQuestion={report.questionText ?? ''}
+            initialAnswer={report.correctAnswer ?? ''}
+            initialExplanation={null}
+            showExplanation={false}
+            canonicalSubcategory={null}
+            broadCategory={null}
+            concern={`${report.note}${report.suggestedAnswer ? ` (reader suggests: ${report.suggestedAnswer})` : ''}`}
+            onDone={resolved}
+            onCancel={() => setEditing(false)}
+          />
+        </Modal>
+      ) : null}
+      {!editing ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -370,41 +868,31 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
           />
           <button
             type="button"
-            onClick={() => void act('uphold')}
-            disabled={pending !== null}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            onClick={() => act('uphold')}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
           >
-            {pending === 'uphold' ? 'Upholding…' : 'Uphold'}
+            Uphold
           </button>
-          {/* Edit reworks canonical questions only — generated bank rows are
-              machine substrate; fix supply at the creation surface instead. */}
-          {report.target.table === 'question' ? (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              disabled={pending !== null}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-            >
-              Edit
-            </button>
-          ) : null}
+          {/* Edit → re-run → approve works on BOTH stores now (B-REVIEW-RERUN-01):
+              a reworked generated question re-verifies and returns to the bank. */}
           <button
             type="button"
-            onClick={() => void act('dismiss')}
-            disabled={pending !== null}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            onClick={() => setEditing(true)}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
+            style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+          >
+            Edit &amp; re-run
+          </button>
+          <button
+            type="button"
+            onClick={() => act('dismiss')}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--border)' }}
           >
-            {pending === 'dismiss' ? 'Dismissing…' : 'Dismiss'}
+            Dismiss
           </button>
         </div>
-      )}
-      {error ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
-          {error}
-        </p>
       ) : null}
     </article>
   );
@@ -414,23 +902,29 @@ function ReportRow({ report }: { report: AdminReviewReport }) {
 // the verifier and the "concern" block is the verifier's stored reason instead
 // of a reporter note. Actions: restore (verifier was wrong), edit (verifier was
 // right — fix it), retire (right, not worth fixing; soft/reversible).
-function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
+function DemotionRow({
+  item,
+  onCleared,
+  onStage,
+}: {
+  item: MachineDemotionReviewItem;
+  onCleared: () => void;
+  onStage: (action: StagedAction) => void;
+}) {
   const router = useRouter();
-  const [pending, setPending] = useState<'restore' | 'retire' | null>(null);
   const [editing, setEditing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function act(action: 'restore_demoted' | 'retire_demoted') {
-    if (pending) return;
-    setPending(action === 'restore_demoted' ? 'restore' : 'retire');
-    setError(null);
-    const err = await postAdminAction({ action, questionId: item.questionId });
-    if (err) {
-      setError(err);
-      setPending(null);
-      return;
-    }
+  function resolved() {
+    onCleared();
     router.refresh();
+  }
+
+  function act(action: 'restore_demoted' | 'retire_demoted') {
+    onStage({
+      key: `demotion:${item.questionId}`,
+      label: action === 'restore_demoted' ? 'Restored to circulation' : 'Retired (recoverable)',
+      body: { action, questionId: item.questionId },
+    });
   }
 
   const authorLabel = item.authorIsHouse
@@ -463,7 +957,9 @@ function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
       <p className="mt-2 font-medium text-[var(--brand-ink)]">{item.questionText}</p>
       <p className="text-muted-foreground mt-0.5">Answer: {item.correctAnswer}</p>
       {item.explanation ? (
-        <p className="text-muted-foreground mt-0.5 text-[13px]">{item.explanation}</p>
+        <div className="text-muted-foreground mt-0.5 text-[13px]">
+          <ClampText text={item.explanation} />
+        </div>
       ) : null}
 
       <p
@@ -475,51 +971,48 @@ function DemotionRow({ item }: { item: MachineDemotionReviewItem }) {
       </p>
 
       {editing ? (
-        <EditPanel
-          questionId={item.questionId}
-          initialQuestion={item.questionText}
-          initialAnswer={item.correctAnswer}
-          initialExplanation={item.explanation}
-          showExplanation
-          concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
-          onDone={() => router.refresh()}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
+        <Modal title="Edit &amp; re-run" onClose={() => setEditing(false)}>
+          <EditPanel
+            target={{ table: 'question', id: item.questionId }}
+            initialQuestion={item.questionText}
+            initialAnswer={item.correctAnswer}
+            initialExplanation={item.explanation}
+            showExplanation
+            canonicalSubcategory={item.canonicalSubcategory}
+            broadCategory={item.broadCategory}
+            concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
+            onDone={resolved}
+            onCancel={() => setEditing(false)}
+          />
+        </Modal>
+      ) : null}
+      {!editing ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => void act('restore_demoted')}
-            disabled={pending !== null}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            onClick={() => act('restore_demoted')}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
           >
-            {pending === 'restore' ? 'Restoring…' : 'Restore — verifier was wrong'}
+            Restore — verifier was wrong
           </button>
           <button
             type="button"
             onClick={() => setEditing(true)}
-            disabled={pending !== null}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
           >
             Edit
           </button>
           <button
             type="button"
-            onClick={() => void act('retire_demoted')}
-            disabled={pending !== null}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            onClick={() => act('retire_demoted')}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
           >
-            {pending === 'retire' ? 'Retiring…' : 'Retire (recoverable)'}
+            Retire (recoverable)
           </button>
         </div>
-      )}
-      {error ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
-          {error}
-        </p>
       ) : null}
     </article>
   );
@@ -536,28 +1029,26 @@ function authorBadge(item: BlockedReviewItem): { label: string; tone: 'human' | 
   return { label: `Human · ${item.authorName}`, tone: 'human' };
 }
 
-function BlockedRow({ item }: { item: BlockedReviewItem }) {
-  const router = useRouter();
+function BlockedRow({
+  item,
+  onStage,
+}: {
+  item: BlockedReviewItem;
+  onStage: (action: StagedAction) => void;
+}) {
   const [reviewReason, setReviewReason] = useState('');
   const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function unblock() {
-    if (pending) return;
-    setPending(true);
-    setError(null);
-    const err = await postAdminAction({
-      action: 'reverse',
-      target: item.target,
-      reviewReason: reviewReason.trim() || undefined,
+  function unblock() {
+    onStage({
+      key: `blocked:${item.target.table}:${item.target.id}`,
+      label: 'Un-blocked — back in circulation',
+      body: {
+        action: 'reverse',
+        target: item.target,
+        reviewReason: reviewReason.trim() || undefined,
+      },
     });
-    if (err) {
-      setError(err.replace('Action', 'Un-block'));
-      setPending(false);
-      return;
-    }
-    router.refresh();
   }
 
   const badge = authorBadge(item);
@@ -619,21 +1110,16 @@ function BlockedRow({ item }: { item: BlockedReviewItem }) {
             />
             <button
               type="button"
-              onClick={() => void unblock()}
-              disabled={pending}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              onClick={unblock}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium"
               style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
             >
-              {pending ? 'Un-blocking…' : 'Confirm un-block'}
+              Confirm un-block
             </button>
             <button
               type="button"
-              onClick={() => {
-                setConfirming(false);
-                setError(null);
-              }}
-              disabled={pending}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              onClick={() => setConfirming(false)}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium"
               style={{ borderColor: 'var(--border)' }}
             >
               Cancel
@@ -641,11 +1127,6 @@ function BlockedRow({ item }: { item: BlockedReviewItem }) {
           </div>
         </div>
       )}
-      {error ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
-          {error}
-        </p>
-      ) : null}
     </article>
   );
 }

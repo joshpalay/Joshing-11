@@ -1,6 +1,6 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 
-import { db, knowledgeEdges, knowledgeNodes } from '@/server/db';
+import { db, generatedQuestions, knowledgeEdges, knowledgeNodes, questions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // B-KNOWLEDGE-ADMIN-01 P1 — write layer for the human-authored knowledge graph
@@ -39,6 +39,69 @@ export async function listKnowledgeGraph(): Promise<{
   return { nodes, edges };
 }
 
+export type DomainQuestionPeek = {
+  text: string;
+  answer: string;
+  source: 'canonical' | 'bank';
+  suppressed: boolean;
+};
+
+// A read-only peek at what actually lives in a territory — the admin sanity
+// check before moving/merging it. Canonical rows match on the node's exact
+// label; bank rows match on domain_key (the folded form), so spelling variants
+// still show. Newest first, canonical before bank, capped.
+export async function listQuestionsForDomain(
+  key: string,
+  limit = 20,
+): Promise<{ label: string; questions: DomainQuestionPeek[] } | null> {
+  const [node] = await db
+    .select({ label: knowledgeNodes.label })
+    .from(knowledgeNodes)
+    .where(eq(knowledgeNodes.domainKey, key))
+    .limit(1);
+  if (!node) return null;
+
+  const [canonical, bank] = await Promise.all([
+    db
+      .select({
+        text: questions.questionText,
+        answer: questions.answerText,
+        status: questions.publicStatus,
+      })
+      .from(questions)
+      .where(and(eq(questions.canonicalSubcategory, node.label), isNull(questions.deletedAt)))
+      .orderBy(desc(questions.createdAt))
+      .limit(limit),
+    db
+      .select({
+        text: generatedQuestions.questionText,
+        answer: generatedQuestions.answer,
+        isDuplicate: generatedQuestions.isDuplicate,
+      })
+      .from(generatedQuestions)
+      .where(eq(generatedQuestions.domainKey, key))
+      .orderBy(desc(generatedQuestions.createdAt))
+      .limit(limit),
+  ]);
+
+  const rows: DomainQuestionPeek[] = [
+    ...canonical.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'canonical' as const,
+      suppressed: q.status === 'needs_review' || q.status === 'rejected',
+    })),
+    ...bank.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'bank' as const,
+      suppressed: q.isDuplicate,
+    })),
+  ].slice(0, limit);
+
+  return { label: node.label, questions: rows };
+}
+
 export type CreateNodeInput = {
   label: string;
   nodeKind: NodeKind;
@@ -48,7 +111,7 @@ export type CreateNodeInput = {
 };
 
 export type NodeResult =
-  | { ok: true; node: KnowledgeNodeRow }
+  | { ok: true; node: KnowledgeNodeRow; corpusWarning?: string }
   | { ok: false; reason: 'domain_key_collision'; existing: KnowledgeNodeRow }
   | { ok: false; reason: 'not_found' };
 
@@ -150,12 +213,29 @@ export async function updateKnowledgeNode(
       .where(eq(knowledgeEdges.parentDomainKey, node.domainKey));
   }
 
+  // Rename follow-through: the territory's QUESTIONS (and player progress)
+  // carry the old label, so move them along — otherwise the renamed node
+  // shows 0 Qs while the corpus sits stranded under the old spelling (the
+  // Bikini Bottom → SpongeBob lesson, 2026-07-03). Dynamic import to keep
+  // this module free of a static pg dependency in unit tests.
+  let corpusWarning: string | undefined;
+  if (nextLabel !== node.label) {
+    const { retargetRenamedDomain } = await import('@/server/knowledge/merge-domain');
+    const moved = await retargetRenamedDomain(
+      { oldLabel: node.label, newLabel: nextLabel },
+      actorUserId,
+    );
+    if (!moved.ok) {
+      corpusWarning = `Renamed, but ${moved.detail.join(', ')} still hold the old label — extend the merge tables before re-running.`;
+    }
+  }
+
   console.info('[knowledge-admin] node updated', {
     actorUserId,
     id: input.id,
     renamed: nextKey !== node.domainKey ? { from: node.domainKey, to: nextKey } : false,
   });
-  return { ok: true, node: updated };
+  return { ok: true, node: updated, ...(corpusWarning ? { corpusWarning } : {}) };
 }
 
 export type EdgeResult =
@@ -233,6 +313,219 @@ export async function ratifyProposedParent(
     { childDomainKey: input.childDomainKey, parentDomainKey: parentKey, edgeType: input.edgeType },
     actorUserId,
   );
+}
+
+// Tree-editor verb: attach a child under a parent (substantive), optionally
+// moving it FROM its current parent in the same act. Ordering is
+// create-before-delete so a fault can duplicate an edge but never orphan the
+// child. Filing something under a LEAF promotes that leaf to 'both' (D-doc §3
+// — Bach is masterable AND parent of WTC); its leaf mastery is untouched.
+// Flip a child above its own parent ("drag Shakespeare so it is the parent of
+// Shakespearean Drama"): the child takes the parent's memberships, the parent
+// files under the child, everything else stays put. Create-before-delete
+// ordering — a fault can leave a transient extra edge, never an orphan.
+export async function invertKnowledgeEdge(
+  input: { childDomainKey: string; parentDomainKey: string },
+  actorUserId: string,
+): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'self_edge' }> {
+  if (input.childDomainKey === input.parentDomainKey) return { ok: false, reason: 'self_edge' };
+  const [edge] = await db
+    .select({ id: knowledgeEdges.id })
+    .from(knowledgeEdges)
+    .where(
+      and(
+        eq(knowledgeEdges.childDomainKey, input.childDomainKey),
+        eq(knowledgeEdges.parentDomainKey, input.parentDomainKey),
+      ),
+    )
+    .limit(1);
+  if (!edge) return { ok: false, reason: 'not_found' };
+
+  // The child inherits the parent's own memberships (grandparents). Drop the
+  // parent's membership rows the child already holds, then re-point the rest.
+  const [childParentEdges, parentParentEdges] = await Promise.all([
+    db
+      .select({ parentDomainKey: knowledgeEdges.parentDomainKey })
+      .from(knowledgeEdges)
+      .where(eq(knowledgeEdges.childDomainKey, input.childDomainKey)),
+    db
+      .select({ id: knowledgeEdges.id, parentDomainKey: knowledgeEdges.parentDomainKey })
+      .from(knowledgeEdges)
+      .where(eq(knowledgeEdges.childDomainKey, input.parentDomainKey)),
+  ]);
+  const childAlreadyUnder = new Set(childParentEdges.map((e) => e.parentDomainKey));
+  for (const grand of parentParentEdges) {
+    if (childAlreadyUnder.has(grand.parentDomainKey) || grand.parentDomainKey === input.childDomainKey) {
+      await db.delete(knowledgeEdges).where(eq(knowledgeEdges.id, grand.id));
+    } else {
+      await db
+        .update(knowledgeEdges)
+        .set({ childDomainKey: input.childDomainKey })
+        .where(eq(knowledgeEdges.id, grand.id));
+    }
+  }
+
+  // The parent files under the child; the child becomes a parent-ish node.
+  const created = await createKnowledgeEdge(
+    {
+      childDomainKey: input.parentDomainKey,
+      parentDomainKey: input.childDomainKey,
+      edgeType: 'substantive',
+    },
+    actorUserId,
+  );
+  if (!created.ok && created.reason !== 'duplicate') return { ok: false, reason: 'not_found' };
+  await db
+    .update(knowledgeNodes)
+    .set({ nodeKind: 'both' })
+    .where(and(eq(knowledgeNodes.domainKey, input.childDomainKey), eq(knowledgeNodes.nodeKind, 'leaf')));
+
+  // Last: sever the old downward edge (create-before-delete).
+  await db.delete(knowledgeEdges).where(eq(knowledgeEdges.id, edge.id));
+
+  console.info('[knowledge-admin] edge inverted', { actorUserId, ...input });
+  return { ok: true };
+}
+
+export async function attachChild(
+  input: {
+    childDomainKey: string;
+    toParentDomainKey: string;
+    /** Present = MOVE (the old home edge is removed); absent = COPY (§7 multi-parent). */
+    moveFromParentDomainKey?: string | null;
+  },
+  actorUserId: string,
+): Promise<EdgeResult> {
+  if (input.childDomainKey === input.toParentDomainKey) {
+    return { ok: false, reason: 'self_edge' };
+  }
+
+  // Reject a move/copy that would create a cycle: the destination must not be
+  // a descendant of the child (walking all substantive edges).
+  const allEdges = await db
+    .select({
+      childDomainKey: knowledgeEdges.childDomainKey,
+      parentDomainKey: knowledgeEdges.parentDomainKey,
+      edgeType: knowledgeEdges.edgeType,
+    })
+    .from(knowledgeEdges);
+  const childrenByParent = new Map<string, string[]>();
+  for (const edge of allEdges) {
+    if (edge.edgeType !== 'substantive') continue;
+    const list = childrenByParent.get(edge.parentDomainKey);
+    if (list) list.push(edge.childDomainKey);
+    else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
+  }
+  const seen = new Set<string>();
+  const queue = [input.childDomainKey];
+  while (queue.length > 0) {
+    const next = queue.pop()!;
+    if (seen.has(next)) continue;
+    seen.add(next);
+    if (next === input.toParentDomainKey && next !== input.childDomainKey) {
+      return { ok: false, reason: 'self_edge' }; // destination is inside the child's subtree
+    }
+    queue.push(...(childrenByParent.get(next) ?? []));
+  }
+
+  const created = await createKnowledgeEdge(
+    {
+      childDomainKey: input.childDomainKey,
+      parentDomainKey: input.toParentDomainKey,
+      edgeType: 'substantive',
+    },
+    actorUserId,
+  );
+  // A duplicate edge on COPY/MOVE is fine — the relationship already exists;
+  // continue so a MOVE still removes the old home.
+  if (!created.ok && created.reason !== 'duplicate') return created;
+
+  // Promote a leaf destination to 'both' — it just became a parent.
+  await db
+    .update(knowledgeNodes)
+    .set({ nodeKind: 'both' })
+    .where(and(eq(knowledgeNodes.domainKey, input.toParentDomainKey), eq(knowledgeNodes.nodeKind, 'leaf')));
+
+  if (input.moveFromParentDomainKey && input.moveFromParentDomainKey !== input.toParentDomainKey) {
+    await deleteKnowledgeEdge(
+      {
+        childDomainKey: input.childDomainKey,
+        parentDomainKey: input.moveFromParentDomainKey,
+      },
+      actorUserId,
+    );
+  }
+
+  console.info('[knowledge-admin] child attached', { actorUserId, ...input });
+  if (created.ok) return created;
+  // Duplicate-create path: fetch the existing edge for a uniform return.
+  const [existing] = await db
+    .select()
+    .from(knowledgeEdges)
+    .where(
+      and(
+        eq(knowledgeEdges.childDomainKey, input.childDomainKey),
+        eq(knowledgeEdges.parentDomainKey, input.toParentDomainKey),
+      ),
+    )
+    .limit(1);
+  return existing ? { ok: true, edge: existing } : { ok: false, reason: 'not_found' };
+}
+
+// Structure-suggester ratify (§4: the Accept click IS the human commit): mint
+// the parent (kind 'parent', human-tuned threshold), ensure a leaf node for
+// each accepted child (they're REAL corpus labels — the node is the label's
+// entry into the graph), and draw substantive edges. Existing nodes are reused
+// via the collision path — never duplicated.
+export async function ratifyStructureGroup(
+  input: {
+    parentLabel: string;
+    broadCategory: string | null;
+    masteryThreshold: number | null;
+    childLabels: string[];
+  },
+  actorUserId: string,
+): Promise<{ ok: true; parentKey: string; edgesCreated: number }> {
+  const ensureNode = async (
+    label: string,
+    nodeKind: NodeKind,
+    masteryThreshold: number | null,
+    broadCategory: string | null,
+  ): Promise<string> => {
+    const created = await createKnowledgeNode(
+      { label, nodeKind, masteryThreshold, broadCategory, fieldHue: null },
+      actorUserId,
+    );
+    if (created.ok) return created.node.domainKey;
+    if (created.reason === 'domain_key_collision') return created.existing.domainKey;
+    return domainKey(label);
+  };
+
+  const parentKey = await ensureNode(
+    input.parentLabel,
+    'parent',
+    input.masteryThreshold,
+    input.broadCategory,
+  );
+
+  let edgesCreated = 0;
+  for (const childLabel of input.childLabels) {
+    const childKey = await ensureNode(childLabel, 'leaf', null, input.broadCategory);
+    if (childKey === parentKey) continue;
+    const edge = await createKnowledgeEdge(
+      { childDomainKey: childKey, parentDomainKey: parentKey, edgeType: 'substantive' },
+      actorUserId,
+    );
+    if (edge.ok) edgesCreated += 1; // duplicates are fine — already ratified
+  }
+
+  console.info('[knowledge-admin] structure group ratified', {
+    actorUserId,
+    parent: input.parentLabel,
+    children: input.childLabels.length,
+    edgesCreated,
+  });
+  return { ok: true, parentKey, edgesCreated };
 }
 
 // Deleting an edge is structure-editing, not content removal — the hard delete

@@ -10,12 +10,16 @@ import {
   upholdReport,
 } from '@/server/db/queries/content-reports';
 import {
+  approveEditedQuestion,
   editQuestionContent,
   restoreDemotedQuestion,
   retireDemotedQuestion,
 } from '@/server/db/queries/machine-demotions';
+import { rerunQuestion } from '@/server/quality/rerun-question';
 
 export const dynamic = 'force-dynamic';
+// rerun = one answer-generation call + one grounded verify (may web-search).
+export const maxDuration = 60;
 
 const reviewReason = z.string().trim().max(500).optional();
 
@@ -43,6 +47,25 @@ const bodySchema = z.discriminatedUnion('action', [
     answerText: z.string().trim().min(1).max(1000).optional(),
     factualExplanation: z.string().trim().max(4000).nullable().optional(),
   }),
+  // B-REVIEW-RERUN-01: re-run the (edited) question through the LLM for a fresh
+  // answer + grounded verdict. Persists NOTHING — it's the preview the reviewer
+  // reads before approving.
+  z.object({
+    action: z.literal('rerun_verify'),
+    questionText: z.string().trim().min(1).max(2000),
+    answerText: z.string().trim().max(1000).optional(),
+    canonicalSubcategory: z.string().trim().max(200).nullable().optional(),
+    broadCategory: z.string().trim().max(200).nullable().optional(),
+  }),
+  // The commit: persist the edit + a passing verification stamp and return the
+  // question to circulation (both stores). Resolves active incorrect reports.
+  z.object({
+    action: z.literal('approve'),
+    target: z.object({ table: z.enum(['question', 'generated']), id: z.string().trim().min(1) }),
+    questionText: z.string().trim().min(1).max(2000),
+    answerText: z.string().trim().min(1).max(1000),
+    explanation: z.string().trim().max(4000).nullable().optional(),
+  }),
 ]);
 
 export async function POST(request: NextRequest) {
@@ -58,6 +81,31 @@ export async function POST(request: NextRequest) {
   }
 
   const data = parsed.data;
+
+  if (data.action === 'rerun_verify') {
+    const result = await rerunQuestion({
+      questionText: data.questionText,
+      answerText: data.answerText,
+      canonicalSubcategory: data.canonicalSubcategory,
+      broadCategory: data.broadCategory,
+    });
+    if (!result) {
+      return NextResponse.json({ error: 'llm_unavailable' }, { status: 503 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (data.action === 'approve') {
+    const result = await approveEditedQuestion(data.target, {
+      questionText: data.questionText,
+      answerText: data.answerText,
+      explanation: data.explanation,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.reason }, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
 
   if (data.action === 'edit') {
     const { questionText, answerText, factualExplanation } = data;

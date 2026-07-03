@@ -60,6 +60,11 @@ const bodySchema = z.discriminatedUnion('action', [
     difficultyEstimate: z.enum(['accessible', 'moderate', 'specialist']),
     broadCategory: z.string().trim().min(1).max(120),
     flags: decisionFlagsSchema,
+    // Public byline: self (default), machine (Maid Acasa), or house (Joshing).
+    attribution: z.enum(['self', 'machine', 'house']).default('self'),
+    // 'own' = the crafter wrote it themselves (no machine draft behind it) —
+    // same rail, same vet, same batch fact-check.
+    origin: z.enum(['machine_draft', 'own']).default('machine_draft'),
   }),
   // The kill verdict, recorded to the decision ledger. Nothing else persists —
   // an unkept candidate still never exists as a servable question; this is
@@ -129,6 +134,8 @@ export async function POST(request: NextRequest) {
         machineDraftAnswer: data.machineDraftAnswer,
         difficultyEstimate: data.difficultyEstimate,
         broadCategory: data.broadCategory,
+        attribution: data.attribution,
+        origin: data.origin,
       });
       // Ledger the human's verdict either way — a keep the vet then blocked is
       // still a keep for teaching purposes. Best-effort by contract.
