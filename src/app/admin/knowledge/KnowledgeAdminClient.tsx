@@ -64,9 +64,11 @@ function hueSwatch(hue: string | null) {
 export function KnowledgeAdminClient({
   nodes,
   edges,
+  depthByKey,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
+  depthByKey: Record<string, number>;
 }) {
   const router = useRouter();
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -98,7 +100,12 @@ export function KnowledgeAdminClient({
 
       <StructureSuggester graphIsEmpty={nodes.length === 0} onDone={() => router.refresh()} />
 
-      <KnowledgeTreeEditor nodes={nodes} edges={edges} onDone={() => router.refresh()} />
+      <KnowledgeTreeEditor
+        nodes={nodes}
+        edges={edges}
+        depthByKey={depthByKey}
+        onDone={() => router.refresh()}
+      />
 
       {/* The form-based tools remain for edge-type work (collection edges),
           per-node LLM parent proposals, and bulk inspection — tucked away so
@@ -173,13 +180,20 @@ type PickState = {
   fromParentKey: string | null;
 } | null;
 
+// A leaf under this many questions is "too small to stand alone" — the signal
+// to condense it upward (Move it under a parent). Matches the exhaustion
+// story: a thin leaf gets played out fast.
+const THIN_LEAF_THRESHOLD = 6;
+
 function KnowledgeTreeEditor({
   nodes,
   edges,
+  depthByKey,
   onDone,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
+  depthByKey: Record<string, number>;
   onDone: () => void;
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -380,6 +394,7 @@ function KnowledgeTreeEditor({
               depth={0}
               ancestors={new Set()}
               nodeByKey={nodeByKey}
+              depthByKey={depthByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               expanded={expanded}
@@ -405,6 +420,7 @@ function TreeRow({
   depth,
   ancestors,
   nodeByKey,
+  depthByKey,
   childrenByParent,
   parentCountByChild,
   expanded,
@@ -422,6 +438,7 @@ function TreeRow({
   depth: number;
   ancestors: Set<string>;
   nodeByKey: Map<string, KnowledgeNodeRow>;
+  depthByKey: Record<string, number>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
   expanded: Set<string>;
@@ -434,6 +451,7 @@ function TreeRow({
   onAct: (body: Record<string, unknown>) => Promise<void> | void;
   onDone: () => void;
 }) {
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [childLabel, setChildLabel] = useState('');
   const [editing, setEditing] = useState(false);
@@ -499,6 +517,9 @@ function TreeRow({
 
   const smallBtn =
     'rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-40';
+  // Revealed-menu buttons: proper tap targets, unlike the old inline row.
+  const menuBtn =
+    'inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40';
 
   return (
     <div>
@@ -560,19 +581,30 @@ function TreeRow({
                 ? node.masteryThreshold
                   ? `bar ${node.masteryThreshold}`
                   : 'bar unset'
-                : ''}
+                : `${depthByKey[nodeKey] ?? 0} Qs`}
               {parentCount > 1 ? ` · in ${parentCount} trees` : ''}
             </span>
+            {/* "This is too small" — a thin leaf that isn't already nested is a
+                condense-me candidate (Move it under a parent). */}
+            {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
+              <span
+                className="rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
+                title="Too few questions to stand alone — Move it under a broader parent"
+              >
+                thin
+              </span>
+            ) : null}
           </>
         )}
 
-        <span className="ml-auto flex flex-wrap items-center gap-1">
+        <span className="ml-auto flex items-center gap-1">
           {picking ? (
             <button
               type="button"
               onClick={() => onPlace(nodeKey)}
               disabled={placeDisabled}
-              className={smallBtn}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40"
               style={
                 placeDisabled
                   ? { borderColor: 'var(--border)', color: 'var(--text-muted)' }
@@ -581,70 +613,93 @@ function TreeRow({
             >
               Place here
             </button>
-          ) : (
-            !editing && (
-              <>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onPick({ mode: 'move', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey })
-                  }
-                  className={smallBtn}
-                  style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-                >
-                  Move
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onPick({ mode: 'copy', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey })
-                  }
-                  className={smallBtn}
-                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-                >
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddingChild((v) => !v);
-                    setRowError(null);
-                  }}
-                  className={smallBtn}
-                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-                >
-                  + Child
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditing(true);
-                    setEditLabel(node.label);
-                    setEditBar(node.masteryThreshold?.toString() ?? '');
-                  }}
-                  className={smallBtn}
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-                >
-                  Edit
-                </button>
-                {parentKey ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void onAct({ action: 'delete_edge', childDomainKey: nodeKey, parentDomainKey: parentKey })
-                    }
-                    className={smallBtn}
-                    style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-                    aria-label={`Remove ${node.label} from this parent`}
-                    title="Remove from this parent (the territory itself is kept)"
-                  >
-                    ✕
-                  </button>
-                ) : null}
-              </>
-            )
-          )}
+          ) : !editing ? (
+            // Actions collapse behind one comfortably-tappable toggle — the five
+            // inline buttons were sub-target and wrapped on a phone.
+            <button
+              type="button"
+              onClick={() => setActionsOpen((v) => !v)}
+              aria-expanded={actionsOpen}
+              aria-label={`Actions for ${node.label}`}
+              className="inline-flex size-9 items-center justify-center rounded-md border text-base"
+              style={
+                actionsOpen
+                  ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
+                  : { borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }
+              }
+            >
+              ⋯
+            </button>
+          ) : null}
         </span>
+
+        {/* Revealed action set — full-size targets, one tidy row (wraps at
+            most to two on a narrow phone, still tappable). */}
+        {actionsOpen && !picking && !editing ? (
+          <div className="flex w-full flex-wrap items-center gap-1.5 pt-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setActionsOpen(false);
+                onPick({ mode: 'move', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey });
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+            >
+              Move
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActionsOpen(false);
+                onPick({ mode: 'copy', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey });
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAddingChild(true);
+                setActionsOpen(false);
+                setRowError(null);
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            >
+              + Child
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActionsOpen(false);
+                setEditing(true);
+                setEditLabel(node.label);
+                setEditBar(node.masteryThreshold?.toString() ?? '');
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+            >
+              Edit
+            </button>
+            {parentKey ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  void onAct({ action: 'delete_edge', childDomainKey: nodeKey, parentDomainKey: parentKey });
+                }}
+                className={menuBtn}
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                title="Remove from this parent (the territory itself is kept)"
+              >
+                Remove from here
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {addingChild ? (
           <span className="flex w-full items-center gap-1.5 pl-6 pt-1">
@@ -682,6 +737,7 @@ function TreeRow({
               depth={depth + 1}
               ancestors={new Set([...ancestors, nodeKey])}
               nodeByKey={nodeByKey}
+              depthByKey={depthByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               expanded={expanded}
@@ -789,30 +845,110 @@ function StructureSuggester({
             Nothing left to group{meta && meta.alreadyStructured > 0 ? ` — ${meta.alreadyStructured} labels are already structured` : ''}.
           </p>
         ) : (
-          <div className="mt-3 space-y-3">
-            {meta ? (
-              <p className="text-muted-foreground text-xs">
-                {groups.length} group{groups.length === 1 ? '' : 's'} proposed from {meta.corpusSize}{' '}
-                unstructured territories. Accept the ones that ring true.
-              </p>
-            ) : null}
-            {groups.map((group) => (
-              <SuggestedGroupCard
-                key={group.parentLabel}
-                group={group}
-                onResolved={() => {
-                  setGroups((prev) => prev?.filter((g) => g.parentLabel !== group.parentLabel) ?? null);
-                  onDone();
-                }}
-                onDismiss={() =>
-                  setGroups((prev) => prev?.filter((g) => g.parentLabel !== group.parentLabel) ?? null)
-                }
-              />
-            ))}
-          </div>
+          <SuggestionList
+            groups={groups}
+            meta={meta}
+            onResolve={(parentLabel) =>
+              setGroups((prev) => prev?.filter((g) => g.parentLabel !== parentLabel) ?? null)
+            }
+            onDone={onDone}
+          />
         )
       ) : null}
     </section>
+  );
+}
+
+function groupQuestionTotal(group: SuggestedGroup): number {
+  return group.children.reduce((sum, c) => sum + c.machineDepth + c.humanAuthored, 0);
+}
+
+function SuggestionList({
+  groups,
+  meta,
+  onResolve,
+  onDone,
+}: {
+  groups: SuggestedGroup[];
+  meta: { corpusSize: number; alreadyStructured: number } | null;
+  onResolve: (parentLabel: string) => void;
+  onDone: () => void;
+}) {
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  // Biggest, most-confident groups first — the ones worth accepting on sight.
+  const sorted = useMemo(
+    () => [...groups].sort((a, b) => groupQuestionTotal(b) - groupQuestionTotal(a)),
+    [groups],
+  );
+
+  // "High-confidence" = a substantial group (≥3 children AND ≥20 questions):
+  // a real body of knowledge, not a thin pairing. These are safe to accept in
+  // one gesture; the rest still get individual review.
+  const highConfidence = sorted.filter(
+    (g) => g.children.length >= 3 && groupQuestionTotal(g) >= 20,
+  );
+
+  async function acceptAllHighConfidence() {
+    if (bulkPending || highConfidence.length === 0) return;
+    setBulkPending(true);
+    setBulkError(null);
+    let failed = 0;
+    for (const group of highConfidence) {
+      const res = await post({
+        action: 'ratify_structure_group',
+        parentLabel: group.parentLabel,
+        broadCategory: group.broadCategory,
+        masteryThreshold: group.suggestedThreshold,
+        childLabels: group.children.map((c) => c.label),
+      });
+      if (res.ok) onResolve(group.parentLabel);
+      else failed += 1;
+    }
+    setBulkPending(false);
+    if (failed > 0) setBulkError(`${failed} group${failed === 1 ? '' : 's'} didn’t save — review them below.`);
+    onDone();
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {meta ? (
+          <p className="text-muted-foreground text-xs">
+            {groups.length} group{groups.length === 1 ? '' : 's'} from {meta.corpusSize} unstructured
+            territories — biggest first. Tap one to review, or accept the obvious ones in bulk.
+          </p>
+        ) : null}
+        {highConfidence.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => void acceptAllHighConfidence()}
+            disabled={bulkPending}
+            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+            style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+          >
+            {bulkPending ? 'Accepting…' : `Accept ${highConfidence.length} high-confidence`}
+          </button>
+        ) : null}
+      </div>
+      {bulkError ? (
+        <p className="text-[13px]" style={{ color: 'var(--danger)' }}>
+          {bulkError}
+        </p>
+      ) : null}
+      {sorted.map((group) => (
+        <SuggestedGroupCard
+          key={group.parentLabel}
+          group={group}
+          onResolved={() => {
+            onResolve(group.parentLabel);
+            onDone();
+          }}
+          onDismiss={() => onResolve(group.parentLabel)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -831,6 +967,7 @@ function SuggestedGroupCard({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const selectedCount = group.children.filter((c) => checked[c.label]).length;
 
   async function accept() {
@@ -852,29 +989,67 @@ function SuggestedGroupCard({
     onResolved();
   }
 
+  const total = group.children.reduce((sum, c) => sum + c.machineDepth + c.humanAuthored, 0);
+
+  // Collapsed by default — a header you scan, expand to review, so 20+ groups
+  // aren't a wall. Accept/Dismiss live on the header for a quick call.
   return (
-    <div className="rounded-md border p-3" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-serif text-base font-semibold text-[var(--brand-ink)]">
-          {group.parentLabel}
-        </span>
-        {group.broadCategory ? (
-          <span className="text-muted-foreground text-xs">· {group.broadCategory}</span>
-        ) : null}
-        <label className="ml-auto flex items-center gap-1.5 text-xs text-[var(--brand-ink-700)]">
-          Mastery bar
-          <input
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value.replace(/[^0-9]/g, ''))}
-            className="w-20 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]"
-            inputMode="numeric"
-            aria-label={`Mastery threshold for ${group.parentLabel}`}
-          />
-          pts
-        </label>
+    <div className="rounded-md border" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex flex-wrap items-center gap-2 p-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <span aria-hidden className="text-[var(--brand-ink-700)]">
+            {open ? '▾' : '▸'}
+          </span>
+          <span className="min-w-0">
+            <span className="font-serif text-base font-semibold text-[var(--brand-ink)]">
+              {group.parentLabel}
+            </span>
+            <span className="text-muted-foreground ml-2 text-xs">
+              {group.children.length} territories · {total} questions
+              {group.broadCategory ? ` · ${group.broadCategory}` : ''}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void accept()}
+          disabled={pending || selectedCount < 1}
+          className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40"
+          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+        >
+          {pending ? 'Accepting…' : 'Accept'}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          disabled={pending}
+          className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        >
+          Dismiss
+        </button>
       </div>
-      <ul className="mt-2 space-y-1">
-        {group.children.map((child) => (
+
+      {!open ? null : (
+        <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: 'var(--border)' }}>
+          <label className="mb-2 flex items-center gap-1.5 text-xs text-[var(--brand-ink-700)]">
+            Mastery bar
+            <input
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value.replace(/[^0-9]/g, ''))}
+              className="w-20 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]"
+              inputMode="numeric"
+              aria-label={`Mastery threshold for ${group.parentLabel}`}
+            />
+            pts
+          </label>
+          <ul className="space-y-1">
+            {group.children.map((child) => (
           <li key={child.label} className="flex items-center gap-2 text-[13px]">
             <label className="flex cursor-pointer items-center gap-2">
               <input
@@ -887,37 +1062,20 @@ function SuggestedGroupCard({
             <span className="text-muted-foreground text-xs">
               {child.machineDepth + child.humanAuthored} questions
             </span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void accept()}
-          disabled={pending || selectedCount < 1}
-          className="inline-flex min-h-9 items-center rounded-md border px-3 py-1 text-sm font-medium disabled:opacity-50"
-          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-        >
-          {pending ? 'Accepting…' : `Accept ${selectedCount} of ${group.children.length}`}
-        </button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          disabled={pending}
-          className="inline-flex min-h-9 items-center rounded-md border px-3 py-1 text-sm font-medium disabled:opacity-50"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-        >
-          Dismiss
-        </button>
-        <span className="text-muted-foreground text-xs">
-          accepting creates the parent, its leaves, and substantive edges
-        </span>
-      </div>
-      {error ? (
-        <p className="mt-1.5 text-[13px]" style={{ color: 'var(--danger)' }}>
-          {error}
-        </p>
-      ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground mt-2 text-xs">
+            {selectedCount} of {group.children.length} selected · accepting creates the parent, its
+            leaves, and substantive edges.
+          </p>
+          {error ? (
+            <p className="mt-1.5 text-[13px]" style={{ color: 'var(--danger)' }}>
+              {error}
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
