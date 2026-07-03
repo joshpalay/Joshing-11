@@ -6,6 +6,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
@@ -260,32 +261,62 @@ function KnowledgeTreeEditor({
   const [error, setError] = useState<string | null>(null);
   const [newTopLabel, setNewTopLabel] = useState('');
 
-  // Drag-and-drop state: the label of the row being dragged (for the overlay),
-  // and the pending drop awaiting the human's Move-vs-Also-list choice.
-  const [dragLabel, setDragLabel] = useState<string | null>(null);
+  // Drag-and-drop state: what's being dragged (label for the overlay; key +
+  // from-parent so every row can show whether it's a legal target), and the
+  // pending drop awaiting the human's Move-vs-Also-list choice.
+  const [drag, setDrag] = useState<{
+    label: string;
+    childKey: string;
+    fromParentKey: string | null;
+  } | null>(null);
+  // The drop already happened when this is set — it drives the follow-up bar
+  // (keep-under-old-too / undo). toParentKey null ⇒ the drop was an un-nest.
   const [pendingDrop, setPendingDrop] = useState<{
     childKey: string;
     childLabel: string;
     fromParentKey: string | null;
-    toParentKey: string;
+    toParentKey: string | null;
     toParentLabel: string;
   } | null>(null);
 
   // A tap must still expand / open the ⋯ menu — only a real drag (>8px) grabs.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  // The browser fires a click on the handle when a drag releases over it —
+  // without this guard every completed drag would ALSO enter pick-up mode.
+  const lastDragEndAt = useRef(0);
+  function pickUnlessJustDragged(pick: PickState) {
+    if (Date.now() - lastDragEndAt.current < 300) return;
+    setPicking(pick);
+  }
 
   const pickedSubtree = useMemo(
     () => (picking ? descendantsOf(picking.childKey) : new Set<string>()),
     [picking, descendantsOf],
   );
+  // While a drag is live, rows inside the dragged subtree (or the node itself)
+  // are the only ILLEGAL targets — everything else lights up as a landing spot.
+  const dragSubtree = useMemo(
+    () => (drag ? descendantsOf(drag.childKey) : new Set<string>()),
+    [drag, descendantsOf],
+  );
 
   function onDragStart(event: DragStartEvent) {
-    const data = event.active.data.current as { label?: string } | undefined;
-    setDragLabel(data?.label ?? null);
+    const data = event.active.data.current as
+      | { label?: string; childKey?: string; fromParentKey?: string | null }
+      | undefined;
+    if (data?.childKey) {
+      setPendingDrop(null); // a new drag supersedes the last drop's follow-up
+      setDrag({
+        label: data.label ?? data.childKey,
+        childKey: data.childKey,
+        fromParentKey: data.fromParentKey ?? null,
+      });
+    }
   }
 
   function onDragEnd(event: DragEndEvent) {
-    setDragLabel(null);
+    setDrag(null);
+    lastDragEndAt.current = Date.now();
     const child = event.active.data.current as
       | { childKey: string; fromParentKey: string | null; label: string }
       | undefined;
@@ -297,10 +328,18 @@ function KnowledgeTreeEditor({
     // Root zone → un-nest to top level (remove the current home edge).
     if (over.toParentKey === null) {
       if (!child.fromParentKey) return; // already top-level
+      setPendingDrop(null);
       void act({
         action: 'delete_edge',
         childDomainKey: child.childKey,
         parentDomainKey: child.fromParentKey,
+      });
+      setPendingDrop({
+        childKey: child.childKey,
+        childLabel: child.label,
+        fromParentKey: child.fromParentKey,
+        toParentKey: null,
+        toParentLabel: 'top level',
       });
       return;
     }
@@ -312,8 +351,17 @@ function KnowledgeTreeEditor({
       setError('Can’t place a territory inside its own subtree.');
       return;
     }
-    // Offer Move vs Also-list (the multi-parent choice) at the drop.
+    // The drop IS the move — no confirmation tap (drag Sonatas onto Beethoven
+    // → it's a child, done). The follow-up bar offers "keep under the old
+    // parent too" (the multi-parent case) and Undo.
     setError(null);
+    setPendingDrop(null);
+    void act({
+      action: 'attach_child',
+      childDomainKey: child.childKey,
+      toParentDomainKey: toParentKey,
+      ...(child.fromParentKey ? { moveFromParentDomainKey: child.fromParentKey } : {}),
+    });
     setPendingDrop({
       childKey: child.childKey,
       childLabel: child.label,
@@ -323,18 +371,40 @@ function KnowledgeTreeEditor({
     });
   }
 
-  function commitDrop(mode: 'move' | 'copy') {
-    if (!pendingDrop) return;
+  // Post-drop follow-ups. "Keep too" re-adds the old home edge — the node then
+  // lives under BOTH parents (Beethoven's Symphony under Beethoven AND
+  // Symphonic Works). "Undo" puts everything back.
+  function keepUnderOldToo() {
+    if (!pendingDrop?.fromParentKey) return;
     const drop = pendingDrop;
     setPendingDrop(null);
     void act({
       action: 'attach_child',
       childDomainKey: drop.childKey,
-      toParentDomainKey: drop.toParentKey,
-      ...(mode === 'move' && drop.fromParentKey
-        ? { moveFromParentDomainKey: drop.fromParentKey }
-        : {}),
+      toParentDomainKey: drop.fromParentKey,
     });
+  }
+
+  function undoDrop() {
+    if (!pendingDrop) return;
+    const drop = pendingDrop;
+    setPendingDrop(null);
+    if (drop.fromParentKey) {
+      // Move it back home (removing the new edge if one was added).
+      void act({
+        action: 'attach_child',
+        childDomainKey: drop.childKey,
+        toParentDomainKey: drop.fromParentKey,
+        ...(drop.toParentKey ? { moveFromParentDomainKey: drop.toParentKey } : {}),
+      });
+    } else if (drop.toParentKey) {
+      // Was top-level; un-nest it again.
+      void act({
+        action: 'delete_edge',
+        childDomainKey: drop.childKey,
+        parentDomainKey: drop.toParentKey,
+      });
+    }
   }
 
   async function act(body: Record<string, unknown>, keepPicking = false) {
@@ -431,35 +501,38 @@ function KnowledgeTreeEditor({
             aria-live="polite"
           >
             <span className="w-full sm:w-auto">
-              Put <strong>{pendingDrop.childLabel}</strong> under{' '}
-              <strong>{pendingDrop.toParentLabel}</strong>?
+              <strong>{pendingDrop.childLabel}</strong> →{' '}
+              <strong>{pendingDrop.toParentLabel}</strong> ✓
             </span>
+            {pendingDrop.fromParentKey && pendingDrop.toParentKey ? (
+              <button
+                type="button"
+                onClick={keepUnderOldToo}
+                disabled={busy}
+                className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                title="It will live under both parents"
+              >
+                Keep under {nodeByKey.get(pendingDrop.fromParentKey)?.label ?? 'the old parent'} too
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => commitDrop('move')}
-              disabled={busy}
-              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-            >
-              Move here
-            </button>
-            <button
-              type="button"
-              onClick={() => commitDrop('copy')}
+              onClick={undoDrop}
               disabled={busy}
               className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
               style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-              title="Keep it where it is and also list it here (lives under both)"
             >
-              Also list here
+              Undo
             </button>
             <button
               type="button"
               onClick={() => setPendingDrop(null)}
+              aria-label="Dismiss"
               className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
               style={{ borderColor: 'var(--border)' }}
             >
-              Cancel
+              ✕
             </button>
           </div>
         </div>
@@ -497,9 +570,9 @@ function KnowledgeTreeEditor({
         </div>
       ) : (
         <p className="text-muted-foreground mb-2 text-xs">
-          Drag a row by its ⠿ handle onto another to nest it (or onto “top level” to un-nest).
-          Dropping asks Move vs. Also-list (for territories that belong under two parents). Tap ⋯
-          for the same actions plus edit.
+          Drag a ⠿ handle onto another row to nest it — the drop IS the move (Sonatas onto
+          Beethoven → child). Or just TAP ⠿ to pick a row up and choose from big “Place here”
+          buttons. After a drop you can undo, or keep it under the old parent too.
         </p>
       )}
       {error ? (
@@ -508,8 +581,19 @@ function KnowledgeTreeEditor({
         </p>
       ) : null}
 
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <RootDropZone />
+      <DndContext
+        sensors={sensors}
+        // The drop target is wherever the FINGER is, not a rectangle overlap —
+        // much more predictable on touch.
+        collisionDetection={pointerWithin}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => {
+          setDrag(null);
+          lastDragEndAt.current = Date.now();
+        }}
+      >
+        <RootDropZone dragActive={drag !== null} />
         <div className="rounded-md border py-1" style={{ borderColor: 'var(--border)' }}>
           {roots.length === 0 ? (
             <p className="text-muted-foreground px-3 py-2 text-sm">
@@ -531,8 +615,10 @@ function KnowledgeTreeEditor({
                 setExpanded={setExpanded}
                 picking={picking}
                 pickedSubtree={pickedSubtree}
+                dragKey={drag?.childKey ?? null}
+                dragSubtree={dragSubtree}
                 busy={busy}
-                onPick={setPicking}
+                onPick={pickUnlessJustDragged}
                 onPlace={placeInto}
                 onAct={act}
                 onDone={onDone}
@@ -541,12 +627,12 @@ function KnowledgeTreeEditor({
           )}
         </div>
         <DragOverlay>
-          {dragLabel ? (
+          {drag ? (
             <div
               className="rounded-md border px-3 py-1.5 text-sm font-medium shadow-[var(--shadow-card)]"
               style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink)' }}
             >
-              {dragLabel}
+              {drag.label}
             </div>
           ) : null}
         </DragOverlay>
@@ -556,16 +642,18 @@ function KnowledgeTreeEditor({
 }
 
 // The drop target for un-nesting: drag a nested row here to make it top-level.
-function RootDropZone() {
+// Lights up the moment a drag starts, so the option is discoverable mid-drag.
+function RootDropZone({ dragActive }: { dragActive: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'root-zone', data: { toParentKey: null } });
   return (
     <div
       ref={setNodeRef}
       className="mb-1 rounded-md border border-dashed px-3 py-2 text-center text-xs transition-colors"
       style={{
-        borderColor: isOver ? 'var(--brand-navy)' : 'var(--border)',
+        borderColor: isOver || dragActive ? 'var(--brand-navy)' : 'var(--border)',
         background: isOver ? 'var(--surface-2)' : 'transparent',
-        color: 'var(--text-muted)',
+        color: dragActive ? 'var(--brand-ink-700)' : 'var(--text-muted)',
+        borderWidth: isOver ? 2 : 1,
       }}
     >
       top level — drop here to un-nest
@@ -586,6 +674,8 @@ function TreeRow({
   setExpanded,
   picking,
   pickedSubtree,
+  dragKey,
+  dragSubtree,
   busy,
   onPick,
   onPlace,
@@ -604,6 +694,8 @@ function TreeRow({
   setExpanded: (updater: (prev: Set<string>) => Set<string>) => void;
   picking: PickState;
   pickedSubtree: Set<string>;
+  dragKey: string | null;
+  dragSubtree: Set<string>;
   busy: boolean;
   onPick: (pick: PickState) => void;
   onPlace: (toParentKey: string) => void;
@@ -698,30 +790,51 @@ function TreeRow({
   const menuBtn =
     'inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40';
 
+  // While a drag is live: every legal landing spot is announced, not just the
+  // one under the pointer. Illegal = the dragged node itself and anything
+  // inside its subtree (a same-parent drop is simply ignored on release).
+  const dropEligible = dragKey !== null && nodeKey !== dragKey && !dragSubtree.has(nodeKey);
+
   return (
     <div>
       <div
         ref={setDropRef}
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-1.5 text-sm last:border-b-0"
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-1.5 text-sm transition-colors last:border-b-0"
         style={{
           borderColor: 'var(--border)',
           paddingLeft: `${8 + depth * 18}px`,
           opacity: isDragging ? 0.4 : 1,
-          // Highlight a valid drop target as a drag hovers over it.
+          // During a drag every legal target is visibly a landing zone; the one
+          // under the finger lights up stronger.
           background: isOver ? 'var(--surface-2)' : undefined,
-          boxShadow: isOver ? 'inset 3px 0 0 var(--brand-navy)' : undefined,
+          boxShadow: isOver
+            ? 'inset 0 0 0 2px var(--brand-navy)'
+            : dropEligible
+              ? 'inset 0 0 0 1px var(--brand-navy)'
+              : undefined,
+          borderRadius: isOver || dropEligible ? 6 : undefined,
         }}
       >
-        {/* Drag handle — grab here to re-file the row. Its own control so a tap
-            elsewhere on the row still expands / opens ⋯. */}
+        {/* Drag handle — a real 44px control, not a bare glyph. Drag it to
+            re-file; a plain TAP falls back to pick-up mode (big "Place here"
+            buttons on every destination). */}
         <button
           type="button"
           ref={setDragRef}
           {...listeners}
           {...attributes}
-          aria-label={`Drag ${node.label}`}
-          className="cursor-grab touch-none text-[var(--text-muted)] active:cursor-grabbing"
-          style={{ touchAction: 'none' }}
+          onClick={() =>
+            onPick({ mode: 'move', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey })
+          }
+          aria-label={`Move ${node.label} (drag, or tap to pick up)`}
+          title="Drag to re-file — or tap to pick up and choose a destination"
+          className="inline-flex min-h-11 min-w-9 cursor-grab touch-none items-center justify-center rounded-md border active:cursor-grabbing"
+          style={{
+            touchAction: 'none',
+            borderColor: 'var(--border)',
+            color: 'var(--brand-ink-700)',
+            background: 'var(--brand-field)',
+          }}
         >
           ⠿
         </button>
@@ -942,6 +1055,8 @@ function TreeRow({
               setExpanded={setExpanded}
               picking={picking}
               pickedSubtree={pickedSubtree}
+              dragKey={dragKey}
+              dragSubtree={dragSubtree}
               busy={busy}
               onPick={onPick}
               onPlace={onPlace}
