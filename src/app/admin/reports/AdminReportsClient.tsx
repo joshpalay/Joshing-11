@@ -141,6 +141,65 @@ function TabButton({
   );
 }
 
+// The edit/re-run flow opens here instead of expanding inline — a bottom sheet
+// on a phone, a centered dialog on desktop, so the form + verdict + actions get
+// real room and the queue behind it doesn't jump. Esc / ✕ / Cancel close it;
+// the scrim deliberately does NOT dismiss, so a mis-tap can't discard an edit
+// and a re-run mid-flight.
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+    >
+      <div
+        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-xl border sm:max-w-lg sm:rounded-xl"
+        style={{ background: 'var(--brand-card)', borderColor: 'var(--border)' }}
+      >
+        <div
+          className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-3"
+          style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+        >
+          <span className="font-serif text-base font-semibold text-[var(--brand-ink)]">{title}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="text-muted-foreground inline-flex size-9 items-center justify-center rounded-md hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 // Clamp a long block to a few lines with a show-more toggle — keeps review
 // cards short enough to scan a full queue without endless scrolling.
 function ClampText({ text, lines = 3 }: { text: string; lines?: number }) {
@@ -612,19 +671,22 @@ function ReportRow({ report, onCleared }: { report: AdminReviewReport; onCleared
       </p>
 
       {editing ? (
-        <EditPanel
-          target={report.target}
-          initialQuestion={report.questionText ?? ''}
-          initialAnswer={report.correctAnswer ?? ''}
-          initialExplanation={null}
-          showExplanation={false}
-          canonicalSubcategory={null}
-          broadCategory={null}
-          concern={`${report.note}${report.suggestedAnswer ? ` (reader suggests: ${report.suggestedAnswer})` : ''}`}
-          onDone={resolved}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
+        <Modal title="Edit &amp; re-run" onClose={() => setEditing(false)}>
+          <EditPanel
+            target={report.target}
+            initialQuestion={report.questionText ?? ''}
+            initialAnswer={report.correctAnswer ?? ''}
+            initialExplanation={null}
+            showExplanation={false}
+            canonicalSubcategory={null}
+            broadCategory={null}
+            concern={`${report.note}${report.suggestedAnswer ? ` (reader suggests: ${report.suggestedAnswer})` : ''}`}
+            onDone={resolved}
+            onCancel={() => setEditing(false)}
+          />
+        </Modal>
+      ) : null}
+      {!editing ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -663,7 +725,7 @@ function ReportRow({ report, onCleared }: { report: AdminReviewReport; onCleared
             {pending === 'dismiss' ? 'Dismissing…' : 'Dismiss'}
           </button>
         </div>
-      )}
+      ) : null}
       {error ? (
         <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
           {error}
@@ -745,19 +807,22 @@ function DemotionRow({ item, onCleared }: { item: MachineDemotionReviewItem; onC
       </p>
 
       {editing ? (
-        <EditPanel
-          target={{ table: 'question', id: item.questionId }}
-          initialQuestion={item.questionText}
-          initialAnswer={item.correctAnswer}
-          initialExplanation={item.explanation}
-          showExplanation
-          canonicalSubcategory={item.canonicalSubcategory}
-          broadCategory={item.broadCategory}
-          concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
-          onDone={resolved}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
+        <Modal title="Edit &amp; re-run" onClose={() => setEditing(false)}>
+          <EditPanel
+            target={{ table: 'question', id: item.questionId }}
+            initialQuestion={item.questionText}
+            initialAnswer={item.correctAnswer}
+            initialExplanation={item.explanation}
+            showExplanation
+            canonicalSubcategory={item.canonicalSubcategory}
+            broadCategory={item.broadCategory}
+            concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
+            onDone={resolved}
+            onCancel={() => setEditing(false)}
+          />
+        </Modal>
+      ) : null}
+      {!editing ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -787,7 +852,7 @@ function DemotionRow({ item, onCleared }: { item: MachineDemotionReviewItem; onC
             {pending === 'retire' ? 'Retiring…' : 'Retire (recoverable)'}
           </button>
         </div>
-      )}
+      ) : null}
       {error ? (
         <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
           {error}
