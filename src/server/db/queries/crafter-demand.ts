@@ -1,6 +1,6 @@
 import { and, countDistinct, desc, eq, gte, inArray, isNotNull, isNull, max, ne, sql } from 'drizzle-orm';
 
-import { db, generatedQuestions, masteryEvents, questions } from '@/server/db';
+import { db, generatedQuestions, masteryEvents, questions, retrievalDomainHealth } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { labelSimilarity } from '@/lib/knowledge/label-similarity';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
@@ -50,6 +50,17 @@ export type CrafterWorklistRow = {
   clusterMachineDepth: number; // own + clusterLabels
   clusterHumanAuthored: number; // own + clusterLabels
   heat: CrafterWorklistHeat;
+  /**
+   * Machine futility — how badly the MACHINE does here (Josh, 2026-07-03:
+   * "shouldn't it be the ones that are most difficult to generate? The ones
+   * that are most costly"). A thin domain the machine generates well will
+   * self-heal on refill; a thin domain where its questions keep getting
+   * demoted (or generation keeps timing out) only a human can deepen.
+   */
+  machineVerified: number; // machine questions the verifier has judged
+  machineDemoted: number; // …of those, pulled as wrong
+  demotionRate: number | null; // demoted/verified; null below the sample floor
+  generationStruggling: boolean; // refill has been timing out here (health row)
 };
 
 // Thresholds are deliberately small-scale (18-user era) and transparent — tune
@@ -59,6 +70,25 @@ const COVERED_TOTAL_DEPTH = 40; // at/above this a domain reads as covered
 const COVERED_HUMAN_DEPTH = 12; // enough human-authored depth is coverage on its own
 
 const HEAT_RANK: Record<CrafterWorklistHeat, number> = { high: 0, mid: 1, low: 2, covered: 3 };
+
+// Futility needs a minimum verified sample — 1 demoted of 1 verified is noise,
+// not a 100% failure rate.
+const FUTILITY_MIN_VERIFIED = 4;
+// A health row at/above this many consecutive refill timeouts reads as "the
+// machine can't even generate here" (mirrors the refill cooldown's own signal).
+const STRUGGLING_TIMEOUTS = 2;
+
+/**
+ * Sort key for machine futility, pure and exported for tests: demotion rate
+ * (when the sample supports one) plus a flat bump when generation itself is
+ * timing out. Higher = the machine is worse here = a human matters more.
+ */
+export function futilityScore(row: {
+  demotionRate: number | null;
+  generationStruggling: boolean;
+}): number {
+  return (row.demotionRate ?? 0) + (row.generationStruggling ? 0.5 : 0);
+}
 
 function heatFor(activePlayers: number, machineDepth: number, humanAuthored: number): CrafterWorklistHeat {
   const totalDepth = machineDepth + humanAuthored;
@@ -171,7 +201,8 @@ export async function getCrafterWorklist(
   const domains = activity.map((row) => row.domain);
   if (domains.length === 0) return [];
 
-  const [machineDepthByDomain, authoredRows, declared, corpusLabels] = await Promise.all([
+  const [machineDepthByDomain, authoredRows, declared, corpusLabels, verdictRows, healthRows] =
+    await Promise.all([
     getDurablePoolDepthForDomains(domains),
     db
       .select({
@@ -197,6 +228,29 @@ export async function getCrafterWorklist(
       });
       return [] as ClusterLabel[];
     }),
+    // Futility, quality half: per-domain verifier outcomes on machine questions.
+    db
+      .select({
+        domain: generatedQuestions.canonicalSubcategory,
+        verified: sql<number>`count(*)::int`,
+        demoted: sql<number>`count(*) filter (where ${generatedQuestions.verificationVerdict} = 'demoted')::int`,
+      })
+      .from(generatedQuestions)
+      .where(
+        and(
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+          isNotNull(generatedQuestions.verificationVerdict),
+        ),
+      )
+      .groupBy(generatedQuestions.canonicalSubcategory),
+    // Futility, generation half: domains where refill keeps timing out.
+    db
+      .select({
+        domain: retrievalDomainHealth.domain,
+        consecutiveTimeouts: retrievalDomainHealth.consecutiveTimeouts,
+      })
+      .from(retrievalDomainHealth)
+      .where(inArray(retrievalDomainHealth.domain, domains)),
   ]);
 
   const clusters = buildLabelClusters(domains, corpusLabels, getConvergeTrgmThreshold());
@@ -206,6 +260,14 @@ export async function getCrafterWorklist(
     if (row.domain) authoredByDomain.set(row.domain, row.humanAuthored);
   }
   const declaredSet = new Set(declared.map((d) => d.domain.trim().toLowerCase()));
+  const verdictsByDomain = new Map(
+    verdictRows.filter((r) => r.domain).map((r) => [r.domain!, r]),
+  );
+  const strugglingDomains = new Set(
+    healthRows
+      .filter((r) => r.consecutiveTimeouts >= STRUGGLING_TIMEOUTS)
+      .map((r) => r.domain),
+  );
 
   const rows: CrafterWorklistRow[] = activity.map((row) => {
     const machineDepth = machineDepthByDomain.get(row.domain) ?? 0;
@@ -218,6 +280,9 @@ export async function getCrafterWorklist(
       machineDepth + clusterLabels.reduce((sum, c) => sum + c.machineDepth, 0);
     const clusterHumanAuthored =
       humanAuthored + clusterLabels.reduce((sum, c) => sum + c.humanAuthored, 0);
+    const verdicts = verdictsByDomain.get(row.domain);
+    const machineVerified = verdicts ? Number(verdicts.verified) : 0;
+    const machineDemoted = verdicts ? Number(verdicts.demoted) : 0;
     return {
       domain: row.domain,
       activePlayers: row.activePlayers,
@@ -229,12 +294,23 @@ export async function getCrafterWorklist(
       clusterMachineDepth,
       clusterHumanAuthored,
       heat: heatFor(row.activePlayers, clusterMachineDepth, clusterHumanAuthored),
+      machineVerified,
+      machineDemoted,
+      demotionRate:
+        machineVerified >= FUTILITY_MIN_VERIFIED ? machineDemoted / machineVerified : null,
+      generationStruggling: strugglingDomains.has(row.domain),
     };
   });
 
+  // Demand stays the GATE (heat first — no point authoring where nobody
+  // plays); within a heat band the MACHINE-FUTILE domains rank first, because
+  // a thin domain the machine handles fine self-heals on refill, while one it
+  // keeps fumbling only a human can deepen. Depth is the final tiebreak.
   rows.sort((a, b) => {
     const heat = HEAT_RANK[a.heat] - HEAT_RANK[b.heat];
     if (heat !== 0) return heat;
+    const futility = futilityScore(b) - futilityScore(a);
+    if (futility !== 0) return futility;
     if (a.activePlayers !== b.activePlayers) return b.activePlayers - a.activePlayers;
     return a.clusterMachineDepth + a.clusterHumanAuthored - (b.clusterMachineDepth + b.clusterHumanAuthored);
   });

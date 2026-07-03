@@ -61,7 +61,9 @@ export function CrafterClient({
           </p>
           <p className="text-muted-foreground mb-4 text-xs">
             Depth counts machine pool and human-authored separately — a domain with players and no
-            human questions is where your craft is most wanted.
+            human questions is where your craft is most wanted. Within a band, domains where the
+            machine <em>struggles</em> (its questions get pulled, or generation times out) rank
+            first: those can&apos;t self-heal on refill — only a human deepens them.
           </p>
           <div className="space-y-2.5">
             {worklist.length === 0 ? (
@@ -293,6 +295,20 @@ function DomainRow({ row, onCraft }: { row: CrafterWorklistRow; onCraft: () => v
               {row.clusterLabels
                 .map((c) => `${c.label} (${c.machineDepth + c.humanAuthored})`)
                 .join(' · ')}
+            </div>
+          ) : null}
+          {/* The machine-futility story: WHY this row outranks its heat-mates.
+              The machine failing here is exactly where a human is
+              irreplaceable — a costly domain, not just a thin one. */}
+          {row.demotionRate !== null && row.demotionRate > 0 ? (
+            <div className="mt-0.5 text-xs" style={{ color: 'var(--danger)' }}>
+              the machine struggles here — {Math.round(row.demotionRate * 100)}% of its questions
+              get pulled by the verifier ({row.machineDemoted} of {row.machineVerified})
+              {row.generationStruggling ? ' · generation keeps timing out' : ''}
+            </div>
+          ) : row.generationStruggling ? (
+            <div className="mt-0.5 text-xs" style={{ color: 'var(--danger)' }}>
+              the machine struggles here — generation keeps timing out
             </div>
           ) : null}
         </div>
