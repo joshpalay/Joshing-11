@@ -19,10 +19,10 @@ describe('parseVerifyVerdict', () => {
     expect(mod.parseVerifyVerdict('{"verdict":"unverifiable","reason":"no source"}')?.outcome).toBe('unverifiable');
   });
 
-  it('keeps the reason and truncates it', () => {
-    const long = 'x'.repeat(500);
+  it('keeps the reason and truncates it at 500 (200 cut verdicts mid-word)', () => {
+    const long = 'x'.repeat(700);
     const r = mod.parseVerifyVerdict(`{"verdict":"demoted","reason":"${long}"}`);
-    expect(r?.reason.length).toBe(200);
+    expect(r?.reason.length).toBe(500);
   });
 
   it('returns null for an unknown verdict or malformed JSON', () => {

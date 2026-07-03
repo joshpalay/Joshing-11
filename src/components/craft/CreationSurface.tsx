@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import type { DraftCandidate, DraftTier } from '@/server/crafter/draft-candidates';
 
 // B-CRAFTER-LIFECYCLE-01 — the creation surface, shared by BOTH audiences:
@@ -354,10 +355,9 @@ function CandidateCard({
         ))}
       </div>
 
-      <textarea
+      <AutoGrowTextarea
         value={questionText}
         onChange={(e) => setQuestionText(e.target.value)}
-        rows={2}
         className={fieldClass}
         aria-label="Question"
       />
@@ -371,10 +371,9 @@ function CandidateCard({
           aria-label="Answer"
         />
       </div>
-      <textarea
+      <AutoGrowTextarea
         value={explainer}
         onChange={(e) => setExplainer(e.target.value)}
-        rows={2}
         className={`${fieldClass} mt-2`}
         aria-label="Explainer"
       />
