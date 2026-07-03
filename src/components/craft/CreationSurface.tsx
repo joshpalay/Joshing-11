@@ -425,6 +425,22 @@ const FLAG_LABEL: Record<DraftCandidate['flags'][number]['kind'], string> = {
   tier_mismatch: 'tier mismatch',
 };
 
+// On-demand LLM answer check for a card. `for` pins a verdict to the exact
+// (question, answer) pair it was computed for, so any later inline edit makes the
+// verdict stale and it stops showing (the human must re-check). 'checking'/'error'
+// are transient and carry no pair.
+type VerifyState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'error' }
+  | { status: 'ok'; for: string }
+  | { status: 'unverifiable'; for: string }
+  | { status: 'wrong'; for: string; corrected: string | null };
+
+function answerPairKey(questionText: string, answer: string): string {
+  return `${questionText.trim()} ${answer.trim()}`;
+}
+
 function CandidateCard({
   state,
   domain,
@@ -444,6 +460,63 @@ function CandidateCard({
   const [questionText, setQuestionText] = useState(candidate.questionText);
   const [answer, setAnswer] = useState(candidate.answer);
   const [explainer, setExplainer] = useState(candidate.explainer);
+  const [verify, setVerify] = useState<VerifyState>({ status: 'idle' });
+
+  const currentKey = answerPairKey(questionText, answer);
+  // A verdict only counts for the answer it was computed against — an edit since
+  // then makes it stale. Transient states (checking/error) always show.
+  const verdictForCurrent =
+    (verify.status === 'ok' || verify.status === 'unverifiable' || verify.status === 'wrong')
+    && verify.for === currentKey;
+  // Did the human change the machine's draft answer/question? Only edited cards
+  // need re-verification before keep — an untouched draft was already gated.
+  const dirty =
+    answer.trim() !== candidate.answer.trim()
+    || questionText.trim() !== candidate.questionText.trim();
+
+  // Ask the LLM whether the current answer is correct for the current question.
+  // Fail-open: a checker outage resolves to 'error' and never blocks keep.
+  async function checkAnswer(): Promise<VerifyState> {
+    const key = answerPairKey(questionText, answer);
+    if (!questionText.trim() || !answer.trim()) return { status: 'idle' };
+    setVerify({ status: 'checking' });
+    try {
+      const res = await fetch('/api/questions/verify-answer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ questionText: questionText.trim(), answer: answer.trim() }),
+      });
+      if (!res.ok) {
+        const next: VerifyState = { status: 'error' };
+        setVerify(next);
+        return next;
+      }
+      const body = (await res.json()) as {
+        verdict: 'OK' | 'WRONG' | 'UNVERIFIABLE';
+        correctedAnswer: string | null;
+      };
+      const next: VerifyState =
+        body.verdict === 'OK'
+          ? { status: 'ok', for: key }
+          : body.verdict === 'WRONG'
+            ? { status: 'wrong', for: key, corrected: body.correctedAnswer }
+            : { status: 'unverifiable', for: key };
+      setVerify(next);
+      return next;
+    } catch {
+      const next: VerifyState = { status: 'error' };
+      setVerify(next);
+      return next;
+    }
+  }
+
+  function applyCorrection(corrected: string) {
+    setAnswer(corrected);
+    // The pair just changed — clear the stale WRONG verdict so the human can
+    // re-check the corrected answer.
+    setVerify({ status: 'idle' });
+  }
 
   // The kill is instant client-side (the card collapses immediately) and the
   // verdict is reported to the decision ledger fire-and-forget — teaching data
@@ -467,8 +540,17 @@ function CandidateCard({
     }).catch(() => {});
   }
 
-  async function keep() {
+  async function keep(opts?: { force?: boolean }) {
     if (status !== 'open') return;
+    // If the human edited the draft and this exact answer hasn't been confirmed,
+    // run the LLM check before committing. A WRONG verdict halts the keep and
+    // surfaces the correction; the human can fix it, re-check, or "Keep anyway"
+    // (opts.force). OK/UNVERIFIABLE/checker-error fall through (fail-open — the
+    // server keep path still vets, and an outage must not block honest keeps).
+    if (!opts?.force && dirty && !(verify.status === 'ok' && verify.for === currentKey)) {
+      const result = await checkAnswer();
+      if (result.status === 'wrong') return;
+    }
     onChange({ ...state, status: 'keeping', error: undefined });
     try {
       const res = await fetch(endpoint, {
@@ -595,16 +677,72 @@ function CandidateCard({
         </div>
       ) : null}
 
+      {/* LLM answer check. Shows the verdict for the CURRENT (question, answer)
+          pair; an inline edit makes a prior verdict stale and it disappears until
+          re-checked. A WRONG verdict offers the corrected answer to apply. */}
+      {verify.status === 'checking' ? (
+        <p className="text-muted-foreground mt-2 text-xs">Checking the answer with the LLM…</p>
+      ) : verify.status === 'error' ? (
+        <p className="text-muted-foreground mt-2 text-xs">Couldn&apos;t reach the answer checker — try again.</p>
+      ) : verdictForCurrent && verify.status === 'ok' ? (
+        <p className="mt-2 text-xs" style={{ color: 'var(--success)' }}>✓ LLM check: this answer looks correct.</p>
+      ) : verdictForCurrent && verify.status === 'unverifiable' ? (
+        <p className="text-muted-foreground mt-2 text-xs">LLM check: couldn&apos;t verify this one — use your judgement.</p>
+      ) : verdictForCurrent && verify.status === 'wrong' ? (
+        <div
+          className="mt-2 rounded-md px-3 py-2 text-xs leading-relaxed"
+          style={{ background: 'var(--warning-surface)', color: 'var(--warning)' }}
+        >
+          <p>⚠ LLM check: this answer looks incorrect for the question.</p>
+          {verify.corrected ? (
+            <p className="mt-1">
+              Suggested correct answer: <strong>{verify.corrected}</strong>
+            </p>
+          ) : null}
+          {verify.corrected ? (
+            <button
+              type="button"
+              onClick={() => applyCorrection(verify.corrected!)}
+              className="mt-2 rounded-md border px-3 py-1 text-xs font-medium"
+              style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
+            >
+              Apply suggested answer
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void keep()}
-          disabled={status === 'keeping' || !questionText.trim() || !answer.trim()}
+          disabled={status === 'keeping' || verify.status === 'checking' || !questionText.trim() || !answer.trim()}
           className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
         >
-          {status === 'keeping' ? 'Keeping…' : 'Keep'}
+          {status === 'keeping' ? 'Keeping…' : verify.status === 'checking' ? 'Checking…' : 'Keep'}
         </button>
+        {verdictForCurrent && verify.status === 'wrong' ? (
+          <button
+            type="button"
+            onClick={() => void keep({ force: true })}
+            disabled={status === 'keeping'}
+            className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
+          >
+            Keep anyway
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void checkAnswer()}
+            disabled={status === 'keeping' || verify.status === 'checking' || !questionText.trim() || !answer.trim()}
+            className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          >
+            Check answer
+          </button>
+        )}
         <button
           type="button"
           onClick={kill}
@@ -614,7 +752,7 @@ function CandidateCard({
         >
           Kill
         </button>
-        <span className="text-muted-foreground text-xs">edit inline, then keep</span>
+        <span className="text-muted-foreground text-xs">edit inline · check · keep</span>
       </div>
       {state.error && status === 'open' ? (
         <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>

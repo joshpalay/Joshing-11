@@ -160,3 +160,52 @@ describe('suggestQuestionAnswer', () => {
     await expect(suggestQuestionAnswer('q')).rejects.toThrow('Invalid suggestion response');
   });
 });
+
+// verifyAnswer exposes the same single verification pass for on-demand answer
+// checks (the crafter keep/kill cards): given a question + a human-edited answer,
+// return the verdict and, when confident, the corrected answer.
+describe('verifyAnswer', () => {
+  beforeEach(() => {
+    createMessageMock.mockReset();
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key-with-enough-length';
+    process.env.LLM_ENABLED = 'true';
+  });
+
+  it('passes an answer the verifier confirms', async () => {
+    createMessageMock.mockResolvedValueOnce(anthropicTextResponse({ verdict: 'OK', corrected_answer: null }));
+
+    const { verifyAnswer } = await importModule();
+    expect(await verifyAnswer('Which planet is closest to the Sun?', 'Mercury')).toEqual({
+      verdict: 'OK',
+      correctedAnswer: null,
+    });
+    expect(createMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('flags a wrong answer and returns the correction', async () => {
+    createMessageMock.mockResolvedValueOnce(
+      anthropicTextResponse({ verdict: 'WRONG', corrected_answer: 'Balthazar Getty' }),
+    );
+
+    const { verifyAnswer } = await importModule();
+    expect(await verifyAnswer('DFW compared which actor to a Ford Escort?', 'Keanu Reeves')).toEqual({
+      verdict: 'WRONG',
+      correctedAnswer: 'Balthazar Getty',
+    });
+  });
+
+  it('fails open to UNVERIFIABLE when the verifier errors', async () => {
+    createMessageMock.mockRejectedValueOnce(new Error('verifier timeout'));
+
+    const { verifyAnswer } = await importModule();
+    expect(await verifyAnswer('q', 'a')).toEqual({ verdict: 'UNVERIFIABLE', correctedAnswer: null });
+  });
+
+  it('fails open to UNVERIFIABLE when the LLM client is unavailable', async () => {
+    process.env.LLM_ENABLED = 'false';
+
+    const { verifyAnswer } = await importModule();
+    expect(await verifyAnswer('q', 'a')).toEqual({ verdict: 'UNVERIFIABLE', correctedAnswer: null });
+    expect(createMessageMock).not.toHaveBeenCalled();
+  });
+});
