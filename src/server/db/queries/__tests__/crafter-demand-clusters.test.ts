@@ -7,6 +7,7 @@ vi.mock('@/server/db', () => ({
   generatedQuestions: {},
   masteryEvents: {},
   questions: {},
+  retrievalDomainHealth: {},
 }));
 vi.mock('@/server/db/queries/declared-interests', () => ({
   getActiveDeclaredInterests: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('@/server/knowledge/converge-domain', () => ({
   getConvergeTrgmThreshold: () => 0.55,
 }));
 
-import { buildLabelClusters, type ClusterLabel } from '@/server/db/queries/crafter-demand';
+import { buildLabelClusters, futilityScore, type ClusterLabel } from '@/server/db/queries/crafter-demand';
 
 const THRESHOLD = 0.55;
 
@@ -63,5 +64,27 @@ describe('buildLabelClusters', () => {
     ];
     const clusters = buildLabelClusters(['General  Knowledge'], withGeneric, THRESHOLD);
     expect(clusters.get('General  Knowledge')).toEqual([]);
+  });
+});
+
+// The futility sort key (B, 2026-07-03: rank the wanted set by where the
+// machine is most costly): demotion rate when the sample supports one, plus a
+// flat bump when generation itself keeps timing out.
+describe('futilityScore', () => {
+  it('a struggling-generation domain outranks a clean one even without verdicts', () => {
+    const struggling = futilityScore({ demotionRate: null, generationStruggling: true });
+    const clean = futilityScore({ demotionRate: 0, generationStruggling: false });
+    expect(struggling).toBeGreaterThan(clean);
+  });
+
+  it('high demotion rate outranks low; the timeout bump stacks on top', () => {
+    const badQuality = futilityScore({ demotionRate: 0.4, generationStruggling: false });
+    const okQuality = futilityScore({ demotionRate: 0.1, generationStruggling: false });
+    expect(badQuality).toBeGreaterThan(okQuality);
+    expect(futilityScore({ demotionRate: 0.4, generationStruggling: true })).toBeGreaterThan(badQuality);
+  });
+
+  it('below the sample floor (rate=null) the machine is presumed fine', () => {
+    expect(futilityScore({ demotionRate: null, generationStruggling: false })).toBe(0);
   });
 });
