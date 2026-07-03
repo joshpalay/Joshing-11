@@ -248,7 +248,9 @@ describe('applyMergesForUser', () => {
       expect.objectContaining({ canonicalSubcategory: 'Ulysses', sourceType: 'domain_merged' }),
     ]));
     expect(state.questions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' })]);
-    expect(state.generatedQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', broadCategory: 'Literature' })]);
+    // domain_key MUST track the new canonical (bank lookup / depth roll-up fold
+    // on it) — regression guard for the 2026-07-03 stale-key fragmentation.
+    expect(state.generatedQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses', domainKey: 'ulysses', broadCategory: 'Literature' })]);
     expect(state.skippedDailyQuestions).toEqual([expect.objectContaining({ canonicalSubcategory: 'Ulysses' })]);
   });
 

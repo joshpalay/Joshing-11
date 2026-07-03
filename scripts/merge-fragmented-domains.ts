@@ -101,6 +101,11 @@ const MERGES: Array<{ target: string; sources: string[] }> = [
   { target: 'T. S. Eliot', sources: ['T.S. Eliot'] },
   // Same author-corpus, phrasing variant — the 75-row canonical form wins.
   { target: "Virginia Woolf's Novels and Essays", sources: ['Virginia Woolf Novels'] },
+  // 2026-07-03: same scope (the whole series), differ only by an author-name
+  // prefix that changes the domainKey so the deterministic fold missed it
+  // (lexical sim 0.606). NOT "Harry Potter Book 3" — that's a narrower topic
+  // and belongs UNDER the series via a graph edge, never a string merge.
+  { target: 'Harry Potter Series', sources: ["J.K. Rowling's Harry Potter Series"] },
 ];
 
 function sqlLiteral(value: string): string {
