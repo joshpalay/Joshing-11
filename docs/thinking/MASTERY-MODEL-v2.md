@@ -134,16 +134,16 @@ irreversible step (migration, recompute, flag flip) is late and flag-gated.
 Logic (P1–P3) is proven before schema/surfaces (P4–P5).
 
 - **Phase 0 — Validation queries (no code). ✅ RAN 2026-07-04** (results below).
-- **Phase 1 — Pure v2 math** (zero DB, unit-tested): `leafProgress =
+- **Phase 1 — Pure v2 math** ✅ SHIPPED (PR #1392) (zero DB, unit-tested): `leafProgress =
   min(1, earned/leafBar)`, `parentCoverage = Σ(weight·leafProgress)/Σweight`,
   mastered ≥ 0.75, `leafBar = f(depth, reachableSupply)`. Tests mirror
   `parent-mastery.test.ts`. Wired to nothing.
-- **Phase 2 — Node weight: storage + seeding** (behind flag, no live read
+- **Phase 2 — Node weight: storage + seeding** ✅ SHIPPED (PR #1393; migration 0109; backfill applied to all 113 nodes 2026-07-04) (behind flag, no live read
   change): add `node_weight` column (additive nullable migration); seed in
   `createKnowledgeNode` (`knowledge-graph.ts:134`) + backfill script (model on
   `backfill-domain-key.ts`); source Wikidata child-count → LLM fallback;
   human-editable via the admin "bar" field extended to weight.
-- **Phase 3 — Recompute engine + reclassification writer** (script-first, behind
+- **Phase 3 — Recompute engine + reclassification writer** ✅ SHIPPED (PR #1394; engine + `reclassifyQuestionsByIds` + validator — see the **Phase 3 finding** below) (script-first, behind
   flag): rebuild `PLAYER_MASTERY` from `MASTERY_EVENTS × current taxonomy` with
   the null-`question_id` fallback (re-bucket by the question's current domain
   where present, else the event's stored label); validate it reproduces today's
@@ -185,6 +185,74 @@ Logic (P1–P3) is proven before schema/surfaces (P4–P5).
   the 84 edges.)
 
 Net: nothing in Phase 0 blocks the plan.
+
+### Phase 3 finding (prod, 2026-07-04): the recompute POLICY is not lossless
+
+Validating `recomputeMastery` against live `PLAYER_MASTERY`
+(`scripts/validate-mastery-recompute.ts`) surfaced a decision that GATES the live
+rebuild:
+
+- **The engine is correct.** In `--stored-only` mode (bucket by the event's stored
+  snapshot) it reproduces `PLAYER_MASTERY`: **185/212 exact**, 2 small point diffs,
+  23 only-in-stored (declared-but-unplayed 0-point territories).
+- **But re-bucketing by the question's CURRENT domain does NOT reproduce it.**
+  `PLAYER_MASTERY` is keyed by the **session/declared** domain a player engaged
+  (e.g. "Virginia Woolf"); individual questions carry **finer own tags** (a "Mrs.
+  Dalloway" question served under a Woolf session). Recomputing by question-domain
+  moves those points out of Woolf into Mrs. Dalloway (+428 in one case).
+
+**Consequence:** "mastery follows the question's current domain" (decision 1's
+re-bucketing) is a real POLICY change, not a lossless recompute — it **fragments**
+a player's broad-domain mastery across fine sub-domains. It is only coherent once
+**P5 parent-coverage rollup** recombines those fine domains under their parent.
+**Do not run a live rebuild until (a) this policy is chosen and (b) rollup lands.**
+Open decision: mastery follows the question's own tag (needs rollup) vs. the
+session domain (reproduces today, but then reclassification can't re-home
+already-earned points — the whole reason for the recompute).
+
+## Phase 4 scope — drop `edge_type` / single-parent tree
+
+Prereq confirmed: **0 collection edges in prod** (audit 2026-07-03), so the DATA
+change is free; the risk is code/UI surface, not data. Re-confirm the 0-count at
+migration time.
+
+**A. Simplify pure branches** (each becomes a no-op filter once every edge is
+substantive): `graph.ts` `substantiveAncestors` (:124), `substantiveDescendants`
+(:152), `litCorners` (:202), `rosterCoverage` (:316), `collectionMembersCovered`
+(:353); `knowledge-tree.ts` home-parent containment (:149), grow-rim collection
+exclusion (:281), `collectCollections` (:333).
+
+**B. Remove collection-only surfaces** (no substantive equivalent — DELETE, don't
+just filter): `graph.ts` `collectionCoverage` / `collectionMembersCovered` /
+`collectCollections`; the `collections` array in `knowledge-tree.ts`; the
+`collections` prop + coverage-strip render in
+`components/knowledge/KnowledgeBubbleMap.tsx`.
+
+**C. Schema / DDL** (migration 0110): `ALTER TABLE "KnowledgeEdge" DROP COLUMN
+"edge_type"` + drop the CHECK; remove `edgeType` from `schema.ts:850`; remove the
+`edge_type IN (...)` from the `instrumentation.ts:376` boot-guard CREATE TABLE.
+
+**D. Admin write layer**: `knowledge-graph.ts` `EdgeType` type (:15) + hardcoded
+`edgeType: 'substantive'` on attach/ratify (:388/:450/:531); `route.ts`
+`edgeTypeSchema` + edge create/ratify inputs; `KnowledgeAdminClient.tsx` edge-type
+picker + ratify buttons (:1429/:1496-1514/:1881/:1924/:1934/:1981).
+
+**E. The one LIVE consumer — verify no-op**: supply-depth rollup
+`getDurablePoolDepthForDomains` (`retrieval-demand.ts:168`) already counts
+substantive-only; with 0 collection edges, dropping the type changes nothing.
+
+**F. Single-parent enforcement — the open decision.** The spec wants a
+single-parent containment tree so "parent = sum of its leaves" doesn't
+double-count a shared leaf. Options: (1) enforce now — unique constraint on
+`child_domain_key` + a migration to resolve existing multi-parent leaves; (2)
+defer — drop only `edge_type` now, keep multi-parent, tackle single-parent in P5.
+**Phase-4-0 query RAN (prod, 2026-07-04): only 1 of 91 children has >1 parent**
+(max 2) — so enforcing single-parent now is nearly free (resolve one leaf +
+add the unique constraint). Recommend option (1).
+
+**Sequencing (within P4):** code first (stop reading `edge_type`: A+B+D), THEN the
+migration (C), so no deploy window reads a dropped column. Low data risk; the real
+work is deleting the collection-coverage UI cleanly + the single-parent call.
 
 ## Migration / supersession
 
