@@ -11,7 +11,7 @@ superseded by the implementation map below.
 
 | Piece | Where | Flag |
 |---|---|---|
-| Retrieval layer + per-domain daily cache (E) | `src/server/daily/domain-reference.ts`, `src/server/db/queries/domain-reference.ts`, `DomainReferencePassage` (migration **0107**) | rides Consumer A's flag |
+| Retrieval layer + per-domain daily cache (E) | `src/server/daily/domain-reference.ts`, `src/server/db/queries/domain-reference.ts`, `DomainReferencePassage` (migration **0108**) | rides Consumer A's flag |
 | Consumer A — generation reference anchor (A2 soft preference, B2 provenance-distinct block) | `buildUserPrompt` reference block + fetch at the post-bank/post-guard call site in `src/server/daily/generate-questions.ts` | `GENERATION_WIKI_ANCHOR_ENABLED` |
 | Consumer B — verifier source allowlist (F1) | `buildVerifyRequestParams` in `src/server/quality/verify-question.ts` — reaches BOTH sync and Batch-API verify modes through the shared builder | `VERIFY_WEB_SEARCH_ALLOWED_DOMAINS` (e.g. `wikipedia.org,fandom.com`) |
 | Decision C guard — passage prose never persisted into a served question | `questionLeaksPassageText` filter applied before the generation gates | always-on when A is on |

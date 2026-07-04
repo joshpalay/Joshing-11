@@ -596,7 +596,16 @@ export async function applyMergesForUser(
 
       await tx
         .update(generatedQuestions)
-        .set({ canonicalSubcategory: target, broadCategory: broadCategory ?? 'General Knowledge' })
+        // domainKey MUST be recomputed with the canonical: the bank lookup and
+        // pool-depth roll-up fold on domain_key, so leaving it at the pre-merge
+        // value silently strands these rows (canonical 'Harry Potter Series'
+        // but domain_key 'j.k. rowling's harry potter series' — the 2026-07-03
+        // Harry Potter fragmentation traced to exactly this omission).
+        .set({
+          canonicalSubcategory: target,
+          domainKey: domainKey(target),
+          broadCategory: broadCategory ?? 'General Knowledge',
+        })
         .where(and(eq(generatedQuestions.userId, userId), inArray(generatedQuestions.canonicalSubcategory, sourceDomains)));
 
       await tx

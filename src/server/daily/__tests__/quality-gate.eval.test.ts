@@ -100,6 +100,43 @@ describe.skipIf(!evalsEnabled)('quality gate GENERIC_AT_TIER (live)', () => {
   );
 });
 
+describe.skipIf(!evalsEnabled)('quality gate MISLEADING_SETUP (live)', () => {
+  it(
+    'flags a setup whose clue points at a different answer than intended',
+    async () => {
+      // Buttkicker's 2026-07-03 tennis question: the "set won without the
+      // opponent taking a single game" clause describes a *love set* / "bagel",
+      // steering a knowledgeable player away from the intended one-word "Love".
+      const result = await findQualityFailures([
+        q(
+          'In tennis, a player who has won zero points in a game is said to have this score, which is also used to describe a set won without the opponent taking a single game. What is this term for a scoreless result?',
+          'Love',
+          'accessible',
+          'Tennis Fundamentals',
+        ),
+      ]);
+      expect([...result.toDrop]).toEqual([0]);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag the same fact asked cleanly',
+    async () => {
+      const result = await findQualityFailures([
+        q(
+          'In tennis scoring, what term is used for a score of zero?',
+          'Love',
+          'accessible',
+          'Tennis Fundamentals',
+        ),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+});
+
 describe.skipIf(!evalsEnabled)('quality gate FALSE_PREMISE (live)', () => {
   it(
     'flags a buried false-count premise even though it reads cleanly',

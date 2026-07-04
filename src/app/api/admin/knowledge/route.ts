@@ -59,17 +59,23 @@ const bodySchema = z.discriminatedUnion('action', [
     childDomainKey: keySchema,
     parentDomainKey: keySchema,
   }),
-  // P3: ask the near-ness tree for PROPOSED parent edges for a leaf. Proposals
-  // are suggestions only — nothing persists until a human ratifies.
+  // P3: PROPOSED parent edges for a leaf, from two sources — Wikidata (the
+  // preferred proposer: a clean is-a ontology, direct edges only) and the
+  // near-ness LLM (for hyper-specific territories Wikidata won't cover). Each
+  // proposal carries its provenance. Suggestions only — nothing persists until
+  // a human ratifies.
   z.object({ action: z.literal('propose'), childLabel: z.string().trim().min(1).max(120) }),
   // P3: the human commit. Creates the parent node if it doesn't exist yet
-  // (part of the deliberate ratify act, §4) and draws the typed edge.
+  // (part of the deliberate ratify act, §4) and draws the typed edge. The
+  // human always picks the edge type — Wikidata's is-a is a hint, not a
+  // verdict. wikidataQid present ⇒ stored on the parent node for provenance.
   z.object({
     action: z.literal('ratify'),
     childDomainKey: keySchema,
     parentLabel: z.string().trim().min(1).max(120),
     parentBroadCategory: z.string().trim().max(80).nullable().optional(),
     edgeType: edgeTypeSchema,
+    wikidataQid: z.string().regex(/^Q\d+$/).nullable().optional(),
   }),
   // Tree-editor verb: attach child under parent — MOVE when moveFrom present
   // (old home edge removed), COPY otherwise (§7 multi-parent). Filing under a
@@ -187,24 +193,70 @@ export async function POST(request: NextRequest) {
     }
 
     case 'propose': {
-      // Graceful degrade (slate P3): if the near-ness module is unavailable or
-      // has nothing cached, the queue is simply empty — manual authoring is
-      // always sufficient. Never an error the author has to care about.
+      // Graceful degrade (slate P3): every source that is unavailable —
+      // Wikidata egress blocked, near-ness module missing, nothing cached —
+      // simply contributes nothing. An empty queue is fine; manual authoring
+      // is always sufficient. Never an error the author has to care about.
+      const childKey = domainKey(data.childLabel);
+      const proposals: Array<{
+        label: string;
+        broadCategory: string | null;
+        rung: 'parent' | 'grandparent';
+        parentDomainKey: string;
+        source: 'wikidata' | 'llm';
+        qid: string | null;
+        description: string | null;
+      }> = [];
+      const seenKeys = new Set<string>([childKey]); // never propose the child as its own parent
+
+      // Wikidata first — the preferred proposer. Direct is-a edges only
+      // (depth 1); the module never throws, but guard the import too.
+      try {
+        const { getWikidataStructure } = await import('@/server/knowledge/wikidata');
+        const structure = await getWikidataStructure(data.childLabel);
+        for (const parent of structure?.parents ?? []) {
+          const key = domainKey(parent.label);
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
+          proposals.push({
+            label: parent.label,
+            broadCategory: null,
+            rung: 'parent',
+            parentDomainKey: key,
+            source: 'wikidata',
+            qid: parent.qid,
+            description: parent.description,
+          });
+        }
+      } catch {
+        // degrade — the LLM source (or manual entry) still serves
+      }
+
+      // Near-ness LLM second — covers hyper-specific Joshing territories
+      // Wikidata won't have ("Spy School Books 1-6").
       try {
         const { getOrBuildDomainRungs } = await import('@/server/knowledge/nearness-tree');
         const rungs = await getOrBuildDomainRungs(data.childLabel);
-        const proposals = rungs
-          .filter((r) => r.rung === 'parent' || r.rung === 'grandparent')
-          .map((r) => ({
+        for (const r of rungs) {
+          if (r.rung !== 'parent' && r.rung !== 'grandparent') continue;
+          const key = domainKey(r.domain);
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
+          proposals.push({
             label: r.domain,
             broadCategory: r.broadCategory,
             rung: r.rung,
-            parentDomainKey: domainKey(r.domain),
-          }));
-        return NextResponse.json({ proposals });
+            parentDomainKey: key,
+            source: 'llm',
+            qid: null,
+            description: null,
+          });
+        }
       } catch {
-        return NextResponse.json({ proposals: [] });
+        // degrade — whatever Wikidata found (possibly nothing) still returns
       }
+
+      return NextResponse.json({ proposals });
     }
 
     case 'attach_child': {
@@ -295,6 +347,7 @@ export async function POST(request: NextRequest) {
           parentLabel: data.parentLabel,
           parentBroadCategory: data.parentBroadCategory ?? null,
           edgeType: data.edgeType,
+          wikidataQid: data.wikidataQid ?? null,
         },
         session.userId,
       );

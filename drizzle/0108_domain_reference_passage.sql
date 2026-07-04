@@ -1,4 +1,4 @@
--- 0107_domain_reference_passage (D-FANDOM-GROUNDING-01, ratified A2+B2+C+D1+E+F1)
+-- 0108_domain_reference_passage (D-FANDOM-GROUNDING-01, ratified A2+B2+C+D1+E+F1)
 --
 -- Per-domain reference-passage cache: one row per canonical_subcategory holding a
 -- canon-scoped extract retrieved from Wikipedia (primary) or Fandom (fallback for

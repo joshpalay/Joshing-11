@@ -1,5 +1,5 @@
 /**
- * Read/write layer for DomainReferencePassage (0107, D-FANDOM-GROUNDING-01) —
+ * Read/write layer for DomainReferencePassage (0108, D-FANDOM-GROUNDING-01) —
  * the per-domain reference-passage cache. Retrieval/orchestration lives in
  * src/server/daily/domain-reference.ts; this module only touches the table.
  */

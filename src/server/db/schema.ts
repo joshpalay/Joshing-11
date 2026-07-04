@@ -827,6 +827,9 @@ export const knowledgeNodes = pgTable(
     masteryThreshold: integer('mastery_threshold'),
     broadCategory: text('broad_category'),
     fieldHue: text('field_hue'),
+    // Wikidata provenance (ADMIN-01 P3): the QID this node was ratified from.
+    // NULL for manually-authored / LLM-proposed nodes.
+    wikidataQid: text('wikidata_qid'),
     createdAt: createdAt(),
   },
   (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
@@ -1623,7 +1626,7 @@ export const llmUsageEvent = pgTable(
   ],
 );
 
-// D-FANDOM-GROUNDING-01 (0107): per-domain reference-passage cache — one row per
+// D-FANDOM-GROUNDING-01 (0108): per-domain reference-passage cache — one row per
 // canonical_subcategory, refreshed on a daily TTL (decision E). Feeds two
 // consumers off ONE retrieval: the generation prompt's reference anchor
 // (Consumer A, GENERATION_WIKI_ANCHOR_ENABLED) and — via the same source

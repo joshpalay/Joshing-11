@@ -817,6 +817,7 @@ function TreeRow({
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [peekOpen, setPeekOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [placesOpen, setPlacesOpen] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [childLabel, setChildLabel] = useState('');
@@ -1158,6 +1159,18 @@ function TreeRow({
             <button
               type="button"
               onClick={() => {
+                setSuggestOpen((v) => !v);
+                setActionsOpen(false);
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              title="Ask Wikidata (and the LLM) for candidate parents — you ratify or reject each one"
+            >
+              Suggest parents
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 setActionsOpen(false);
                 onPick({ mode: 'merge', childKey: nodeKey, childLabel: node.label, fromParentKey: parentKey });
               }}
@@ -1222,6 +1235,16 @@ function TreeRow({
         ) : null}
 
         {peekOpen ? <QuestionsPeek domainKeyValue={nodeKey} onClose={() => setPeekOpen(false)} /> : null}
+
+        {suggestOpen ? (
+          <ParentSuggestions
+            childKey={nodeKey}
+            childLabel={node.label}
+            existingParentKeys={new Set(parentsByChild.get(nodeKey) ?? [])}
+            onRatified={onDone}
+            onClose={() => setSuggestOpen(false)}
+          />
+        ) : null}
 
         {addingChild ? (
           <span className="flex w-full items-center gap-1.5 pl-6 pt-1">
@@ -1336,6 +1359,171 @@ function QuestionsPeek({
                 — {q.answer}
                 {q.source === 'bank' ? ' · bank' : ''}
                 {q.suppressed ? ' · out of circulation' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-muted-foreground mt-1.5 text-xs underline-offset-2 hover:underline"
+      >
+        close
+      </button>
+    </div>
+  );
+}
+
+// B-KNOWLEDGE-ADMIN-01 P3 — the per-territory proposal queue. Two sources feed
+// it: Wikidata (preferred — a clean is-a ontology, direct edges only) and the
+// near-ness LLM (for territories Wikidata won't have). Provenance is shown on
+// every card; the human always picks the edge type (Wikidata's is-a suggests
+// substantive, but P279 ≠ "you learn about the parent"); Ratify is the ONLY
+// write, Reject discards client-side and persists nothing (§4).
+type ParentProposal = {
+  label: string;
+  broadCategory: string | null;
+  rung: 'parent' | 'grandparent';
+  parentDomainKey: string;
+  source: 'wikidata' | 'llm';
+  qid: string | null;
+  description: string | null;
+};
+
+function ParentSuggestions({
+  childKey,
+  childLabel,
+  existingParentKeys,
+  onRatified,
+  onClose,
+}: {
+  childKey: string;
+  childLabel: string;
+  existingParentKeys: Set<string>;
+  onRatified: () => void;
+  onClose: () => void;
+}) {
+  const [proposals, setProposals] = useState<ParentProposal[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+    void (async () => {
+      const res = await post({ action: 'propose', childLabel });
+      if (!res.ok) {
+        setError(`Couldn't fetch suggestions (${res.status}).`);
+        return;
+      }
+      const body = res.body as unknown as { proposals: ParentProposal[] } | null;
+      // A parent this child already lives under isn't a proposal — drop it.
+      setProposals((body?.proposals ?? []).filter((p) => !existingParentKeys.has(p.parentDomainKey)));
+    })();
+    // existingParentKeys is read once on the initial load by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childLabel]);
+
+  async function ratify(proposal: ParentProposal, edgeType: (typeof EDGE_TYPES)[number]) {
+    if (pendingKey) return;
+    setPendingKey(proposal.parentDomainKey);
+    setError(null);
+    const res = await post({
+      action: 'ratify',
+      childDomainKey: childKey,
+      parentLabel: proposal.label,
+      parentBroadCategory: proposal.broadCategory,
+      edgeType,
+      wikidataQid: proposal.qid,
+    });
+    setPendingKey(null);
+    if (!res.ok) {
+      setError(`Ratify failed (${res.status}).`);
+      return;
+    }
+    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
+    onRatified();
+  }
+
+  function reject(proposal: ParentProposal) {
+    // Discard — writes nothing (§4).
+    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
+  }
+
+  return (
+    <div
+      className="mt-1 w-full rounded-md border p-2 text-[13px]"
+      style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+    >
+      <p className="text-muted-foreground mb-1.5 text-xs">
+        Proposed parents for <strong>{childLabel}</strong> — ratifying adds an unlit corner for
+        players who haven&apos;t earned it; it never changes anyone&apos;s existing mastery.
+      </p>
+      {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+      {proposals === null && !error ? (
+        <p className="text-muted-foreground animate-pulse text-xs">Asking Wikidata and the LLM…</p>
+      ) : proposals !== null && proposals.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          No suggestions — neither source knows this territory. Add a parent manually with + Child
+          on the parent, or Move.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {(proposals ?? []).map((p) => (
+            <li key={p.parentDomainKey} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 truncate font-medium text-[var(--brand-ink)]">{p.label}</span>
+              <span
+                className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                style={
+                  p.source === 'wikidata'
+                    ? { color: 'var(--brand-navy)', background: 'var(--surface-2)' }
+                    : { color: 'var(--text-muted)', background: 'var(--surface-2)' }
+                }
+                title={
+                  p.source === 'wikidata'
+                    ? `Wikidata entity ${p.qid} — direct is-a relation`
+                    : 'Proposed by the near-ness LLM'
+                }
+              >
+                {p.source === 'wikidata' ? `Wikidata ${p.qid}` : 'LLM'}
+              </span>
+              {p.description ? (
+                <span className="text-muted-foreground min-w-0 truncate text-xs">{p.description}</span>
+              ) : null}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                {EDGE_TYPES.map((edgeType) => (
+                  <button
+                    key={edgeType}
+                    type="button"
+                    disabled={pendingKey !== null}
+                    onClick={() => void ratify(p, edgeType)}
+                    className="inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium disabled:opacity-40"
+                    style={
+                      edgeType === 'substantive'
+                        ? { borderColor: 'var(--success)', color: 'var(--success)' }
+                        : { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
+                    }
+                    title={
+                      edgeType === 'substantive'
+                        ? 'Ratify: understanding this child teaches you about the parent (depth counts)'
+                        : 'Ratify as coverage-only grouping'
+                    }
+                  >
+                    {pendingKey === p.parentDomainKey ? '…' : `Ratify ${edgeType}`}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={pendingKey !== null}
+                  onClick={() => reject(p)}
+                  className="inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                  title="Discard this proposal — nothing is saved"
+                >
+                  Reject
+                </button>
               </span>
             </li>
           ))}

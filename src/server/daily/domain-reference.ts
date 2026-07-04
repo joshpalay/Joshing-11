@@ -4,7 +4,7 @@
  * One canon-scoped reference passage per (domain, day), retrieved via the
  * Anthropic web_search tool restricted to Wikipedia + Fandom (D1: reuse the
  * native tool rather than build a fetch+parse layer; D2 deferred). Cached in
- * DomainReferencePassage (0107) so the whole org pays at most one retrieval per
+ * DomainReferencePassage (0108) so the whole org pays at most one retrieval per
  * domain per day — every user's generation run after the first reads the cache.
  *
  * Consumer A (generate-questions.ts) feeds the passage into the generation
