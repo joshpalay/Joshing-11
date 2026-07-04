@@ -764,6 +764,13 @@
       "when": 1785888000000,
       "tag": "0108_domain_reference_passage",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1785974400000,
+      "tag": "0109_knowledge_node_weight",
+      "breakpoints": true
     }
   ]
 }

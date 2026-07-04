@@ -368,6 +368,11 @@ export async function register() {
       await db.execute(sql`
         ALTER TABLE "KnowledgeNode" ADD COLUMN IF NOT EXISTS "wikidata_qid" text
       `);
+      // Mastery v2 (migration 0109): depth-weight seed on each node. Additive
+      // nullable column — same repair rationale as the 0107 wikidata_qid guard.
+      await db.execute(sql`
+        ALTER TABLE "KnowledgeNode" ADD COLUMN IF NOT EXISTS "node_weight" integer
+      `);
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS "KnowledgeEdge" (
           "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
