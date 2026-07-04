@@ -22,6 +22,7 @@
 import { eq } from 'drizzle-orm';
 
 import { db, knowledgeLeafMastery } from '@/server/db';
+import { domainKey } from '@/lib/knowledge/domain-key';
 import { substantiveDescendants, type GraphEdge } from '@/server/knowledge/graph';
 import {
   computeLeafBar,
@@ -48,6 +49,31 @@ export function isKnowledgeMasteryV2Enabled(): boolean {
  * mid-weight rather than skew coverage.
  */
 export const DEFAULT_NODE_WEIGHT = 3;
+
+/**
+ * Points a typical correct answer awards, used to convert a domain's question
+ * COUNT into a reachable-supply points ceiling. 50 = a Moderate first_correct
+ * (DIFFICULTY_BASE_POINTS); CALIBRATION-PENDING like DEFAULT_POINTS_PER_WEIGHT.
+ */
+export const REACHABLE_POINTS_PER_QUESTION = 50;
+
+/**
+ * Build the reachable-supply cap (in points) per folded domain from corpus
+ * question counts — a leaf's bar can never exceed what its existing questions
+ * can award (spec decision 5: a deep-but-thin domain stays masterable). Folds
+ * label variants together via domainKey. Pure.
+ */
+export function reachableSupplyFromDepths(
+  depths: readonly { label: string; questionCount: number }[],
+): Map<string, number> {
+  const byKey = new Map<string, number>();
+  for (const d of depths) {
+    const key = domainKey(d.label);
+    const points = Math.max(0, d.questionCount) * REACHABLE_POINTS_PER_QUESTION;
+    byKey.set(key, (byKey.get(key) ?? 0) + points);
+  }
+  return byKey;
+}
 
 export type V2Node = {
   domainKey: string;
