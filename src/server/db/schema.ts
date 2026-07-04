@@ -830,12 +830,6 @@ export const knowledgeNodes = pgTable(
     // Wikidata provenance (ADMIN-01 P3): the QID this node was ratified from.
     // NULL for manually-authored / LLM-proposed nodes.
     wikidataQid: text('wikidata_qid'),
-    // Mastery v2 (docs/thinking/MASTERY-MODEL-v2.md) DEPTH WEIGHT: a topic-size /
-    // breadth proxy on a ~1–10 scale, seeded from Wikidata child-count (LLM
-    // fallback) and human-overridable. Distinct from mastery_threshold (the v1
-    // parent bar) and from "N Qs" depth (a question count). NULL → unseeded; read
-    // by nothing yet (dark until the v2 read path in Phase 5).
-    nodeWeight: integer('node_weight'),
     createdAt: createdAt(),
   },
   (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
