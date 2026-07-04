@@ -110,6 +110,8 @@ export type CreateNodeInput = {
   fieldHue: string | null;
   /** Wikidata provenance (ADMIN-01 P3) — set when the node is ratified from a Wikidata proposal. */
   wikidataQid?: string | null;
+  /** Mastery v2 depth weight (1–10); seeded at the route boundary or set by an admin. Null = unseeded. */
+  nodeWeight?: number | null;
 };
 
 export type NodeResult =
@@ -144,6 +146,7 @@ export async function createKnowledgeNode(
         broadCategory: input.broadCategory,
         fieldHue: input.fieldHue,
         wikidataQid: input.wikidataQid ?? null,
+        nodeWeight: input.nodeWeight ?? null,
       })
       .returning();
     console.info('[knowledge-admin] node created', { actorUserId, label: input.label, key });
@@ -200,6 +203,7 @@ export async function updateKnowledgeNode(
       ...(input.masteryThreshold !== undefined ? { masteryThreshold: input.masteryThreshold } : {}),
       ...(input.broadCategory !== undefined ? { broadCategory: input.broadCategory } : {}),
       ...(input.fieldHue !== undefined ? { fieldHue: input.fieldHue } : {}),
+      ...(input.nodeWeight !== undefined ? { nodeWeight: input.nodeWeight } : {}),
     })
     .where(eq(knowledgeNodes.id, input.id))
     .returning();
