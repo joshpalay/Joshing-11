@@ -16,7 +16,6 @@ import {
 } from '@/server/db/queries/knowledge-graph';
 import { proposeKnowledgeStructure } from '@/server/knowledge/propose-structure';
 import { mergeDomainIntoTarget } from '@/server/knowledge/merge-domain';
-import { computeNodeWeight } from '@/server/knowledge/node-weight';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +37,6 @@ const bodySchema = z.discriminatedUnion('action', [
     masteryThreshold: z.number().int().min(1).max(1_000_000).nullable().optional(),
     broadCategory: z.string().trim().max(80).nullable().optional(),
     fieldHue: z.string().trim().max(40).nullable().optional(),
-    nodeWeight: z.number().int().min(1).max(10).nullable().optional(),
   }),
   z.object({
     action: z.literal('edit_node'),
@@ -48,7 +46,6 @@ const bodySchema = z.discriminatedUnion('action', [
     masteryThreshold: z.number().int().min(1).max(1_000_000).nullable().optional(),
     broadCategory: z.string().trim().max(80).nullable().optional(),
     fieldHue: z.string().trim().max(40).nullable().optional(),
-    nodeWeight: z.number().int().min(1).max(10).nullable().optional(),
   }),
   z.object({
     action: z.literal('create_edge'),
@@ -132,9 +129,6 @@ export async function POST(request: NextRequest) {
 
   switch (data.action) {
     case 'create_node': {
-      // Mastery v2: seed the depth weight when the admin didn't set one
-      // (Wikidata child-count → LLM fallback; null when neither resolves).
-      const nodeWeight = data.nodeWeight ?? (await computeNodeWeight(data.label)).weight;
       const result = await createKnowledgeNode(
         {
           label: data.label,
@@ -142,7 +136,6 @@ export async function POST(request: NextRequest) {
           masteryThreshold: data.masteryThreshold ?? null,
           broadCategory: data.broadCategory ?? null,
           fieldHue: data.fieldHue ?? null,
-          nodeWeight,
         },
         session.userId,
       );
