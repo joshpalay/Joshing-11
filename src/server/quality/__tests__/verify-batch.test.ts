@@ -52,4 +52,29 @@ describe('buildVerifyRequestParams — the shared sync/batch request', () => {
     const params = buildVerifyRequestParams(input);
     expect(params.tools?.[0]).toMatchObject({ type: 'web_search_20250305', name: 'web_search' });
   });
+
+  it('restricts search to the wiki allowlist when VERIFY_WEB_SEARCH_ALLOWED_DOMAINS is set (F1)', () => {
+    const prev = process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
+    try {
+      process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = 'wikipedia.org, fandom.com';
+      const params = buildVerifyRequestParams(input);
+      expect(params.tools?.[0]).toMatchObject({
+        allowed_domains: ['wikipedia.org', 'fandom.com'],
+      });
+    } finally {
+      if (prev === undefined) delete process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
+      else process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = prev;
+    }
+  });
+
+  it('leaves search unrestricted when the env var is unset (pre-existing behavior)', () => {
+    const prev = process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
+    try {
+      delete process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
+      const params = buildVerifyRequestParams(input);
+      expect(params.tools?.[0]).not.toHaveProperty('allowed_domains');
+    } finally {
+      if (prev !== undefined) process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = prev;
+    }
+  });
 });
