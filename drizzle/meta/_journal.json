@@ -778,6 +778,13 @@
       "when": 1786060800000,
       "tag": "0110_drop_knowledge_edge_type",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1786147200000,
+      "tag": "0111_knowledge_leaf_mastery",
+      "breakpoints": true
     }
   ]
 }

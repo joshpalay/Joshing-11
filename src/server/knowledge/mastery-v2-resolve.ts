@@ -19,6 +19,9 @@
  * (buildKnowledgeTree behind KNOWLEDGE_MASTERY_V2) land in the follow-up P5 step.
  */
 
+import { eq } from 'drizzle-orm';
+
+import { db, knowledgeLeafMastery } from '@/server/db';
 import { substantiveDescendants, type GraphEdge } from '@/server/knowledge/graph';
 import {
   computeLeafBar,
@@ -135,4 +138,49 @@ export function resolveV2Mastery(
   }
 
   return { leaves, parents };
+}
+
+// ─── DB-backed wrapper (mirrors parent-mastery.ts's getParentMasteryForUser) ───
+
+export async function getFrozenLeafKeys(userId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ leafDomainKey: knowledgeLeafMastery.leafDomainKey })
+    .from(knowledgeLeafMastery)
+    .where(eq(knowledgeLeafMastery.userId, userId));
+  return new Set(rows.map((r) => r.leafDomainKey));
+}
+
+// Idempotent stamp — the unique (user, leaf) index makes a re-master a no-op.
+export async function freezeLeafMastery(userId: string, leafKey: string): Promise<void> {
+  await db
+    .insert(knowledgeLeafMastery)
+    .values({ userId, leafDomainKey: leafKey })
+    .onConflictDoNothing();
+}
+
+/**
+ * DB-backed resolve: reads the leaf-freeze ledger, resolves v2 mastery, and stamps
+ * any freshly-mastered leaf so it becomes terminal. Flag-off returns pure
+ * computation with an empty frozen set and never writes — so this is inert until
+ * KNOWLEDGE_MASTERY_V2 flips.
+ */
+export async function getV2MasteryForUser(
+  userId: string,
+  nodes: readonly V2Node[],
+  edges: readonly GraphEdge[],
+  pointsByKey: ReadonlyMap<string, number>,
+  options: ResolveV2Options = {},
+): Promise<V2MasteryResult> {
+  const enabled = isKnowledgeMasteryV2Enabled();
+  const frozen = enabled ? await getFrozenLeafKeys(userId) : new Set<string>();
+  const result = resolveV2Mastery(nodes, edges, pointsByKey, frozen, options);
+
+  if (enabled) {
+    for (const [key, leaf] of result.leaves) {
+      if (leaf.isMaster && !frozen.has(key)) {
+        await freezeLeafMastery(userId, key); // best-effort terminal stamp
+      }
+    }
+  }
+  return result;
 }
