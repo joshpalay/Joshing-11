@@ -96,6 +96,96 @@ the live schema + a prod audit (0 collection edges).
   itself has a depth signal.
 - `leafBar` shape: exact function of `(depth, reachable supply)`.
 
+## Refinements from the current-code map (2026-07-04)
+
+Three parallel read-only investigations mapped the live system. Four things that
+change the plan:
+
+1. **The leaf bar is a NEW coupling.** Leaf tiers today are driven by a flat
+   constant `TIER_THRESHOLD_POINTS` (establishing 0 / familiar 100 / solid 1000 /
+   mastery 2000, `src/server/mastery/tiers.ts:4`). `KnowledgeNode.mastery_threshold`
+   feeds ONLY the parent rollup, never leaves (Phase 0: **0/77 leaves** have a
+   threshold set). So "depth sets the leaf bar" introduces depth into leaf math
+   that does not exist today — a larger change than decision #5 implied.
+2. **"Depth" is a taken word — use "weight"/"mass".** The admin tree's "N Qs" is
+   `depthByKey`, a question COUNT. The v2 depth-weight is a different quantity;
+   name it node **weight** to avoid the collision.
+3. **Seed source is Wikidata child-count / LLM, NOT Wikipedia section-count.**
+   `src/server/knowledge/wikidata.ts` explicitly forbids scraping Wikipedia's
+   graph and already provides a wired breadth proxy —
+   `getWikidataStructure(label).children.length` (P279 child count), cached, no
+   new HTTP. Seed = **Wikidata child-count first, Haiku LLM depth score fallback**
+   for non-Wikidata topics. (Revises decision #5's "section-count or LLM".)
+4. **Dropping `edge_type` is low-risk in prod but has a UI tail.** Its one
+   un-flagged live consumer is supply-depth rollup (`retrieval-demand.ts:168`),
+   which already counts substantive-only — and prod has 0 collection edges, so
+   collapsing changes no live behavior. BUT the collection-only surfaces
+   (`collectCollections`, `collectionMembersCovered`, the coverage-strip UI) must
+   be **deliberately removed**, not just filtered.
+
+Storage note (revises decision #5): prefer a **dedicated `node_weight` column**
+over overloading `mastery_threshold`, so v1 parent-bar semantics stay intact
+during v1/v2 coexistence (additive nullable migration).
+
+## Build plan (phased)
+
+Each phase is independently mergeable; risk rises with phase number; every
+irreversible step (migration, recompute, flag flip) is late and flag-gated.
+Logic (P1–P3) is proven before schema/surfaces (P4–P5).
+
+- **Phase 0 — Validation queries (no code). ✅ RAN 2026-07-04** (results below).
+- **Phase 1 — Pure v2 math** (zero DB, unit-tested): `leafProgress =
+  min(1, earned/leafBar)`, `parentCoverage = Σ(weight·leafProgress)/Σweight`,
+  mastered ≥ 0.75, `leafBar = f(depth, reachableSupply)`. Tests mirror
+  `parent-mastery.test.ts`. Wired to nothing.
+- **Phase 2 — Node weight: storage + seeding** (behind flag, no live read
+  change): add `node_weight` column (additive nullable migration); seed in
+  `createKnowledgeNode` (`knowledge-graph.ts:134`) + backfill script (model on
+  `backfill-domain-key.ts`); source Wikidata child-count → LLM fallback;
+  human-editable via the admin "bar" field extended to weight.
+- **Phase 3 — Recompute engine + reclassification writer** (script-first, behind
+  flag): rebuild `PLAYER_MASTERY` from `MASTERY_EVENTS × current taxonomy` with
+  the null-`question_id` fallback (re-bucket by the question's current domain
+  where present, else the event's stored label); validate it reproduces today's
+  aggregate before trusting. Then `reclassifyQuestionsByIds` (updates only the 3
+  question columns, never per-user tables) + a `reclassify_questions` admin action
+  off the `list_questions` panel.
+- **Phase 4 — Drop `edge_type` / single-parent tree** (schema migration): remove
+  edge-type branches (`graph.ts:124/152/202/316/353`,
+  `knowledge-tree.ts:149/281/333`), deliberately remove collection-only UI, drop
+  the column + update the `instrumentation.ts:376` boot guard. Decide
+  single-parent enforcement here.
+- **Phase 5 — Wire v2 into read surfaces** (behind `KNOWLEDGE_MASTERY_V2`, v1
+  default): replace the inline parent calc (`knowledge-tree.ts:212`) with v2
+  coverage; leaf progress uses the depth-capped bar; **invert the freeze** (freeze
+  the leaf, compute the parent live); retire/repurpose `KnowledgeParentMastery`.
+- **Phase 6 — Flip + backfill + validate**: backfill weights (P2), run recompute
+  (P3), decide leaf-freeze grandfather backfill, flip flag preview→prod, verify no
+  lost leaf mastery.
+
+### Phase 0 results (prod, 2026-07-04)
+
+- **Seeding is tiny.** 113 nodes: 26 parents (all have a threshold), **77 leaves
+  (0 have one)**, 10 "both" (1 set). Node-weight seeding ≈ 113 Wikidata/LLM calls,
+  ~86 starting from nothing — cheap, cacheable. Confirms refinement #1.
+- **Recompute feasible; ~12.5% of events need the label fallback.** 1,345
+  `MASTERY_EVENTS`: 1,177 (87.5%) carry a `question_id` → re-bucketable by current
+  domain; 168 (12.5%) are null-`question_id` → fall back to the event's stored
+  label (72 `domain_merged` bookkeeping, inherently label-only; 96 bot/
+  personal-daily `live_correct`/`catchup_correct` with `questionId:null`). Small,
+  clear rule.
+- **Almost nobody is near mastery — migration blast radius is near-zero.** 212
+  `PLAYER_MASTERY` rows: 138 establishing, 73 familiar, **1 solid, 0 mastery**
+  (max 1,396, avg 101 vs the 1000/2000 bars). The P6 grandfather concern is nearly
+  moot (no high-tier players to protect) — but v2 bars need calibrating for this
+  scale or "mastery" stays unreachable.
+- **Reclassification earns its keep, bounded.** Of 1,257 bank questions, **111
+  (~8.8%)** are tagged at a node that IS a parent (has children) → candidates to
+  push into a child. Real, not a backlog. (35 parent keys, 89 child keys across
+  the 84 edges.)
+
+Net: nothing in Phase 0 blocks the plan.
+
 ## Migration / supersession
 
 - **Revises `parent-mastery.ts`.** The terminal parent-freeze ledger
