@@ -8,6 +8,7 @@ import {
   getCorpusLabelPoints,
 } from '@/server/db/queries/crafter-demand';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
+import { getRetrievalConfig } from '@/server/daily/retrieval-config';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 import { KnowledgeAdminClient } from './KnowledgeAdminClient';
@@ -35,8 +36,11 @@ export default async function AdminKnowledgePage() {
     getCorpusLabelGenStats(),
   ]);
   const ownDepthByKey: Record<string, number> = {};
+  const ownMachineDepthByKey: Record<string, number> = {};
   for (const entry of corpusDepths) {
-    ownDepthByKey[domainKey(entry.label)] = entry.machineDepth + entry.humanAuthored;
+    const key = domainKey(entry.label);
+    ownDepthByKey[key] = (ownDepthByKey[key] ?? 0) + entry.machineDepth + entry.humanAuthored;
+    ownMachineDepthByKey[key] = (ownMachineDepthByKey[key] ?? 0) + entry.machineDepth;
   }
   const ownPointsByKey: Record<string, number> = {};
   for (const entry of corpusPoints) {
@@ -60,9 +64,31 @@ export default async function AdminKnowledgePage() {
     if (list) list.push(edge.childDomainKey);
     else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
   }
+  // "Capped" = tapped out at the narrow-KB / area-expansion gate boundary
+  // (kb-exhaustion.ts fires below `poolDepthThreshold` servable facts, where the
+  // system stops serving fresh Qs and pushes expansion). To mean EXHAUSTED, not
+  // merely under-generated, a leaf must (a) have been mined (generated ≥ threshold
+  // times), (b) still hold fewer than threshold servable machine facts, AND (c)
+  // show generation actually hitting a wall — mostly duplicates, or producing
+  // nothing servable at all. A big topic with a low dup rate stays "needs
+  // generation", not capped.
+  const POOL_THRESHOLD = getRetrievalConfig().poolDepthThreshold;
+  const CAPPED_DUP_RATE = 0.5;
+  const nodeKindByKey = new Map(nodes.map((n) => [n.domainKey, n.nodeKind]));
+  const isCappedLeaf = (key: string): boolean => {
+    if (nodeKindByKey.get(key) === 'parent') return false;
+    const gen = ownGenByKey[key];
+    if (!gen || gen.total < POOL_THRESHOLD) return false; // not mined enough to judge
+    if ((ownMachineDepthByKey[key] ?? 0) >= POOL_THRESHOLD) return false; // pool is healthy
+    const dupRate = gen.total > 0 ? gen.dupes / gen.total : 0;
+    return (ownMachineDepthByKey[key] ?? 0) === 0 || dupRate >= CAPPED_DUP_RATE;
+  };
+
   const depthByKey: Record<string, number> = { ...ownDepthByKey };
   const pointsByKey: Record<string, number> = { ...ownPointsByKey };
   const genStatsByKey: Record<string, { total: number; dupes: number }> = {};
+  // self = this leaf is capped; descendants = capped leaves under a parent.
+  const cappedByKey: Record<string, { self: boolean; descendants: number }> = {};
   for (const node of nodes) {
     const key = node.domainKey;
     const descendants = new Set<string>();
@@ -77,15 +103,18 @@ export default async function AdminKnowledgePage() {
     let pointsSum = ownPointsByKey[key] ?? 0;
     let genTotal = ownGenByKey[key]?.total ?? 0;
     let genDupes = ownGenByKey[key]?.dupes ?? 0;
+    let cappedDescendants = 0;
     for (const d of descendants) {
       depthSum += ownDepthByKey[d] ?? 0;
       pointsSum += ownPointsByKey[d] ?? 0;
       genTotal += ownGenByKey[d]?.total ?? 0;
       genDupes += ownGenByKey[d]?.dupes ?? 0;
+      if (isCappedLeaf(d)) cappedDescendants += 1;
     }
     depthByKey[key] = depthSum;
     pointsByKey[key] = pointsSum;
     genStatsByKey[key] = { total: genTotal, dupes: genDupes };
+    cappedByKey[key] = { self: isCappedLeaf(key), descendants: cappedDescendants };
   }
 
   return (
@@ -95,6 +124,7 @@ export default async function AdminKnowledgePage() {
       depthByKey={depthByKey}
       pointsByKey={pointsByKey}
       genStatsByKey={genStatsByKey}
+      cappedByKey={cappedByKey}
     />
   );
 }
