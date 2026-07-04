@@ -1,35 +1,30 @@
 /**
- * Mastery v2 (docs/thinking/MASTERY-MODEL-v2.md) — Phase 5: the pure READ-MODEL.
+ * Mastery v2 (docs/thinking/MASTERY-MODEL-v2.md "Final model") — the READ-MODEL.
  *
- * Composes node WEIGHT (Phase 2, `node_weight`) and the v2 KERNEL (Phase 1,
- * mastery-v2.ts) over the containment tree (Phase 4, every edge is depth-eligible)
- * into per-node mastery, split by grain (spec decision 3):
+ * Projects a player's per-leaf points onto the containment tree and resolves each
+ * node's mastery against its own POINTS threshold:
+ *   points   = rolled-up points (a leaf's own; a parent's descendant sum)
+ *   progress = points / threshold
+ *   mastered = points ≥ 75% of threshold        (isMastered)
+ * One formula for every node. The only leaf/parent difference:
+ *   - LEAF (and 'both') mastery FREEZES — permanent once earned (the freeze
+ *     ledger); a pure PARENT is LIVE (climbs/falls as the map fills in).
+ *   - Parent thresholds are INDEPENDENT (the LLM's estimate of the whole area),
+ *     not a sum of leaves — so an incomplete area can't be falsely mastered.
  *
- *   - LEAF grain (freeze-able): every point-bearing node (nodeKind leaf | both).
- *     leafBar = f(weight, reachable supply); progress = points/bar; mastered when
- *     frozen OR points ≥ bar. Once a leaf is frozen it reads as master forever.
- *   - PARENT grain (LIVE coverage): a container's depth-weighted coverage of its
- *     descendant point-bearing leaves. Mastered at ≥ 75% (PARENT_MASTERY_COVERAGE).
- *     Never frozen — it rises and falls as the map grows (this is what recombines
- *     the fine sub-domains a question-domain recompute fragments; see the Phase 3
- *     finding in the spec).
- *
- * Pure and deterministic — no DB, no writes. The DB-backed wrapper (reading the
- * leaf-freeze ledger, loading nodes/edges/points) and the surface wiring
- * (buildKnowledgeTree behind KNOWLEDGE_MASTERY_V2) land in the follow-up P5 step.
+ * The pure `resolveV2Mastery` is unit-tested without a DB; `getV2MasteryForUser`
+ * is the thin DB wrapper (reads/stamps the leaf-freeze ledger). Inert until
+ * KNOWLEDGE_MASTERY_V2 flips.
  */
 
 import { eq } from 'drizzle-orm';
 
 import { db, knowledgeLeafMastery } from '@/server/db';
-import { domainKey } from '@/lib/knowledge/domain-key';
-import { substantiveDescendants, type GraphEdge } from '@/server/knowledge/graph';
+import { rollUpCredit, type GraphEdge } from '@/server/knowledge/graph';
 import {
-  computeLeafBar,
-  leafMastered,
-  leafProgress,
-  parentCoverage,
-  type LeafContribution,
+  DEFAULT_MASTERY_THRESHOLD,
+  isMastered,
+  masteryProgress,
 } from '@/server/knowledge/mastery-v2';
 
 function boolEnv(name: string, fallback: boolean): boolean {
@@ -38,132 +33,69 @@ function boolEnv(name: string, fallback: boolean): boolean {
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
-/** Flag gate for the v2 read path (the follow-up surface wiring reads this). */
+/** Flag gate for the v2 read path. */
 export function isKnowledgeMasteryV2Enabled(): boolean {
   return boolEnv('KNOWLEDGE_GRAPH_ENABLED', false) && boolEnv('KNOWLEDGE_MASTERY_V2', false);
-}
-
-/**
- * Fallback weight for an unseeded node. Every prod node was seeded 2026-07-04, but
- * a node minted after the backfill (before its seed runs) reads null — treat it as
- * mid-weight rather than skew coverage.
- */
-export const DEFAULT_NODE_WEIGHT = 3;
-
-/**
- * Points a typical correct answer awards, used to convert a domain's question
- * COUNT into a reachable-supply points ceiling. 50 = a Moderate first_correct
- * (DIFFICULTY_BASE_POINTS); CALIBRATION-PENDING like DEFAULT_POINTS_PER_WEIGHT.
- */
-export const REACHABLE_POINTS_PER_QUESTION = 50;
-
-/**
- * Build the reachable-supply cap (in points) per folded domain from corpus
- * question counts — a leaf's bar can never exceed what its existing questions
- * can award (spec decision 5: a deep-but-thin domain stays masterable). Folds
- * label variants together via domainKey. Pure.
- */
-export function reachableSupplyFromDepths(
-  depths: readonly { label: string; questionCount: number }[],
-): Map<string, number> {
-  const byKey = new Map<string, number>();
-  for (const d of depths) {
-    const key = domainKey(d.label);
-    const points = Math.max(0, d.questionCount) * REACHABLE_POINTS_PER_QUESTION;
-    byKey.set(key, (byKey.get(key) ?? 0) + points);
-  }
-  return byKey;
 }
 
 export type V2Node = {
   domainKey: string;
   nodeKind: 'leaf' | 'parent' | 'both';
-  nodeWeight: number | null;
+  /** The node's mastery threshold in POINTS (null → the code default). */
+  masteryThreshold: number | null;
 };
 
-export type LeafMastery = {
+export type V2NodeMastery = {
   domainKey: string;
-  leafBar: number;
-  /** 0..1 fraction of the bar earned. */
+  /** The points threshold in effect (seeded value or the default). */
+  threshold: number;
+  /** Rolled-up points (own for a leaf; descendant sum for a parent). */
+  points: number;
+  /** 0..1 fraction of the threshold earned. */
   progress: number;
-  /** frozen (permanent) OR points ≥ bar. */
+  /** points ≥ 75% of threshold, OR (leaf/both only) a frozen master. */
   isMaster: boolean;
 };
 
-export type ParentMastery = {
-  domainKey: string;
-  /** 0..1 depth-weighted coverage of descendant leaves. */
-  coverage: number;
-  /** coverage ≥ PARENT_MASTERY_COVERAGE. Live — never frozen. */
-  isMaster: boolean;
-};
+function thresholdOf(node: V2Node): number {
+  return node.masteryThreshold != null && node.masteryThreshold > 0
+    ? node.masteryThreshold
+    : DEFAULT_MASTERY_THRESHOLD;
+}
 
-export type V2MasteryResult = {
-  leaves: Map<string, LeafMastery>;
-  parents: Map<string, ParentMastery>;
-};
-
-export type ResolveV2Options = {
-  /** Override the weight→points mapping (mastery-v2 DEFAULT_POINTS_PER_WEIGHT otherwise). */
-  pointsPerWeight?: number;
-  /** Per-leaf cap: the points the domain's existing questions can actually award. */
-  reachableSupplyByKey?: ReadonlyMap<string, number>;
-};
+/** A node bears its own points (and its mastery freezes) unless it's a pure parent. */
+function freezeEligible(node: V2Node): boolean {
+  return node.nodeKind !== 'parent';
+}
 
 /**
- * Resolve v2 mastery for a set of authored nodes + containment edges + a player's
- * per-leaf points. `frozenLeaves` are leaves the player has permanently mastered
- * (the leaf-freeze ledger, read by the DB wrapper). Pure — inject everything.
+ * Resolve v2 mastery for the authored nodes + containment edges + a player's
+ * per-leaf points. `frozenLeaves` are leaves permanently mastered (the freeze
+ * ledger). Pure — one entry per node, same formula throughout.
  */
 export function resolveV2Mastery(
   nodes: readonly V2Node[],
   edges: readonly GraphEdge[],
   pointsByKey: ReadonlyMap<string, number>,
   frozenLeaves: ReadonlySet<string> = new Set(),
-  options: ResolveV2Options = {},
-): V2MasteryResult {
-  const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
-  const weightOf = (n: V2Node): number =>
-    n.nodeWeight != null && n.nodeWeight > 0 ? n.nodeWeight : DEFAULT_NODE_WEIGHT;
+): Map<string, V2NodeMastery> {
+  // Every node's rolled-up points: a leaf's own, a parent's descendant sum.
+  const totals = rollUpCredit(pointsByKey, edges);
 
-  // 1) LEAF grain — every point-bearing node (leaf or 'both').
-  const leaves = new Map<string, LeafMastery>();
+  const out = new Map<string, V2NodeMastery>();
   for (const node of nodes) {
-    if (node.nodeKind === 'parent') continue; // pure container, no own points
-    const leafBar = computeLeafBar({
-      weight: weightOf(node),
-      reachableSupplyPoints: options.reachableSupplyByKey?.get(node.domainKey),
-      pointsPerWeight: options.pointsPerWeight,
-    });
-    const points = pointsByKey.get(node.domainKey) ?? 0;
-    leaves.set(node.domainKey, {
+    const threshold = thresholdOf(node);
+    const points = totals.get(node.domainKey) ?? 0;
+    const frozen = freezeEligible(node) && frozenLeaves.has(node.domainKey);
+    out.set(node.domainKey, {
       domainKey: node.domainKey,
-      leafBar,
-      progress: leafProgress(points, leafBar),
-      isMaster: frozenLeaves.has(node.domainKey) || leafMastered(points, leafBar),
+      threshold,
+      points,
+      progress: masteryProgress(points, threshold),
+      isMaster: frozen || isMastered(points, threshold),
     });
   }
-
-  // 2) PARENT grain — LIVE depth-weighted coverage of descendant leaves.
-  const parents = new Map<string, ParentMastery>();
-  for (const node of nodes) {
-    if (node.nodeKind === 'leaf') continue; // not a container
-    const contributions: LeafContribution[] = [];
-    for (const descendantKey of substantiveDescendants(node.domainKey, edges)) {
-      const leaf = leaves.get(descendantKey);
-      if (!leaf) continue; // descendant is a pure parent — no own weight/points
-      const descendantNode = nodeByKey.get(descendantKey);
-      contributions.push({
-        weight: descendantNode ? weightOf(descendantNode) : DEFAULT_NODE_WEIGHT,
-        // A mastered/frozen leaf contributes in full; else its partial progress.
-        progress: leaf.isMaster ? 1 : leaf.progress,
-      });
-    }
-    const { coverage, isMaster } = parentCoverage(contributions);
-    parents.set(node.domainKey, { domainKey: node.domainKey, coverage, isMaster });
-  }
-
-  return { leaves, parents };
+  return out;
 }
 
 // ─── DB-backed wrapper (mirrors parent-mastery.ts's getParentMasteryForUser) ───
@@ -185,26 +117,26 @@ export async function freezeLeafMastery(userId: string, leafKey: string): Promis
 }
 
 /**
- * DB-backed resolve: reads the leaf-freeze ledger, resolves v2 mastery, and stamps
- * any freshly-mastered leaf so it becomes terminal. Flag-off returns pure
- * computation with an empty frozen set and never writes — so this is inert until
- * KNOWLEDGE_MASTERY_V2 flips.
+ * DB-backed resolve: reads the leaf-freeze ledger, resolves, and stamps any
+ * freshly-mastered LEAF/'both' node so it becomes terminal. Flag-off returns pure
+ * computation with an empty frozen set and never writes — inert until the flag.
  */
 export async function getV2MasteryForUser(
   userId: string,
   nodes: readonly V2Node[],
   edges: readonly GraphEdge[],
   pointsByKey: ReadonlyMap<string, number>,
-  options: ResolveV2Options = {},
-): Promise<V2MasteryResult> {
+): Promise<Map<string, V2NodeMastery>> {
   const enabled = isKnowledgeMasteryV2Enabled();
   const frozen = enabled ? await getFrozenLeafKeys(userId) : new Set<string>();
-  const result = resolveV2Mastery(nodes, edges, pointsByKey, frozen, options);
+  const result = resolveV2Mastery(nodes, edges, pointsByKey, frozen);
 
   if (enabled) {
-    for (const [key, leaf] of result.leaves) {
-      if (leaf.isMaster && !frozen.has(key)) {
-        await freezeLeafMastery(userId, key); // best-effort terminal stamp
+    for (const node of nodes) {
+      if (!freezeEligible(node)) continue; // only leaf/'both' mastery freezes
+      const entry = result.get(node.domainKey);
+      if (entry?.isMaster && !frozen.has(node.domainKey)) {
+        await freezeLeafMastery(userId, node.domainKey); // best-effort terminal stamp
       }
     }
   }

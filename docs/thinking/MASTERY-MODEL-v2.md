@@ -1,11 +1,70 @@
 # Mastery Model v2 — depth-weighted, projection-based
 
-**Status:** DESIGN (not built). Supersedes the shipped frozen-parent design in
-`src/server/knowledge/parent-mastery.ts`. Everything here is still behind
-`KNOWLEDGE_GRAPH_MASTERY` (off by default) — so this is a direction change made
-*before* the model is live, which is the cheap time to make it. · **Date:**
-2026-07-04 · Emerged from the taxonomy/mastery discussion; grounded in a read of
-the live schema + a prod audit (0 collection edges).
+**Status:** P1–P5 BUILT & merged, all **dark** behind `KNOWLEDGE_MASTERY_V2`
+(off). Supersedes the shipped frozen-parent design in `parent-mastery.ts`.
+**⚠️ REVISED 2026-07-04 — the depth-WEIGHT framing throughout the rest of this doc
+is SUPERSEDED; read "Final model" next.** · Emerged from the taxonomy/mastery
+discussion.
+
+## Final model (per-node POINTS threshold) — the CURRENT design
+
+After seeing the seeded 1–10 weights on the real admin tree, the "weight" framing
+proved confusing: it meant different things for a leaf (sized its own bar) vs a
+parent (a parent's own weight was actually **inert** — parent mastery used its
+leaves' weights). Reframed to a single, concrete, comparable number.
+
+**One number, one formula, everywhere:**
+
+- **Every node (leaf AND parent) carries a mastery threshold in POINTS** — the
+  existing `KnowledgeNode.mastery_threshold` column, now populated on leaves too
+  (v1 left 0/79 leaves unset). Seeded by an **LLM estimate of the topic's true
+  size** ("how many points of play demonstrate knowing this topic"): King Lear
+  ~1,500, Shakespearean Tragedy ~15,000. Human-editable.
+- **progress = your rolled-up points ÷ that node's threshold** — one 0–100%
+  number, identical meaning for a leaf and a parent, comparable across all
+  domains. (Leaf = its own points; parent = sum of descendant-leaf points via
+  `rollUpCredit`.)
+- **Mastered at ≥ 75%** of threshold — the same bar everywhere.
+- **Parent thresholds are INDEPENDENT, not sum-of-leaves.** A parent's threshold
+  is the LLM's estimate of the *whole area*, stable as leaves are authored — so
+  an incomplete area can't be falsely mastered (mastering Hamlet + King Lear out
+  of an eventual ten leaves ≈ 20% of Tragedy, not mastered — correct).
+- **No supply cap.** A leaf's threshold reflects the topic's real size, not the
+  current question count. Low early supply just means a topic isn't masterable
+  YET — honest, since the questions to demonstrate it don't exist yet.
+- **Grain (kept from decision 3 below):** leaf mastery **freezes** (permanent);
+  parent mastery is **live** (climbs as the map fills in).
+
+**Deliberate consequence:** mastery is rare/slow early (thin supply → few topics
+reachable) and *grows* as the supply engine deepens each area — the finite-set
+philosophy. Human-editable thresholds are the dial if a topic feels mis-sized.
+
+### What this supersedes (all merged, all dark)
+
+- **`node_weight`** (the 1–10 depth weight, Phase 2) — dropped; the per-node
+  number IS a points threshold now.
+- **`DEFAULT_POINTS_PER_WEIGHT`** + **`REACHABLE_POINTS_PER_QUESTION`** — dropped.
+- **The reachable-supply cap** (Phase 5 follow-up, PR #1401) — dropped.
+- **Decision 4** ("75% *depth-weighted coverage*") and **decision 5** ("external
+  weight proxy") below — replaced by the above. The **75% bar is kept.**
+
+### Rework (contained — everything is dark)
+
+1. **Seeding:** the LLM scorer outputs a POINTS threshold ("points to master
+   {topic}") per node → write to `mastery_threshold` for EVERY node (leaves
+   included); new backfill over all nodes. Replaces the `node_weight` seed.
+2. **Read-model (`mastery-v2-resolve.ts`):** leaf mastered = `points ≥ threshold`;
+   `progress = points/threshold`. Parent = `rolledPoints / ownThreshold ≥ 0.75`.
+   Delete `computeLeafBar`, `reachableSupplyFromDepths`, `DEFAULT_POINTS_PER_WEIGHT`,
+   `REACHABLE_POINTS_PER_QUESTION`, and the coverage-of-leaves calc.
+3. **Kernel (`mastery-v2.ts`):** `parentCoverage`/`leafBar` → the single
+   `points/threshold` progress. Keep `PARENT_MASTERY_COVERAGE = 0.75`.
+4. **Admin:** the "wt" (1–10) editor → a **points-threshold** editor on every row
+   (`mastery_threshold`, already wired via `edit_node`).
+5. **Schema:** drop the `node_weight` column (migration); `mastery_threshold`
+   already holds points.
+
+---
 
 ## The problem this fixes
 
