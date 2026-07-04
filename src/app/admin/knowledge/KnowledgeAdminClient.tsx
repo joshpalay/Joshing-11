@@ -47,10 +47,14 @@ export function KnowledgeAdminClient({
   nodes,
   edges,
   depthByKey,
+  pointsByKey,
+  genStatsByKey,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
   depthByKey: Record<string, number>;
+  pointsByKey: Record<string, number>;
+  genStatsByKey: Record<string, { total: number; dupes: number }>;
 }) {
   const router = useRouter();
 
@@ -63,10 +67,12 @@ export function KnowledgeAdminClient({
         <AdminTabs active="knowledge" />
         <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
           The territory structure — human-authored, always. Nodes are leaves/parents. Each row
-          shows its <strong>mastery weight</strong> (<em>wt</em> — the depth/mass of the topic,
-          1–10, color-coded shallow→deep; it scales mastery for leaves and each node&apos;s share
-          of a parent&apos;s coverage) and its question count (<em>Qs</em>, rolled up through the
-          subtree for parents). Nothing here touches questions or any player&apos;s mastery.
+          shows its <strong>mastery threshold</strong> (<em>pts</em> — the points to master the
+          topic, color-coded by size; edit it via ⋯), its question count (<em>Qs</em>), and the
+          points currently <em>avail</em>able there (difficulty-weighted) — the latter two rolled
+          up through the subtree for parents. A <em>⟳ dup</em> flag marks where new questions are
+          hard to find (a high share of generations come back duplicates). Nothing here touches
+          questions or any player&apos;s mastery.
         </p>
       </header>
 
@@ -76,6 +82,8 @@ export function KnowledgeAdminClient({
         nodes={nodes}
         edges={edges}
         depthByKey={depthByKey}
+        pointsByKey={pointsByKey}
+        genStatsByKey={genStatsByKey}
         onDone={() => router.refresh()}
       />
 
@@ -137,15 +145,31 @@ function thresholdColor(points: number): string {
   return 'var(--danger)'; // large
 }
 
+// "Hard to find questions" heat: the share of a domain's GENERATED questions that
+// came back DUPLICATES. A high share means the generator keeps repeating itself —
+// the topic's fresh facts are drying up, so new questions are hard to source (vs
+// a domain like Shakespearean Tragedy where they still come easily). Only shown
+// when there's a real sample AND it's actually hard (≥ 50%), so the tree
+// highlights only the territories that need authoring attention.
+const HARD_TO_SOURCE_MIN_SAMPLE = 10;
+const HARD_TO_SOURCE_MIN_RATE = 0.5;
+function dupRateColor(rate: number): string {
+  return rate >= 0.65 ? 'var(--danger)' : 'var(--accent-gold)'; // ≥65% red; 50–65% gold
+}
+
 function KnowledgeTreeEditor({
   nodes,
   edges,
   depthByKey,
+  pointsByKey,
+  genStatsByKey,
   onDone,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
   depthByKey: Record<string, number>;
+  pointsByKey: Record<string, number>;
+  genStatsByKey: Record<string, { total: number; dupes: number }>;
   onDone: () => void;
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -720,6 +744,8 @@ function KnowledgeTreeEditor({
                 ancestors={new Set()}
                 nodeByKey={nodeByKey}
                 depthByKey={depthByKey}
+                pointsByKey={pointsByKey}
+                genStatsByKey={genStatsByKey}
                 childrenByParent={childrenByParent}
                 parentCountByChild={parentCountByChild}
                 parentsByChild={parentsByChild}
@@ -785,6 +811,8 @@ function TreeRow({
   ancestors,
   nodeByKey,
   depthByKey,
+  pointsByKey,
+  genStatsByKey,
   childrenByParent,
   parentCountByChild,
   parentsByChild,
@@ -808,6 +836,8 @@ function TreeRow({
   ancestors: Set<string>;
   nodeByKey: Map<string, KnowledgeNodeRow>;
   depthByKey: Record<string, number>;
+  pointsByKey: Record<string, number>;
+  genStatsByKey: Record<string, { total: number; dupes: number }>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
   parentsByChild: Map<string, string[]>;
@@ -1049,6 +1079,28 @@ function TreeRow({
               <span className="text-muted-foreground" title="Questions in this area">
                 {depthByKey[nodeKey] ?? 0} Qs
               </span>
+              <span
+                className="text-muted-foreground"
+                title="Points currently available here (difficulty-weighted, rolled up) — eyeball against the threshold"
+              >
+                {(pointsByKey[nodeKey] ?? 0).toLocaleString()} avail
+              </span>
+              {(() => {
+                const g = genStatsByKey[nodeKey];
+                if (!g || g.total < HARD_TO_SOURCE_MIN_SAMPLE) return null;
+                const rate = g.dupes / g.total;
+                if (rate < HARD_TO_SOURCE_MIN_RATE) return null; // only flag where it's hard
+                const pct = Math.round(rate * 100);
+                return (
+                  <span
+                    className="font-medium"
+                    style={{ color: dupRateColor(rate) }}
+                    title={`${pct}% of generated questions here are duplicates — new ones are hard to find (${g.dupes}/${g.total} generated)`}
+                  >
+                    ⟳ {pct}% dup
+                  </span>
+                );
+              })()}
             </span>
             {/* Multi-parent chip: tap to see every place this territory lives
                 and jump to any of them. */}
@@ -1307,6 +1359,8 @@ function TreeRow({
               ancestors={new Set([...ancestors, nodeKey])}
               nodeByKey={nodeByKey}
               depthByKey={depthByKey}
+              pointsByKey={pointsByKey}
+              genStatsByKey={genStatsByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               parentsByChild={parentsByChild}
