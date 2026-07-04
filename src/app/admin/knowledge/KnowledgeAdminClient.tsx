@@ -237,6 +237,31 @@ function KnowledgeTreeEditor({
   const [error, setError] = useState<string | null>(null);
   const [newTopLabel, setNewTopLabel] = useState('');
 
+  // "Exhausted only" filter: the worklist of tapped-out areas without scanning.
+  // Visible set = every exhausted leaf plus its ancestor path (so it stays findable
+  // in context); null when off. Count drives the toggle label.
+  const [exhaustedOnly, setExhaustedOnly] = useState(false);
+  const exhaustedCount = useMemo(
+    () => nodes.reduce((n, node) => n + (exhaustedByKey[node.domainKey]?.self ? 1 : 0), 0),
+    [nodes, exhaustedByKey],
+  );
+  const exhaustedVisibleKeys = useMemo(() => {
+    if (!exhaustedOnly) return null;
+    const keys = new Set<string>();
+    for (const node of nodes) {
+      if (!exhaustedByKey[node.domainKey]?.self) continue;
+      keys.add(node.domainKey);
+      const stack = [...(parentsByChild.get(node.domainKey) ?? [])];
+      while (stack.length > 0) {
+        const p = stack.pop()!;
+        if (keys.has(p)) continue;
+        keys.add(p);
+        stack.push(...(parentsByChild.get(p) ?? []));
+      }
+    }
+    return keys;
+  }, [exhaustedOnly, nodes, exhaustedByKey, parentsByChild]);
+
   // Drag-and-drop state: what's being dragged (label for the overlay; key +
   // from-parent so every row can show whether it's a legal target), and the
   // pending drop awaiting the human's Move-vs-Also-list choice.
@@ -722,6 +747,29 @@ function KnowledgeTreeEditor({
         </p>
       ) : null}
 
+      {exhaustedCount > 0 ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExhaustedOnly((v) => !v)}
+            aria-pressed={exhaustedOnly}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium"
+            style={
+              exhaustedOnly
+                ? { borderColor: 'var(--danger)', color: 'var(--danger)' }
+                : { borderColor: 'var(--border)' }
+            }
+          >
+            ⛔ Exhausted only ({exhaustedCount})
+          </button>
+          {exhaustedOnly ? (
+            <span className="text-muted-foreground text-xs">
+              Showing only tapped-out areas and the path to them — author more to refill.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <DndContext
         sensors={sensors}
         // The drop target is wherever the FINGER is, not a rectangle overlap —
@@ -748,6 +796,7 @@ function KnowledgeTreeEditor({
                 parentKey={null}
                 depth={0}
                 ancestors={new Set()}
+                visibleKeys={exhaustedVisibleKeys}
                 nodeByKey={nodeByKey}
                 depthByKey={depthByKey}
                 pointsByKey={pointsByKey}
@@ -816,6 +865,7 @@ function TreeRow({
   parentKey,
   depth,
   ancestors,
+  visibleKeys,
   nodeByKey,
   depthByKey,
   pointsByKey,
@@ -842,6 +892,8 @@ function TreeRow({
   parentKey: string | null;
   depth: number;
   ancestors: Set<string>;
+  /** When non-null, only render rows in this set (exhausted leaves + ancestors). */
+  visibleKeys: ReadonlySet<string> | null;
   nodeByKey: Map<string, KnowledgeNodeRow>;
   depthByKey: Record<string, number>;
   pointsByKey: Record<string, number>;
@@ -895,9 +947,13 @@ function TreeRow({
   });
 
   if (!node || ancestors.has(nodeKey)) return null; // cycle guard
+  // Exhausted-only filter: skip any row not on an exhausted leaf's ancestor path.
+  if (visibleKeys && !visibleKeys.has(nodeKey)) return null;
 
   const children = childrenByParent.get(nodeKey) ?? [];
-  const isOpen = expanded.has(nodeKey);
+  // While filtering, force every surviving row open so the exhausted leaves show
+  // without manual expansion (off-path children still self-skip above).
+  const isOpen = expanded.has(nodeKey) || visibleKeys !== null;
   const parentCount = parentCountByChild.get(nodeKey) ?? 0;
   const isParentish = node.nodeKind !== 'leaf' || children.length > 0;
 
@@ -1391,6 +1447,7 @@ function TreeRow({
               parentKey={nodeKey}
               depth={depth + 1}
               ancestors={new Set([...ancestors, nodeKey])}
+              visibleKeys={visibleKeys}
               nodeByKey={nodeByKey}
               depthByKey={depthByKey}
               pointsByKey={pointsByKey}
