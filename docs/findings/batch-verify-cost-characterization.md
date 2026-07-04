@@ -6,10 +6,12 @@
 > 2. **`extra_fact` tightening** — the answer heuristic now requires bundling
 >    **plus** an assertion signal (`answerCarriesAdjacentClaim`), not just a
 >    comma/"and"; the explanation path is unchanged. Live by default; escape
->    hatch `PREFILTER_EXTRA_FACT_LEGACY=true`. **Measure the actual skip-rate
->    lift with `npx tsx scripts/measure-prefilter-skip-rate.ts` (read-only, zero
->    spend) and record the numbers here** — the 9%-skip baseline below is the
->    before.
+>    hatch `PREFILTER_EXTRA_FACT_LEGACY=true`.
+>    **MEASURED 2026-07-03: a near-NO-OP (skip 9.3% → 9.8%; no leak; hatch stays
+>    OFF).** See the dedicated before/after section below for the full numbers
+>    and the §5 retraction — the dominant router is the *explanation* path, so
+>    the operative cost dials are #3 (Batch API 50%) and the web-search-frequency
+>    posture, not the pre-filter.
 > 3. **Batch API mode** — `BATCH_VERIFY_ASYNC_ENABLED=true` (flag-off default)
 >    runs the cron two-phase over the Message Batches API: 50% off all token
 >    usage, no per-call timeout, verdicts land ~24h later. Docs confirm

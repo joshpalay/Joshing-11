@@ -31,6 +31,12 @@ import {
   getParentMasteryForUser,
   isKnowledgeGraphMasteryEnabled,
 } from '@/server/knowledge/parent-mastery';
+import {
+  getV2MasteryForUser,
+  isKnowledgeMasteryV2Enabled,
+  reachableSupplyFromDepths,
+} from '@/server/knowledge/mastery-v2-resolve';
+import { getCorpusLabelDepths } from '@/server/db/queries/crafter-demand';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // Gap-view framing for a substantive parent (D-KNOWLEDGE-MAP-USABILITY-01 C3):
@@ -129,6 +135,14 @@ export type BuildTreeOptions = {
    * on someone else's behalf.
    */
   includeGhosts?: boolean;
+  /**
+   * Mastery v2 (KNOWLEDGE_MASTERY_V2): the set of AUTHORED node keys mastered
+   * under the depth-weighted read-model (leaf ≥ bar / frozen, or parent ≥ 75%
+   * coverage). When present it REPLACES the v1 per-node master badge
+   * (leaf-tier + parentProgress). Un-authored owned leaves (rendered under the
+   * root) keep their v1 leaf-tier badge — v2 only knows authored nodes.
+   */
+  masteredOverride?: ReadonlySet<string>;
 };
 
 export function buildKnowledgeTree(
@@ -146,8 +160,9 @@ export function buildKnowledgeTree(
   const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
   const ownedByKey = new Map(owned.map((leaf) => [domainKey(leaf.domain), leaf]));
 
-  const substantive = edges.filter((e) => e.edgeType === 'substantive');
-  // §E home-parent: the FIRST substantive edge is the containment edge.
+  // §E home-parent: the FIRST edge is the containment edge (every edge is
+  // depth-eligible since the collection type was dropped 2026-07-04).
+  const substantive = edges;
   const homeParentByChild = new Map<string, string>();
   const homeChildrenByParent = new Map<string, string[]>();
   for (const edge of substantive) {
@@ -215,7 +230,11 @@ export function buildKnowledgeTree(
       ? frozenParents.has(key) ||
         parentProgress(totals.get(key) ?? 0, corners, node.masteryThreshold).isMaster
       : false;
-    const mastered = Boolean(ownedLeaf?.mastered) || parentMastered;
+    // v2 (when the override is present) owns the master badge for authored nodes;
+    // otherwise the v1 grain (leaf-tier OR parent threshold+corners) stands.
+    const mastered = options.masteredOverride
+      ? options.masteredOverride.has(key)
+      : Boolean(ownedLeaf?.mastered) || parentMastered;
 
     // Gap-view framing (C3) — the same numbers the mastery call just used,
     // surfaced so the map can say "6 of 9 · 1,240/2,000 pts" on focus.
@@ -273,18 +292,8 @@ export function buildKnowledgeTree(
     const heldFields = new Set(
       rootChildren.map((child) => child.field).filter((f): f is string => Boolean(f)),
     );
-    // Collection-only parents never rim (§7 — a set to cover, not a territory
-    // to enter): a parent whose child edges are all collection-type.
-    const substantiveParents = new Set(substantive.map((e) => e.parentDomainKey));
-    const collectionOnlyParents = new Set(
-      edges
-        .filter((e) => e.edgeType === 'collection')
-        .map((e) => e.parentDomainKey)
-        .filter((key) => !substantiveParents.has(key)),
-    );
     const rimCandidates = [...nodeByKey.values()].filter((node) => {
       if (homeParentByChild.has(node.domainKey) || isHeld(node.domainKey)) return false;
-      if (collectionOnlyParents.has(node.domainKey)) return false;
       const field = node.fieldHue ?? hueForBroadCategory(node.broadCategory);
       return field !== null && heldFields.has(field);
     });
@@ -305,50 +314,8 @@ export function buildKnowledgeTree(
 // The rim invites, it doesn't crowd — at most this many unheld roots at home.
 export const GROW_RIM_CAP = 3;
 
-export type CollectionSummary = {
-  label: string;
-  covered: number;
-  rosterSize: number;
-};
-
-/**
- * Collection parents (§7) are NOT containers of points, so they never enter
- * the packed view — they render as a coverage strip ("You've covered 2 of 3
- * Plays Starting With 'H'"). Only collections where the player has covered at
- * least one member appear; a wall of untouched sets isn't an invitation, it's
- * noise. Pure; unit-tested.
- */
-export function collectCollections(
-  owned: readonly OwnedLeaf[],
-  nodes: readonly AuthoredNode[],
-  edges: readonly GraphEdge[],
-): CollectionSummary[] {
-  const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
-  const ownedKeys = new Set(
-    owned.filter((leaf) => leaf.points > 0).map((leaf) => domainKey(leaf.domain)),
-  );
-
-  const rosters = new Map<string, { total: number; covered: number }>();
-  for (const edge of edges) {
-    if (edge.edgeType !== 'collection') continue;
-    if (!nodeByKey.has(edge.parentDomainKey)) continue;
-    const entry = rosters.get(edge.parentDomainKey) ?? { total: 0, covered: 0 };
-    entry.total += 1;
-    // Coverage-only: any credit in a member lights ONE slot; depth never
-    // over-credits (§7).
-    if (ownedKeys.has(edge.childDomainKey)) entry.covered += 1;
-    rosters.set(edge.parentDomainKey, entry);
-  }
-
-  return [...rosters.entries()]
-    .filter(([, r]) => r.covered > 0)
-    .map(([key, r]) => ({
-      label: nodeByKey.get(key)?.label ?? key,
-      covered: r.covered,
-      rosterSize: r.total,
-    }))
-    .sort((a, b) => b.covered / b.rosterSize - a.covered / a.rosterSize);
-}
+// collectCollections / CollectionSummary removed 2026-07-04 (migration 0110):
+// the collection edge type is gone, so there is no coverage strip.
 
 /** Sum of REAL points in a subtree — ghosts excluded (unit-test hook). */
 export function sumRealPoints(node: KnowledgeTreeNode): number {
@@ -359,7 +326,6 @@ export function sumRealPoints(node: KnowledgeTreeNode): number {
 
 export type KnowledgeMapData = {
   tree: KnowledgeTreeNode;
-  collections: CollectionSummary[];
   /** The owned, visible domains behind the tree — reused for share-card props. */
   ownedDomains: Array<{
     domain: string;
@@ -403,11 +369,35 @@ export async function getKnowledgeMapData(
   const edges: GraphEdge[] = graph.edges.map((e) => ({
     childDomainKey: e.childDomainKey,
     parentDomainKey: e.parentDomainKey,
-    edgeType: e.edgeType,
   }));
 
   let frozenParents: ReadonlySet<string> = new Set();
-  if (isKnowledgeGraphMasteryEnabled()) {
+  let masteredOverride: ReadonlySet<string> | undefined;
+  if (isKnowledgeMasteryV2Enabled()) {
+    // v2 read path: depth-weighted coverage over the containment tree. Overrides
+    // the per-node master badge; the v1 gap-view numbers still frame the focus
+    // header for now (a v2 coverage framing is a follow-up).
+    const v2Nodes = graph.nodes.map((n) => ({
+      domainKey: n.domainKey,
+      nodeKind: n.nodeKind,
+      nodeWeight: n.nodeWeight,
+    }));
+    const pointsByKey = new Map<string, number>();
+    for (const leaf of owned) pointsByKey.set(domainKey(leaf.domain), leaf.points);
+    // Reachable-supply cap: a leaf's bar can't exceed what its existing questions
+    // can award, so a deep-but-thin domain stays masterable (spec decision 5).
+    const depths = await getCorpusLabelDepths();
+    const reachableSupplyByKey = reachableSupplyFromDepths(
+      depths.map((d) => ({ label: d.label, questionCount: d.machineDepth + d.humanAuthored })),
+    );
+    const v2 = await getV2MasteryForUser(userId, v2Nodes, edges, pointsByKey, {
+      reachableSupplyByKey,
+    });
+    const mastered = new Set<string>();
+    for (const [key, leaf] of v2.leaves) if (leaf.isMaster) mastered.add(key);
+    for (const [key, parent] of v2.parents) if (parent.isMaster) mastered.add(key);
+    masteredOverride = mastered;
+  } else if (isKnowledgeGraphMasteryEnabled()) {
     const credits = new Map<string, number>();
     for (const leaf of owned) {
       if (leaf.points > 0) credits.set(domainKey(leaf.domain), leaf.points);
@@ -421,8 +411,7 @@ export async function getKnowledgeMapData(
   }
 
   return {
-    tree: buildKnowledgeTree(owned, nodes, edges, frozenParents, options),
-    collections: collectCollections(owned, nodes, edges),
+    tree: buildKnowledgeTree(owned, nodes, edges, frozenParents, { ...options, masteredOverride }),
     ownedDomains: visible.map((d) => ({
       domain: d.domain,
       displayName: d.displayName || d.domain,

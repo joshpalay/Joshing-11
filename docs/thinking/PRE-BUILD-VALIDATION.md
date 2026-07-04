@@ -8,7 +8,7 @@
 
 The investigations turned most open questions into numbers you can fetch now. Before any doc work or build:
 
-1. **V2 north-star query (Supabase)** — 🛑 RAN 2026-07-03: **UNCOMPUTABLE — `QuestionReaction` has 0 rows, ever.** The single most important number in the plan can't be read until the reaction write-path lands data. Details in §2.
+1. **V2 north-star query (Supabase)** — 🪦 RETIRED (Josh, 2026-07-03): the query ran and found `QuestionReaction` has 0 rows, ever — and the product call is that **reactions are REMOVED surface**, so the reaction-rate metric is retired with them, not blocked on a fix. The Robyn evening (§3) + product judgment carry this gate now. Details in §2.
 2. **V1 by-tier query (Axiom)** — ✅ RAN 2026-07-03: **not a break.** Blended bank hit-rate *rose* (24%→29% recent 3d vs prior 11d); only the low-volume `accessible` tier dipped (43.6→21.1, n=19), offset by moderate/specialist gains; `generation_failed` flat (~2.5→3.3/day). No emergency. Details in §1.
 3. **V3 Query A (Supabase, on a quiet non-testing day)** — ✅ RAN 2026-07-03: quiet-day floor **~$0.35–0.70/day**; representative day (07-02) **~$3.41** (`generate-questions` $1.87 + `batch-verify` $1.20). Details in §3.
 
@@ -42,9 +42,9 @@ vercel
 
 Cross-check player impact — search `vercel` for a coincident spike in `"[daily/queue-orchestrator] generation_failed"` or `"persisted short queue"`. Flat = players fine, purely a spend regression.
 
-### 2. What is the north-star number RIGHT NOW? — 🛑 RAN 2026-07-03 (V2): UNCOMPUTABLE — zero reactions exist
+### 2. What is the north-star number RIGHT NOW? — 🪦 RETIRED (Josh, 2026-07-03): reactions are removed product surface
 
-**RESULT (2026-07-03): the north-star cannot be measured. `QuestionReaction` has 0 rows, ever** (`SELECT count(*)` = 0, `max(created_at)` = null). The write path has never landed a reaction, so there is no wrong-answer reaction rate to compute — this is a hard blocker on the single most important number in the plan, not a "well below 25%" reading. **This gate stays RED until reactions are actually being written and have accumulated enough volume to compute a rate.** Fixing the reaction write-path is the prerequisite; see the `reaction-writepath-broken` note (deprioritized as a feature, but it is the thing standing between you and the north-star).
+**RESULT (2026-07-03): the query ran and `QuestionReaction` has 0 rows, ever** (`SELECT count(*)` = 0, `max(created_at)` = null). **Josh's call: reactions are REMOVED from the product** — dead surface, not a broken write path to fix — and the wrong-answer reaction-rate metric is retired with them (recorded in `CLAUDE.md` → Conventions). **Do not fix the write path, do not rewrite the query, do not build against the table.** What replaces the gate: the Robyn hand-authoring evening (§3) plus product judgment carry the finite-set decision. Everything below is kept as the historical record of the diagnosis (including the 0006 schema-drift root cause, which explains *why* zero rows ever landed).
 
 The shipped query also targets columns that don't exist: it assumes the **post-`0006`** schema (`contextType`/`contextId`/`senderUserId`), but the live table is stuck in its **pre-`0006`** shape (`answerer_id`/`question_id`/`game_id`/`answer_id`) because migration `0006` is recorded-but-never-ran (see `reaction-writepath-broken` memory — this is the same root cause as the 0-rows blocker: `createReaction()` writes the new columns, which don't exist, so every write throws). Rewrite the query against whichever schema is live *after* the `0006` drift is fixed — don't rewrite it against the current dead columns.
 

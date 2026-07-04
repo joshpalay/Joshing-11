@@ -1,7 +1,43 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ReformulationOption, scopeSignpost } from '@/components/QuestionForm';
+import { isVerifiedAnswer, ReformulationOption, scopeSignpost } from '@/components/QuestionForm';
+
+// The screenshot bug: the LLM auto-filled a wrong answer ("Keanu Reeves"), which
+// the "verified" check then matched against itself, self-certifying a wrong answer
+// as broadcast-eligible. "verified" must mean the AUTHOR independently corroborated
+// the suggestion — not that they passively accepted the machine's guess.
+describe('isVerifiedAnswer (anti self-certification)', () => {
+  const suggestion = 'Keanu Reeves';
+
+  it('verifies when the author independently typed a matching answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'author' })).toBe(true);
+  });
+
+  it('does NOT verify when the author merely accepted the suggestion (no independent corroboration)', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'suggestion' })).toBe(false);
+  });
+
+  it('does NOT verify before the author has supplied any answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '', answerSource: null })).toBe(false);
+  });
+
+  it('verifies an automated (autoSubmit) adoption of the verifier-vouched suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'auto' })).toBe(true);
+  });
+
+  it('does NOT verify when the author typed a different answer than the suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Balthazar Getty', answerSource: 'author' })).toBe(false);
+  });
+
+  it('matches case- and whitespace-insensitively for an author-supplied answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '  keanu reeves ', answerSource: 'author' })).toBe(true);
+  });
+
+  it('falls back to verified when there is no suggestion to cross-check against', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: null, userAnswer: 'anything', answerSource: 'author' })).toBe(true);
+  });
+});
 
 // B5 / D9 (PRD-D-5 §5.1): the authoring signpost is a feature, not a privacy
 // warning. Public is the default and reads as a reward (others can play this);

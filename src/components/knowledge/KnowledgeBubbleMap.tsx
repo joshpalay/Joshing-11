@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowUp } from 'lucide-react';
 import { hierarchy, pack, type HierarchyCircularNode } from 'd3-hierarchy';
 
-import type { CollectionSummary, KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
+import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { KnowledgeNodeCard, type SelectedNodeInfo } from '@/components/knowledge/KnowledgeNodeCard';
 
 // B-KNOWLEDGE-TAXONOMY-01 P5 — the nested circle-pack knowledge map, ported
@@ -111,14 +111,12 @@ function buildListSections(tree: KnowledgeTreeNode): ListSection[] {
 
 export function KnowledgeBubbleMap({
   data,
-  collections = [],
   // 'own' = interactive (adds allowed via the card); 'friend' = read-only
   // portrait — the tree carries no ghosts, and the card hides every mutation.
   variant = 'own',
   rootTitle = 'Your peaks',
 }: {
   data: KnowledgeTreeNode;
-  collections?: CollectionSummary[];
   variant?: 'own' | 'friend';
   rootTitle?: string;
 }) {
@@ -579,23 +577,6 @@ export function KnowledgeBubbleMap({
           ))}
         </div>
       )}
-
-      {/* Collection parents (§7) are coverage, not containers — they live in a
-          strip, never in the pack. "You've covered N of M" is the honest voice. */}
-      {collections.length > 0 ? (
-        <div className="flex gap-2 overflow-x-auto py-1.5" role="list" aria-label="Collections covered">
-          {collections.map((c) => (
-            <span
-              key={c.label}
-              role="listitem"
-              className="flex-none whitespace-nowrap rounded-full border px-3 py-1 text-[11px]"
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' }}
-            >
-              {c.label} · {c.covered} of {c.rosterSize} covered
-            </span>
-          ))}
-        </div>
-      ) : null}
 
       <p className="min-h-5 pt-1.5 text-center font-serif text-[11px] italic text-[var(--text-muted)]" aria-live="polite">
         {!listMode ? hint : ''}

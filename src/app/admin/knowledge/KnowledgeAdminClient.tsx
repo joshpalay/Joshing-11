@@ -23,7 +23,6 @@ import { AdminTabs } from '@/app/admin/AdminTabs';
 // human act (D-doc §4); the collision path surfaces the existing node instead
 // of minting a sibling — the whole model exists to kill that failure mode.
 
-const EDGE_TYPES = ['substantive', 'collection'] as const;
 
 async function post(body: Record<string, unknown>): Promise<{
   ok: boolean;
@@ -63,11 +62,11 @@ export function KnowledgeAdminClient({
         </h1>
         <AdminTabs active="knowledge" />
         <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
-          The territory structure — human-authored, always. Nodes are leaves/parents; a parent&apos;s
-          <strong> mastery threshold</strong> is its absolute points bar (Medici ~100, Italian
-          Renaissance ~2000). Edges are typed: <em>substantive</em> (depth counts toward
-          understanding) vs <em>collection</em> (coverage only). Nothing here touches questions or
-          any player&apos;s mastery.
+          The territory structure — human-authored, always. Nodes are leaves/parents. Each row
+          shows its <strong>mastery weight</strong> (<em>wt</em> — the depth/mass of the topic,
+          1–10, color-coded shallow→deep; it scales mastery for leaves and each node&apos;s share
+          of a parent&apos;s coverage) and its question count (<em>Qs</em>, rolled up through the
+          subtree for parents). Nothing here touches questions or any player&apos;s mastery.
         </p>
       </header>
 
@@ -126,6 +125,19 @@ type PickState = {
 // story: a thin leaf gets played out fast.
 const THIN_LEAF_THRESHOLD = 6;
 
+// Node-weight heat scale (mastery v2 mass, 1–10): every node — leaf AND
+// parent — carries a weight that scales its mastery (the leaf bar, and its
+// share of a parent's coverage). Color it by magnitude so a curator can scan
+// how deep each territory is at a glance (shallow → deep). The authored range
+// is 1–9 (avg ~4–6). Tokens follow the crafter admin's heat convention
+// (success/gold/danger as a magnitude ramp on an internal ops surface), not
+// grading semantics. Called "weight"/"mass", never "depth" — "N Qs" owns that.
+function nodeWeightColor(weight: number): string {
+  if (weight <= 3) return 'var(--success)'; // shallow
+  if (weight <= 6) return 'var(--accent-gold)'; // moderate
+  return 'var(--danger)'; // deep
+}
+
 function KnowledgeTreeEditor({
   nodes,
   edges,
@@ -142,10 +154,9 @@ function KnowledgeTreeEditor({
   const { childrenByParent, parentCountByChild, parentsByChild, roots, descendantsOf } = useMemo(() => {
     const childrenByParent = new Map<string, string[]>();
     const parentCountByChild = new Map<string, number>();
-    // All substantive parents per child — powers the "in N trees" jump list.
+    // All parents per child — powers the "in N trees" jump list.
     const parentsByChild = new Map<string, string[]>();
     for (const edge of edges) {
-      if (edge.edgeType !== 'substantive') continue;
       if (!nodeByKey.has(edge.childDomainKey) || !nodeByKey.has(edge.parentDomainKey)) continue;
       const list = childrenByParent.get(edge.parentDomainKey);
       if (list) list.push(edge.childDomainKey);
@@ -817,12 +828,13 @@ function TreeRow({
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [peekOpen, setPeekOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [placesOpen, setPlacesOpen] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [childLabel, setChildLabel] = useState('');
   const [editing, setEditing] = useState(false);
   const [editLabel, setEditLabel] = useState('');
-  const [editBar, setEditBar] = useState('');
+  const [editWeight, setEditWeight] = useState('');
   const [rowError, setRowError] = useState<string | null>(null);
 
   const node = nodeByKey.get(nodeKey); // not a hook — safe before the hooks below
@@ -883,7 +895,10 @@ function TreeRow({
       action: 'edit_node',
       id: node!.id,
       label: editLabel.trim() || undefined,
-      masteryThreshold: editBar.trim() ? Number(editBar) : null,
+      // Edit the v2 mastery WEIGHT (1–10). masteryThreshold is intentionally
+      // omitted — the query leaves any existing value untouched, so this repurposes
+      // the field to weight without nulling a parent's legacy v1 bar.
+      nodeWeight: editWeight.trim() ? Math.min(10, Math.max(1, Number(editWeight))) : null,
     });
     if (!res.ok) {
       setRowError(
@@ -994,12 +1009,13 @@ function TreeRow({
               aria-label="Label"
             />
             <input
-              value={editBar}
-              onChange={(e) => setEditBar(e.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="bar"
+              value={editWeight}
+              onChange={(e) => setEditWeight(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="wt 1–10"
               inputMode="numeric"
+              maxLength={2}
               className="w-16 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-0.5 text-sm"
-              aria-label="Mastery bar"
+              aria-label="Mastery weight (1–10)"
             />
             <button type="button" onClick={() => void saveEdit()} className={smallBtn} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
               Save
@@ -1018,12 +1034,26 @@ function TreeRow({
             >
               {node.label}
             </span>
-            <span className="text-muted-foreground shrink-0 whitespace-nowrap text-xs">
-              {node.nodeKind !== 'leaf'
-                ? node.masteryThreshold
-                  ? `bar ${node.masteryThreshold}`
-                  : 'bar unset'
-                : `${depthByKey[nodeKey] ?? 0} Qs`}
+            {/* Two facts under every name (leaves included): the node's
+                mastery WEIGHT (v2 mass — color-coded by how deep the territory
+                is; scales the leaf bar and the node's share of parent
+                coverage) and the question count (rolled up through the subtree
+                for parents). */}
+            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">
+              <span
+                className="font-medium"
+                style={{ color: node.nodeWeight ? nodeWeightColor(node.nodeWeight) : 'var(--warning)' }}
+                title={
+                  node.nodeWeight
+                    ? `Mastery weight: ${node.nodeWeight}/10 (depth/mass — scales mastery)`
+                    : 'No weight set — tap ⋯ to set one'
+                }
+              >
+                {node.nodeWeight ? `wt ${node.nodeWeight}` : 'wt —'}
+              </span>
+              <span className="text-muted-foreground" title="Questions in this area">
+                {depthByKey[nodeKey] ?? 0} Qs
+              </span>
             </span>
             {/* Multi-parent chip: tap to see every place this territory lives
                 and jump to any of them. */}
@@ -1136,7 +1166,7 @@ function TreeRow({
                 setActionsOpen(false);
                 setEditing(true);
                 setEditLabel(node.label);
-                setEditBar(node.masteryThreshold?.toString() ?? '');
+                setEditWeight(node.nodeWeight?.toString() ?? '');
               }}
               className={menuBtn}
               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
@@ -1154,6 +1184,18 @@ function TreeRow({
               title="See the questions that actually live in this territory"
             >
               Questions
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSuggestOpen((v) => !v);
+                setActionsOpen(false);
+              }}
+              className={menuBtn}
+              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              title="Ask Wikidata (and the LLM) for candidate parents — you ratify or reject each one"
+            >
+              Suggest parents
             </button>
             <button
               type="button"
@@ -1222,6 +1264,16 @@ function TreeRow({
         ) : null}
 
         {peekOpen ? <QuestionsPeek domainKeyValue={nodeKey} onClose={() => setPeekOpen(false)} /> : null}
+
+        {suggestOpen ? (
+          <ParentSuggestions
+            childKey={nodeKey}
+            childLabel={node.label}
+            existingParentKeys={new Set(parentsByChild.get(nodeKey) ?? [])}
+            onRatified={onDone}
+            onClose={() => setSuggestOpen(false)}
+          />
+        ) : null}
 
         {addingChild ? (
           <span className="flex w-full items-center gap-1.5 pl-6 pt-1">
@@ -1336,6 +1388,159 @@ function QuestionsPeek({
                 — {q.answer}
                 {q.source === 'bank' ? ' · bank' : ''}
                 {q.suppressed ? ' · out of circulation' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-muted-foreground mt-1.5 text-xs underline-offset-2 hover:underline"
+      >
+        close
+      </button>
+    </div>
+  );
+}
+
+// B-KNOWLEDGE-ADMIN-01 P3 — the per-territory proposal queue. Two sources feed
+// it: Wikidata (preferred — a clean is-a ontology, direct edges only) and the
+// near-ness LLM (for territories Wikidata won't have). Provenance is shown on
+// every card; the human always picks the edge type (Wikidata's is-a suggests
+// substantive, but P279 ≠ "you learn about the parent"); Ratify is the ONLY
+// write, Reject discards client-side and persists nothing (§4).
+type ParentProposal = {
+  label: string;
+  broadCategory: string | null;
+  rung: 'parent' | 'grandparent';
+  parentDomainKey: string;
+  source: 'wikidata' | 'llm';
+  qid: string | null;
+  description: string | null;
+};
+
+function ParentSuggestions({
+  childKey,
+  childLabel,
+  existingParentKeys,
+  onRatified,
+  onClose,
+}: {
+  childKey: string;
+  childLabel: string;
+  existingParentKeys: Set<string>;
+  onRatified: () => void;
+  onClose: () => void;
+}) {
+  const [proposals, setProposals] = useState<ParentProposal[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+    void (async () => {
+      const res = await post({ action: 'propose', childLabel });
+      if (!res.ok) {
+        setError(`Couldn't fetch suggestions (${res.status}).`);
+        return;
+      }
+      const body = res.body as unknown as { proposals: ParentProposal[] } | null;
+      // A parent this child already lives under isn't a proposal — drop it.
+      setProposals((body?.proposals ?? []).filter((p) => !existingParentKeys.has(p.parentDomainKey)));
+    })();
+    // existingParentKeys is read once on the initial load by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childLabel]);
+
+  async function ratify(proposal: ParentProposal) {
+    if (pendingKey) return;
+    setPendingKey(proposal.parentDomainKey);
+    setError(null);
+    const res = await post({
+      action: 'ratify',
+      childDomainKey: childKey,
+      parentLabel: proposal.label,
+      parentBroadCategory: proposal.broadCategory,
+      wikidataQid: proposal.qid,
+    });
+    setPendingKey(null);
+    if (!res.ok) {
+      setError(`Ratify failed (${res.status}).`);
+      return;
+    }
+    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
+    onRatified();
+  }
+
+  function reject(proposal: ParentProposal) {
+    // Discard — writes nothing (§4).
+    setProposals((prev) => prev?.filter((p) => p.parentDomainKey !== proposal.parentDomainKey) ?? null);
+  }
+
+  return (
+    <div
+      className="mt-1 w-full rounded-md border p-2 text-[13px]"
+      style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+    >
+      <p className="text-muted-foreground mb-1.5 text-xs">
+        Proposed parents for <strong>{childLabel}</strong> — ratifying adds an unlit corner for
+        players who haven&apos;t earned it; it never changes anyone&apos;s existing mastery.
+      </p>
+      {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+      {proposals === null && !error ? (
+        <p className="text-muted-foreground animate-pulse text-xs">Asking Wikidata and the LLM…</p>
+      ) : proposals !== null && proposals.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          No suggestions — neither source knows this territory. Add a parent manually with + Child
+          on the parent, or Move.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {(proposals ?? []).map((p) => (
+            <li key={p.parentDomainKey} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 truncate font-medium text-[var(--brand-ink)]">{p.label}</span>
+              <span
+                className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                style={
+                  p.source === 'wikidata'
+                    ? { color: 'var(--brand-navy)', background: 'var(--surface-2)' }
+                    : { color: 'var(--text-muted)', background: 'var(--surface-2)' }
+                }
+                title={
+                  p.source === 'wikidata'
+                    ? `Wikidata entity ${p.qid} — direct is-a relation`
+                    : 'Proposed by the near-ness LLM'
+                }
+              >
+                {p.source === 'wikidata' ? `Wikidata ${p.qid}` : 'LLM'}
+              </span>
+              {p.description ? (
+                <span className="text-muted-foreground min-w-0 truncate text-xs">{p.description}</span>
+              ) : null}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={pendingKey !== null}
+                  onClick={() => void ratify(p)}
+                  className="inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium disabled:opacity-40"
+                  style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+                  title="Ratify: draw the containment edge under this parent"
+                >
+                  {pendingKey === p.parentDomainKey ? '…' : 'Ratify'}
+                </button>
+                <button
+                  type="button"
+                  disabled={pendingKey !== null}
+                  onClick={() => reject(p)}
+                  className="inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                  title="Discard this proposal — nothing is saved"
+                >
+                  Reject
+                </button>
               </span>
             </li>
           ))}
@@ -1690,12 +1895,10 @@ function OrphanCheck({
   const substantiveParentsOfChild = new Map<string, number>();
   for (const edge of edges) {
     childrenOfParent.set(edge.parentDomainKey, (childrenOfParent.get(edge.parentDomainKey) ?? 0) + 1);
-    if (edge.edgeType === 'substantive') {
-      substantiveParentsOfChild.set(
-        edge.childDomainKey,
-        (substantiveParentsOfChild.get(edge.childDomainKey) ?? 0) + 1,
-      );
-    }
+    substantiveParentsOfChild.set(
+      edge.childDomainKey,
+      (substantiveParentsOfChild.get(edge.childDomainKey) ?? 0) + 1,
+    );
   }
   const orphanLeaves = nodes.filter(
     (n) => n.nodeKind !== 'parent' && !substantiveParentsOfChild.has(n.domainKey),
@@ -1733,7 +1936,6 @@ function OrphanCheck({
 function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: () => void }) {
   const [childKey, setChildKey] = useState('');
   const [parentKey, setParentKey] = useState('');
-  const [edgeType, setEdgeType] = useState<(typeof EDGE_TYPES)[number]>('substantive');
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -1743,7 +1945,7 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
     if (pending || !childKey || !parentKey) return;
     setPending(true);
     setNotice(null);
-    const res = await post({ action: 'create_edge', childDomainKey: childKey, parentDomainKey: parentKey, edgeType });
+    const res = await post({ action: 'create_edge', childDomainKey: childKey, parentDomainKey: parentKey });
     setPending(false);
     if (!res.ok) {
       setNotice(
@@ -1788,16 +1990,6 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Type</span>
-          <select value={edgeType} onChange={(e) => setEdgeType(e.target.value as (typeof EDGE_TYPES)[number])} className={fieldClass}>
-            {EDGE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
         <button
           type="button"
           onClick={() => void submit()}
@@ -1808,10 +2000,6 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
           {pending ? 'Drawing…' : 'Draw edge'}
         </button>
       </div>
-      <p className="text-muted-foreground mt-1.5 text-[0.7rem]">
-        substantive = depth counts toward understanding the parent · collection = each member covered
-        lights one slot.
-      </p>
       {/* ADMIN P2 — the impact preview: the §B guarantee stated to the author
           before the commit, with the actual names in it. */}
       {childKey && parentKey && childKey !== parentKey ? (

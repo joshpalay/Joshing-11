@@ -29,7 +29,7 @@ export async function KnowledgeBubblePage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const [{ tree, collections, ownedDomains }, [user]] = await Promise.all([
+  const [{ tree, ownedDomains }, [user]] = await Promise.all([
     getKnowledgeMapData(session.userId),
     db
       .select({ displayName: users.displayName })
@@ -63,7 +63,7 @@ export async function KnowledgeBubblePage() {
           existingLabels={sorted.map((d) => d.displayName)}
         />
       </header>
-      <KnowledgeBubbleMap data={tree} collections={collections} />
+      <KnowledgeBubbleMap data={tree} />
     </main>
   );
 }

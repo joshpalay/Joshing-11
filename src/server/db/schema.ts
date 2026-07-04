@@ -827,24 +827,32 @@ export const knowledgeNodes = pgTable(
     masteryThreshold: integer('mastery_threshold'),
     broadCategory: text('broad_category'),
     fieldHue: text('field_hue'),
+    // Wikidata provenance (ADMIN-01 P3): the QID this node was ratified from.
+    // NULL for manually-authored / LLM-proposed nodes.
+    wikidataQid: text('wikidata_qid'),
+    // Mastery v2 (docs/thinking/MASTERY-MODEL-v2.md) DEPTH WEIGHT: a topic-size /
+    // breadth proxy on a ~1–10 scale, seeded from Wikidata child-count (LLM
+    // fallback) and human-overridable. Distinct from mastery_threshold (the v1
+    // parent bar) and from "N Qs" depth (a question count). NULL → unseeded; read
+    // by nothing yet (dark until the v2 read path in Phase 5).
+    nodeWeight: integer('node_weight'),
     createdAt: createdAt(),
   },
   (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
 );
 
-// Typed child→parent membership (§7): 'substantive' = depth-eligible credit
-// (you understand the subject); 'collection' = coverage-only (you've covered
-// the set). A leaf may have many parents. Deliberately SEPARATE from
-// DomainRelation above — that is the serving-side near-ness cache keyed on raw
-// canonical_subcategory strings; this is the authored taxonomy keyed on
-// domainKey. Keyed by domain_key, not node id, so edges survive label edits.
+// Child→parent containment membership. Every edge is depth-eligible credit
+// (you understand the subject) — the substantive/collection distinction was
+// dropped 2026-07-04 (migration 0110; prod had 0 collection edges). Deliberately
+// SEPARATE from DomainRelation above — that is the serving-side near-ness cache
+// keyed on raw canonical_subcategory strings; this is the authored taxonomy keyed
+// on domainKey. Keyed by domain_key, not node id, so edges survive label edits.
 export const knowledgeEdges = pgTable(
   'KnowledgeEdge',
   {
     id: id(),
     childDomainKey: text('child_domain_key').notNull(),
     parentDomainKey: text('parent_domain_key').notNull(),
-    edgeType: text('edge_type').$type<'substantive' | 'collection'>().notNull(),
     createdAt: createdAt(),
   },
   (table) => [
@@ -870,6 +878,25 @@ export const knowledgeParentMastery = pgTable(
   (table) => [
     uniqueIndex('KnowledgeParentMastery_user_parent_key').on(table.userId, table.parentDomainKey),
     index('KnowledgeParentMastery_user_id_idx').on(table.userId),
+  ],
+);
+
+// Mastery v2 (migration 0111) — the LEAF-mastery freeze ledger, the grain
+// inversion of KnowledgeParentMastery (docs/thinking/MASTERY-MODEL-v2.md,
+// decision 3). A row = the moment a player permanently mastered a leaf. Leaf
+// mastery is terminal; parent mastery, by contrast, is computed LIVE and never
+// frozen. Dark until KNOWLEDGE_MASTERY_V2.
+export const knowledgeLeafMastery = pgTable(
+  'KnowledgeLeafMastery',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    leafDomainKey: text('leaf_domain_key').notNull(),
+    masteredAt: timestamp('mastered_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('KnowledgeLeafMastery_user_leaf_key').on(table.userId, table.leafDomainKey),
+    index('KnowledgeLeafMastery_user_id_idx').on(table.userId),
   ],
 );
 
@@ -1620,6 +1647,36 @@ export const llmUsageEvent = pgTable(
   (table) => [
     check('LlmUsageEvent_provider_valid', sql`provider IN ('anthropic', 'openai')`),
     index('LlmUsageEvent_provider_created_at_idx').on(table.provider, table.createdAt),
+  ],
+);
+
+// D-FANDOM-GROUNDING-01 (0108): per-domain reference-passage cache — one row per
+// canonical_subcategory, refreshed on a daily TTL (decision E). Feeds two
+// consumers off ONE retrieval: the generation prompt's reference anchor
+// (Consumer A, GENERATION_WIKI_ANCHOR_ENABLED) and — via the same source
+// allowlist — the batch verifier's grounding (Consumer B). source='none' is a
+// negative cache: retrieval ran and neither wiki covered the domain, so we
+// don't re-bill the lookup until the TTL lapses. Passage text is grounding-only
+// and never persisted into a served question (decision C; see
+// questionLeaksPassageText). Removable as a unit with the flags.
+export const domainReferencePassage = pgTable(
+  'DomainReferencePassage',
+  {
+    id: id(),
+    canonicalSubcategory: text('canonical_subcategory').notNull(),
+    // 'wikipedia' (primary) | 'fandom' (deep-specialist fallback) | 'none'
+    source: text('source').notNull(),
+    passage: text('passage'),
+    sourceUrl: text('source_url'),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check(
+      'DomainReferencePassage_source_valid',
+      sql`source IN ('wikipedia', 'fandom', 'none')`,
+    ),
+    uniqueIndex('DomainReferencePassage_domain_key').on(table.canonicalSubcategory),
   ],
 );
 
