@@ -185,6 +185,34 @@ export async function getCorpusLabelPoints(): Promise<Array<{ label: string; poi
   return [...byLabel.entries()].map(([label, points]) => ({ label, points }));
 }
 
+// Generation EXHAUSTION per domain: how many questions the generator has produced
+// (total) and how many came back DUPLICATES. A high duplicate share means the
+// generator keeps repeating itself — the topic's fresh facts are drying up, so
+// NEW questions are hard to find (the opposite of a domain where they come
+// easily). Raw counts, keyed by raw label — the caller folds/rolls up and derives
+// the rate, so a parent reflects its whole subtree.
+export async function getCorpusLabelGenStats(): Promise<
+  Array<{ label: string; total: number; dupes: number }>
+> {
+  const rows = await db
+    .select({
+      label: generatedQuestions.canonicalSubcategory,
+      total: sql<number>`count(*)::int`,
+      dupes: sql<number>`count(*) filter (where ${generatedQuestions.isDuplicate})::int`,
+    })
+    .from(generatedQuestions)
+    .where(isNotNull(generatedQuestions.canonicalSubcategory))
+    .groupBy(generatedQuestions.canonicalSubcategory);
+
+  const out: Array<{ label: string; total: number; dupes: number }> = [];
+  for (const r of rows) {
+    const label = r.label?.trim();
+    if (!label) continue;
+    out.push({ label, total: Number(r.total), dupes: Number(r.dupes) });
+  }
+  return out;
+}
+
 /**
  * For each worklist domain, the corpus labels that are lexical siblings —
  * domainKey-equal (typographic variants) or trigram-similar at the converge
