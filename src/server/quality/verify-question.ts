@@ -61,6 +61,21 @@ function isWebSearchEnabled(): boolean {
 const WEB_SEARCH_MAX_USES = Math.max(1, Number(process.env.VERIFY_WEB_SEARCH_MAX_USES ?? 3));
 const VERIFY_TIMEOUT_MS = Math.max(5_000, Number(process.env.VERIFY_TIMEOUT_MS ?? 35_000));
 
+// D-FANDOM-GROUNDING-01 Consumer B (decision F1, env-gated): restrict the
+// verifier's web-search grounding to reference wikis so its fallback searches
+// read the same tiered sources that anchor generation. Comma-separated domain
+// list (e.g. "wikipedia.org,fandom.com" — the F1 posture); unset = unrestricted
+// search, the pre-existing behavior. Read at call time so a flip needs no
+// deploy. F1 is a HARD restriction — watch the 'unverifiable' verdict rate
+// after enabling; a spike on non-wiki-shaped domains is the F1→F2 loosen
+// trigger named in the D-doc.
+function verifyAllowedDomains(): string[] | null {
+  const raw = process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS?.trim();
+  if (!raw) return null;
+  const domains = raw.split(',').map((d) => d.trim()).filter(Boolean);
+  return domains.length > 0 ? domains : null;
+}
+
 const SYSTEM_PROMPT = `You are fact-checking ONE already-published trivia question to decide whether it should stay in circulation. You are given the question, the answer the game marks correct, optionally its explanation, and which dimension(s) to scrutinise.
 
 Dimensions:
@@ -116,8 +131,14 @@ function buildUserMessage(input: VerifyInput): string {
  * per request before submission (it bypasses loggedMessagesCreate).
  */
 export function buildVerifyRequestParams(input: VerifyInput): Anthropic.MessageCreateParamsNonStreaming {
+  const allowedDomains = verifyAllowedDomains();
   const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] = isWebSearchEnabled()
-    ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: WEB_SEARCH_MAX_USES }]
+    ? [{
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: WEB_SEARCH_MAX_USES,
+        ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
+      }]
     : undefined;
   return {
     model: ANTHROPIC_MODEL,

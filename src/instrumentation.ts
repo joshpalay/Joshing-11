@@ -2011,6 +2011,24 @@ export async function register() {
       await db.execute(sql`
         ALTER TABLE "LlmUsageEvent" ADD COLUMN IF NOT EXISTS "is_batch" boolean NOT NULL DEFAULT false
       `);
+      // Migration 0107 (D-FANDOM-GROUNDING-01): the per-domain reference-passage
+      // cache. The generation cron would 42P01 on its cache read/upsert if the
+      // migration recorded without the table. Self-contained; same rationale as
+      // the 0090/0091/0106 guards above.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DomainReferencePassage" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "canonical_subcategory" text NOT NULL,
+          "source" text NOT NULL,
+          "passage" text,
+          "source_url" text,
+          "fetched_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "DomainReferencePassage_source_valid" CHECK (source IN ('wikipedia', 'fandom', 'none'))
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "DomainReferencePassage" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "DomainReferencePassage_domain_key" ON "DomainReferencePassage" ("canonical_subcategory")`);
       // Migration 0092 (B-LLM-COST-LATENCY-REPORT-01) stores the weekly cost &
       // latency digest. The llm-cost-report cron would 42P01 on insert if the
       // migration recorded without the table present. Self-contained; precedent: 0091.

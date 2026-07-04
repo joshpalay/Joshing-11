@@ -58,6 +58,12 @@ import {
   selectOverflowParents,
   selectUngroundedExcludedDomains,
 } from '@/server/daily/kb-exhaustion';
+import {
+  getReferencePassagesForDomains,
+  isGenerationWikiAnchorEnabled,
+  questionLeaksPassageText,
+  type DomainReferences,
+} from '@/server/daily/domain-reference';
 import { getExpansionParents } from '@/server/knowledge/open-domain';
 import { getOrBuildDomainRungs } from '@/server/knowledge/nearness-tree';
 import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
@@ -389,6 +395,12 @@ export function buildUserPrompt(
   // instead of inventing facts for domains it doesn't truly know. See
   // getAuthoredExamplesForDomains / DOMAIN_EXAMPLE_LIMIT.
   domainExamples?: ReadonlyMap<string, ReadonlyArray<{ questionText: string; answerText: string }>>,
+  // D-FANDOM-GROUNDING-01 Consumer A: per-domain wiki reference passages — a
+  // provenance-labeled block DISTINCT from the authored examples (decision B2:
+  // authored = trusted human canon; reference = unvetted retrieved source), with
+  // a soft "prefer facts in the passage" instruction (decision A2, not a hard
+  // extractive constraint). Absent unless GENERATION_WIKI_ANCHOR_ENABLED.
+  domainReferences?: DomainReferences,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -541,7 +553,26 @@ ${wrapUserInput('domain_examples', perDomain.join('\n\n'))}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${examplesHint}
+  // Reference anchor (D-FANDOM-GROUNDING-01, A2+B2): retrieved wiki passages for
+  // this round's domains. Deliberately a SEPARATE block from the human-authored
+  // examples — those are trusted canon, this is unvetted retrieved reference, and
+  // the prompt says so. The instruction is A2's soft preference, not a span
+  // constraint: the model still writes freely; the demote-only batch verifier
+  // stays the enforcement boundary.
+  let referenceHint = '';
+  if (domainReferences && domainReferences.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const ref = domainReferences.get(domain);
+      if (ref) perDomain.push(`[${domain}] (source: ${ref.source})\n${ref.passage}`);
+    }
+    if (perDomain.length > 0) {
+      referenceHint = `\n\nREFERENCE PASSAGES — retrieved wiki extracts for some of this round's domains. Unlike the human-authored examples above, these are UNVETTED reference material, not canon a person wrote. For a domain with a passage: prefer facts present in the passage; if a fact is not in the passage and you are not certain of it from the actual work, do not assert it. Never copy a passage sentence into a question verbatim — write your own question text.
+${wrapUserInput('reference_passages', perDomain.join('\n\n'))}`;
+    }
+  }
+
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${examplesHint}${referenceHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -1348,6 +1379,7 @@ async function callLlmOnce(
   culturalAnchor?: CulturalAnchor | null,
   provider: LlmProvider = 'anthropic',
   domainExamples?: DomainExamples,
+  domainReferences?: DomainReferences,
 ): Promise<LlmQuestion[]> {
   const userPrompt = buildUserPrompt(
     domains,
@@ -1363,6 +1395,7 @@ async function callLlmOnce(
     domainStrengths,
     culturalAnchor,
     domainExamples,
+    domainReferences,
   );
 
   // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
@@ -1433,6 +1466,7 @@ export async function generateDailyQuestions(
     underDifficultyReserve?: GeneratedQuestionRow[];
     provider?: LlmProvider;
     domainExamples?: DomainExamples;
+    domainReferences?: DomainReferences;
   } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
@@ -1442,6 +1476,7 @@ export async function generateDailyQuestions(
   // makes the caller pass the global setting instead of the literal below.
   const provider: LlmProvider = options.provider ?? 'anthropic';
   const domainExamples = options.domainExamples;
+  const domainReferences = options.domainReferences;
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -1478,6 +1513,7 @@ export async function generateDailyQuestions(
         culturalAnchor,
         provider,
         domainExamples,
+        domainReferences,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -1498,6 +1534,7 @@ export async function generateDailyQuestions(
         culturalAnchor,
         provider,
         domainExamples,
+        domainReferences,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -1532,6 +1569,24 @@ export async function generateDailyQuestions(
     chunkSpecs.map((spec) => runChunk(spec.domains, spec.count)),
   );
   let generated: LlmQuestion[] = chunkResults.flat();
+
+  // Decision C guard (D-FANDOM-GROUNDING-01): reference passages are
+  // grounding-only — a question whose text is a verbatim lift from its domain's
+  // source passage is dropped before any gate sees it (CC-BY-SA prose must never
+  // be persisted into a served question). Expected to fire ~never; the prompt
+  // already forbids copying.
+  if (domainReferences && domainReferences.size > 0) {
+    generated = generated.filter((q) => {
+      const ref = domainReferences.get(q.canonical_subcategory);
+      if (ref && questionLeaksPassageText(q.question_text, ref.passage)) {
+        console.warn('[daily/generate-questions] dropped verbatim passage lift', {
+          domain: q.canonical_subcategory,
+        });
+        return false;
+      }
+      return true;
+    });
+  }
 
   if (generated.length === 0) return [];
 
@@ -2318,6 +2373,24 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // B-LLM-PROVIDER-AB-SWITCH B2: resolve the generation provider once per run
     // (cached read; falls back to 'anthropic' on failure) and thread it through.
     const genProvider = (await getProviderSettings()).gen;
+
+    // D-FANDOM-GROUNDING-01 Consumer A (flag-off by default): cached wiki
+    // reference passages for exactly the domains going to FRESH generation —
+    // fetched here, after bank fill and the exhaustion-guard routing, so
+    // bank-served domains never pay a retrieval. Cache-first (one retrieval per
+    // domain per day org-wide) and fail-open: a miss just means no reference
+    // block this round, same contract as the authored-examples anchor above.
+    let domainReferences: DomainReferences | undefined;
+    if (isGenerationWikiAnchorEnabled()) {
+      domainReferences = await getReferencePassagesForDomains(domainsForLlm).catch((error) => {
+        console.warn('[daily/generate-questions] reference retrieval failed; proceeding unanchored', {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return undefined;
+      });
+    }
+
     llmGenerated = await generateDailyQuestions(
       domainsForLlm,
       remainingCount,
@@ -2337,6 +2410,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         underDifficultyReserve: options.underDifficultyReserve,
         provider: genProvider,
         domainExamples,
+        domainReferences,
       },
     );
   }
