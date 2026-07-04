@@ -410,6 +410,24 @@ export async function register() {
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS "KnowledgeParentMastery_user_id_idx" ON "KnowledgeParentMastery" ("user_id")
       `);
+      // Mastery v2 (migration 0111): the leaf-mastery freeze ledger — same
+      // idempotent shape as the parent ledger above.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "KnowledgeLeafMastery" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id"),
+          "leaf_domain_key" text NOT NULL,
+          "mastered_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "KnowledgeLeafMastery" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "KnowledgeLeafMastery_user_leaf_key"
+          ON "KnowledgeLeafMastery" ("user_id", "leaf_domain_key")
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "KnowledgeLeafMastery_user_id_idx" ON "KnowledgeLeafMastery" ("user_id")
+      `);
     } catch {
       // Best-effort pre-create; migrate() creates them on a fresh DB.
     }

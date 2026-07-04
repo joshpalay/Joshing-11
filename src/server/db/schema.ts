@@ -881,6 +881,25 @@ export const knowledgeParentMastery = pgTable(
   ],
 );
 
+// Mastery v2 (migration 0111) — the LEAF-mastery freeze ledger, the grain
+// inversion of KnowledgeParentMastery (docs/thinking/MASTERY-MODEL-v2.md,
+// decision 3). A row = the moment a player permanently mastered a leaf. Leaf
+// mastery is terminal; parent mastery, by contrast, is computed LIVE and never
+// frozen. Dark until KNOWLEDGE_MASTERY_V2.
+export const knowledgeLeafMastery = pgTable(
+  'KnowledgeLeafMastery',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    leafDomainKey: text('leaf_domain_key').notNull(),
+    masteredAt: timestamp('mastered_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('KnowledgeLeafMastery_user_leaf_key').on(table.userId, table.leafDomainKey),
+    index('KnowledgeLeafMastery_user_id_idx').on(table.userId),
+  ],
+);
+
 export const questionFeedback = pgTable(
   'QuestionFeedback',
   {
