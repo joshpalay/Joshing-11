@@ -119,3 +119,15 @@ describe('resolveV2Mastery — parent grain (live coverage)', () => {
     expect(parents.has('bach')).toBe(true); // also a container
   });
 });
+
+describe('reachableSupplyFromDepths', () => {
+  it('converts question counts to a points ceiling and folds label variants', () => {
+    const map = mod.reachableSupplyFromDepths([
+      { label: 'King Lear', questionCount: 4 },
+      { label: 'king lear', questionCount: 2 }, // folds onto the same key
+      { label: 'Hamlet', questionCount: 0 },
+    ]);
+    expect(map.get('king lear')).toBe(6 * mod.REACHABLE_POINTS_PER_QUESTION);
+    expect(map.get('hamlet')).toBe(0);
+  });
+});

@@ -34,7 +34,9 @@ import {
 import {
   getV2MasteryForUser,
   isKnowledgeMasteryV2Enabled,
+  reachableSupplyFromDepths,
 } from '@/server/knowledge/mastery-v2-resolve';
+import { getCorpusLabelDepths } from '@/server/db/queries/crafter-demand';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // Gap-view framing for a substantive parent (D-KNOWLEDGE-MAP-USABILITY-01 C3):
@@ -374,8 +376,7 @@ export async function getKnowledgeMapData(
   if (isKnowledgeMasteryV2Enabled()) {
     // v2 read path: depth-weighted coverage over the containment tree. Overrides
     // the per-node master badge; the v1 gap-view numbers still frame the focus
-    // header for now (a v2 coverage framing is a follow-up). Reachable-supply cap
-    // is not yet wired, so the leaf bar is uncapped depth (also a follow-up).
+    // header for now (a v2 coverage framing is a follow-up).
     const v2Nodes = graph.nodes.map((n) => ({
       domainKey: n.domainKey,
       nodeKind: n.nodeKind,
@@ -383,7 +384,15 @@ export async function getKnowledgeMapData(
     }));
     const pointsByKey = new Map<string, number>();
     for (const leaf of owned) pointsByKey.set(domainKey(leaf.domain), leaf.points);
-    const v2 = await getV2MasteryForUser(userId, v2Nodes, edges, pointsByKey);
+    // Reachable-supply cap: a leaf's bar can't exceed what its existing questions
+    // can award, so a deep-but-thin domain stays masterable (spec decision 5).
+    const depths = await getCorpusLabelDepths();
+    const reachableSupplyByKey = reachableSupplyFromDepths(
+      depths.map((d) => ({ label: d.label, questionCount: d.machineDepth + d.humanAuthored })),
+    );
+    const v2 = await getV2MasteryForUser(userId, v2Nodes, edges, pointsByKey, {
+      reachableSupplyByKey,
+    });
     const mastered = new Set<string>();
     for (const [key, leaf] of v2.leaves) if (leaf.isMaster) mastered.add(key);
     for (const [key, parent] of v2.parents) if (parent.isMaster) mastered.add(key);
