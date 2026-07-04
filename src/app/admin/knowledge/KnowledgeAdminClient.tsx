@@ -49,14 +49,14 @@ export function KnowledgeAdminClient({
   depthByKey,
   pointsByKey,
   genStatsByKey,
-  cappedByKey,
+  exhaustedByKey,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
   depthByKey: Record<string, number>;
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
-  cappedByKey: Record<string, { self: boolean; descendants: number }>;
+  exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
 }) {
   const router = useRouter();
 
@@ -73,9 +73,9 @@ export function KnowledgeAdminClient({
           topic, color-coded by size; edit it via ⋯), its question count (<em>Qs</em>), and the
           points currently <em>avail</em>able there (difficulty-weighted) — the latter two rolled
           up through the subtree for parents. A <em>⟳ dup</em> flag marks where new questions are
-          hard to find (a high share of generations come back duplicates); <em>⛔ capped</em> marks
-          a tapped-out area at the expansion gate (author more to lift it). Nothing here touches
-          questions or any player&apos;s mastery.
+          hard to find (a high share of generations come back duplicates); <em>⛔ exhausted</em>
+          marks a tapped-out area at the expansion gate (author more to refill it). Nothing here
+          touches questions or any player&apos;s mastery.
         </p>
       </header>
 
@@ -87,7 +87,7 @@ export function KnowledgeAdminClient({
         depthByKey={depthByKey}
         pointsByKey={pointsByKey}
         genStatsByKey={genStatsByKey}
-        cappedByKey={cappedByKey}
+        exhaustedByKey={exhaustedByKey}
         onDone={() => router.refresh()}
       />
 
@@ -167,7 +167,7 @@ function KnowledgeTreeEditor({
   depthByKey,
   pointsByKey,
   genStatsByKey,
-  cappedByKey,
+  exhaustedByKey,
   onDone,
 }: {
   nodes: KnowledgeNodeRow[];
@@ -175,7 +175,7 @@ function KnowledgeTreeEditor({
   depthByKey: Record<string, number>;
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
-  cappedByKey: Record<string, { self: boolean; descendants: number }>;
+  exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
   onDone: () => void;
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -752,7 +752,7 @@ function KnowledgeTreeEditor({
                 depthByKey={depthByKey}
                 pointsByKey={pointsByKey}
                 genStatsByKey={genStatsByKey}
-                cappedByKey={cappedByKey}
+                exhaustedByKey={exhaustedByKey}
                 childrenByParent={childrenByParent}
                 parentCountByChild={parentCountByChild}
                 parentsByChild={parentsByChild}
@@ -820,7 +820,7 @@ function TreeRow({
   depthByKey,
   pointsByKey,
   genStatsByKey,
-  cappedByKey,
+  exhaustedByKey,
   childrenByParent,
   parentCountByChild,
   parentsByChild,
@@ -846,7 +846,7 @@ function TreeRow({
   depthByKey: Record<string, number>;
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
-  cappedByKey: Record<string, { self: boolean; descendants: number }>;
+  exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
   parentsByChild: Map<string, string[]>;
@@ -1095,28 +1095,28 @@ function TreeRow({
                 {(pointsByKey[nodeKey] ?? 0).toLocaleString()} avail
               </span>
               {(() => {
-                // Escalating supply signal: CAPPED (at the expansion gate) beats
+                // Escalating supply signal: EXHAUSTED (at the expansion gate) beats
                 // "hard to source" (high dup) beats nothing.
-                const cap = cappedByKey[nodeKey];
-                if (cap?.self) {
+                const ex = exhaustedByKey[nodeKey];
+                if (ex?.self) {
                   return (
                     <span
                       className="font-semibold"
                       style={{ color: 'var(--danger)' }}
-                      title="Capped — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh Qs here and offers area-expansion instead. Author more by hand to lift it."
+                      title="Exhausted — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh Qs here and offers area-expansion instead. Author more by hand to refill it."
                     >
-                      ⛔ capped
+                      ⛔ exhausted
                     </span>
                   );
                 }
-                if (cap && cap.descendants > 0) {
+                if (ex && ex.descendants > 0) {
                   return (
                     <span
                       className="font-medium"
                       style={{ color: 'var(--danger)' }}
-                      title={`${cap.descendants} sub-area${cap.descendants === 1 ? '' : 's'} here ${cap.descendants === 1 ? 'is' : 'are'} tapped out (at the expansion gate)`}
+                      title={`${ex.descendants} sub-area${ex.descendants === 1 ? '' : 's'} here ${ex.descendants === 1 ? 'is' : 'are'} exhausted (at the expansion gate)`}
                     >
-                      ⛔ {cap.descendants} capped
+                      ⛔ {ex.descendants} exhausted
                     </span>
                   );
                 }
@@ -1395,7 +1395,7 @@ function TreeRow({
               depthByKey={depthByKey}
               pointsByKey={pointsByKey}
               genStatsByKey={genStatsByKey}
-              cappedByKey={cappedByKey}
+              exhaustedByKey={exhaustedByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               parentsByChild={parentsByChild}
