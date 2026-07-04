@@ -17,7 +17,6 @@ type Edge = import('@/server/knowledge/graph').GraphEdge;
 const sub = (child: string, parent: string): Edge => ({
   childDomainKey: child,
   parentDomainKey: parent,
-  edgeType: 'substantive',
 });
 
 const PARENT = { domainKey: 'renaissance italy', masteryThreshold: 2000 };

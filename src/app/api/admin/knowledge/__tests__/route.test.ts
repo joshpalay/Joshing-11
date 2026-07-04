@@ -152,25 +152,24 @@ describe('POST /api/admin/knowledge', () => {
     expect(body.existing?.label).toBe('Renaissance Italy'); // surfaced, offer edit
   });
 
-  it('creates a typed edge', async () => {
+  it('creates an edge', async () => {
     const res = await post({
       action: 'create_edge',
       childDomainKey: 'medici family',
       parentDomainKey: 'renaissance italy',
-      edgeType: 'substantive',
     });
     expect(res.status).toBe(201);
     expect(createEdgeMock).toHaveBeenCalledWith(
-      { childDomainKey: 'medici family', parentDomainKey: 'renaissance italy', edgeType: 'substantive' },
+      { childDomainKey: 'medici family', parentDomainKey: 'renaissance italy' },
       'admin-1',
     );
   });
 
   it('maps self-edge to 400 and duplicate to 409', async () => {
     createEdgeMock.mockResolvedValueOnce({ ok: false, reason: 'self_edge' });
-    expect((await post({ action: 'create_edge', childDomainKey: 'x', parentDomainKey: 'x', edgeType: 'substantive' })).status).toBe(400);
+    expect((await post({ action: 'create_edge', childDomainKey: 'x', parentDomainKey: 'x' })).status).toBe(400);
     createEdgeMock.mockResolvedValueOnce({ ok: false, reason: 'duplicate' });
-    expect((await post({ action: 'create_edge', childDomainKey: 'a', parentDomainKey: 'b', edgeType: 'collection' })).status).toBe(409);
+    expect((await post({ action: 'create_edge', childDomainKey: 'a', parentDomainKey: 'b' })).status).toBe(409);
   });
 
   it('deletes exactly one edge pair', async () => {
@@ -180,12 +179,6 @@ describe('POST /api/admin/knowledge', () => {
       { childDomainKey: 'medici family', parentDomainKey: 'renaissance italy' },
       'admin-1',
     );
-  });
-
-  it('rejects an invalid edge type', async () => {
-    const res = await post({ action: 'create_edge', childDomainKey: 'a', parentDomainKey: 'b', edgeType: 'friendly' });
-    expect(res.status).toBe(400);
-    expect(createEdgeMock).not.toHaveBeenCalled();
   });
 
   // ─── ADMIN P3: the two-source proposal queue (Wikidata primary, LLM secondary) ───
@@ -375,18 +368,17 @@ describe('POST /api/admin/knowledge', () => {
     expect(proposeStructureMock).not.toHaveBeenCalled();
   });
 
-  it('ratify creates exactly one edge with the HUMAN-chosen edge type', async () => {
+  it('ratify creates exactly one containment edge', async () => {
     const res = await post({
       action: 'ratify',
       childDomainKey: 'medici family',
       parentLabel: 'Renaissance Italy',
       parentBroadCategory: 'History',
-      edgeType: 'collection',
     });
     expect(res.status).toBe(201);
     expect(ratifyMock).toHaveBeenCalledTimes(1);
     expect(ratifyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ edgeType: 'collection', parentLabel: 'Renaissance Italy' }),
+      expect.objectContaining({ parentLabel: 'Renaissance Italy' }),
       'admin-1',
     );
   });
@@ -396,12 +388,11 @@ describe('POST /api/admin/knowledge', () => {
       action: 'ratify',
       childDomainKey: 'medici family',
       parentLabel: 'Italian Renaissance',
-      edgeType: 'substantive',
       wikidataQid: 'Q4692',
     });
     expect(res.status).toBe(201);
     expect(ratifyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ wikidataQid: 'Q4692', edgeType: 'substantive' }),
+      expect.objectContaining({ wikidataQid: 'Q4692' }),
       'admin-1',
     );
   });
@@ -411,7 +402,6 @@ describe('POST /api/admin/knowledge', () => {
       action: 'ratify',
       childDomainKey: 'medici family',
       parentLabel: 'Italian Renaissance',
-      edgeType: 'substantive',
       wikidataQid: 'not-a-qid',
     });
     expect(res.status).toBe(400);

@@ -48,7 +48,6 @@ export type KnowledgeEdgeRow = typeof knowledgeEdges.$inferSelect;
 export type GraphEdge = {
   childDomainKey: string;
   parentDomainKey: string;
-  edgeType: 'substantive' | 'collection';
 };
 
 // Human-set absolute thresholds are the rule (§5); this default only covers a
@@ -115,13 +114,13 @@ export async function resolveFinestNode(
 // ─── pure credit math (no DB — unit-tested with D-doc §2 fixtures) ───────────
 
 /**
- * All substantive ancestors of a node (transitive, cycle-safe, excludes the
- * node itself). Collection edges are not walked — they never carry points.
+ * All ancestors of a node (transitive, cycle-safe, excludes the node itself).
+ * Every containment edge carries points (the collection distinction was dropped
+ * 2026-07-04). Name kept for call-site stability.
  */
 export function substantiveAncestors(nodeKey: string, edges: readonly GraphEdge[]): Set<string> {
   const parentsByChild = new Map<string, string[]>();
   for (const edge of edges) {
-    if (edge.edgeType !== 'substantive') continue;
     const list = parentsByChild.get(edge.childDomainKey);
     if (list) list.push(edge.parentDomainKey);
     else parentsByChild.set(edge.childDomainKey, [edge.parentDomainKey]);
@@ -149,7 +148,6 @@ export function substantiveAncestors(nodeKey: string, edges: readonly GraphEdge[
 export function substantiveDescendants(nodeKey: string, edges: readonly GraphEdge[]): Set<string> {
   const childrenByParent = new Map<string, string[]>();
   for (const edge of edges) {
-    if (edge.edgeType !== 'substantive') continue;
     const list = childrenByParent.get(edge.parentDomainKey);
     if (list) list.push(edge.childDomainKey);
     else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
@@ -199,7 +197,7 @@ export function litCorners(
 ): number {
   let lit = 0;
   for (const edge of edges) {
-    if (edge.parentDomainKey !== parentKey || edge.edgeType !== 'substantive') continue;
+    if (edge.parentDomainKey !== parentKey) continue;
     if ((totals.get(edge.childDomainKey) ?? 0) > 0) lit += 1;
   }
   return lit;
@@ -286,7 +284,6 @@ export async function getClusterContext(): Promise<ClusterContext> {
       .select({
         childDomainKey: knowledgeEdges.childDomainKey,
         parentDomainKey: knowledgeEdges.parentDomainKey,
-        edgeType: knowledgeEdges.edgeType,
       })
       .from(knowledgeEdges),
   ]);
@@ -313,45 +310,12 @@ export function rosterCoverage(
   let total = 0;
   let lit = 0;
   for (const edge of edges) {
-    if (edge.parentDomainKey !== parentKey || edge.edgeType !== 'substantive') continue;
+    if (edge.parentDomainKey !== parentKey) continue;
     total += 1;
     if ((totals.get(edge.childDomainKey) ?? 0) > 0) lit += 1;
   }
   return { lit, total };
 }
 
-export type CollectionCoverage = {
-  covered: number;
-  rosterSize: number;
-  pct: number;
-};
-
-/**
- * Collection parents are pure coverage (§7/§9-A): each distinct member with
- * any credit lights one slot; depth within a member never over-credits. No
- * threshold or corner logic applies.
- */
-export function collectionCoverage(membersCovered: number, rosterSize: number): CollectionCoverage {
-  return {
-    covered: membersCovered,
-    rosterSize,
-    pct: rosterSize > 0 ? Math.min(membersCovered / rosterSize, 1) : 0,
-  };
-}
-
-/**
- * Coverage counter for a collection parent from raw totals: distinct direct
- * collection members with any credit (depth in one member still lights ONE slot).
- */
-export function collectionMembersCovered(
-  parentKey: string,
-  totals: ReadonlyMap<string, number>,
-  edges: readonly GraphEdge[],
-): number {
-  let covered = 0;
-  for (const edge of edges) {
-    if (edge.parentDomainKey !== parentKey || edge.edgeType !== 'collection') continue;
-    if ((totals.get(edge.childDomainKey) ?? 0) > 0) covered += 1;
-  }
-  return covered;
-}
+// collectionCoverage / collectionMembersCovered removed 2026-07-04 (migration
+// 0110): the collection edge type is gone, so there is no coverage-only grain.

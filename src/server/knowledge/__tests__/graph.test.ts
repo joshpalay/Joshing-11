@@ -15,12 +15,6 @@ type Edge = import('@/server/knowledge/graph').GraphEdge;
 const sub = (child: string, parent: string): Edge => ({
   childDomainKey: child,
   parentDomainKey: parent,
-  edgeType: 'substantive',
-});
-const col = (child: string, parent: string): Edge => ({
-  childDomainKey: child,
-  parentDomainKey: parent,
-  edgeType: 'collection',
 });
 
 // D-doc §2 world: Renaissance Italy's roster.
@@ -65,11 +59,6 @@ describe('rollUpCredit — §5.1 points are points', () => {
     expect(totals.get('shakespeare')).toBe(300); // once — not 600
   });
 
-  it('collection edges never carry points', () => {
-    const edges: Edge[] = [col('hamlet', 'plays starting with h')];
-    const totals = mod.rollUpCredit(new Map([['hamlet', 2500]]), edges);
-    expect(totals.get('plays starting with h')).toBeUndefined();
-  });
 });
 
 describe('parentProgress — §9-A revised (threshold bar + ≥2-corner gate)', () => {
@@ -224,8 +213,8 @@ describe('buildClusterMatcher — P6 Beat 4 cluster overlap (the Josh/Ari fix)',
       ['renaissance italy', 'Renaissance Italy'],
     ]),
     edges: [
-      { childDomainKey: 'medici family', parentDomainKey: 'renaissance italy', edgeType: 'substantive' as const },
-      { childDomainKey: 'renaissance florence', parentDomainKey: 'renaissance italy', edgeType: 'substantive' as const },
+      { childDomainKey: 'medici family', parentDomainKey: 'renaissance italy' },
+      { childDomainKey: 'renaissance florence', parentDomainKey: 'renaissance italy' },
     ],
   };
 
@@ -250,53 +239,6 @@ describe('buildClusterMatcher — P6 Beat 4 cluster overlap (the Josh/Ari fix)',
     expect(noGraph('Chess')).toBeNull();
   });
 
-  it('collection edges never create alignment', () => {
-    const ctx = {
-      nodeKeys: new Set(['hamlet', 'plays starting with h', 'henry v']),
-      labelByKey: new Map([['plays starting with h', 'Plays Starting With H']]),
-      edges: [
-        { childDomainKey: 'hamlet', parentDomainKey: 'plays starting with h', edgeType: 'collection' as const },
-        { childDomainKey: 'henry v', parentDomainKey: 'plays starting with h', edgeType: 'collection' as const },
-      ],
-    };
-    const match = mod.buildClusterMatcher(['Hamlet'], ctx);
-    expect(match('Henry V')).toBeNull(); // knowing Hamlet says nothing about Henry V (§7)
-  });
-});
-
-describe('collectionCoverage — §7 coverage-only', () => {
-  const H_SHELF: Edge[] = [
-    col('hamlet', 'plays starting with h'),
-    col('henry v', 'plays starting with h'),
-    col('hedda gabler', 'plays starting with h'),
-  ];
-
-  it('depth in one member lights exactly one slot', () => {
-    const totals = mod.rollUpCredit(new Map([['hamlet', 2500]]), H_SHELF);
-    // collection totals don't roll — coverage counts credited members directly
-    const covered = mod.collectionMembersCovered(
-      'plays starting with h',
-      new Map([['hamlet', 2500]]),
-      H_SHELF,
-    );
-    expect(covered).toBe(1);
-    expect(mod.collectionCoverage(covered, 3).pct).toBeCloseTo(1 / 3);
-    expect(totals.get('plays starting with h')).toBeUndefined();
-  });
-
-  it('covering all members completes the set', () => {
-    const credits = new Map([
-      ['hamlet', 10],
-      ['henry v', 10],
-      ['hedda gabler', 10],
-    ]);
-    const covered = mod.collectionMembersCovered('plays starting with h', credits, H_SHELF);
-    expect(mod.collectionCoverage(covered, 3).pct).toBe(1);
-  });
-
-  it('empty roster yields zero, not NaN', () => {
-    expect(mod.collectionCoverage(0, 0).pct).toBe(0);
-  });
 });
 
 describe('substantiveDescendants — B-SUPPLY-GRAPH-DEPTH-01 (supply depth walk)', () => {
@@ -310,13 +252,6 @@ describe('substantiveDescendants — B-SUPPLY-GRAPH-DEPTH-01 (supply depth walk)
     expect(descendants.has('cosimo de medici')).toBe(true); // grandchild
     expect(descendants.has('renaissance italy')).toBe(false);
     expect(descendants.size).toBe(6);
-  });
-
-  it('never walks collection edges (members are coverage, not depth)', () => {
-    const edges = [sub('medici family', 'renaissance italy'), col('mona lisa', 'renaissance italy')];
-    const descendants = mod.substantiveDescendants('renaissance italy', edges);
-    expect(descendants.has('mona lisa')).toBe(false);
-    expect(descendants.size).toBe(1);
   });
 
   it('is cycle-safe and diamond-safe', () => {

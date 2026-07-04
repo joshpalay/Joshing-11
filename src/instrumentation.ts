@@ -378,7 +378,6 @@ export async function register() {
           "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
           "child_domain_key" text NOT NULL,
           "parent_domain_key" text NOT NULL,
-          "edge_type" text NOT NULL CHECK ("edge_type" IN ('substantive', 'collection')),
           "created_at" timestamp with time zone NOT NULL DEFAULT now()
         )
       `);

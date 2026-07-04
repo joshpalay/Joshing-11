@@ -144,7 +144,6 @@ export default async function FriendKnowledgePage({
             <div className="flex h-[60vh] min-h-80 flex-col">
               <KnowledgeBubbleMap
                 data={mapData.tree}
-                collections={mapData.collections}
                 variant="friend"
                 rootTitle={`${friendFirstName}'s peaks`}
               />

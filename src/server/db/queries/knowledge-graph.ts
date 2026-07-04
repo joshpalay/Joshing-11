@@ -12,7 +12,6 @@ import { domainKey } from '@/lib/knowledge/domain-key';
 // existing node must surface that node, never mint a sibling.
 
 export type NodeKind = 'leaf' | 'parent' | 'both';
-export type EdgeType = 'substantive' | 'collection';
 
 export type KnowledgeNodeRow = typeof knowledgeNodes.$inferSelect;
 export type KnowledgeEdgeRow = typeof knowledgeEdges.$inferSelect;
@@ -250,7 +249,7 @@ export type EdgeResult =
   | { ok: false; reason: 'self_edge' | 'unknown_node' | 'duplicate' | 'not_found' };
 
 export async function createKnowledgeEdge(
-  input: { childDomainKey: string; parentDomainKey: string; edgeType: EdgeType },
+  input: { childDomainKey: string; parentDomainKey: string },
   actorUserId: string,
 ): Promise<EdgeResult> {
   if (input.childDomainKey === input.parentDomainKey) {
@@ -287,7 +286,6 @@ export async function ratifyProposedParent(
     childDomainKey: string;
     parentLabel: string;
     parentBroadCategory: string | null;
-    edgeType: EdgeType;
     /** Present when the proposal came from Wikidata — stored on the parent node for provenance/re-query. */
     wikidataQid?: string | null;
   },
@@ -329,7 +327,7 @@ export async function ratifyProposedParent(
   }
 
   return createKnowledgeEdge(
-    { childDomainKey: input.childDomainKey, parentDomainKey: parentKey, edgeType: input.edgeType },
+    { childDomainKey: input.childDomainKey, parentDomainKey: parentKey },
     actorUserId,
   );
 }
@@ -389,7 +387,6 @@ export async function invertKnowledgeEdge(
     {
       childDomainKey: input.parentDomainKey,
       parentDomainKey: input.childDomainKey,
-      edgeType: 'substantive',
     },
     actorUserId,
   );
@@ -425,12 +422,10 @@ export async function attachChild(
     .select({
       childDomainKey: knowledgeEdges.childDomainKey,
       parentDomainKey: knowledgeEdges.parentDomainKey,
-      edgeType: knowledgeEdges.edgeType,
     })
     .from(knowledgeEdges);
   const childrenByParent = new Map<string, string[]>();
   for (const edge of allEdges) {
-    if (edge.edgeType !== 'substantive') continue;
     const list = childrenByParent.get(edge.parentDomainKey);
     if (list) list.push(edge.childDomainKey);
     else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
@@ -451,7 +446,6 @@ export async function attachChild(
     {
       childDomainKey: input.childDomainKey,
       parentDomainKey: input.toParentDomainKey,
-      edgeType: 'substantive',
     },
     actorUserId,
   );
@@ -532,7 +526,7 @@ export async function ratifyStructureGroup(
     const childKey = await ensureNode(childLabel, 'leaf', null, input.broadCategory);
     if (childKey === parentKey) continue;
     const edge = await createKnowledgeEdge(
-      { childDomainKey: childKey, parentDomainKey: parentKey, edgeType: 'substantive' },
+      { childDomainKey: childKey, parentDomainKey: parentKey },
       actorUserId,
     );
     if (edge.ok) edgesCreated += 1; // duplicates are fine — already ratified
