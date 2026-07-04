@@ -1623,6 +1623,36 @@ export const llmUsageEvent = pgTable(
   ],
 );
 
+// D-FANDOM-GROUNDING-01 (0107): per-domain reference-passage cache — one row per
+// canonical_subcategory, refreshed on a daily TTL (decision E). Feeds two
+// consumers off ONE retrieval: the generation prompt's reference anchor
+// (Consumer A, GENERATION_WIKI_ANCHOR_ENABLED) and — via the same source
+// allowlist — the batch verifier's grounding (Consumer B). source='none' is a
+// negative cache: retrieval ran and neither wiki covered the domain, so we
+// don't re-bill the lookup until the TTL lapses. Passage text is grounding-only
+// and never persisted into a served question (decision C; see
+// questionLeaksPassageText). Removable as a unit with the flags.
+export const domainReferencePassage = pgTable(
+  'DomainReferencePassage',
+  {
+    id: id(),
+    canonicalSubcategory: text('canonical_subcategory').notNull(),
+    // 'wikipedia' (primary) | 'fandom' (deep-specialist fallback) | 'none'
+    source: text('source').notNull(),
+    passage: text('passage'),
+    sourceUrl: text('source_url'),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check(
+      'DomainReferencePassage_source_valid',
+      sql`source IN ('wikipedia', 'fandom', 'none')`,
+    ),
+    uniqueIndex('DomainReferencePassage_domain_key').on(table.canonicalSubcategory),
+  ],
+);
+
 // Batch-verify async mode (0106): one row per Anthropic Message Batch of
 // verification requests submitted by /api/cron/batch-verify-questions when
 // BATCH_VERIFY_ASYNC_ENABLED is on. The daily cron harvests 'submitted' runs
