@@ -146,8 +146,9 @@ export function buildKnowledgeTree(
   const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
   const ownedByKey = new Map(owned.map((leaf) => [domainKey(leaf.domain), leaf]));
 
-  const substantive = edges.filter((e) => e.edgeType === 'substantive');
-  // §E home-parent: the FIRST substantive edge is the containment edge.
+  // §E home-parent: the FIRST edge is the containment edge (every edge is
+  // depth-eligible since the collection type was dropped 2026-07-04).
+  const substantive = edges;
   const homeParentByChild = new Map<string, string>();
   const homeChildrenByParent = new Map<string, string[]>();
   for (const edge of substantive) {
@@ -273,18 +274,8 @@ export function buildKnowledgeTree(
     const heldFields = new Set(
       rootChildren.map((child) => child.field).filter((f): f is string => Boolean(f)),
     );
-    // Collection-only parents never rim (§7 — a set to cover, not a territory
-    // to enter): a parent whose child edges are all collection-type.
-    const substantiveParents = new Set(substantive.map((e) => e.parentDomainKey));
-    const collectionOnlyParents = new Set(
-      edges
-        .filter((e) => e.edgeType === 'collection')
-        .map((e) => e.parentDomainKey)
-        .filter((key) => !substantiveParents.has(key)),
-    );
     const rimCandidates = [...nodeByKey.values()].filter((node) => {
       if (homeParentByChild.has(node.domainKey) || isHeld(node.domainKey)) return false;
-      if (collectionOnlyParents.has(node.domainKey)) return false;
       const field = node.fieldHue ?? hueForBroadCategory(node.broadCategory);
       return field !== null && heldFields.has(field);
     });
@@ -305,50 +296,8 @@ export function buildKnowledgeTree(
 // The rim invites, it doesn't crowd — at most this many unheld roots at home.
 export const GROW_RIM_CAP = 3;
 
-export type CollectionSummary = {
-  label: string;
-  covered: number;
-  rosterSize: number;
-};
-
-/**
- * Collection parents (§7) are NOT containers of points, so they never enter
- * the packed view — they render as a coverage strip ("You've covered 2 of 3
- * Plays Starting With 'H'"). Only collections where the player has covered at
- * least one member appear; a wall of untouched sets isn't an invitation, it's
- * noise. Pure; unit-tested.
- */
-export function collectCollections(
-  owned: readonly OwnedLeaf[],
-  nodes: readonly AuthoredNode[],
-  edges: readonly GraphEdge[],
-): CollectionSummary[] {
-  const nodeByKey = new Map(nodes.map((n) => [n.domainKey, n]));
-  const ownedKeys = new Set(
-    owned.filter((leaf) => leaf.points > 0).map((leaf) => domainKey(leaf.domain)),
-  );
-
-  const rosters = new Map<string, { total: number; covered: number }>();
-  for (const edge of edges) {
-    if (edge.edgeType !== 'collection') continue;
-    if (!nodeByKey.has(edge.parentDomainKey)) continue;
-    const entry = rosters.get(edge.parentDomainKey) ?? { total: 0, covered: 0 };
-    entry.total += 1;
-    // Coverage-only: any credit in a member lights ONE slot; depth never
-    // over-credits (§7).
-    if (ownedKeys.has(edge.childDomainKey)) entry.covered += 1;
-    rosters.set(edge.parentDomainKey, entry);
-  }
-
-  return [...rosters.entries()]
-    .filter(([, r]) => r.covered > 0)
-    .map(([key, r]) => ({
-      label: nodeByKey.get(key)?.label ?? key,
-      covered: r.covered,
-      rosterSize: r.total,
-    }))
-    .sort((a, b) => b.covered / b.rosterSize - a.covered / a.rosterSize);
-}
+// collectCollections / CollectionSummary removed 2026-07-04 (migration 0110):
+// the collection edge type is gone, so there is no coverage strip.
 
 /** Sum of REAL points in a subtree — ghosts excluded (unit-test hook). */
 export function sumRealPoints(node: KnowledgeTreeNode): number {
@@ -359,7 +308,6 @@ export function sumRealPoints(node: KnowledgeTreeNode): number {
 
 export type KnowledgeMapData = {
   tree: KnowledgeTreeNode;
-  collections: CollectionSummary[];
   /** The owned, visible domains behind the tree — reused for share-card props. */
   ownedDomains: Array<{
     domain: string;
@@ -403,7 +351,6 @@ export async function getKnowledgeMapData(
   const edges: GraphEdge[] = graph.edges.map((e) => ({
     childDomainKey: e.childDomainKey,
     parentDomainKey: e.parentDomainKey,
-    edgeType: e.edgeType,
   }));
 
   let frozenParents: ReadonlySet<string> = new Set();
@@ -422,7 +369,6 @@ export async function getKnowledgeMapData(
 
   return {
     tree: buildKnowledgeTree(owned, nodes, edges, frozenParents, options),
-    collections: collectCollections(owned, nodes, edges),
     ownedDomains: visible.map((d) => ({
       domain: d.domain,
       displayName: d.displayName || d.domain,

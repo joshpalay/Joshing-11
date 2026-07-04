@@ -28,7 +28,6 @@ export const dynamic = 'force-dynamic';
 // surface it and offer edit instead (the anti-fragmentation tripwire).
 
 const nodeKindSchema = z.enum(['leaf', 'parent', 'both']);
-const edgeTypeSchema = z.enum(['substantive', 'collection']);
 const keySchema = z.string().trim().min(1).max(160);
 
 const bodySchema = z.discriminatedUnion('action', [
@@ -55,7 +54,6 @@ const bodySchema = z.discriminatedUnion('action', [
     action: z.literal('create_edge'),
     childDomainKey: keySchema,
     parentDomainKey: keySchema,
-    edgeType: edgeTypeSchema,
   }),
   z.object({
     action: z.literal('delete_edge'),
@@ -69,15 +67,13 @@ const bodySchema = z.discriminatedUnion('action', [
   // a human ratifies.
   z.object({ action: z.literal('propose'), childLabel: z.string().trim().min(1).max(120) }),
   // P3: the human commit. Creates the parent node if it doesn't exist yet
-  // (part of the deliberate ratify act, §4) and draws the typed edge. The
-  // human always picks the edge type — Wikidata's is-a is a hint, not a
-  // verdict. wikidataQid present ⇒ stored on the parent node for provenance.
+  // (part of the deliberate ratify act, §4) and draws the containment edge.
+  // wikidataQid present ⇒ stored on the parent node for provenance.
   z.object({
     action: z.literal('ratify'),
     childDomainKey: keySchema,
     parentLabel: z.string().trim().min(1).max(120),
     parentBroadCategory: z.string().trim().max(80).nullable().optional(),
-    edgeType: edgeTypeSchema,
     wikidataQid: z.string().regex(/^Q\d+$/).nullable().optional(),
   }),
   // Tree-editor verb: attach child under parent — MOVE when moveFrom present
@@ -176,7 +172,6 @@ export async function POST(request: NextRequest) {
         {
           childDomainKey: data.childDomainKey,
           parentDomainKey: data.parentDomainKey,
-          edgeType: data.edgeType,
         },
         session.userId,
       );
@@ -353,7 +348,6 @@ export async function POST(request: NextRequest) {
           childDomainKey: data.childDomainKey,
           parentLabel: data.parentLabel,
           parentBroadCategory: data.parentBroadCategory ?? null,
-          edgeType: data.edgeType,
           wikidataQid: data.wikidataQid ?? null,
         },
         session.userId,

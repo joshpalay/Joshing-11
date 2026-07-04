@@ -23,7 +23,6 @@ const node = (label: string, kind: Node['nodeKind'] = 'leaf', threshold: number 
 const sub = (child: string, parent: string): Edge => ({
   childDomainKey: child.toLowerCase(),
   parentDomainKey: parent.toLowerCase(),
-  edgeType: 'substantive',
 });
 
 const NODES: Node[] = [
@@ -196,35 +195,5 @@ describe('grow-rim — unheld same-field roots as ghost invitations', () => {
   });
 });
 
-describe('collectCollections — §7 coverage strip', () => {
-  const H_NODES = [
-    node('Plays Starting With H', 'parent', null),
-    node('Hamlet'),
-    node('Henry V'),
-    node('Hedda Gabler'),
-  ];
-  const H_EDGES: Edge[] = [
-    { childDomainKey: 'hamlet', parentDomainKey: 'plays starting with h', edgeType: 'collection' },
-    { childDomainKey: 'henry v', parentDomainKey: 'plays starting with h', edgeType: 'collection' },
-    { childDomainKey: 'hedda gabler', parentDomainKey: 'plays starting with h', edgeType: 'collection' },
-  ];
-
-  it('depth in one member lights exactly one slot', () => {
-    const collections = mod.collectCollections(
-      [{ domain: 'Hamlet', points: 2500, mastered: true, broadCategory: 'Literature' }],
-      H_NODES,
-      H_EDGES,
-    );
-    expect(collections).toEqual([{ label: 'Plays Starting With H', covered: 1, rosterSize: 3 }]);
-  });
-
-  it('untouched collections do not appear; collections never enter the packed tree', () => {
-    expect(mod.collectCollections(OWNED, H_NODES, H_EDGES)).toEqual([]);
-    const tree = mod.buildKnowledgeTree(
-      [{ domain: 'Hamlet', points: 2500, mastered: true, broadCategory: 'Literature' }],
-      H_NODES,
-      H_EDGES,
-    );
-    expect(findNode(tree, 'plays starting with h')).toBeNull(); // §7: not a container
-  });
-});
+// collectCollections tests removed 2026-07-04 (migration 0110): the collection
+// edge type and the coverage strip are gone.

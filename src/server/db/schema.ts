@@ -841,19 +841,18 @@ export const knowledgeNodes = pgTable(
   (table) => [uniqueIndex('KnowledgeNode_domain_key_key').on(table.domainKey)],
 );
 
-// Typed child→parent membership (§7): 'substantive' = depth-eligible credit
-// (you understand the subject); 'collection' = coverage-only (you've covered
-// the set). A leaf may have many parents. Deliberately SEPARATE from
-// DomainRelation above — that is the serving-side near-ness cache keyed on raw
-// canonical_subcategory strings; this is the authored taxonomy keyed on
-// domainKey. Keyed by domain_key, not node id, so edges survive label edits.
+// Child→parent containment membership. Every edge is depth-eligible credit
+// (you understand the subject) — the substantive/collection distinction was
+// dropped 2026-07-04 (migration 0110; prod had 0 collection edges). Deliberately
+// SEPARATE from DomainRelation above — that is the serving-side near-ness cache
+// keyed on raw canonical_subcategory strings; this is the authored taxonomy keyed
+// on domainKey. Keyed by domain_key, not node id, so edges survive label edits.
 export const knowledgeEdges = pgTable(
   'KnowledgeEdge',
   {
     id: id(),
     childDomainKey: text('child_domain_key').notNull(),
     parentDomainKey: text('parent_domain_key').notNull(),
-    edgeType: text('edge_type').$type<'substantive' | 'collection'>().notNull(),
     createdAt: createdAt(),
   },
   (table) => [

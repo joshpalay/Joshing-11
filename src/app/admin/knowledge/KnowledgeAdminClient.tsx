@@ -23,7 +23,6 @@ import { AdminTabs } from '@/app/admin/AdminTabs';
 // human act (D-doc §4); the collision path surfaces the existing node instead
 // of minting a sibling — the whole model exists to kill that failure mode.
 
-const EDGE_TYPES = ['substantive', 'collection'] as const;
 
 async function post(body: Record<string, unknown>): Promise<{
   ok: boolean;
@@ -142,10 +141,9 @@ function KnowledgeTreeEditor({
   const { childrenByParent, parentCountByChild, parentsByChild, roots, descendantsOf } = useMemo(() => {
     const childrenByParent = new Map<string, string[]>();
     const parentCountByChild = new Map<string, number>();
-    // All substantive parents per child — powers the "in N trees" jump list.
+    // All parents per child — powers the "in N trees" jump list.
     const parentsByChild = new Map<string, string[]>();
     for (const edge of edges) {
-      if (edge.edgeType !== 'substantive') continue;
       if (!nodeByKey.has(edge.childDomainKey) || !nodeByKey.has(edge.parentDomainKey)) continue;
       const list = childrenByParent.get(edge.parentDomainKey);
       if (list) list.push(edge.childDomainKey);
@@ -1426,7 +1424,7 @@ function ParentSuggestions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [childLabel]);
 
-  async function ratify(proposal: ParentProposal, edgeType: (typeof EDGE_TYPES)[number]) {
+  async function ratify(proposal: ParentProposal) {
     if (pendingKey) return;
     setPendingKey(proposal.parentDomainKey);
     setError(null);
@@ -1435,7 +1433,6 @@ function ParentSuggestions({
       childDomainKey: childKey,
       parentLabel: proposal.label,
       parentBroadCategory: proposal.broadCategory,
-      edgeType,
       wikidataQid: proposal.qid,
     });
     setPendingKey(null);
@@ -1493,27 +1490,16 @@ function ParentSuggestions({
                 <span className="text-muted-foreground min-w-0 truncate text-xs">{p.description}</span>
               ) : null}
               <span className="ml-auto flex shrink-0 items-center gap-1">
-                {EDGE_TYPES.map((edgeType) => (
-                  <button
-                    key={edgeType}
-                    type="button"
-                    disabled={pendingKey !== null}
-                    onClick={() => void ratify(p, edgeType)}
-                    className="inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium disabled:opacity-40"
-                    style={
-                      edgeType === 'substantive'
-                        ? { borderColor: 'var(--success)', color: 'var(--success)' }
-                        : { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
-                    }
-                    title={
-                      edgeType === 'substantive'
-                        ? 'Ratify: understanding this child teaches you about the parent (depth counts)'
-                        : 'Ratify as coverage-only grouping'
-                    }
-                  >
-                    {pendingKey === p.parentDomainKey ? '…' : `Ratify ${edgeType}`}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  disabled={pendingKey !== null}
+                  onClick={() => void ratify(p)}
+                  className="inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium disabled:opacity-40"
+                  style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+                  title="Ratify: draw the containment edge under this parent"
+                >
+                  {pendingKey === p.parentDomainKey ? '…' : 'Ratify'}
+                </button>
                 <button
                   type="button"
                   disabled={pendingKey !== null}
@@ -1878,12 +1864,10 @@ function OrphanCheck({
   const substantiveParentsOfChild = new Map<string, number>();
   for (const edge of edges) {
     childrenOfParent.set(edge.parentDomainKey, (childrenOfParent.get(edge.parentDomainKey) ?? 0) + 1);
-    if (edge.edgeType === 'substantive') {
-      substantiveParentsOfChild.set(
-        edge.childDomainKey,
-        (substantiveParentsOfChild.get(edge.childDomainKey) ?? 0) + 1,
-      );
-    }
+    substantiveParentsOfChild.set(
+      edge.childDomainKey,
+      (substantiveParentsOfChild.get(edge.childDomainKey) ?? 0) + 1,
+    );
   }
   const orphanLeaves = nodes.filter(
     (n) => n.nodeKind !== 'parent' && !substantiveParentsOfChild.has(n.domainKey),
@@ -1921,7 +1905,6 @@ function OrphanCheck({
 function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: () => void }) {
   const [childKey, setChildKey] = useState('');
   const [parentKey, setParentKey] = useState('');
-  const [edgeType, setEdgeType] = useState<(typeof EDGE_TYPES)[number]>('substantive');
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -1931,7 +1914,7 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
     if (pending || !childKey || !parentKey) return;
     setPending(true);
     setNotice(null);
-    const res = await post({ action: 'create_edge', childDomainKey: childKey, parentDomainKey: parentKey, edgeType });
+    const res = await post({ action: 'create_edge', childDomainKey: childKey, parentDomainKey: parentKey });
     setPending(false);
     if (!res.ok) {
       setNotice(
@@ -1976,16 +1959,6 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Type</span>
-          <select value={edgeType} onChange={(e) => setEdgeType(e.target.value as (typeof EDGE_TYPES)[number])} className={fieldClass}>
-            {EDGE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
         <button
           type="button"
           onClick={() => void submit()}
@@ -1996,10 +1969,6 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
           {pending ? 'Drawing…' : 'Draw edge'}
         </button>
       </div>
-      <p className="text-muted-foreground mt-1.5 text-[0.7rem]">
-        substantive = depth counts toward understanding the parent · collection = each member covered
-        lights one slot.
-      </p>
       {/* ADMIN P2 — the impact preview: the §B guarantee stated to the author
           before the commit, with the actual names in it. */}
       {childKey && parentKey && childKey !== parentKey ? (

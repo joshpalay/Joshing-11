@@ -771,6 +771,13 @@
       "when": 1785974400000,
       "tag": "0109_knowledge_node_weight",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1786060800000,
+      "tag": "0110_drop_knowledge_edge_type",
+      "breakpoints": true
     }
   ]
 }
