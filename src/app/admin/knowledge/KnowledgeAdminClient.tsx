@@ -125,17 +125,16 @@ type PickState = {
 // story: a thin leaf gets played out fast.
 const THIN_LEAF_THRESHOLD = 6;
 
-// Node-weight heat scale (mastery v2 mass, 1–10): every node — leaf AND
-// parent — carries a weight that scales its mastery (the leaf bar, and its
-// share of a parent's coverage). Color it by magnitude so a curator can scan
-// how deep each territory is at a glance (shallow → deep). The authored range
-// is 1–9 (avg ~4–6). Tokens follow the crafter admin's heat convention
-// (success/gold/danger as a magnitude ramp on an internal ops surface), not
-// grading semantics. Called "weight"/"mass", never "depth" — "N Qs" owns that.
-function nodeWeightColor(weight: number): string {
-  if (weight <= 3) return 'var(--success)'; // shallow
-  if (weight <= 6) return 'var(--accent-gold)'; // moderate
-  return 'var(--danger)'; // deep
+// Mastery-threshold heat scale (mastery v2, in POINTS): every node — leaf AND
+// parent — carries a points threshold to master it (progress = points ÷
+// threshold ≥ 75%). Color by magnitude so a curator can scan how big each
+// territory is at a glance (small → large). Tokens follow the crafter admin's
+// heat convention (success/gold/danger as a magnitude ramp on an internal ops
+// surface), not grading semantics.
+function thresholdColor(points: number): string {
+  if (points <= 2000) return 'var(--success)'; // small
+  if (points <= 8000) return 'var(--accent-gold)'; // moderate
+  return 'var(--danger)'; // large
 }
 
 function KnowledgeTreeEditor({
@@ -834,7 +833,7 @@ function TreeRow({
   const [childLabel, setChildLabel] = useState('');
   const [editing, setEditing] = useState(false);
   const [editLabel, setEditLabel] = useState('');
-  const [editWeight, setEditWeight] = useState('');
+  const [editThreshold, setEditThreshold] = useState('');
   const [rowError, setRowError] = useState<string | null>(null);
 
   const node = nodeByKey.get(nodeKey); // not a hook — safe before the hooks below
@@ -895,10 +894,8 @@ function TreeRow({
       action: 'edit_node',
       id: node!.id,
       label: editLabel.trim() || undefined,
-      // Edit the v2 mastery WEIGHT (1–10). masteryThreshold is intentionally
-      // omitted — the query leaves any existing value untouched, so this repurposes
-      // the field to weight without nulling a parent's legacy v1 bar.
-      nodeWeight: editWeight.trim() ? Math.min(10, Math.max(1, Number(editWeight))) : null,
+      // Edit the v2 mastery THRESHOLD in points (progress = points ÷ threshold).
+      masteryThreshold: editThreshold.trim() ? Math.max(1, Number(editThreshold)) : null,
     });
     if (!res.ok) {
       setRowError(
@@ -1009,13 +1006,13 @@ function TreeRow({
               aria-label="Label"
             />
             <input
-              value={editWeight}
-              onChange={(e) => setEditWeight(e.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="wt 1–10"
+              value={editThreshold}
+              onChange={(e) => setEditThreshold(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="points"
               inputMode="numeric"
-              maxLength={2}
-              className="w-16 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-0.5 text-sm"
-              aria-label="Mastery weight (1–10)"
+              maxLength={6}
+              className="w-20 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-0.5 text-sm"
+              aria-label="Mastery threshold (points)"
             />
             <button type="button" onClick={() => void saveEdit()} className={smallBtn} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
               Save
@@ -1034,22 +1031,20 @@ function TreeRow({
             >
               {node.label}
             </span>
-            {/* Two facts under every name (leaves included): the node's
-                mastery WEIGHT (v2 mass — color-coded by how deep the territory
-                is; scales the leaf bar and the node's share of parent
-                coverage) and the question count (rolled up through the subtree
-                for parents). */}
+            {/* Two facts under every name (leaves included): the node's mastery
+                THRESHOLD in points (color-coded by size; master at 75% of it) and
+                the question count (rolled up through the subtree for parents). */}
             <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">
               <span
                 className="font-medium"
-                style={{ color: node.nodeWeight ? nodeWeightColor(node.nodeWeight) : 'var(--warning)' }}
+                style={{ color: node.masteryThreshold ? thresholdColor(node.masteryThreshold) : 'var(--warning)' }}
                 title={
-                  node.nodeWeight
-                    ? `Mastery weight: ${node.nodeWeight}/10 (depth/mass — scales mastery)`
-                    : 'No weight set — tap ⋯ to set one'
+                  node.masteryThreshold
+                    ? `Mastery threshold: ${node.masteryThreshold.toLocaleString()} pts (master at 75%)`
+                    : 'No threshold set — tap ⋯ to set one'
                 }
               >
-                {node.nodeWeight ? `wt ${node.nodeWeight}` : 'wt —'}
+                {node.masteryThreshold ? `${node.masteryThreshold.toLocaleString()} pts` : '— pts'}
               </span>
               <span className="text-muted-foreground" title="Questions in this area">
                 {depthByKey[nodeKey] ?? 0} Qs
@@ -1166,7 +1161,7 @@ function TreeRow({
                 setActionsOpen(false);
                 setEditing(true);
                 setEditLabel(node.label);
-                setEditWeight(node.nodeWeight?.toString() ?? '');
+                setEditThreshold(node.masteryThreshold?.toString() ?? '');
               }}
               className={menuBtn}
               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
