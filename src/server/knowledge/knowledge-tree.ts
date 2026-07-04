@@ -34,9 +34,7 @@ import {
 import {
   getV2MasteryForUser,
   isKnowledgeMasteryV2Enabled,
-  reachableSupplyFromDepths,
 } from '@/server/knowledge/mastery-v2-resolve';
-import { getCorpusLabelDepths } from '@/server/db/queries/crafter-demand';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // Gap-view framing for a substantive parent (D-KNOWLEDGE-MAP-USABILITY-01 C3):
@@ -374,28 +372,19 @@ export async function getKnowledgeMapData(
   let frozenParents: ReadonlySet<string> = new Set();
   let masteredOverride: ReadonlySet<string> | undefined;
   if (isKnowledgeMasteryV2Enabled()) {
-    // v2 read path: depth-weighted coverage over the containment tree. Overrides
-    // the per-node master badge; the v1 gap-view numbers still frame the focus
-    // header for now (a v2 coverage framing is a follow-up).
+    // v2 read path (points-threshold model): every node's mastery = rolled-up
+    // points ÷ its own threshold ≥ 75%. Overrides the per-node master badge; the
+    // v1 gap-view numbers still frame the focus header for now.
     const v2Nodes = graph.nodes.map((n) => ({
       domainKey: n.domainKey,
       nodeKind: n.nodeKind,
-      nodeWeight: n.nodeWeight,
+      masteryThreshold: n.masteryThreshold,
     }));
     const pointsByKey = new Map<string, number>();
     for (const leaf of owned) pointsByKey.set(domainKey(leaf.domain), leaf.points);
-    // Reachable-supply cap: a leaf's bar can't exceed what its existing questions
-    // can award, so a deep-but-thin domain stays masterable (spec decision 5).
-    const depths = await getCorpusLabelDepths();
-    const reachableSupplyByKey = reachableSupplyFromDepths(
-      depths.map((d) => ({ label: d.label, questionCount: d.machineDepth + d.humanAuthored })),
-    );
-    const v2 = await getV2MasteryForUser(userId, v2Nodes, edges, pointsByKey, {
-      reachableSupplyByKey,
-    });
+    const v2 = await getV2MasteryForUser(userId, v2Nodes, edges, pointsByKey);
     const mastered = new Set<string>();
-    for (const [key, leaf] of v2.leaves) if (leaf.isMaster) mastered.add(key);
-    for (const [key, parent] of v2.parents) if (parent.isMaster) mastered.add(key);
+    for (const [key, entry] of v2) if (entry.isMaster) mastered.add(key);
     masteredOverride = mastered;
   } else if (isKnowledgeGraphMasteryEnabled()) {
     const credits = new Map<string, number>();
