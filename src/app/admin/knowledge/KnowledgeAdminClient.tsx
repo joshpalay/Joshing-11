@@ -62,11 +62,11 @@ export function KnowledgeAdminClient({
         </h1>
         <AdminTabs active="knowledge" />
         <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
-          The territory structure — human-authored, always. Nodes are leaves/parents; a parent&apos;s
-          <strong> mastery threshold</strong> is its absolute points bar (Medici ~100, Italian
-          Renaissance ~2000). Edges are typed: <em>substantive</em> (depth counts toward
-          understanding) vs <em>collection</em> (coverage only). Nothing here touches questions or
-          any player&apos;s mastery.
+          The territory structure — human-authored, always. Nodes are leaves/parents. Each row
+          shows its <strong>mastery weight</strong> (<em>wt</em> — the depth/mass of the topic,
+          1–10, color-coded shallow→deep; it scales mastery for leaves and each node&apos;s share
+          of a parent&apos;s coverage) and its question count (<em>Qs</em>, rolled up through the
+          subtree for parents). Nothing here touches questions or any player&apos;s mastery.
         </p>
       </header>
 
@@ -124,6 +124,19 @@ type PickState = {
 // to condense it upward (Move it under a parent). Matches the exhaustion
 // story: a thin leaf gets played out fast.
 const THIN_LEAF_THRESHOLD = 6;
+
+// Node-weight heat scale (mastery v2 mass, 1–10): every node — leaf AND
+// parent — carries a weight that scales its mastery (the leaf bar, and its
+// share of a parent's coverage). Color it by magnitude so a curator can scan
+// how deep each territory is at a glance (shallow → deep). The authored range
+// is 1–9 (avg ~4–6). Tokens follow the crafter admin's heat convention
+// (success/gold/danger as a magnitude ramp on an internal ops surface), not
+// grading semantics. Called "weight"/"mass", never "depth" — "N Qs" owns that.
+function nodeWeightColor(weight: number): string {
+  if (weight <= 3) return 'var(--success)'; // shallow
+  if (weight <= 6) return 'var(--accent-gold)'; // moderate
+  return 'var(--danger)'; // deep
+}
 
 function KnowledgeTreeEditor({
   nodes,
@@ -1017,12 +1030,26 @@ function TreeRow({
             >
               {node.label}
             </span>
-            <span className="text-muted-foreground shrink-0 whitespace-nowrap text-xs">
-              {node.nodeKind !== 'leaf'
-                ? node.masteryThreshold
-                  ? `bar ${node.masteryThreshold}`
-                  : 'bar unset'
-                : `${depthByKey[nodeKey] ?? 0} Qs`}
+            {/* Two facts under every name (leaves included): the node's
+                mastery WEIGHT (v2 mass — color-coded by how deep the territory
+                is; scales the leaf bar and the node's share of parent
+                coverage) and the question count (rolled up through the subtree
+                for parents). */}
+            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">
+              <span
+                className="font-medium"
+                style={{ color: node.nodeWeight ? nodeWeightColor(node.nodeWeight) : 'var(--warning)' }}
+                title={
+                  node.nodeWeight
+                    ? `Mastery weight: ${node.nodeWeight}/10 (depth/mass — scales mastery)`
+                    : 'No weight set — tap ⋯ to set one'
+                }
+              >
+                {node.nodeWeight ? `wt ${node.nodeWeight}` : 'wt —'}
+              </span>
+              <span className="text-muted-foreground" title="Questions in this area">
+                {depthByKey[nodeKey] ?? 0} Qs
+              </span>
             </span>
             {/* Multi-parent chip: tap to see every place this territory lives
                 and jump to any of them. */}
