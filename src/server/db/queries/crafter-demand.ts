@@ -148,6 +148,43 @@ export async function getCorpusLabelDepths(): Promise<ClusterLabel[]> {
   return [...byLabel.values()];
 }
 
+// Difficulty-weighted POINTS a domain's current questions can award — the
+// "reachable points" a curator eyeballs against a node's mastery threshold (is
+// this area even earnable yet?). First-correct points by tier (accessible 10 /
+// moderate 50 / specialist 100; unknown tier → moderate). The MACHINE side is
+// deduped by fact_key (a player answers each fact once), matching the distinct-
+// factKey depth metric; the HUMAN side is every servable authored question.
+// Keyed by raw label — the caller folds/rolls up through the tree, same as depth.
+export async function getCorpusLabelPoints(): Promise<Array<{ label: string; points: number }>> {
+  const tierPts = sql`CASE "difficulty_estimate" WHEN 'specialist' THEN 100 WHEN 'moderate' THEN 50 WHEN 'accessible' THEN 10 ELSE 50 END`;
+  const [machine, human] = await Promise.all([
+    db.execute(sql`
+      SELECT canonical_subcategory AS label, SUM(pts)::int AS points FROM (
+        SELECT DISTINCT ON (fact_key) canonical_subcategory, (${tierPts}) AS pts
+        FROM "GeneratedQuestion"
+        WHERE is_duplicate = false AND fact_key IS NOT NULL AND canonical_subcategory IS NOT NULL
+        ORDER BY fact_key
+      ) t
+      GROUP BY canonical_subcategory
+    `),
+    db.execute(sql`
+      SELECT canonical_subcategory AS label, SUM(${tierPts})::int AS points
+      FROM "Question"
+      WHERE creator_id IS NOT NULL AND deleted_at IS NULL AND visibility <> 'blocked'
+        AND canonical_subcategory IS NOT NULL
+      GROUP BY canonical_subcategory
+    `),
+  ]);
+
+  const byLabel = new Map<string, number>();
+  for (const r of [...machine.rows, ...human.rows] as Array<{ label: string; points: number | string }>) {
+    const label = typeof r.label === 'string' ? r.label.trim() : '';
+    if (!label) continue;
+    byLabel.set(label, (byLabel.get(label) ?? 0) + Number(r.points ?? 0));
+  }
+  return [...byLabel.entries()].map(([label, points]) => ({ label, points }));
+}
+
 /**
  * For each worklist domain, the corpus labels that are lexical siblings —
  * domainKey-equal (typographic variants) or trigram-similar at the converge

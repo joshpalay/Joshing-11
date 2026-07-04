@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
-import { getCorpusLabelDepths } from '@/server/db/queries/crafter-demand';
+import { getCorpusLabelDepths, getCorpusLabelPoints } from '@/server/db/queries/crafter-demand';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
@@ -18,15 +18,22 @@ export default async function AdminKnowledgePage() {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
-  const [{ nodes, edges }, corpusDepths] = await Promise.all([
+  const [{ nodes, edges }, corpusDepths, corpusPoints] = await Promise.all([
     listKnowledgeGraph(),
     // Per-label question depth (machine + human), so the tree can flag
     // territories too thin to stand alone ("this is too small — condense it").
     getCorpusLabelDepths(),
+    // Per-label points currently available (difficulty-weighted), shown next to
+    // Qs so a curator can eyeball it against the node's mastery threshold.
+    getCorpusLabelPoints(),
   ]);
   const ownDepthByKey: Record<string, number> = {};
   for (const entry of corpusDepths) {
     ownDepthByKey[domainKey(entry.label)] = entry.machineDepth + entry.humanAuthored;
+  }
+  const ownPointsByKey: Record<string, number> = {};
+  for (const entry of corpusPoints) {
+    ownPointsByKey[domainKey(entry.label)] = (ownPointsByKey[domainKey(entry.label)] ?? 0) + entry.points;
   }
 
   // Rolled-up Qs for display: questions are filed under LEAF labels, so a
@@ -40,6 +47,7 @@ export default async function AdminKnowledgePage() {
     else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
   }
   const depthByKey: Record<string, number> = { ...ownDepthByKey };
+  const pointsByKey: Record<string, number> = { ...ownPointsByKey };
   for (const node of nodes) {
     const key = node.domainKey;
     const descendants = new Set<string>();
@@ -50,10 +58,22 @@ export default async function AdminKnowledgePage() {
       descendants.add(child);
       stack.push(...(childrenByParent.get(child) ?? []));
     }
-    let sum = ownDepthByKey[key] ?? 0;
-    for (const d of descendants) sum += ownDepthByKey[d] ?? 0;
-    depthByKey[key] = sum;
+    let depthSum = ownDepthByKey[key] ?? 0;
+    let pointsSum = ownPointsByKey[key] ?? 0;
+    for (const d of descendants) {
+      depthSum += ownDepthByKey[d] ?? 0;
+      pointsSum += ownPointsByKey[d] ?? 0;
+    }
+    depthByKey[key] = depthSum;
+    pointsByKey[key] = pointsSum;
   }
 
-  return <KnowledgeAdminClient nodes={nodes} edges={edges} depthByKey={depthByKey} />;
+  return (
+    <KnowledgeAdminClient
+      nodes={nodes}
+      edges={edges}
+      depthByKey={depthByKey}
+      pointsByKey={pointsByKey}
+    />
+  );
 }

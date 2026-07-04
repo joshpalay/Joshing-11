@@ -47,10 +47,12 @@ export function KnowledgeAdminClient({
   nodes,
   edges,
   depthByKey,
+  pointsByKey,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
   depthByKey: Record<string, number>;
+  pointsByKey: Record<string, number>;
 }) {
   const router = useRouter();
 
@@ -63,10 +65,11 @@ export function KnowledgeAdminClient({
         <AdminTabs active="knowledge" />
         <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
           The territory structure — human-authored, always. Nodes are leaves/parents. Each row
-          shows its <strong>mastery weight</strong> (<em>wt</em> — the depth/mass of the topic,
-          1–10, color-coded shallow→deep; it scales mastery for leaves and each node&apos;s share
-          of a parent&apos;s coverage) and its question count (<em>Qs</em>, rolled up through the
-          subtree for parents). Nothing here touches questions or any player&apos;s mastery.
+          shows its <strong>mastery threshold</strong> (<em>pts</em> — the points to master the
+          topic, color-coded by size; edit it via ⋯), its question count (<em>Qs</em>), and the
+          points currently <em>avail</em>able there (difficulty-weighted) — the latter two rolled
+          up through the subtree for parents. Nothing here touches questions or any player&apos;s
+          mastery.
         </p>
       </header>
 
@@ -76,6 +79,7 @@ export function KnowledgeAdminClient({
         nodes={nodes}
         edges={edges}
         depthByKey={depthByKey}
+        pointsByKey={pointsByKey}
         onDone={() => router.refresh()}
       />
 
@@ -141,11 +145,13 @@ function KnowledgeTreeEditor({
   nodes,
   edges,
   depthByKey,
+  pointsByKey,
   onDone,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
   depthByKey: Record<string, number>;
+  pointsByKey: Record<string, number>;
   onDone: () => void;
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -720,6 +726,7 @@ function KnowledgeTreeEditor({
                 ancestors={new Set()}
                 nodeByKey={nodeByKey}
                 depthByKey={depthByKey}
+                pointsByKey={pointsByKey}
                 childrenByParent={childrenByParent}
                 parentCountByChild={parentCountByChild}
                 parentsByChild={parentsByChild}
@@ -785,6 +792,7 @@ function TreeRow({
   ancestors,
   nodeByKey,
   depthByKey,
+  pointsByKey,
   childrenByParent,
   parentCountByChild,
   parentsByChild,
@@ -808,6 +816,7 @@ function TreeRow({
   ancestors: Set<string>;
   nodeByKey: Map<string, KnowledgeNodeRow>;
   depthByKey: Record<string, number>;
+  pointsByKey: Record<string, number>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
   parentsByChild: Map<string, string[]>;
@@ -1048,6 +1057,12 @@ function TreeRow({
               </span>
               <span className="text-muted-foreground" title="Questions in this area">
                 {depthByKey[nodeKey] ?? 0} Qs
+              </span>
+              <span
+                className="text-muted-foreground"
+                title="Points currently available here (difficulty-weighted, rolled up) — eyeball against the threshold"
+              >
+                {(pointsByKey[nodeKey] ?? 0).toLocaleString()} avail
               </span>
             </span>
             {/* Multi-parent chip: tap to see every place this territory lives
@@ -1307,6 +1322,7 @@ function TreeRow({
               ancestors={new Set([...ancestors, nodeKey])}
               nodeByKey={nodeByKey}
               depthByKey={depthByKey}
+              pointsByKey={pointsByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               parentsByChild={parentsByChild}
