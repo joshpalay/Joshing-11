@@ -31,6 +31,10 @@ import {
   getParentMasteryForUser,
   isKnowledgeGraphMasteryEnabled,
 } from '@/server/knowledge/parent-mastery';
+import {
+  getV2MasteryForUser,
+  isKnowledgeMasteryV2Enabled,
+} from '@/server/knowledge/mastery-v2-resolve';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // Gap-view framing for a substantive parent (D-KNOWLEDGE-MAP-USABILITY-01 C3):
@@ -129,6 +133,14 @@ export type BuildTreeOptions = {
    * on someone else's behalf.
    */
   includeGhosts?: boolean;
+  /**
+   * Mastery v2 (KNOWLEDGE_MASTERY_V2): the set of AUTHORED node keys mastered
+   * under the depth-weighted read-model (leaf ≥ bar / frozen, or parent ≥ 75%
+   * coverage). When present it REPLACES the v1 per-node master badge
+   * (leaf-tier + parentProgress). Un-authored owned leaves (rendered under the
+   * root) keep their v1 leaf-tier badge — v2 only knows authored nodes.
+   */
+  masteredOverride?: ReadonlySet<string>;
 };
 
 export function buildKnowledgeTree(
@@ -216,7 +228,11 @@ export function buildKnowledgeTree(
       ? frozenParents.has(key) ||
         parentProgress(totals.get(key) ?? 0, corners, node.masteryThreshold).isMaster
       : false;
-    const mastered = Boolean(ownedLeaf?.mastered) || parentMastered;
+    // v2 (when the override is present) owns the master badge for authored nodes;
+    // otherwise the v1 grain (leaf-tier OR parent threshold+corners) stands.
+    const mastered = options.masteredOverride
+      ? options.masteredOverride.has(key)
+      : Boolean(ownedLeaf?.mastered) || parentMastered;
 
     // Gap-view framing (C3) — the same numbers the mastery call just used,
     // surfaced so the map can say "6 of 9 · 1,240/2,000 pts" on focus.
@@ -354,7 +370,25 @@ export async function getKnowledgeMapData(
   }));
 
   let frozenParents: ReadonlySet<string> = new Set();
-  if (isKnowledgeGraphMasteryEnabled()) {
+  let masteredOverride: ReadonlySet<string> | undefined;
+  if (isKnowledgeMasteryV2Enabled()) {
+    // v2 read path: depth-weighted coverage over the containment tree. Overrides
+    // the per-node master badge; the v1 gap-view numbers still frame the focus
+    // header for now (a v2 coverage framing is a follow-up). Reachable-supply cap
+    // is not yet wired, so the leaf bar is uncapped depth (also a follow-up).
+    const v2Nodes = graph.nodes.map((n) => ({
+      domainKey: n.domainKey,
+      nodeKind: n.nodeKind,
+      nodeWeight: n.nodeWeight,
+    }));
+    const pointsByKey = new Map<string, number>();
+    for (const leaf of owned) pointsByKey.set(domainKey(leaf.domain), leaf.points);
+    const v2 = await getV2MasteryForUser(userId, v2Nodes, edges, pointsByKey);
+    const mastered = new Set<string>();
+    for (const [key, leaf] of v2.leaves) if (leaf.isMaster) mastered.add(key);
+    for (const [key, parent] of v2.parents) if (parent.isMaster) mastered.add(key);
+    masteredOverride = mastered;
+  } else if (isKnowledgeGraphMasteryEnabled()) {
     const credits = new Map<string, number>();
     for (const leaf of owned) {
       if (leaf.points > 0) credits.set(domainKey(leaf.domain), leaf.points);
@@ -368,7 +402,7 @@ export async function getKnowledgeMapData(
   }
 
   return {
-    tree: buildKnowledgeTree(owned, nodes, edges, frozenParents, options),
+    tree: buildKnowledgeTree(owned, nodes, edges, frozenParents, { ...options, masteredOverride }),
     ownedDomains: visible.map((d) => ({
       domain: d.domain,
       displayName: d.displayName || d.domain,

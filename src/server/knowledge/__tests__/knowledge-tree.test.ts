@@ -197,3 +197,28 @@ describe('grow-rim — unheld same-field roots as ghost invitations', () => {
 
 // collectCollections tests removed 2026-07-04 (migration 0110): the collection
 // edge type and the coverage strip are gone.
+
+describe('buildKnowledgeTree — v2 masteredOverride (Phase 5 wiring)', () => {
+  const NODES_V2 = [node('Tragedy', 'parent', null), node('King Lear'), node('Hamlet')];
+  const EDGES_V2 = [sub('King Lear', 'Tragedy'), sub('Hamlet', 'Tragedy')];
+  const OWNED_V2 = [
+    { domain: 'King Lear', points: 3000, mastered: true, broadCategory: 'Literature' },
+    { domain: 'Hamlet', points: 50, mastered: false, broadCategory: 'Literature' },
+  ];
+
+  it('the override REPLACES the per-node master badge (leaf AND parent)', () => {
+    // v2 inverts v1 here: parent + Hamlet mastered, King Lear not.
+    const tree = mod.buildKnowledgeTree(OWNED_V2, NODES_V2, EDGES_V2, new Set(), {
+      masteredOverride: new Set(['tragedy', 'hamlet']),
+    });
+    expect(findNode(tree, 'tragedy')?.mastered).toBe(true);
+    expect(findNode(tree, 'king lear')?.mastered).toBeUndefined(); // v1-mastered, but override off
+    expect(findNode(tree, 'hamlet')?.mastered).toBe(true); // v1 not mastered, override on
+  });
+
+  it('without the override, the v1 grain stands', () => {
+    const tree = mod.buildKnowledgeTree(OWNED_V2, NODES_V2, EDGES_V2);
+    expect(findNode(tree, 'king lear')?.mastered).toBe(true); // v1 leaf-tier
+    expect(findNode(tree, 'hamlet')?.mastered).toBeUndefined();
+  });
+});
