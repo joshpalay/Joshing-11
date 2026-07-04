@@ -55,3 +55,54 @@ Respond in JSON only: { "depth": &lt;integer 1-10&gt; }`;
     return null;
   }
 }
+
+export const MIN_MASTERY_THRESHOLD = 300;
+export const MAX_MASTERY_THRESHOLD = 40_000;
+
+/**
+ * Mastery v2 (points-threshold model) — estimate how many POINTS of trivia play
+ * demonstrate mastery of a topic, in the game's own scoring currency (a correct
+ * answer earns ~10 easy / ~50 moderate / ~100 hard). This seeds
+ * `KnowledgeNode.mastery_threshold` for every node — a leaf gets a modest number,
+ * a parent (whole area) a large one. Returns null when unavailable.
+ *
+ * Haiku (categorization tier). FAILS OPEN: absent client / outage / malformed →
+ * null, so the caller leaves the node unseeded (reader falls back to the default).
+ */
+export async function scoreMasteryThresholdPoints(label: string): Promise<number | null> {
+  const clean = label.trim().replace(/\s+/g, ' ').slice(0, 120);
+  if (!clean) return null;
+
+  const client = getAnthropicClient();
+  if (!client) return null;
+
+  const systemPrompt = `Estimate how many POINTS of trivia play demonstrate real MASTERY of a topic.
+Scoring currency: a correct answer earns ~10 (easy), ~50 (moderate), ~100 (hard) — so mastery = correctly answering enough of the topic's questions.
+Judge the topic's real-world SIZE, not its fame. Anchors:
+- a single narrow work or event (one poem, one battle, one minor character): 300–800
+- a focused subject (one novel, one album, a lesser figure): 800–2,000
+- a major figure's body of work, a franchise, a decade of a genre: 2,000–6,000
+- a large field (a national literature, a war, a scientific subfield): 6,000–15,000
+- a vast domain (a whole art form, a science, a millennium of history): 15,000–40,000
+Respond in JSON only: { "points": &lt;integer&gt; }`;
+
+  try {
+    const response = await loggedMessagesCreate(client, 'mastery-threshold-points', {
+      model: HAIKU_MODEL,
+      max_tokens: 40,
+      temperature: 0.1,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: wrapUserInput('topic', clean) }],
+    });
+
+    const parsed = parseJsonObject(extractTextContent(response.content));
+    const raw = parsed?.points ?? parsed?.threshold;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) return null;
+    // Round to the nearest 100 and clamp to a sane band.
+    const rounded = Math.round(n / 100) * 100;
+    return Math.max(MIN_MASTERY_THRESHOLD, Math.min(MAX_MASTERY_THRESHOLD, rounded));
+  } catch {
+    return null;
+  }
+}
