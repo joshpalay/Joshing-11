@@ -7,6 +7,7 @@ import { hierarchy, pack, type HierarchyCircularNode } from 'd3-hierarchy';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { KnowledgeNodeCard, type SelectedNodeInfo } from '@/components/knowledge/KnowledgeNodeCard';
+import { adoptDomain } from '@/components/knowledge/adopt';
 
 // B-KNOWLEDGE-TAXONOMY-01 P5 — the nested circle-pack knowledge map, ported
 // from the ratified knowledge-bubbles prototype onto the repo's design
@@ -29,22 +30,6 @@ function subscribeReducedMotion(callback: () => void): () => void {
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
   mq.addEventListener('change', callback);
   return () => mq.removeEventListener('change', callback);
-}
-
-// Adopt endpoint (the territory-adopt path): sets the ghost domain's Daily
-// Five frequency, which folds it into the knowledge base rotation.
-async function adoptDomain(domain: string): Promise<boolean> {
-  try {
-    const res = await fetch('/api/daily/preferences/domain-frequency', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ domain, frequency: 'sometimes' }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
 }
 
 // One list section per top-level territory: the parent's own framing plus its
