@@ -25,6 +25,7 @@
 // question still ships with its original key), it never blocks or drops.
 
 import {
+  ANTHROPIC_MODEL,
   INSTRUCTION_SCOPING_QUALIFIER,
   INSTRUCTION_USER_INPUT_GUIDANCE,
   extractTextContent,
@@ -40,12 +41,14 @@ export interface EnrichVariantsItem {
   explainer: string;
 }
 
-// Default to the generation tier (Sonnet) — judging answer equivalence needs the
-// same reasoning the generator and factual gate use; Haiku is too lenient/broad
-// here and would risk polluting keys. Overridable without a deploy, mirroring
-// FACTUAL_GATE_MODEL. Resolved lazily so tests can stub the model id.
+// Default to the generation tier — judging answer equivalence needs the same
+// reasoning the generator and factual gate use; Haiku is too lenient/broad here
+// and would risk polluting keys. Inherits ANTHROPIC_MODEL (Sonnet 5 in prod, the
+// central flag) rather than pinning a version, so a model flip carries here too;
+// overridable without a deploy, mirroring FACTUAL_GATE_MODEL. Resolved lazily so
+// tests can stub the model id.
 function enrichModel(): string {
-  return process.env.ENRICH_VARIANTS_MODEL?.trim() || 'claude-sonnet-4-6';
+  return process.env.ENRICH_VARIANTS_MODEL?.trim() || ANTHROPIC_MODEL;
 }
 
 function enrichEnabled(): boolean {
