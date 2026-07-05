@@ -158,6 +158,7 @@ The single largest source of broken questions is a FALSE CLAIM smuggled into the
 RULE: assert in the setup ONLY what the question actually needs the player to lean on, and only what you are certain is true. If a fact is not essential to the ask, CUT it. When you must include framing, prefer evocative, atmospheric description (which carries no factual claim) over a pile of stated counts, superlatives, and attributions. Setup length is not the problem — asserted side-facts are; a long atmospheric question is safe, a short one with a wrong number is not.
 - BAD (false, unnecessary superlative): "Dumbledore makes last-minute point awards that overturn Slytherin's lead. Which student receives fifty points — the largest single award in that sequence — for standing up to his friends?" → the "fifty points / largest single award" claim is both decorative and false (it was ten points, and the largest award went to someone else); the question works without it.
 - GOOD (same answer, no asserted side-fact): "At the end-of-year feast in Harry's first year, which student does Dumbledore award points to 'for standing up to his friends'?" → "Neville Longbottom"
+THE SAME FLOOR APPLIES TO THE EXPLAINER, NOT JUST THE SETUP: the explainer is fact-checked exactly like the question, and one wrong decorative aside in it — a date, a count, an adjacent work, an attribution the answer never needed — demotes the WHOLE question even when the ask and answer are perfect. Every factual claim you put in the explainer must be load-bearing to understanding the answer AND independently checkable. If you are not certain of an incidental detail (the exact year, "the first", who directed the adaptation, what else the author wrote), leave it OUT — a short explainer that only restates why the answer is right is safer than a rich one that smuggles in a wrong "1973". Prefer under-claiming to a decorative aside.
 
 FAN-SALIENCE RULE (Rule 1 — tier-dependent):
 Do NOT default to the most nameable entity in a work — the character roster, the title, the principal location. Those are wiki-salient (easy to look up, dull to be asked). Chase fan-salient facts instead: the thing a devoted fan of THIS specific work would be delighted to be recognized for knowing — the rewatch-catch, the running joke, the exact wording of a famous line, the specific beat or object fans hold onto. Apply by difficulty tier:
@@ -276,7 +277,7 @@ Return format:
       "broad_category": "string",
       "question_text": "string",
       "answer": "string",
-      "explainer": "string, 2-3 sentences of educational context",
+      "explainer": "string, 2-3 sentences of educational context — every factual claim in it must be load-bearing and checkable (see the side-facts floor); omit any incidental date/count/attribution you are not certain of rather than risk a wrong aside",
       "difficulty_estimate": "accessible | moderate | specialist",
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
       "subject_entity": "string, the single primary subject the question is about (see above) — coarser than fact_key",
@@ -873,7 +874,8 @@ For each question decide:
   - the question's clearly-correct answer is a different thing/person than the stated answer, OR
   - the question and answer come from mismatched subjects (e.g. a literature question answered with an unrelated political figure), OR
   - the question's SETUP asserts a false fact — a wrong count, date, attribution, authorship, or relationship — EVEN WHEN the stated answer is correct. E.g. "Bach composed six works for unaccompanied strings — three for solo violin and three for solo cello — what collective title is given to the cello set?" answered "Cello Suites": the answer is correct, but the premise is false (Bach wrote six of each, not three), so this is WRONG.
-- OK — the stated answer is correct (or a reasonable equivalent/alternate form) AND the setup contains no false factual claim.
+  - the EXPLAINER (e=) asserts a false incidental fact — a wrong date, count, attribution, or adjacent-work claim — EVEN WHEN the question, answer, and setup are all correct. The explainer is fact-checked downstream exactly like the question, so a decorative wrong aside there (e.g. calling a 1979 anthology "the 1973 anthology") demotes the whole item. Judge only clear factual errors, not phrasing.
+- OK — the stated answer is correct (or a reasonable equivalent/alternate form) AND neither the setup nor the explainer contains a false factual claim.
 - UNVERIFIABLE — you genuinely cannot verify the fact (extremely niche, recent, or personal). Treat these as OK; do NOT flag them.
 
 Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar applies — when in doubt, leave it. Do not flag for style, difficulty, phrasing, or ambiguity; only for a factually incorrect stated answer or a factually false premise.
@@ -966,7 +968,7 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
   const body = generated
     .map(
       (q, i) =>
-        `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}`,
+        `[${i}] domain=${q.canonical_subcategory}\n    q=${q.question_text}\n    a=${q.answer}\n    e=${q.explainer}`,
     )
     .join('\n\n');
   const userMessage = wrapUserInput('batch', body);
