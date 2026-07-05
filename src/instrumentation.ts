@@ -2067,6 +2067,16 @@ export async function register() {
       `);
       await db.execute(sql`ALTER TABLE "LlmCostReport" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS "LlmCostReport_created_at_idx" ON "LlmCostReport" ("created_at")`);
+      // Migration 0114 (D-SUPPLY-FINITE-SET-01 P2): the durable set-completion
+      // designation + system-created (inviterless) author invitations. The daily
+      // summary evaluates completion and would error on the missing column /
+      // NOT NULL constraint if the migration recorded without these. Both
+      // idempotent (ADD COLUMN IF NOT EXISTS / DROP NOT NULL is a no-op if already
+      // relaxed). Same rationale as the 0105/0106 guards above.
+      await db.execute(sql`
+        ALTER TABLE "PLAYER_MASTERY" ADD COLUMN IF NOT EXISTS "designated_at" timestamp with time zone
+      `);
+      await db.execute(sql`ALTER TABLE "AuthorInvitation" ALTER COLUMN "invited_by" DROP NOT NULL`);
       // Migration 0115 (D-QUALITY-SALVAGE-01): machine-proposed salvage fixes for
       // demoted questions. The salvage batch + review queue read/insert here and
       // would 42P01 if the migration recorded without the table. Self-contained;

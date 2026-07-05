@@ -496,6 +496,11 @@ export const playerMastery = pgTable(
     // friend's domain can't leak into the main five until the player adopts it
     // (a non-resting frequency) or declares it. See getKnowledgeBase.
     rotationEligible: boolean('rotation_eligible').notNull().default(true),
+    // D-SUPPLY-FINITE-SET-01 P2: the durable "you completed this set" recognition
+    // (designation). Set once a player has answered the domain's whole set; drives
+    // the /invited trophy's permanence. Recognition only — no mechanical effect.
+    // NULL = not yet designated. Mirrors tier_reached_at.
+    designatedAt: timestamp('designated_at', { withTimezone: true }),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -1203,7 +1208,9 @@ export const authorInvitations = pgTable(
     userId: text('user_id').notNull().references(() => users.id),
     domain: text('domain').notNull(),
     reason: text('reason').notNull().default('domain_exhausted'),
-    invitedBy: text('invited_by').notNull().references(() => users.id),
+    // Nullable since 0114: a set-completion invitation is system-created and has
+    // no human inviter (NULL = automatic). Human crafter invites still set it.
+    invitedBy: text('invited_by').references(() => users.id),
     createdAt: createdAt(),
     seenAt: timestamp('seen_at', { withTimezone: true }),
     doorChoice: text('door_choice'),

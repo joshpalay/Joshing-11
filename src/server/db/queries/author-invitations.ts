@@ -1,6 +1,6 @@
 import { and, countDistinct, desc, eq, gte, inArray, isNull, max, min, sql } from 'drizzle-orm';
 
-import { authorInvitations, db, masteryEvents, users } from '@/server/db';
+import { authorInvitations, db, masteryEvents, playerMastery, users } from '@/server/db';
 
 // B-CRAFTER-LIFECYCLE-01 Phase 3 — the manual "invitation to author" state
 // (decision 2026-07-01: manual checkbox first; automatic exhaustion signals can
@@ -11,8 +11,11 @@ import { authorInvitations, db, masteryEvents, users } from '@/server/db';
 //   3. records which door they took (doorChoice: author | expand | wait).
 // 'domain_exhausted' is the first invitation reason of a couple — keep new
 // reasons as data, not new tables. No hard-delete: revoke = resolvedAt stamp.
+// 'set_completed' (D-SUPPLY-FINITE-SET-01 P2) is the AUTOMATIC reason: the
+// player answered a domain's whole finite set. Unlike the manual crafter flip
+// it has no human inviter (invited_by IS NULL).
 
-export type InvitationReason = 'domain_exhausted';
+export type InvitationReason = 'domain_exhausted' | 'set_completed';
 export type DoorChoice = 'author' | 'expand' | 'wait';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -118,6 +121,61 @@ export async function inviteToAuthor(params: {
     if (isUniqueViolation(err)) return { ok: true, action: 'already_invited' };
     throw err;
   }
+}
+
+// The AUTOMATIC counterpart (D-SUPPLY-FINITE-SET-01 P2): a system-created
+// invitation with no human inviter (invited_by NULL, reason 'set_completed'),
+// fired when a player completes a domain's finite set. Same idempotent
+// unique-violation guard as inviteToAuthor.
+export async function inviteToAuthorAutomatic(params: {
+  userId: string;
+  domain: string;
+}): Promise<InviteResult> {
+  try {
+    await db.insert(authorInvitations).values({
+      userId: params.userId,
+      domain: params.domain,
+      invitedBy: null,
+      reason: 'set_completed',
+    });
+    return { ok: true, action: 'invited' };
+  } catch (err) {
+    if (isUniqueViolation(err)) return { ok: true, action: 'already_invited' };
+    throw err;
+  }
+}
+
+// ─── set-completion designation (recognition only, no mechanical effect) ─────
+
+// Has this player already earned the durable designation for this domain? Reads
+// PLAYER_MASTERY.designated_at — the completion guard so a set is trophied once.
+export async function hasDesignation(userId: string, domain: string): Promise<boolean> {
+  const [row] = await db
+    .select({ designatedAt: playerMastery.designatedAt })
+    .from(playerMastery)
+    .where(and(eq(playerMastery.userId, userId), eq(playerMastery.canonicalSubcategory, domain)))
+    .limit(1);
+  return row?.designatedAt != null;
+}
+
+// Stamp the designation on the player's existing mastery row (one always exists
+// once they've played the domain). Only stamps when currently NULL, so it never
+// moves an earlier recognition timestamp.
+export async function markDomainDesignated(
+  userId: string,
+  domain: string,
+  now: Date,
+): Promise<void> {
+  await db
+    .update(playerMastery)
+    .set({ designatedAt: now })
+    .where(
+      and(
+        eq(playerMastery.userId, userId),
+        eq(playerMastery.canonicalSubcategory, domain),
+        isNull(playerMastery.designatedAt),
+      ),
+    );
 }
 
 // Flip the checkbox OFF: soft-close (resolvedAt), never delete. A no-op when
