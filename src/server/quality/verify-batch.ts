@@ -43,14 +43,19 @@ export function isBatchVerifyAsyncEnabled(): boolean {
 /** 'q' = Question, 'g' = GeneratedQuestion — encoded into the batch custom_id. */
 export type VerifyStore = 'q' | 'g';
 
+// The Batches API constrains custom_id to ^[a-zA-Z0-9_-]{1,64}$ — a colon
+// separator is REJECTED at submit (invalid_request_error), which is exactly how
+// the async mode silently no-oped in prod (submit threw on every run; the cron
+// caught, logged, and returned 200). Underscore is in the allowed class and
+// unambiguous before a UUID. Decode tolerates the legacy colon form defensively.
 export function encodeVerifyCustomId(store: VerifyStore, rowId: string): string {
-  return `${store}:${rowId}`;
+  return `${store}_${rowId}`;
 }
 
 export function decodeVerifyCustomId(
   customId: string,
 ): { store: VerifyStore; rowId: string } | null {
-  const match = /^([qg]):(.+)$/.exec(customId);
+  const match = /^([qg])[_:](.+)$/.exec(customId);
   if (!match) return null;
   return { store: match[1] as VerifyStore, rowId: match[2] };
 }

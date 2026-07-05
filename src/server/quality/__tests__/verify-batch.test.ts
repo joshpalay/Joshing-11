@@ -17,11 +17,25 @@ describe('verify custom_id codec', () => {
     }
   });
 
+  it('emits only characters the Batches API accepts (^[a-zA-Z0-9_-]{1,64}$)', () => {
+    // Regression for the 2026-07-05 prod finding: the original colon separator
+    // was REJECTED by the real API at submit — every async run silently no-oped.
+    for (const store of ['q', 'g'] as const) {
+      const encoded = encodeVerifyCustomId(store, 'a4f0c2de-1b3c-4d5e-8f90-0123456789ab');
+      expect(encoded).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+    }
+  });
+
+  it('still decodes the legacy colon form defensively', () => {
+    expect(decodeVerifyCustomId('q:row-1')).toEqual({ store: 'q', rowId: 'row-1' });
+  });
+
   it('rejects malformed custom_ids instead of guessing a store', () => {
     expect(decodeVerifyCustomId('x:abc')).toBeNull();
     expect(decodeVerifyCustomId('q')).toBeNull();
     expect(decodeVerifyCustomId('')).toBeNull();
     expect(decodeVerifyCustomId('q:')).toBeNull();
+    expect(decodeVerifyCustomId('q_')).toBeNull();
   });
 });
 

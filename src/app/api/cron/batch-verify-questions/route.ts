@@ -37,12 +37,20 @@ const ASYNC_BATCH_SIZE = Math.max(1, Number(process.env.BATCH_VERIFY_ASYNC_BATCH
 // Each worker holds an LLM (and maybe a web-search) call in flight.
 const VERIFY_CONCURRENCY = 4;
 
-// Operational escape hatch for the 2026-07 extra_fact tightening: set
-// PREFILTER_EXTRA_FACT_LEGACY=true to restore the pre-tightening routing
-// (any comma/paren/"and" in the answer routes) without a deploy.
+// Operational escape hatches for the 2026-07 prefilter tightenings, both
+// restorable without a deploy: PREFILTER_EXTRA_FACT_LEGACY=true restores the
+// pre-tightening ANSWER routing (any comma/paren/"and" routes);
+// PREFILTER_EXPLANATION_LEGACY=true restores the pre-tightening EXPLANATION
+// routing (any one signal OR length ≥140 routes — the measured ~90% router).
 function prefilterOptions(): PrefilterOptions {
-  const raw = process.env.PREFILTER_EXTRA_FACT_LEGACY?.trim().toLowerCase();
-  return { legacyExtraFact: raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on' };
+  const flag = (name: string) => {
+    const raw = process.env[name]?.trim().toLowerCase();
+    return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+  };
+  return {
+    legacyExtraFact: flag('PREFILTER_EXTRA_FACT_LEGACY'),
+    legacyExplanation: flag('PREFILTER_EXPLANATION_LEGACY'),
+  };
 }
 
 type PendingRow = {

@@ -33,10 +33,13 @@ type VariantTally = {
   extraFact: number;
 };
 
-function tallyVariant(rows: SampleRow[], legacyExtraFact: boolean): VariantTally {
+function tallyVariant(
+  rows: SampleRow[],
+  options: { legacyExtraFact?: boolean; legacyExplanation?: boolean },
+): VariantTally {
   const t: VariantTally = { skipped: 0, routed: 0, falsePremise: 0, extraFact: 0 };
   for (const row of rows) {
-    const d = prefilterForVerification(row, { legacyExtraFact });
+    const d = prefilterForVerification(row, options);
     if (!d.needsVerification) {
       t.skipped += 1;
       continue;
@@ -83,15 +86,19 @@ async function main() {
     ...generatedRows.map((r) => ({ ...r, store: 'GeneratedQuestion' as const })),
   ];
 
-  const legacy = tallyVariant(sample, true);
-  const strict = tallyVariant(sample, false);
+  // Three variants, cumulative: full legacy → answer tightening only (the
+  // 2026-07-03 near-no-op) → answer + explanation tightening (2026-07-05).
+  const legacy = tallyVariant(sample, { legacyExtraFact: true, legacyExplanation: true });
+  const answerOnly = tallyVariant(sample, { legacyExplanation: true });
+  const strict = tallyVariant(sample, {});
   const n = sample.length;
 
   console.log(`\nSample: ${n} rows (${questionRows.length} Question + ${generatedRows.length} GeneratedQuestion, most recent)\n`);
-  console.log('variant   skip           route          false_premise  extra_fact');
+  console.log('variant        skip           route          false_premise  extra_fact');
   for (const [name, t] of [
-    ['legacy ', legacy],
-    ['strict ', strict],
+    ['legacy      ', legacy],
+    ['answer-only ', answerOnly],
+    ['strict      ', strict],
   ] as const) {
     console.log(
       `${name}   ${String(t.skipped).padStart(4)} (${pct(t.skipped, n).padStart(6)})  ` +
@@ -103,19 +110,24 @@ async function main() {
 
   // Rows whose overall decision flipped route→skip: the spend actually saved.
   const flipped = sample.filter((row) => {
-    const wasRouted = prefilterForVerification(row, { legacyExtraFact: true }).needsVerification;
+    const wasRouted = prefilterForVerification(row, {
+      legacyExtraFact: true,
+      legacyExplanation: true,
+    }).needsVerification;
     const nowRouted = prefilterForVerification(row).needsVerification;
     return wasRouted && !nowRouted;
   });
   console.log(
     `\nroute→skip under tightening: ${flipped.length} rows (${pct(flipped.length, n)}) — ` +
-      `each was a paid verify call/day of demand; eyeball a few below for anything that LOOKS claim-bearing:`,
+      `each was a paid verify call/day of demand; eyeball for anything that LOOKS claim-bearing ` +
+      `(explainer shown — the tightened router's input):`,
   );
-  for (const row of flipped.slice(0, 10)) {
+  for (const row of flipped.slice(0, 15)) {
     console.log(`  [${row.store}] Q: ${row.questionText.slice(0, 90)}`);
     console.log(`      A: ${row.answer.slice(0, 90)}`);
+    if (row.explanation) console.log(`      E: ${row.explanation.slice(0, 110)}`);
   }
-  if (flipped.length > 10) console.log(`  … and ${flipped.length - 10} more`);
+  if (flipped.length > 15) console.log(`  … and ${flipped.length - 15} more`);
 }
 
 main()

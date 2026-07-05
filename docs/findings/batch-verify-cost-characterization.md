@@ -1,5 +1,23 @@
 # batch-verify cron — cost characterization (read-only, no LLM calls)
 
+> **UPDATE (2026-07-05): the §5 "explanation path" lever landed and MOVED the
+> needle — and the Batch API mode had a submit-blocking bug, now fixed.**
+> 1. **Explanation-path tightening** (`explanationCarriesAdjacentClaims`): routes
+>    only NOVEL-kind or claim-dense (≥2 kinds) explainers; length alone never
+>    routes; the `count` signal no longer double-fires on years. Measured on
+>    1,200 recent rows: **skip 5.7% → 21.5%, extra_fact 94.1% → 63.3%**
+>    (190/1,200 route→skip; flips eyeballed — no leaked claims). Escape hatch
+>    `PREFILTER_EXPLANATION_LEGACY=true`.
+> 2. **Batch mode was silently broken**: `custom_id` used a colon (`q:<uuid>`),
+>    which the Batches API rejects (`^[a-zA-Z0-9_-]{1,64}$`) — every submit threw,
+>    was caught, and returned 200. Fixed to `q_<uuid>` (legacy-tolerant decode) +
+>    a pattern regression test. First real batches submitted 2026-07-05 via the
+>    backlog blitz (`scripts/verify-backlog-blitz.ts`).
+> 3. **Backlog correction:** of the 833 "unverified" GeneratedQuestion rows, 826
+>    were EXPIRED (never re-servable; the cron rightly ignores them). The
+>    actionable backlog was 643, now cleared/in-flight.
+> See docs/findings/SCALE-READINESS-2026-07-05.md for the full review.
+
 > **UPDATE (2026-07-02): the three cost dials this doc named have landed.**
 > 1. **System-prompt caching** — `buildVerifyRequestParams` now sends the system
 >    prompt with an ephemeral `cache_control` breakpoint (live in both modes).
