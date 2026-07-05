@@ -4,13 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { isVerifiedAnswer, ReformulationOption, scopeSignpost } from '@/components/QuestionForm';
 
 // The model (2026-07): Joshing suggests an answer that was already fact-checked
-// before it was shown, so USING it is verified. If the player says it's wrong and
-// supplies their own answer, that answer earns "verified" only by passing an
-// on-demand fact-check (checkedOk) — or by happening to equal the suggestion.
-// This supersedes the older "anti self-certification" model that treated adopting
-// the suggestion as unverified; the guard against a confidently-wrong answer going
-// public is now the fact-check verdict itself, not a second human retype.
-describe('isVerifiedAnswer (suggest-a-verified-answer model)', () => {
+// before it was shown, so USING it is verified — this is what fixed the confusing
+// "unverified" state when a player tapped "Use Joshing's answer".
+//
+// "Verified" stays STRICT because it unlocks spreading (broadcast to all friends +
+// forwarding): the answer must AGREE with Joshing's independent suggestion. An
+// author override that DIFFERS is never auto-verified — not even when a single
+// on-demand fact-check likes it, since a crafted false premise could fool one
+// verifier. That is the guard against a nefarious actor spreading a wrong answer.
+describe('isVerifiedAnswer (suggest-a-verified-answer, strict spread guard)', () => {
   const suggestion = 'Bucephalus';
 
   it('verifies when the author is using Joshing’s (pre-fact-checked) suggestion', () => {
@@ -33,16 +35,8 @@ describe('isVerifiedAnswer (suggest-a-verified-answer model)', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '', answerSource: null })).toBe(false);
   });
 
-  it('does NOT verify an author override that differs from the suggestion and has no passing check', () => {
+  it('does NOT verify an author override that differs from the suggestion (strict guard)', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author' })).toBe(false);
-  });
-
-  it('does NOT verify an author override even after a WRONG/UNVERIFIABLE check (checkedOk false)', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author', checkedOk: false })).toBe(false);
-  });
-
-  it('verifies an author override once its on-demand fact-check comes back OK (checkedOk)', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author', checkedOk: true })).toBe(true);
   });
 
   it('falls back to verified when there is no suggestion to anchor against', () => {

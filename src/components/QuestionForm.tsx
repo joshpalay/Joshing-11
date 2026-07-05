@@ -347,26 +347,24 @@ function answersMatch(a: string, b: string | null): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
-// "Verified" means the answer carries an independent machine fact-check, NOT that
-// the author retyped a matching string. The model: Joshing suggests an answer that
-// was already fact-checked before it was shown, so using it ('suggestion'/'auto')
-// is verified. If the player overrides it with their own answer ('author'), that
-// answer is verified when it equals the suggestion, or when a fresh on-demand
-// fact-check (`checkedOk` — the /api/questions/verify-answer verdict for THIS
-// answer) came back OK. With no suggestion to anchor against we fall back to
-// verified (suggestion unavailable, or edit mode without one).
+// "Verified" is the STRICT bar that unlocks spreading (broadcast to all friends +
+// forwarding by recipients): the answer must AGREE with Joshing's independent,
+// fact-checked suggestion. Using it verbatim ('suggestion'/'auto'), or
+// independently typing a matching answer ('author' + match), clears it. An answer
+// that DIFFERS from the suggestion is never auto-verified — even if a single
+// on-demand fact-check likes it. That check can be gamed by a crafted false
+// premise, so it stays advisory only; requiring agreement with an independently
+// generated answer is the guard that stops a wrong or adversarial answer from
+// self-certifying and spreading. With no suggestion to anchor against we fall back
+// to verified (suggestion unavailable, or edit mode without one).
 export function isVerifiedAnswer(params: {
   suggestedAnswer: string | null;
   userAnswer: string;
   answerSource: AnswerSource;
-  checkedOk?: boolean;
 }): boolean {
   if (!params.suggestedAnswer) return true;
   if (params.answerSource === 'suggestion' || params.answerSource === 'auto') return true;
-  if (params.answerSource === 'author') {
-    return answersMatch(params.userAnswer, params.suggestedAnswer) || params.checkedOk === true;
-  }
-  return false;
+  return params.answerSource === 'author' && answersMatch(params.userAnswer, params.suggestedAnswer);
 }
 
 function computedVerified(state: State): boolean {
@@ -374,15 +372,7 @@ function computedVerified(state: State): boolean {
     suggestedAnswer: state.llmSuggestedAnswer,
     userAnswer: state.userAnswer,
     answerSource: state.answerSource,
-    checkedOk: checkVerdictOk(state),
   });
-}
-
-// A fact-check verdict only counts as OK when it was computed for the answer
-// currently on the field.
-function checkVerdictOk(state: State): boolean {
-  return state.answerCheck.status === 'ok'
-    && state.answerCheck.for === answerPairKey(state.questionText, state.userAnswer);
 }
 
 function validate(state: State): string | null {
@@ -896,7 +886,21 @@ export function QuestionForm({
             ) : state.answerCheck.status === 'checking' ? (
               <p className="text-sm text-muted-foreground">Checking your answer…</p>
             ) : checkOkNow ? (
-              <p className="text-sm text-[var(--success)]">✓ Verified — we checked your answer and it looks correct.</p>
+              // Advisory only: the check likes it, but it still differs from
+              // Joshing's independent answer, so it stays unverified for spreading.
+              // (Verified — which unlocks sharing with everyone — requires agreeing
+              // with Joshing's answer, the guard against a crafted answer spreading.)
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p>Your answer looks right to us — but it isn&apos;t Joshing&apos;s answer, so it stays unverified. You can save it and send it directly to friends; use Joshing&apos;s answer to share with everyone.</p>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
+                  disabled={state.stage === 'SUBMITTING'}
+                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Use Joshing&apos;s answer instead
+                </button>
+              </div>
             ) : checkWrongNow ? (
               // The player's own answer failed the fact-check. Surface the machine's
               // correction; they can adopt it, keep theirs (unverified), or re-check.
@@ -920,7 +924,7 @@ export function QuestionForm({
             ) : (
               // Author replaced Joshing's answer with their own; verdict not in yet.
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                <p className="text-xs text-muted-foreground">You changed the answer. Joshing suggested <span className="font-medium text-foreground">{state.llmSuggestedAnswer}</span>.</p>
+                <p className="text-xs text-muted-foreground">You changed the answer — it no longer matches Joshing&apos;s, so it&apos;s unverified (save &amp; direct-send only, no wider sharing). Joshing suggested <span className="font-medium text-foreground">{state.llmSuggestedAnswer}</span>.</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"

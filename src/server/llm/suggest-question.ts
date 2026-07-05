@@ -18,10 +18,13 @@
  * original suggestion untouched, so an LLM hiccup never blocks the suggestion.
  *
  * This verification is what lets the form treat the suggestion as a VERIFIED
- * answer the author can adopt as-is. If the author instead says it's wrong and
- * supplies their own answer, that answer is fact-checked on demand (verifyAnswer,
- * exposed at /api/questions/verify-answer) before it earns "verified". See
- * QuestionForm's isVerifiedAnswer.
+ * answer the author can adopt as-is. "Verified" (which unlocks broadcast +
+ * forwarding) stays strict: the author's answer must AGREE with this
+ * independently generated suggestion. If they override it with a different
+ * answer it is unverified for spreading — a single on-demand fact-check
+ * (verifyAnswer, exposed at /api/questions/verify-answer) is offered as advisory
+ * help but deliberately does NOT grant "verified", since a crafted false premise
+ * could fool one verifier. See QuestionForm's isVerifiedAnswer.
  */
 
 import {
