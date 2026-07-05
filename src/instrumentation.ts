@@ -2077,6 +2077,27 @@ export async function register() {
         ALTER TABLE "PLAYER_MASTERY" ADD COLUMN IF NOT EXISTS "designated_at" timestamp with time zone
       `);
       await db.execute(sql`ALTER TABLE "AuthorInvitation" ALTER COLUMN "invited_by" DROP NOT NULL`);
+      // Migration 0115 (D-QUALITY-SALVAGE-01): machine-proposed salvage fixes for
+      // demoted questions. The salvage batch + review queue read/insert here and
+      // would 42P01 if the migration recorded without the table. Self-contained;
+      // same rationale as the 0103 CrafterDraftDecision guard.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "QuestionSalvageProposal" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "question_id" text NOT NULL,
+          "target_table" text NOT NULL,
+          "kind" text NOT NULL,
+          "proposed_stem" text,
+          "proposed_explanation" text,
+          "reverify_outcome" text NOT NULL,
+          "reverify_reason" text,
+          "status" text NOT NULL DEFAULT 'ready',
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "QuestionSalvageProposal" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "QuestionSalvageProposal_question_id_idx" ON "QuestionSalvageProposal" ("question_id")`);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "QuestionSalvageProposal_active_question_key" ON "QuestionSalvageProposal" ("question_id") WHERE "status" = 'ready'`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

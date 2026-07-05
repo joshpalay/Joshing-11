@@ -6,6 +6,7 @@ import {
   resolveActiveIncorrectReportsForGenerated,
   resolveActiveIncorrectReportsForQuestion,
 } from '@/server/db/queries/content-reports';
+import { getReadyProposalsForQuestions, type SalvageProposalRow } from '@/server/db/queries/salvage-proposals';
 import { type QuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 
 // B-CRAFTER-LIFECYCLE-01 Phase 1 — the MACHINE stream of the admin review queue.
@@ -44,6 +45,9 @@ export type MachineDemotionReviewItem = {
   creatorId: string | null;
   authorName: string | null;
   authorIsHouse: boolean;
+  // D-QUALITY-SALVAGE-01: a machine-proposed, pre-re-verified minimal fix awaiting
+  // one-click approval. Present only when a 'ready' proposal exists for this row.
+  proposal: SalvageProposalRow | null;
 };
 
 // Demoted canonical questions awaiting a human call, oldest demotion first
@@ -81,6 +85,8 @@ export async function getMachineDemotionsForReview(): Promise<MachineDemotionRev
     )
     .orderBy(asc(questions.verifiedAt));
 
+  const proposals = await getReadyProposalsForQuestions(rows.map((r) => r.questionId));
+
   return rows.map((row) => ({
     questionId: row.questionId,
     questionText: row.questionText,
@@ -92,6 +98,7 @@ export async function getMachineDemotionsForReview(): Promise<MachineDemotionRev
     broadCategory: row.broadCategory,
     source: row.source,
     creatorId: row.creatorId,
+    proposal: proposals.get(row.questionId) ?? null,
     ...resolveAuthorDisplay(row.creatorId, row.source, row.authorName),
   }));
 }
