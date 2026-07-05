@@ -1250,6 +1250,37 @@ export const crafterDraftDecisions = pgTable(
   ],
 );
 
+// D-QUALITY-SALVAGE-01: a machine-proposed minimal fix for a verifier-demoted
+// question, pre-re-verified, awaiting a human's one-click approval in the review
+// queue. Never applied automatically — approving copies the proposed text into
+// the real edit/approve path. Append-only-ish: one live ('ready') proposal per
+// question; superseded/decided proposals keep their terminal status for record.
+export const questionSalvageProposals = pgTable(
+  'QuestionSalvageProposal',
+  {
+    id: id(),
+    // The demoted row's id, in whichever store it lives (see targetTable).
+    questionId: text('question_id').notNull(),
+    targetTable: text('target_table').$type<'question' | 'generated'>().notNull(),
+    kind: text('kind').$type<'extra_fact_stem' | 'extra_fact_explainer' | 'unsalvageable'>().notNull(),
+    proposedStem: text('proposed_stem'),
+    proposedExplanation: text('proposed_explanation'),
+    // Outcome of re-verifying the PROPOSED version. A proposal is only surfaced
+    // when this is 'ok' — the human never sees a fix that didn't actually pass.
+    reverifyOutcome: text('reverify_outcome').$type<'ok' | 'demoted' | 'unverifiable'>().notNull(),
+    reverifyReason: text('reverify_reason'),
+    status: text('status').$type<'ready' | 'applied' | 'rejected' | 'unsalvageable'>().notNull().default('ready'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('QuestionSalvageProposal_question_id_idx').on(table.questionId),
+    // At most one live proposal per question — a re-run supersedes, not stacks.
+    uniqueIndex('QuestionSalvageProposal_active_question_key')
+      .on(table.questionId)
+      .where(sql`${table.status} = 'ready'`),
+  ],
+);
+
 export const friendships = pgTable(
   'Friendship',
   {
