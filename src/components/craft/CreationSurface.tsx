@@ -285,9 +285,45 @@ function OwnQuestionCard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keptCount, setKeptCount] = useState(0);
+  // Inline LLM answer check — parity with the machine-draft cards. A verdict is
+  // pinned to the exact (question, answer) pair; editing either makes it stale.
+  const [verify, setVerify] = useState<VerifyState>({ status: 'idle' });
+  const currentKey = answerPairKey(questionText, answer);
+  const verdictForCurrent =
+    (verify.status === 'ok' || verify.status === 'unverifiable' || verify.status === 'wrong')
+    && verify.for === currentKey;
 
   const fieldClass =
     'w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 py-1 text-sm focus:border-[var(--brand-navy)]';
+
+  // Fail-open: a checker outage resolves to 'error' and never blocks the add.
+  async function checkAnswer() {
+    if (!questionText.trim() || !answer.trim()) return;
+    const key = answerPairKey(questionText, answer);
+    setVerify({ status: 'checking' });
+    try {
+      const res = await fetch('/api/questions/verify-answer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ questionText: questionText.trim(), answer: answer.trim() }),
+      });
+      if (!res.ok) {
+        setVerify({ status: 'error' });
+        return;
+      }
+      const body = (await res.json()) as { verdict: 'OK' | 'WRONG' | 'UNVERIFIABLE'; correctedAnswer: string | null };
+      setVerify(
+        body.verdict === 'OK'
+          ? { status: 'ok', for: key }
+          : body.verdict === 'WRONG'
+            ? { status: 'wrong', for: key, corrected: body.correctedAnswer }
+            : { status: 'unverifiable', for: key },
+      );
+    } catch {
+      setVerify({ status: 'error' });
+    }
+  }
 
   async function keepOwn() {
     if (pending || !questionText.trim() || !answer.trim()) return;
@@ -382,6 +418,44 @@ function OwnQuestionCard({
         className={`${fieldClass} mt-2`}
         aria-label="Explainer"
       />
+
+      {/* On-demand LLM answer check — same pass as the machine-draft cards. The
+          verdict is stale once question/answer changes and stops showing. */}
+      {verify.status === 'checking' ? (
+        <p className="text-muted-foreground mt-2 text-xs">Checking the answer with the LLM…</p>
+      ) : verify.status === 'error' ? (
+        <p className="text-muted-foreground mt-2 text-xs">Couldn&apos;t reach the answer checker — try again.</p>
+      ) : verdictForCurrent && verify.status === 'ok' ? (
+        <p className="mt-2 text-xs" style={{ color: 'var(--success)' }}>✓ LLM check: this answer looks correct.</p>
+      ) : verdictForCurrent && verify.status === 'unverifiable' ? (
+        <p className="text-muted-foreground mt-2 text-xs">LLM check: couldn&apos;t verify this one — use your judgement.</p>
+      ) : verdictForCurrent && verify.status === 'wrong' ? (
+        <div
+          className="mt-2 rounded-md px-3 py-2 text-xs leading-relaxed"
+          style={{ background: 'var(--warning-surface)', color: 'var(--warning)' }}
+        >
+          <p>⚠ LLM check: this answer looks incorrect for the question.</p>
+          {verify.corrected ? (
+            <p className="mt-1">
+              Suggested correct answer: <strong>{verify.corrected}</strong>
+            </p>
+          ) : null}
+          {verify.corrected ? (
+            <button
+              type="button"
+              onClick={() => {
+                setAnswer(verify.corrected!);
+                setVerify({ status: 'idle' });
+              }}
+              className="mt-2 rounded-md border px-3 py-1 text-xs font-medium"
+              style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
+            >
+              Apply suggested answer
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <select
           value={difficulty}
@@ -402,6 +476,15 @@ function OwnQuestionCard({
           style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
         >
           {pending ? 'Adding…' : 'Add — fact-check queued'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void checkAnswer()}
+          disabled={pending || verify.status === 'checking' || !questionText.trim() || !answer.trim()}
+          className="inline-flex min-h-11 items-center rounded-md border px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        >
+          {verify.status === 'checking' ? 'Checking…' : 'Check answer'}
         </button>
         {keptCount > 0 ? (
           <span className="text-xs" style={{ color: 'var(--success)' }}>
