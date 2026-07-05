@@ -23,6 +23,7 @@ import {
 } from '@/server/daily/kb-exhaustion';
 import type { AdjacentDomainSuggestion } from '@/server/llm/interests';
 import { suggestAdjacentDomains, suggestBroaderDomains } from '@/server/llm/interests';
+import { evaluateSetCompletions } from '@/server/daily/set-completion';
 import { getCachedDomainRungs } from '@/server/knowledge/nearness-tree';
 import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
 import { domainKey } from '@/lib/knowledge/domain-key';
@@ -355,6 +356,15 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     territoryType: masteryByDomain.get(domain)?.territoryType ?? null,
   }));
   const expansionOffer = await buildExpansionOffer(userId, touchedForExpansion);
+
+  // D-SUPPLY-FINITE-SET-01 P2: designate + auto-invite domains this player just
+  // completed (answered the whole finite set). Side-effect only — it creates the
+  // AuthorInvitation that the summary's InvitationTakeoverGate then routes to
+  // /invited (the trophy). Fail-open; never blocks the summary.
+  await evaluateSetCompletions(
+    userId,
+    touchedForExpansion.map((t) => t.domain),
+  );
 
   return {
     date: dateString,
