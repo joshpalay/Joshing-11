@@ -52,6 +52,14 @@ export type StreamQuestion = {
   // the feed — and drives the ANSWERED history's "Correct" / "Not this time"
   // copy plus the bundle progress mark.
   priorResult: 'correct' | 'incorrect' | null;
+  // The viewer has DISMISSED this milestone question (dismiss-as-answered). Like
+  // `priorResult`, it CONSUMES the question — it counts toward the bundle's
+  // played progress and a bundle whose questions are all answered-or-dismissed
+  // disappears — but it is NEUTRAL: a dismiss is not a wrong answer and touches
+  // nothing in mastery/points. Persisted per-viewer in MilestoneDismissed;
+  // seeded here on load so a dismissed question stays dismissed across reloads.
+  // Milestone (From Friends) questions only; undefined/false everywhere else.
+  dismissed?: boolean;
   // Honest authorship for the expanded reveal (D-FEED-GROUP3-01 §4). Tri-state,
   // and the distinction is load-bearing for the provenance marker:
   //   - undefined        — provenance not resolved for this source; show nothing

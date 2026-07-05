@@ -37,6 +37,7 @@ vi.mock('@/server/db/queries/lately', () => ({
     new Map(ids.map((id) => [id, { questionId: id, text: `text ${id}`, domain: 'history' }])),
   ),
   getViewerPriorAnswerResults: getViewerPriorAnswerResultsMock,
+  getViewerDismissedMilestoneIds: vi.fn(async () => new Set()),
 }));
 
 import { buildActivityStream } from '@/server/activity/build-stream';

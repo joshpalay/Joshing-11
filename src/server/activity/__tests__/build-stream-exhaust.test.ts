@@ -8,10 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // run with no cross-viewer leakage. We mock the upstream queries (echoing the
 // questions through the pure transforms) and assert which bundles survive.
 
-const { getViewerPriorAnswerResultsMock, getFriendActivityMock } = vi.hoisted(() => ({
-  getViewerPriorAnswerResultsMock: vi.fn(async () => new Map<string, 'correct' | 'incorrect'>()),
-  getFriendActivityMock: vi.fn(async () => [{ id: 'm1', questionIds: ['q1', 'q2'] }]),
-}));
+const { getViewerPriorAnswerResultsMock, getViewerDismissedMilestoneIdsMock, getFriendActivityMock } =
+  vi.hoisted(() => ({
+    getViewerPriorAnswerResultsMock: vi.fn(async () => new Map<string, 'correct' | 'incorrect'>()),
+    getViewerDismissedMilestoneIdsMock: vi.fn(async () => new Set<string>()),
+    getFriendActivityMock: vi.fn(async () => [{ id: 'm1', questionIds: ['q1', 'q2'] }]),
+  }));
 
 vi.mock('@/app/activities/filter-utility-activities', () => ({
   filterUtilityActivities: () => [],
@@ -43,6 +45,7 @@ vi.mock('@/server/db/queries/lately', () => ({
     new Map(ids.map((id) => [id, { questionId: id, text: `text ${id}`, domain: 'history' }])),
   ),
   getViewerPriorAnswerResults: getViewerPriorAnswerResultsMock,
+  getViewerDismissedMilestoneIds: getViewerDismissedMilestoneIdsMock,
 }));
 
 import { buildActivityStream } from '@/server/activity/build-stream';
@@ -50,13 +53,18 @@ import { buildActivityStream } from '@/server/activity/build-stream';
 type MilestoneItem = {
   kind: string;
   id: string;
-  questions: Array<{ questionId: string; priorResult: 'correct' | 'incorrect' | null }>;
+  questions: Array<{
+    questionId: string;
+    priorResult: 'correct' | 'incorrect' | null;
+    dismissed?: boolean;
+  }>;
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   getFriendActivityMock.mockResolvedValue([{ id: 'm1', questionIds: ['q1', 'q2'] }]);
   getViewerPriorAnswerResultsMock.mockResolvedValue(new Map());
+  getViewerDismissedMilestoneIdsMock.mockResolvedValue(new Set());
 });
 
 describe('buildActivityStream — exhausted From Friends bundles are hidden (per-viewer)', () => {
@@ -119,5 +127,39 @@ describe('buildActivityStream — exhausted From Friends bundles are hidden (per
     expect(milestone).toBeDefined();
     expect(milestone!.questions).toHaveLength(5);
     expect(milestone!.questions.filter((q) => q.priorResult === null)).toHaveLength(5);
+  });
+
+  // Dismiss-as-answered: a dismissed question is consumed like an answered one —
+  // it no longer counts as "remaining", so waving off the last unanswered
+  // question empties the bundle and it drops, and the flag rides each question so
+  // the client can render the dismissed ones (and keep them dismissed on reload).
+  it('drops a bundle whose questions are all dismissed (no answers)', async () => {
+    getViewerDismissedMilestoneIdsMock.mockResolvedValue(new Set(['q1', 'q2']));
+
+    const stream = (await buildActivityStream('viewer-1')) as unknown as MilestoneItem[];
+    expect(stream.find((item) => item.kind === 'milestone')).toBeUndefined();
+  });
+
+  it('drops a bundle whose questions are a mix of answered and dismissed', async () => {
+    getViewerPriorAnswerResultsMock.mockResolvedValue(new Map([['q1', 'correct']]));
+    getViewerDismissedMilestoneIdsMock.mockResolvedValue(new Set(['q2']));
+
+    const stream = (await buildActivityStream('viewer-1')) as unknown as MilestoneItem[];
+    expect(stream.find((item) => item.kind === 'milestone')).toBeUndefined();
+  });
+
+  it('keeps a bundle with one dismissed and one still-answerable question, flagging the dismissed one', async () => {
+    getViewerDismissedMilestoneIdsMock.mockResolvedValue(new Set(['q1']));
+
+    const stream = (await buildActivityStream('viewer-1')) as unknown as MilestoneItem[];
+    const milestone = stream.find((item) => item.kind === 'milestone');
+
+    expect(milestone).toBeDefined();
+    // q1 carries the dismissed flag (so the card renders it as dismissed); q2 is
+    // the one remaining answerable question.
+    expect(milestone!.questions.find((q) => q.questionId === 'q1')?.dismissed).toBe(true);
+    expect(milestone!.questions.find((q) => q.questionId === 'q2')?.dismissed).toBe(false);
+    const remaining = milestone!.questions.filter((q) => q.priorResult === null && !q.dismissed);
+    expect(remaining.map((q) => q.questionId)).toEqual(['q2']);
   });
 });

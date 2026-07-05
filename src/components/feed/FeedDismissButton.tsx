@@ -8,7 +8,9 @@ type FeedDismissButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
  * The quiet, secondary dismiss control on an unanswered question card, sitting
  * bottom-left opposite the primary "Answer →" (FeedActionLink). Deliberately
  * lighter than Answer — a muted-foreground text label, no underline — so it
- * stays discoverable without competing. View-state only: it never mutes.
+ * stays discoverable without competing. The consequence of pressing it is the
+ * caller's concern: on the From Friends streak card (dismiss-as-answered) it
+ * consumes and persists the question; elsewhere it may be view-state only.
  */
 export function FeedDismissButton({ className, type, ...props }: FeedDismissButtonProps) {
   return (

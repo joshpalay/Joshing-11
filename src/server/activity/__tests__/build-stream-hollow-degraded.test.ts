@@ -35,6 +35,7 @@ vi.mock('@/server/db/queries/lately', () => ({
   getFriendActivity: vi.fn(async () => []),
   getMilestoneQuestionText: vi.fn(async () => new Map()),
   getViewerPriorAnswerResults: vi.fn(async () => new Map()),
+  getViewerDismissedMilestoneIds: vi.fn(async () => new Set()),
 }));
 
 import { buildActivityStream } from '@/server/activity/build-stream';

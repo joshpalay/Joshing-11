@@ -1534,6 +1534,33 @@ export const recoveredSetAside = pgTable(
   ],
 );
 
+// Per-user "dismiss" for a From Friends milestone/streak question. A reversible
+// soft-dismiss at the QUESTION level: an active row (reinstatedAt IS NULL) marks
+// that the viewer has waved a friend's question off — it counts toward the
+// bundle's played/consumed progress exactly like an answer (so a bundle whose
+// questions are all answered-or-dismissed disappears), but it is deliberately
+// NEUTRAL: it writes ONLY this row and touches nothing in the mastery/points
+// system, so a dismiss never reads as a wrong answer. Undo sets reinstatedAt =
+// now(); dismissing again inserts a fresh active row. Mirrors RecoveredSetAside
+// / FeedDismissedDomain exactly (the partial unique index keeps at most one
+// active row per (userId, questionId)).
+export const milestoneDismissed = pgTable(
+  'MilestoneDismissed',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
+    reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
+  },
+  (table) => [
+    index('MilestoneDismissed_userId_idx').on(table.userId),
+    uniqueIndex('milestone_dismissed_active_unique')
+      .on(table.userId, table.questionId)
+      .where(sql`${table.reinstatedAt} IS NULL`),
+  ],
+);
+
 export const friendInvitations = pgTable(
   'FriendInvitation',
   {

@@ -154,6 +154,28 @@ describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', 
   });
 });
 
+describe('FromFriendsStreak — dismiss-as-answered', () => {
+  it('renders a persisted-dismissed question as a quiet "Dismissed" undo bar, not an answer card', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak item={streakItem([q('waved', { dismissed: true }), q('fresh')])} />,
+    );
+    // The dismissed question keeps its dismissed state across reloads: it reads as
+    // a "Dismissed" bar with an Undo, NOT a spent result and NOT an answer card.
+    expect(html).toContain('Dismissed');
+    expect(html).toContain('Undo');
+    expect(html).not.toContain('Not this time');
+    // Only the still-fresh question stays answerable.
+    expect(html).toContain('Question fresh');
+    expect(answerCardCount(html)).toBe(1);
+  });
+
+  it('offers a Dismiss control on each still-answerable card', () => {
+    const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('a'), q('b')])} />);
+    // The dismiss affordance is present pre-answer on every playable card.
+    expect((html.match(/Dismiss/g) ?? []).length).toBe(2);
+  });
+});
+
 describe('FromFriendsStreak — View Answer peek', () => {
   it('renders a Dismiss | View Answer pair on each still-answerable card', () => {
     const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('a'), q('b')])} />);
