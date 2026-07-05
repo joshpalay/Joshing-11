@@ -3,38 +3,49 @@ import { describe, expect, it } from 'vitest';
 
 import { isVerifiedAnswer, ReformulationOption, scopeSignpost } from '@/components/QuestionForm';
 
-// The screenshot bug: the LLM auto-filled a wrong answer ("Keanu Reeves"), which
-// the "verified" check then matched against itself, self-certifying a wrong answer
-// as broadcast-eligible. "verified" must mean the AUTHOR independently corroborated
-// the suggestion — not that they passively accepted the machine's guess.
-describe('isVerifiedAnswer (anti self-certification)', () => {
-  const suggestion = 'Keanu Reeves';
+// The model (2026-07): Joshing suggests an answer that was already fact-checked
+// before it was shown, so USING it is verified. If the player says it's wrong and
+// supplies their own answer, that answer earns "verified" only by passing an
+// on-demand fact-check (checkedOk) — or by happening to equal the suggestion.
+// This supersedes the older "anti self-certification" model that treated adopting
+// the suggestion as unverified; the guard against a confidently-wrong answer going
+// public is now the fact-check verdict itself, not a second human retype.
+describe('isVerifiedAnswer (suggest-a-verified-answer model)', () => {
+  const suggestion = 'Bucephalus';
 
-  it('verifies when the author independently typed a matching answer', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'author' })).toBe(true);
+  it('verifies when the author is using Joshing’s (pre-fact-checked) suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Bucephalus', answerSource: 'suggestion' })).toBe(true);
   });
 
-  it('does NOT verify when the author merely accepted the suggestion (no independent corroboration)', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'suggestion' })).toBe(false);
+  it('verifies an automated (autoSubmit) adoption of the suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Bucephalus', answerSource: 'auto' })).toBe(true);
+  });
+
+  it('verifies when the author independently typed a matching answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Bucephalus', answerSource: 'author' })).toBe(true);
+  });
+
+  it('matches case- and whitespace-insensitively for an author-supplied answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '  bucephalus ', answerSource: 'author' })).toBe(true);
   });
 
   it('does NOT verify before the author has supplied any answer', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '', answerSource: null })).toBe(false);
   });
 
-  it('verifies an automated (autoSubmit) adoption of the verifier-vouched suggestion', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'auto' })).toBe(true);
+  it('does NOT verify an author override that differs from the suggestion and has no passing check', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author' })).toBe(false);
   });
 
-  it('does NOT verify when the author typed a different answer than the suggestion', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Balthazar Getty', answerSource: 'author' })).toBe(false);
+  it('does NOT verify an author override even after a WRONG/UNVERIFIABLE check (checkedOk false)', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author', checkedOk: false })).toBe(false);
   });
 
-  it('matches case- and whitespace-insensitively for an author-supplied answer', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '  keanu reeves ', answerSource: 'author' })).toBe(true);
+  it('verifies an author override once its on-demand fact-check comes back OK (checkedOk)', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author', checkedOk: true })).toBe(true);
   });
 
-  it('falls back to verified when there is no suggestion to cross-check against', () => {
+  it('falls back to verified when there is no suggestion to anchor against', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: null, userAnswer: 'anything', answerSource: 'author' })).toBe(true);
   });
 });

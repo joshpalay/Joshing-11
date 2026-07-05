@@ -17,10 +17,11 @@
  * The verifier is strictly fail-open: any error/timeout/invalid output leaves the
  * original suggestion untouched, so an LLM hiccup never blocks the suggestion.
  *
- * The verifier is only half the defence: the form treats the suggestion as an
- * INDEPENDENT cross-check the author confirms against, never a pre-filled answer,
- * so a wrong guess that slips past the verifier still cannot self-certify as
- * "verified". See QuestionForm's isVerifiedAnswer.
+ * This verification is what lets the form treat the suggestion as a VERIFIED
+ * answer the author can adopt as-is. If the author instead says it's wrong and
+ * supplies their own answer, that answer is fact-checked on demand (verifyAnswer,
+ * exposed at /api/questions/verify-answer) before it earns "verified". See
+ * QuestionForm's isVerifiedAnswer.
  */
 
 import {
