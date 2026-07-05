@@ -170,6 +170,13 @@ function Eyebrow({ children, color }: { children: ReactNode; color: string }) {
 }
 
 function Shell({ th, children }: { th: RoomTheme; children: ReactNode }) {
+  // A room centers its content when it fits, but a tall beat (long question
+  // text, a long domain list) can exceed the viewport. `justify-content: center`
+  // would clip the overflow off both edges with no way to read it, so instead we
+  // let the room scroll and center via auto margins on the child — auto margins
+  // collapse to 0 when content overflows, keeping the top reachable rather than
+  // clipped. Extra top/bottom padding clears the pips and the "tap to continue"
+  // hint. Vertical drags scroll; a tap still advances (handled on <main>).
   return (
     <div
       className="ceremony-room-in"
@@ -179,11 +186,14 @@ function Shell({ th, children }: { th: RoomTheme; children: ReactNode }) {
         background: th.bg,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
-        padding: '36px 30px',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        padding: '72px 30px calc(72px + env(safe-area-inset-bottom))',
       }}
     >
-      <div className="mx-auto w-full max-w-md">{children}</div>
+      <div className="w-full max-w-md" style={{ margin: 'auto' }}>
+        {children}
+      </div>
     </div>
   );
 }
