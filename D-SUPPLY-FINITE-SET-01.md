@@ -116,3 +116,52 @@ A set is bounded *at any moment*, not permanently sealed:
 - The paid AC-1 refill run / soak — still paused pending the P3 re-scope; refill
   as it stands (infinite drain) is now the *wrong shape*, so do not run the
   old-shape confirmation — rebuild it fill-once first.
+
+## Results (addendum, 2026-07-05)
+
+P1 and P2 shipped the same day this was ratified; building them + the parallel
+demoted-question work surfaced findings that **partly overtake the plan above.**
+The decision holds as *direction*; three corrections to what's written:
+
+- **P1 (curation-worthiness score) — shipped (#1422), but the signal is INERT.**
+  `curationVerdict` + `CURATION_FUTILITY_THRESHOLD=0.34` are live in the crafter
+  worklist + weekly cost email. **Nothing crosses the line in prod:** the worst
+  domain is ~25% demotion (under 0.34) and refill is off so nothing is
+  "generation-struggling." The router is built ahead of anything to route.
+
+- **The cost-routing premise (§2) is weaker than assumed — and this session
+  eroded it further.** §2 keys "curate this domain" on **demotion rate** as a
+  proxy for intrinsic domain difficulty. But the salvage pass (`D-QUALITY-
+  SALVAGE-01`, #1426) found **~70% of demotions are one-off *extra-fact* errors**
+  (a wrong year/count/attribution, usually in the explainer) scattered across
+  otherwise-fine domains — fixable with a one-line trim, **not** a signal the
+  domain is hard. Worse, the salvage pass + the generation tightening (#1425)
+  **drive demotion rates down broadly**, hollowing out the exact signal P4's
+  routing depends on. **Correction:** if cost-routing is revived, do NOT key it on
+  raw demotion rate. Use the signals salvage can't explain away — **verify
+  web-search rate** and **draft-kill rate** — or **post-salvage *residual*
+  demotion** (a domain that still demotes *after* the trim is the genuinely-hard
+  one). That residual is the real "expensive domain."
+
+- **P2 (set-completion) — shipped (#1427), but it does NOT use `node_weight`.**
+  Contrary to "set size is seeded from `node_weight`" (§"What finite changes"),
+  completion was implemented as **distinct-answered ≥ durable pool depth, floored
+  at `SET_COMPLETION_MIN_SIZE=8`** — because at current scale pool depth *is* the
+  set, and weight-based target sizing is really a P3/generation-cap concern that
+  doesn't exist yet. Do not build P3 assuming P2 already sizes sets by weight.
+
+- **At ~6 weekly players the whole model is LATENT, not load-bearing.** Only 13
+  pre-P2 completions across 4 players exist, and they don't retroactively fire —
+  so the trophy/authorship arc will rarely trigger for now. **P3 (fill-once
+  refill) and P4 (routing) are scale-gated, not next-up:** normal generation +
+  human authoring already fills sets faster than 6 people drain them, and P4 has
+  no cost-variance to route on yet. Revisit both when player count grows enough
+  that (a) players actually complete sets and (b) a residual-demotion signal has
+  real spread.
+
+- **What held up:** the completion-as-trophy reframe (the driving fix for the
+  "answering ever deeper leads to boredom" feedback) is correct regardless of
+  scale, and the phasing ("each independently mergeable") is what let P1/P2 ship
+  while P3/P4 wait. The §2 convergence idea (expensive domain == ideal-author
+  domain) stays elegant — *if* cost-variance ever materializes under a
+  salvage-corrected signal.
