@@ -15,6 +15,7 @@ import {
   restoreDemotedQuestion,
   retireDemotedQuestion,
 } from '@/server/db/queries/machine-demotions';
+import { resolveSalvageProposal } from '@/server/db/queries/salvage-proposals';
 import { rerunQuestion } from '@/server/quality/rerun-question';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,9 @@ const bodySchema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('restore_demoted'), questionId: z.string().trim().min(1) }),
   z.object({ action: z.literal('retire_demoted'), questionId: z.string().trim().min(1) }),
+  // D-QUALITY-SALVAGE-01: dismiss a machine-proposed salvage fix ("Not a fix");
+  // the demotion card falls back to the manual restore/edit/retire buttons.
+  z.object({ action: z.literal('reject_salvage'), questionId: z.string().trim().min(1) }),
   z.object({
     action: z.literal('edit'),
     questionId: z.string().trim().min(1),
@@ -104,7 +108,15 @@ export async function POST(request: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.reason }, { status: 404 });
     }
+    // If this approval consumed a salvage proposal, mark it applied (best-effort;
+    // a no-op when the edit didn't come from one).
+    await resolveSalvageProposal(data.target.id, 'applied');
     return NextResponse.json(result);
+  }
+
+  if (data.action === 'reject_salvage') {
+    await resolveSalvageProposal(data.questionId, 'rejected');
+    return NextResponse.json({ ok: true });
   }
 
   if (data.action === 'edit') {
@@ -148,6 +160,12 @@ export async function POST(request: NextRequest) {
       { error: result.reason },
       { status: result.reason === 'not_found' ? 404 : 409 },
     );
+  }
+
+  // A manual restore/retire settles the demotion, so retire any live salvage
+  // proposal too (it can't apply to a row that has left the queue).
+  if (data.action === 'restore_demoted' || data.action === 'retire_demoted') {
+    await resolveSalvageProposal(data.questionId, 'rejected');
   }
 
   return NextResponse.json(result);

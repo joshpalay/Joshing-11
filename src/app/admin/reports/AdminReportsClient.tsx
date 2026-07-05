@@ -161,6 +161,10 @@ export function AdminReportsClient({
       })),
   ].sort((a, b) => a.at - b.at);
   const openCount = inappropriate.length + rest.length;
+  // D-QUALITY-SALVAGE-01: how many demotions have a ready one-click fix waiting.
+  const readyFixCount = demotions.filter(
+    (item) => item.proposal && !hiddenKey(`demotion:${item.questionId}`),
+  ).length;
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
@@ -173,6 +177,12 @@ export function AdminReportsClient({
           Two streams, one queue: players reported these, or the verifier pulled them pending your
           call. Nothing here is deleted — flagged questions sit out of circulation until you act.
         </p>
+        {readyFixCount > 0 ? (
+          <p className="mt-2 text-sm font-medium text-[var(--success)]">
+            {readyFixCount} {readyFixCount === 1 ? 'has' : 'have'} a suggested fix that re-verifies
+            clean — look for “Review fix”.
+          </p>
+        ) : null}
         <div className="mt-3 flex gap-2">
           <TabButton active={view === 'open'} onClick={() => setView('open')}>
             Needing review ({openCount})
@@ -913,6 +923,9 @@ function DemotionRow({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  // Opened from the "Review fix" button → EditPanel pre-fills the machine's
+  // proposed edit (D-QUALITY-SALVAGE-01). The human still re-runs + approves.
+  const [fixMode, setFixMode] = useState(false);
 
   function resolved() {
     onCleared();
@@ -925,6 +938,20 @@ function DemotionRow({
       label: action === 'restore_demoted' ? 'Restored to circulation' : 'Retired (recoverable)',
       body: { action, questionId: item.questionId },
     });
+  }
+
+  function rejectFix() {
+    onStage({
+      key: `demotion:${item.questionId}`,
+      label: 'Suggested fix dismissed',
+      body: { action: 'reject_salvage', questionId: item.questionId },
+    });
+  }
+
+  const proposal = item.proposal;
+  function openFix() {
+    setFixMode(true);
+    setEditing(true);
   }
 
   const authorLabel = item.authorIsHouse
@@ -970,24 +997,63 @@ function DemotionRow({
         {item.verificationReason ?? 'reason not captured (demoted before reasons were stored)'}
       </p>
 
+      {/* D-QUALITY-SALVAGE-01: a machine-proposed minimal fix that already
+          re-verified clean. Conservative — "Review fix" opens the same edit panel
+          pre-filled; the human still re-runs + approves. Nothing auto-applies. */}
+      {proposal && !editing ? (
+        <div
+          className="mt-2 rounded-md border px-3 py-2 text-[13px]"
+          style={{ borderColor: 'var(--success)', background: 'var(--success-surface, transparent)' }}
+        >
+          <p className="font-semibold text-[var(--success)]">
+            Suggested fix — verifier re-checked, now passes
+          </p>
+          <p className="text-muted-foreground mt-0.5">
+            {proposal.kind === 'extra_fact_explainer' ? 'Explainer' : 'Question'} · {proposal.reverifyReason ?? 'minimal edit'}
+          </p>
+          {proposal.proposedStem ? (
+            <p className="mt-1 text-[var(--brand-ink)]">
+              <span className="text-muted-foreground">Proposed question: </span>
+              {proposal.proposedStem}
+            </p>
+          ) : null}
+          {proposal.proposedExplanation ? (
+            <p className="mt-1 text-[var(--brand-ink-700)]">
+              <span className="text-muted-foreground">Proposed explainer: </span>
+              {proposal.proposedExplanation}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {editing ? (
-        <Modal title="Edit &amp; re-run" onClose={() => setEditing(false)}>
+        <Modal title="Edit &amp; re-run" onClose={() => { setEditing(false); setFixMode(false); }}>
           <EditPanel
             target={{ table: 'question', id: item.questionId }}
-            initialQuestion={item.questionText}
+            initialQuestion={fixMode && proposal?.proposedStem ? proposal.proposedStem : item.questionText}
             initialAnswer={item.correctAnswer}
-            initialExplanation={item.explanation}
+            initialExplanation={fixMode && proposal?.proposedExplanation ? proposal.proposedExplanation : item.explanation}
             showExplanation
             canonicalSubcategory={item.canonicalSubcategory}
             broadCategory={item.broadCategory}
             concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
             onDone={resolved}
-            onCancel={() => setEditing(false)}
+            onCancel={() => { setEditing(false); setFixMode(false); }}
           />
         </Modal>
       ) : null}
       {!editing ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          {proposal ? (
+            <button
+              type="button"
+              onClick={openFix}
+              className="rounded-md border px-3 py-1.5 text-sm font-semibold"
+              style={{ borderColor: 'var(--success)', background: 'var(--success)', color: 'var(--on-accent, #fff)' }}
+            >
+              Review fix →
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => act('restore_demoted')}
@@ -1012,6 +1078,16 @@ function DemotionRow({
           >
             Retire (recoverable)
           </button>
+          {proposal ? (
+            <button
+              type="button"
+              onClick={rejectFix}
+              className="rounded-md px-2 py-1.5 text-xs font-medium"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              Not a fix
+            </button>
+          ) : null}
         </div>
       ) : null}
     </article>

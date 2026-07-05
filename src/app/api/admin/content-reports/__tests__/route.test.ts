@@ -51,6 +51,9 @@ vi.mock('@/server/db/queries/machine-demotions', () => ({
   approveEditedQuestion: approveMock,
 }));
 vi.mock('@/server/quality/rerun-question', () => ({ rerunQuestion: rerunMock }));
+vi.mock('@/server/db/queries/salvage-proposals', () => ({
+  resolveSalvageProposal: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { POST } from '@/app/api/admin/content-reports/route';
 
