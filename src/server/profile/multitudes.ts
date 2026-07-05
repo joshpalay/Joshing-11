@@ -1,9 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { loggedMessagesCreate } from '@/lib/llm';
+import { ANTHROPIC_MODEL, loggedMessagesCreate } from '@/lib/llm';
 import type { MasteryTier } from '@/types/db';
 import type { PortraitState } from '@/server/profile/portrait';
 
-const MODEL = 'claude-sonnet-4-6';
+// Inherit the central generation model (Sonnet 5 in prod) rather than pinning a
+// version, so a model flip carries here too. Prose-only, no schema — the tier
+// doesn't matter much, but there's no reason to leave it stranded on 4.6.
+const MODEL = ANTHROPIC_MODEL;
 const SYSTEM_PROMPT = "You are writing a one-line identity statement for a player in a trivia game where knowledge is identity. Their strongest territories are listed. Write a single sentence — 12 to 25 words — that names their intellectual world with warmth and specificity. Tone: a well-written author bio, not a stats report. Never say 'you are' — the sentence should read like a caption. Specific nouns, not abstractions. The sentence should make the player feel recognized, not evaluated.";
 
 type CacheValue = {

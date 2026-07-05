@@ -1,0 +1,26 @@
+-- 0114: finite-set completion (D-SUPPLY-FINITE-SET-01 P2).
+--
+-- Two additive/relaxing changes so a player who answers a domain's whole set
+-- earns a durable "designation" and an automatic invitation to author more:
+--
+--   1. PLAYER_MASTERY.designated_at — the durable recognition timestamp. The
+--      /invited trophy is currently ephemeral (computed live from an active
+--      AuthorInvitation); this is its missing permanent half. Mirrors the
+--      existing tier_reached_at "recognition timestamp" precedent. Nullable,
+--      additive — safe on a non-empty table, nothing reads it until P2 ships.
+--
+--   2. AuthorInvitation.invited_by — dropped NOT NULL. Until now every
+--      invitation had a human inviter (the crafter admin checkbox). A
+--      set-completion invitation is system-created and has no inviter, so the
+--      column becomes nullable (NULL = automatic). Relaxing a constraint is
+--      safe on existing rows.
+--
+-- Both statements are idempotent and mirrored by defensive guards in
+-- src/instrumentation.ts (precedent: 0105/0106 ADD COLUMN guards).
+--
+-- Rollback:
+--   ALTER TABLE "PLAYER_MASTERY" DROP COLUMN "designated_at";
+--   ALTER TABLE "AuthorInvitation" ALTER COLUMN "invited_by" SET NOT NULL;  -- only if no NULL rows exist
+ALTER TABLE "PLAYER_MASTERY" ADD COLUMN IF NOT EXISTS "designated_at" timestamp with time zone;
+--> statement-breakpoint
+ALTER TABLE "AuthorInvitation" ALTER COLUMN "invited_by" DROP NOT NULL;

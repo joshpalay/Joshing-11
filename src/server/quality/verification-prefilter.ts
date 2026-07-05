@@ -99,17 +99,64 @@ function isOpinionAdjacent(text: string): boolean {
   return OPINION_RE.test(text);
 }
 
-// The explanation carries adjacent claims when it is more than a terse restatement
-// of the answer — long enough to assert something of its own, with assertion
-// signals or substantial independent prose.
-function explanationCarriesClaims(
+// LEGACY (pre-2026-07-05): substance ≈ claims — ≥60 chars AND (any one signal OR
+// ≥140 chars). MEASURED as the dominant ~90% router (cost-characterization §5
+// retraction): trivia explainers nearly always clear one of those bars — every
+// explainer mentions a year or runs long — so extra_fact routed almost every row
+// and the pre-filter skipped only ~9%. Kept callable for the escape hatch and
+// the before/after measurement script.
+export function explanationCarriesClaimsLegacy(
   explanation: string | null | undefined,
-  _answer: string,
 ): boolean {
   if (!explanation) return false;
   const trimmed = explanation.trim();
   if (trimmed.length < 60) return false; // too short to carry an independent claim
   return signalKinds(trimmed).size >= 1 || trimmed.length >= 140;
+}
+
+// TIGHTENED (2026-07-05): length is prose, not a claim — and a single signal of
+// the same KIND the question/answer already carries is context (restating the
+// asked fact), not an ADJACENT claim. Route only when the explanation asserts
+// something checkable BEYOND the question+answer:
+//   - a signal kind ABSENT from stem+answer (a genuinely new claim category —
+//     e.g. the question asks a "who" and the explainer volunteers a date), or
+//   - two-plus distinct signal kinds (a claim-dense explainer — where wrong
+//     adjacent facts live).
+// Kind-level comparison is deliberately coarse (stem 1804 / explainer 1799 both
+// read as 'year' and would skip) — this is a demote-only BACKGROUND net behind
+// the factual gate and ask-to-answer, and the spend guarantee only pays out on
+// skips. The measurement script prints route→skip flips for eyeballing.
+// signalKinds with the year/count double-fire collapsed: the 'count' pattern
+// greedily matches ANY number followed by a word — including the year itself
+// ("in 1912 after…") — so every explainer mentioning a year read as two kinds
+// (year + count) and looked claim-dense. Keep 'count' only when a NON-year
+// number (or word-number) also matches. Local to the explanation path — the
+// stem/premise router keeps the original, deliberately conservative behavior.
+function effectiveKinds(text: string): Set<string> {
+  const kinds = signalKinds(text);
+  if (kinds.has('year') && kinds.has('count')) {
+    const withoutYears = text.replace(/\b(1\d{3}|20\d{2})\b/g, ' ');
+    if (!new RegExp(`\\b(\\d+|${WORD_NUMBERS})\\s+\\w+`, 'i').test(withoutYears)) {
+      kinds.delete('count');
+    }
+  }
+  return kinds;
+}
+
+export function explanationCarriesAdjacentClaims(
+  explanation: string | null | undefined,
+  stem: string,
+  answer: string,
+): boolean {
+  if (!explanation) return false;
+  const trimmed = explanation.trim();
+  if (trimmed.length < 60) return false; // too short to carry an independent claim
+  const explKinds = effectiveKinds(trimmed);
+  if (explKinds.size === 0) return false; // pure prose — nothing checkable
+  if (explKinds.size >= 2) return true; // claim-dense
+  const contextKinds = effectiveKinds(`${stem} ${answer}`);
+  for (const kind of explKinds) if (!contextKinds.has(kind)) return true; // novel kind
+  return false;
 }
 
 // The answer bundles an extra descriptor ("Eroica (Beethoven's Third, dedicated to
@@ -145,6 +192,13 @@ export type PrefilterOptions = {
    * before/after comparison. Default false (tightened heuristic).
    */
   legacyExtraFact?: boolean;
+  /**
+   * Use the pre-2026-07-05 explanation heuristic (any one signal OR length ≥140
+   * routes — the measured ~90% router). Operational escape hatch only — the cron
+   * passes this from PREFILTER_EXPLANATION_LEGACY; the measurement script uses it
+   * for the before/after comparison. Default false (adjacent-claims heuristic).
+   */
+  legacyExplanation?: boolean;
 };
 
 /**
@@ -178,12 +232,16 @@ export function prefilterForVerification(
   if (premiseBearing) dimensions.push('false_premise');
 
   // extra_fact: the explanation or the answer carries adjacent claims. The answer
-  // side requires bundling + an assertion signal (tightened 2026-07) unless the
-  // legacy escape hatch is on.
+  // side requires bundling + an assertion signal (tightened 2026-07); the
+  // explanation side requires a NOVEL or claim-dense assertion (tightened
+  // 2026-07-05 — the measured ~90% router). Each has its own legacy hatch.
   const answerRoutes = options?.legacyExtraFact
     ? answerIsMultiFact(answer)
     : answerCarriesAdjacentClaim(answer);
-  if (explanationCarriesClaims(input.explanation, answer) || answerRoutes) {
+  const explanationRoutes = options?.legacyExplanation
+    ? explanationCarriesClaimsLegacy(input.explanation)
+    : explanationCarriesAdjacentClaims(input.explanation, stem, answer);
+  if (explanationRoutes || answerRoutes) {
     dimensions.push('extra_fact');
   }
 

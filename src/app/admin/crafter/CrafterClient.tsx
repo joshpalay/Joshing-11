@@ -257,6 +257,17 @@ function DomainRow({ row, onCraft }: { row: CrafterWorklistRow; onCraft: () => v
                 you love this
               </span>
             ) : null}
+            {/* D-SUPPLY-FINITE-SET-01: this subject crossed the "too expensive
+                for the machine" line — human curation beats auto-fill here. */}
+            {row.expensiveToMachine ? (
+              <span
+                className="rounded-sm border px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+                style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                title={`Expensive for the machine — curate this (${row.expensiveReason ?? 'costly to generate'})`}
+              >
+                expensive · curate
+              </span>
+            ) : null}
             <span className="text-[0.65rem] uppercase tracking-[0.06em]" style={{ color: heatColor(row.heat) }}>
               {HEAT_LABEL[row.heat]}
             </span>

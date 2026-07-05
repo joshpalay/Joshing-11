@@ -171,7 +171,7 @@ async function getPlayerMasteryRows(userId: string, orderByPoints = false): Prom
         .from(playerMastery)
         .where(eq(playerMastery.userId, userId));
 
-    return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const, rotationEligible: true }));
+    return rows.map((row) => ({ ...row, territoryType: 'demonstrated' as const, rotationEligible: true, designatedAt: null }));
   }
 }
 
@@ -213,7 +213,7 @@ async function getPlayerMasteryRowsBulk(
       .from(playerMastery)
       .where(inArray(playerMastery.userId, ids))
       .orderBy(desc(playerMastery.totalPoints));
-    rows = raw.map((row) => ({ ...row, territoryType: 'demonstrated' as const, rotationEligible: true }));
+    rows = raw.map((row) => ({ ...row, territoryType: 'demonstrated' as const, rotationEligible: true, designatedAt: null }));
   }
 
   for (const row of rows) {

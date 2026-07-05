@@ -99,7 +99,8 @@ describe('prefilterForVerification — tightened extra_fact answer heuristic (20
   });
 
   it('claim-bearing explanations still route regardless of the answer shape', () => {
-    // The explanation path is untouched by the tightening.
+    // Survives BOTH tightenings: the explainer's year claim is a kind the
+    // question+answer never carried (novel adjacent claim).
     const d = decide(
       'Who painted the ceiling of the Sistine Chapel?',
       'Michelangelo',
@@ -113,6 +114,66 @@ describe('prefilterForVerification — tightened extra_fact answer heuristic (20
     const input = { questionText: 'What items does Ben buy at the store?', answer: 'Bread, eggs and milk' };
     const strict = prefilterForVerification(input);
     const legacy = prefilterForVerification(input, { legacyExtraFact: true });
+    expect(strict.needsVerification).toBe(false);
+    expect(legacy.needsVerification).toBe(true);
+    if (legacy.needsVerification) expect(legacy.dimensions).toContain('extra_fact');
+  });
+});
+
+describe('prefilterForVerification — tightened explanation heuristic (2026-07-05)', () => {
+  it('no longer routes an explanation that merely restates the asked fact-kind', () => {
+    // The stem/answer are ABOUT a year; the explainer's only signal is that same
+    // year. That's context, not an adjacent claim — under the legacy heuristic
+    // this routed to a paid verify (any one signal).
+    const d = decide(
+      'In what year did the Titanic sink?',
+      '1912',
+      'The Titanic sank in 1912 after striking an iceberg, and the disaster prompted sweeping changes to maritime safety law.',
+    );
+    expect(d.needsVerification).toBe(false);
+  });
+
+  it('no longer routes long pure-prose explanations (length is not a claim)', () => {
+    // ≥140 chars but zero assertion signals — legacy routed on length alone.
+    const d = decide(
+      'What is the capital of France?',
+      'Paris',
+      'Paris has long been celebrated as a global center of art, fashion, gastronomy and culture, and its cafe-lined boulevards draw countless visitors from far beyond its borders.',
+    );
+    expect(d.needsVerification).toBe(false);
+  });
+
+  it('still routes an explanation that volunteers a NOVEL claim kind', () => {
+    // Question asks a "who"; the explainer volunteers a date — a checkable
+    // adjacent claim the question never asked about.
+    const d = decide(
+      'Who wrote The Waste Land?',
+      'T. S. Eliot',
+      'T. S. Eliot published The Waste Land in 1922, and it quickly became one of the most influential poems of the modernist movement.',
+    );
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('extra_fact');
+  });
+
+  it('still routes a claim-dense explainer (two-plus signal kinds)', () => {
+    const d = decide(
+      "What is the title of Beethoven's Third Symphony?",
+      'Eroica',
+      'Beethoven composed the Eroica in 1804 and it was the first of his symphonies to break with classical convention.',
+    );
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('extra_fact');
+  });
+
+  it('the legacy explanation hatch restores the old routing', () => {
+    const input = {
+      questionText: 'In what year did the Titanic sink?',
+      answer: '1912',
+      explanation:
+        'The Titanic sank in 1912 after striking an iceberg, and the disaster prompted sweeping changes to maritime safety law.',
+    };
+    const strict = prefilterForVerification(input);
+    const legacy = prefilterForVerification(input, { legacyExplanation: true });
     expect(strict.needsVerification).toBe(false);
     expect(legacy.needsVerification).toBe(true);
     if (legacy.needsVerification) expect(legacy.dimensions).toContain('extra_fact');
