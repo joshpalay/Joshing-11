@@ -139,11 +139,13 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     expect(html).not.toContain('2 of 3 questions');
   });
 
-  it('reads as a settled completion once every question is answered, not "0 of N questions"', () => {
-    // A bundle whose questions are all already attempted (right or wrong) reaches
-    // the card with 0 remaining. The progress line must read as a completion
-    // ("All 3 answered"), not the bare "0 of 3 questions" — which read as "no
-    // questions" to a player who had in fact gotten every one.
+  it('removes the playable card once every question is consumed (dismiss-as-answered)', () => {
+    // A playable bundle with nothing left to answer — every question answered
+    // (right or wrong) OR dismissed — has nothing to act on, so it leaves the
+    // feed in place rather than lingering as a spent "All N answered" shell. This
+    // is the in-session mirror of build-stream dropping an exhausted bundle on
+    // load (a real bundle always arrives with ≥1 answerable question, so this
+    // only fires after the viewer empties it).
     const allAnsweredExpand: Extract<StreamExpand, { kind: 'milestone' }> = {
       ...EXPAND,
       questions: QUESTIONS.map((q) => ({ ...q, priorResult: q.priorResult ?? 'correct' })),
@@ -156,10 +158,50 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
         showTimestamp={false}
       />,
     );
-    expect(html).toContain('All 3 answered');
-    expect(html).not.toContain('0 of 3 questions');
-    // The affordance flips to Revisit once they're all done.
-    expect(html).toContain('Revisit');
+    // The whole card is gone — no progress line, no chrome, no headline.
+    expect(html).toBe('');
+  });
+
+  it('removes the playable card when the last unanswered question was dismissed', () => {
+    // One question already answered, the rest dismissed → 0 answerable, so the
+    // bundle disappears exactly as if they had all been answered.
+    const allConsumedExpand: Extract<StreamExpand, { kind: 'milestone' }> = {
+      ...EXPAND,
+      questions: QUESTIONS.map((q, i) =>
+        i === 0 ? { ...q, priorResult: 'correct' } : { ...q, priorResult: null, dismissed: true },
+      ),
+    };
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem
+        item={{ ...MILESTONE_ITEM, expand: allConsumedExpand }}
+        timestamp="2:00 PM"
+        elevated
+        showTimestamp={false}
+      />,
+    );
+    expect(html).toBe('');
+  });
+
+  it('keeps the card and counts a dismissed question as consumed in the remaining tally', () => {
+    // 3 questions: one dismissed, one answered, one still fresh → "1 of 3" left.
+    const partialExpand: Extract<StreamExpand, { kind: 'milestone' }> = {
+      ...EXPAND,
+      questions: [
+        { ...QUESTIONS[0], priorResult: null, dismissed: true },
+        { ...QUESTIONS[1], priorResult: 'correct' },
+        { ...QUESTIONS[2], priorResult: null },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem
+        item={{ ...MILESTONE_ITEM, expand: partialExpand }}
+        timestamp="2:00 PM"
+        elevated
+        showTimestamp={false}
+      />,
+    );
+    expect(html).not.toBe('');
+    expect(html).toContain('1 of 3 questions');
   });
 });
 

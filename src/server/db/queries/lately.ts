@@ -24,7 +24,8 @@ import {
   applyTierGate,
   type TrustTier,
 } from '@/server/daily/verification-gating';
-import { db, feedItems, follows, masteryEvents, questions, users } from '@/server/db';
+import { db, feedItems, follows, masteryEvents, milestoneDismissed, questions, users } from '@/server/db';
+import { pgErrorCode } from '@/server/db/pg-error';
 import { approvedFollowExists } from '@/server/db/queries/follow-visibility';
 import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
 
@@ -645,6 +646,85 @@ export async function getViewerPriorAnswerResults(
     }
   }
   return out;
+}
+
+// --- Milestone dismiss (dismiss-as-answered) ---------------------------------
+//
+// A viewer waving a From Friends milestone question off. NEUTRAL by design: it
+// writes only the MilestoneDismissed row and never touches mastery/points, so a
+// dismiss is not a wrong answer — but it counts toward the bundle's consumed
+// progress exactly like an answer (build-stream excludes dismissed questions
+// from a bundle's `remaining`), so a fully answered-or-dismissed bundle
+// disappears on the next load. Reversible via reinstateMilestoneQuestion (undo).
+// Mirrors the recovered-set-aside soft-dismiss (queries/recovered-questions.ts).
+
+/**
+ * The viewer's actively-dismissed milestone question ids (reinstatedAt IS NULL),
+ * scoped to `ids` when given. Read-only, and resilient to the table not existing
+ * yet: a pre-migration database returns an empty set rather than failing the
+ * whole Home load (mirrors getSetAsideQuestionIds' 42P01 handling).
+ */
+export async function getViewerDismissedMilestoneIds(
+  userId: string,
+  ids: string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  try {
+    const rows = await db
+      .select({ questionId: milestoneDismissed.questionId })
+      .from(milestoneDismissed)
+      .where(
+        and(
+          eq(milestoneDismissed.userId, userId),
+          inArray(milestoneDismissed.questionId, ids),
+          isNull(milestoneDismissed.reinstatedAt),
+        ),
+      );
+    return new Set(rows.map((r) => r.questionId));
+  } catch (error) {
+    if (pgErrorCode(error) === '42P01') return new Set(); // table not yet migrated
+    throw error;
+  }
+}
+
+/**
+ * Dismiss a milestone question for the viewer (reversible soft-dismiss). A no-op
+ * if it is already dismissed. The partial unique index guarantees at most one
+ * active row per (user, question). Mirrors setAsideRecoveredQuestion.
+ */
+export async function dismissMilestoneQuestion(userId: string, questionId: string): Promise<void> {
+  const [existing] = await db
+    .select({ id: milestoneDismissed.id })
+    .from(milestoneDismissed)
+    .where(
+      and(
+        eq(milestoneDismissed.userId, userId),
+        eq(milestoneDismissed.questionId, questionId),
+        isNull(milestoneDismissed.reinstatedAt),
+      ),
+    )
+    .limit(1);
+
+  if (existing) return;
+
+  await db.insert(milestoneDismissed).values({ userId, questionId });
+}
+
+/**
+ * Undo a dismiss (bring the question back) by marking the active row reinstated.
+ * A no-op if it was not dismissed. Mirrors restoreRecoveredQuestion.
+ */
+export async function reinstateMilestoneQuestion(userId: string, questionId: string): Promise<void> {
+  await db
+    .update(milestoneDismissed)
+    .set({ reinstatedAt: new Date() })
+    .where(
+      and(
+        eq(milestoneDismissed.userId, userId),
+        eq(milestoneDismissed.questionId, questionId),
+        isNull(milestoneDismissed.reinstatedAt),
+      ),
+    );
 }
 
 // --- Convergence (B-Convergence-1) -------------------------------------------

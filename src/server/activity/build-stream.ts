@@ -28,6 +28,7 @@ import {
   getLatelyConvergences,
   getLatelyMoments,
   getMilestoneQuestionText,
+  getViewerDismissedMilestoneIds,
   getViewerPriorAnswerResults,
 } from '@/server/db/queries/lately';
 
@@ -75,7 +76,7 @@ export async function buildActivityStream(
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
-  const [items, moments, textById, priorById, hiddenIds] = await Promise.all([
+  const [items, moments, textById, priorById, hiddenIds, dismissedIds] = await Promise.all([
     itemsPromise,
     momentsPromise,
     getMilestoneQuestionText(allQuestionIds),
@@ -83,6 +84,11 @@ export async function buildActivityStream(
     // B-Report-3: durable self-hide — a question the viewer reported as
     // inappropriate (open|upheld) stays out of their Lately stack across reloads.
     getViewerHiddenQuestionIds(userId, allQuestionIds),
+    // Dismiss-as-answered: questions the viewer waved off. Neutral (no mastery),
+    // but consumed — excluded from a bundle's `remaining` count below, so a
+    // fully answered-or-dismissed bundle disappears exactly like a fully-played
+    // one. Milestone question ids only (convergence questions can't be dismissed).
+    getViewerDismissedMilestoneIds(userId, allQuestionIds),
   ]);
 
   const utilityItems = filterUtilityActivities(items, moments)
@@ -137,6 +143,7 @@ export async function buildActivityStream(
           text: q.text,
           domain: q.domain,
           priorResult: priorById.get(q.questionId) ?? null,
+          dismissed: dismissedIds.has(q.questionId),
           authorName: q.authorName,
           authorIsHouse: q.authorIsHouse,
           // D-4 via-attribution: the relay source the friend got this question
@@ -153,8 +160,10 @@ export async function buildActivityStream(
       // exhausted case only. `priorResult` is per-viewer (getViewerPriorAnswer
       // Results(userId, …)), so the filter is viewer-relative and never shared
       // across users; the 30-day spent-card roll-off is now moot for exhausted
-      // cards (they leave on exhaustion, not on a timer).
-      const remaining = questions.filter((q) => q.priorResult === null).length;
+      // cards (they leave on exhaustion, not on a timer). A DISMISSED question is
+      // consumed the same way an answered one is — waving off the last unanswered
+      // question empties the bundle and it disappears (dismiss-as-answered).
+      const remaining = questions.filter((q) => q.priorResult === null && !q.dismissed).length;
       return remaining > 0 ? friendActivityToStreamItem(card, questions) : null;
     })
     .filter((item): item is StreamItem => item !== null);

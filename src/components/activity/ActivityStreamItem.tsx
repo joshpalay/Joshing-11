@@ -131,6 +131,14 @@ export function ActivityStreamItem({
         (milestoneQuestions ?? []).filter((q) => q.priorResult !== null).map((q) => q.questionId),
       ),
   );
+  // Questions the viewer has DISMISSED (dismiss-as-answered), seeded from the
+  // server flag so a dismiss survives a reload. Consumed like an answer for the
+  // progress count + card lifecycle, but NEUTRAL — never rendered as a graded
+  // result. In the flat /activities expansion a dismissed question is simply
+  // hidden (it was neither answered nor is it still answerable).
+  const [serverDismissed] = useState<Set<string>>(
+    () => new Set((milestoneQuestions ?? []).filter((q) => q.dismissed).map((q) => q.questionId)),
+  );
   // Resolutions captured this session — both correct and "not this time" — keyed
   // by questionId, carrying what the viewer typed so the history can echo it. A
   // question goes in here on the FIRST answer regardless of correctness, which is
@@ -145,6 +153,12 @@ export function ActivityStreamItem({
     return serverAnswered.has(questionId) || resolutions.has(questionId);
   }
 
+  // Dismissed on load (the in-session dismisses live inside the streak cards and
+  // report up through the expansion counter below, not here).
+  function isDismissed(questionId: string): boolean {
+    return serverDismissed.has(questionId);
+  }
+
   function resolve(questionId: string, submitted: string, isCorrect: boolean) {
     setResolutions((prev) => {
       const next = new Map(prev);
@@ -155,12 +169,15 @@ export function ActivityStreamItem({
   }
 
   // On the playable home card the expansion renders the From Friends streak cards
-  // (which own their own resolution state), so answers there don't flow through
-  // `resolve` above. This counter ticks the summary's triangle cluster + count in
-  // step as questions are answered in the open expansion.
+  // (which own their own resolution/dismiss state), so answers and dismisses there
+  // don't flow through `resolve` above. This counter ticks the summary's triangle
+  // cluster + count in step as questions are CONSUMED (answered OR dismissed) in
+  // the open expansion; a dismiss undo un-ticks it.
   const [expansionResolved, setExpansionResolved] = useState(0);
   const answeredCount =
-    (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId)).length + expansionResolved;
+    (milestoneQuestions ?? []).filter(
+      (q) => isResolved(q.questionId) || isDismissed(q.questionId),
+    ).length + expansionResolved;
 
   // The "{remaining} of {total} questions" count under a milestone line — how
   // many are still answerable (D-HOME-DASHBOARD-MODEL-01 point 3), in lockstep
@@ -346,16 +363,16 @@ export function ActivityStreamItem({
                     color: INK3,
                   }}
                 >
-                  {/* While questions remain, count down what's still
-                      answerable ("1 of 3 questions"), in lockstep with the solid
-                      bundle triangles. Once every question is answered, the
-                      remaining count is 0 — so read it as a settled completion
-                      ("All 3 answered") rather than the bare "0 of 3 questions",
-                      which read as "no questions" to players who had in fact
-                      gotten every one (request 2026-06-23). */}
-                  {allAnswered
-                    ? `All ${milestoneProgress.total} answered`
-                    : `${milestoneProgress.total - milestoneProgress.answered} of ${milestoneProgress.total} questions`}
+                  {/* Count down what's still answerable ("1 of 3 questions"), in
+                      lockstep with the solid bundle triangles. The playable card
+                      never renders at a 0-remaining count: a bundle whose every
+                      question is answered-or-dismissed leaves the feed in place
+                      (the `playableCard && allAnswered` guard above returns null),
+                      the in-session mirror of build-stream's load-time exhaustion
+                      drop — so there is no "0 of 3" / "All 3 answered" state to
+                      show here (dismiss-as-answered; supersedes the 2026-06-23
+                      completion-copy treatment). */}
+                  {`${milestoneProgress.total - milestoneProgress.answered} of ${milestoneProgress.total} questions`}
                 </p>
               ) : null}
               {/* Texture cards may carry supplementary metadata (a domain, a
@@ -523,6 +540,15 @@ export function ActivityStreamItem({
     </>
   );
 
+  // Dismiss-as-answered (whenever-nothing's-answerable): once the viewer has
+  // consumed EVERY question in a playable bundle — answered or dismissed — the
+  // card has nothing left to act on, so it leaves the feed in place rather than
+  // lingering as a spent shell. (This is the in-session mirror of build-stream's
+  // load-time exhaustion drop; a bundle always arrives with ≥1 answerable
+  // question, so this only fires after the viewer empties it here.) Scoped to the
+  // playable home card — the flat /activities log keeps its answered rows.
+  if (playableCard && allAnswered) return null;
+
   return (
     <div id={item.anchorId ?? undefined} style={containerStyle}>
       <div
@@ -551,8 +577,9 @@ export function ActivityStreamItem({
               // Friends streak's question cards in the new card styling (category
               // eyebrow, per-card answer/dismiss, correct-answered drops away) —
               // inline, not a separate page. FromFriendsStreak owns its own
-              // resolution state; bump the summary count so the triangle cluster +
-              // "N of M" tick as questions resolve in the open expansion.
+              // resolution/dismiss state; bump the summary count so the triangle
+              // cluster + "N of M" tick as questions are consumed (answered OR
+              // dismissed) in the open expansion, and un-tick on a dismiss undo.
               <div style={{ marginTop: 14 }} onClick={(e) => e.stopPropagation()}>
                 <FromFriendsStreak
                   item={item}
@@ -561,13 +588,20 @@ export function ActivityStreamItem({
                     setExpansionResolved((n) => n + 1);
                     onQuestionResolved?.();
                   }}
+                  onQuestionReopened={() => {
+                    setExpansionResolved((n) => Math.max(0, n - 1));
+                  }}
                 />
               </div>
             ) : (
-              // The flat /activities log keeps the original inline answer list.
+              // The flat /activities log keeps the original inline answer list. A
+              // question dismissed on Home is hidden here (neither answered nor
+              // answerable), consistent with build-stream dropping it from the
+              // bundle's remaining count.
               <MilestoneExpansion
                 expand={expand}
                 isResolved={isResolved}
+                isDismissed={isDismissed}
                 resolutions={resolutions}
                 onResolved={resolve}
               />
@@ -623,16 +657,22 @@ function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
 export function MilestoneExpansion({
   expand,
   isResolved,
+  isDismissed,
   resolutions,
   onResolved,
 }: {
   expand: Extract<StreamExpand, { kind: 'milestone' }>;
   isResolved: (questionId: string) => boolean;
+  // A question the viewer dismissed (dismiss-as-answered) is hidden here — it was
+  // neither answered nor is it still answerable. Optional so the flat list keeps
+  // working for callers that don't track dismissals.
+  isDismissed?: (questionId: string) => boolean;
   resolutions: Map<string, Resolution>;
   onResolved: (questionId: string, submitted: string, isCorrect: boolean) => void;
 }) {
-  const unanswered = expand.questions.filter((q) => !isResolved(q.questionId));
-  const answered = expand.questions.filter((q) => isResolved(q.questionId));
+  const visible = expand.questions.filter((q) => !(isDismissed?.(q.questionId) ?? false));
+  const unanswered = visible.filter((q) => !isResolved(q.questionId));
+  const answered = visible.filter((q) => isResolved(q.questionId));
 
   return (
     <div
