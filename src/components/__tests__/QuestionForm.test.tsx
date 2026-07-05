@@ -3,38 +3,43 @@ import { describe, expect, it } from 'vitest';
 
 import { isVerifiedAnswer, ReformulationOption, scopeSignpost } from '@/components/QuestionForm';
 
-// The screenshot bug: the LLM auto-filled a wrong answer ("Keanu Reeves"), which
-// the "verified" check then matched against itself, self-certifying a wrong answer
-// as broadcast-eligible. "verified" must mean the AUTHOR independently corroborated
-// the suggestion — not that they passively accepted the machine's guess.
-describe('isVerifiedAnswer (anti self-certification)', () => {
-  const suggestion = 'Keanu Reeves';
+// The model (2026-07): Joshing suggests an answer that was already fact-checked
+// before it was shown, so USING it is verified — this is what fixed the confusing
+// "unverified" state when a player tapped "Use Joshing's answer".
+//
+// "Verified" stays STRICT because it unlocks spreading (broadcast to all friends +
+// forwarding): the answer must AGREE with Joshing's independent suggestion. An
+// author override that DIFFERS is never auto-verified — not even when a single
+// on-demand fact-check likes it, since a crafted false premise could fool one
+// verifier. That is the guard against a nefarious actor spreading a wrong answer.
+describe('isVerifiedAnswer (suggest-a-verified-answer, strict spread guard)', () => {
+  const suggestion = 'Bucephalus';
 
-  it('verifies when the author independently typed a matching answer', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'author' })).toBe(true);
+  it('verifies when the author is using Joshing’s (pre-fact-checked) suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Bucephalus', answerSource: 'suggestion' })).toBe(true);
   });
 
-  it('does NOT verify when the author merely accepted the suggestion (no independent corroboration)', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'suggestion' })).toBe(false);
+  it('verifies an automated (autoSubmit) adoption of the suggestion', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Bucephalus', answerSource: 'auto' })).toBe(true);
+  });
+
+  it('verifies when the author independently typed a matching answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Bucephalus', answerSource: 'author' })).toBe(true);
+  });
+
+  it('matches case- and whitespace-insensitively for an author-supplied answer', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '  bucephalus ', answerSource: 'author' })).toBe(true);
   });
 
   it('does NOT verify before the author has supplied any answer', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '', answerSource: null })).toBe(false);
   });
 
-  it('verifies an automated (autoSubmit) adoption of the verifier-vouched suggestion', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Keanu Reeves', answerSource: 'auto' })).toBe(true);
+  it('does NOT verify an author override that differs from the suggestion (strict guard)', () => {
+    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Marengo', answerSource: 'author' })).toBe(false);
   });
 
-  it('does NOT verify when the author typed a different answer than the suggestion', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: 'Balthazar Getty', answerSource: 'author' })).toBe(false);
-  });
-
-  it('matches case- and whitespace-insensitively for an author-supplied answer', () => {
-    expect(isVerifiedAnswer({ suggestedAnswer: suggestion, userAnswer: '  keanu reeves ', answerSource: 'author' })).toBe(true);
-  });
-
-  it('falls back to verified when there is no suggestion to cross-check against', () => {
+  it('falls back to verified when there is no suggestion to anchor against', () => {
     expect(isVerifiedAnswer({ suggestedAnswer: null, userAnswer: 'anything', answerSource: 'author' })).toBe(true);
   });
 });

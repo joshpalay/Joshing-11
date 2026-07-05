@@ -148,6 +148,71 @@ export async function getCorpusLabelDepths(): Promise<ClusterLabel[]> {
   return [...byLabel.values()];
 }
 
+// Difficulty-weighted POINTS a domain's current questions can award — the
+// "reachable points" a curator eyeballs against a node's mastery threshold (is
+// this area even earnable yet?). First-correct points by tier (accessible 10 /
+// moderate 50 / specialist 100; unknown tier → moderate). The MACHINE side is
+// deduped by fact_key (a player answers each fact once), matching the distinct-
+// factKey depth metric; the HUMAN side is every servable authored question.
+// Keyed by raw label — the caller folds/rolls up through the tree, same as depth.
+export async function getCorpusLabelPoints(): Promise<Array<{ label: string; points: number }>> {
+  const tierPts = sql`CASE "difficulty_estimate" WHEN 'specialist' THEN 100 WHEN 'moderate' THEN 50 WHEN 'accessible' THEN 10 ELSE 50 END`;
+  const [machine, human] = await Promise.all([
+    db.execute(sql`
+      SELECT canonical_subcategory AS label, SUM(pts)::int AS points FROM (
+        SELECT DISTINCT ON (fact_key) canonical_subcategory, (${tierPts}) AS pts
+        FROM "GeneratedQuestion"
+        WHERE is_duplicate = false AND fact_key IS NOT NULL AND canonical_subcategory IS NOT NULL
+        ORDER BY fact_key
+      ) t
+      GROUP BY canonical_subcategory
+    `),
+    db.execute(sql`
+      SELECT canonical_subcategory AS label, SUM(${tierPts})::int AS points
+      FROM "Question"
+      WHERE creator_id IS NOT NULL AND deleted_at IS NULL AND visibility <> 'blocked'
+        AND canonical_subcategory IS NOT NULL
+      GROUP BY canonical_subcategory
+    `),
+  ]);
+
+  const byLabel = new Map<string, number>();
+  for (const r of [...machine.rows, ...human.rows] as Array<{ label: string; points: number | string }>) {
+    const label = typeof r.label === 'string' ? r.label.trim() : '';
+    if (!label) continue;
+    byLabel.set(label, (byLabel.get(label) ?? 0) + Number(r.points ?? 0));
+  }
+  return [...byLabel.entries()].map(([label, points]) => ({ label, points }));
+}
+
+// Generation EXHAUSTION per domain: how many questions the generator has produced
+// (total) and how many came back DUPLICATES. A high duplicate share means the
+// generator keeps repeating itself — the topic's fresh facts are drying up, so
+// NEW questions are hard to find (the opposite of a domain where they come
+// easily). Raw counts, keyed by raw label — the caller folds/rolls up and derives
+// the rate, so a parent reflects its whole subtree.
+export async function getCorpusLabelGenStats(): Promise<
+  Array<{ label: string; total: number; dupes: number }>
+> {
+  const rows = await db
+    .select({
+      label: generatedQuestions.canonicalSubcategory,
+      total: sql<number>`count(*)::int`,
+      dupes: sql<number>`count(*) filter (where ${generatedQuestions.isDuplicate})::int`,
+    })
+    .from(generatedQuestions)
+    .where(isNotNull(generatedQuestions.canonicalSubcategory))
+    .groupBy(generatedQuestions.canonicalSubcategory);
+
+  const out: Array<{ label: string; total: number; dupes: number }> = [];
+  for (const r of rows) {
+    const label = r.label?.trim();
+    if (!label) continue;
+    out.push({ label, total: Number(r.total), dupes: Number(r.dupes) });
+  }
+  return out;
+}
+
 /**
  * For each worklist domain, the corpus labels that are lexical siblings —
  * domainKey-equal (typographic variants) or trigram-similar at the converge

@@ -6,6 +6,7 @@ import { getSession } from '@/server/auth/session';
 import type { MasteryTier } from '@/types/db';
 import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree';
 import { KnowledgeBubbleMap } from '@/components/knowledge/KnowledgeBubbleMap';
+import { KnowledgeViewSwitcher } from '@/components/knowledge/KnowledgeViewSwitcher';
 
 import { BubblePageChrome } from './BubblePageChrome';
 
@@ -44,6 +45,9 @@ export async function KnowledgeBubblePage() {
 
   return (
     <main className="mx-auto flex h-dvh max-w-3xl flex-col px-4 py-5">
+      <div className="mb-2 flex items-center justify-center">
+        <KnowledgeViewSwitcher current="current" />
+      </div>
       <header className="mb-1 flex items-baseline justify-between gap-3">
         <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
           What you <em className="italic text-[var(--brand-ink-700)]">know</em>

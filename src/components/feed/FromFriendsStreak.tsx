@@ -51,6 +51,7 @@ export function FromFriendsStreak({
   elevated = false,
   headerless = false,
   onQuestionResolved,
+  onQuestionReopened,
 }: {
   item: StreamItem;
   elevated?: boolean;
@@ -58,18 +59,22 @@ export function FromFriendsStreak({
   // already names the friend + categories, so the cards render BARE: no internal
   // streak header, no per-card "via {friend}'s streak" line, no indent.
   headerless?: boolean;
-  // Fires after a card is answered in place. The /from-friends overflow subpage
-  // (B-HOME-OVERFLOW-02 §7) uses it to refresh the router cache so Home recomputes
-  // its served window on return; Home itself omits it.
+  // Fires after a card is CONSUMED in place — answered OR dismissed. The parent
+  // bundle ticks its "N of M" progress and drops the whole card once nothing is
+  // answerable; the /from-friends overflow subpage (B-HOME-OVERFLOW-02 §7) also
+  // refreshes the router cache so Home recomputes its served window on return.
   onQuestionResolved?: () => void;
+  // Fires when a dismiss is UNDONE, so the parent un-ticks that same progress.
+  onQuestionReopened?: () => void;
 }) {
   const expand = item.expand;
   const questions = expand && expand.kind === 'milestone' ? expand.questions : [];
-  // The shared per-card answered-state (Phase 2): one resolution set for the
-  // whole streak, so answering one card resolves only that card and persists
-  // across the result-sheet close + re-render. Called unconditionally to keep
-  // the hook order stable; the early return below guards the render.
-  const { isResolved, resolve, resolutions } = useStreakResolutions(questions, onQuestionResolved);
+  // The shared per-card answered/dismissed-state (Phase 2): one resolution set
+  // for the whole streak, so acting on one card resolves only that card and
+  // persists across the result-sheet close + re-render. Called unconditionally to
+  // keep the hook order stable; the early return below guards the render.
+  const { isResolved, resolve, resolutions, isDismissed, dismiss, undismiss, isConsumed } =
+    useStreakResolutions(questions, onQuestionResolved, onQuestionReopened);
 
   if (!expand || expand.kind !== 'milestone' || questions.length === 0) return null;
 
@@ -95,17 +100,18 @@ export function FromFriendsStreak({
   // header carries attribution for the whole streak.
   const showViaLine = !headerless && !showHeader;
 
-  // Unanswered-first ordering (request 2026-06-27): answered cards sink to the
-  // bottom of the streak so the questions still to play float to the top — the
-  // primary job here is answering what's left, so the actionable cards lead and
-  // the dimmed spent cards cluster below as a scannable group. A stable partition
-  // preserves the server's original order WITHIN each group, so an answered card
-  // simply drops past the remaining unanswered ones the moment it resolves rather
-  // than reshuffling. `priorResult`-answered questions (already answered on load)
-  // partition the same way, so a half-played streak opens already grouped.
+  // Unanswered-first ordering (request 2026-06-27): CONSUMED cards — answered OR
+  // dismissed — sink to the bottom of the streak so the questions still to play
+  // float to the top. The primary job here is acting on what's left, so the
+  // actionable cards lead and the dimmed spent / dismissed cards cluster below as
+  // a scannable group. A stable partition preserves the server's original order
+  // WITHIN each group, so a card simply drops past the remaining ones the moment
+  // it resolves rather than reshuffling. Server-consumed questions (answered or
+  // dismissed on load) partition the same way, so a half-played streak opens
+  // already grouped.
   const ordered = [
-    ...questions.filter((q) => !isResolved(q.questionId)),
-    ...questions.filter((q) => isResolved(q.questionId)),
+    ...questions.filter((q) => !isConsumed(q.questionId)),
+    ...questions.filter((q) => isConsumed(q.questionId)),
   ];
 
   const cards = ordered.map((q) => (
@@ -119,6 +125,9 @@ export function FromFriendsStreak({
       resolved={isResolved(q.questionId)}
       resolution={resolutions.get(q.questionId) ?? null}
       onResolved={resolve}
+      dismissed={isDismissed(q.questionId)}
+      onDismiss={dismiss}
+      onUndismiss={undismiss}
     />
   ));
 
@@ -251,6 +260,9 @@ function StreakQuestionCard({
   resolved,
   resolution,
   onResolved,
+  dismissed,
+  onDismiss,
+  onUndismiss,
 }: {
   question: StreamQuestion;
   friendName: string;
@@ -260,12 +272,50 @@ function StreakQuestionCard({
   resolved: boolean;
   resolution: StreakResolution | null;
   onResolved: (questionId: string, submitted: string, isCorrect: boolean) => void;
+  // Dismiss-as-answered: the parent owns the dismissed set (so it can tick the
+  // bundle progress and drop the card once nothing is answerable). The card
+  // reports the click and persists it; the parent flips the state.
+  dismissed: boolean;
+  onDismiss: (questionId: string) => void;
+  onUndismiss: (questionId: string) => void;
 }) {
   // The same milestone answer/grade flow the inline list row uses; the card's
   // Answer button just opens it.
   const answer = useMilestoneAnswer(question, onResolved);
-  // Dismiss is view-state only ("pass"): collapse the card to an undo bar.
-  const [passed, setPassed] = useState(false);
+
+  // Dismiss "acts as if answered": it CONSUMES the question (ticks the bundle
+  // progress, and empties → removes the whole card) and PERSISTS per-viewer so it
+  // never returns on reload — but NEUTRALLY, via a dedicated route that writes no
+  // mastery/points (unlike "View Answer" below, which persists a give-up miss).
+  // The parent-owned `dismissed` flag drives the collapsed undo bar; the flip is
+  // optimistic and reverts if the write fails.
+  function handleDismiss() {
+    onDismiss(question.questionId);
+    void fetch('/api/lately/milestone/dismiss', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ questionId: question.questionId }),
+    })
+      .then((res) => {
+        if (!res.ok) onUndismiss(question.questionId);
+      })
+      .catch(() => onUndismiss(question.questionId));
+  }
+
+  function handleUndo() {
+    onUndismiss(question.questionId);
+    void fetch('/api/lately/milestone/dismiss', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ questionId: question.questionId }),
+    })
+      .then((res) => {
+        if (!res.ok) onDismiss(question.questionId);
+      })
+      .catch(() => onDismiss(question.questionId));
+  }
   // "View Answer" — reveal the correct answer inline. Seeing it consumes the
   // question exactly like the Daily Five's "Show me the answer": it PERSISTS as a
   // give-up (a miss with no points, no catch-up second swing) via the milestone
@@ -304,7 +354,7 @@ function StreakQuestionCard({
   const category = question.domain?.trim() || null;
   const hasProvenance = questionProvenance(question) !== null;
 
-  if (passed && !resolved) {
+  if (dismissed) {
     return (
       <div
         style={{
@@ -318,7 +368,7 @@ function StreakQuestionCard({
         }}
       >
         <span>Dismissed{category ? ` · ${category}` : ''}</span>
-        <FeedActionLink size="sm" onClick={() => setPassed(false)}>
+        <FeedActionLink size="sm" onClick={handleUndo}>
           Undo
         </FeedActionLink>
       </div>
@@ -430,7 +480,7 @@ function StreakQuestionCard({
             <CardRow
               left={
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <FeedDismissButton onClick={() => setPassed(true)} />
+                  <FeedDismissButton onClick={handleDismiss} />
                   {/* Once the answer is seen the card is consumed, so the peek
                       link drops away with the Answer button. An errored reveal
                       keeps the link so the viewer can retry. */}

@@ -38,16 +38,35 @@ type FriendOption = { id: string; displayName: string };
 type Stage = 'WRITING' | 'CRITIQUING' | 'CRITIQUED' | 'ANSWERING' | 'SUBMITTING' | 'DONE';
 
 // Provenance of the current correct-answer value:
-//   'author'     — the author typed it themselves.
-//   'suggestion' — a human passively accepted Joshing's suggested answer in the
-//                  manual composer. NOT independent corroboration → unverified.
-//   'auto'       — the fully-automated autoSubmit flow adopted the suggestion,
-//                  which was already fact-checked by the suggestion verifier. No
-//                  human is present to anchor, so this counts as verified.
-// This gates "verified" (see isVerifiedAnswer): an author-typed answer that agrees
-// with the suggestion, or an 'auto' adoption, earns the badge; a manual passive
-// accept does not.
+//   'author'     — the author typed/edited it themselves. Verified only when it
+//                  equals Joshing's (already fact-checked) suggestion, OR a fresh
+//                  on-demand fact-check of their answer came back OK.
+//   'suggestion' — the author is using Joshing's suggested answer verbatim. That
+//                  suggestion was independently fact-checked before it was shown
+//                  (see suggest-question.ts), so it counts as a verified answer.
+//   'auto'       — the fully-automated autoSubmit flow adopted the suggestion.
+//                  Same footing as 'suggestion': verified.
+// This gates "verified" (see isVerifiedAnswer). The model: Joshing suggests a
+// verified answer; the player may say it's wrong and supply their own, which is
+// then fact-checked on demand before it earns the badge.
 type AnswerSource = 'author' | 'suggestion' | 'auto' | null;
+
+// On-demand fact-check verdict for the author's OWN answer (the crafter surface
+// uses the identical /api/questions/verify-answer pass). `for` pins an OK/WRONG/
+// UNVERIFIABLE verdict to the exact (question, answer) pair it was computed for,
+// so any later edit makes the verdict stale and it stops counting. 'checking' /
+// 'error' are transient and carry no pair.
+type AnswerCheck =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'error' }
+  | { status: 'ok'; for: string }
+  | { status: 'unverifiable'; for: string }
+  | { status: 'wrong'; for: string; corrected: string | null };
+
+function answerPairKey(questionText: string, answer: string): string {
+  return `${questionText.trim().toLowerCase()} :: ${answer.trim().toLowerCase()}`;
+}
 
 type Props = {
   mode?: 'create' | 'edit';
@@ -76,6 +95,9 @@ type State = {
   suggestedAlternates: string[];
   suggestedExplanation: string;
   answerSource: AnswerSource;
+  // Fact-check verdict for the author's own answer. Reset to idle whenever the
+  // answer changes so a stale verdict never counts.
+  answerCheck: AnswerCheck;
   userAnswer: string;
   alternateText: string;
   explanation: string;
@@ -110,6 +132,8 @@ type Action =
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_RESULT'; questionText: string; suggestion: SuggestionResponse }
   | { type: 'USE_SUGGESTION'; asVerified?: boolean }
+  | { type: 'START_CHECK' }
+  | { type: 'CHECK_RESULT'; check: AnswerCheck }
   | { type: 'SUGGESTION_ERROR'; questionText?: string; value: string | null }
   | { type: 'SUBMITTING' }
   | { type: 'DONE' }
@@ -134,6 +158,7 @@ function initialState(initialValues?: Partial<QuestionFormValues>, initialSpecif
     // treat it as author-supplied — this preserves the prior verified state when
     // re-opening a question. A fresh create starts with no answer and no source.
     answerSource: (initialValues?.correctAnswer ?? '').trim() ? 'author' : null,
+    answerCheck: { status: 'idle' },
     userAnswer: initialValues?.correctAnswer ?? '',
     alternateText: (initialValues?.alternateAnswers ?? []).join(', '),
     explanation: initialValues?.explanation ?? '',
@@ -165,9 +190,11 @@ function reducer(state: State, action: Action): State {
     case 'FIELD': {
       const next = { ...state, [action.field]: action.value, error: null };
       if (action.field === 'userAnswer') {
-        // The author is typing their own answer — this is the independent signal
-        // "verified" is meant to capture. Mark it author-sourced.
+        // The author is overriding with their own answer — Joshing's suggestion is
+        // no longer the value on the field. Mark it author-sourced and drop any
+        // prior fact-check verdict; it belonged to a different answer.
         next.answerSource = 'author';
+        next.answerCheck = { status: 'idle' };
         // If their own answer happens to match Joshing's independent suggestion
         // and they have no explanation yet, carry Joshing's over (it describes
         // this same answer). Never clobber an explanation already present.
@@ -203,13 +230,7 @@ function reducer(state: State, action: Action): State {
       if (state.questionText.trim() !== action.questionText) {
         return { ...state, suggesting: false };
       }
-      // Store the suggestion as an INDEPENDENT cross-check only. We deliberately do
-      // NOT fill userAnswer/alternateText/explanation here: auto-filling the answer
-      // made "verified" (author answer == suggestion) trivially true, so a
-      // confidently-wrong guess self-certified and became broadcast-eligible. The
-      // author supplies their own answer; the supporting fields apply only if they
-      // adopt the suggestion (USE_SUGGESTION) or type a matching answer (FIELD).
-      return {
+      const base: State = {
         ...state,
         suggesting: false,
         suggestionError: null,
@@ -217,21 +238,50 @@ function reducer(state: State, action: Action): State {
         suggestedAlternates: action.suggestion.alternateAnswers,
         suggestedExplanation: action.suggestion.explanation,
       };
+      // The suggestion was independently fact-checked before it reached us
+      // (suggest-question.ts runs the verifier), so it IS a verified answer.
+      // Adopt it as the default answer — the player can still say it's wrong and
+      // overwrite it. Guard on an empty field so we never clobber an answer the
+      // player already started typing while the suggestion was loading.
+      if (!state.userAnswer.trim()) {
+        return {
+          ...base,
+          userAnswer: action.suggestion.correctAnswer,
+          answerSource: 'suggestion',
+          answerCheck: { status: 'idle' },
+          alternateText: state.alternateText.trim() ? state.alternateText : action.suggestion.alternateAnswers.join(', '),
+          explanation: state.explanation.trim() ? state.explanation : action.suggestion.explanation,
+        };
+      }
+      return base;
     }
     case 'USE_SUGGESTION': {
       if (!state.llmSuggestedAnswer) return state;
       // Adopt Joshing's suggested answer verbatim and fill the supporting fields
-      // (without clobbering anything already typed). asVerified marks the automated
-      // autoSubmit adoption ('auto' → verified); a manual passive accept stays
-      // 'suggestion' → unverified.
+      // (without clobbering anything already typed). The suggestion is pre-fact-
+      // checked, so both the manual adoption ('suggestion') and the automated
+      // autoSubmit adoption ('auto') count as verified.
       return {
         ...state,
         error: null,
         userAnswer: state.llmSuggestedAnswer,
         answerSource: action.asVerified ? 'auto' : 'suggestion',
+        answerCheck: { status: 'idle' },
         alternateText: state.alternateText.trim() ? state.alternateText : state.suggestedAlternates.join(', '),
         explanation: state.explanation.trim() ? state.explanation : state.suggestedExplanation,
       };
+    }
+    case 'START_CHECK': return { ...state, answerCheck: { status: 'checking' }, error: null };
+    case 'CHECK_RESULT': {
+      // Ignore a verdict that arrived after the author changed the answer — it was
+      // computed for a pair that is no longer on the field.
+      if (
+        (action.check.status === 'ok' || action.check.status === 'wrong' || action.check.status === 'unverifiable')
+        && action.check.for !== answerPairKey(state.questionText, state.userAnswer)
+      ) {
+        return state;
+      }
+      return { ...state, answerCheck: action.check };
     }
     case 'SUGGESTION_ERROR': {
       if (action.questionText && state.questionText.trim() !== action.questionText) {
@@ -297,23 +347,23 @@ function answersMatch(a: string, b: string | null): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
-// "Verified" means the answer is independently corroborated, NOT merely that the
-// author didn't override the LLM. In the manual composer it is earned only when the
-// author *typed their own* answer and it agrees with Joshing's independent
-// suggestion. Passively accepting the suggestion ('suggestion') is deference to the
-// machine, not corroboration, so it stays unverified — this is what stops a
-// confidently wrong auto-suggestion from self-certifying and becoming
-// broadcast-eligible. The fully-automated autoSubmit adoption ('auto') is verified:
-// no human is present to anchor and the answer already passed the suggestion
-// verifier. With no suggestion to check against, we fall back to verified (unchanged
-// behaviour for when the suggestion is unavailable, or edit mode without one).
+// "Verified" is the STRICT bar that unlocks spreading (broadcast to all friends +
+// forwarding by recipients): the answer must AGREE with Joshing's independent,
+// fact-checked suggestion. Using it verbatim ('suggestion'/'auto'), or
+// independently typing a matching answer ('author' + match), clears it. An answer
+// that DIFFERS from the suggestion is never auto-verified — even if a single
+// on-demand fact-check likes it. That check can be gamed by a crafted false
+// premise, so it stays advisory only; requiring agreement with an independently
+// generated answer is the guard that stops a wrong or adversarial answer from
+// self-certifying and spreading. With no suggestion to anchor against we fall back
+// to verified (suggestion unavailable, or edit mode without one).
 export function isVerifiedAnswer(params: {
   suggestedAnswer: string | null;
   userAnswer: string;
   answerSource: AnswerSource;
 }): boolean {
   if (!params.suggestedAnswer) return true;
-  if (params.answerSource === 'auto') return true;
+  if (params.answerSource === 'suggestion' || params.answerSource === 'auto') return true;
   return params.answerSource === 'author' && answersMatch(params.userAnswer, params.suggestedAnswer);
 }
 
@@ -457,9 +507,55 @@ export function QuestionForm({
   const showDestinations = mode === 'create';
   const verified = computedVerified(state);
   const hasAnswer = state.userAnswer.trim().length > 0;
-  const usedSuggestion = state.answerSource === 'suggestion';
+  // The player is running with Joshing's verified answer (verbatim, or their own
+  // typed answer that happens to equal it).
+  const usingSuggestion =
+    state.answerSource === 'suggestion'
+    || state.answerSource === 'auto'
+    || (state.answerSource === 'author' && answersMatch(state.userAnswer, state.llmSuggestedAnswer));
+  // The player said Joshing's answer was wrong and supplied their own — it needs a
+  // fact-check to earn "verified".
+  // Fact-check verdict flags, pinned to the answer currently on the field.
+  const currentAnswerKey = answerPairKey(state.questionText, state.userAnswer);
+  const checkOkNow = state.answerCheck.status === 'ok' && state.answerCheck.for === currentAnswerKey;
+  const checkWrongNow = state.answerCheck.status === 'wrong' && state.answerCheck.for === currentAnswerKey;
+  const checkUnverifiableNow = state.answerCheck.status === 'unverifiable' && state.answerCheck.for === currentAnswerKey;
+  const checkCorrection = state.answerCheck.status === 'wrong' && state.answerCheck.for === currentAnswerKey ? state.answerCheck.corrected : null;
   const submitDisabled = state.stage === 'SUBMITTING';
   const resolvedSubmitLabel = submitLabel ?? (mode === 'edit' ? 'Update question' : 'Save question');
+
+  // Fact-check the player's own answer against the question (the same pass the
+  // crafter surface uses). Fail-open: a checker outage resolves to 'unverifiable'
+  // and never blocks saving.
+  async function checkAnswer() {
+    const questionText = state.questionText.trim();
+    const answer = state.userAnswer.trim();
+    if (!questionText || !answer) return;
+    const key = answerPairKey(questionText, answer);
+    dispatch({ type: 'START_CHECK' });
+    try {
+      const response = await fetch('/api/questions/verify-answer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ questionText, answer }),
+      });
+      if (!response.ok) {
+        dispatch({ type: 'CHECK_RESULT', check: { status: 'error' } });
+        return;
+      }
+      const body = await response.json().catch(() => null) as { verdict?: 'OK' | 'WRONG' | 'UNVERIFIABLE'; correctedAnswer?: string | null } | null;
+      const check: AnswerCheck =
+        body?.verdict === 'OK'
+          ? { status: 'ok', for: key }
+          : body?.verdict === 'WRONG'
+            ? { status: 'wrong', for: key, corrected: body.correctedAnswer ?? null }
+            : { status: 'unverifiable', for: key };
+      dispatch({ type: 'CHECK_RESULT', check });
+    } catch {
+      dispatch({ type: 'CHECK_RESULT', check: { status: 'error' } });
+    }
+  }
 
   async function loadFriends() {
     if (state.friends.length > 0 || state.friendsLoading) return;
@@ -758,6 +854,102 @@ export function QuestionForm({
             />
           </div>
 
+          {/* Verification status — sits directly under the answer it describes.
+              The model: Joshing suggests an answer that was already fact-checked,
+              so using it is verified. If the player says it's wrong and supplies
+              their own, that answer earns "verified" by passing an on-demand
+              fact-check (the same /api/questions/verify-answer pass the crafter
+              surface uses). */}
+          {state.llmSuggestedAnswer ? (
+            !hasAnswer ? (
+              // Field cleared (or a rare no-adopt state) — offer Joshing's answer.
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Joshing&apos;s answer</p>
+                <p className="mt-1 font-medium">{state.llmSuggestedAnswer}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Type the answer you have in mind above, or use Joshing&apos;s.</p>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
+                  disabled={state.stage === 'SUBMITTING'}
+                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Use Joshing&apos;s answer
+                </button>
+              </div>
+            ) : usingSuggestion ? (
+              // Running with Joshing's verified answer. Calm confirmation + an easy
+              // way to say it's wrong (just edit the field above).
+              <div className="rounded-md border border-[var(--border)] bg-[var(--brand-field)] p-3 text-sm">
+                <p className="text-[var(--success)]">✓ Verified — Joshing checked this answer.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Not right? Edit the answer above and we&apos;ll re-check yours.</p>
+              </div>
+            ) : state.answerCheck.status === 'checking' ? (
+              <p className="text-sm text-muted-foreground">Checking your answer…</p>
+            ) : checkOkNow ? (
+              // Advisory only: the check likes it, but it still differs from
+              // Joshing's independent answer, so it stays unverified for spreading.
+              // (Verified — which unlocks sharing with everyone — requires agreeing
+              // with Joshing's answer, the guard against a crafted answer spreading.)
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p>Your answer looks right to us — but it isn&apos;t Joshing&apos;s answer, so it stays unverified. You can save it and send it directly to friends; use Joshing&apos;s answer to share with everyone.</p>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
+                  disabled={state.stage === 'SUBMITTING'}
+                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Use Joshing&apos;s answer instead
+                </button>
+              </div>
+            ) : checkWrongNow ? (
+              // The player's own answer failed the fact-check. Surface the machine's
+              // correction; they can adopt it, keep theirs (unverified), or re-check.
+              <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
+                <p>⚠ We couldn&apos;t confirm your answer — the check thinks it may be wrong.</p>
+                {checkCorrection ? <p className="mt-1">Joshing&apos;s answer: <strong>{checkCorrection}</strong></p> : null}
+                <p className="mt-2 text-xs">You can still save and send it directly to friends, tagged unverified — or use Joshing&apos;s answer.</p>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
+                  disabled={state.stage === 'SUBMITTING'}
+                  className="mt-2 rounded-md border border-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Use Joshing&apos;s answer instead
+                </button>
+              </div>
+            ) : checkUnverifiableNow ? (
+              <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
+                <p>Couldn&apos;t confirm this one automatically — use your judgment. You can save it and send it directly to friends; it&apos;ll be tagged unverified.</p>
+              </div>
+            ) : (
+              // Author replaced Joshing's answer with their own; verdict not in yet.
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p className="text-xs text-muted-foreground">You changed the answer — it no longer matches Joshing&apos;s, so it&apos;s unverified (save &amp; direct-send only, no wider sharing). Joshing suggested <span className="font-medium text-foreground">{state.llmSuggestedAnswer}</span>.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void checkAnswer()}
+                    disabled={state.stage === 'SUBMITTING'}
+                    className="rounded-md border border-[var(--brand-navy)] px-3 py-1 text-xs font-medium text-[var(--brand-navy)] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Check my answer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
+                    disabled={state.stage === 'SUBMITTING'}
+                    className="rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Use Joshing&apos;s answer instead
+                  </button>
+                </div>
+                {state.answerCheck.status === 'error' ? (
+                  <p className="mt-2 text-xs text-destructive">Couldn&apos;t reach the answer checker — try again.</p>
+                ) : null}
+              </div>
+            )
+          ) : null}
+
           <div>
             <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
             <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Accepted variations, separated by commas" />
@@ -785,53 +977,6 @@ export function QuestionForm({
               <span>{state.creatorNote.length}/200</span>
             </div>
           </div>
-
-          {/* Joshing's answer is an INDEPENDENT cross-check, never a pre-fill.
-              The author enters their own answer; agreement earns "verified". This
-              is what stops a confidently-wrong suggestion (e.g. "Keanu Reeves" for
-              a fact about Balthazar Getty) from self-certifying via auto-fill. */}
-          {state.llmSuggestedAnswer ? (
-            !hasAnswer ? (
-              // Nothing entered yet — offer Joshing's answer as a cross-check, but
-              // do not fill the field (that would manufacture a false match).
-              <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Joshing&apos;s answer</p>
-                <p className="mt-1 font-medium">{state.llmSuggestedAnswer}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Type the answer you have in mind above and we&apos;ll check it against this — or adopt Joshing&apos;s as-is.</p>
-                <button
-                  type="button"
-                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
-                  disabled={state.stage === 'SUBMITTING'}
-                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Use Joshing&apos;s answer
-                </button>
-              </div>
-            ) : verified ? (
-              <p className="text-sm text-[var(--success)]">✓ Verified — your answer matches Joshing&apos;s independent answer.</p>
-            ) : usedSuggestion ? (
-              // Author adopted the suggestion without supplying their own answer.
-              // Coherent, but not independently corroborated — cannot broadcast.
-              <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
-                <p>⚠ Unverified — this is Joshing&apos;s suggested answer, not one you confirmed yourself. You can send it directly to specific friends, but it can&apos;t be shared with everyone. If you know it&apos;s right, type it into the answer field above.</p>
-              </div>
-            ) : (
-              // Author supplied their own answer and it differs from Joshing&apos;s.
-              <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
-                <p className="text-xs uppercase tracking-[0.1em]">Joshing suggested a different answer</p>
-                <p className="mt-1 line-through decoration-[var(--warning)]">{state.llmSuggestedAnswer}</p>
-                <p className="mt-2">⚠ Unverified — your answer differs from Joshing&apos;s. Double-check which is right; recipients will see it tagged unverified.</p>
-                <button
-                  type="button"
-                  onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
-                  disabled={state.stage === 'SUBMITTING'}
-                  className="mt-2 rounded-md border border-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Use Joshing&apos;s answer instead
-                </button>
-              </div>
-            )
-          ) : null}
 
           {showDestinations ? (
             <div className="rounded-md border bg-muted/40 p-4">
