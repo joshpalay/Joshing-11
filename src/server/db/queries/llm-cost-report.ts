@@ -17,6 +17,7 @@ import { and, desc, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 
 import { adminUserIds } from '@/server/auth/admin';
 import { db, generatedQuestions, llmCostReport, llmUsageEvent, masteryEvents, users } from '@/server/db';
+import { getExpensiveDomains, type ExpensiveDomain } from '@/server/db/queries/crafter-demand';
 import { estimateCostUsd } from '@/server/llm/pricing';
 
 // ─── Decision A: the surface taxonomy ────────────────────────────────────────
@@ -301,6 +302,13 @@ export type CostLatencyReport = {
   answersGraded: number;
   costPerQuestionUsd: number | null;
   costPerAnswerGradedUsd: number | null;
+  /**
+   * D-SUPPLY-FINITE-SET-01 cost-routed curation: subjects that crossed the "too
+   * expensive for the machine" line (high demotion / generation timing out) and
+   * should be human-curated. The weekly notification half of the crafter
+   * dashboard badge. Worst first.
+   */
+  expensiveDomains: ExpensiveDomain[];
 };
 
 /**
@@ -311,14 +319,16 @@ export async function buildCostLatencyReport(windowDays = 7): Promise<CostLatenc
   const now = new Date();
   const periodStart = new Date(now.getTime() - windowDays * 86_400_000);
 
-  const [surfaces, prev, month, latency, questionsGenerated, answersGraded] = await Promise.all([
-    readSurfaceCost(windowDays, 0),
-    readSurfaceCost(windowDays * 2, windowDays),
-    readSurfaceCost(30, 0),
-    readSurfaceLatency(windowDays, 0),
-    countQuestionsGenerated(windowDays),
-    countAnswersGraded(windowDays),
-  ]);
+  const [surfaces, prev, month, latency, questionsGenerated, answersGraded, expensiveDomains] =
+    await Promise.all([
+      readSurfaceCost(windowDays, 0),
+      readSurfaceCost(windowDays * 2, windowDays),
+      readSurfaceCost(30, 0),
+      readSurfaceLatency(windowDays, 0),
+      countQuestionsGenerated(windowDays),
+      countAnswersGraded(windowDays),
+      getExpensiveDomains().catch(() => [] as ExpensiveDomain[]),
+    ]);
 
   const totalUsd = surfaces.reduce((a, s) => a + s.costUsd, 0);
   const prevTotalUsd = prev.reduce((a, s) => a + s.costUsd, 0);
@@ -350,6 +360,7 @@ export async function buildCostLatencyReport(windowDays = 7): Promise<CostLatenc
     answersGraded,
     costPerQuestionUsd: questionsGenerated > 0 ? generateUsd / questionsGenerated : null,
     costPerAnswerGradedUsd: answersGraded > 0 ? gradeUsd / answersGraded : null,
+    expensiveDomains,
   };
 }
 
@@ -453,6 +464,24 @@ export function renderCostLatencyReportMarkdown(r: CostLatencyReport): string {
     lines.push('| --- | --- | --- |');
     for (const l of timed) {
       lines.push(`| ${l.label} | ${ms(l.avgMs)} | ${ms(l.p95Ms)} |`);
+    }
+    lines.push('');
+  }
+
+  // Subjects that got expensive for the machine — the notification half of the
+  // crafter dashboard badge (D-SUPPLY-FINITE-SET-01 cost-routed curation). These
+  // are where human authoring beats paying to re-generate junk.
+  if (r.expensiveDomains.length > 0) {
+    lines.push('## Subjects too expensive for the machine — curate these');
+    lines.push('');
+    lines.push(
+      'The machine keeps producing wrong or unservable questions here (or can’t generate at all). Author them by hand instead of paying to re-generate — they’re flagged in the crafter worklist:',
+    );
+    for (const d of r.expensiveDomains.slice(0, 15)) {
+      lines.push(`- **${d.domain}** — ${d.reason}`);
+    }
+    if (r.expensiveDomains.length > 15) {
+      lines.push(`- …and ${r.expensiveDomains.length - 15} more`);
     }
     lines.push('');
   }

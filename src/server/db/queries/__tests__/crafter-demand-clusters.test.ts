@@ -21,7 +21,13 @@ vi.mock('@/server/knowledge/converge-domain', () => ({
   getConvergeTrgmThreshold: () => 0.55,
 }));
 
-import { buildLabelClusters, futilityScore, type ClusterLabel } from '@/server/db/queries/crafter-demand';
+import {
+  buildLabelClusters,
+  curationVerdict,
+  futilityScore,
+  CURATION_FUTILITY_THRESHOLD,
+  type ClusterLabel,
+} from '@/server/db/queries/crafter-demand';
 
 const THRESHOLD = 0.55;
 
@@ -86,5 +92,46 @@ describe('futilityScore', () => {
 
   it('below the sample floor (rate=null) the machine is presumed fine', () => {
     expect(futilityScore({ demotionRate: null, generationStruggling: false })).toBe(0);
+  });
+});
+
+// D-SUPPLY-FINITE-SET-01: the "too expensive → curate it" threshold that drives
+// the crafter dashboard badge and the weekly notification.
+describe('curationVerdict', () => {
+  it('a low-demotion, healthy domain is NOT expensive', () => {
+    const v = curationVerdict({ demotionRate: 0.1, generationStruggling: false });
+    expect(v.expensive).toBe(false);
+    expect(v.reason).toBeNull();
+  });
+
+  it('a high demotion rate crosses the line with a % reason', () => {
+    const v = curationVerdict({ demotionRate: 0.64, generationStruggling: false });
+    expect(v.expensive).toBe(true);
+    expect(v.reason).toBe('64% demoted');
+  });
+
+  it('generation timing out crosses the line on its own', () => {
+    // struggling bump (0.5) alone clears 0.34, even with no verdict sample.
+    const v = curationVerdict({ demotionRate: null, generationStruggling: true });
+    expect(v.expensive).toBe(true);
+    expect(v.reason).toBe('generation timing out');
+  });
+
+  it('names both causes when both fire', () => {
+    const v = curationVerdict({ demotionRate: 0.5, generationStruggling: true });
+    expect(v.expensive).toBe(true);
+    expect(v.reason).toBe('50% demoted; generation timing out');
+  });
+
+  it('does not fabricate a % reason when the rate is below the threshold but struggling pushes it over', () => {
+    // demotionRate 0.1 alone wouldn't cross; the 0.5 struggling bump does. The
+    // reason must not claim "10% demoted" as a cause — only the timeout.
+    const v = curationVerdict({ demotionRate: 0.1, generationStruggling: true });
+    expect(v.expensive).toBe(true);
+    expect(v.reason).toBe('generation timing out');
+  });
+
+  it('the threshold is the documented value', () => {
+    expect(CURATION_FUTILITY_THRESHOLD).toBe(0.34);
   });
 });

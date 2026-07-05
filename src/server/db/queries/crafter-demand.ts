@@ -61,6 +61,15 @@ export type CrafterWorklistRow = {
   machineDemoted: number; // …of those, pulled as wrong
   demotionRate: number | null; // demoted/verified; null below the sample floor
   generationStruggling: boolean; // refill has been timing out here (health row)
+  /**
+   * D-SUPPLY-FINITE-SET-01 curation routing: TRUE when this subject has crossed
+   * the "too expensive for the machine" line (futility ≥ threshold) — it should
+   * be human-curated, not left to auto-fill. Drives the crafter dashboard badge
+   * and the weekly "subjects that got expensive" notification. `expensiveReason`
+   * is a short human string ('64% demoted' / 'generation timing out').
+   */
+  expensiveToMachine: boolean;
+  expensiveReason: string | null;
 };
 
 // Thresholds are deliberately small-scale (18-user era) and transparent — tune
@@ -88,6 +97,101 @@ export function futilityScore(row: {
   generationStruggling: boolean;
 }): number {
   return (row.demotionRate ?? 0) + (row.generationStruggling ? 0.5 : 0);
+}
+
+// The "too expensive for the machine → curate it" line (D-SUPPLY-FINITE-SET-01
+// cost-routed curation). Crossed by EITHER a high demotion rate (a third+ of the
+// machine's verified questions here are wrong — re-generating just re-mints
+// junk) OR generation timing out at all (the 0.5 struggling bump alone clears
+// it — the machine can't even produce here). Small-scale, tune by eye.
+export const CURATION_FUTILITY_THRESHOLD = 0.34;
+
+/**
+ * Whether a subject has crossed the curation line, with a short human reason.
+ * Pure and exported for tests + the weekly notification. Only speaks when there
+ * is a real signal: a demotion rate needs the sample floor (FUTILITY_MIN_VERIFIED),
+ * so a domain flagged solely on `generationStruggling` reads as a timeout, not a
+ * fabricated failure rate.
+ */
+export function curationVerdict(row: {
+  demotionRate: number | null;
+  generationStruggling: boolean;
+}): { expensive: boolean; reason: string | null } {
+  if (futilityScore(row) < CURATION_FUTILITY_THRESHOLD) return { expensive: false, reason: null };
+  const parts: string[] = [];
+  if (row.demotionRate != null && row.demotionRate >= CURATION_FUTILITY_THRESHOLD) {
+    parts.push(`${Math.round(row.demotionRate * 100)}% demoted`);
+  }
+  if (row.generationStruggling) parts.push('generation timing out');
+  return { expensive: true, reason: parts.join('; ') || 'costly to generate' };
+}
+
+export type ExpensiveDomain = {
+  domain: string;
+  reason: string;
+  demotionRate: number | null;
+  generationStruggling: boolean;
+};
+
+/**
+ * GLOBAL curation-worthiness scan (D-SUPPLY-FINITE-SET-01) — every subject that
+ * has crossed the "too expensive for the machine" line, corpus-wide (not scoped
+ * to one crafter's active domains like getCrafterWorklist). Powers the weekly
+ * "subjects that got expensive" notification in the LLM cost report. Read-only,
+ * pure threshold over the same two signals the worklist uses:
+ *   - per-domain machine demotion rate (needs the FUTILITY_MIN_VERIFIED sample),
+ *   - refill generation timing out (RetrievalDomainHealth).
+ * Sorted by futility, worst first.
+ */
+export async function getExpensiveDomains(): Promise<ExpensiveDomain[]> {
+  const [verdictRows, healthRows] = await Promise.all([
+    db
+      .select({
+        domain: generatedQuestions.canonicalSubcategory,
+        verified: sql<number>`count(*)::int`,
+        demoted: sql<number>`count(*) filter (where ${generatedQuestions.verificationVerdict} = 'demoted')::int`,
+      })
+      .from(generatedQuestions)
+      .where(isNotNull(generatedQuestions.verificationVerdict))
+      .groupBy(generatedQuestions.canonicalSubcategory),
+    db
+      .select({
+        domain: retrievalDomainHealth.domain,
+        consecutiveTimeouts: retrievalDomainHealth.consecutiveTimeouts,
+      })
+      .from(retrievalDomainHealth)
+      .where(gte(retrievalDomainHealth.consecutiveTimeouts, STRUGGLING_TIMEOUTS)),
+  ]);
+
+  const struggling = new Set(healthRows.map((r) => r.domain).filter(Boolean) as string[]);
+  const out: ExpensiveDomain[] = [];
+  const seen = new Set<string>();
+
+  for (const r of verdictRows) {
+    if (!r.domain) continue;
+    const verified = Number(r.verified);
+    const demoted = Number(r.demoted);
+    const demotionRate = verified >= FUTILITY_MIN_VERIFIED ? demoted / verified : null;
+    const generationStruggling = struggling.has(r.domain);
+    const v = curationVerdict({ demotionRate, generationStruggling });
+    if (v.expensive) {
+      out.push({ domain: r.domain, reason: v.reason ?? 'costly to generate', demotionRate, generationStruggling });
+      seen.add(r.domain);
+    }
+  }
+  // Domains that time out so hard they have no verdict rows at all (the machine
+  // can't even produce here) — the clearest curate case; include them too.
+  for (const domain of struggling) {
+    if (seen.has(domain)) continue;
+    const v = curationVerdict({ demotionRate: null, generationStruggling: true });
+    out.push({ domain, reason: v.reason ?? 'generation timing out', demotionRate: null, generationStruggling: true });
+  }
+
+  return out.sort(
+    (a, b) =>
+      futilityScore({ demotionRate: b.demotionRate, generationStruggling: b.generationStruggling }) -
+      futilityScore({ demotionRate: a.demotionRate, generationStruggling: a.generationStruggling }),
+  );
 }
 
 function heatFor(activePlayers: number, machineDepth: number, humanAuthored: number): CrafterWorklistHeat {
@@ -348,6 +452,10 @@ export async function getCrafterWorklist(
     const verdicts = verdictsByDomain.get(row.domain);
     const machineVerified = verdicts ? Number(verdicts.verified) : 0;
     const machineDemoted = verdicts ? Number(verdicts.demoted) : 0;
+    const demotionRate =
+      machineVerified >= FUTILITY_MIN_VERIFIED ? machineDemoted / machineVerified : null;
+    const generationStruggling = strugglingDomains.has(row.domain);
+    const verdict = curationVerdict({ demotionRate, generationStruggling });
     return {
       domain: row.domain,
       activePlayers: row.activePlayers,
@@ -361,9 +469,10 @@ export async function getCrafterWorklist(
       heat: heatFor(row.activePlayers, clusterMachineDepth, clusterHumanAuthored),
       machineVerified,
       machineDemoted,
-      demotionRate:
-        machineVerified >= FUTILITY_MIN_VERIFIED ? machineDemoted / machineVerified : null,
-      generationStruggling: strugglingDomains.has(row.domain),
+      demotionRate,
+      generationStruggling,
+      expensiveToMachine: verdict.expensive,
+      expensiveReason: verdict.reason,
     };
   });
 
