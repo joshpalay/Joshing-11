@@ -116,6 +116,20 @@ const FUNCTION_DURATION_BUDGET_MS = Number(
   process.env.DAILY_BUILD_DURATION_BUDGET_MS ?? 90_000,
 );
 
+// Background builds (the daily cron) run under a route whose maxDuration is 300s,
+// so they can afford a LONGER top-up loop than the user-facing synchronous POST.
+// The 90s sync ceiling is why a struggling build stops at 4 instead of 5: after
+// the first pass (~50-70s) there isn't budget to START another top-up round
+// (elapsed + GENERATION_TIMEOUT_MS + margin > 90s), so it persists the short queue
+// (the measured "four questions" case). Giving the non-interactive build ~180s
+// lets that extra round run and reach DAILY_QUEUE_SIZE. The sync + pre-warm paths
+// keep the 90s budget for perceived latency; carry-forward means most users are
+// served the cron's pre-built (full) queue anyway. Env-tunable; keep it under the
+// cron route's maxDuration (300s) with margin for concurrency.
+const BACKGROUND_DURATION_BUDGET_MS = Number(
+  process.env.DAILY_BUILD_BG_DURATION_BUDGET_MS ?? 180_000,
+);
+
 // Headroom reserved AFTER the last LLM round for assembling + atomically
 // persisting the queue before the ceiling.
 const BUILD_PERSIST_MARGIN_MS = 8_000;
@@ -124,9 +138,8 @@ const BUILD_PERSIST_MARGIN_MS = 8_000;
 // to GENERATION_TIMEOUT_MS — plus persistence can still finish before the
 // platform kills the function. This is what keeps a short-but-served (≥ floor)
 // queue from degrading into a 504 + a "forever" wait on Hobby.
-const hasBudgetForAnotherRound = (elapsedMs: number) =>
-  elapsedMs + GENERATION_TIMEOUT_MS + BUILD_PERSIST_MARGIN_MS <=
-  FUNCTION_DURATION_BUDGET_MS;
+const hasBudgetForAnotherRound = (elapsedMs: number, budgetMs: number) =>
+  elapsedMs + GENERATION_TIMEOUT_MS + BUILD_PERSIST_MARGIN_MS <= budgetMs;
 
 // Hard cap on top-up rounds, independent of the time budget — a backstop against
 // a pathological domain that keeps generating questions the gates fully reject.
@@ -289,11 +302,20 @@ async function topUpAndCarryForwardPartialQueue(userId: string): Promise<boolean
   }
 }
 
-export function fillDailyQueueForUser(userId: string): Promise<void> {
+export function fillDailyQueueForUser(
+  userId: string,
+  options?: { background?: boolean },
+): Promise<void> {
   const inFlight = inFlightFills.get(userId);
   if (inFlight) return inFlight;
 
-  const promise = buildDailyQueueForUser(userId).finally(() => {
+  // Background (cron) builds get the longer top-up budget their 300s route allows;
+  // the synchronous POST / pre-warm keep the 90s budget for perceived latency.
+  const durationBudgetMs = options?.background
+    ? BACKGROUND_DURATION_BUDGET_MS
+    : FUNCTION_DURATION_BUDGET_MS;
+
+  const promise = buildDailyQueueForUser(userId, durationBudgetMs).finally(() => {
     // Clear on settle (success OR failure) so the next genuine build for this
     // user isn't blocked by a stale entry — a rejected build must be retryable.
     inFlightFills.delete(userId);
@@ -302,7 +324,10 @@ export function fillDailyQueueForUser(userId: string): Promise<void> {
   return promise;
 }
 
-async function buildDailyQueueForUser(userId: string): Promise<void> {
+async function buildDailyQueueForUser(
+  userId: string,
+  durationBudgetMs: number,
+): Promise<void> {
   const startedAt = Date.now();
 
   // Commit point for Refine Your Game: staged decisions from the prior daily's
@@ -645,7 +670,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
       (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) >
       0 &&
     topUpRounds < MAX_TOP_UP_ROUNDS &&
-    hasBudgetForAnotherRound(Date.now() - startedAt)
+    hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)
   ) {
     topUpRounds += 1;
     const roundShortfall =
@@ -938,7 +963,7 @@ async function buildDailyQueueForUser(userId: string): Promise<void> {
     // additive, so when little time is left (e.g. a slow core build near the
     // ceiling) skipping it lets the core queue still persist instead of risking a
     // mid-bonus kill that would lose the whole build.
-    if (bonusDomains.length > 0 && hasBudgetForAnotherRound(Date.now() - startedAt)) {
+    if (bonusDomains.length > 0 && hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)) {
       const presenceByDomain = new Map(
         bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
       );

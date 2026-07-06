@@ -1801,6 +1801,20 @@ export function rankAndFilterBankCandidates<
   return { ranked, dudsExcluded };
 }
 
+// Own-unused bank reuse (kill-switch, default ON). By default the bank serves
+// only OTHER users' stock (cross-user reuse). At small scale with niche interests
+// that pool is thin, so a queue burns fresh Sonnet calls even though the viewer's
+// OWN over-provisioned / unfinished stock — rows persisted but never placed
+// (used_in_queue = false) — sits serveable in the pool. Including them cuts fresh
+// generation (fewer short queues, faster builds). Repeat-safe: used_in_queue flips
+// true the instant a row is placed (persistDailyQueue), and the fact-key /
+// question-text avoid sets below dedup anything already seen. Disable with
+// BANK_INCLUDE_OWN_UNUSED=false.
+function isBankIncludeOwnUnusedEnabled(): boolean {
+  const raw = process.env.BANK_INCLUDE_OWN_UNUSED?.trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
+
 export async function pickBankSource(
   userId: string,
   domain: string,
@@ -1808,6 +1822,17 @@ export async function pickBankSource(
   avoidFactKeys: ReadonlySet<string>,
   avoidQuestionTexts: ReadonlySet<string> = new Set(),
 ): Promise<BankSource | null> {
+  // Cross-user stock, plus (when enabled) the viewer's own never-served rows.
+  const viewerClause = isBankIncludeOwnUnusedEnabled()
+    ? or(
+        sql`${generatedQuestions.userId} <> ${userId}`,
+        and(
+          eq(generatedQuestions.userId, userId),
+          eq(generatedQuestions.usedInQueue, false),
+        ),
+      )
+    : sql`${generatedQuestions.userId} <> ${userId}`;
+
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
     candidates = await db
@@ -1825,7 +1850,7 @@ export async function pickBankSource(
         ),
         eq(generatedQuestions.difficultyEstimate, difficulty),
         isNotNull(generatedQuestions.factKey),
-        sql`${generatedQuestions.userId} <> ${userId}`,
+        viewerClause,
         eq(generatedQuestions.isDuplicate, false),
         // B-Report-3: skip generated questions under an open/upheld report.
         notSuppressedByContentReport(generatedQuestions.id, 'generated'),
