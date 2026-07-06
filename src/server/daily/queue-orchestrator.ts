@@ -43,6 +43,7 @@ import {
   type QueueSlot,
 } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
+import { verifyGateThinDeclared } from '@/server/daily/verify-gate-thin';
 import { commitPendingRefineDecisions } from '@/server/refine/commit';
 import { logLatency } from '@/server/telemetry';
 
@@ -817,7 +818,19 @@ async function buildDailyQueueForUser(
 
   const coreAuthored = [...authored, ...authoredBackfill];
   const coreHouse = [...housePicks, ...houseBackfill];
-  const coreGenerated = [...generatedForQueue, ...generatedBackfill, ...underDifficultyBackfill];
+  let coreGenerated = [...generatedForQueue, ...generatedBackfill, ...underDifficultyBackfill];
+
+  // Verify-gate (2026-07-06): in the viewer's THIN DECLARED domains, hold back
+  // UNVERIFIED fresh generations — the niche-fiction fabrication case ("Ben Ripley
+  // vomits" in "Spy School Books 1-6") the factual gate can't catch. Only rows that
+  // earned >= machine_verified serve; the rest wait for the async web-search verify
+  // pass. Flag-gated OFF; a no-op until VERIFY_GATE_THIN_DECLARED_ENABLED is flipped
+  // alongside the verifier wiki/fandom allowlist. Applied BEFORE the achieved/floor
+  // check so a gate-induced shortfall degrades or retries like any other.
+  const declaredDomains = new Set(
+    knowledgeBase.filter((entry) => entry.territoryType === 'declared').map((entry) => entry.domain),
+  );
+  coreGenerated = await verifyGateThinDeclared(coreGenerated, declaredDomains);
 
   const achieved = coreAuthored.length + coreHouse.length + coreGenerated.length;
 
