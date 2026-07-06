@@ -2227,24 +2227,61 @@ export async function getRecentFactKeys(
   userId: string,
   limit = 200,
 ): Promise<RecentFactKeyEntry[]> {
-  const rows = await db
-    .select({
-      factKey: generatedQuestions.factKey,
-      domain: generatedQuestions.canonicalSubcategory,
-    })
-    .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.userId, userId),
-      isNotNull(generatedQuestions.factKey),
-    ))
-    .orderBy(sql`${generatedQuestions.createdAt} desc`)
-    .limit(limit);
+  // Two sources, unioned (B-DEDUP-ANSWERED-FACTS, 2026-07-06). This is the ONE
+  // durable (non-windowed) dedup — the answer/subject cooldowns are short windows,
+  // so a fact answered >window days ago can still repeat unless it lives here.
+  //  (1) Facts the viewer ANSWERED on ANY surface (daily / feed / catch-up),
+  //      resolved to the answered row's fact_key — INCLUDING questions ANOTHER
+  //      user generated (a friend's question surfaced in the feed). The
+  //      "generated-for-you" source alone misses those, which is how a feed-
+  //      answered fact came back as a +2 bonus (the Optimus report). This is the
+  //      "never re-serve a fact I've already answered" guarantee.
+  //  (2) Facts GENERATED for the viewer (served but maybe unanswered) — the prior
+  //      behavior, so we still avoid re-creating something already put in front of
+  //      them. Answered facts are listed first so they win the cap.
+  const [answered, generated] = await Promise.all([
+    db
+      .select({
+        factKey: generatedQuestions.factKey,
+        domain: generatedQuestions.canonicalSubcategory,
+      })
+      .from(masteryEvents)
+      // MASTERY_EVENTS.question_id references the canonical Question twin, not the
+      // GeneratedQuestion — bridge via the twin's generated_question_id to read the
+      // fact_key. This is what makes a feed-answered question whose GENERATED row
+      // another user owns still land in the viewer's avoid set.
+      .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
+      .innerJoin(
+        generatedQuestions,
+        eq(canonicalQuestions.generatedQuestionId, generatedQuestions.id),
+      )
+      .where(and(
+        eq(masteryEvents.answeredByUserId, userId),
+        isNotNull(generatedQuestions.factKey),
+      ))
+      .orderBy(sql`${masteryEvents.createdAt} desc`)
+      .limit(limit),
+    db
+      .select({
+        factKey: generatedQuestions.factKey,
+        domain: generatedQuestions.canonicalSubcategory,
+      })
+      .from(generatedQuestions)
+      .where(and(
+        eq(generatedQuestions.userId, userId),
+        isNotNull(generatedQuestions.factKey),
+      ))
+      .orderBy(sql`${generatedQuestions.createdAt} desc`)
+      .limit(limit),
+  ]);
 
   const out: RecentFactKeyEntry[] = [];
-  for (const row of rows) {
-    if (row.factKey) {
-      out.push({ domain: row.domain ?? 'unknown', factKey: row.factKey });
-    }
+  const seen = new Set<string>();
+  for (const row of [...answered, ...generated]) {
+    if (!row.factKey || seen.has(row.factKey)) continue;
+    seen.add(row.factKey);
+    out.push({ domain: row.domain ?? 'unknown', factKey: row.factKey });
+    if (out.length >= limit) break;
   }
   return out;
 }
