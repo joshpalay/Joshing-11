@@ -472,6 +472,39 @@ export function computeStarvationStepDown(
 }
 
 /**
+ * Earned-skill lift (D-DIFFICULTY-SIZE-COMPLETION-01, Phase 0). Raise an
+ * already-played domain's REQUESTED tier up to the player's demonstrated global
+ * skill tier, so a levelled-up player's existing domains climb in parallel with
+ * the finite-set count instead of being pinned at their first-contact tier. This
+ * is the counterpart to the disconnect where a persisted per-domain row fully
+ * overrode the global adaptiveLevel.
+ *
+ * - Never LOWERS (max only): the demand-side step-down (two wrong) and the
+ *   supply-side corrections stay the only things that ease a domain off.
+ * - SUPPRESSED while the player is on an incorrect streak in THIS domain
+ *   (consecutiveIncorrect > 0): an earned step-down on a domain they're currently
+ *   missing must be respected — global skill elsewhere shouldn't re-harden a
+ *   domain that's actively fighting them.
+ *
+ * A thin domain lifted above what it can field is self-correcting: the queue
+ * still fills from the under-difficulty reserve, supply recalibration eases the
+ * persisted row back down, and the topic reaches its (small) size and graduates —
+ * so the lift can't strand a narrow KB below the served floor.
+ */
+export function liftServedToGlobalSkill(
+  persisted: ServedDifficulty,
+  globalSkillTier: ServedDifficulty,
+  consecutiveIncorrect: number,
+): ServedDifficulty {
+  if (consecutiveIncorrect > 0) return persisted;
+  const idx = Math.max(
+    DIFFICULTY_LADDER.indexOf(persisted),
+    DIFFICULTY_LADDER.indexOf(globalSkillTier),
+  );
+  return DIFFICULTY_LADDER[idx];
+}
+
+/**
  * Supply-side difficulty correction — the counterpart to the demand-side streak
  * ladder in updateDomainDifficultyOnAnswer. A streak step-up is *optimistic*: it can
  * raise a domain to a tier the generator can't actually field (there is, for example,
@@ -725,6 +758,45 @@ export async function markDomainExpansionOffered(
 }
 
 /**
+ * Mark a domain eligible for the post-daily-Five expansion offer because the
+ * player just COMPLETED its finite set (D-DIFFICULTY-SIZE-COMPLETION-01, Phase 1b:
+ * completion → graduate). This reuses the exact `expansionEligibleSince` funnel the
+ * supply-ceiling trigger already drives — getPendingExpansionDomains →
+ * selectExpansionSource → buildExpansionOffer — so a completed set surfaces the
+ * neighbor/parent "branch out" card with no separate path, and the once-per-area
+ * suppression (expansionOfferedAt, filtered by getPendingExpansionDomains) holds.
+ *
+ * COALESCE preserves any existing eligibility timestamp so re-completion doesn't
+ * reset it, and it never touches expansionOfferedAt — a domain already offered and
+ * resolved stays suppressed. Upserts (a completed domain always has a row, but the
+ * insert branch is a harmless guard). Idempotent; best-effort by contract.
+ */
+export async function markDomainExpansionEligible(
+  userId: string,
+  canonicalSubcategory: string,
+): Promise<void> {
+  if (!canonicalSubcategory) return;
+  const now = new Date();
+  await db
+    .insert(userDomainDifficulties)
+    .values({
+      userId,
+      canonicalSubcategory,
+      servedDifficulty: seedDifficultyFromAdaptiveLevel(MIN_ADAPTIVE_LEVEL),
+      consecutiveCorrect: 0,
+      consecutiveIncorrect: 0,
+      lastUpdated: now,
+      expansionEligibleSince: now,
+    })
+    .onConflictDoUpdate({
+      target: [userDomainDifficulties.userId, userDomainDifficulties.canonicalSubcategory],
+      set: {
+        expansionEligibleSince: sql`COALESCE(${userDomainDifficulties.expansionEligibleSince}, ${now})`,
+      },
+    });
+}
+
+/**
  * Of the given domains, which already have an expansion offer stamped
  * (expansionOfferedAt set) — i.e. were already offered once. Used by the thinness
  * trigger to honor the once-per-area rule (B-AREA-EXPANSION-01).
@@ -817,6 +889,7 @@ export async function getDomainDifficultyOverrides(
     .select({
       canonicalSubcategory: userDomainDifficulties.canonicalSubcategory,
       servedDifficulty: userDomainDifficulties.servedDifficulty,
+      consecutiveIncorrect: userDomainDifficulties.consecutiveIncorrect,
     })
     .from(userDomainDifficulties)
     .where(and(
@@ -824,26 +897,35 @@ export async function getDomainDifficultyOverrides(
       inArray(userDomainDifficulties.canonicalSubcategory, domains),
     ));
 
-  const known = new Map<string, ServedDifficulty>();
+  const known = new Map<string, { served: ServedDifficulty; consecutiveIncorrect: number }>();
   for (const row of rows) {
-    known.set(row.canonicalSubcategory, row.servedDifficulty as ServedDifficulty);
+    known.set(row.canonicalSubcategory, {
+      served: row.servedDifficulty as ServedDifficulty,
+      consecutiveIncorrect: row.consecutiveIncorrect ?? 0,
+    });
   }
 
-  // Only domains without a persisted row need a first-contact seed. Pull the
-  // user's adaptive level and which of those domains are opted-in focus areas
-  // so we can floor the seed to "Familiar" for the latter (declared OR
-  // demonstrated — the erosion-floor split is applied later, on answer).
+  // Read the global adaptive level for BOTH jobs: the first-contact seed (domains
+  // with no persisted row) AND the earned-skill lift on ALREADY-PLAYED domains
+  // (D-DIFFICULTY-SIZE-COMPLETION-01, Phase 0). A persisted per-domain row used to
+  // FULLY override the global level, so a player who demonstrably levelled up kept
+  // being served their old (often accessible) first-contact tier on domains they
+  // had already played — the "aces every question but it never gets harder"
+  // disconnect (Marcellus). The focus-set lookup only needs the unseeded domains
+  // (its sole job is flooring their first-contact seed; the erosion-floor split is
+  // applied later, on answer).
   const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
-  const [seedLevel, focusDomains] = domainsNeedingSeed.length === 0
-    ? [MIN_ADAPTIVE_LEVEL, new Set<string>()]
-    : await Promise.all([
-        readCurrentAdaptiveLevel(userId),
-        getFocusDomainSet(userId, domainsNeedingSeed),
-      ]);
+  const [seedLevel, focusDomains] = await Promise.all([
+    readCurrentAdaptiveLevel(userId),
+    getFocusDomainSet(userId, domainsNeedingSeed),
+  ]);
+  const globalSkillTier = seedDifficultyFromAdaptiveLevel(seedLevel);
 
   for (const domain of domains) {
-    const served = known.get(domain)
-      ?? applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
+    const row = known.get(domain);
+    const served = row
+      ? liftServedToGlobalSkill(row.served, globalSkillTier, row.consecutiveIncorrect)
+      : applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
     overrides.set(domain, SERVED_TO_PREFERENCE[served]);
   }
 

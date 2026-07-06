@@ -7,15 +7,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   state,
   getDurablePoolDepthForDomains,
+  getTargetQuestionCountForDomains,
   hasDesignation,
   markDomainDesignated,
   inviteToAuthorAutomatic,
+  markDomainExpansionEligible,
 } = vi.hoisted(() => ({
   state: { answeredRows: [] as Array<{ domain: string; answered: number }> },
   getDurablePoolDepthForDomains: vi.fn(),
+  getTargetQuestionCountForDomains: vi.fn(),
   hasDesignation: vi.fn(),
   markDomainDesignated: vi.fn(),
   inviteToAuthorAutomatic: vi.fn(),
+  markDomainExpansionEligible: vi.fn(),
 }));
 
 vi.mock('@/server/db', () => {
@@ -30,11 +34,18 @@ vi.mock('@/server/db', () => {
   };
 });
 vi.mock('@/server/db/queries/retrieval-demand', () => ({ getDurablePoolDepthForDomains }));
+// Depth sizing is the default completion size source; mock it (minPossibleTargetCount
+// is the candidate gate floor).
+vi.mock('@/server/daily/domain-size', () => ({
+  getTargetQuestionCountForDomains,
+  minPossibleTargetCount: () => 12,
+}));
 vi.mock('@/server/db/queries/author-invitations', () => ({
   hasDesignation,
   markDomainDesignated,
   inviteToAuthorAutomatic,
 }));
+vi.mock('@/server/adaptive-difficulty', () => ({ markDomainExpansionEligible }));
 
 import {
   evaluateSetCompletions,
@@ -74,42 +85,48 @@ describe('evaluateSetCompletions', () => {
     state.answeredRows = [];
     hasDesignation.mockResolvedValue(false);
     getDurablePoolDepthForDomains.mockResolvedValue(new Map());
+    getTargetQuestionCountForDomains.mockResolvedValue(new Map());
     inviteToAuthorAutomatic.mockResolvedValue({ ok: true, action: 'invited' });
+    markDomainExpansionEligible.mockResolvedValue(undefined);
   });
 
-  it('designates + invites a domain the player just completed', async () => {
-    state.answeredRows = [{ domain: 'Spy School', answered: 12 }];
-    getDurablePoolDepthForDomains.mockResolvedValue(new Map([['Spy School', 10]]));
+  it('designates + invites a domain whose depth-sized set the player just covered', async () => {
+    // Spy School depth-sized target = 18; the player has answered 18 distinct.
+    state.answeredRows = [{ domain: 'Spy School', answered: 18 }];
+    getTargetQuestionCountForDomains.mockResolvedValue(new Map([['Spy School', 18]]));
 
     const completed = await evaluateSetCompletions('u1', ['Spy School']);
 
     expect(completed).toEqual(['Spy School']);
     expect(markDomainDesignated).toHaveBeenCalledWith('u1', 'Spy School', expect.any(Date));
     expect(inviteToAuthorAutomatic).toHaveBeenCalledWith({ userId: 'u1', domain: 'Spy School' });
+    // Phase 1b: completing the set makes the domain eligible for the graduation offer.
+    expect(markDomainExpansionEligible).toHaveBeenCalledWith('u1', 'Spy School');
   });
 
-  it('does not designate a below-floor domain', async () => {
+  it('does not even size a domain below the candidate gate floor', async () => {
     state.answeredRows = [{ domain: 'Tiny Topic', answered: 4 }];
-    getDurablePoolDepthForDomains.mockResolvedValue(new Map([['Tiny Topic', 4]]));
 
     const completed = await evaluateSetCompletions('u1', ['Tiny Topic']);
 
     expect(completed).toEqual([]);
+    // Below the gate (12) → never pays the depth sizing call.
+    expect(getTargetQuestionCountForDomains).not.toHaveBeenCalled();
     expect(markDomainDesignated).not.toHaveBeenCalled();
-    expect(inviteToAuthorAutomatic).not.toHaveBeenCalled();
   });
 
-  it('does not designate a not-yet-covered domain', async () => {
-    state.answeredRows = [{ domain: 'Big Topic', answered: 9 }];
-    getDurablePoolDepthForDomains.mockResolvedValue(new Map([['Big Topic', 30]]));
+  it('does not designate a deep topic still short of its (large) target', async () => {
+    // Star Wars depth-sized target = 128; 40 distinct answered → long runway left.
+    state.answeredRows = [{ domain: 'Star Wars', answered: 40 }];
+    getTargetQuestionCountForDomains.mockResolvedValue(new Map([['Star Wars', 128]]));
 
-    expect(await evaluateSetCompletions('u1', ['Big Topic'])).toEqual([]);
+    expect(await evaluateSetCompletions('u1', ['Star Wars'])).toEqual([]);
     expect(inviteToAuthorAutomatic).not.toHaveBeenCalled();
   });
 
   it('is idempotent — already-designated domains are skipped without writes', async () => {
-    state.answeredRows = [{ domain: 'Spy School', answered: 12 }];
-    getDurablePoolDepthForDomains.mockResolvedValue(new Map([['Spy School', 10]]));
+    state.answeredRows = [{ domain: 'Spy School', answered: 18 }];
+    getTargetQuestionCountForDomains.mockResolvedValue(new Map([['Spy School', 18]]));
     hasDesignation.mockResolvedValue(true);
 
     const completed = await evaluateSetCompletions('u1', ['Spy School']);
@@ -119,14 +136,27 @@ describe('evaluateSetCompletions', () => {
     expect(inviteToAuthorAutomatic).not.toHaveBeenCalled();
   });
 
+  it('falls back to pool depth when depth sizing faults (never blocks the trophy)', async () => {
+    // A sizing outage must not silently stop every completion from firing.
+    state.answeredRows = [{ domain: 'Spy School', answered: 18 }];
+    getTargetQuestionCountForDomains.mockRejectedValue(new Error('haiku down'));
+    getDurablePoolDepthForDomains.mockResolvedValue(new Map([['Spy School', 15]]));
+
+    const completed = await evaluateSetCompletions('u1', ['Spy School']);
+
+    expect(completed).toEqual(['Spy School']); // 18 >= pool depth 15
+    expect(getDurablePoolDepthForDomains).toHaveBeenCalled();
+  });
+
   it('never throws — a query fault returns no completions', async () => {
+    getTargetQuestionCountForDomains.mockRejectedValue(new Error('down'));
     getDurablePoolDepthForDomains.mockRejectedValue(new Error('db down'));
-    state.answeredRows = [{ domain: 'Spy School', answered: 12 }];
+    state.answeredRows = [{ domain: 'Spy School', answered: 18 }];
     expect(await evaluateSetCompletions('u1', ['Spy School'])).toEqual([]);
   });
 
   it('returns early for an empty domain list (no queries)', async () => {
     expect(await evaluateSetCompletions('u1', [])).toEqual([]);
-    expect(getDurablePoolDepthForDomains).not.toHaveBeenCalled();
+    expect(getTargetQuestionCountForDomains).not.toHaveBeenCalled();
   });
 });

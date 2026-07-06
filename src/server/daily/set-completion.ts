@@ -7,10 +7,16 @@
  * author more, which lights the already-built /invited trophy takeover.
  *
  * Completion is COVERAGE-based (Josh, 2026-07-05): the player has answered at
- * least as many DISTINCT questions as the set holds distinct facts. We compare
- * distinct-answered (not the raw answer-event count — repeats/catch-up must not
- * trophy a replay) against the durable pool depth (the set size at current
- * scale), gated by a floor so a 3-question domain isn't called a "set".
+ * least as many DISTINCT questions as the set's size (not the raw answer-event
+ * count — repeats/catch-up must not trophy a replay).
+ *
+ * The set SIZE is the topic's depth-derived target question count
+ * (D-DIFFICULTY-SIZE-COMPLETION-01, Josh 2026-07-06): a thin topic reaches its
+ * small size fast → trophy → graduate; a deep topic has a long runway and rarely
+ * completes. This replaced the earlier "durable pool depth" stopgap (which sized
+ * completion by whatever questions happened to exist rather than the topic's real
+ * size). The old behaviour is still reachable via DEPTH_SIZED_COMPLETION_ENABLED=0
+ * as a kill-switch; depth sizing also fails open to it.
  *
  * Fail-open and idempotent: a designation stamps once (guarded on
  * designated_at IS NULL) and the invitation's partial unique index makes a
@@ -20,17 +26,45 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { db, masteryEvents } from '@/server/db';
+import { markDomainExpansionEligible } from '@/server/adaptive-difficulty';
 import {
   hasDesignation,
   inviteToAuthorAutomatic,
   markDomainDesignated,
 } from '@/server/db/queries/author-invitations';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
+import {
+  getTargetQuestionCountForDomains,
+  minPossibleTargetCount,
+} from '@/server/daily/domain-size';
 
 // Below this many distinct facts a domain isn't a "set" worth a trophy — a
 // thin domain a player exhausts is surfaced to the human via the crafter
-// worklist instead (the P1 expensive/thin signal), not celebrated. Tunable.
+// worklist instead (the P1 expensive/thin signal), not celebrated. Only binds
+// when depth sizing is OFF; the depth path uses minPossibleTargetCount(). Tunable.
 export const SET_COMPLETION_MIN_SIZE = 8;
+
+function isDepthSizedCompletionEnabled(): boolean {
+  const raw = process.env.DEPTH_SIZED_COMPLETION_ENABLED?.trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
+
+// Resolve each candidate domain's set SIZE: the depth-derived target count, or
+// (kill-switch / on error) the legacy durable-pool-depth. Fail-open to the legacy
+// path so a sizing outage can't silently stop every trophy from ever firing.
+async function getSetSizesForDomains(domains: string[]): Promise<Map<string, number>> {
+  if (!isDepthSizedCompletionEnabled()) {
+    return getDurablePoolDepthForDomains(domains);
+  }
+  try {
+    return await getTargetQuestionCountForDomains(domains);
+  } catch (error) {
+    console.warn('[set-completion] depth sizing failed; falling back to pool depth', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return getDurablePoolDepthForDomains(domains);
+  }
+}
 
 /**
  * Pure completion predicate (unit-tested): a set is complete when it is at least
@@ -82,13 +116,21 @@ export async function evaluateSetCompletions(
 
   const completed: string[] = [];
   try {
-    const [answeredByDomain, poolDepthByDomain] = await Promise.all([
-      distinctAnsweredByDomain(userId, unique),
-      getDurablePoolDepthForDomains(unique),
-    ]);
+    const answeredByDomain = await distinctAnsweredByDomain(userId, unique);
+    // Only a domain the player has answered enough DISTINCT questions in can be a
+    // completed set — gate the (LLM) depth sizing to those, so we never sprinkle
+    // depth calls across every touched-but-nowhere-near-complete domain. The floor
+    // is the smallest target any topic can have.
+    const gateFloor = isDepthSizedCompletionEnabled()
+      ? minPossibleTargetCount()
+      : SET_COMPLETION_MIN_SIZE;
+    const candidates = unique.filter((domain) => (answeredByDomain.get(domain) ?? 0) >= gateFloor);
+    if (candidates.length === 0) return [];
+
+    const setSizeByDomain = await getSetSizesForDomains(candidates);
     const now = new Date();
-    for (const domain of unique) {
-      const setSize = poolDepthByDomain.get(domain) ?? 0;
+    for (const domain of candidates) {
+      const setSize = setSizeByDomain.get(domain) ?? 0;
       const distinctAnswered = answeredByDomain.get(domain) ?? 0;
       if (!isSetComplete({ distinctAnswered, setSize })) continue;
       // Cheap guard first so a repeat call skips the writes entirely; the writes
@@ -96,6 +138,16 @@ export async function evaluateSetCompletions(
       if (await hasDesignation(userId, domain)) continue;
       await markDomainDesignated(userId, domain, now);
       await inviteToAuthorAutomatic({ userId, domain });
+      // Phase 1b: completing the set makes the domain eligible for the graduation
+      // ("branch out to a neighbor topic") offer built later in this same summary.
+      // Best-effort — a graduation-eligibility miss must not drop the trophy.
+      await markDomainExpansionEligible(userId, domain).catch((error) => {
+        console.warn('[set-completion] markDomainExpansionEligible failed (non-fatal)', {
+          userId,
+          domain,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
       completed.push(domain);
     }
   } catch (error) {

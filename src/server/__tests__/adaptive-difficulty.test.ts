@@ -14,6 +14,7 @@ import {
   computeDomainDifficultyStep,
   computeStarvationStepDown,
   computeSupplyCorrection,
+  liftServedToGlobalSkill,
   focusDomainMinDifficulty,
   mapAdaptiveLevelToDifficultyHint,
   type DomainDifficultyState,
@@ -42,6 +43,32 @@ describe('applyAdaptiveLevelAdjustment — global adaptive level', () => {
 
   it('clamps at MAX_ADAPTIVE_LEVEL (4.0) — cannot exceed ceiling', () => {
     expect(applyAdaptiveLevelAdjustment(4.0, 1.0)).toBe(4.0);
+  });
+});
+
+describe('liftServedToGlobalSkill — earned-skill lift on played domains (Phase 0)', () => {
+  it('lifts a played domain UP to the global skill tier when not struggling', () => {
+    // Marcellus: global level demonstrates moderate/specialist skill, but the
+    // played domain is pinned at its accessible first-contact tier.
+    expect(liftServedToGlobalSkill('accessible', 'moderate', 0)).toBe('moderate');
+    expect(liftServedToGlobalSkill('accessible', 'specialist', 0)).toBe('specialist');
+    expect(liftServedToGlobalSkill('moderate', 'specialist', 0)).toBe('specialist');
+  });
+
+  it('never LOWERS: a domain already above global skill is left alone', () => {
+    expect(liftServedToGlobalSkill('specialist', 'accessible', 0)).toBe('specialist');
+    expect(liftServedToGlobalSkill('moderate', 'accessible', 0)).toBe('moderate');
+  });
+
+  it('is a no-op when the domain already sits at the global skill tier', () => {
+    expect(liftServedToGlobalSkill('moderate', 'moderate', 0)).toBe('moderate');
+  });
+
+  it('is SUPPRESSED while the player is on an incorrect streak in this domain', () => {
+    // An earned step-down on a domain they're currently missing must be respected,
+    // even if their global skill is higher.
+    expect(liftServedToGlobalSkill('accessible', 'specialist', 1)).toBe('accessible');
+    expect(liftServedToGlobalSkill('moderate', 'specialist', 2)).toBe('moderate');
   });
 });
 
