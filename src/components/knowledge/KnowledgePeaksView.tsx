@@ -2,10 +2,17 @@
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, ChevronRight, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import {
+  TERRITORY_FREQUENCIES,
+  TERRITORY_FREQUENCY_COPY,
+  TERRITORY_FREQUENCY_LABEL,
+  type DomainPreferenceFrequency,
+  type TerritoryFrequency,
+} from '@/lib/daily/territory-model';
 
 // D-KNOWLEDGE-MAP-USABILITY-01 (leaf-first follow-up) — the "New" knowledge
 // view. Where the bubble map leads with rolled-up parent clusters, this leads
@@ -27,6 +34,18 @@ function formatPts(value: number): string {
 function quizHref(name: string): string {
   return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
 }
+
+// A peaks leaf's `node.name` === its `canonicalSubcategory`, which is exactly the
+// key `domainPreferenceFrequency` stores — matched case-insensitively, just like
+// the domain-frequency route. Normalize both sides the same way to resolve it.
+function freqKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+// Decision A: a leaf with no explicit preference shows its actual effective
+// default. For an owned peak that's `'sometimes'` ("Sometimes") — the rotation
+// it's already in — so the face is truthful, not blank.
+const DEFAULT_FREQUENCY: TerritoryFrequency = 'sometimes';
 
 function isOwnedLeaf(node: KnowledgeTreeNode): boolean {
   return (
@@ -66,13 +85,65 @@ function indexLeaves(tree: KnowledgeTreeNode): LeafInfo[] {
 export function KnowledgePeaksView({
   data,
   variant = 'own',
+  frequencyByDomain = {},
 }: {
   data: KnowledgeTreeNode;
   variant?: 'own' | 'friend';
+  /**
+   * Per-leaf Daily Five rotation, keyed by domain string (case-insensitive).
+   * Threaded from the page's daily preferences — additive read, no schema
+   * change. Self-only: never passed for the friend variant.
+   */
+  frequencyByDomain?: DomainPreferenceFrequency;
 }) {
   const [tree, setTree] = useState<KnowledgeTreeNode>(data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+
+  // Optimistic frequency map, keyed by normalized domain. Seeded from the
+  // server preference and updated in place on write (like `adoptNode`), so the
+  // face pill and detail sheet reflect the change before the round rebuilds.
+  const [freqMap, setFreqMap] = useState<Record<string, TerritoryFrequency>>(() => {
+    const seeded: Record<string, TerritoryFrequency> = {};
+    for (const [domain, frequency] of Object.entries(frequencyByDomain)) {
+      seeded[freqKey(domain)] = frequency;
+    }
+    return seeded;
+  });
+
+  const resolveFrequency = useCallback(
+    (name: string): TerritoryFrequency => freqMap[freqKey(name)] ?? DEFAULT_FREQUENCY,
+    [freqMap],
+  );
+
+  // Optimistic write: flip local state, POST the single-domain change, revert on
+  // failure. The route merges server-side and drops untouched Daily Five queues.
+  const setFrequency = useCallback(
+    async (name: string, frequency: TerritoryFrequency): Promise<boolean> => {
+      const key = freqKey(name);
+      const previous = freqMap[key];
+      setFreqMap((prev) => ({ ...prev, [key]: frequency }));
+      try {
+        const res = await fetch('/api/daily/preferences/domain-frequency', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ domain: name, frequency }),
+        });
+        if (!res.ok) throw new Error('frequency update failed');
+        return true;
+      } catch {
+        setFreqMap((prev) => {
+          const next = { ...prev };
+          if (previous === undefined) delete next[key];
+          else next[key] = previous;
+          return next;
+        });
+        return false;
+      }
+    },
+    [freqMap],
+  );
 
   const leaves = useMemo(() => indexLeaves(tree), [tree]);
   const sorted = useMemo(
@@ -160,6 +231,15 @@ export function KnowledgePeaksView({
                       {leaf.topParent.name}
                     </span>
                   ) : null}
+                  {/* Read-only frequency glance (Decision 2) — quiet, not a control. */}
+                  {variant === 'own' ? (
+                    <span
+                      className="mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]"
+                      style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+                    >
+                      {TERRITORY_FREQUENCY_LABEL[resolveFrequency(leaf.node.name)]}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -229,9 +309,11 @@ export function KnowledgePeaksView({
             key={selected.node.id}
             leaf={selected}
             variant={variant}
+            frequency={resolveFrequency(selected.node.name)}
             onClose={() => setSelectedId(null)}
             onSelectSibling={(id) => setSelectedId(id)}
             onAdd={variant === 'own' ? adoptNode : async () => false}
+            onSetFrequency={setFrequency}
           />
         </div>
       ) : null}
@@ -251,17 +333,26 @@ type AddPhase =
 function PeakDetailCard({
   leaf,
   variant,
+  frequency,
   onClose,
   onSelectSibling,
   onAdd,
+  onSetFrequency,
 }: {
   leaf: LeafInfo;
   variant: 'own' | 'friend';
+  frequency: TerritoryFrequency;
   onClose: () => void;
   onSelectSibling: (id: string) => void;
   onAdd: (id: string, name: string) => Promise<boolean>;
+  onSetFrequency: (name: string, frequency: TerritoryFrequency) => Promise<boolean>;
 }) {
   const [phase, setPhase] = useState<AddPhase>({ step: 'idle' });
+  // Frequency edit is self-only; the sheet remounts per leaf (keyed on node.id)
+  // so these reset on leaf switch — the "Updated" line persists until then (O3).
+  const [freqSaving, setFreqSaving] = useState(false);
+  const [freqChanged, setFreqChanged] = useState(false);
+  const [freqError, setFreqError] = useState(false);
   const node = leaf.node;
   const parent = leaf.parent;
   const siblings = (parent?.children ?? []).filter((c) => c.id !== node.id);
@@ -275,6 +366,19 @@ function PeakDetailCard({
     setPhase({ step: 'adding', id, name });
     const ok = await onAdd(id, name);
     setPhase({ step: ok ? 'added' : 'failed', id, name });
+  };
+
+  // Tap a frequency row to set it (Decision B: in-place, immediate). Only an
+  // actual change fires the write and the confirmation (Decision C) — re-tapping
+  // the current state is a no-op, so the "Updated" line never lies.
+  const selectFrequency = async (next: TerritoryFrequency) => {
+    if (freqSaving || next === frequency) return;
+    setFreqSaving(true);
+    setFreqError(false);
+    const ok = await onSetFrequency(node.name, next);
+    setFreqSaving(false);
+    if (ok) setFreqChanged(true);
+    else setFreqError(true);
   };
 
   const card = (children: ReactNode) => (
@@ -414,22 +518,80 @@ function PeakDetailCard({
         </button>
       </div>
 
+      {/* Frequency block (Decision 3/4) — the loud, editable control. Rows reuse
+          the Territory Setup ZONES copy verbatim (shared const, no re-authoring).
+          Self-only: friend cards stay read-only and show no frequency (DO-NOT). */}
       {variant === 'own' ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            href={`/knowledge/${encodeURIComponent(node.name)}`}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+        <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            How often should this come up?
+          </p>
+          <div
+            className="mt-2 grid gap-1.5"
+            role="radiogroup"
+            aria-label={`How often to ask about ${node.name}`}
           >
-            View details
-          </Link>
-          <Link
-            href={quizHref(node.name)}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-          >
-            Quiz me here
-          </Link>
+            {TERRITORY_FREQUENCIES.map((value) => {
+              const selectedFreq = value === frequency;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedFreq}
+                  disabled={freqSaving}
+                  onClick={() => void selectFrequency(value)}
+                  className="flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  style={
+                    selectedFreq
+                      ? {
+                          borderColor: 'var(--brand-navy)',
+                          background: 'var(--brand-navy)',
+                          color: 'var(--brand-card)',
+                        }
+                      : {
+                          borderColor: 'var(--border)',
+                          background: 'var(--brand-card)',
+                          color: 'var(--brand-ink)',
+                        }
+                  }
+                >
+                  <span aria-hidden className="mt-0.5 grid size-4 flex-none place-items-center">
+                    {selectedFreq ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <span
+                        className="size-3.5 rounded-full border"
+                        style={{ borderColor: 'var(--border)' }}
+                      />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-serif text-[15px] leading-tight">
+                      {TERRITORY_FREQUENCY_LABEL[value]}
+                    </span>
+                    <span
+                      className={selectedFreq ? 'block text-xs opacity-80' : 'block text-xs'}
+                      style={selectedFreq ? undefined : { color: 'var(--text-muted)' }}
+                    >
+                      {TERRITORY_FREQUENCY_COPY[value]}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Queue-drop acknowledgement (Decision C) — quiet, only on real change,
+              stays until the sheet closes or a different leaf is opened (O3). */}
+          {freqChanged ? (
+            <p className="mt-2 text-xs text-[var(--text-muted)]" aria-live="polite">
+              Updated — your next round reflects this.
+            </p>
+          ) : freqError ? (
+            <p className="mt-2 text-xs" aria-live="polite" style={{ color: 'var(--game-wrong-strong)' }}>
+              Couldn’t update it. Try again.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -478,6 +640,26 @@ function PeakDetailCard({
               ))}
             </ul>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* View details / Quiz me — the quiet exits, last in the sheet order. */}
+      {variant === 'own' ? (
+        <div className="mt-4 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+          <Link
+            href={`/knowledge/${encodeURIComponent(node.name)}`}
+            className={actionButton}
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            View details
+          </Link>
+          <Link
+            href={quizHref(node.name)}
+            className={actionButton}
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            Quiz me here
+          </Link>
         </div>
       ) : null}
     </>,

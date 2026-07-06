@@ -22,6 +22,17 @@ export const TERRITORY_FREQUENCY_LABEL: Record<TerritoryFrequency, string> = {
   resting: 'Never',
 };
 
+// The one-line description shown under each frequency label. Single source of
+// truth for the Territory Setup zones (`ZONES` in TerritorySetupClient) and the
+// knowledge peaks detail sheet's frequency block, so the wording stays identical
+// across every surface that lets a player set rotation.
+export const TERRITORY_FREQUENCY_COPY: Record<TerritoryFrequency, string> = {
+  often: 'These show up most in your rounds.',
+  sometimes: 'These stay in rotation, but less often.',
+  blue_moon: 'Still on your map, but only surface every so often.',
+  resting: 'These are part of your map, but won’t be asked for now.',
+};
+
 export function isTerritoryFrequency(value: unknown): value is TerritoryFrequency {
   return value === 'often' || value === 'sometimes' || value === 'blue_moon' || value === 'resting';
 }
