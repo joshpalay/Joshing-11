@@ -131,7 +131,10 @@ export async function GET(request: NextRequest) {
       // reminder — they're already playing today.
       let freshlyGenerated = false;
       if (!queue || existingSlots.length === 0) {
-        await fillDailyQueueForUser(user.id);
+        // Background build: use the longer top-up budget this 300s cron route
+        // allows, so a struggling build reaches DAILY_QUEUE_SIZE instead of
+        // persisting the 4-slot short queue the 90s sync ceiling forces.
+        await fillDailyQueueForUser(user.id, { background: true });
         queue = await getTodaysDailyQueue(user.id);
         results.generated += 1;
         freshlyGenerated = true;
