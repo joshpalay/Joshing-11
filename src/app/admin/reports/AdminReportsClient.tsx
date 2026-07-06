@@ -180,7 +180,7 @@ export function AdminReportsClient({
         {readyFixCount > 0 ? (
           <p className="mt-2 text-sm font-medium text-[var(--success)]">
             {readyFixCount} {readyFixCount === 1 ? 'has' : 'have'} a suggested fix that re-verifies
-            clean — look for “Review fix”.
+            clean — look for “Approve fix”.
           </p>
         ) : null}
         <div className="mt-3 flex gap-2">
@@ -475,6 +475,11 @@ function EditPanel({
   // — repeated inside the panel so the one thing the admin needs while fixing
   // it never scrolls out of sight.
   concern,
+  // D-QUALITY-SALVAGE-01: when opened from "Review fix", the salvage sweep has
+  // ALREADY re-verified this exact proposed text (that's what makes the card
+  // green). Seeding that verdict enables Approve immediately — no redundant
+  // second re-run — while any edit re-gates it via edited() below.
+  seedVerdict,
   onDone,
   onCancel,
 }: {
@@ -486,6 +491,7 @@ function EditPanel({
   canonicalSubcategory: string | null;
   broadCategory: string | null;
   concern?: string | null;
+  seedVerdict?: RerunVerdict | null;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -494,7 +500,7 @@ function EditPanel({
   const [explanation, setExplanation] = useState(initialExplanation ?? '');
   const [pending, setPending] = useState<'save' | 'rerun' | 'approve' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rerun, setRerun] = useState<RerunVerdict | null>(null);
+  const [rerun, setRerun] = useState<RerunVerdict | null>(seedVerdict ?? null);
   const [dirtySinceRerun, setDirtySinceRerun] = useState(false);
 
   // Any content edit invalidates a prior verdict — the machine vouched for the
@@ -954,6 +960,41 @@ function DemotionRow({
     setEditing(true);
   }
 
+  // One-click accept of the machine's already-verified fix (D-QUALITY-SALVAGE-01).
+  // The salvage sweep re-verified this exact text against the existing answer and
+  // only stores it 'ready' when it passes — so approving needs no second re-run.
+  // Staged (undoable) and idempotent like the other demotion commits; the field
+  // fallbacks mirror what the sweep verified (proposed text, original otherwise).
+  function approveFix() {
+    if (!proposal) return;
+    onStage({
+      key: `demotion:${item.questionId}`,
+      label: 'Fix approved — back in circulation',
+      body: {
+        action: 'approve',
+        target: { table: 'question', id: item.questionId },
+        questionText: proposal.proposedStem ?? item.questionText,
+        answerText: item.correctAnswer,
+        explanation: proposal.proposedExplanation ?? item.explanation ?? null,
+      },
+    });
+  }
+
+  // The verdict to seed into "Review fix" so Approve is live on open. Honest: it
+  // reports the sweep's stored reason against the answer it was verified with.
+  const fixSeedVerdict: RerunVerdict | null =
+    proposal
+      ? {
+          suggestedAnswer: item.correctAnswer,
+          alternateAnswers: [],
+          explanation: proposal.proposedExplanation ?? item.explanation ?? '',
+          verdict: 'ok',
+          reason: proposal.reverifyReason ?? 'Re-verified clean by the salvage sweep.',
+          usedWeb: false,
+          verifiedAnswer: item.correctAnswer,
+        }
+      : null;
+
   const authorLabel = item.authorIsHouse
     ? 'House · editorial'
     : item.authorName
@@ -1037,6 +1078,7 @@ function DemotionRow({
             canonicalSubcategory={item.canonicalSubcategory}
             broadCategory={item.broadCategory}
             concern={item.verificationReason ?? 'demoted by the verifier (reason not captured)'}
+            seedVerdict={fixMode ? fixSeedVerdict : null}
             onDone={resolved}
             onCancel={() => { setEditing(false); setFixMode(false); }}
           />
@@ -1045,14 +1087,27 @@ function DemotionRow({
       {!editing ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {proposal ? (
-            <button
-              type="button"
-              onClick={openFix}
-              className="rounded-md border px-3 py-1.5 text-sm font-semibold"
-              style={{ borderColor: 'var(--success)', background: 'var(--success)', color: 'var(--on-accent, #fff)' }}
-            >
-              Review fix →
-            </button>
+            <>
+              {/* Fast path: accept the already-verified fix in one click, no
+                  re-run (D-QUALITY-SALVAGE-01). "Review fix" stays for eyeballing
+                  or tweaking first — it opens the panel with Approve already live. */}
+              <button
+                type="button"
+                onClick={approveFix}
+                className="rounded-md border px-3 py-1.5 text-sm font-semibold"
+                style={{ borderColor: 'var(--success)', background: 'var(--success)', color: 'var(--on-accent, #fff)' }}
+              >
+                Approve fix
+              </button>
+              <button
+                type="button"
+                onClick={openFix}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium"
+                style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+              >
+                Review fix →
+              </button>
+            </>
           ) : null}
           <button
             type="button"
