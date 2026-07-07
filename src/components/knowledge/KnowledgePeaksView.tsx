@@ -62,6 +62,17 @@ function freqKey(name: string): string {
 // it's already in — so the face is truthful, not blank.
 const DEFAULT_FREQUENCY: TerritoryFrequency = 'sometimes';
 
+// Mirror of Territory Setup's `ZONES`, assembled from the SAME shared source of
+// truth those zones are built from (territory-model's label + copy maps) — so
+// the four rows here read identically to the setup surface and can never drift.
+// Not re-authored: the strings live in TERRITORY_FREQUENCY_COPY, not here.
+const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
+  TERRITORY_FREQUENCIES.map((value) => ({
+    value,
+    title: TERRITORY_FREQUENCY_LABEL[value],
+    copy: TERRITORY_FREQUENCY_COPY[value],
+  }));
+
 function isOwnedLeaf(node: KnowledgeTreeNode): boolean {
   return (
     !node.ghost && (node.value ?? 0) > 0 && (!node.children || node.children.length === 0)
@@ -257,10 +268,8 @@ export function KnowledgePeaksView({
                 frequency={resolveFrequency(area.node.name)}
                 showFrequency={variant === 'own'}
                 active={area.node.id === selectedId}
-                onSelect={
-                  area.node.ghost
-                    ? undefined
-                    : () => setSelectedId(area.node.id === selectedId ? null : area.node.id)
+                onSelect={() =>
+                  setSelectedId(area.node.id === selectedId ? null : area.node.id)
                 }
               />
             ))}
@@ -360,7 +369,7 @@ function KnowledgeCircleCell({
   frequency: TerritoryFrequency;
   showFrequency: boolean;
   active: boolean;
-  /** Ghost cells are display-only in P1 (adopt lands in P2), so they pass none. */
+  /** Whole cell is the tap target; a ghost opens the sheet's adopt confirm (P2). */
   onSelect?: () => void;
 }) {
   const ghost = Boolean(node.ghost);
@@ -527,6 +536,20 @@ function PeakDetailCard({
   const ownedSiblings = siblings.filter((c) => !c.ghost && (c.value ?? 0) > 0);
   const ghostSiblings = siblings.filter((c) => c.ghost);
 
+  // "Within this" = the child areas held inside this node (container cells).
+  const ownChildren = node.children ?? [];
+  const heldChildren = ownChildren.filter((c) => !c.ghost && (c.value ?? 0) > 0);
+  const ghostChildren = ownChildren.filter((c) => c.ghost);
+
+  // "More in {area}" expands sideways. With a parent (a leaf/sub-area opened from
+  // the list), that's the sibling roster. For a top-level area (no parent) it's
+  // the addable children of this area itself — the same "grow it next" move.
+  const areaName = parent ? parent.name : node.name;
+  const jumpSiblings = parent ? ownedSiblings : [];
+  const addSiblings = parent ? ghostSiblings : ghostChildren;
+  const showMoreIn = variant === 'own' && (jumpSiblings.length > 0 || addSiblings.length > 0);
+  const sectionBorder = { borderColor: 'var(--border)' };
+
   const actionButton =
     'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
@@ -648,22 +671,56 @@ function PeakDetailCard({
     );
   }
 
+  // A ghost cell is an unstarted area: the sheet is a single adopt confirm (D8 —
+  // ghost tap → "Add to your map?" before adopting). No frequency/sections until
+  // it's on the map. Uses the same optimistic add path as the ghost Add rows.
+  if (node.ghost) {
+    return card(
+      <>
+        <div className="flex items-start justify-between gap-3">
+          <p className="font-serif text-base text-[var(--brand-ink)]">
+            Add <strong>{node.name}</strong> to your map?
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid size-8 flex-none place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Questions will start appearing in your Daily Five.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => void confirmAdd(node.id, node.name)}
+            className={actionButton}
+            style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+          >
+            <Plus className="size-4" aria-hidden /> Add it
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className={actionButton}
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            Not now
+          </button>
+        </div>
+      </>,
+    );
+  }
+
   return card(
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          {/* Where this rolls up to (leaf-first: the path is the point). */}
-          {leaf.path.length > 0 ? (
-            <p className="flex flex-wrap items-center gap-1 text-[11px] uppercase tracking-[0.06em] text-[var(--text-muted)]">
-              {leaf.path.map((ancestor, i) => (
-                <span key={ancestor.id} className="flex items-center gap-1">
-                  {i > 0 ? <ChevronRight className="size-3" aria-hidden /> : null}
-                  {ancestor.name}
-                </span>
-              ))}
-            </p>
-          ) : null}
-          <p className="mt-1 flex items-center gap-2 font-serif text-lg text-[var(--brand-ink)]">
+          <p className="flex items-center gap-2 font-serif text-lg text-[var(--brand-ink)]">
             <span
               aria-hidden
               className="size-3.5 flex-none rounded-full"
@@ -686,20 +743,119 @@ function PeakDetailCard({
         </button>
       </div>
 
-      {/* Frequency block (Decision 3/4) — the loud, editable control. Rows reuse
-          the Territory Setup ZONES copy verbatim (shared const, no re-authoring).
-          Self-only: friend cards stay read-only and show no frequency (DO-NOT). */}
-      {variant === 'own' ? (
-        <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+      {/* Part of — where this area rolls up to (read-only). Empty for a
+          top-level area, which rolls up to nothing. */}
+      {leaf.path.length > 0 ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+          <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
+            {leaf.path.map((ancestor, i) => (
+              <span key={ancestor.id} className="flex items-center gap-1">
+                {i > 0 ? (
+                  <ChevronRight className="size-3 text-[var(--text-muted)]" aria-hidden />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="size-2.5 rounded-full"
+                    style={{ background: fieldColor(ancestor.field) }}
+                  />
+                )}
+                {ancestor.name}
+              </span>
+            ))}
+          </p>
+        </div>
+      ) : null}
+
+      {/* Within this — the child areas you already hold inside this one. */}
+      {heldChildren.length > 0 ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
-            How often should this come up?
+            Within this — what you hold
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {heldChildren.map((child) => (
+              <button
+                key={child.id}
+                type="button"
+                onClick={() => onSelectSibling(child.id)}
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+              >
+                <span
+                  aria-hidden
+                  className="size-3 rounded-full"
+                  style={{ background: child.mastered ? 'var(--accent-gold)' : fieldColor(child.field) }}
+                />
+                <span className="font-serif text-[var(--brand-ink)]">{child.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* More in {area} — jump to owned neighbours, or add the ghosts next to it. */}
+      {showMoreIn ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            More in {areaName}
+          </p>
+          {jumpSiblings.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {jumpSiblings.map((sib) => (
+                <button
+                  key={sib.id}
+                  type="button"
+                  onClick={() => onSelectSibling(sib.id)}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+                >
+                  <span
+                    aria-hidden
+                    className="size-3 rounded-full"
+                    style={{ background: sib.mastered ? 'var(--accent-gold)' : fieldColor(sib.field) }}
+                  />
+                  <span className="font-serif text-[var(--brand-ink)]">{sib.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {addSiblings.length > 0 ? (
+            <ul className="mt-2 grid gap-1.5">
+              {addSiblings.map((ghost) => (
+                <li key={ghost.id} className="flex items-center justify-between gap-2">
+                  <span className="truncate font-serif text-sm text-[var(--brand-ink)]">
+                    {ghost.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPhase({ step: 'confirm', id: ghost.id, name: ghost.name })}
+                    className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                  >
+                    <Plus className="size-3.5" aria-hidden /> Add
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* How often it shows up (D8, last) — the loud, editable control. Rows come
+          from ZONES, the mirror of Territory Setup's zones (shared copy source, no
+          re-authoring). Self-only: friend cards stay read-only (DO-NOT). */}
+      {variant === 'own' ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            How often it shows up
           </p>
           <div
             className="mt-2 grid gap-1.5"
             role="radiogroup"
             aria-label={`How often to ask about ${node.name}`}
           >
-            {TERRITORY_FREQUENCIES.map((value) => {
+            {ZONES.map(({ value, title, copy }) => {
               const selectedFreq = value === frequency;
               return (
                 <button
@@ -735,14 +891,12 @@ function PeakDetailCard({
                     )}
                   </span>
                   <span className="min-w-0">
-                    <span className="block font-serif text-[15px] leading-tight">
-                      {TERRITORY_FREQUENCY_LABEL[value]}
-                    </span>
+                    <span className="block font-serif text-[15px] leading-tight">{title}</span>
                     <span
                       className={selectedFreq ? 'block text-xs opacity-80' : 'block text-xs'}
                       style={selectedFreq ? undefined : { color: 'var(--text-muted)' }}
                     >
-                      {TERRITORY_FREQUENCY_COPY[value]}
+                      {copy}
                     </span>
                   </span>
                 </button>
@@ -760,74 +914,6 @@ function PeakDetailCard({
               Couldn’t update it. Try again.
             </p>
           ) : null}
-        </div>
-      ) : null}
-
-      {/* Siblings — where it sits, and what's next to add inside the same area. */}
-      {parent && (ownedSiblings.length > 0 || ghostSiblings.length > 0) ? (
-        <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
-            More in {parent.name}
-          </p>
-          {ownedSiblings.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {ownedSiblings.map((sib) => (
-                <button
-                  key={sib.id}
-                  type="button"
-                  onClick={() => onSelectSibling(sib.id)}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
-                >
-                  <span
-                    aria-hidden
-                    className="size-3 rounded-full"
-                    style={{ background: sib.mastered ? 'var(--accent-gold)' : fieldColor(sib.field) }}
-                  />
-                  <span className="font-serif text-[var(--brand-ink)]">{sib.name}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {variant === 'own' && ghostSiblings.length > 0 ? (
-            <ul className="mt-2 grid gap-1.5">
-              {ghostSiblings.map((ghost) => (
-                <li key={ghost.id} className="flex items-center justify-between gap-2">
-                  <span className="truncate font-serif text-sm text-[var(--brand-ink)]">
-                    {ghost.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPhase({ step: 'confirm', id: ghost.id, name: ghost.name })}
-                    className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-                  >
-                    <Plus className="size-3.5" aria-hidden /> Add
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* View details / Quiz me — the quiet exits, last in the sheet order. */}
-      {variant === 'own' ? (
-        <div className="mt-4 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-          <Link
-            href={`/knowledge/${encodeURIComponent(node.name)}`}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-          >
-            View details
-          </Link>
-          <Link
-            href={quizHref(node.name)}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-          >
-            Quiz me here
-          </Link>
         </div>
       ) : null}
     </>,
