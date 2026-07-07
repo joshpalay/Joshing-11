@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { AdminTabs } from '@/app/admin/AdminTabs';
 import { CATEGORIES } from '@/lib/questions-types';
 import type {
+  AdminQuestionDetail,
   AdminQuestionRow,
   AdminQuestionSortDir,
   AdminQuestionSortKey,
@@ -112,14 +113,196 @@ function SortHeader({
   );
 }
 
+// ── Phase 3 detail view ──────────────────────────────────────────────────────
+// Read-only "look before you edit" surface. Every non-embedding column is
+// inspectable. Rendered as a side sheet driven by the ?detail=<id> param.
+
+function scalar(value: string | number | boolean | null): string {
+  if (value === null || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  return String(value);
+}
+
+function Field({ label, value }: { label: string; value: string | number | boolean | null }) {
+  return (
+    <div className="grid grid-cols-[minmax(120px,180px)_1fr] gap-2 py-1">
+      <span className="text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </span>
+      <span className="whitespace-pre-wrap break-words text-[13px]" style={{ color: 'var(--brand-ink)' }}>
+        {scalar(value)}
+      </span>
+    </div>
+  );
+}
+
+function ListField({ label, values }: { label: string; values: string[] }) {
+  return (
+    <div className="grid grid-cols-[minmax(120px,180px)_1fr] gap-2 py-1">
+      <span className="text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </span>
+      {values.length === 0 ? (
+        <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+          —
+        </span>
+      ) : (
+        <ul className="list-disc pl-4 text-[13px]" style={{ color: 'var(--brand-ink)' }}>
+          {values.map((v, i) => (
+            <li key={i} className="break-words">
+              {v}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mb-4">
+      <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--brand-navy)' }}>
+        {title}
+      </h3>
+      <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      style={{ background: 'rgba(0,0,0,0.3)' }}
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="h-full w-full overflow-y-auto border-l p-5 sm:max-w-xl"
+        style={{ background: 'var(--brand-card)', borderColor: 'var(--border)' }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Question detail"
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-lg font-semibold" style={{ color: 'var(--brand-ink)' }}>
+              Question detail
+            </h2>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {detail.id}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border px-3 py-1.5 text-sm"
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            Close
+          </button>
+        </div>
+
+        <Group title="Content">
+          <Field label="Question" value={detail.questionText} />
+          <Field label="Answer" value={detail.answerText} />
+          <ListField label="Accepted alt." values={detail.acceptedAlternatives} />
+          <Field label="Factual explanation" value={detail.factualExplanation} />
+          <Field label="Breadcrumb" value={detail.breadcrumbContext} />
+          <Field label="Creator note" value={detail.creatorNote} />
+          <Field label="Inside joke" value={detail.insideJoke} />
+          <Field label="Short label" value={detail.shortLabel} />
+          <Field label="LLM suggested" value={detail.llmSuggestedAnswer} />
+          <Field label="Answer source" value={detail.answerSource} />
+        </Group>
+
+        <Group title="Provenance">
+          <Field label="Author" value={detail.authorIsPerson ? detail.authorLabel : `${detail.authorLabel} (non-person)`} />
+          <Field label="Creator id" value={detail.creatorId} />
+          <Field label="Source" value={detail.source} />
+          <Field label="Generated question id" value={detail.generatedQuestionId} />
+          <Field label="Source question id" value={detail.sourceQuestionId} />
+          <Field label="Source creator id" value={detail.sourceCreatorId} />
+          <Field label="Suppressed by" value={detail.suppressedBy} />
+          <Field label="Subject entity" value={detail.subjectEntity} />
+          <Field label="Categorize provider" value={detail.categorizeProvider} />
+          <ListField label="Source refs" values={detail.sourceRefs} />
+        </Group>
+
+        <Group title="Categorization">
+          <Field label="Category" value={detail.category} />
+          <Field label="Broad category" value={detail.broadCategory} />
+          <Field label="Subcategory" value={detail.subcategory} />
+          <Field label="Canonical subcat." value={detail.canonicalSubcategory} />
+          <Field label="Category overridden" value={detail.categoryOverridden} />
+          <Field label="Question type" value={detail.questionType} />
+          <Field label="Minimum required" value={detail.minimumRequired} />
+          <Field label="Difficulty (est.)" value={detail.difficultyEstimate} />
+          <Field label="Difficulty (LLM)" value={detail.llmDifficulty} />
+          <Field label="Difficulty (calib.)" value={detail.calibratedDifficulty} />
+        </Group>
+
+        <Group title="Explainers">
+          <Field label="Brief" value={detail.explainerBrief} />
+          <Field label="Full" value={detail.explainerFull} />
+          <Field label="Brief (correct)" value={detail.explainerBriefCorrect} />
+          <Field label="Full (correct)" value={detail.explainerFullCorrect} />
+          <Field label="Brief (wrong)" value={detail.explainerBriefWrong} />
+          <Field label="Full (wrong)" value={detail.explainerFullWrong} />
+          <Field label="Brief (expired)" value={detail.explainerBriefExpired} />
+          <Field label="Full (expired)" value={detail.explainerFullExpired} />
+        </Group>
+
+        <Group title="Grading & lifecycle state">
+          <Field label="Status" value={detail.status} />
+          <Field label="Verified" value={detail.verified} />
+          <Field label="Trust tier" value={detail.trustTier} />
+          <Field label="Visibility" value={detail.visibility} />
+          <Field label="Public status" value={detail.publicStatus} />
+          <Field label="Public elig. score" value={detail.publicEligibilityScore} />
+          <Field label="Public elig. reason" value={detail.publicEligibilityReason} />
+          <Field label="Shared to friends" value={detail.sharedToFriendsFeed} />
+          <Field label="Verification verdict" value={detail.verificationVerdict} />
+          <Field label="Verification reason" value={detail.verificationReason} />
+          <Field label="Critique iterations" value={detail.critiqueIterations} />
+        </Group>
+
+        <Group title="Signals & flags">
+          <Field label="Asked count" value={detail.askedCount} />
+          <Field label="Correct count" value={detail.correctCount} />
+          <Field label="Correct rate" value={detail.correctRate} />
+          <Field label="Surface priority" value={detail.surfacePriorityScore} />
+          <Field label="Perishable" value={detail.perishable} />
+          <Field label="Nobody correct" value={detail.nobodyCorrectFlag} />
+          <Field label="Duplicate" value={detail.isDuplicate} />
+          <Field label="Author deleted" value={detail.authorDeleted} />
+        </Group>
+
+        <Group title="Timestamps">
+          <Field label="Created" value={detail.createdAt} />
+          <Field label="Updated" value={detail.updatedAt} />
+          <Field label="Verified at" value={detail.verifiedAt} />
+          <Field label="Deleted at" value={detail.deletedAt} />
+        </Group>
+      </div>
+    </div>
+  );
+}
+
 export function AdminQuestionsClient({
   result,
   sortKey,
   sortDir,
+  detail,
 }: {
   result: AdminQuestionsPage;
   sortKey: AdminQuestionSortKey;
   sortDir: AdminQuestionSortDir;
+  detail: AdminQuestionDetail | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -156,6 +339,14 @@ export function AdminQuestionsClient({
 
   function goToPage(page: number) {
     navigate({ page: String(page) }, { keepPage: true });
+  }
+
+  function openDetail(id: string) {
+    navigate({ detail: id }, { keepPage: true });
+  }
+
+  function closeDetail() {
+    navigate({ detail: null }, { keepPage: true });
   }
 
   function resetFilters() {
@@ -311,6 +502,9 @@ export function AdminQuestionsClient({
         <table className="w-full border-collapse text-left">
           <thead>
             <tr style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
+              <th className={HEAD}>
+                <span className="sr-only">Inspect</span>
+              </th>
               <th className={HEAD}>Question</th>
               <th className={HEAD}>Answer</th>
               <SortHeader label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
@@ -330,7 +524,7 @@ export function AdminQuestionsClient({
           <tbody>
             {result.rows.length === 0 ? (
               <tr>
-                <td className={CELL} colSpan={14} style={{ color: 'var(--text-muted)' }}>
+                <td className={CELL} colSpan={15} style={{ color: 'var(--text-muted)' }}>
                   No questions match.
                 </td>
               </tr>
@@ -345,6 +539,16 @@ export function AdminQuestionsClient({
                     color: 'var(--brand-ink)',
                   }}
                 >
+                  <td className={`${CELL} whitespace-nowrap`}>
+                    <button
+                      type="button"
+                      onClick={() => openDetail(row.id)}
+                      className="rounded border px-2 py-0.5 text-[11px] font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{ borderColor: 'var(--border)', color: 'var(--brand-navy)' }}
+                    >
+                      Inspect
+                    </button>
+                  </td>
                   <td className={`${CELL} min-w-[280px] max-w-[360px]`}>
                     <span className="line-clamp-2">{row.questionText}</span>
                   </td>
@@ -408,6 +612,8 @@ export function AdminQuestionsClient({
           </button>
         </div>
       </div>
+
+      {detail ? <DetailSheet detail={detail} onClose={closeDetail} /> : null}
     </main>
   );
 }

@@ -91,6 +91,167 @@ const HOUSE_LABEL = 'House';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
+function isoOrNull(value: Date | null): string | null {
+  return value ? value.toISOString() : null;
+}
+
+// The full read-only record for the Phase 3 detail view. Every non-embedding
+// Question column is inspectable here (the 1024-dim vector is deliberately
+// omitted — it is not human-inspectable and would bloat the payload). Same H-1
+// author guard as the list row.
+export type AdminQuestionDetail = {
+  id: string;
+  authorLabel: string;
+  authorIsPerson: boolean;
+  creatorId: string | null;
+  generatedQuestionId: string | null;
+  source: string;
+  sourceQuestionId: string | null;
+  sourceCreatorId: string | null;
+  suppressedBy: string | null;
+  subjectEntity: string | null;
+  categorizeProvider: string | null;
+  questionText: string;
+  answerText: string;
+  acceptedAlternatives: string[];
+  factualExplanation: string | null;
+  breadcrumbContext: string | null;
+  creatorNote: string | null;
+  insideJoke: string | null;
+  shortLabel: string | null;
+  llmSuggestedAnswer: string | null;
+  answerSource: string | null;
+  questionType: string;
+  minimumRequired: number | null;
+  category: string;
+  broadCategory: string | null;
+  subcategory: string | null;
+  canonicalSubcategory: string | null;
+  categoryOverridden: boolean;
+  difficultyEstimate: string | null;
+  llmDifficulty: string | null;
+  calibratedDifficulty: string | null;
+  explainerBrief: string | null;
+  explainerFull: string | null;
+  explainerBriefCorrect: string | null;
+  explainerFullCorrect: string | null;
+  explainerBriefWrong: string | null;
+  explainerFullWrong: string | null;
+  explainerBriefExpired: string | null;
+  explainerFullExpired: string | null;
+  status: string;
+  verified: boolean;
+  critiqueIterations: number;
+  visibility: string;
+  publicStatus: string;
+  publicEligibilityScore: number | null;
+  publicEligibilityReason: string | null;
+  sharedToFriendsFeed: boolean;
+  askedCount: number;
+  correctCount: number;
+  correctRate: number | null;
+  surfacePriorityScore: number;
+  trustTier: string;
+  perishable: boolean;
+  sourceRefs: string[];
+  nobodyCorrectFlag: boolean;
+  isDuplicate: boolean;
+  authorDeleted: boolean;
+  verificationVerdict: string | null;
+  verificationReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  verifiedAt: string | null;
+};
+
+// Full-record fetch for the detail view. Unscoped by design (admin audit) and
+// does NOT filter deletedAt — a deleted row must still be inspectable from the
+// show-deleted list. The gate is the isAdminUser check on the calling route.
+export async function getAdminQuestionDetail(id: string): Promise<AdminQuestionDetail | null> {
+  const [row] = await db
+    .select({
+      q: questions,
+      authorDisplayName: users.displayName,
+    })
+    .from(questions)
+    .leftJoin(users, eq(users.id, questions.creatorId))
+    .where(eq(questions.id, id))
+    .limit(1);
+
+  if (!row) return null;
+  const q = row.q;
+
+  const resolved = resolveAuthorDisplay(q.creatorId, parseQuestionSource(q.source), row.authorDisplayName);
+  const isPerson = resolved.authorName !== null && !resolved.authorIsHouse && !q.authorDeleted;
+
+  return {
+    id: q.id,
+    authorLabel: isPerson ? (resolved.authorName as string) : HOUSE_LABEL,
+    authorIsPerson: isPerson,
+    creatorId: q.creatorId,
+    generatedQuestionId: q.generatedQuestionId,
+    source: q.source,
+    sourceQuestionId: q.sourceQuestionId,
+    sourceCreatorId: q.sourceCreatorId,
+    suppressedBy: q.suppressedBy,
+    subjectEntity: q.subjectEntity,
+    categorizeProvider: q.categorizeProvider,
+    questionText: q.questionText,
+    answerText: q.answerText,
+    acceptedAlternatives: q.acceptedAlternatives ?? [],
+    factualExplanation: q.factualExplanation,
+    breadcrumbContext: q.breadcrumbContext,
+    creatorNote: q.creatorNote,
+    insideJoke: q.insideJoke,
+    shortLabel: q.shortLabel,
+    llmSuggestedAnswer: q.llmSuggestedAnswer,
+    answerSource: q.answerSource,
+    questionType: q.questionType,
+    minimumRequired: q.minimumRequired,
+    category: q.category,
+    broadCategory: q.broadCategory,
+    subcategory: q.subcategory,
+    canonicalSubcategory: q.canonicalSubcategory,
+    categoryOverridden: q.categoryOverridden,
+    difficultyEstimate: q.difficultyEstimate,
+    llmDifficulty: q.llmDifficulty,
+    calibratedDifficulty: q.calibratedDifficulty,
+    explainerBrief: q.explainerBrief,
+    explainerFull: q.explainerFull,
+    explainerBriefCorrect: q.explainerBriefCorrect,
+    explainerFullCorrect: q.explainerFullCorrect,
+    explainerBriefWrong: q.explainerBriefWrong,
+    explainerFullWrong: q.explainerFullWrong,
+    explainerBriefExpired: q.explainerBriefExpired,
+    explainerFullExpired: q.explainerFullExpired,
+    status: q.status,
+    verified: q.verified,
+    critiqueIterations: q.critiqueIterations,
+    visibility: q.visibility,
+    publicStatus: q.publicStatus,
+    publicEligibilityScore: q.publicEligibilityScore,
+    publicEligibilityReason: q.publicEligibilityReason,
+    sharedToFriendsFeed: q.sharedToFriendsFeed,
+    askedCount: q.askedCount,
+    correctCount: q.correctCount,
+    correctRate: q.correctRate,
+    surfacePriorityScore: q.surfacePriorityScore,
+    trustTier: q.trustTier,
+    perishable: q.perishable,
+    sourceRefs: q.sourceRefs ?? [],
+    nobodyCorrectFlag: q.nobodyCorrectFlag,
+    isDuplicate: q.isDuplicate,
+    authorDeleted: q.authorDeleted,
+    verificationVerdict: q.verificationVerdict,
+    verificationReason: q.verificationReason,
+    createdAt: q.createdAt.toISOString(),
+    updatedAt: q.updatedAt.toISOString(),
+    deletedAt: isoOrNull(q.deletedAt),
+    verifiedAt: isoOrNull(q.verifiedAt),
+  };
+}
+
 function buildWhere(query: AdminQuestionsQuery): SQL | undefined {
   const clauses: SQL[] = [];
 

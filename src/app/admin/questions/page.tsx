@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import {
+  getAdminQuestionDetail,
   getAllQuestionsForAdmin,
+  type AdminQuestionDetail,
   type AdminQuestionSortDir,
   type AdminQuestionSortKey,
 } from '@/server/db/queries/admin-questions';
@@ -37,6 +39,7 @@ type AdminQuestionsSearchParams = {
   duplicate?: string;
   tombstone?: string;
   perishable?: string;
+  detail?: string;
 };
 
 // B-ADMIN-QUESTIONS-OVERVIEW-01 — the FOURTH admin room: an audit view of every
@@ -73,5 +76,16 @@ export default async function AdminQuestionsPage({
     },
   });
 
-  return <AdminQuestionsClient result={result} sortKey={parseSortKey(params.sort)} sortDir={params.dir === 'asc' ? 'asc' : 'desc'} />;
+  const detail: AdminQuestionDetail | null = params.detail
+    ? await getAdminQuestionDetail(params.detail)
+    : null;
+
+  return (
+    <AdminQuestionsClient
+      result={result}
+      sortKey={parseSortKey(params.sort)}
+      sortDir={params.dir === 'asc' ? 'asc' : 'desc'}
+      detail={detail}
+    />
+  );
 }
