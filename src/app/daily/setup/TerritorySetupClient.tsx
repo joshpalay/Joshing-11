@@ -20,6 +20,9 @@ import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/ci
 import {
   buildSavePayload,
   getNearbyTerritories,
+  TERRITORY_FREQUENCIES,
+  TERRITORY_FREQUENCY_COPY,
+  TERRITORY_FREQUENCY_LABEL,
   type DomainPreferenceFrequency,
   type NearbyTerritory,
   type TerritoryDomain,
@@ -39,20 +42,15 @@ type ActiveTerritory = {
   frequency: TerritoryFrequency;
 } | null;
 
-const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> = [
-  { value: 'often', title: 'Often', copy: 'These show up most in your rounds.' },
-  { value: 'sometimes', title: 'Sometimes', copy: 'These stay in rotation, but less often.' },
-  {
-    value: 'blue_moon',
-    title: 'Blue Moon',
-    copy: 'Still on your map, but only surface every so often.',
-  },
-  {
-    value: 'resting',
-    title: 'Never',
-    copy: 'These are part of your map, but won’t be asked for now.',
-  },
-];
+// Derived from the shared frequency label/copy maps so this surface and the
+// knowledge peaks detail sheet never drift. Order follows TERRITORY_FREQUENCIES
+// (often → sometimes → blue_moon → resting), which is the zone stack order.
+const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
+  TERRITORY_FREQUENCIES.map((value) => ({
+    value,
+    title: TERRITORY_FREQUENCY_LABEL[value],
+    copy: TERRITORY_FREQUENCY_COPY[value],
+  }));
 
 // "General Knowledge" is the categorizer's catch-all bucket; show it under a
 // softer label, matching the Knowledge portrait sections.
