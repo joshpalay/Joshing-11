@@ -42,6 +42,23 @@ function fieldColor(field: string | null | undefined): string {
   return field ? `var(--cat-${field}, var(--brand-ink-400))` : 'var(--brand-ink-400)';
 }
 
+// The category axis is the node's `field` hue key ('literature', 'film-tv', …).
+// Title-case it for the filter chips, with a couple of nicer overrides. The hue
+// is always paired with the readable label — it never carries meaning alone.
+const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
+  'film-tv': 'Film & TV',
+  'pop-culture': 'Pop Culture',
+};
+function categoryLabel(field: string): string {
+  return (
+    CATEGORY_LABEL_OVERRIDES[field] ??
+    field
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  );
+}
+
 function formatPts(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
 }
@@ -203,6 +220,63 @@ export function KnowledgePeaksView({
     [areaCells],
   );
 
+  // ── Controls bar (P3) — search / filter / sort, all client-side over the
+  // already-loaded areas. No new query. ────────────────────────────────────
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
+  const [freqFilter, setFreqFilter] = useState<Set<TerritoryFrequency>>(new Set());
+  const [sortMode, setSortMode] = useState<'mastery' | 'category'>('mastery');
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const cell of areaCells) if (cell.node.field) set.add(cell.node.field);
+    return [...set].sort();
+  }, [areaCells]);
+
+  const visibleCells = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = areaCells.filter(({ node }) => {
+      if (q && !node.name.toLowerCase().includes(q)) return false;
+      // Filters compose with AND across axes; "no chips" = no filter on that axis.
+      if (catFilter.size > 0 && !(node.field && catFilter.has(node.field))) return false;
+      if (freqFilter.size > 0) {
+        // Ghosts are unstarted — no rotation — so a frequency filter drops them.
+        if (node.ghost || !freqFilter.has(resolveFrequency(node.name))) return false;
+      }
+      return true;
+    });
+    const ghostRank = (c: LeafInfo) => (c.node.ghost ? 1 : 0);
+    return [...filtered].sort((a, b) => {
+      if (ghostRank(a) !== ghostRank(b)) return ghostRank(a) - ghostRank(b);
+      if (sortMode === 'category') {
+        const fa = a.node.field ?? '~';
+        const fb = b.node.field ?? '~';
+        if (fa !== fb) return fa < fb ? -1 : 1;
+        return a.node.name.localeCompare(b.node.name);
+      }
+      // Mastery: mastered areas first, then points desc as the mastery proxy.
+      const ma = a.node.mastered ? 0 : 1;
+      const mb = b.node.mastered ? 0 : 1;
+      if (ma !== mb) return ma - mb;
+      return sumRealPoints(b.node) - sumRealPoints(a.node);
+    });
+  }, [areaCells, search, catFilter, freqFilter, sortMode, resolveFrequency]);
+
+  const toggleCat = (field: string) =>
+    setCatFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  const toggleFreq = (freq: TerritoryFrequency) =>
+    setFreqFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(freq)) next.delete(freq);
+      else next.add(freq);
+      return next;
+    });
+
   // Selection resolves from the area cells first, then the flat leaf list (the
   // "see all" expansion), so either surface opens the same sheet.
   const selected = selectedId
@@ -254,13 +328,32 @@ export function KnowledgePeaksView({
           What you’re smart at
         </p>
 
+        {areaCells.length > 0 ? (
+          <ControlsBar
+            search={search}
+            onSearch={setSearch}
+            sortMode={sortMode}
+            onSort={setSortMode}
+            categories={categories}
+            catFilter={catFilter}
+            onToggleCat={toggleCat}
+            showFrequencyFilter={variant === 'own'}
+            freqFilter={freqFilter}
+            onToggleFreq={toggleFreq}
+          />
+        ) : null}
+
         {areaCells.length === 0 ? (
           <p className="py-10 text-center font-serif text-[var(--text-muted)]">
             Answer and write questions and your peaks will show up here.
           </p>
+        ) : visibleCells.length === 0 ? (
+          <p className="py-10 text-center font-serif text-[var(--text-muted)]">
+            No areas match — try clearing a filter.
+          </p>
         ) : (
           <div className="grid grid-cols-3 gap-x-1 gap-y-6">
-            {areaCells.map((area) => (
+            {visibleCells.map((area) => (
               <KnowledgeCircleCell
                 key={area.node.id}
                 node={area.node}
@@ -345,6 +438,107 @@ export function KnowledgePeaksView({
             onAdd={variant === 'own' ? adoptNode : async () => false}
             onSetFrequency={setFrequency}
           />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// The controls bar (P3): search + filter (category, rotation) + sort (mastery,
+// category). Everything is client-side over the already-loaded areas — no query,
+// no round-trip. Chips match the knowledge chrome; selected = navy fill.
+function ControlsBar({
+  search,
+  onSearch,
+  sortMode,
+  onSort,
+  categories,
+  catFilter,
+  onToggleCat,
+  showFrequencyFilter,
+  freqFilter,
+  onToggleFreq,
+}: {
+  search: string;
+  onSearch: (value: string) => void;
+  sortMode: 'mastery' | 'category';
+  onSort: (mode: 'mastery' | 'category') => void;
+  categories: string[];
+  catFilter: Set<string>;
+  onToggleCat: (field: string) => void;
+  showFrequencyFilter: boolean;
+  freqFilter: Set<TerritoryFrequency>;
+  onToggleFreq: (freq: TerritoryFrequency) => void;
+}) {
+  const pill =
+    'inline-flex min-h-8 items-center rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  const pillStyle = (on: boolean) =>
+    on
+      ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-card)', background: 'var(--brand-navy)' }
+      : { borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' };
+  const groupLabel = 'text-[0.7rem] uppercase tracking-[0.08em] text-[var(--text-muted)]';
+
+  return (
+    <div className="mb-4 grid gap-2.5">
+      <input
+        type="search"
+        value={search}
+        onChange={(event) => onSearch(event.target.value)}
+        placeholder="Search your areas…"
+        aria-label="Search areas"
+        className="min-h-9 w-full rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={{ borderColor: 'var(--border)', background: 'var(--brand-card)', color: 'var(--brand-ink)' }}
+      />
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={groupLabel}>Sort</span>
+        {(['mastery', 'category'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onSort(mode)}
+            aria-pressed={sortMode === mode}
+            className={pill}
+            style={pillStyle(sortMode === mode)}
+          >
+            {mode === 'mastery' ? 'Mastery' : 'Category'}
+          </button>
+        ))}
+      </div>
+
+      {categories.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={groupLabel}>Category</span>
+          {categories.map((field) => (
+            <button
+              key={field}
+              type="button"
+              onClick={() => onToggleCat(field)}
+              aria-pressed={catFilter.has(field)}
+              className={pill}
+              style={pillStyle(catFilter.has(field))}
+            >
+              {categoryLabel(field)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {showFrequencyFilter ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={groupLabel}>Rotation</span>
+          {TERRITORY_FREQUENCIES.map((freq) => (
+            <button
+              key={freq}
+              type="button"
+              onClick={() => onToggleFreq(freq)}
+              aria-pressed={freqFilter.has(freq)}
+              className={pill}
+              style={pillStyle(freqFilter.has(freq))}
+            >
+              {TERRITORY_FREQUENCY_LABEL[freq]}
+            </button>
+          ))}
         </div>
       ) : null}
     </div>
