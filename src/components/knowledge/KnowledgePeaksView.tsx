@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
 
-import { sumRealPoints, type KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
+import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
 import {
   MIN_SIZE,
@@ -61,6 +61,17 @@ function categoryLabel(field: string): string {
 
 function formatPts(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
+}
+
+// Local mirror of knowledge-tree's `sumRealPoints` — sum of REAL points in a
+// subtree, ghosts excluded. Inlined (not imported) because this is a client
+// component: a *value* import from '@/server/knowledge/knowledge-tree' pulls the
+// server db/pg module into the browser bundle. The type import above is erased,
+// so it's safe; this pure helper isn't, so it lives here.
+function subtreeRealPoints(node: KnowledgeTreeNode): number {
+  if (node.ghost) return 0;
+  const own = node.value ?? 0;
+  return own + (node.children ?? []).reduce((sum, child) => sum + subtreeRealPoints(child), 0);
 }
 
 function quizHref(name: string): string {
@@ -247,14 +258,14 @@ export function KnowledgePeaksView({
       const ag = a.node.ghost ? 1 : 0;
       const bg = b.node.ghost ? 1 : 0;
       if (ag !== bg) return ag - bg;
-      return sumRealPoints(b.node) - sumRealPoints(a.node);
+      return subtreeRealPoints(b.node) - subtreeRealPoints(a.node);
     });
   }, [areas]);
   const maxAreaPoints = useMemo(
     () =>
       Math.max(
         1,
-        ...areaCells.filter((c) => !c.node.ghost).map((c) => sumRealPoints(c.node)),
+        ...areaCells.filter((c) => !c.node.ghost).map((c) => subtreeRealPoints(c.node)),
       ),
     [areaCells],
   );
@@ -297,7 +308,7 @@ export function KnowledgePeaksView({
       const ma = a.node.mastered ? 0 : 1;
       const mb = b.node.mastered ? 0 : 1;
       if (ma !== mb) return ma - mb;
-      return sumRealPoints(b.node) - sumRealPoints(a.node);
+      return subtreeRealPoints(b.node) - subtreeRealPoints(a.node);
     });
   }, [areaCells, search, catFilter, freqFilter, sortMode, resolveFrequency]);
 
@@ -615,7 +626,7 @@ function KnowledgeCircleCell({
   const ghost = Boolean(node.ghost);
   const mastered = Boolean(node.mastered);
   const color = mastered ? 'var(--accent-gold)' : fieldColor(node.field);
-  const points = ghost ? 0 : sumRealPoints(node);
+  const points = ghost ? 0 : subtreeRealPoints(node);
   const diameter = ghost ? GHOST_DIAMETER : getCircleSize(points, maxPoints);
   const coreR = diameter / 2;
   const children = node.children ?? [];
