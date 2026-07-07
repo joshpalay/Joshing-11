@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree';
+import { getFullyExploredDomains } from '@/server/knowledge/fully-explored';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { KnowledgePeaksView } from '@/components/knowledge/KnowledgePeaksView';
 import { KnowledgeViewSwitcher } from '@/components/knowledge/KnowledgeViewSwitcher';
@@ -17,9 +18,10 @@ export async function KnowledgePeaksPage() {
   // Frequency is an additive read: the tree payload doesn't carry per-leaf
   // rotation, so we fetch the player's domain-frequency map alongside it and let
   // the view resolve each leaf by case-insensitive domain key.
-  const [{ tree }, preferences] = await Promise.all([
+  const [{ tree }, preferences, fullyExplored] = await Promise.all([
     getKnowledgeMapData(session.userId),
     getDailyPreferences(session.userId),
+    getFullyExploredDomains(session.userId),
   ]);
 
   return (
@@ -35,6 +37,7 @@ export async function KnowledgePeaksPage() {
       <KnowledgePeaksView
         data={tree}
         frequencyByDomain={preferences.domainPreferenceFrequency}
+        fullyExploredDomains={fullyExplored}
       />
     </main>
   );

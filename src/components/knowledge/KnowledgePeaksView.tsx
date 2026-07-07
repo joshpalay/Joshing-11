@@ -79,6 +79,13 @@ function freqKey(name: string): string {
 // it's already in — so the face is truthful, not blank.
 const DEFAULT_FREQUENCY: TerritoryFrequency = 'sometimes';
 
+const EMPTY_DOMAIN_SET: ReadonlySet<string> = new Set();
+
+// Darkened triangle-gold so the "Fully explored" honor clears AA on the cream
+// card (raw --accent-gold is too light for small text) — same token the feed's
+// new-territory card uses.
+const GOLD_INK = 'var(--accent-gold-ink)';
+
 // Mirror of Territory Setup's `ZONES`, assembled from the SAME shared source of
 // truth those zones are built from (territory-model's label + copy maps) — so
 // the four rows here read identically to the setup surface and can never drift.
@@ -129,6 +136,7 @@ export function KnowledgePeaksView({
   data,
   variant = 'own',
   frequencyByDomain = {},
+  fullyExploredDomains = EMPTY_DOMAIN_SET,
 }: {
   data: KnowledgeTreeNode;
   variant?: 'own' | 'friend';
@@ -138,6 +146,12 @@ export function KnowledgePeaksView({
    * change. Self-only: never passed for the friend variant.
    */
   frequencyByDomain?: DomainPreferenceFrequency;
+  /**
+   * Domains the viewer has no unanswered available questions left in (P4 / D7).
+   * A distinct signal — NOT `mastered`. Currently gated/empty; when non-empty
+   * the face shows "Fully explored" and the sheet shows the honor block.
+   */
+  fullyExploredDomains?: ReadonlySet<string>;
 }) {
   const [tree, setTree] = useState<KnowledgeTreeNode>(data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -186,6 +200,31 @@ export function KnowledgePeaksView({
       }
     },
     [freqMap],
+  );
+
+  // "Fully explored" honor (P4) — resolve per node by normalized domain key,
+  // same match as frequency. Currently the source set is gated/empty.
+  const fullyExploredKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const domain of fullyExploredDomains) set.add(freqKey(domain));
+    return set;
+  }, [fullyExploredDomains]);
+  const resolveFullyExplored = useCallback(
+    (name: string): boolean => fullyExploredKeys.has(freqKey(name)),
+    [fullyExploredKeys],
+  );
+
+  // Friend-variant adopt (P4 / D9): a "+" adopts the friend's area onto the
+  // VIEWER's own map via the shared adopt path. It does NOT mutate the friend's
+  // tree (that's their map) — it just tracks which names the viewer has taken.
+  const [adopted, setAdopted] = useState<Set<string>>(new Set());
+  const adoptToMyMap = useCallback(
+    async (name: string): Promise<boolean> => {
+      const ok = await adoptDomain(name);
+      if (ok) setAdopted((prev) => new Set(prev).add(freqKey(name)));
+      return ok;
+    },
+    [],
   );
 
   const leaves = useMemo(() => indexLeaves(tree), [tree]);
@@ -360,6 +399,7 @@ export function KnowledgePeaksView({
                 maxPoints={maxAreaPoints}
                 frequency={resolveFrequency(area.node.name)}
                 showFrequency={variant === 'own'}
+                fullyExplored={resolveFullyExplored(area.node.name)}
                 active={area.node.id === selectedId}
                 onSelect={() =>
                   setSelectedId(area.node.id === selectedId ? null : area.node.id)
@@ -433,10 +473,13 @@ export function KnowledgePeaksView({
             leaf={selected}
             variant={variant}
             frequency={resolveFrequency(selected.node.name)}
+            fullyExplored={resolveFullyExplored(selected.node.name)}
+            adopted={adopted.has(freqKey(selected.node.name))}
             onClose={() => setSelectedId(null)}
             onSelectSibling={(id) => setSelectedId(id)}
             onAdd={variant === 'own' ? adoptNode : async () => false}
             onSetFrequency={setFrequency}
+            onAdopt={variant === 'friend' ? adoptToMyMap : undefined}
           />
         </div>
       ) : null}
@@ -555,6 +598,7 @@ function KnowledgeCircleCell({
   maxPoints,
   frequency,
   showFrequency,
+  fullyExplored,
   active,
   onSelect,
 }: {
@@ -562,6 +606,8 @@ function KnowledgeCircleCell({
   maxPoints: number;
   frequency: TerritoryFrequency;
   showFrequency: boolean;
+  /** P4/D7 — replaces the frequency word with the "Fully explored" honor. */
+  fullyExplored: boolean;
   active: boolean;
   /** Whole cell is the tap target; a ghost opens the sheet's adopt confirm (P2). */
   onSelect?: () => void;
@@ -659,7 +705,14 @@ function KnowledgeCircleCell({
       >
         {node.name}
       </span>
-      {!ghost && showFrequency ? (
+      {ghost ? null : fullyExplored ? (
+        <span
+          className="text-[10px] font-medium uppercase tracking-[0.06em]"
+          style={{ color: GOLD_INK }}
+        >
+          ✦ Fully explored
+        </span>
+      ) : showFrequency ? (
         <span className="text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
           {TERRITORY_FREQUENCY_LABEL[frequency]}
         </span>
@@ -705,20 +758,32 @@ function PeakDetailCard({
   leaf,
   variant,
   frequency,
+  fullyExplored,
+  adopted,
   onClose,
   onSelectSibling,
   onAdd,
   onSetFrequency,
+  onAdopt,
 }: {
   leaf: LeafInfo;
   variant: 'own' | 'friend';
   frequency: TerritoryFrequency;
+  /** P4/D7 — replaces the frequency editor with the honor block. */
+  fullyExplored: boolean;
+  /** P4/D9 — the viewer has already adopted this friend's area onto their map. */
+  adopted: boolean;
   onClose: () => void;
   onSelectSibling: (id: string) => void;
   onAdd: (id: string, name: string) => Promise<boolean>;
   onSetFrequency: (name: string, frequency: TerritoryFrequency) => Promise<boolean>;
+  /** P4/D9 — friend variant only: adopt this area onto the viewer's own map. */
+  onAdopt?: (name: string) => Promise<boolean>;
 }) {
   const [phase, setPhase] = useState<AddPhase>({ step: 'idle' });
+  // Friend-adopt confirm (D8/D9): "+" → confirm → adopt onto the viewer's map.
+  const [adoptConfirm, setAdoptConfirm] = useState(false);
+  const [adoptBusy, setAdoptBusy] = useState(false);
   // Frequency edit is self-only; the sheet remounts per leaf (keyed on node.id)
   // so these reset on leaf switch — the "Updated" line persists until then (O3).
   const [freqSaving, setFreqSaving] = useState(false);
@@ -764,6 +829,14 @@ function PeakDetailCard({
     setFreqSaving(false);
     if (ok) setFreqChanged(true);
     else setFreqError(true);
+  };
+
+  const confirmAdopt = async () => {
+    if (adoptBusy || !onAdopt) return;
+    setAdoptBusy(true);
+    await onAdopt(node.name);
+    setAdoptBusy(false);
+    setAdoptConfirm(false);
   };
 
   const card = (children: ReactNode) => (
@@ -1036,10 +1109,33 @@ function PeakDetailCard({
         </div>
       ) : null}
 
-      {/* How often it shows up (D8, last) — the loud, editable control. Rows come
-          from ZONES, the mirror of Territory Setup's zones (shared copy source, no
-          re-authoring). Self-only: friend cards stay read-only (DO-NOT). */}
-      {variant === 'own' ? (
+      {/* Honor OR editor (D7/D8, last). Fully-explored replaces the editor with a
+          read-only honor block (both variants); otherwise the own variant gets the
+          frequency editor and the friend variant stays read-only. Rows come from
+          ZONES, the mirror of Territory Setup's zones (shared copy source). */}
+      {fullyExplored ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <div
+            className="flex items-center gap-3 rounded-lg p-3"
+            style={{
+              background: 'color-mix(in srgb, var(--accent-gold) 8%, var(--brand-card))',
+              border: '1px solid color-mix(in srgb, var(--accent-gold) 32%, var(--border))',
+            }}
+          >
+            <span aria-hidden className="text-2xl">
+              🏆
+            </span>
+            <span className="min-w-0">
+              <span className="block font-serif text-[15px]" style={{ color: GOLD_INK }}>
+                Fully explored
+              </span>
+              <span className="block text-xs text-[var(--text-muted)]">
+                You’ve answered every question here. New ones will appear as they’re added.
+              </span>
+            </span>
+          </div>
+        </div>
+      ) : variant === 'own' ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
             How often it shows up
@@ -1108,6 +1204,52 @@ function PeakDetailCard({
               Couldn’t update it. Try again.
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Friend variant (D9): adopt this area onto the VIEWER's own map. Confirm
+          first, then the shared adopt path; once taken it reads "On your map". */}
+      {variant === 'friend' && onAdopt ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          {adopted ? (
+            <p className="inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
+              <Check className="size-4" aria-hidden /> On your map
+            </p>
+          ) : adoptConfirm ? (
+            <>
+              <p className="font-serif text-base text-[var(--brand-ink)]">
+                Add <strong>{node.name}</strong> to your map?
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={adoptBusy}
+                  onClick={() => void confirmAdopt()}
+                  className={actionButton}
+                  style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+                >
+                  <Plus className="size-4" aria-hidden /> {adoptBusy ? 'Adding…' : 'Add it'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdoptConfirm(false)}
+                  className={actionButton}
+                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                >
+                  Not now
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdoptConfirm(true)}
+              className={actionButton}
+              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+            >
+              <Plus className="size-4" aria-hidden /> Add to my map
+            </button>
+          )}
         </div>
       ) : null}
     </>,
