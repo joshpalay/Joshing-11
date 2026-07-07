@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
+import { isAdminUser } from '@/server/auth/admin';
 import { getUserOnboardingProfile } from '@/server/db/queries/users';
 import { getBellBadgeCount } from '@/server/db/queries/activity';
 import { getIncomingFollowRequestCount } from '@/server/db/queries/friends';
@@ -31,6 +32,11 @@ export async function GET() {
   return NextResponse.json({
     userId: session.userId,
     displayName: profile?.displayName ?? null,
+    // Admin membership resolved server-side from the ADMIN_USER_IDS allowlist —
+    // the client receives only this boolean, never the allowlist itself. Purely
+    // to reveal admin-only affordances (e.g. the /admin/questions link on the
+    // Questions tab); every admin route still re-checks the gate and 404s.
+    isAdmin: isAdminUser(session.userId),
     bellBadgeCount,
     friendRequestCount,
     friendsDotVisible: discoveryStatus.hasNew,
