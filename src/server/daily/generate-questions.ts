@@ -25,6 +25,7 @@ import {
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import {
+  getAnsweredFactKeysAmong,
   getAuthoredExamplesForDomains,
   getAuthoredQuestionTexts,
   getKnowledgeBase,
@@ -1802,7 +1803,7 @@ export async function generateDailyQuestions(
   // multi-answer questions and merge them into acceptable_variants at persist.
   // Distinct from ask-to-answer (which captures the same answer rephrased);
   // additive, batched, and fail-open. Runs in the same parallel wave.
-  const [, askResult, enrichByIndex] = await Promise.all([
+  const [, askResult, enrichByIndex, answeredAmongBatch] = await Promise.all([
     Promise.all(
       toPersist.map(async (question) => {
         const aside = await generateInsideJoke({
@@ -1820,7 +1821,27 @@ export async function generateDailyQuestions(
     enrichAcceptableVariants(
       toPersist.map((q) => ({ questionText: q.question_text, answer: q.answer, explainer: q.explainer })),
     ),
+    // Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exact DB check of this batch's
+    // fact_keys against the viewer's FULL answered history. factKeyAvoidSet is
+    // built from the recency-capped getRecentFactKeys (200), and a 445-fact
+    // history already overflows it — this uncapped check is what makes "never
+    // re-serve an answered fact" hold at any history size. Bounded (≤ batch
+    // size keys), fail-open: a DB miss just leaves the capped set in charge.
+    (async () => {
+      try {
+        return await getAnsweredFactKeysAmong(userId, toPersist.map((q) => q.fact_key));
+      } catch {
+        return new Set<string>();
+      }
+    })(),
   ]);
+  if (answeredAmongBatch.size > 0) {
+    console.warn('[daily/generate-questions] full-set dedup: batch re-proposed answered facts', {
+      count: answeredAmongBatch.size,
+      factKeys: [...answeredAmongBatch],
+    });
+    for (const key of answeredAmongBatch) factKeyAvoidSet.add(key);
+  }
   if (askResult.toDrop.size > 0) {
     console.warn('[daily/generate-questions] dropping ask-to-answer failures', {
       droppedCount: askResult.toDrop.size,
