@@ -2286,6 +2286,53 @@ export async function getRecentFactKeys(
   return out;
 }
 
+/**
+ * Demand-pull replenish (D-SUPPLY-DEMAND-PULL-01): how much SERVEABLE own-bank
+ * stock does the viewer have right now, per domain? A row counts only if the
+ * next build could actually place it: never served (used_in_queue=false), not a
+ * duplicate, fact-keyed, in the viewer's current palette, AND its fact not
+ * already answered by the viewer on any surface (the same MASTERY_EVENTS →
+ * canonical-twin → fact_key bridge getRecentFactKeys uses — a stale flute row
+ * is not stock). Domains are matched on the folded domain_key with the exact
+ * canonical string as fallback, mirroring pickBankSource.
+ */
+export async function countServeableOwnBankStock(
+  userId: string,
+  domains: string[],
+): Promise<Map<string, number>> {
+  if (domains.length === 0) return new Map();
+  const keys = [...new Set(domains.map((domain) => domainKey(domain)))];
+  const rows = await db
+    .select({
+      domain: generatedQuestions.canonicalSubcategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.userId, userId),
+      eq(generatedQuestions.usedInQueue, false),
+      eq(generatedQuestions.isDuplicate, false),
+      isNotNull(generatedQuestions.factKey),
+      or(
+        inArray(generatedQuestions.domainKey, keys),
+        inArray(generatedQuestions.canonicalSubcategory, domains),
+      ),
+      sql`NOT EXISTS (
+        SELECT 1 FROM "MASTERY_EVENTS" me
+        JOIN "Question" cq ON me.question_id = cq.id
+        JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
+        WHERE me.answered_by_user_id = ${userId}
+          AND agq.fact_key = ${generatedQuestions.factKey}
+      )`,
+    ))
+    .groupBy(generatedQuestions.canonicalSubcategory);
+  const out = new Map<string, number>();
+  for (const row of rows) {
+    if (row.domain) out.set(row.domain, row.count);
+  }
+  return out;
+}
+
 // Question texts the viewer has AUTHORED (canonical `questions`, creator =
 // viewer). The +2 bonus (and any bank reuse) must never serve a fact the viewer
 // personally wrote a question about — they obviously know it, and being handed
