@@ -2,11 +2,42 @@ import { notFound } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
-import { getAllQuestionsForAdmin } from '@/server/db/queries/admin-questions';
+import {
+  getAllQuestionsForAdmin,
+  type AdminQuestionSortDir,
+  type AdminQuestionSortKey,
+} from '@/server/db/queries/admin-questions';
 
 import { AdminQuestionsClient } from './AdminQuestionsClient';
 
 export const dynamic = 'force-dynamic';
+
+const SORT_KEYS: AdminQuestionSortKey[] = ['createdAt', 'askedCount', 'correctRate', 'category'];
+
+function parseSortKey(value: string | undefined): AdminQuestionSortKey {
+  return SORT_KEYS.includes(value as AdminQuestionSortKey) ? (value as AdminQuestionSortKey) : 'createdAt';
+}
+
+function trimmed(value: string | undefined): string | undefined {
+  const v = value?.trim();
+  return v ? v : undefined;
+}
+
+type AdminQuestionsSearchParams = {
+  page?: string;
+  showDeleted?: string;
+  sort?: string;
+  dir?: string;
+  q?: string;
+  category?: string;
+  trustTier?: string;
+  visibility?: string;
+  verdict?: string;
+  nobodyCorrect?: string;
+  duplicate?: string;
+  tombstone?: string;
+  perishable?: string;
+};
 
 // B-ADMIN-QUESTIONS-OVERVIEW-01 — the FOURTH admin room: an audit view of every
 // question in the pool (all creators, house + LLM, and soft-deleted rows). Same
@@ -16,19 +47,31 @@ export const dynamic = 'force-dynamic';
 export default async function AdminQuestionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; showDeleted?: string }>;
+  searchParams: Promise<AdminQuestionsSearchParams>;
 }) {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
   const params = await searchParams;
   const page = Number.parseInt(params.page ?? '1', 10);
-  const showDeleted = params.showDeleted === '1';
 
   const result = await getAllQuestionsForAdmin({
     page: Number.isFinite(page) ? page : 1,
-    showDeleted,
+    showDeleted: params.showDeleted === '1',
+    sortKey: parseSortKey(params.sort),
+    sortDir: (params.dir === 'asc' ? 'asc' : 'desc') as AdminQuestionSortDir,
+    filters: {
+      search: trimmed(params.q),
+      category: trimmed(params.category),
+      trustTier: trimmed(params.trustTier),
+      visibility: trimmed(params.visibility),
+      verificationVerdict: trimmed(params.verdict),
+      nobodyCorrectFlag: params.nobodyCorrect === '1',
+      isDuplicate: params.duplicate === '1',
+      authorDeleted: params.tombstone === '1',
+      perishable: params.perishable === '1',
+    },
   });
 
-  return <AdminQuestionsClient result={result} />;
+  return <AdminQuestionsClient result={result} sortKey={parseSortKey(params.sort)} sortDir={params.dir === 'asc' ? 'asc' : 'desc'} />;
 }

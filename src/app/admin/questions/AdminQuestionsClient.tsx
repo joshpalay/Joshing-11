@@ -1,18 +1,32 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { AdminTabs } from '@/app/admin/AdminTabs';
-import type { AdminQuestionRow, AdminQuestionsPage } from '@/server/db/queries/admin-questions';
+import { CATEGORIES } from '@/lib/questions-types';
+import type {
+  AdminQuestionRow,
+  AdminQuestionSortDir,
+  AdminQuestionSortKey,
+  AdminQuestionsPage,
+} from '@/server/db/queries/admin-questions';
 
-// B-ADMIN-QUESTIONS-OVERVIEW-01 Phase 1 — the read-only pool audit table.
-// Deliberately plain (an internal ops tool): a wide, horizontally-scrollable
-// table with a show-deleted toggle and pagination. Interface quiet, content loud.
-// Canon: house/tombstone rows carry the neutral "House" label resolved server-
-// side (never a person); every flag is a TEXT badge, never color alone.
+// B-ADMIN-QUESTIONS-OVERVIEW-01 Phase 1+2 — the read-only pool audit table with
+// server-driven sort & filter (URL search params → server re-query, so sort and
+// filter apply across the WHOLE pool, not just the loaded page). Deliberately
+// plain (an internal ops tool). Interface quiet, content loud. Canon:
+// house/tombstone rows carry the neutral "House" label resolved server-side
+// (never a person); every flag is a TEXT badge, never color alone.
+
+// Filter option lists. Sourced from the schema pgEnums (TrustTier,
+// QuestionVisibility, QuestionVerificationVerdict) and CATEGORIES — kept as plain
+// constants here so this client module pulls in no server-only schema import.
+const TRUST_TIERS = ['unverified', 'machine_verified', 'human_validated', 'author_confirmed'];
+const VISIBILITIES = ['public', 'friends', 'private', 'blocked'];
+const VERDICTS = ['ok', 'demoted', 'unverifiable', 'skipped'];
 
 function fmtDate(iso: string): string {
-  // YYYY-MM-DD — compact and sortable-looking for an audit table.
   return iso.slice(0, 10);
 }
 
@@ -64,29 +78,99 @@ function FlagBadges({ row }: { row: AdminQuestionRow }) {
 
 const CELL = 'px-2 py-1.5 align-top text-[13px]';
 const HEAD = 'px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.04em]';
+const CONTROL = 'rounded-md border px-2 py-1.5 text-sm';
 
-export function AdminQuestionsClient({ result }: { result: AdminQuestionsPage }) {
+// A sortable column header. A <button> so it is keyboard-operable; aria-sort
+// exposes the current direction to assistive tech.
+function SortHeader({
+  label,
+  columnKey,
+  sortKey,
+  sortDir,
+  onToggle,
+}: {
+  label: string;
+  columnKey: AdminQuestionSortKey;
+  sortKey: AdminQuestionSortKey;
+  sortDir: AdminQuestionSortDir;
+  onToggle: (key: AdminQuestionSortKey) => void;
+}) {
+  const active = sortKey === columnKey;
+  const arrow = active ? (sortDir === 'asc' ? '↑' : '↓') : '';
+  return (
+    <th className={HEAD} aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        onClick={() => onToggle(columnKey)}
+        className="inline-flex items-center gap-1 uppercase tracking-[0.04em] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={{ color: active ? 'var(--brand-navy)' : 'inherit' }}
+      >
+        {label}
+        {arrow ? <span aria-hidden>{arrow}</span> : null}
+      </button>
+    </th>
+  );
+}
+
+export function AdminQuestionsClient({
+  result,
+  sortKey,
+  sortDir,
+}: {
+  result: AdminQuestionsPage;
+  sortKey: AdminQuestionSortKey;
+  sortDir: AdminQuestionSortDir;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [search, setSearch] = useState(searchParams.get('q') ?? '');
+
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
 
-  function navigate(next: Record<string, string | null>) {
+  // Update the given params (null deletes), always resetting to page 1 for any
+  // filter/sort change so a narrowed result set never lands on an empty page.
+  function navigate(next: Record<string, string | null>, { keepPage = false } = {}) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(next)) {
-      if (value === null) params.delete(key);
+      if (value === null || value === '') params.delete(key);
       else params.set(key, value);
     }
+    if (!keepPage) params.delete('page');
     router.push(`/admin/questions?${params.toString()}`);
   }
 
-  function toggleDeleted() {
-    navigate({ showDeleted: result.showDeleted ? null : '1', page: '1' });
+  function setFilter(key: string, value: string | null) {
+    navigate({ [key]: value });
+  }
+
+  function toggleFlag(key: string, on: boolean) {
+    navigate({ [key]: on ? '1' : null });
+  }
+
+  function toggleSort(key: AdminQuestionSortKey) {
+    // Same column → flip direction; new column → default to desc.
+    const nextDir: AdminQuestionSortDir = sortKey === key && sortDir === 'desc' ? 'asc' : 'desc';
+    navigate({ sort: key, dir: nextDir });
   }
 
   function goToPage(page: number) {
-    navigate({ page: String(page) });
+    navigate({ page: String(page) }, { keepPage: true });
   }
+
+  function resetFilters() {
+    setSearch('');
+    router.push('/admin/questions');
+  }
+
+  const isDeleted = result.showDeleted;
+
+  const boolFilters: { key: string; label: string }[] = [
+    { key: 'nobodyCorrect', label: 'Nobody correct' },
+    { key: 'duplicate', label: 'Duplicate' },
+    { key: 'tombstone', label: 'Tombstone' },
+    { key: 'perishable', label: 'Perishable' },
+  ];
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-6">
@@ -95,16 +179,133 @@ export function AdminQuestionsClient({ result }: { result: AdminQuestionsPage })
         <AdminTabs active="questions" />
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          {result.total.toLocaleString()} question{result.total === 1 ? '' : 's'}
-          {result.showDeleted ? ' (including deleted)' : ''}
-        </p>
-        <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--brand-ink-700)' }}>
-          <input type="checkbox" checked={result.showDeleted} onChange={toggleDeleted} />
+      {/* Filter bar. Every control combines (AND) with the others server-side. */}
+      <form
+        className="mb-3 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setFilter('q', search.trim() || null);
+        }}
+      >
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+          Search
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="question or answer"
+            className={CONTROL}
+            style={{ borderColor: 'var(--border)', minWidth: '200px' }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+          Category
+          <select
+            value={searchParams.get('category') ?? ''}
+            onChange={(e) => setFilter('category', e.target.value || null)}
+            className={CONTROL}
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <option value="">All</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+          Trust tier
+          <select
+            value={searchParams.get('trustTier') ?? ''}
+            onChange={(e) => setFilter('trustTier', e.target.value || null)}
+            className={CONTROL}
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <option value="">All</option>
+            {TRUST_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+          Visibility
+          <select
+            value={searchParams.get('visibility') ?? ''}
+            onChange={(e) => setFilter('visibility', e.target.value || null)}
+            className={CONTROL}
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <option value="">All</option>
+            {VISIBILITIES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+          Verdict
+          <select
+            value={searchParams.get('verdict') ?? ''}
+            onChange={(e) => setFilter('verdict', e.target.value || null)}
+            className={CONTROL}
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <option value="">All</option>
+            {VERDICTS.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="submit"
+          className="rounded-md border px-3 py-1.5 text-sm font-medium"
+          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+        >
+          Apply search
+        </button>
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="rounded-md border px-3 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        >
+          Reset
+        </button>
+      </form>
+
+      {/* Boolean flag filters — each carries a text label (no color-alone). */}
+      <div className="mb-3 flex flex-wrap items-center gap-4 text-sm" style={{ color: 'var(--brand-ink-700)' }}>
+        {boolFilters.map((f) => (
+          <label key={f.key} className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={searchParams.get(f.key) === '1'}
+              onChange={(e) => toggleFlag(f.key, e.target.checked)}
+            />
+            {f.label}
+          </label>
+        ))}
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={isDeleted} onChange={(e) => toggleFlag('showDeleted', e.target.checked)} />
           Show deleted
         </label>
       </div>
+
+      <p className="mb-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+        {result.total.toLocaleString()} question{result.total === 1 ? '' : 's'}
+        {isDeleted ? ' (including deleted)' : ''}
+      </p>
 
       <div className="overflow-x-auto rounded-md border" style={{ borderColor: 'var(--border)' }}>
         <table className="w-full border-collapse text-left">
@@ -112,18 +313,18 @@ export function AdminQuestionsClient({ result }: { result: AdminQuestionsPage })
             <tr style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
               <th className={HEAD}>Question</th>
               <th className={HEAD}>Answer</th>
-              <th className={HEAD}>Category</th>
+              <SortHeader label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
               <th className={HEAD}>Author</th>
               <th className={HEAD}>Source</th>
               <th className={HEAD}>Trust</th>
               <th className={HEAD}>Visibility</th>
               <th className={HEAD}>Public status</th>
               <th className={HEAD}>Verdict</th>
-              <th className={HEAD}>Asked</th>
+              <SortHeader label="Asked" columnKey="askedCount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
               <th className={HEAD}>Correct</th>
-              <th className={HEAD}>Rate</th>
+              <SortHeader label="Rate" columnKey="correctRate" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
               <th className={HEAD}>Flags</th>
-              <th className={HEAD}>Created</th>
+              <SortHeader label="Created" columnKey="createdAt" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
             </tr>
           </thead>
           <tbody>
@@ -159,11 +360,7 @@ export function AdminQuestionsClient({ result }: { result: AdminQuestionsPage })
                     ) : null}
                   </td>
                   <td className={`${CELL} whitespace-nowrap`}>
-                    {row.authorIsPerson ? (
-                      row.authorLabel
-                    ) : (
-                      <Badge label={row.authorLabel} tone="muted" />
-                    )}
+                    {row.authorIsPerson ? row.authorLabel : <Badge label={row.authorLabel} tone="muted" />}
                   </td>
                   <td className={`${CELL} whitespace-nowrap`}>{row.source}</td>
                   <td className={`${CELL} whitespace-nowrap`}>{row.trustTier}</td>
