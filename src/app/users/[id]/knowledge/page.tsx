@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { KnowledgeBubbleMap } from '@/components/knowledge/KnowledgeBubbleMap'
+import { KnowledgePeaksView } from '@/components/knowledge/KnowledgePeaksView'
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { PortraitCircles } from '@/components/knowledge/PortraitCircles'
 import { getSession } from '@/server/auth/session'
 import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree'
+import { getFullyExploredDomains } from '@/server/knowledge/fully-explored'
 import { isKnowledgeMapPageEnabled } from '@/server/knowledge/map-page-flag'
 import {
   getKnowledgePageData,
@@ -66,6 +67,9 @@ export default async function FriendKnowledgePage({
   const mapData = isKnowledgeMapPageEnabled()
     ? await getKnowledgeMapData(portrait.user.id, { includeGhosts: false })
     : null
+  // Per-viewer availability read (gated / stub → empty) so the read-only friend
+  // grid can render the "Fully explored" honor once the signal exists.
+  const fullyExplored = mapData ? await getFullyExploredDomains(session.userId) : new Set<string>()
 
   const visibleDomains = isOwner
     ? pageData.allDomains
@@ -138,14 +142,15 @@ export default async function FriendKnowledgePage({
       {hasKnowledge ? (
         <div className="mt-6">
           {mapData ? (
-            // P5 follow-up: flag-on, the friend's map renders as the same
-            // nested bubbles — read-only variant (no ghosts, no adopt; their
-            // hidden domains already filtered by the loader).
+            // Friend variant of the circle grid (D9): read-only — no frequency
+            // word or editor — with a per-area "+ Add to my map" that adopts the
+            // area onto the VIEWER's map. Their hidden domains are already
+            // filtered by the loader; includeGhosts:false means no ghost cells.
             <div className="flex h-[60vh] min-h-80 flex-col">
-              <KnowledgeBubbleMap
+              <KnowledgePeaksView
                 data={mapData.tree}
                 variant="friend"
-                rootTitle={`${friendFirstName}'s peaks`}
+                fullyExploredDomains={fullyExplored}
               />
             </div>
           ) : (

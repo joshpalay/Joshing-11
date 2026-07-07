@@ -2,31 +2,111 @@
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, ChevronRight, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import {
+  MIN_SIZE,
+  MAX_SIZE,
+  getCircleSize,
+  getCircleOpacity,
+} from '@/components/knowledge/CategoryCircles';
+import {
+  TERRITORY_FREQUENCIES,
+  TERRITORY_FREQUENCY_COPY,
+  TERRITORY_FREQUENCY_LABEL,
+  type DomainPreferenceFrequency,
+  type TerritoryFrequency,
+} from '@/lib/daily/territory-model';
 
-// D-KNOWLEDGE-MAP-USABILITY-01 (leaf-first follow-up) — the "New" knowledge
-// view. Where the bubble map leads with rolled-up parent clusters, this leads
-// with the specific things you're smart at (Hamlet, the WTC, Wagner's Ring
-// Cycle) as trophies. Tapping a peak shows where it rolls UP to (its parent
-// area) and the sibling areas you could ADD next. Same tree data as the map,
-// same confirmed-add path — nothing here is a new endpoint or new mastery math.
+// D-KNOWLEDGE-CIRCLE-GRID-01 (P1) — the knowledge "peaks" view rendered as a
+// circle grid: each top-level area a planet sized by points, containers wearing
+// a dotted Saturn ring of moons (filled = a child area you hold, hollow = one
+// you could add), the Daily Five frequency spelled out beneath, and unstarted
+// areas as dashed "+" ghosts. Same tree payload, same mastery math — this phase
+// is display only (the detail sheet is untouched; editing lands in P2).
 
-const TOP_PEAKS = 10;
+// Saturn geometry (matches the ratified mock): the dotted ring sits a fixed gap
+// outside the core, with evenly-spaced moon dots on it, capped so a big roster
+// stays a ring and not a crowd.
+const RING_GAP = 13;
+const MOON_RADIUS = 5;
+const MOON_CAP = 10;
+// Every cell reserves the same square so circles align on a grid baseline
+// regardless of their own diameter; the ring + moons extend into the padding.
+const CELL_SLOT = MAX_SIZE + 2 * (RING_GAP + MOON_RADIUS) + 4;
+const GHOST_DIAMETER = MIN_SIZE + 6;
 
 function fieldColor(field: string | null | undefined): string {
   return field ? `var(--cat-${field}, var(--brand-ink-400))` : 'var(--brand-ink-400)';
+}
+
+// The category axis is the node's `field` hue key ('literature', 'film-tv', …).
+// Title-case it for the filter chips, with a couple of nicer overrides. The hue
+// is always paired with the readable label — it never carries meaning alone.
+const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
+  'film-tv': 'Film & TV',
+  'pop-culture': 'Pop Culture',
+};
+function categoryLabel(field: string): string {
+  return (
+    CATEGORY_LABEL_OVERRIDES[field] ??
+    field
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  );
 }
 
 function formatPts(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
 }
 
+// Local mirror of knowledge-tree's `sumRealPoints` — sum of REAL points in a
+// subtree, ghosts excluded. Inlined (not imported) because this is a client
+// component: a *value* import from '@/server/knowledge/knowledge-tree' pulls the
+// server db/pg module into the browser bundle. The type import above is erased,
+// so it's safe; this pure helper isn't, so it lives here.
+function subtreeRealPoints(node: KnowledgeTreeNode): number {
+  if (node.ghost) return 0;
+  const own = node.value ?? 0;
+  return own + (node.children ?? []).reduce((sum, child) => sum + subtreeRealPoints(child), 0);
+}
+
 function quizHref(name: string): string {
   return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
 }
+
+// A peaks leaf's `node.name` === its `canonicalSubcategory`, which is exactly the
+// key `domainPreferenceFrequency` stores — matched case-insensitively, just like
+// the domain-frequency route. Normalize both sides the same way to resolve it.
+function freqKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+// Decision A: a leaf with no explicit preference shows its actual effective
+// default. For an owned peak that's `'sometimes'` ("Sometimes") — the rotation
+// it's already in — so the face is truthful, not blank.
+const DEFAULT_FREQUENCY: TerritoryFrequency = 'sometimes';
+
+const EMPTY_DOMAIN_SET: ReadonlySet<string> = new Set();
+
+// Darkened triangle-gold so the "Fully explored" honor clears AA on the cream
+// card (raw --accent-gold is too light for small text) — same token the feed's
+// new-territory card uses.
+const GOLD_INK = 'var(--accent-gold-ink)';
+
+// Mirror of Territory Setup's `ZONES`, assembled from the SAME shared source of
+// truth those zones are built from (territory-model's label + copy maps) — so
+// the four rows here read identically to the setup surface and can never drift.
+// Not re-authored: the strings live in TERRITORY_FREQUENCY_COPY, not here.
+const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
+  TERRITORY_FREQUENCIES.map((value) => ({
+    value,
+    title: TERRITORY_FREQUENCY_LABEL[value],
+    copy: TERRITORY_FREQUENCY_COPY[value],
+  }));
 
 function isOwnedLeaf(node: KnowledgeTreeNode): boolean {
   return (
@@ -66,21 +146,194 @@ function indexLeaves(tree: KnowledgeTreeNode): LeafInfo[] {
 export function KnowledgePeaksView({
   data,
   variant = 'own',
+  frequencyByDomain = {},
+  fullyExploredDomains = EMPTY_DOMAIN_SET,
 }: {
   data: KnowledgeTreeNode;
   variant?: 'own' | 'friend';
+  /**
+   * Per-leaf Daily Five rotation, keyed by domain string (case-insensitive).
+   * Threaded from the page's daily preferences — additive read, no schema
+   * change. Self-only: never passed for the friend variant.
+   */
+  frequencyByDomain?: DomainPreferenceFrequency;
+  /**
+   * Domains the viewer has no unanswered available questions left in (P4 / D7).
+   * A distinct signal — NOT `mastered`. Currently gated/empty; when non-empty
+   * the face shows "Fully explored" and the sheet shows the honor block.
+   */
+  fullyExploredDomains?: ReadonlySet<string>;
 }) {
   const [tree, setTree] = useState<KnowledgeTreeNode>(data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+
+  // Optimistic frequency map, keyed by normalized domain. Seeded from the
+  // server preference and updated in place on write (like `adoptNode`), so the
+  // face pill and detail sheet reflect the change before the round rebuilds.
+  const [freqMap, setFreqMap] = useState<Record<string, TerritoryFrequency>>(() => {
+    const seeded: Record<string, TerritoryFrequency> = {};
+    for (const [domain, frequency] of Object.entries(frequencyByDomain)) {
+      seeded[freqKey(domain)] = frequency;
+    }
+    return seeded;
+  });
+
+  const resolveFrequency = useCallback(
+    (name: string): TerritoryFrequency => freqMap[freqKey(name)] ?? DEFAULT_FREQUENCY,
+    [freqMap],
+  );
+
+  // Optimistic write: flip local state, POST the single-domain change, revert on
+  // failure. The route merges server-side and drops untouched Daily Five queues.
+  const setFrequency = useCallback(
+    async (name: string, frequency: TerritoryFrequency): Promise<boolean> => {
+      const key = freqKey(name);
+      const previous = freqMap[key];
+      setFreqMap((prev) => ({ ...prev, [key]: frequency }));
+      try {
+        const res = await fetch('/api/daily/preferences/domain-frequency', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ domain: name, frequency }),
+        });
+        if (!res.ok) throw new Error('frequency update failed');
+        return true;
+      } catch {
+        setFreqMap((prev) => {
+          const next = { ...prev };
+          if (previous === undefined) delete next[key];
+          else next[key] = previous;
+          return next;
+        });
+        return false;
+      }
+    },
+    [freqMap],
+  );
+
+  // "Fully explored" honor (P4) — resolve per node by normalized domain key,
+  // same match as frequency. Currently the source set is gated/empty.
+  const fullyExploredKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const domain of fullyExploredDomains) set.add(freqKey(domain));
+    return set;
+  }, [fullyExploredDomains]);
+  const resolveFullyExplored = useCallback(
+    (name: string): boolean => fullyExploredKeys.has(freqKey(name)),
+    [fullyExploredKeys],
+  );
+
+  // Friend-variant adopt (P4 / D9): a "+" adopts the friend's area onto the
+  // VIEWER's own map via the shared adopt path. It does NOT mutate the friend's
+  // tree (that's their map) — it just tracks which names the viewer has taken.
+  const [adopted, setAdopted] = useState<Set<string>>(new Set());
+  const adoptToMyMap = useCallback(
+    async (name: string): Promise<boolean> => {
+      const ok = await adoptDomain(name);
+      if (ok) setAdopted((prev) => new Set(prev).add(freqKey(name)));
+      return ok;
+    },
+    [],
+  );
 
   const leaves = useMemo(() => indexLeaves(tree), [tree]);
   const sorted = useMemo(
     () => [...leaves].sort((a, b) => (b.node.value ?? 0) - (a.node.value ?? 0)),
     [leaves],
   );
-  const top = sorted.slice(0, TOP_PEAKS);
-  const selected = selectedId ? leaves.find((l) => l.node.id === selectedId) ?? null : null;
+
+  // Grid cells = the top-level areas of the tree. A node with children reads as a
+  // container (Saturn ring of moons); a bare node reads as a leaf; a ghost reads
+  // as an unstarted, addable area. Held areas sort by rolled-up points; ghosts
+  // trail at the end. LeafInfo-shaped so the existing detail sheet takes them
+  // unchanged (path/parent stay empty — top-level areas roll up to nothing).
+  const areas = useMemo<LeafInfo[]>(
+    () => (tree.children ?? []).map((node) => ({ node, path: [], parent: null, topParent: null })),
+    [tree],
+  );
+  const areaCells = useMemo(() => {
+    return [...areas].sort((a, b) => {
+      const ag = a.node.ghost ? 1 : 0;
+      const bg = b.node.ghost ? 1 : 0;
+      if (ag !== bg) return ag - bg;
+      return subtreeRealPoints(b.node) - subtreeRealPoints(a.node);
+    });
+  }, [areas]);
+  const maxAreaPoints = useMemo(
+    () =>
+      Math.max(
+        1,
+        ...areaCells.filter((c) => !c.node.ghost).map((c) => subtreeRealPoints(c.node)),
+      ),
+    [areaCells],
+  );
+
+  // ── Controls bar (P3) — search / filter / sort, all client-side over the
+  // already-loaded areas. No new query. ────────────────────────────────────
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
+  const [freqFilter, setFreqFilter] = useState<Set<TerritoryFrequency>>(new Set());
+  const [sortMode, setSortMode] = useState<'mastery' | 'category'>('mastery');
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const cell of areaCells) if (cell.node.field) set.add(cell.node.field);
+    return [...set].sort();
+  }, [areaCells]);
+
+  const visibleCells = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = areaCells.filter(({ node }) => {
+      if (q && !node.name.toLowerCase().includes(q)) return false;
+      // Filters compose with AND across axes; "no chips" = no filter on that axis.
+      if (catFilter.size > 0 && !(node.field && catFilter.has(node.field))) return false;
+      if (freqFilter.size > 0) {
+        // Ghosts are unstarted — no rotation — so a frequency filter drops them.
+        if (node.ghost || !freqFilter.has(resolveFrequency(node.name))) return false;
+      }
+      return true;
+    });
+    const ghostRank = (c: LeafInfo) => (c.node.ghost ? 1 : 0);
+    return [...filtered].sort((a, b) => {
+      if (ghostRank(a) !== ghostRank(b)) return ghostRank(a) - ghostRank(b);
+      if (sortMode === 'category') {
+        const fa = a.node.field ?? '~';
+        const fb = b.node.field ?? '~';
+        if (fa !== fb) return fa < fb ? -1 : 1;
+        return a.node.name.localeCompare(b.node.name);
+      }
+      // Mastery: mastered areas first, then points desc as the mastery proxy.
+      const ma = a.node.mastered ? 0 : 1;
+      const mb = b.node.mastered ? 0 : 1;
+      if (ma !== mb) return ma - mb;
+      return subtreeRealPoints(b.node) - subtreeRealPoints(a.node);
+    });
+  }, [areaCells, search, catFilter, freqFilter, sortMode, resolveFrequency]);
+
+  const toggleCat = (field: string) =>
+    setCatFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  const toggleFreq = (freq: TerritoryFrequency) =>
+    setFreqFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(freq)) next.delete(freq);
+      else next.add(freq);
+      return next;
+    });
+
+  // Selection resolves from the area cells first, then the flat leaf list (the
+  // "see all" expansion), so either surface opens the same sheet.
+  const selected = selectedId
+    ? areas.find((a) => a.node.id === selectedId) ??
+      leaves.find((l) => l.node.id === selectedId) ??
+      null
+    : null;
 
   // Full picture, grouped by top area — the "see everything" expansion.
   const groups = useMemo(() => {
@@ -125,48 +378,49 @@ export function KnowledgePeaksView({
           What you’re smart at
         </p>
 
-        {top.length === 0 ? (
+        {areaCells.length > 0 ? (
+          <ControlsBar
+            search={search}
+            onSearch={setSearch}
+            sortMode={sortMode}
+            onSort={setSortMode}
+            categories={categories}
+            catFilter={catFilter}
+            onToggleCat={toggleCat}
+            showFrequencyFilter={variant === 'own'}
+            freqFilter={freqFilter}
+            onToggleFreq={toggleFreq}
+          />
+        ) : null}
+
+        {areaCells.length === 0 ? (
           <p className="py-10 text-center font-serif text-[var(--text-muted)]">
             Answer and write questions and your peaks will show up here.
           </p>
+        ) : visibleCells.length === 0 ? (
+          <p className="py-10 text-center font-serif text-[var(--text-muted)]">
+            No areas match — try clearing a filter.
+          </p>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {top.map((leaf) => {
-              const mastered = Boolean(leaf.node.mastered);
-              const active = leaf.node.id === selectedId;
-              return (
-                <button
-                  key={leaf.node.id}
-                  type="button"
-                  onClick={() => setSelectedId(active ? null : leaf.node.id)}
-                  aria-pressed={active}
-                  className="group flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  style={{
-                    borderColor: active ? 'var(--brand-navy)' : 'var(--border)',
-                    background: 'var(--brand-card)',
-                    borderLeftWidth: 4,
-                    borderLeftColor: mastered ? 'var(--accent-gold)' : fieldColor(leaf.node.field),
-                  }}
-                >
-                  <span className="font-serif text-[15px] leading-tight text-[var(--brand-ink)]">
-                    {leaf.node.name}
-                  </span>
-                  <span className="mt-auto text-[11px] text-[var(--text-muted)]">
-                    {mastered ? 'Mastery · ' : ''}
-                    {formatPts(leaf.node.value ?? 0)} pts
-                  </span>
-                  {leaf.topParent ? (
-                    <span className="truncate text-[10px] uppercase tracking-[0.06em] text-[var(--text-muted)]">
-                      {leaf.topParent.name}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
+          <div className="grid grid-cols-3 gap-x-1 gap-y-6">
+            {visibleCells.map((area) => (
+              <KnowledgeCircleCell
+                key={area.node.id}
+                node={area.node}
+                maxPoints={maxAreaPoints}
+                frequency={resolveFrequency(area.node.name)}
+                showFrequency={variant === 'own'}
+                fullyExplored={resolveFullyExplored(area.node.name)}
+                active={area.node.id === selectedId}
+                onSelect={() =>
+                  setSelectedId(area.node.id === selectedId ? null : area.node.id)
+                }
+              />
+            ))}
           </div>
         )}
 
-        {sorted.length > top.length ? (
+        {sorted.length > 0 ? (
           <div className="pt-4">
             <button
               type="button"
@@ -229,13 +483,276 @@ export function KnowledgePeaksView({
             key={selected.node.id}
             leaf={selected}
             variant={variant}
+            frequency={resolveFrequency(selected.node.name)}
+            fullyExplored={resolveFullyExplored(selected.node.name)}
+            adopted={adopted.has(freqKey(selected.node.name))}
             onClose={() => setSelectedId(null)}
             onSelectSibling={(id) => setSelectedId(id)}
             onAdd={variant === 'own' ? adoptNode : async () => false}
+            onSetFrequency={setFrequency}
+            onAdopt={variant === 'friend' ? adoptToMyMap : undefined}
           />
         </div>
       ) : null}
     </div>
+  );
+}
+
+// The controls bar (P3): search + filter (category, rotation) + sort (mastery,
+// category). Everything is client-side over the already-loaded areas — no query,
+// no round-trip. Chips match the knowledge chrome; selected = navy fill.
+function ControlsBar({
+  search,
+  onSearch,
+  sortMode,
+  onSort,
+  categories,
+  catFilter,
+  onToggleCat,
+  showFrequencyFilter,
+  freqFilter,
+  onToggleFreq,
+}: {
+  search: string;
+  onSearch: (value: string) => void;
+  sortMode: 'mastery' | 'category';
+  onSort: (mode: 'mastery' | 'category') => void;
+  categories: string[];
+  catFilter: Set<string>;
+  onToggleCat: (field: string) => void;
+  showFrequencyFilter: boolean;
+  freqFilter: Set<TerritoryFrequency>;
+  onToggleFreq: (freq: TerritoryFrequency) => void;
+}) {
+  const pill =
+    'inline-flex min-h-8 items-center rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+  const pillStyle = (on: boolean) =>
+    on
+      ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-card)', background: 'var(--brand-navy)' }
+      : { borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' };
+  const groupLabel = 'text-[0.7rem] uppercase tracking-[0.08em] text-[var(--text-muted)]';
+
+  return (
+    <div className="mb-4 grid gap-2.5">
+      <input
+        type="search"
+        value={search}
+        onChange={(event) => onSearch(event.target.value)}
+        placeholder="Search your areas…"
+        aria-label="Search areas"
+        className="min-h-9 w-full rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={{ borderColor: 'var(--border)', background: 'var(--brand-card)', color: 'var(--brand-ink)' }}
+      />
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={groupLabel}>Sort</span>
+        {(['mastery', 'category'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onSort(mode)}
+            aria-pressed={sortMode === mode}
+            className={pill}
+            style={pillStyle(sortMode === mode)}
+          >
+            {mode === 'mastery' ? 'Mastery' : 'Category'}
+          </button>
+        ))}
+      </div>
+
+      {categories.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={groupLabel}>Category</span>
+          {categories.map((field) => (
+            <button
+              key={field}
+              type="button"
+              onClick={() => onToggleCat(field)}
+              aria-pressed={catFilter.has(field)}
+              className={pill}
+              style={pillStyle(catFilter.has(field))}
+            >
+              {categoryLabel(field)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {showFrequencyFilter ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={groupLabel}>Rotation</span>
+          {TERRITORY_FREQUENCIES.map((freq) => (
+            <button
+              key={freq}
+              type="button"
+              onClick={() => onToggleFreq(freq)}
+              aria-pressed={freqFilter.has(freq)}
+              className={pill}
+              style={pillStyle(freqFilter.has(freq))}
+            >
+              {TERRITORY_FREQUENCY_LABEL[freq]}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// One grid cell — the "planet." Core diameter/opacity ride the shared
+// CategoryCircles scale (points → size); a container additionally wears a dotted
+// Saturn ring with a moon per child (filled = a child area held, hollow = an
+// addable/ghost one), capped so a big roster stays a ring. "Never" fades the
+// core (word + opacity carry the state, never color). Ghosts are a dashed "+".
+function KnowledgeCircleCell({
+  node,
+  maxPoints,
+  frequency,
+  showFrequency,
+  fullyExplored,
+  active,
+  onSelect,
+}: {
+  node: KnowledgeTreeNode;
+  maxPoints: number;
+  frequency: TerritoryFrequency;
+  showFrequency: boolean;
+  /** P4/D7 — replaces the frequency word with the "Fully explored" honor. */
+  fullyExplored: boolean;
+  active: boolean;
+  /** Whole cell is the tap target; a ghost opens the sheet's adopt confirm (P2). */
+  onSelect?: () => void;
+}) {
+  const ghost = Boolean(node.ghost);
+  const mastered = Boolean(node.mastered);
+  const color = mastered ? 'var(--accent-gold)' : fieldColor(node.field);
+  const points = ghost ? 0 : subtreeRealPoints(node);
+  const diameter = ghost ? GHOST_DIAMETER : getCircleSize(points, maxPoints);
+  const coreR = diameter / 2;
+  const children = node.children ?? [];
+  const moons = children.slice(0, MOON_CAP);
+  const hasRing = !ghost && moons.length > 0;
+  const ringR = coreR + RING_GAP;
+  const never = !ghost && frequency === 'resting';
+  const coreOpacity = never ? 0.28 : getCircleOpacity(points, maxPoints);
+
+  const svg = (
+    <svg
+      width={CELL_SLOT}
+      height={CELL_SLOT}
+      viewBox={`${-CELL_SLOT / 2} ${-CELL_SLOT / 2} ${CELL_SLOT} ${CELL_SLOT}`}
+      aria-hidden
+      style={{ overflow: 'visible' }}
+    >
+      {ghost ? (
+        <>
+          <circle
+            r={coreR}
+            fill="none"
+            stroke="var(--brand-ink-400)"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+          />
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="var(--brand-ink-400)"
+            fontSize={coreR}
+          >
+            +
+          </text>
+        </>
+      ) : (
+        <>
+          {hasRing ? (
+            <circle
+              r={ringR}
+              fill="none"
+              stroke={color}
+              strokeOpacity={0.5}
+              strokeWidth={1}
+              strokeDasharray="2 3"
+            />
+          ) : null}
+          <circle r={coreR} fill={color} fillOpacity={coreOpacity} />
+          {points > 0 && diameter >= 34 ? (
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="var(--brand-ink)"
+              fontFamily="var(--font-serif)"
+              fontSize={Math.max(9, Math.round(coreR * 0.6))}
+            >
+              {formatPts(points)}
+            </text>
+          ) : null}
+          {moons.map((child, i) => {
+            const angle = ((-90 + i * (360 / moons.length)) * Math.PI) / 180;
+            const held = !child.ghost && (child.value ?? 0) > 0;
+            return (
+              <circle
+                key={child.id}
+                cx={Math.cos(angle) * ringR}
+                cy={Math.sin(angle) * ringR}
+                r={MOON_RADIUS}
+                fill={held ? color : 'var(--brand-card)'}
+                fillOpacity={held ? 0.9 : 1}
+                stroke={color}
+                strokeWidth={1.5}
+              />
+            );
+          })}
+        </>
+      )}
+    </svg>
+  );
+
+  const caption = (
+    <>
+      <span
+        className={`font-serif text-[12.5px] leading-tight ${
+          ghost ? 'text-[var(--text-muted)]' : 'text-[var(--brand-ink)]'
+        }`}
+      >
+        {node.name}
+      </span>
+      {ghost ? null : fullyExplored ? (
+        <span
+          className="text-[10px] font-medium uppercase tracking-[0.06em]"
+          style={{ color: GOLD_INK }}
+        >
+          ✦ Fully explored
+        </span>
+      ) : showFrequency ? (
+        <span className="text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
+          {TERRITORY_FREQUENCY_LABEL[frequency]}
+        </span>
+      ) : null}
+    </>
+  );
+
+  // Ghosts are inert this phase; owned/leaf cells are the tap target for the sheet.
+  if (!onSelect) {
+    return (
+      <div className="flex flex-col items-center gap-1 text-center">
+        {svg}
+        {caption}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      className={`flex flex-col items-center gap-1 rounded-xl p-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        active ? 'bg-[var(--brand-card)]' : 'hover:opacity-90'
+      }`}
+    >
+      {svg}
+      {caption}
+    </button>
   );
 }
 
@@ -251,22 +768,57 @@ type AddPhase =
 function PeakDetailCard({
   leaf,
   variant,
+  frequency,
+  fullyExplored,
+  adopted,
   onClose,
   onSelectSibling,
   onAdd,
+  onSetFrequency,
+  onAdopt,
 }: {
   leaf: LeafInfo;
   variant: 'own' | 'friend';
+  frequency: TerritoryFrequency;
+  /** P4/D7 — replaces the frequency editor with the honor block. */
+  fullyExplored: boolean;
+  /** P4/D9 — the viewer has already adopted this friend's area onto their map. */
+  adopted: boolean;
   onClose: () => void;
   onSelectSibling: (id: string) => void;
   onAdd: (id: string, name: string) => Promise<boolean>;
+  onSetFrequency: (name: string, frequency: TerritoryFrequency) => Promise<boolean>;
+  /** P4/D9 — friend variant only: adopt this area onto the viewer's own map. */
+  onAdopt?: (name: string) => Promise<boolean>;
 }) {
   const [phase, setPhase] = useState<AddPhase>({ step: 'idle' });
+  // Friend-adopt confirm (D8/D9): "+" → confirm → adopt onto the viewer's map.
+  const [adoptConfirm, setAdoptConfirm] = useState(false);
+  const [adoptBusy, setAdoptBusy] = useState(false);
+  // Frequency edit is self-only; the sheet remounts per leaf (keyed on node.id)
+  // so these reset on leaf switch — the "Updated" line persists until then (O3).
+  const [freqSaving, setFreqSaving] = useState(false);
+  const [freqChanged, setFreqChanged] = useState(false);
+  const [freqError, setFreqError] = useState(false);
   const node = leaf.node;
   const parent = leaf.parent;
   const siblings = (parent?.children ?? []).filter((c) => c.id !== node.id);
   const ownedSiblings = siblings.filter((c) => !c.ghost && (c.value ?? 0) > 0);
   const ghostSiblings = siblings.filter((c) => c.ghost);
+
+  // "Within this" = the child areas held inside this node (container cells).
+  const ownChildren = node.children ?? [];
+  const heldChildren = ownChildren.filter((c) => !c.ghost && (c.value ?? 0) > 0);
+  const ghostChildren = ownChildren.filter((c) => c.ghost);
+
+  // "More in {area}" expands sideways. With a parent (a leaf/sub-area opened from
+  // the list), that's the sibling roster. For a top-level area (no parent) it's
+  // the addable children of this area itself — the same "grow it next" move.
+  const areaName = parent ? parent.name : node.name;
+  const jumpSiblings = parent ? ownedSiblings : [];
+  const addSiblings = parent ? ghostSiblings : ghostChildren;
+  const showMoreIn = variant === 'own' && (jumpSiblings.length > 0 || addSiblings.length > 0);
+  const sectionBorder = { borderColor: 'var(--border)' };
 
   const actionButton =
     'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
@@ -275,6 +827,27 @@ function PeakDetailCard({
     setPhase({ step: 'adding', id, name });
     const ok = await onAdd(id, name);
     setPhase({ step: ok ? 'added' : 'failed', id, name });
+  };
+
+  // Tap a frequency row to set it (Decision B: in-place, immediate). Only an
+  // actual change fires the write and the confirmation (Decision C) — re-tapping
+  // the current state is a no-op, so the "Updated" line never lies.
+  const selectFrequency = async (next: TerritoryFrequency) => {
+    if (freqSaving || next === frequency) return;
+    setFreqSaving(true);
+    setFreqError(false);
+    const ok = await onSetFrequency(node.name, next);
+    setFreqSaving(false);
+    if (ok) setFreqChanged(true);
+    else setFreqError(true);
+  };
+
+  const confirmAdopt = async () => {
+    if (adoptBusy || !onAdopt) return;
+    setAdoptBusy(true);
+    await onAdopt(node.name);
+    setAdoptBusy(false);
+    setAdoptConfirm(false);
   };
 
   const card = (children: ReactNode) => (
@@ -376,22 +949,56 @@ function PeakDetailCard({
     );
   }
 
+  // A ghost cell is an unstarted area: the sheet is a single adopt confirm (D8 —
+  // ghost tap → "Add to your map?" before adopting). No frequency/sections until
+  // it's on the map. Uses the same optimistic add path as the ghost Add rows.
+  if (node.ghost) {
+    return card(
+      <>
+        <div className="flex items-start justify-between gap-3">
+          <p className="font-serif text-base text-[var(--brand-ink)]">
+            Add <strong>{node.name}</strong> to your map?
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid size-8 flex-none place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Questions will start appearing in your Daily Five.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => void confirmAdd(node.id, node.name)}
+            className={actionButton}
+            style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+          >
+            <Plus className="size-4" aria-hidden /> Add it
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className={actionButton}
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+          >
+            Not now
+          </button>
+        </div>
+      </>,
+    );
+  }
+
   return card(
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          {/* Where this rolls up to (leaf-first: the path is the point). */}
-          {leaf.path.length > 0 ? (
-            <p className="flex flex-wrap items-center gap-1 text-[11px] uppercase tracking-[0.06em] text-[var(--text-muted)]">
-              {leaf.path.map((ancestor, i) => (
-                <span key={ancestor.id} className="flex items-center gap-1">
-                  {i > 0 ? <ChevronRight className="size-3" aria-hidden /> : null}
-                  {ancestor.name}
-                </span>
-              ))}
-            </p>
-          ) : null}
-          <p className="mt-1 flex items-center gap-2 font-serif text-lg text-[var(--brand-ink)]">
+          <p className="flex items-center gap-2 font-serif text-lg text-[var(--brand-ink)]">
             <span
               aria-hidden
               className="size-3.5 flex-none rounded-full"
@@ -414,34 +1021,66 @@ function PeakDetailCard({
         </button>
       </div>
 
-      {variant === 'own' ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            href={`/knowledge/${encodeURIComponent(node.name)}`}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-          >
-            View details
-          </Link>
-          <Link
-            href={quizHref(node.name)}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-          >
-            Quiz me here
-          </Link>
+      {/* Part of — where this area rolls up to (read-only). Empty for a
+          top-level area, which rolls up to nothing. */}
+      {leaf.path.length > 0 ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+          <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
+            {leaf.path.map((ancestor, i) => (
+              <span key={ancestor.id} className="flex items-center gap-1">
+                {i > 0 ? (
+                  <ChevronRight className="size-3 text-[var(--text-muted)]" aria-hidden />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="size-2.5 rounded-full"
+                    style={{ background: fieldColor(ancestor.field) }}
+                  />
+                )}
+                {ancestor.name}
+              </span>
+            ))}
+          </p>
         </div>
       ) : null}
 
-      {/* Siblings — where it sits, and what's next to add inside the same area. */}
-      {parent && (ownedSiblings.length > 0 || ghostSiblings.length > 0) ? (
-        <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+      {/* Within this — the child areas you already hold inside this one. */}
+      {heldChildren.length > 0 ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
-            More in {parent.name}
+            Within this — what you hold
           </p>
-          {ownedSiblings.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {heldChildren.map((child) => (
+              <button
+                key={child.id}
+                type="button"
+                onClick={() => onSelectSibling(child.id)}
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+              >
+                <span
+                  aria-hidden
+                  className="size-3 rounded-full"
+                  style={{ background: child.mastered ? 'var(--accent-gold)' : fieldColor(child.field) }}
+                />
+                <span className="font-serif text-[var(--brand-ink)]">{child.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* More in {area} — jump to owned neighbours, or add the ghosts next to it. */}
+      {showMoreIn ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            More in {areaName}
+          </p>
+          {jumpSiblings.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {ownedSiblings.map((sib) => (
+              {jumpSiblings.map((sib) => (
                 <button
                   key={sib.id}
                   type="button"
@@ -459,9 +1098,9 @@ function PeakDetailCard({
               ))}
             </div>
           ) : null}
-          {variant === 'own' && ghostSiblings.length > 0 ? (
+          {addSiblings.length > 0 ? (
             <ul className="mt-2 grid gap-1.5">
-              {ghostSiblings.map((ghost) => (
+              {addSiblings.map((ghost) => (
                 <li key={ghost.id} className="flex items-center justify-between gap-2">
                   <span className="truncate font-serif text-sm text-[var(--brand-ink)]">
                     {ghost.name}
@@ -478,6 +1117,150 @@ function PeakDetailCard({
               ))}
             </ul>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Honor OR editor (D7/D8, last). Fully-explored replaces the editor with a
+          read-only honor block (both variants); otherwise the own variant gets the
+          frequency editor and the friend variant stays read-only. Rows come from
+          ZONES, the mirror of Territory Setup's zones (shared copy source). */}
+      {fullyExplored ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <div
+            className="flex items-center gap-3 rounded-lg p-3"
+            style={{
+              background: 'color-mix(in srgb, var(--accent-gold) 8%, var(--brand-card))',
+              border: '1px solid color-mix(in srgb, var(--accent-gold) 32%, var(--border))',
+            }}
+          >
+            <span aria-hidden className="text-2xl">
+              🏆
+            </span>
+            <span className="min-w-0">
+              <span className="block font-serif text-[15px]" style={{ color: GOLD_INK }}>
+                Fully explored
+              </span>
+              <span className="block text-xs text-[var(--text-muted)]">
+                You’ve answered every question here. New ones will appear as they’re added.
+              </span>
+            </span>
+          </div>
+        </div>
+      ) : variant === 'own' ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            How often it shows up
+          </p>
+          <div
+            className="mt-2 grid gap-1.5"
+            role="radiogroup"
+            aria-label={`How often to ask about ${node.name}`}
+          >
+            {ZONES.map(({ value, title, copy }) => {
+              const selectedFreq = value === frequency;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedFreq}
+                  disabled={freqSaving}
+                  onClick={() => void selectFrequency(value)}
+                  className="flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  style={
+                    selectedFreq
+                      ? {
+                          borderColor: 'var(--brand-navy)',
+                          background: 'var(--brand-navy)',
+                          color: 'var(--brand-card)',
+                        }
+                      : {
+                          borderColor: 'var(--border)',
+                          background: 'var(--brand-card)',
+                          color: 'var(--brand-ink)',
+                        }
+                  }
+                >
+                  <span aria-hidden className="mt-0.5 grid size-4 flex-none place-items-center">
+                    {selectedFreq ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <span
+                        className="size-3.5 rounded-full border"
+                        style={{ borderColor: 'var(--border)' }}
+                      />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-serif text-[15px] leading-tight">{title}</span>
+                    <span
+                      className={selectedFreq ? 'block text-xs opacity-80' : 'block text-xs'}
+                      style={selectedFreq ? undefined : { color: 'var(--text-muted)' }}
+                    >
+                      {copy}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Queue-drop acknowledgement (Decision C) — quiet, only on real change,
+              stays until the sheet closes or a different leaf is opened (O3). */}
+          {freqChanged ? (
+            <p className="mt-2 text-xs text-[var(--text-muted)]" aria-live="polite">
+              Updated — your next round reflects this.
+            </p>
+          ) : freqError ? (
+            <p className="mt-2 text-xs" aria-live="polite" style={{ color: 'var(--game-wrong-strong)' }}>
+              Couldn’t update it. Try again.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Friend variant (D9): adopt this area onto the VIEWER's own map. Confirm
+          first, then the shared adopt path; once taken it reads "On your map". */}
+      {variant === 'friend' && onAdopt ? (
+        <div className="mt-4 border-t pt-3" style={sectionBorder}>
+          {adopted ? (
+            <p className="inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
+              <Check className="size-4" aria-hidden /> On your map
+            </p>
+          ) : adoptConfirm ? (
+            <>
+              <p className="font-serif text-base text-[var(--brand-ink)]">
+                Add <strong>{node.name}</strong> to your map?
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={adoptBusy}
+                  onClick={() => void confirmAdopt()}
+                  className={actionButton}
+                  style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+                >
+                  <Plus className="size-4" aria-hidden /> {adoptBusy ? 'Adding…' : 'Add it'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdoptConfirm(false)}
+                  className={actionButton}
+                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                >
+                  Not now
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdoptConfirm(true)}
+              className={actionButton}
+              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+            >
+              <Plus className="size-4" aria-hidden /> Add to my map
+            </button>
+          )}
         </div>
       ) : null}
     </>,

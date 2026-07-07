@@ -2098,6 +2098,23 @@ export async function register() {
       await db.execute(sql`ALTER TABLE "QuestionSalvageProposal" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS "QuestionSalvageProposal_question_id_idx" ON "QuestionSalvageProposal" ("question_id")`);
       await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "QuestionSalvageProposal_active_question_key" ON "QuestionSalvageProposal" ("question_id") WHERE "status" = 'ready'`);
+      // Migration 0116 (D-DIFFICULTY-SIZE-COMPLETION-01): cached topic depth score
+      // that set-completion sizes the completable set from. evaluateSetCompletions
+      // would 42P01 on read if the migration recorded without the table. Self-
+      // contained; same rationale as the 0108 DomainReferencePassage guard.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DomainDepthEstimate" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "domain_key" text NOT NULL,
+          "depth_score" integer,
+          "sample_label" text,
+          "source" text NOT NULL DEFAULT 'llm',
+          "computed_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "created_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "DomainDepthEstimate_domain_key" ON "DomainDepthEstimate" ("domain_key")`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

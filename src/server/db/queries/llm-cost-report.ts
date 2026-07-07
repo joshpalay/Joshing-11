@@ -49,21 +49,40 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
     key: 'generate',
     label: 'Generating questions',
     playerFacing: false,
-    scopes: ['generate-questions', 'pool-refill-generate', 'multitudes'],
+    scopes: ['generate-questions', 'pool-refill-generate', 'multitudes', 'crafter-draft'],
   },
   {
     key: 'quality',
     label: 'Checking question quality',
     playerFacing: false,
+    // Generation-time gates + quality repair (salvage/variants). Post-hoc
+    // fact-checking now lives in its own 'verify' bucket below.
     scopes: [
       'quality-gate',
       'factual-gate',
       'critique',
-      'vet-question',
-      'recheck',
       'difficulty',
       'batch-dedupe',
       'history-dedupe',
+      'salvage-propose',
+      'enrich-variants',
+    ],
+  },
+  {
+    key: 'verify',
+    label: 'Fact-checking questions',
+    playerFacing: false,
+    // The verification pipeline — the biggest single cost centre (batch-verify
+    // alone is the top scope by calls, and carries the web-search spend). Was
+    // entirely in "Other / unmapped" before, so the digest under-named it.
+    scopes: [
+      'vet-question',
+      'recheck',
+      'batch-verify',
+      'ask-to-answer-cold',
+      'ask-to-answer-judge',
+      'audit:gate',
+      'questions-suggest-verify',
     ],
   },
   {
@@ -84,7 +103,30 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
       'interests-proofread',
       'interests-suggest',
       'interests-suggest-adjacent',
+      'interests-suggest-broader',
     ],
+  },
+  {
+    key: 'sizing',
+    label: 'Sizing & structuring topics',
+    playerFacing: false,
+    // Depth/size scoring + knowledge-graph structuring. This is where the
+    // depth-sized finite-set completion (D-DIFFICULTY-SIZE-COMPLETION-01) and
+    // mastery-v2 seeding spend lands; also the nearness/graduation adjacency.
+    scopes: [
+      'node-weight-depth',
+      'mastery-threshold-points',
+      'knowledge-structure-proposal',
+      'nearness-tree',
+    ],
+  },
+  {
+    key: 'grounding',
+    label: 'Grounding from wiki/web sources',
+    playerFacing: false,
+    // Reference-passage retrieval (D-FANDOM-GROUNDING-01). Flag-off today, so this
+    // reads $0 until the wiki-anchor flips — then its cost is named, not hidden.
+    scopes: ['domain-reference'],
   },
   {
     key: 'tagging',
@@ -98,6 +140,7 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
       'reconcile-subcategory',
       'clean-question',
       'categorize',
+      'categorize-deleak',
     ],
   },
   {

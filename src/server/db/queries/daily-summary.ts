@@ -355,16 +355,18 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     domain,
     territoryType: masteryByDomain.get(domain)?.territoryType ?? null,
   }));
-  const expansionOffer = await buildExpansionOffer(userId, touchedForExpansion);
-
   // D-SUPPLY-FINITE-SET-01 P2: designate + auto-invite domains this player just
-  // completed (answered the whole finite set). Side-effect only — it creates the
-  // AuthorInvitation that the summary's InvitationTakeoverGate then routes to
-  // /invited (the trophy). Fail-open; never blocks the summary.
+  // completed (answered the whole finite set). Creates the AuthorInvitation the
+  // summary's InvitationTakeoverGate routes to /invited (the trophy), AND marks the
+  // completed domain expansion-eligible. Runs BEFORE buildExpansionOffer so a
+  // just-completed set surfaces the graduation ("branch out") card in the SAME
+  // summary (D-DIFFICULTY-SIZE-COMPLETION-01 Phase 1b). Fail-open; never blocks.
   await evaluateSetCompletions(
     userId,
     touchedForExpansion.map((t) => t.domain),
   );
+
+  const expansionOffer = await buildExpansionOffer(userId, touchedForExpansion);
 
   return {
     date: dateString,

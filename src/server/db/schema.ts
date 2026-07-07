@@ -1739,6 +1739,32 @@ export const domainReferencePassage = pgTable(
   ],
 );
 
+// D-DIFFICULTY-SIZE-COMPLETION-01 (0116): cached topic DEPTH SCORE (1-10), keyed
+// on the folded domain_key so it covers every played canonical_subcategory, not
+// just the few authored KnowledgeNodes. Set-completion derives a depth-sized
+// target question count from this at read time (count = coefficient x depth^2),
+// so the target curve is env-tunable with no re-seed. depth_score NULL is a
+// negative cache (sizing ran, LLM returned nothing → readers use the default
+// depth). One row per domain_key. Removable as a unit.
+export const domainDepthEstimates = pgTable(
+  'DomainDepthEstimate',
+  {
+    id: id(),
+    domainKey: text('domain_key').notNull(),
+    // 1-10 breadth/depth (scoreDomainDepth). NULL = negative cache.
+    depthScore: integer('depth_score'),
+    // A canonical_subcategory that folded to this key — for debugging only.
+    sampleLabel: text('sample_label'),
+    // 'llm' (scored) | 'default' (LLM unavailable/null; using the code default).
+    source: text('source').notNull().default('llm'),
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('DomainDepthEstimate_domain_key').on(table.domainKey),
+  ],
+);
+
 // Batch-verify async mode (0106): one row per Anthropic Message Batch of
 // verification requests submitted by /api/cron/batch-verify-questions when
 // BATCH_VERIFY_ASYNC_ENABLED is on. The daily cron harvests 'submitted' runs
