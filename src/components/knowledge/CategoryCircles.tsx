@@ -33,18 +33,21 @@ export function getDomainColor(broadCategory: string): string {
 
 // ── Circle sizing — matches PortraitCircles constants ─────────────────────────
 
-const MIN_SIZE = 30;
-const MAX_SIZE = 72;
+// Exported so the knowledge circle-grid view (KnowledgePeaksView) draws its
+// planets on the exact same point→diameter / point→opacity scale as the
+// game/round summary circles — one sizing language across the surfaces.
+export const MIN_SIZE = 30;
+export const MAX_SIZE = 72;
 const MIN_OPACITY = 0.22;
 const SEED = 0.08;
 const DURATION = 800;
 
-function getCircleSize(pts: number, maxPts: number): number {
+export function getCircleSize(pts: number, maxPts: number): number {
   const n = pts / Math.max(maxPts, 1);
   return Math.round(MIN_SIZE + n * (MAX_SIZE - MIN_SIZE));
 }
 
-function getCircleOpacity(pts: number, maxPts: number): number {
+export function getCircleOpacity(pts: number, maxPts: number): number {
   const n = pts / Math.max(maxPts, 1);
   return MIN_OPACITY + n * (1 - MIN_OPACITY);
 }

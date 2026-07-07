@@ -4,8 +4,14 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
 
-import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
+import { sumRealPoints, type KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import {
+  MIN_SIZE,
+  MAX_SIZE,
+  getCircleSize,
+  getCircleOpacity,
+} from '@/components/knowledge/CategoryCircles';
 import {
   TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_COPY,
@@ -14,14 +20,23 @@ import {
   type TerritoryFrequency,
 } from '@/lib/daily/territory-model';
 
-// D-KNOWLEDGE-MAP-USABILITY-01 (leaf-first follow-up) — the "New" knowledge
-// view. Where the bubble map leads with rolled-up parent clusters, this leads
-// with the specific things you're smart at (Hamlet, the WTC, Wagner's Ring
-// Cycle) as trophies. Tapping a peak shows where it rolls UP to (its parent
-// area) and the sibling areas you could ADD next. Same tree data as the map,
-// same confirmed-add path — nothing here is a new endpoint or new mastery math.
+// D-KNOWLEDGE-CIRCLE-GRID-01 (P1) — the knowledge "peaks" view rendered as a
+// circle grid: each top-level area a planet sized by points, containers wearing
+// a dotted Saturn ring of moons (filled = a child area you hold, hollow = one
+// you could add), the Daily Five frequency spelled out beneath, and unstarted
+// areas as dashed "+" ghosts. Same tree payload, same mastery math — this phase
+// is display only (the detail sheet is untouched; editing lands in P2).
 
-const TOP_PEAKS = 10;
+// Saturn geometry (matches the ratified mock): the dotted ring sits a fixed gap
+// outside the core, with evenly-spaced moon dots on it, capped so a big roster
+// stays a ring and not a crowd.
+const RING_GAP = 13;
+const MOON_RADIUS = 5;
+const MOON_CAP = 10;
+// Every cell reserves the same square so circles align on a grid baseline
+// regardless of their own diameter; the ring + moons extend into the padding.
+const CELL_SLOT = MAX_SIZE + 2 * (RING_GAP + MOON_RADIUS) + 4;
+const GHOST_DIAMETER = MIN_SIZE + 6;
 
 function fieldColor(field: string | null | undefined): string {
   return field ? `var(--cat-${field}, var(--brand-ink-400))` : 'var(--brand-ink-400)';
@@ -150,8 +165,40 @@ export function KnowledgePeaksView({
     () => [...leaves].sort((a, b) => (b.node.value ?? 0) - (a.node.value ?? 0)),
     [leaves],
   );
-  const top = sorted.slice(0, TOP_PEAKS);
-  const selected = selectedId ? leaves.find((l) => l.node.id === selectedId) ?? null : null;
+
+  // Grid cells = the top-level areas of the tree. A node with children reads as a
+  // container (Saturn ring of moons); a bare node reads as a leaf; a ghost reads
+  // as an unstarted, addable area. Held areas sort by rolled-up points; ghosts
+  // trail at the end. LeafInfo-shaped so the existing detail sheet takes them
+  // unchanged (path/parent stay empty — top-level areas roll up to nothing).
+  const areas = useMemo<LeafInfo[]>(
+    () => (tree.children ?? []).map((node) => ({ node, path: [], parent: null, topParent: null })),
+    [tree],
+  );
+  const areaCells = useMemo(() => {
+    return [...areas].sort((a, b) => {
+      const ag = a.node.ghost ? 1 : 0;
+      const bg = b.node.ghost ? 1 : 0;
+      if (ag !== bg) return ag - bg;
+      return sumRealPoints(b.node) - sumRealPoints(a.node);
+    });
+  }, [areas]);
+  const maxAreaPoints = useMemo(
+    () =>
+      Math.max(
+        1,
+        ...areaCells.filter((c) => !c.node.ghost).map((c) => sumRealPoints(c.node)),
+      ),
+    [areaCells],
+  );
+
+  // Selection resolves from the area cells first, then the flat leaf list (the
+  // "see all" expansion), so either surface opens the same sheet.
+  const selected = selectedId
+    ? areas.find((a) => a.node.id === selectedId) ??
+      leaves.find((l) => l.node.id === selectedId) ??
+      null
+    : null;
 
   // Full picture, grouped by top area — the "see everything" expansion.
   const groups = useMemo(() => {
@@ -196,57 +243,31 @@ export function KnowledgePeaksView({
           What you’re smart at
         </p>
 
-        {top.length === 0 ? (
+        {areaCells.length === 0 ? (
           <p className="py-10 text-center font-serif text-[var(--text-muted)]">
             Answer and write questions and your peaks will show up here.
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {top.map((leaf) => {
-              const mastered = Boolean(leaf.node.mastered);
-              const active = leaf.node.id === selectedId;
-              return (
-                <button
-                  key={leaf.node.id}
-                  type="button"
-                  onClick={() => setSelectedId(active ? null : leaf.node.id)}
-                  aria-pressed={active}
-                  className="group flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  style={{
-                    borderColor: active ? 'var(--brand-navy)' : 'var(--border)',
-                    background: 'var(--brand-card)',
-                    borderLeftWidth: 4,
-                    borderLeftColor: mastered ? 'var(--accent-gold)' : fieldColor(leaf.node.field),
-                  }}
-                >
-                  <span className="font-serif text-[15px] leading-tight text-[var(--brand-ink)]">
-                    {leaf.node.name}
-                  </span>
-                  <span className="mt-auto text-[11px] text-[var(--text-muted)]">
-                    {mastered ? 'Mastery · ' : ''}
-                    {formatPts(leaf.node.value ?? 0)} pts
-                  </span>
-                  {leaf.topParent ? (
-                    <span className="truncate text-[10px] uppercase tracking-[0.06em] text-[var(--text-muted)]">
-                      {leaf.topParent.name}
-                    </span>
-                  ) : null}
-                  {/* Read-only frequency glance (Decision 2) — quiet, not a control. */}
-                  {variant === 'own' ? (
-                    <span
-                      className="mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]"
-                      style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
-                    >
-                      {TERRITORY_FREQUENCY_LABEL[resolveFrequency(leaf.node.name)]}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
+          <div className="grid grid-cols-3 gap-x-1 gap-y-6">
+            {areaCells.map((area) => (
+              <KnowledgeCircleCell
+                key={area.node.id}
+                node={area.node}
+                maxPoints={maxAreaPoints}
+                frequency={resolveFrequency(area.node.name)}
+                showFrequency={variant === 'own'}
+                active={area.node.id === selectedId}
+                onSelect={
+                  area.node.ghost
+                    ? undefined
+                    : () => setSelectedId(area.node.id === selectedId ? null : area.node.id)
+                }
+              />
+            ))}
           </div>
         )}
 
-        {sorted.length > top.length ? (
+        {sorted.length > 0 ? (
           <div className="pt-4">
             <button
               type="button"
@@ -318,6 +339,153 @@ export function KnowledgePeaksView({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// One grid cell — the "planet." Core diameter/opacity ride the shared
+// CategoryCircles scale (points → size); a container additionally wears a dotted
+// Saturn ring with a moon per child (filled = a child area held, hollow = an
+// addable/ghost one), capped so a big roster stays a ring. "Never" fades the
+// core (word + opacity carry the state, never color). Ghosts are a dashed "+".
+function KnowledgeCircleCell({
+  node,
+  maxPoints,
+  frequency,
+  showFrequency,
+  active,
+  onSelect,
+}: {
+  node: KnowledgeTreeNode;
+  maxPoints: number;
+  frequency: TerritoryFrequency;
+  showFrequency: boolean;
+  active: boolean;
+  /** Ghost cells are display-only in P1 (adopt lands in P2), so they pass none. */
+  onSelect?: () => void;
+}) {
+  const ghost = Boolean(node.ghost);
+  const mastered = Boolean(node.mastered);
+  const color = mastered ? 'var(--accent-gold)' : fieldColor(node.field);
+  const points = ghost ? 0 : sumRealPoints(node);
+  const diameter = ghost ? GHOST_DIAMETER : getCircleSize(points, maxPoints);
+  const coreR = diameter / 2;
+  const children = node.children ?? [];
+  const moons = children.slice(0, MOON_CAP);
+  const hasRing = !ghost && moons.length > 0;
+  const ringR = coreR + RING_GAP;
+  const never = !ghost && frequency === 'resting';
+  const coreOpacity = never ? 0.28 : getCircleOpacity(points, maxPoints);
+
+  const svg = (
+    <svg
+      width={CELL_SLOT}
+      height={CELL_SLOT}
+      viewBox={`${-CELL_SLOT / 2} ${-CELL_SLOT / 2} ${CELL_SLOT} ${CELL_SLOT}`}
+      aria-hidden
+      style={{ overflow: 'visible' }}
+    >
+      {ghost ? (
+        <>
+          <circle
+            r={coreR}
+            fill="none"
+            stroke="var(--brand-ink-400)"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+          />
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="var(--brand-ink-400)"
+            fontSize={coreR}
+          >
+            +
+          </text>
+        </>
+      ) : (
+        <>
+          {hasRing ? (
+            <circle
+              r={ringR}
+              fill="none"
+              stroke={color}
+              strokeOpacity={0.5}
+              strokeWidth={1}
+              strokeDasharray="2 3"
+            />
+          ) : null}
+          <circle r={coreR} fill={color} fillOpacity={coreOpacity} />
+          {points > 0 && diameter >= 34 ? (
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="var(--brand-ink)"
+              fontFamily="var(--font-serif)"
+              fontSize={Math.max(9, Math.round(coreR * 0.6))}
+            >
+              {formatPts(points)}
+            </text>
+          ) : null}
+          {moons.map((child, i) => {
+            const angle = ((-90 + i * (360 / moons.length)) * Math.PI) / 180;
+            const held = !child.ghost && (child.value ?? 0) > 0;
+            return (
+              <circle
+                key={child.id}
+                cx={Math.cos(angle) * ringR}
+                cy={Math.sin(angle) * ringR}
+                r={MOON_RADIUS}
+                fill={held ? color : 'var(--brand-card)'}
+                fillOpacity={held ? 0.9 : 1}
+                stroke={color}
+                strokeWidth={1.5}
+              />
+            );
+          })}
+        </>
+      )}
+    </svg>
+  );
+
+  const caption = (
+    <>
+      <span
+        className={`font-serif text-[12.5px] leading-tight ${
+          ghost ? 'text-[var(--text-muted)]' : 'text-[var(--brand-ink)]'
+        }`}
+      >
+        {node.name}
+      </span>
+      {!ghost && showFrequency ? (
+        <span className="text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
+          {TERRITORY_FREQUENCY_LABEL[frequency]}
+        </span>
+      ) : null}
+    </>
+  );
+
+  // Ghosts are inert this phase; owned/leaf cells are the tap target for the sheet.
+  if (!onSelect) {
+    return (
+      <div className="flex flex-col items-center gap-1 text-center">
+        {svg}
+        {caption}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      className={`flex flex-col items-center gap-1 rounded-xl p-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        active ? 'bg-[var(--brand-card)]' : 'hover:opacity-90'
+      }`}
+    >
+      {svg}
+      {caption}
+    </button>
   );
 }
 
