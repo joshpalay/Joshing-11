@@ -10,7 +10,7 @@ export function AdminTabs({
   active,
   needingReviewCount,
 }: {
-  active: 'crafter' | 'reports' | 'knowledge';
+  active: 'crafter' | 'reports' | 'knowledge' | 'questions';
   needingReviewCount?: number;
 }) {
   const tabClass = 'rounded-md border px-3 py-1.5 text-sm font-medium';
@@ -45,6 +45,14 @@ export function AdminTabs({
         aria-current={active === 'knowledge' ? 'page' : undefined}
       >
         Knowledge graph
+      </Link>
+      <Link
+        href="/admin/questions"
+        className={tabClass}
+        style={active === 'questions' ? activeStyle : idleStyle}
+        aria-current={active === 'questions' ? 'page' : undefined}
+      >
+        Questions
       </Link>
     </nav>
   );
