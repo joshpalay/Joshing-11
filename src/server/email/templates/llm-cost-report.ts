@@ -1,4 +1,5 @@
 import type { CostLatencyReport } from '@/server/db/queries/llm-cost-report';
+import type { SupplyCoverageSummary } from '@/server/daily/supply-coverage';
 
 /**
  * Email template for the weekly LLM cost & latency digest
@@ -77,9 +78,88 @@ function td(value: string, align: 'left' | 'right'): string {
   return `<td align="${align}" style="font-family:${SERIF};font-size:15px;color:${INK};padding:6px 0;border-bottom:1px solid ${RULE};">${value}</td>`;
 }
 
+// Domain-supply section (D-SUPPLY-FINITENESS-01 #5). Alarm-first: discrepancy
+// domains (generation went dry FAR short of a trusted corpus estimate — a
+// supply problem, not completion) lead; raise-estimate (still yielding past the
+// seed) follows; the healthy states are one summary line. Renders nothing when
+// the summary is absent (coverage read failed — fail-open) or empty.
+function supplySectionHtml(supply: SupplyCoverageSummary | null | undefined): string {
+  if (!supply || supply.entries.length === 0) return '';
+  const { counts, discrepancies, raiseEstimates } = supply;
+
+  const discRows = discrepancies
+    .slice(0, 8)
+    .map((entry) => {
+      const est = entry.estimatedQuestions == null ? '—' : num(entry.estimatedQuestions);
+      const ratio = entry.ratio == null ? '—' : pct(entry.ratio);
+      return `<tr>${td(escapeHtml(entry.label), 'left')}${td(num(entry.realized), 'right')}${td(est, 'right')}${td(ratio, 'right')}</tr>`;
+    })
+    .join('');
+
+  const raiseLine =
+    raiseEstimates.length > 0
+      ? `<tr><td style="font-family:${SERIF};font-size:14px;color:${INK_SOFT};padding:8px 0 0;">Estimate too low (still yielding past it): ${raiseEstimates
+          .slice(0, 5)
+          .map((entry) => escapeHtml(entry.label))
+          .join(', ')}${raiseEstimates.length > 5 ? ` +${raiseEstimates.length - 5} more` : ''}.</td></tr>`
+      : '';
+
+  const healthyLine = `<tr><td style="font-family:${SANS};font-size:12px;color:${INK_FAINT};padding-top:10px;">${num(
+    counts.filling,
+  )} filling · ${num(counts.soft_finite)} resting (believed complete) · ${num(
+    counts.unsized,
+  )} unsized</td></tr>`;
+
+  const discBlock =
+    discrepancies.length > 0
+      ? `<tr><td style="font-family:${SERIF};font-size:15px;line-height:1.5;color:${INK};padding-bottom:8px;"><strong>${num(
+          discrepancies.length,
+        )} domain${discrepancies.length === 1 ? '' : 's'} went dry far short of a trusted size estimate</strong> — a supply problem, not completion. Worst first:</td></tr>
+      <tr><td>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          <tr>${th('Domain', 'left')}${th('Have', 'right')}${th('Est.', 'right')}${th('Coverage', 'right')}</tr>
+          ${discRows}
+        </table>
+      </td></tr>`
+      : `<tr><td style="font-family:${SERIF};font-size:15px;color:${INK_SOFT};">No supply discrepancies — no domain is dry while far short of a trusted estimate.</td></tr>`;
+
+  return `${eyebrow('Domain supply')}${discBlock}${raiseLine}${healthyLine}`;
+}
+
+// Plain-text twin of the section, appended to the markdown body so the text
+// part carries the same alarm (the STORED cost-report artifact is unchanged).
+function supplySectionText(supply: SupplyCoverageSummary | null | undefined): string {
+  if (!supply || supply.entries.length === 0) return '';
+  const lines: string[] = ['', '## Domain supply', ''];
+  if (supply.discrepancies.length > 0) {
+    lines.push(
+      `${supply.discrepancies.length} domain(s) went dry far short of a trusted size estimate (supply problem, not completion):`,
+    );
+    for (const entry of supply.discrepancies.slice(0, 8)) {
+      lines.push(
+        `- ${entry.label}: ${entry.realized}/${entry.estimatedQuestions ?? '—'} (${
+          entry.ratio == null ? '—' : `${Math.round(entry.ratio * 100)}%`
+        }), dry ${entry.consecutiveDryRounds} rounds`,
+      );
+    }
+  } else {
+    lines.push('No supply discrepancies.');
+  }
+  if (supply.raiseEstimates.length > 0) {
+    lines.push(
+      `Estimate too low (raise): ${supply.raiseEstimates.map((entry) => entry.label).join(', ')}`,
+    );
+  }
+  lines.push(
+    `${supply.counts.filling} filling · ${supply.counts.soft_finite} resting · ${supply.counts.unsized} unsized`,
+  );
+  return lines.join('\n');
+}
+
 export function buildCostReportEmailTemplate(params: {
   report: CostLatencyReport;
   markdown: string;
+  supply?: SupplyCoverageSummary | null;
 }): { subject: string; html: string; text: string } {
   const { report: r, markdown } = params;
   const range = `${fmtDate(r.periodStart)}–${fmtDate(r.periodEnd)}`;
@@ -166,6 +246,8 @@ export function buildCostReportEmailTemplate(params: {
                   : ''
               }
 
+              ${supplySectionHtml(params.supply)}
+
               ${unpricedNote}
             </table>
           </td></tr>
@@ -175,5 +257,5 @@ export function buildCostReportEmailTemplate(params: {
   </body>
 </html>`;
 
-  return { subject, html, text: markdown };
+  return { subject, html, text: markdown + supplySectionText(params.supply) };
 }

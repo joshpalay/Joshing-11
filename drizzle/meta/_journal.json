@@ -827,6 +827,13 @@
 			"when": 1786665600000,
 			"tag": "0117_domain_size_estimate",
 			"breakpoints": true
+		},
+		{
+			"idx": 118,
+			"version": "7",
+			"when": 1786752000000,
+			"tag": "0118_supply_dry_tracking",
+			"breakpoints": true
 		}
 	]
 }

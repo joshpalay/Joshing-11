@@ -2128,6 +2128,10 @@ export async function register() {
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "wikidata_qid" text`);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "fandom_host" text`);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "resolved_at" timestamp with time zone`);
+      // Migration 0118 (D-SUPPLY-FINITENESS-01 #4): dry-round observation
+      // counters for the supply-state machine. Additive + nullable/defaulted.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "consecutive_dry_rounds" integer NOT NULL DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "last_yield_at" timestamp with time zone`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

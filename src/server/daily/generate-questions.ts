@@ -47,6 +47,7 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { recordSupplyYieldObservation } from '@/server/db/queries/domain-depth-estimate';
 import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { adminUserIds } from '@/server/auth/admin';
@@ -2444,6 +2445,23 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         domainReferences,
       },
     );
+
+    // Dry-round observation (D-SUPPLY-FINITENESS-01 #4): of the domains OFFERED
+    // to fresh generation this round, which yielded a surviving row and which
+    // came back empty? Feeds the consecutive_dry_rounds counter the supply-state
+    // machine reads (K in a row → provisionally dry). Matched on the folded
+    // domain_key because the persist path reconciles labels. Fire-and-forget
+    // telemetry: never blocks or fails the build.
+    try {
+      const yieldedKeys = new Set(llmGenerated.map((row) => domainKey(row.canonicalSubcategory)));
+      const offeredKeys = [...new Set(domainsForLlm.map((domain) => domainKey(domain)))];
+      void recordSupplyYieldObservation({
+        yieldedDomainKeys: [...yieldedKeys],
+        dryDomainKeys: offeredKeys.filter((key) => !yieldedKeys.has(key)),
+      }).catch(() => {});
+    } catch {
+      // observation-only
+    }
   }
 
   return [...bankPicks, ...llmGenerated];
