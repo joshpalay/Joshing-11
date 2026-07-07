@@ -172,7 +172,202 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+const EDITABLE_VISIBILITIES = ['public', 'friends', 'private'];
+
+// Phase 4 edit form. Minimal ratified field set (Decision B). answerText and
+// acceptedAlternatives are grading-adjacent — a change to either requires an
+// explicit confirm before persisting (grading must fail toward the player).
+function EditForm({
+  detail,
+  onDone,
+  onCancel,
+}: {
+  detail: AdminQuestionDetail;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [questionText, setQuestionText] = useState(detail.questionText);
+  const [answerText, setAnswerText] = useState(detail.answerText);
+  const [acceptedAlternatives, setAcceptedAlternatives] = useState(detail.acceptedAlternatives.join('\n'));
+  const [factualExplanation, setFactualExplanation] = useState(detail.factualExplanation ?? '');
+  const [category, setCategory] = useState(detail.category);
+  const [visibility, setVisibility] = useState(detail.visibility);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const altsArray = acceptedAlternatives
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // Build a patch of only the fields that actually changed.
+    const patch: Record<string, unknown> = {};
+    if (questionText.trim() !== detail.questionText) patch.questionText = questionText.trim();
+    if (answerText.trim() !== detail.answerText) patch.answerText = answerText.trim();
+    if (JSON.stringify(altsArray) !== JSON.stringify(detail.acceptedAlternatives)) {
+      patch.acceptedAlternatives = altsArray;
+    }
+    if ((factualExplanation.trim() || null) !== (detail.factualExplanation ?? null)) {
+      patch.factualExplanation = factualExplanation.trim() || null;
+    }
+    if (category !== detail.category) patch.category = category;
+    if (visibility !== detail.visibility) patch.visibility = visibility;
+
+    if (Object.keys(patch).length === 0) {
+      setError('No changes to save.');
+      return;
+    }
+
+    // Grading-adjacent guard: confirm before changing how answers grade.
+    const gradingChanged = 'answerText' in patch || 'acceptedAlternatives' in patch;
+    if (gradingChanged) {
+      const ok = window.confirm(
+        'This changes the answer key or accepted alternatives, which changes how past and future answers grade. Save?',
+      );
+      if (!ok) return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/questions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'edit', id: detail.id, ...patch }),
+      });
+      if (!res.ok) {
+        setError(`Save failed (${res.status}).`);
+        setBusy(false);
+        return;
+      }
+      onDone();
+    } catch {
+      setError('Save failed.');
+      setBusy(false);
+    }
+  }
+
+  const inputClass = 'w-full rounded-md border px-2 py-1.5 text-[13px]';
+  const inputStyle = { borderColor: 'var(--border)', background: 'var(--brand-field)', color: 'var(--brand-ink)' };
+  const labelClass = 'mb-1 block text-[11px] uppercase tracking-[0.04em]';
+  const labelStyle = { color: 'var(--text-muted)' };
+
+  return (
+    <div className="mb-4">
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Question
+        </label>
+        <textarea rows={3} className={inputClass} style={inputStyle} value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Answer (grading key)
+        </label>
+        <input className={inputClass} style={inputStyle} value={answerText} onChange={(e) => setAnswerText(e.target.value)} />
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Accepted alternatives (one per line)
+        </label>
+        <textarea rows={3} className={inputClass} style={inputStyle} value={acceptedAlternatives} onChange={(e) => setAcceptedAlternatives(e.target.value)} />
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Factual explanation
+        </label>
+        <textarea rows={3} className={inputClass} style={inputStyle} value={factualExplanation} onChange={(e) => setFactualExplanation(e.target.value)} />
+      </div>
+      <div className="mb-3 flex gap-3">
+        <div className="flex-1">
+          <label className={labelClass} style={labelStyle}>
+            Category
+          </label>
+          <select className={inputClass} style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)}>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className={labelClass} style={labelStyle}>
+            Visibility
+          </label>
+          <select className={inputClass} style={inputStyle} value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+            {EDITABLE_VISIBILITIES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+            {/* A blocked row keeps its value visible but can't be re-selected. */}
+            {detail.visibility === 'blocked' ? <option value="blocked">blocked</option> : null}
+          </select>
+        </div>
+      </div>
+
+      {error ? (
+        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={save}
+          className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onCancel}
+          className="rounded-md border px-3 py-1.5 text-sm"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose: () => void }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function mutate(action: 'delete' | 'restore') {
+    if (action === 'delete' && !window.confirm('Soft-delete this question? It stays inspectable under "show deleted" and can be restored.')) {
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch('/api/admin/questions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, id: detail.id }),
+      });
+      if (!res.ok) {
+        setActionError(`${action === 'delete' ? 'Delete' : 'Restore'} failed (${res.status}).`);
+        setBusy(false);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setActionError(`${action === 'delete' ? 'Delete' : 'Restore'} failed.`);
+      setBusy(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end"
@@ -206,6 +401,64 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
             Close
           </button>
         </div>
+
+        {/* Phase 4 actions. Deleted rows offer Restore instead of Edit/Delete. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {detail.deletedAt ? (
+            <>
+              <span className="text-[13px]" style={{ color: 'var(--danger)' }}>
+                Deleted {detail.deletedAt.slice(0, 10)}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => mutate('restore')}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              >
+                Restore
+              </button>
+            </>
+          ) : (
+            <>
+              {!editing ? (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded-md border px-3 py-1.5 text-sm font-medium"
+                  style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                >
+                  Edit
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => mutate('delete')}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+        {actionError ? (
+          <p className="mb-3 text-[13px]" style={{ color: 'var(--danger)' }}>
+            {actionError}
+          </p>
+        ) : null}
+
+        {editing ? (
+          <EditForm
+            detail={detail}
+            onDone={() => {
+              setEditing(false);
+              router.refresh();
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        ) : null}
 
         <Group title="Content">
           <Field label="Question" value={detail.questionText} />
@@ -613,7 +866,7 @@ export function AdminQuestionsClient({
         </div>
       </div>
 
-      {detail ? <DetailSheet detail={detail} onClose={closeDetail} /> : null}
+      {detail ? <DetailSheet key={detail.id} detail={detail} onClose={closeDetail} /> : null}
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db, questions, users } from '@/server/db';
 import { resolveAuthorDisplay, parseQuestionSource } from '@/lib/questions-types';
@@ -93,6 +93,115 @@ const MAX_PAGE_SIZE = 200;
 
 function isoOrNull(value: Date | null): string | null {
   return value ? value.toISOString() : null;
+}
+
+// ── Phase 4 mutations (admin-gated; the caller re-checks isAdminUser) ─────────
+// WHY these live here rather than reusing questions.ts's updateQuestion/
+// deleteQuestion: those are USER-SCOPED — they resolve the row by
+// (id, creatorId=userId) and block edits on in-use rows, so they cannot serve an
+// admin editing another creator's (or a house) question. editQuestionContent
+// (machine-demotions.ts) is admin-safe but covers only 3 of the 6 minimal fields
+// AND unconditionally clears the verification stamp (wrong for a visibility-only
+// edit). So these helpers reuse the canonical MECHANICS — the soft-delete
+// primitive (deletedAt) and the "content changed ⇒ re-verify" stamp-clear that
+// editQuestionContent established — without reimplementing a divergent delete.
+
+export type AdminEditQuestionInput = {
+  questionText?: string;
+  answerText?: string;
+  acceptedAlternatives?: string[];
+  factualExplanation?: string | null;
+  category?: string;
+  visibility?: string;
+};
+
+export type AdminMutationResult = { ok: boolean; reason?: 'not_found' | 'no_fields' };
+
+// Edit a question as an admin. Grading-adjacent fields (question/answer/
+// alternatives/explanation) trigger the same canon editQuestionContent applies:
+// the verification stamp is cleared so the batch-verify sweep re-fact-checks the
+// edit, trustTier records a human shaped the row, and a demoted row returns to
+// circulation. category/visibility are metadata and do NOT touch the stamp.
+export async function adminEditQuestion(
+  id: string,
+  input: AdminEditQuestionInput,
+): Promise<AdminMutationResult> {
+  const values: Partial<typeof questions.$inferInsert> = {};
+  let contentChanged = false;
+
+  if (input.questionText !== undefined) {
+    values.questionText = input.questionText;
+    contentChanged = true;
+  }
+  if (input.answerText !== undefined) {
+    values.answerText = input.answerText;
+    contentChanged = true;
+  }
+  if (input.acceptedAlternatives !== undefined) {
+    values.acceptedAlternatives = input.acceptedAlternatives;
+    contentChanged = true;
+  }
+  if (input.factualExplanation !== undefined) {
+    values.factualExplanation = input.factualExplanation || null;
+    contentChanged = true;
+  }
+  if (input.category !== undefined) {
+    values.category = input.category as typeof questions.$inferInsert.category;
+    // Mirror updateQuestion: an explicit category edit clears the override flag.
+    values.categoryOverridden = false;
+  }
+  if (input.visibility !== undefined) {
+    values.visibility = input.visibility as typeof questions.$inferInsert.visibility;
+  }
+
+  if (Object.keys(values).length === 0) return { ok: false, reason: 'no_fields' };
+
+  // Only edit rows that still exist (deleted rows are restored first, not edited).
+  const [existing] = await db
+    .select({ publicStatus: questions.publicStatus })
+    .from(questions)
+    .where(and(eq(questions.id, id), isNull(questions.deletedAt)))
+    .limit(1);
+  if (!existing) return { ok: false, reason: 'not_found' };
+
+  if (contentChanged) {
+    // Canon (editQuestionContent): the facts changed, so the old stamp no longer
+    // vouches — clear it back into the sweep's dragnet and mark human-shaped.
+    values.verifiedAt = null;
+    values.verificationVerdict = null;
+    values.verificationReason = null;
+    values.trustTier = 'human_validated';
+    if (existing.publicStatus === 'needs_review') values.publicStatus = 'not_scored';
+  }
+  values.updatedAt = new Date();
+
+  await db.update(questions).set(values).where(eq(questions.id, id));
+  return { ok: true };
+}
+
+// Admin soft-delete — reuses the canonical soft-delete primitive (deletedAt),
+// never a hard DELETE. No in-use guard (an admin override is deliberate). A
+// no-op on an already-deleted row.
+export async function adminSoftDeleteQuestion(id: string): Promise<AdminMutationResult> {
+  const updated = await db
+    .update(questions)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(questions.id, id), isNull(questions.deletedAt)))
+    .returning({ id: questions.id });
+  if (updated.length === 0) return { ok: false, reason: 'not_found' };
+  return { ok: true };
+}
+
+// Admin restore — the inverse of the soft-delete (deletedAt back to NULL). Since
+// delete is soft, restore must exist. A no-op on a row that isn't deleted.
+export async function adminRestoreQuestion(id: string): Promise<AdminMutationResult> {
+  const updated = await db
+    .update(questions)
+    .set({ deletedAt: null, updatedAt: new Date() })
+    .where(and(eq(questions.id, id), isNotNull(questions.deletedAt)))
+    .returning({ id: questions.id });
+  if (updated.length === 0) return { ok: false, reason: 'not_found' };
+  return { ok: true };
 }
 
 // The full read-only record for the Phase 3 detail view. Every non-embedding
