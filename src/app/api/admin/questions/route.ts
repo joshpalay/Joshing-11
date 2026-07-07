@@ -30,6 +30,10 @@ const editSchema = z.object({
   factualExplanation: z.string().trim().max(4000).nullable().optional(),
   category: z.enum(CATEGORIES).optional(),
   visibility: z.enum(['public', 'friends', 'private']).optional(),
+  // Re-attribution to the house author (creator_id NULL + source house_authored).
+  // Only 'house' is settable here — reassigning to a specific person would need a
+  // person picker this tool doesn't have.
+  attribution: z.enum(['house']).optional(),
 });
 
 const bodySchema = z.discriminatedUnion('action', [
@@ -72,6 +76,7 @@ export async function POST(request: NextRequest) {
     factualExplanation: fields.factualExplanation,
     category: fields.category,
     visibility: fields.visibility,
+    attribution: fields.attribution,
   };
   if (Object.values(patch).every((v) => v === undefined)) {
     return NextResponse.json({ error: 'validation' }, { status: 400 });

@@ -113,6 +113,13 @@ export type AdminEditQuestionInput = {
   factualExplanation?: string | null;
   category?: string;
   visibility?: string;
+  // Re-attribution. 'house' re-sources the question to the labeled non-human
+  // house author (creator_id NULL + source 'house_authored') — the same override
+  // the crafter "keep" flow applies. NOT a tombstone: authorDeleted stays false
+  // (a deliberate re-attribution, not an account-deletion retention). One-way in
+  // this tool: the original creator link is dropped, so there is no house→person
+  // reverse without a person picker.
+  attribution?: 'house';
 };
 
 export type AdminMutationResult = { ok: boolean; reason?: 'not_found' | 'no_fields' };
@@ -152,6 +159,12 @@ export async function adminEditQuestion(
   }
   if (input.visibility !== undefined) {
     values.visibility = input.visibility as typeof questions.$inferInsert.visibility;
+  }
+  if (input.attribution === 'house') {
+    // House marker: creator_id NULL + source 'house_authored' (crafter-keep
+    // precedent). Not a content change — the verification stamp is untouched.
+    values.creatorId = null;
+    values.source = 'house_authored';
   }
 
   if (Object.keys(values).length === 0) return { ok: false, reason: 'no_fields' };
