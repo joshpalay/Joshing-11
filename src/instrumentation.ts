@@ -2115,6 +2115,19 @@ export async function register() {
       `);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "DomainDepthEstimate_domain_key" ON "DomainDepthEstimate" ("domain_key")`);
+      // Migration 0117 (D-SUPPLY-FINITENESS-01): corpus-grounded size columns on
+      // DomainDepthEstimate. Additive + nullable; getTargetQuestionCountForDomains
+      // reads estimated_questions and would 42703 on an un-migrated DB. Same guard
+      // rationale as the 0116 block above.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "estimated_questions" integer`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "corpus_count" integer`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "shape" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "confidence" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "basis" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "wikipedia_title" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "wikidata_qid" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "fandom_host" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "resolved_at" timestamp with time zone`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }
