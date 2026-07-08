@@ -11,9 +11,10 @@
  * queue. Dropped rows stay persisted for that async pass to promote and serve
  * later. "Fewer but true" on exactly the domains where fabrication is likeliest.
  *
- * Flag-gated OFF by default (VERIFY_GATE_THIN_DECLARED_ENABLED) — flip it alongside
- * the verifier wiki/fandom allowlist so held rows have a path back to serving.
- * Fail-open: any error serves the ungated set (never blocks a build).
+ * DEFAULT ON as of 2026-07-08, flipped together with the verifier wiki/fandom
+ * allowlist default (verify-question.ts) so held rows have a path back to
+ * serving. Set VERIFY_GATE_THIN_DECLARED_ENABLED=false to revert without a
+ * deploy. Fail-open: any error serves the ungated set (never blocks a build).
  */
 import { narrowKbThinnessThreshold } from '@/server/daily/kb-exhaustion';
 import { SELF_PRACTICE_TIERS, type TrustTier } from '@/server/daily/verification-gating';
@@ -22,7 +23,7 @@ import type { GeneratedQuestionRow } from '@/server/daily/generate-questions';
 
 export function isVerifyGateThinEnabled(): boolean {
   const raw = process.env.VERIFY_GATE_THIN_DECLARED_ENABLED?.trim().toLowerCase();
-  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
 }
 
 const SERVEABLE_TIERS = new Set<TrustTier>(SELF_PRACTICE_TIERS);
