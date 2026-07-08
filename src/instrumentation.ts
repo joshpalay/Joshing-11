@@ -2137,6 +2137,23 @@ export async function register() {
       // and would 42703 on an un-migrated DB. Same guard rationale as 0117/0118.
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "manual_estimated_questions" integer`);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "calibrated_at" timestamp with time zone`);
+      // Migration 0120: daily gate-drop counters. The write path is fire-and-
+      // forget (a missing table never blocks generation) but the weekly quality
+      // digest reads it and would 42P01 on an un-migrated DB. Same rationale as
+      // the 0116 DomainDepthEstimate guard above.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "GateDropStat" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "day" date NOT NULL,
+          "gate" text NOT NULL,
+          "considered" integer NOT NULL DEFAULT 0,
+          "dropped" integer NOT NULL DEFAULT 0,
+          "failed_open" integer NOT NULL DEFAULT 0,
+          "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "GateDropStat_day_gate_unique" UNIQUE ("day", "gate")
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "GateDropStat" ENABLE ROW LEVEL SECURITY`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

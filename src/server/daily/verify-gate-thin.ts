@@ -18,6 +18,7 @@
  */
 import { narrowKbThinnessThreshold } from '@/server/daily/kb-exhaustion';
 import { SELF_PRACTICE_TIERS, type TrustTier } from '@/server/daily/verification-gating';
+import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import type { GeneratedQuestionRow } from '@/server/daily/generate-questions';
 
@@ -70,6 +71,7 @@ export async function verifyGateThinDeclared(
     const thinDeclared = new Set(present.filter((domain) => (depths.get(domain) ?? 0) < threshold));
 
     const { kept, dropped } = filterUnverifiedInDomains(rows, thinDeclared);
+    void recordGateDrops([{ gate: 'thin_declared', considered: rows.length, dropped }]);
     if (dropped > 0) {
       console.info('[verify-gate-thin] held unverified generations in thin declared domains', {
         thinDeclared: [...thinDeclared],
@@ -82,6 +84,7 @@ export async function verifyGateThinDeclared(
     console.warn('[verify-gate-thin] failed; serving ungated', {
       error: error instanceof Error ? error.message : String(error),
     });
+    recordGateFailedOpen('thin_declared');
     return rows;
   }
 }

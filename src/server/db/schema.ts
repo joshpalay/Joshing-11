@@ -1849,3 +1849,29 @@ export const qualityReport = pgTable(
   },
   (table) => [index('QualityReport_created_at_idx').on(table.createdAt)],
 );
+
+// 0120: daily counters for the generation-time gate chain (quality, factual,
+// dedup, cooldowns, thin-declared). Every gate in that chain FAILS OPEN by
+// design (an LLM outage must not block the daily queue), which means a gate
+// can be silently disabled — timing out, truncating, or erroring on every
+// call — and nothing surfaces it. These counters make that visible: the
+// weekly quality digest reads them and renders per-gate drop rates plus
+// failed-open run counts. One row per (UTC day, gate), incremented
+// fire-and-forget from the gate chain; a write failure never blocks
+// generation. Coarse by design — no per-question rows, no user linkage.
+export const gateDropStat = pgTable(
+  'GateDropStat',
+  {
+    id: id(),
+    day: date('day').notNull(),
+    gate: text('gate').notNull(),
+    /** Questions the gate saw (batch sizes summed across runs). */
+    considered: integer('considered').notNull().default(0),
+    /** Questions the gate dropped. */
+    dropped: integer('dropped').notNull().default(0),
+    /** Runs where the gate errored/timed out and passed everything unchecked. */
+    failedOpen: integer('failed_open').notNull().default(0),
+    updatedAt: updatedAt(),
+  },
+  (table) => [unique('GateDropStat_day_gate_unique').on(table.day, table.gate)],
+);

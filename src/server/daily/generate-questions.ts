@@ -47,6 +47,7 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
 import {
   coCalibrateRaisedEstimates,
   recordSupplyYieldObservation,
@@ -768,6 +769,7 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
     console.warn('[daily/generate-questions] batch dedupe failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('batch_dedup');
     return new Set();
   }
 }
@@ -857,6 +859,7 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
     console.warn('[daily/generate-questions] quality gate failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('quality');
     return { toDrop: new Set(), reasons: {} };
   }
 }
@@ -1029,6 +1032,7 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
     console.warn('[daily/generate-questions] factual gate failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('factual');
     return { toDrop: new Set(), reasons: {} };
   }
 }
@@ -1218,6 +1222,7 @@ Which NEW indices duplicate any RECENT entry?`;
     console.warn('[daily/generate-questions] history dedupe failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('recent_history');
     return new Set();
   }
 }
@@ -1774,6 +1779,37 @@ export async function generateDailyQuestions(
       originalCount: generated.length,
     });
   }
+
+  // Gate telemetry (0120): daily per-gate considered/dropped counters, read by
+  // the weekly quality digest. Every gate above fails open, so a sustained
+  // zero-drop LLM gate or a failed_open streak (recorded in each gate's catch)
+  // is the only visible symptom of a silently disabled gate. Fire-and-forget —
+  // never blocks the build. difficulty_floor counts DEFLECTIONS (soft gate),
+  // not drops.
+  void recordGateDrops([
+    { gate: 'quality', considered: generated.length, dropped: qualityResult.toDrop.size },
+    { gate: 'factual', considered: generated.length, dropped: factualResult.toDrop.size },
+    { gate: 'recent_history', considered: generated.length, dropped: recentDuplicates.size },
+    { gate: 'batch_dedup', considered: generated.length, dropped: batchDuplicates.size },
+    {
+      gate: 'intra_batch_embedding',
+      considered: generated.length,
+      dropped: intraBatchDuplicates.size,
+    },
+    {
+      gate: 'answered_history_embedding',
+      considered: generated.length,
+      dropped: answeredHistoryDuplicates.size,
+    },
+    { gate: 'answer_cooldown', considered: generated.length, dropped: answerCooldownDuplicates.size },
+    {
+      gate: 'subject_cooldown',
+      considered: generated.length,
+      dropped: subjectCooldownDuplicates.size,
+    },
+    { gate: 'answer_leak', considered: generated.length, dropped: answerLeaks.toDrop.size },
+    { gate: 'difficulty_floor', considered: generated.length, dropped: underDifficulty.toDrop.size },
+  ]);
 
   const allDrops = new Set<number>([
     ...batchDuplicates,
