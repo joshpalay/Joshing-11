@@ -1755,8 +1755,22 @@ export const domainDepthEstimates = pgTable(
     depthScore: integer('depth_score'),
     // A canonical_subcategory that folded to this key — for debugging only.
     sampleLabel: text('sample_label'),
-    // 'llm' (scored) | 'default' (LLM unavailable/null; using the code default).
+    // 'llm' (depth scored) | 'default' (LLM unavailable) | 'corpus' (0117: resolved
+    // + counted against a real Wikipedia/Wikidata/Fandom anchor).
     source: text('source').notNull().default('llm'),
+    // Corpus-grounded size (0117, D-SUPPLY-FINITENESS-01). estimatedQuestions is
+    // the number getTargetQuestionCountForDomains PREFERS over coefficient·depth²
+    // when present; the rest record the resolution for the coverage dashboard +
+    // the confidence-gated discrepancy alarm. All nullable — absent → depth fallback.
+    estimatedQuestions: integer('estimated_questions'),
+    corpusCount: integer('corpus_count'),
+    shape: text('shape'),
+    confidence: text('confidence'),
+    basis: text('basis'),
+    wikipediaTitle: text('wikipedia_title'),
+    wikidataQid: text('wikidata_qid'),
+    fandomHost: text('fandom_host'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },

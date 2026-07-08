@@ -9,6 +9,8 @@ export type DepthEstimateRow = {
   domainKey: string;
   depthScore: number | null;
   source: string;
+  // Corpus-grounded size (0117). When present, the PREFERRED target count.
+  estimatedQuestions: number | null;
 };
 
 /** Cached depth estimates for the given folded domain keys. */
@@ -21,6 +23,7 @@ export async function getDepthEstimates(
       domainKey: domainDepthEstimates.domainKey,
       depthScore: domainDepthEstimates.depthScore,
       source: domainDepthEstimates.source,
+      estimatedQuestions: domainDepthEstimates.estimatedQuestions,
     })
     .from(domainDepthEstimates)
     .where(inArray(domainDepthEstimates.domainKey, domainKeys));
@@ -56,4 +59,43 @@ export async function upsertDepthEstimate(input: {
         computedAt: new Date(),
       },
     });
+}
+
+/**
+ * Cache a CORPUS-grounded size estimate (0117, D-SUPPLY-FINITENESS-01). Writes
+ * estimated_questions (the number getTargetQuestionCountForDomains prefers) plus
+ * the resolution provenance for the coverage dashboard + confidence-gated alarm.
+ * Leaves depth_score untouched (keyed on the same domain_key, so it coexists with
+ * any depth row). Upsert so a re-run / concurrent org-wide sizing converges.
+ */
+export async function upsertCorpusSizeEstimate(input: {
+  domainKey: string;
+  sampleLabel: string;
+  estimatedQuestions: number | null;
+  corpusCount: number | null;
+  shape: string;
+  confidence: string;
+  basis: string;
+  wikipediaTitle: string | null;
+  wikidataQid: string | null;
+  fandomHost: string | null;
+}): Promise<void> {
+  const set = {
+    sampleLabel: input.sampleLabel,
+    source: 'corpus' as const,
+    estimatedQuestions: input.estimatedQuestions,
+    corpusCount: input.corpusCount,
+    shape: input.shape,
+    confidence: input.confidence,
+    basis: input.basis,
+    wikipediaTitle: input.wikipediaTitle,
+    wikidataQid: input.wikidataQid,
+    fandomHost: input.fandomHost,
+    resolvedAt: new Date(),
+    computedAt: new Date(),
+  };
+  await db
+    .insert(domainDepthEstimates)
+    .values({ domainKey: input.domainKey, ...set })
+    .onConflictDoUpdate({ target: domainDepthEstimates.domainKey, set });
 }

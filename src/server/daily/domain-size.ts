@@ -76,10 +76,15 @@ export async function getTargetQuestionCountForDomains(
 
   const cached = await getDepthEstimates(keys).catch(() => new Map());
 
+  // Corpus-grounded target counts win outright when present (D-SUPPLY-FINITENESS-01):
+  // a resolved Wikipedia/Wikidata/Fandom count is a truer set size than
+  // coefficient·depth². Depth remains the fallback for keys with no corpus row.
+  const estimateByKey = new Map<string, number>();
   const depthByKey = new Map<string, number>();
   for (const key of keys) {
     const row = cached.get(key);
     if (row) {
+      if (row.estimatedQuestions != null) estimateByKey.set(key, row.estimatedQuestions);
       depthByKey.set(key, row.depthScore ?? defaultDepth());
       continue;
     }
@@ -104,7 +109,11 @@ export async function getTargetQuestionCountForDomains(
 
   for (const canonical of unique) {
     const key = keyByCanonical.get(canonical)!;
-    out.set(canonical, depthToTargetCount(depthByKey.get(key) ?? defaultDepth()));
+    const corpus = estimateByKey.get(key);
+    out.set(
+      canonical,
+      corpus != null ? corpus : depthToTargetCount(depthByKey.get(key) ?? defaultDepth()),
+    );
   }
   return out;
 }
