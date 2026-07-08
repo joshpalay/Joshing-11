@@ -16,8 +16,13 @@ export interface SupplyCoverageEntry {
   label: string;
   state: SupplyState;
   realized: number;
+  /** EFFECTIVE estimate: the admin override when set, else the corpus estimate. */
   estimatedQuestions: number | null;
-  /** realized / estimate; null when unsized. */
+  /** Corpus-resolved estimate, kept visible alongside an override. */
+  corpusEstimatedQuestions: number | null;
+  /** Admin override (0119); non-null means it is what estimatedQuestions shows. */
+  manualEstimatedQuestions: number | null;
+  /** realized / effective estimate; null when unsized. */
   ratio: number | null;
   confidence: string | null;
   shape: string | null;
@@ -39,10 +44,17 @@ export function summarizeSupplyCoverage(
   rows: DomainSupplyCoverageRow[],
 ): SupplyCoverageSummary {
   const entries: SupplyCoverageEntry[] = rows.map((row) => {
+    // The admin override (0119) wins over the corpus estimate, and an
+    // overridden row classifies at 'high' confidence — a human set the anchor,
+    // so it MAY fire the discrepancy alarm even if the original resolution
+    // was low-confidence.
+    const overridden = row.manualEstimatedQuestions != null;
+    const effectiveEstimate = row.manualEstimatedQuestions ?? row.estimatedQuestions;
+    const effectiveConfidence = overridden ? 'high' : row.confidence;
     const state = classifySupplyState({
       realized: row.realized,
-      estimatedQuestions: row.estimatedQuestions,
-      confidence: row.confidence,
+      estimatedQuestions: effectiveEstimate,
+      confidence: effectiveConfidence,
       consecutiveDryRounds: row.consecutiveDryRounds,
     });
     return {
@@ -50,12 +62,12 @@ export function summarizeSupplyCoverage(
       label: row.sampleLabel ?? row.domainKey,
       state,
       realized: row.realized,
-      estimatedQuestions: row.estimatedQuestions,
+      estimatedQuestions: effectiveEstimate,
+      corpusEstimatedQuestions: row.estimatedQuestions,
+      manualEstimatedQuestions: row.manualEstimatedQuestions,
       ratio:
-        row.estimatedQuestions && row.estimatedQuestions > 0
-          ? row.realized / row.estimatedQuestions
-          : null,
-      confidence: row.confidence,
+        effectiveEstimate && effectiveEstimate > 0 ? row.realized / effectiveEstimate : null,
+      confidence: effectiveConfidence,
       shape: row.shape,
       basis: row.basis,
       consecutiveDryRounds: row.consecutiveDryRounds,

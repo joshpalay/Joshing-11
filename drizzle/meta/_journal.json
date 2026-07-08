@@ -834,6 +834,13 @@
 			"when": 1786752000000,
 			"tag": "0118_supply_dry_tracking",
 			"breakpoints": true
+		},
+		{
+			"idx": 119,
+			"version": "7",
+			"when": 1786838400000,
+			"tag": "0119_supply_manual_override_calibration",
+			"breakpoints": true
 		}
 	]
 }

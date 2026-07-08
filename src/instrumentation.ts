@@ -2132,6 +2132,11 @@ export async function register() {
       // counters for the supply-state machine. Additive + nullable/defaulted.
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "consecutive_dry_rounds" integer NOT NULL DEFAULT 0`);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "last_yield_at" timestamp with time zone`);
+      // Migration 0119: admin manual estimate override + co-calibration stamp.
+      // Additive + nullable; the coverage read selects manual_estimated_questions
+      // and would 42703 on an un-migrated DB. Same guard rationale as 0117/0118.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "manual_estimated_questions" integer`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "calibrated_at" timestamp with time zone`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

@@ -47,7 +47,11 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
-import { recordSupplyYieldObservation } from '@/server/db/queries/domain-depth-estimate';
+import {
+  coCalibrateRaisedEstimates,
+  recordSupplyYieldObservation,
+} from '@/server/db/queries/domain-depth-estimate';
+import { nearCompleteRatio } from '@/server/daily/supply-state';
 import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { adminUserIds } from '@/server/auth/admin';
@@ -2459,6 +2463,13 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         yieldedDomainKeys: [...yieldedKeys],
         dryDomainKeys: offeredKeys.filter((key) => !yieldedKeys.has(key)),
       }).catch(() => {});
+      // Co-calibration (0119): a domain that just yielded may have crossed its
+      // corpus estimate — raise the estimate to observed yield so it re-enters
+      // `filling` instead of parking in `raise_estimate`. Only yielded keys can
+      // newly cross, so this stays a tiny targeted write. Same fire-and-forget
+      // posture as the observation above; a manual admin override is never
+      // touched (the query skips it).
+      void coCalibrateRaisedEstimates([...yieldedKeys], nearCompleteRatio()).catch(() => {});
     } catch {
       // observation-only
     }
