@@ -2154,6 +2154,10 @@ export async function register() {
         )
       `);
       await db.execute(sql`ALTER TABLE "GateDropStat" ENABLE ROW LEVEL SECURITY`);
+      // Migration 0121: admin per-domain generation cap. Additive + nullable; the
+      // coverage read + getCappedDomainKeys select generation_capped_at and would
+      // 42703 on an un-migrated DB. Same guard rationale as 0117/0118/0119.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "generation_capped_at" timestamp with time zone`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

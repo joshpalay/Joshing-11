@@ -848,6 +848,13 @@
 			"when": 1786924800000,
 			"tag": "0120_gate_drop_stat",
 			"breakpoints": true
+		},
+		{
+			"idx": 121,
+			"version": "7",
+			"when": 1787011200000,
+			"tag": "0121_domain_generation_cap",
+			"breakpoints": true
 		}
 	]
 }

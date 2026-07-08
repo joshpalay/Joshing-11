@@ -29,6 +29,8 @@ export interface SupplyCoverageEntry {
   basis: string | null;
   consecutiveDryRounds: number;
   lastYieldAt: Date | null;
+  /** Admin generation cap (0121): true = excluded from generation, never alarms. */
+  generationCapped: boolean;
 }
 
 export interface SupplyCoverageSummary {
@@ -38,6 +40,8 @@ export interface SupplyCoverageSummary {
   /** Still yielding past the estimate — co-calibration should raise these. */
   raiseEstimates: SupplyCoverageEntry[];
   counts: Record<SupplyState, number>;
+  /** How many domains an admin has capped (stopped generating). */
+  cappedCount: number;
 }
 
 export function summarizeSupplyCoverage(
@@ -72,6 +76,7 @@ export function summarizeSupplyCoverage(
       basis: row.basis,
       consecutiveDryRounds: row.consecutiveDryRounds,
       lastYieldAt: row.lastYieldAt,
+      generationCapped: row.generationCappedAt != null,
     };
   });
 
@@ -86,13 +91,19 @@ export function summarizeSupplyCoverage(
 
   const bySeverity = (a: SupplyCoverageEntry, b: SupplyCoverageEntry) =>
     (a.ratio ?? 1) - (b.ratio ?? 1);
+  // A capped domain is a deliberate stop — it must never fire the discrepancy
+  // alarm (email + dashboard) or invite a co-calibration raise, even if it went
+  // dry far short of its estimate. Exclude it from both action lists.
   return {
     entries,
-    discrepancies: entries.filter((entry) => entry.state === 'discrepancy').sort(bySeverity),
+    discrepancies: entries
+      .filter((entry) => entry.state === 'discrepancy' && !entry.generationCapped)
+      .sort(bySeverity),
     raiseEstimates: entries
-      .filter((entry) => entry.state === 'raise_estimate')
+      .filter((entry) => entry.state === 'raise_estimate' && !entry.generationCapped)
       .sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0)),
     counts,
+    cappedCount: entries.filter((entry) => entry.generationCapped).length,
   };
 }
 

@@ -73,7 +73,8 @@ export default async function AdminSupplyPage() {
             Corpus-grounded size estimate vs realized generation, per domain. A{' '}
             <strong>discrepancy</strong> is a domain that went dry far short of a trusted
             estimate — a supply problem, not completion. Resting domains are believed complete
-            and stay re-probeable.
+            and stay re-probeable. <strong>Cap</strong> a domain to stop generating new
+            questions for it entirely — existing questions still serve, and it stops alarming.
           </p>
         </div>
       </div>
@@ -102,6 +103,11 @@ export default async function AdminSupplyPage() {
             <span>
               <strong>{summary.counts.unsized}</strong> unsized
             </span>
+            {summary.cappedCount > 0 ? (
+              <span>
+                <strong style={{ color: 'var(--danger)' }}>{summary.cappedCount}</strong> capped
+              </span>
+            ) : null}
           </div>
 
           <div className="overflow-x-auto">
@@ -132,6 +138,15 @@ export default async function AdminSupplyPage() {
                     <td className="py-2 pr-3">{entry.label}</td>
                     <td className="py-2 pr-3" style={{ color: STATE_COLOR[entry.state] }}>
                       {STATE_LABEL[entry.state]}
+                      {entry.generationCapped ? (
+                        <span
+                          className="block text-xs font-semibold"
+                          style={{ color: 'var(--danger)' }}
+                          title="Capped — excluded from generation; existing questions still serve, and it never fires the discrepancy alarm"
+                        >
+                          ⛔ capped
+                        </span>
+                      ) : null}
                     </td>
                     <td className="py-2 pr-3 text-right">{entry.realized}</td>
                     <td className="py-2 pr-3 text-right">
@@ -156,6 +171,7 @@ export default async function AdminSupplyPage() {
                       <SupplyRowActions
                         domainKey={entry.domainKey}
                         manualEstimatedQuestions={entry.manualEstimatedQuestions}
+                        generationCapped={entry.generationCapped}
                       />
                     </td>
                   </tr>

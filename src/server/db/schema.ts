@@ -1778,6 +1778,13 @@ export const domainDepthEstimates = pgTable(
     // Co-calibration stamp (0119): last time the raise_estimate loop lifted
     // estimated_questions to observed yield. Observability only.
     calibratedAt: timestamp('calibrated_at', { withTimezone: true }),
+    // Admin generation cap (0121): when set, this domain is EXCLUDED from fresh
+    // generation everywhere the daily generator builds its round palette (cron
+    // build + demand-pull replenish) — the system stops searching it for new
+    // facts. Serving is untouched (existing bank still flows) and it never fires
+    // the discrepancy alarm. Distinct from the derived soft_finite state and the
+    // per-player 'resting' tag: a global, deliberate, human stop. NULL = not capped.
+    generationCappedAt: timestamp('generation_capped_at', { withTimezone: true }),
     // Dry-round observations (0118, D-SUPPLY-FINITENESS-01 #4). Raw counters
     // only — the supply STATE is derived at read time by classifySupplyState
     // (src/server/daily/supply-state.ts), so nothing stored can go stale.

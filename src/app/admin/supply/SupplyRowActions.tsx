@@ -11,9 +11,11 @@ import { useRouter } from 'next/navigation';
 export function SupplyRowActions({
   domainKey,
   manualEstimatedQuestions,
+  generationCapped,
 }: {
   domainKey: string;
   manualEstimatedQuestions: number | null;
+  generationCapped: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -131,6 +133,29 @@ export function SupplyRowActions({
           Clear
         </button>
       ) : null}
+      {generationCapped ? (
+        <button
+          type="button"
+          className={buttonClass}
+          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+          disabled={busy}
+          onClick={() => post({ action: 'set_cap', domainKey, capped: false }, 'Un-cap')}
+          title="Resume generation for this domain"
+        >
+          Un-cap
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={buttonClass}
+          style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+          disabled={busy}
+          onClick={() => post({ action: 'set_cap', domainKey, capped: true }, 'Cap')}
+          title="Stop generating new questions for this domain (serving is untouched)"
+        >
+          Cap
+        </button>
+      )}
       {error ? (
         <span className="text-xs" style={{ color: 'var(--danger)' }}>
           {error}

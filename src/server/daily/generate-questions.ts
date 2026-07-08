@@ -50,6 +50,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
 import {
   coCalibrateRaisedEstimates,
+  getCappedDomainKeys,
   recordSupplyYieldObservation,
 } from '@/server/db/queries/domain-depth-estimate';
 import { nearCompleteRatio } from '@/server/daily/supply-state';
@@ -81,6 +82,7 @@ import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeBroadCategory } from '@/server/questions/broad-category';
 import {
   domainWeeklyCap,
+  dropCappedDomains,
   isCustomDomainWeightingEnabled,
   selectCustomDomainsForRound,
 } from '@/server/daily/domain-selection';
@@ -2157,6 +2159,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     recentSkipCounts,
     culturalAnchor,
     answeredCanonicalTexts,
+    cappedDomainKeys,
   ] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
@@ -2170,6 +2173,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // Cross-table repetition guard (BP-6 / Q8); resilient — a miss just means
     // the avoid list carries no answered-canonical entries this round.
     getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
+    // Admin generation caps (0121): domain keys an admin flagged "stop searching".
+    // Fail-open — a miss just means no domain is capped this round.
+    getCappedDomainKeys().catch(() => new Set<string>()),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -2277,6 +2283,15 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       ? firstRunPlan
       : selectDiverseDomains(eligibleKb, count, recentDomainCounts, frequencyByDomain);
   }
+
+  // Admin generation cap (0121): drop capped domains from the round palette so
+  // the generator stops searching them for new facts — global, deliberate, and
+  // applied AFTER all selection/starvation fallbacks so nothing reintroduces a
+  // capped domain. Unlike the weekly-cap starvation guards there is NO fallback:
+  // capped means generate nothing here (serving from the existing bank is
+  // untouched). Covers every entry point in one place — the cron build and
+  // demand-pull replenish both route through this function.
+  domainsForRound = dropCappedDomains(domainsForRound, cappedDomainKeys);
 
   const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
     ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
@@ -2461,6 +2476,11 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     }
   }
 
+  // Re-apply the generation cap (0121) after narrow-KB / near-ness routing: the
+  // expansion-parent and near-rung paths above can push domains back into the
+  // LLM palette, so filter capped keys out one last time before any Sonnet call.
+  domainsForLlm = dropCappedDomains(domainsForLlm, cappedDomainKeys);
+
   let llmGenerated: GeneratedQuestionRow[] = [];
   if (remainingCount > 0 && domainsForLlm.length > 0) {
     // B-LLM-PROVIDER-AB-SWITCH B2: resolve the generation provider once per run
@@ -2559,7 +2579,7 @@ export async function generateBonusQuestionsForDomains(
   const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
   if (domains.length === 0) return results;
 
-  const [previousQuestionTexts, previousFactKeys, authoredTexts, answeredCanonicalTexts] = await Promise.all([
+  const [previousQuestionTexts, previousFactKeys, authoredTexts, answeredCanonicalTexts, cappedDomainKeys] = await Promise.all([
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
     getAuthoredQuestionTexts(userId),
@@ -2568,6 +2588,9 @@ export async function generateBonusQuestionsForDomains(
     // likeliest surface to re-create a just-answered canonical fact. Advisory
     // fold below, mirroring the authored-texts fold; resilient on failure.
     getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
+    // Admin generation caps (0121): a capped domain still SERVES from its bank
+    // below, but the Sonnet fallback (a fresh "search") is skipped. Fail-open.
+    getCappedDomainKeys().catch(() => new Set<string>()),
   ]);
 
   // A +2 bonus must never hand the viewer a question they themselves authored.
@@ -2599,8 +2622,9 @@ export async function generateBonusQuestionsForDomains(
       // Non-accessible bank pick: not-qualifying. Shrink this slot rather than
       // downgrade — and do NOT fall through to Sonnet (the bank answered).
       row = null;
-    } else if (!row) {
-      // Bank miss → Sonnet, accessible target.
+    } else if (!row && !cappedDomainKeys.has(domainKey(domain))) {
+      // Bank miss → Sonnet, accessible target. Skipped for capped domains: the
+      // cap stops fresh searching (the bank pick above still serves them).
       const generated = await generateDailyQuestions(
         [domain],
         1,

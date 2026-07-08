@@ -190,6 +190,39 @@ export async function setManualEstimate(
   return rows.length > 0;
 }
 
+/**
+ * Admin generation cap (0121). value=true stamps generation_capped_at (now);
+ * value=false clears it. A capped domain is excluded from fresh generation
+ * everywhere generateDailyQuestionsFromKnowledgeBase builds its palette; serving
+ * is untouched. UPDATE-only like setManualEstimate: the /admin/supply rows all
+ * exist by construction; returns false when the key has no row so the API 404s.
+ */
+export async function setGenerationCap(
+  domainKeyValue: string,
+  capped: boolean,
+): Promise<boolean> {
+  const rows = await db
+    .update(domainDepthEstimates)
+    .set({ generationCappedAt: capped ? new Date() : null })
+    .where(eq(domainDepthEstimates.domainKey, domainKeyValue))
+    .returning({ domainKey: domainDepthEstimates.domainKey });
+  return rows.length > 0;
+}
+
+/**
+ * The set of domain keys an admin has capped (generation_capped_at set). Read
+ * once per generation round and used to drop those domains from the palette so
+ * the system stops searching them for new facts. Small table, single indexed
+ * scan; fail-open callers treat a throw as "nothing capped".
+ */
+export async function getCappedDomainKeys(): Promise<Set<string>> {
+  const rows = await db
+    .select({ domainKey: domainDepthEstimates.domainKey })
+    .from(domainDepthEstimates)
+    .where(isNotNull(domainDepthEstimates.generationCappedAt));
+  return new Set(rows.map((row) => row.domainKey));
+}
+
 export type DomainSupplyCoverageRow = {
   domainKey: string;
   sampleLabel: string | null;
@@ -201,6 +234,8 @@ export type DomainSupplyCoverageRow = {
   source: string;
   consecutiveDryRounds: number;
   lastYieldAt: Date | null;
+  /** Admin generation cap stamp (0121); non-null = capped, excluded from generation. */
+  generationCappedAt: Date | null;
   /** Distinct facts generated for the domain, bank-wide (all users). */
   realized: number;
 };
@@ -235,6 +270,7 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       source: domainDepthEstimates.source,
       consecutiveDryRounds: domainDepthEstimates.consecutiveDryRounds,
       lastYieldAt: domainDepthEstimates.lastYieldAt,
+      generationCappedAt: domainDepthEstimates.generationCappedAt,
       realized: sql<number>`coalesce(${realized.realized}, 0)::int`,
     })
     .from(domainDepthEstimates)
