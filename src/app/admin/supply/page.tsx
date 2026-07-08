@@ -5,15 +5,18 @@ import { isAdminUser } from '@/server/auth/admin';
 import { buildSupplyCoverageSummary } from '@/server/daily/supply-coverage';
 import type { SupplyState } from '@/server/daily/supply-state';
 import { AdminTabs } from '../AdminTabs';
+import { SupplyRowActions } from './SupplyRowActions';
 
 export const dynamic = 'force-dynamic';
 
 // D-SUPPLY-FINITENESS-01 #5 — the domain-supply coverage dashboard: per domain,
 // the corpus-grounded size estimate vs realized generation, the dry-round
-// counter, and the derived supply state. Read-only observation surface (the
-// weekly digest email carries the same alarm); classification happens in
-// classifySupplyState so the two surfaces always agree. Same admin gate as
-// every /admin page: ADMIN_USER_IDS or a 404 that doesn't reveal the route.
+// counter, and the derived supply state. Classification happens in
+// classifySupplyState so this and the weekly digest email always agree. Per-row
+// actions (0119): re-run the corpus resolver, or set/clear a manual estimate
+// override — the override wins over the corpus number everywhere and shows here
+// with the corpus value alongside. Same admin gate as every /admin page:
+// ADMIN_USER_IDS or a 404 that doesn't reveal the route.
 
 const STATE_LABEL: Record<SupplyState, string> = {
   discrepancy: 'Discrepancy',
@@ -115,7 +118,8 @@ export default async function AdminSupplyPage() {
                   <th className="py-2 pr-3 text-right font-medium">Coverage</th>
                   <th className="py-2 pr-3 text-right font-medium">Dry rounds</th>
                   <th className="py-2 pr-3 font-medium">Confidence</th>
-                  <th className="py-2 font-medium">Basis</th>
+                  <th className="py-2 pr-3 font-medium">Basis</th>
+                  <th className="py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,12 +134,29 @@ export default async function AdminSupplyPage() {
                       {STATE_LABEL[entry.state]}
                     </td>
                     <td className="py-2 pr-3 text-right">{entry.realized}</td>
-                    <td className="py-2 pr-3 text-right">{entry.estimatedQuestions ?? '—'}</td>
+                    <td className="py-2 pr-3 text-right">
+                      {entry.estimatedQuestions ?? '—'}
+                      {entry.manualEstimatedQuestions != null ? (
+                        <span
+                          className="block text-xs"
+                          style={{ color: 'var(--text-muted)' }}
+                          title="Manual override; the corpus estimate shown underneath"
+                        >
+                          manual · corpus {entry.corpusEstimatedQuestions ?? '—'}
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="py-2 pr-3 text-right">{pctLabel(entry.ratio)}</td>
                     <td className="py-2 pr-3 text-right">{entry.consecutiveDryRounds}</td>
                     <td className="py-2 pr-3">{entry.confidence ?? '—'}</td>
-                    <td className="py-2" style={{ color: 'var(--text-muted)' }}>
+                    <td className="py-2 pr-3" style={{ color: 'var(--text-muted)' }}>
                       {entry.basis ?? '—'}
+                    </td>
+                    <td className="py-2">
+                      <SupplyRowActions
+                        domainKey={entry.domainKey}
+                        manualEstimatedQuestions={entry.manualEstimatedQuestions}
+                      />
                     </td>
                   </tr>
                 ))}

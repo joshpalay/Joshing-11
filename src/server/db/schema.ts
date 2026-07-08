@@ -1771,6 +1771,13 @@ export const domainDepthEstimates = pgTable(
     wikidataQid: text('wikidata_qid'),
     fandomHost: text('fandom_host'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    // Admin override (0119): when set, WINS over estimated_questions and the
+    // depth fallback everywhere the estimate is read. Own column so resolver
+    // re-runs / co-calibration never clobber it; NULL = no override.
+    manualEstimatedQuestions: integer('manual_estimated_questions'),
+    // Co-calibration stamp (0119): last time the raise_estimate loop lifted
+    // estimated_questions to observed yield. Observability only.
+    calibratedAt: timestamp('calibrated_at', { withTimezone: true }),
     // Dry-round observations (0118, D-SUPPLY-FINITENESS-01 #4). Raw counters
     // only — the supply STATE is derived at read time by classifySupplyState
     // (src/server/daily/supply-state.ts), so nothing stored can go stale.

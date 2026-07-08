@@ -13,7 +13,15 @@ const {
   inviteToAuthorAutomatic,
   markDomainExpansionEligible,
 } = vi.hoisted(() => ({
-  state: { answeredRows: [] as Array<{ domain: string; answered: number }> },
+  state: {
+    answeredRows: [] as Array<{ domain: string; answered: number }>,
+    // Distinct (label, question) pairs for the graph roll-up numerator.
+    pairRows: [] as Array<{ label: string; questionId: string | null }>,
+    graph: {
+      nodeKeys: [] as string[],
+      edges: [] as Array<{ parentDomainKey: string; childDomainKey: string }>,
+    },
+  },
   getDurablePoolDepthForDomains: vi.fn(),
   getTargetQuestionCountForDomains: vi.fn(),
   hasDesignation: vi.fn(),
@@ -28,11 +36,41 @@ vi.mock('@/server/db', () => {
     where: () => dbChain,
     groupBy: () => Promise.resolve(state.answeredRows),
   };
+  const distinctChain = {
+    from: () => distinctChain,
+    where: () => Promise.resolve(state.pairRows),
+  };
   return {
-    db: { select: () => dbChain },
+    db: { select: () => dbChain, selectDistinct: () => distinctChain },
     masteryEvents: { canonicalSubcategory: 'cs', answeredByUserId: 'a', questionId: 'q' },
   };
 });
+// Graph context for the D-MASTERY-FINEST-NODE-01 §3/P4 subtree roll-up; the
+// default (empty) graph keeps every pre-existing test on the exact-label path.
+vi.mock('@/server/knowledge/graph', () => ({
+  getClusterContext: async () => ({
+    nodeKeys: new Set(state.graph.nodeKeys),
+    labelByKey: new Map(state.graph.nodeKeys.map((key: string) => [key, key])),
+    edges: state.graph.edges,
+  }),
+  substantiveDescendants: (
+    nodeKey: string,
+    edges: readonly { parentDomainKey: string; childDomainKey: string }[],
+  ) => {
+    const out = new Set<string>();
+    const stack = [nodeKey];
+    while (stack.length > 0) {
+      const key = stack.pop()!;
+      for (const edge of edges) {
+        if (edge.parentDomainKey === key && !out.has(edge.childDomainKey)) {
+          out.add(edge.childDomainKey);
+          stack.push(edge.childDomainKey);
+        }
+      }
+    }
+    return out;
+  },
+}));
 vi.mock('@/server/db/queries/retrieval-demand', () => ({ getDurablePoolDepthForDomains }));
 // Depth sizing is the default completion size source; mock it (minPossibleTargetCount
 // is the candidate gate floor).
@@ -83,6 +121,8 @@ describe('evaluateSetCompletions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.answeredRows = [];
+    state.pairRows = [];
+    state.graph = { nodeKeys: [], edges: [] };
     hasDesignation.mockResolvedValue(false);
     getDurablePoolDepthForDomains.mockResolvedValue(new Map());
     getTargetQuestionCountForDomains.mockResolvedValue(new Map());
@@ -158,5 +198,55 @@ describe('evaluateSetCompletions', () => {
   it('returns early for an empty domain list (no queries)', async () => {
     expect(await evaluateSetCompletions('u1', [])).toEqual([]);
     expect(getTargetQuestionCountForDomains).not.toHaveBeenCalled();
+  });
+
+  it('a parent completes on SUBTREE coverage (D-MASTERY-FINEST-NODE-01 §3/P4)', async () => {
+    // "Complete Shakespearean Tragedies" = breadth across the plays. The
+    // exact-label count alone (5) is below the candidate gate; the distinct
+    // questions answered across the substantive subtree (17) both clear the
+    // gate and cover the subtree-union-sized target.
+    state.graph = {
+      nodeKeys: ['shakespearean tragedies', 'hamlet', 'king lear'],
+      edges: [
+        { parentDomainKey: 'shakespearean tragedies', childDomainKey: 'hamlet' },
+        { parentDomainKey: 'shakespearean tragedies', childDomainKey: 'king lear' },
+      ],
+    };
+    state.answeredRows = [{ domain: 'Shakespearean Tragedies', answered: 5 }];
+    state.pairRows = [
+      ...Array.from({ length: 5 }, (_, i) => ({ label: 'Shakespearean Tragedies', questionId: `t${i}` })),
+      ...Array.from({ length: 7 }, (_, i) => ({ label: 'Hamlet', questionId: `h${i}` })),
+      ...Array.from({ length: 5 }, (_, i) => ({ label: 'King Lear', questionId: `l${i}` })),
+    ];
+    getTargetQuestionCountForDomains.mockResolvedValue(
+      new Map([['Shakespearean Tragedies', 17]]),
+    );
+
+    const completed = await evaluateSetCompletions('u1', ['Shakespearean Tragedies']);
+
+    expect(completed).toEqual(['Shakespearean Tragedies']);
+    expect(markDomainDesignated).toHaveBeenCalledWith(
+      'u1',
+      'Shakespearean Tragedies',
+      expect.any(Date),
+    );
+  });
+
+  it('answers outside the subtree never count toward a parent', async () => {
+    state.graph = {
+      nodeKeys: ['shakespearean tragedies', 'hamlet'],
+      edges: [{ parentDomainKey: 'shakespearean tragedies', childDomainKey: 'hamlet' }],
+    };
+    state.answeredRows = [{ domain: 'Shakespearean Tragedies', answered: 12 }];
+    state.pairRows = [
+      ...Array.from({ length: 12 }, (_, i) => ({ label: 'Shakespearean Tragedies', questionId: `t${i}` })),
+      // Unrelated domain — must not inflate the parent's coverage.
+      ...Array.from({ length: 10 }, (_, i) => ({ label: 'Star Wars', questionId: `s${i}` })),
+    ];
+    getTargetQuestionCountForDomains.mockResolvedValue(
+      new Map([['Shakespearean Tragedies', 20]]),
+    );
+
+    expect(await evaluateSetCompletions('u1', ['Shakespearean Tragedies'])).toEqual([]);
   });
 });

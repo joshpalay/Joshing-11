@@ -8,6 +8,7 @@ function row(overrides: Partial<DomainSupplyCoverageRow>): DomainSupplyCoverageR
     domainKey: 'x',
     sampleLabel: 'X',
     estimatedQuestions: 100,
+    manualEstimatedQuestions: null,
     confidence: 'high',
     shape: 'abstract_topic',
     basis: 'wp:sections',
@@ -66,6 +67,43 @@ describe('summarizeSupplyCoverage (the shared #5 surface summary)', () => {
     ]);
     expect(summary.discrepancies).toHaveLength(0);
     expect(summary.counts.soft_finite).toBe(1);
+  });
+
+  it('a manual override wins over the corpus estimate and re-derives the state', () => {
+    // Shakespearean Tragedy: corpus said 27, realized 45 (raise_estimate);
+    // the admin sets 90 → filling again, ratio recomputed against 90.
+    const summary = summarizeSupplyCoverage([
+      row({
+        domainKey: 'shakespearean tragedy',
+        sampleLabel: 'Shakespearean Tragedy',
+        estimatedQuestions: 27,
+        manualEstimatedQuestions: 90,
+        realized: 45,
+      }),
+    ]);
+    const entry = summary.entries[0];
+    expect(entry.state).toBe('filling');
+    expect(entry.estimatedQuestions).toBe(90);
+    expect(entry.corpusEstimatedQuestions).toBe(27);
+    expect(entry.manualEstimatedQuestions).toBe(90);
+    expect(entry.ratio).toBeCloseTo(0.5);
+  });
+
+  it('an overridden row classifies at high confidence — a human anchor may alarm', () => {
+    // Low-confidence resolution would normally suppress the discrepancy alarm;
+    // the admin's number is trusted, so a dry shortfall against it DOES alarm.
+    const summary = summarizeSupplyCoverage([
+      row({
+        realized: 5,
+        consecutiveDryRounds: 5,
+        confidence: 'low',
+        estimatedQuestions: 30,
+        manualEstimatedQuestions: 100,
+      }),
+    ]);
+    expect(summary.entries[0].state).toBe('discrepancy');
+    expect(summary.entries[0].confidence).toBe('high');
+    expect(summary.discrepancies).toHaveLength(1);
   });
 
   it('empty coverage produces an empty, well-formed summary', () => {

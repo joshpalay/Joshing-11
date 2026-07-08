@@ -9,8 +9,11 @@ export type DepthEstimateRow = {
   domainKey: string;
   depthScore: number | null;
   source: string;
+  sampleLabel: string | null;
   // Corpus-grounded size (0117). When present, the PREFERRED target count.
   estimatedQuestions: number | null;
+  // Admin override (0119). When present, wins over estimatedQuestions.
+  manualEstimatedQuestions: number | null;
 };
 
 /** Cached depth estimates for the given folded domain keys. */
@@ -23,7 +26,9 @@ export async function getDepthEstimates(
       domainKey: domainDepthEstimates.domainKey,
       depthScore: domainDepthEstimates.depthScore,
       source: domainDepthEstimates.source,
+      sampleLabel: domainDepthEstimates.sampleLabel,
       estimatedQuestions: domainDepthEstimates.estimatedQuestions,
+      manualEstimatedQuestions: domainDepthEstimates.manualEstimatedQuestions,
     })
     .from(domainDepthEstimates)
     .where(inArray(domainDepthEstimates.domainKey, domainKeys));
@@ -129,10 +134,67 @@ export async function recordSupplyYieldObservation(input: {
   }
 }
 
+/**
+ * Co-calibration write (0119) — the "raise_estimate corrects UPWARD" arrow of
+ * the supply-state machine (supply-state.ts), previously a comment with no
+ * code. For the given domain keys (callers pass the keys that just YIELDED — a
+ * domain can only newly cross the boundary on a round it yields in), any row
+ * whose realized distinct-fact count has met or passed its corpus estimate is
+ * raised to ceil(realized / nearRatio), so the domain re-enters `filling` with
+ * headroom instead of sitting in `raise_estimate` forever. Guardrails:
+ *  - only raises, never lowers (realized >= estimate is the trigger);
+ *  - skips rows with a manual admin override (manual_estimated_questions);
+ *  - skips unsized rows (no corpus estimate to calibrate);
+ *  - realized = count(distinct fact_key), the SAME definition the coverage
+ *    read uses, so the dashboard and the calibration always agree.
+ * Fire-and-forget telemetry-grade: callers void+catch.
+ */
+export async function coCalibrateRaisedEstimates(
+  domainKeys: string[],
+  nearRatio: number,
+): Promise<void> {
+  const keys = [...new Set(domainKeys)].filter(Boolean);
+  if (keys.length === 0 || !(nearRatio > 0)) return;
+  await db.execute(sql`
+    UPDATE "DomainDepthEstimate" d
+    SET "estimated_questions" = CEIL(r.realized / ${nearRatio}::float8)::int,
+        "calibrated_at" = now()
+    FROM (
+      SELECT "domain_key", count(distinct "fact_key")::int AS realized
+      FROM "GeneratedQuestion"
+      WHERE "fact_key" IS NOT NULL AND "domain_key" = ANY(${keys})
+      GROUP BY "domain_key"
+    ) r
+    WHERE d."domain_key" = r."domain_key"
+      AND d."estimated_questions" IS NOT NULL
+      AND d."manual_estimated_questions" IS NULL
+      AND r.realized >= d."estimated_questions"
+  `);
+}
+
+/**
+ * Admin manual estimate override (0119). value=null clears the override so the
+ * domain returns to its corpus/depth path. UPDATE-only: the /admin/supply rows
+ * all exist in the table by construction; returns false when the key has no
+ * row so the API can 404 instead of silently no-oping.
+ */
+export async function setManualEstimate(
+  domainKeyValue: string,
+  value: number | null,
+): Promise<boolean> {
+  const rows = await db
+    .update(domainDepthEstimates)
+    .set({ manualEstimatedQuestions: value })
+    .where(eq(domainDepthEstimates.domainKey, domainKeyValue))
+    .returning({ domainKey: domainDepthEstimates.domainKey });
+  return rows.length > 0;
+}
+
 export type DomainSupplyCoverageRow = {
   domainKey: string;
   sampleLabel: string | null;
   estimatedQuestions: number | null;
+  manualEstimatedQuestions: number | null;
   confidence: string | null;
   shape: string | null;
   basis: string | null;
@@ -166,6 +228,7 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       domainKey: domainDepthEstimates.domainKey,
       sampleLabel: domainDepthEstimates.sampleLabel,
       estimatedQuestions: domainDepthEstimates.estimatedQuestions,
+      manualEstimatedQuestions: domainDepthEstimates.manualEstimatedQuestions,
       confidence: domainDepthEstimates.confidence,
       shape: domainDepthEstimates.shape,
       basis: domainDepthEstimates.basis,
