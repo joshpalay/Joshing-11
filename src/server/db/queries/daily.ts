@@ -1854,6 +1854,20 @@ export async function pickBankSource(
         eq(generatedQuestions.isDuplicate, false),
         // B-Report-3: skip generated questions under an open/upheld report.
         notSuppressedByContentReport(generatedQuestions.id, 'generated'),
+        // Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exclude ANY row whose fact
+        // the viewer has already answered, on any surface, however long ago —
+        // the MASTERY_EVENTS → canonical-twin → fact_key bridge, enforced in
+        // SQL so it cannot be capped. The in-memory avoidFactKeys set below
+        // still covers same-build/batch avoidance, but it is built from the
+        // recency-limited getRecentFactKeys (200) and a 445-fact history
+        // already overflows it — this clause is the uncapped guarantee.
+        sql`NOT EXISTS (
+          SELECT 1 FROM "MASTERY_EVENTS" me
+          JOIN "Question" cq ON me.question_id = cq.id
+          JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
+          WHERE me.answered_by_user_id = ${userId}
+            AND agq.fact_key = ${generatedQuestions.factKey}
+        )`,
       ))
       .orderBy(desc(generatedQuestions.createdAt))
       .limit(BANK_RECENCY_WINDOW);
@@ -2282,6 +2296,84 @@ export async function getRecentFactKeys(
     seen.add(row.factKey);
     out.push({ domain: row.domain ?? 'unknown', factKey: row.factKey });
     if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * Full-set dedup check (D-SUPPLY-NEVER-REPEAT-01): of the given candidate
+ * fact_keys, which has the viewer ALREADY ANSWERED on any surface? Exact and
+ * UNCAPPED — unlike getRecentFactKeys (whose answered arm is recency-limited
+ * for prompt sizing), this checks the full answered history via the same
+ * MASTERY_EVENTS → canonical-twin → fact_key bridge, so "never re-serve an
+ * answered fact" holds no matter how large the history grows (the 200-cap
+ * leak: a 445-fact history left the oldest ~245 invisible to the in-memory
+ * avoid set). Bounded by the candidate batch (≤ ~10 keys per call).
+ */
+export async function getAnsweredFactKeysAmong(
+  userId: string,
+  factKeys: readonly (string | null | undefined)[],
+): Promise<Set<string>> {
+  const keys = [...new Set(factKeys.filter((key): key is string => Boolean(key)))];
+  if (keys.length === 0) return new Set();
+  const rows = await db
+    .selectDistinct({ factKey: generatedQuestions.factKey })
+    .from(masteryEvents)
+    .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
+    .innerJoin(
+      generatedQuestions,
+      eq(canonicalQuestions.generatedQuestionId, generatedQuestions.id),
+    )
+    .where(and(
+      eq(masteryEvents.answeredByUserId, userId),
+      inArray(generatedQuestions.factKey, keys),
+    ));
+  return new Set(rows.map((row) => row.factKey).filter((key): key is string => Boolean(key)));
+}
+
+/**
+ * Demand-pull replenish (D-SUPPLY-DEMAND-PULL-01): how much SERVEABLE own-bank
+ * stock does the viewer have right now, per domain? A row counts only if the
+ * next build could actually place it: never served (used_in_queue=false), not a
+ * duplicate, fact-keyed, in the viewer's current palette, AND its fact not
+ * already answered by the viewer on any surface (the same MASTERY_EVENTS →
+ * canonical-twin → fact_key bridge getRecentFactKeys uses — a stale flute row
+ * is not stock). Domains are matched on the folded domain_key with the exact
+ * canonical string as fallback, mirroring pickBankSource.
+ */
+export async function countServeableOwnBankStock(
+  userId: string,
+  domains: string[],
+): Promise<Map<string, number>> {
+  if (domains.length === 0) return new Map();
+  const keys = [...new Set(domains.map((domain) => domainKey(domain)))];
+  const rows = await db
+    .select({
+      domain: generatedQuestions.canonicalSubcategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(generatedQuestions)
+    .where(and(
+      eq(generatedQuestions.userId, userId),
+      eq(generatedQuestions.usedInQueue, false),
+      eq(generatedQuestions.isDuplicate, false),
+      isNotNull(generatedQuestions.factKey),
+      or(
+        inArray(generatedQuestions.domainKey, keys),
+        inArray(generatedQuestions.canonicalSubcategory, domains),
+      ),
+      sql`NOT EXISTS (
+        SELECT 1 FROM "MASTERY_EVENTS" me
+        JOIN "Question" cq ON me.question_id = cq.id
+        JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
+        WHERE me.answered_by_user_id = ${userId}
+          AND agq.fact_key = ${generatedQuestions.factKey}
+      )`,
+    ))
+    .groupBy(generatedQuestions.canonicalSubcategory);
+  const out = new Map<string, number>();
+  for (const row of rows) {
+    if (row.domain) out.set(row.domain, row.count);
   }
   return out;
 }

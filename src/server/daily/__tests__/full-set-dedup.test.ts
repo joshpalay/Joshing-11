@@ -1,18 +1,18 @@
+// Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): the persist path must drop a
+// generated question whose fact the viewer has ALREADY ANSWERED even when the
+// recency-capped avoid set (getRecentFactKeys, 200) has aged that fact out —
+// the exact leak a 445-fact history opens. Runs the real generation pipeline
+// with a canned LLM and asserts the uncapped DB check (getAnsweredFactKeysAmong)
+// is what drops it; also proves the check fails OPEN (a DB error never blocks
+// the batch).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-// BP-6 / audit Q8 regression: canonical questions the player answered via a
-// friend's feed send, a milestone click-through, or a house slot carry no
-// fact_key, so generation could re-create the same fact the next day. The fix
-// folds recently-answered canonical texts — domain-scoped and capped — into
-// the ADVISORY avoid list. This test drives the +2 path through a bank miss
-// and asserts the in-domain answered text reaches the Sonnet generation
-// prompt while an out-of-domain one is scoped away.
 
 const mocks = vi.hoisted(() => ({
   getRecentDailyQuestionTexts: vi.fn(),
   getRecentFactKeys: vi.fn(),
   getAuthoredQuestionTexts: vi.fn(),
   getRecentAnsweredCanonicalTexts: vi.fn(),
+  getAnsweredFactKeysAmong: vi.fn(),
   pickBankSource: vi.fn(),
   loggedMessagesCreate: vi.fn(),
 }));
@@ -24,7 +24,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   getRecentAnsweredCanonicalTexts: mocks.getRecentAnsweredCanonicalTexts,
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
   getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
-  getAnsweredFactKeysAmong: vi.fn(async () => new Set<string>()),
+  getAnsweredFactKeysAmong: mocks.getAnsweredFactKeysAmong,
   getRecentDomainCounts: vi.fn(),
   getRecentSkipCountsByDomain: vi.fn(),
   getRecentSubAnglesByDomain: vi.fn(),
@@ -61,15 +61,15 @@ vi.mock('@/lib/llm', async (importOriginal) => {
 
 import { generateBonusQuestionsForDomains } from '@/server/daily/generate-questions';
 
-const ANSWERED_IN_DOMAIN = 'Scarpia is the villain in what Puccini opera?';
-const ANSWERED_OTHER_DOMAIN = "What physical anomaly is Anne Boleyn rumored to have had?";
+const FLUTE_FACT_KEY = 'star-trek-inner-light-picard-flute';
 
 function llmText(text: string) {
   return { content: [{ type: 'text', text }] };
 }
 
-// Canned per-tag responses so the full pipeline (generation + gates +
-// ask-to-answer) runs deterministically.
+// Canned per-tag responses: the LLM re-proposes an already-answered fact (the
+// flute) — exactly what happens when the prompt's capped avoid slice no longer
+// carries it.
 function respondByTag(tag: string) {
   switch (tag) {
     case 'generate-questions':
@@ -77,14 +77,15 @@ function respondByTag(tag: string) {
         JSON.stringify({
           questions: [
             {
-              canonical_subcategory: 'Puccini Operas',
-              broad_category: 'Music',
-              question_text: 'In Tosca, what does Cavaradossi paint in Act I?',
-              answer: 'a portrait of Mary Magdalene',
-              explainer: 'He is painting the Magdalene in the church.',
+              canonical_subcategory: 'Star Trek',
+              broad_category: 'TV & Film',
+              question_text:
+                "In 'The Inner Light', what instrument does Picard learn to play?",
+              answer: 'the Ressikan flute',
+              explainer: 'He lives a lifetime on Kataan and keeps the flute.',
               difficulty_estimate: 'accessible',
-              fact_key: 'tosca-cavaradossi-act1-painting',
-              sub_angles: ['Tosca Act I'],
+              fact_key: FLUTE_FACT_KEY,
+              sub_angles: ['The Inner Light'],
               question_shape: 'who_did_what',
             },
           ],
@@ -97,7 +98,7 @@ function respondByTag(tag: string) {
     case 'factual-gate':
       return llmText(JSON.stringify({ drop_indices: [], reasons: {} }));
     case 'ask-to-answer-cold':
-      return llmText('a portrait of Mary Magdalene');
+      return llmText('the Ressikan flute');
     case 'ask-to-answer-judge':
       return llmText(JSON.stringify({ pass_indices: [0], drop_indices: [], reasons: {} }));
     default:
@@ -108,32 +109,36 @@ function respondByTag(tag: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getRecentDailyQuestionTexts.mockResolvedValue([]);
+  // CRITICAL setup: the capped avoid list does NOT carry the flute — it aged
+  // out of the 200-entry window. Only the uncapped DB check knows it.
   mocks.getRecentFactKeys.mockResolvedValue([]);
   mocks.getAuthoredQuestionTexts.mockResolvedValue([]);
-  mocks.getRecentAnsweredCanonicalTexts.mockResolvedValue([
-    { domain: 'Puccini Operas', text: ANSWERED_IN_DOMAIN },
-    { domain: 'Tudor England', text: ANSWERED_OTHER_DOMAIN },
-  ]);
+  mocks.getRecentAnsweredCanonicalTexts.mockResolvedValue([]);
+  mocks.getAnsweredFactKeysAmong.mockResolvedValue(new Set<string>());
   mocks.pickBankSource.mockResolvedValue(null); // bank miss -> Sonnet path
   mocks.loggedMessagesCreate.mockImplementation(async (_client, tag) => respondByTag(tag));
 });
 
-describe('answered-canonical texts reach the generation avoid list (Q8)', () => {
-  it('folds the in-domain answered text into the Sonnet prompt; scopes out other domains', async () => {
-    const results = await generateBonusQuestionsForDomains('viewer-1', ['Puccini Operas']);
-    expect(results).toHaveLength(1);
-
-    const genCall = mocks.loggedMessagesCreate.mock.calls.find(([, tag]) => tag === 'generate-questions');
-    expect(genCall).toBeDefined();
-    const userContent = genCall![2].messages[0].content as string;
-
-    expect(userContent).toContain(ANSWERED_IN_DOMAIN);
-    expect(userContent).not.toContain(ANSWERED_OTHER_DOMAIN);
+describe('full-set dedup at persist (D-SUPPLY-NEVER-REPEAT-01)', () => {
+  it('drops a re-proposed fact the viewer answered even when the capped avoid set missed it', async () => {
+    mocks.getAnsweredFactKeysAmong.mockResolvedValue(new Set([FLUTE_FACT_KEY]));
+    const results = await generateBonusQuestionsForDomains('viewer-1', ['Star Trek']);
+    expect(results).toHaveLength(0);
+    // The check ran against this batch's candidate keys.
+    const [, keys] = mocks.getAnsweredFactKeysAmong.mock.calls[0];
+    expect(keys).toContain(FLUTE_FACT_KEY);
   });
 
-  it('survives a failed answered-canonical read (advisory, resilient)', async () => {
-    mocks.getRecentAnsweredCanonicalTexts.mockRejectedValue(new Error('db hiccup'));
-    const results = await generateBonusQuestionsForDomains('viewer-1', ['Puccini Operas']);
+  it('persists normally when the fact is genuinely new', async () => {
+    const results = await generateBonusQuestionsForDomains('viewer-1', ['Star Trek']);
+    expect(results).toHaveLength(1);
+    // The bonus path returns {domain, question} wrappers.
+    expect(results[0]).toMatchObject({ question: { factKey: FLUTE_FACT_KEY } });
+  });
+
+  it('fails open: a DB error in the full-set check never blocks the batch', async () => {
+    mocks.getAnsweredFactKeysAmong.mockRejectedValue(new Error('db down'));
+    const results = await generateBonusQuestionsForDomains('viewer-1', ['Star Trek']);
     expect(results).toHaveLength(1);
   });
 });
