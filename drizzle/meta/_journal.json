@@ -841,6 +841,13 @@
 			"when": 1786838400000,
 			"tag": "0119_supply_manual_override_calibration",
 			"breakpoints": true
+		},
+		{
+			"idx": 120,
+			"version": "7",
+			"when": 1786924800000,
+			"tag": "0120_gate_drop_stat",
+			"breakpoints": true
 		}
 	]
 }
