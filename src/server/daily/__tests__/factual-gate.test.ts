@@ -56,10 +56,10 @@ describe('parseFactualGateResponse', () => {
     expect(result.reasons[4]).toBe('false premise');
   });
 
-  it('returns empty when the JSON is truncated mid-structure (the silent fail-open the token cap prevents)', () => {
-    // A response cut off at max_tokens: every flagged index is silently lost and
-    // the whole batch ships ungated. Raising FACTUAL_GATE_MAX_TOKENS + the
-    // stop_reason guard in findFactualFailures keep this from happening unseen.
+  it('returns empty when the JSON is truncated mid-structure (why findFactualFailures must fail closed)', () => {
+    // A response cut off at max_tokens: the parser alone loses every flagged
+    // index. findFactualFailures detects this via stop_reason and fails CLOSED
+    // (drops the whole batch) — see factual-gate-failclosed.test.ts.
     const truncated =
       '{"drop_indices":[0,1,2],"reasons":{"0":"Neville received ten points not fifty","1":"the choral finale is the Ninth not the Thi';
     const result = parseFactualGateResponse(truncated, 3);

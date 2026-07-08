@@ -923,8 +923,9 @@ const FACTUAL_GATE_TIMEOUT_MS = FACTUAL_GATE_MODEL === HAIKU_MODEL ? HAIKU_GATE_
 // (this is how the "fifty points" Harry Potter false-premise question reached
 // production despite the gate running on Sonnet, which flags it deterministically).
 // Output is billed per token actually emitted, so this headroom is free unless a
-// response genuinely needs it; the truncation guard below catches any remaining
-// overflow loudly instead of silently.
+// response genuinely needs it; if a verdict still overflows, the guard in
+// findFactualFailures now fails CLOSED (drops the whole batch) rather than
+// shipping it ungated.
 const FACTUAL_GATE_MAX_TOKENS = 2000;
 
 export function parseFactualGateResponse(
@@ -991,17 +992,37 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
       system: FACTUAL_GATE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     }, { timeoutMs: FACTUAL_GATE_TIMEOUT_MS });
-    // A max_tokens stop means the JSON verdict was cut off: the parse below will
-    // fail and return an empty set, so the whole batch passes UNGATED. That used
-    // to be invisible. Surface it loudly so the cap can be raised before it
-    // silently disables the gate again.
+    const raw = extractTextContent(response.content);
+    // A max_tokens stop means the JSON verdict was cut off. A cut-off verdict
+    // almost always means the gate was flagging MANY questions (each drop costs
+    // ~270 output tokens), so shipping the batch on a parse failure is the worst
+    // possible outcome — it fails open on exactly the batches the gate judged
+    // worst (this is how the "fifty points" Harry Potter false premise reached
+    // production). Fail CLOSED instead: drop the whole batch. The chunk-level
+    // retry in generateDailyQuestions regenerates, so the cost is one extra
+    // generation call, not a hole in the day's queue. If the JSON still parses
+    // despite the stop (the object completed and only trailing text was cut),
+    // the verdict is structurally whole — use it, but warn so the cap gets
+    // raised before a real truncation hits.
     if (response.stop_reason === 'max_tokens') {
+      if (!parseJsonObject(raw)) {
+        console.warn(
+          '[daily/generate-questions] factual gate verdict truncated at max_tokens and unparseable — failing CLOSED, dropping whole batch',
+          { batchSize: generated.length, maxTokens: FACTUAL_GATE_MAX_TOKENS },
+        );
+        const toDrop = new Set<number>(generated.map((_, i) => i));
+        const reasons: Record<number, string> = {};
+        for (const index of toDrop) {
+          reasons[index] = 'factual gate verdict truncated at max_tokens; batch dropped unvetted';
+        }
+        return { toDrop, reasons };
+      }
       console.warn(
-        '[daily/generate-questions] factual gate response truncated at max_tokens — batch passed UNGATED',
+        '[daily/generate-questions] factual gate verdict hit max_tokens but parsed — raise FACTUAL_GATE_MAX_TOKENS',
         { batchSize: generated.length, maxTokens: FACTUAL_GATE_MAX_TOKENS },
       );
     }
-    return parseFactualGateResponse(extractTextContent(response.content), generated.length);
+    return parseFactualGateResponse(raw, generated.length);
   } catch (err) {
     // Fail open: a Haiku outage should not block the daily queue. A wrong
     // answer slipping through is no worse than the pre-gate status quo.
