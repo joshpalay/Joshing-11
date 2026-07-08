@@ -1,9 +1,9 @@
 // D-DIFFICULTY-SIZE-COMPLETION-01 — read/write for the cached topic depth score
 // (DomainDepthEstimate, migration 0116). Keyed on the folded domain_key so it
 // covers every played canonical_subcategory, not just authored KnowledgeNodes.
-import { inArray } from 'drizzle-orm';
+import { eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
-import { db, domainDepthEstimates } from '@/server/db';
+import { db, domainDepthEstimates, generatedQuestions } from '@/server/db';
 
 export type DepthEstimateRow = {
   domainKey: string;
@@ -98,4 +98,83 @@ export async function upsertCorpusSizeEstimate(input: {
     .insert(domainDepthEstimates)
     .values({ domainKey: input.domainKey, ...set })
     .onConflictDoUpdate({ target: domainDepthEstimates.domainKey, set });
+}
+
+/**
+ * Dry-round observation write (0118, D-SUPPLY-FINITENESS-01 #4). After a fresh
+ * generation round, reset the counter (+ stamp last_yield_at) for domains that
+ * yielded a surviving row, and increment it for domains that were OFFERED to
+ * the model but yielded nothing. UPDATE-only: a domain with no estimate row yet
+ * simply isn't observed (it gets a row lazily via the sizing paths). Fire-and-
+ * forget telemetry — callers void+catch; a miss never touches generation.
+ */
+export async function recordSupplyYieldObservation(input: {
+  yieldedDomainKeys: string[];
+  dryDomainKeys: string[];
+}): Promise<void> {
+  const yielded = [...new Set(input.yieldedDomainKeys)].filter(Boolean);
+  const dry = [...new Set(input.dryDomainKeys)].filter(Boolean)
+    .filter((key) => !yielded.includes(key));
+  if (yielded.length > 0) {
+    await db
+      .update(domainDepthEstimates)
+      .set({ consecutiveDryRounds: 0, lastYieldAt: new Date() })
+      .where(inArray(domainDepthEstimates.domainKey, yielded));
+  }
+  if (dry.length > 0) {
+    await db
+      .update(domainDepthEstimates)
+      .set({ consecutiveDryRounds: sql`${domainDepthEstimates.consecutiveDryRounds} + 1` })
+      .where(inArray(domainDepthEstimates.domainKey, dry));
+  }
+}
+
+export type DomainSupplyCoverageRow = {
+  domainKey: string;
+  sampleLabel: string | null;
+  estimatedQuestions: number | null;
+  confidence: string | null;
+  shape: string | null;
+  basis: string | null;
+  source: string;
+  consecutiveDryRounds: number;
+  lastYieldAt: Date | null;
+  /** Distinct facts generated for the domain, bank-wide (all users). */
+  realized: number;
+};
+
+/**
+ * Coverage read for the supply-state machine's two surfaces (weekly digest +
+ * admin dashboard, D-SUPPLY-FINITENESS-01 #5): every sized domain joined with
+ * its REALIZED distinct-fact count from the shared bank. State classification
+ * happens in TS (classifySupplyState) so the query stays pure observation.
+ */
+export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow[]> {
+  const realized = db.$with('realized').as(
+    db
+      .select({
+        domainKey: generatedQuestions.domainKey,
+        realized: sql<number>`count(distinct ${generatedQuestions.factKey})::int`.as('realized'),
+      })
+      .from(generatedQuestions)
+      .where(isNotNull(generatedQuestions.factKey))
+      .groupBy(generatedQuestions.domainKey),
+  );
+  const rows = await db
+    .with(realized)
+    .select({
+      domainKey: domainDepthEstimates.domainKey,
+      sampleLabel: domainDepthEstimates.sampleLabel,
+      estimatedQuestions: domainDepthEstimates.estimatedQuestions,
+      confidence: domainDepthEstimates.confidence,
+      shape: domainDepthEstimates.shape,
+      basis: domainDepthEstimates.basis,
+      source: domainDepthEstimates.source,
+      consecutiveDryRounds: domainDepthEstimates.consecutiveDryRounds,
+      lastYieldAt: domainDepthEstimates.lastYieldAt,
+      realized: sql<number>`coalesce(${realized.realized}, 0)::int`,
+    })
+    .from(domainDepthEstimates)
+    .leftJoin(realized, eq(realized.domainKey, domainDepthEstimates.domainKey));
+  return rows;
 }

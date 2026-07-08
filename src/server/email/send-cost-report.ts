@@ -4,6 +4,8 @@ import {
   type CostReportRecipient,
 } from '@/server/db/queries/llm-cost-report';
 
+import type { SupplyCoverageSummary } from '@/server/daily/supply-coverage';
+
 import { sendEmail } from './client';
 import { buildCostReportEmailTemplate } from './templates/llm-cost-report';
 
@@ -25,6 +27,9 @@ export type SendCostReportEmailResult =
 export async function sendCostReportEmail(
   report: CostLatencyReport,
   markdown: string,
+  // Domain-supply coverage (D-SUPPLY-FINITENESS-01 #5); optional + null-safe so
+  // a coverage failure never blocks the cost digest.
+  supply?: SupplyCoverageSummary | null,
 ): Promise<SendCostReportEmailResult> {
   const recipient = await resolveCostReportRecipient();
   if (!recipient) {
@@ -35,7 +40,7 @@ export async function sendCostReportEmail(
     };
   }
 
-  const template = buildCostReportEmailTemplate({ report, markdown });
+  const template = buildCostReportEmailTemplate({ report, markdown, supply });
   const sendResult = await sendEmail({
     to: recipient.to,
     subject: template.subject,

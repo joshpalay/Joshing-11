@@ -1771,6 +1771,11 @@ export const domainDepthEstimates = pgTable(
     wikidataQid: text('wikidata_qid'),
     fandomHost: text('fandom_host'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    // Dry-round observations (0118, D-SUPPLY-FINITENESS-01 #4). Raw counters
+    // only — the supply STATE is derived at read time by classifySupplyState
+    // (src/server/daily/supply-state.ts), so nothing stored can go stale.
+    consecutiveDryRounds: integer('consecutive_dry_rounds').notNull().default(0),
+    lastYieldAt: timestamp('last_yield_at', { withTimezone: true }),
     computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
