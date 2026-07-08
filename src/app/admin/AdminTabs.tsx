@@ -2,15 +2,15 @@
 
 import Link from 'next/link';
 
-// One nav for the crafter tool's rooms — Panel B (/admin/crafter), the review
-// queue (/admin/reports), and the knowledge-graph authoring surface
-// (/admin/knowledge). Shared so the pages read as one tool, not ad-hoc admin
-// routes that happen to link at each other.
+// One nav for the crafter tool's rooms — the overview landing (/admin),
+// Panel B (/admin/crafter), the review queue (/admin/reports), and the
+// knowledge-graph authoring surface (/admin/knowledge). Shared so the pages
+// read as one tool, not ad-hoc admin routes that happen to link at each other.
 export function AdminTabs({
   active,
   needingReviewCount,
 }: {
-  active: 'crafter' | 'reports' | 'knowledge' | 'questions' | 'supply' | 'domains';
+  active: 'overview' | 'crafter' | 'reports' | 'knowledge' | 'questions' | 'supply' | 'domains';
   needingReviewCount?: number;
 }) {
   const tabClass = 'rounded-md border px-3 py-1.5 text-sm font-medium';
@@ -19,6 +19,14 @@ export function AdminTabs({
 
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Crafter sections">
+      <Link
+        href="/admin"
+        className={tabClass}
+        style={active === 'overview' ? activeStyle : idleStyle}
+        aria-current={active === 'overview' ? 'page' : undefined}
+      >
+        Overview
+      </Link>
       <Link
         href="/admin/crafter"
         className={tabClass}

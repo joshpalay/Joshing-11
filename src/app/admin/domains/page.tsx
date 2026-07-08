@@ -40,7 +40,9 @@ export default async function AdminDomainsPage() {
             <strong>see</strong> link to peek at the actual questions before you decide; the{' '}
             <strong>★ keep</strong> tag marks the side that holds more (folding into it moves the
             fewest rows). <strong>Preview</strong> shows the exact rows that would move before
-            anything changes.
+            anything changes. The knowledge graph follows automatically: if a folded label has a
+            graph node, its edges and structure move with it (same engine as the tree&apos;s
+            “Merge into…”).
           </p>
         </div>
       </div>
