@@ -66,7 +66,8 @@ export default async function AdminSupplyPage() {
       <div className="mb-6 flex flex-col gap-4">
         <AdminTabs active="supply" />
         <div>
-          <h1 className="text-2xl font-semibold" style={{ color: 'var(--brand-navy)' }}>
+          {/* Table page — max-w-5xl on purpose (9 columns); content pages sit at 4xl. */}
+          <h1 className="font-serif text-2xl font-semibold" style={{ color: 'var(--brand-ink)' }}>
             Domain supply
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>

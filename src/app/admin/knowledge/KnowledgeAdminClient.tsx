@@ -61,13 +61,15 @@ export function KnowledgeAdminClient({
   const router = useRouter();
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
+    <main className="mx-auto min-h-dvh max-w-4xl px-4 pt-6 pb-24">
       <header className="mb-5">
-        <h1 className="mb-3 font-serif text-2xl font-semibold text-[var(--brand-ink)]">
+        <div className="mb-3">
+          <AdminTabs active="knowledge" />
+        </div>
+        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
           Knowledge graph
         </h1>
-        <AdminTabs active="knowledge" />
-        <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
+        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
           The territory structure — human-authored, always. Nodes are leaves/parents. Each row
           shows its <strong>mastery threshold</strong> (<em>pts</em> — the points to master the
           topic, color-coded by size; edit it via ⋯), its question count (<em>Qs</em>), and the

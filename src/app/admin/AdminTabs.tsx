@@ -27,13 +27,15 @@ export function AdminTabs({
       >
         Overview
       </Link>
+      {/* The poetic name ("Where your craft is wanted") stays on the page
+          itself — nav labels say what a page IS. */}
       <Link
         href="/admin/crafter"
         className={tabClass}
         style={active === 'crafter' ? activeStyle : idleStyle}
         aria-current={active === 'crafter' ? 'page' : undefined}
       >
-        Where your craft is wanted
+        Crafter
       </Link>
       <Link
         href="/admin/reports"

@@ -104,7 +104,7 @@ export default async function AdminOverviewPage() {
       <div className="mb-6 flex flex-col gap-4">
         <AdminTabs active="overview" />
         <div>
-          <h1 className="font-serif text-2xl font-semibold" style={{ color: 'var(--brand-navy)' }}>
+          <h1 className="font-serif text-2xl font-semibold" style={{ color: 'var(--brand-ink)' }}>
             Overview
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -171,8 +171,8 @@ export default async function AdminOverviewPage() {
         />
         <OverviewCard
           href="/admin/crafter"
-          title="Where your craft is wanted"
-          description="Demand-driven authoring: the territories asking for hand-written questions."
+          title="Crafter"
+          description="Where your craft is wanted — the territories asking for hand-written questions."
           stats={[]}
         />
       </div>
