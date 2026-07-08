@@ -9,6 +9,13 @@ export type DomainFragmentationEmail = {
 export type DomainReviewInput = {
   pairs: FragmentationPair[];
   narrowDomains: NarrowDomain[];
+  /**
+   * Absolute URL of the /admin/domains decision UI. When present, the merge
+   * section points the reader there to make each call in the browser (preview +
+   * apply) instead of the old "reply and I'll merge them" manual loop. The cron
+   * resolves it; omit in tests that don't care about the link.
+   */
+  reviewUrl?: string;
 };
 
 function escapeHtml(value: string): string {
@@ -32,7 +39,7 @@ function pct(fraction: number): string {
 export function buildDomainFragmentationEmailTemplate(
   input: DomainReviewInput,
 ): DomainFragmentationEmail {
-  const { pairs, narrowDomains } = input;
+  const { pairs, narrowDomains, reviewUrl } = input;
 
   const subjectParts: string[] = [];
   if (pairs.length > 0) {
@@ -59,13 +66,18 @@ export function buildDomainFragmentationEmailTemplate(
   if (pairs.length > 0) {
     const intro =
       'These domain pairs look similar but were not auto-merged — each is a judgment call. ' +
-      'If a pair is the same scope, reply and I’ll merge them; if they’re genuinely different ' +
-      '(a specific work vs its genre, two siblings), leave them.';
+      'If a pair is the same scope, merge them (pick the surviving label); if they’re genuinely ' +
+      'different (a specific work vs its genre, two siblings), leave them.';
+    const cta = reviewUrl
+      ? `Make each call in the dashboard (preview the exact rows, then apply): ${reviewUrl}`
+      : '';
     const lines = pairs.map(
       (p, i) =>
         `${i + 1}. ${p.domainA} (${p.depthA}) ≈ ${p.domainB} (${p.depthB})  —  ${pct(p.similarity)} similar`,
     );
-    textBlocks.push(`MERGE CLUSTERS\n${intro}\n\n${lines.join('\n')}`);
+    textBlocks.push(
+      `MERGE CLUSTERS\n${intro}${cta ? `\n${cta}` : ''}\n\n${lines.join('\n')}`,
+    );
 
     const rows = pairs
       .map(
@@ -78,9 +90,13 @@ export function buildDomainFragmentationEmailTemplate(
       </tr>`,
       )
       .join('');
+    const ctaHtml = reviewUrl
+      ? `<p style="margin:0 0 8px;"><a href="${escapeHtml(reviewUrl)}" style="color:#1e3a5f;font-weight:600;">Make each call in the dashboard &rarr;</a> <span style="color:#888;">Preview the exact rows, then apply.</span></p>`
+      : '';
     htmlBlocks.push(`
       <h3 style="font-size:15px;margin:0 0 4px;">Merge clusters</h3>
       <p style="margin:0 0 8px;">${escapeHtml(intro)}</p>
+      ${ctaHtml}
       <table style="border-collapse:collapse;width:100%;font-size:14px;">
         <thead>
           <tr style="text-align:left;color:#888;font-size:12px;">

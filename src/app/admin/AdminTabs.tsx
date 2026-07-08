@@ -10,7 +10,7 @@ export function AdminTabs({
   active,
   needingReviewCount,
 }: {
-  active: 'crafter' | 'reports' | 'knowledge' | 'questions' | 'supply';
+  active: 'crafter' | 'reports' | 'knowledge' | 'questions' | 'supply' | 'domains';
   needingReviewCount?: number;
 }) {
   const tabClass = 'rounded-md border px-3 py-1.5 text-sm font-medium';
@@ -61,6 +61,14 @@ export function AdminTabs({
         aria-current={active === 'supply' ? 'page' : undefined}
       >
         Domain supply
+      </Link>
+      <Link
+        href="/admin/domains"
+        className={tabClass}
+        style={active === 'domains' ? activeStyle : idleStyle}
+        aria-current={active === 'domains' ? 'page' : undefined}
+      >
+        Domain merges
       </Link>
     </nav>
   );
