@@ -58,6 +58,7 @@ describe('renderQualityAggregationMarkdown', () => {
     periodEnd: new Date('2026-07-01T00:00:00Z'),
     windowDays: 30,
     floor: 5,
+    gates: [],
   };
 
   it('renders eligible clusters in a table and below-floor as watch', () => {
@@ -76,5 +77,40 @@ describe('renderQualityAggregationMarkdown', () => {
   it('states plainly when nothing cleared the floor', () => {
     const md = mod.renderQualityAggregationMarkdown({ ...base, eligible: [], belowFloor: [] });
     expect(md).toMatch(/No cluster cleared the sample floor/);
+  });
+
+  it('renders gate drop rates and flags failed-open runs', () => {
+    const md = mod.renderQualityAggregationMarkdown({
+      ...base,
+      eligible: [],
+      belowFloor: [],
+      gates: [
+        { gate: 'quality', considered: 200, dropped: 14, failedOpen: 0 },
+        { gate: 'factual', considered: 200, dropped: 8, failedOpen: 3 },
+      ],
+    });
+    expect(md).toContain('Generation gates');
+    expect(md).toContain('| quality | 200 | 14 | 7.0% | 0 |');
+    expect(md).toContain('⚠ 3');
+    expect(md).toMatch(/Check these gates: factual/);
+  });
+
+  it('flags a fail-open LLM gate with a zero drop rate across a real sample', () => {
+    const md = mod.renderQualityAggregationMarkdown({
+      ...base,
+      eligible: [],
+      belowFloor: [],
+      gates: [
+        { gate: 'quality', considered: 120, dropped: 0, failedOpen: 0 },
+        // Deterministic gate at zero is normal — must NOT be flagged.
+        { gate: 'answer_leak', considered: 120, dropped: 0, failedOpen: 0 },
+      ],
+    });
+    expect(md).toMatch(/Check these gates: quality(?!.*answer_leak)/);
+  });
+
+  it('omits the gates section when no counters exist (un-migrated or quiet week)', () => {
+    const md = mod.renderQualityAggregationMarkdown({ ...base, eligible: [], belowFloor: [] });
+    expect(md).not.toContain('Generation gates');
   });
 });

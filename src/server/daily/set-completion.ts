@@ -26,6 +26,8 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { db, masteryEvents } from '@/server/db';
+import { domainKey } from '@/lib/knowledge/domain-key';
+import { getClusterContext, substantiveDescendants } from '@/server/knowledge/graph';
 import { markDomainExpansionEligible } from '@/server/adaptive-difficulty';
 import {
   hasDesignation,
@@ -81,6 +83,15 @@ export function isSetComplete(input: {
 
 // Distinct QUESTIONS a player has answered per domain (coverage) — deduped so
 // a re-answered question counts once, matching the distinct-fact set size.
+//
+// GRAPH-AWARE (D-MASTERY-FINEST-NODE-01 §3/P4): when a requested domain is an
+// authored KnowledgeNode with substantive descendants, its coverage counts
+// distinct questions answered anywhere in the subtree — the numerator must
+// aggregate over the same subtree the subtree-union set SIZE does
+// (getTargetQuestionCountForDomains), or parents whose target grew to the
+// union would become uncompletable. Mirrors getDurablePoolDepthForDomains'
+// roll-up; with an empty graph (or on any graph fault) the exact-label counts
+// are the whole answer, byte-identical to the pre-graph behavior.
 async function distinctAnsweredByDomain(
   userId: string,
   domains: string[],
@@ -99,7 +110,52 @@ async function distinctAnsweredByDomain(
       ),
     )
     .groupBy(masteryEvents.canonicalSubcategory);
-  return new Map(rows.filter((r) => r.domain).map((r) => [r.domain as string, Number(r.answered)]));
+  const result = new Map(
+    rows.filter((r) => r.domain).map((r) => [r.domain as string, Number(r.answered)]),
+  );
+
+  try {
+    const ctx = await getClusterContext();
+    if (ctx.nodeKeys.size === 0 || ctx.edges.length === 0) return result;
+
+    const descendantsByDomain = new Map<string, Set<string>>();
+    for (const domain of domains) {
+      const key = domainKey(domain);
+      if (!ctx.nodeKeys.has(key)) continue;
+      const descendants = substantiveDescendants(key, ctx.edges);
+      if (descendants.size > 0) descendantsByDomain.set(domain, descendants);
+    }
+    if (descendantsByDomain.size === 0) return result;
+
+    // Distinct (label, question) pairs across this player's whole answer
+    // history, folded here because MASTERY_EVENTS stores labels, not keys — a
+    // label variant that folds into the subtree still counts. One player's
+    // history is small at this scale.
+    const pairRows = await db
+      .selectDistinct({
+        label: masteryEvents.canonicalSubcategory,
+        questionId: masteryEvents.questionId,
+      })
+      .from(masteryEvents)
+      .where(eq(masteryEvents.answeredByUserId, userId));
+
+    for (const [domain, descendants] of descendantsByDomain) {
+      const clusterKeys = new Set([domainKey(domain), ...descendants]);
+      const answered = new Set<string>();
+      for (const row of pairRows) {
+        if (!row.questionId) continue;
+        if (clusterKeys.has(domainKey(row.label))) answered.add(row.questionId);
+      }
+      // Never below the base exact-label count: the roll-up only adds.
+      if (answered.size > (result.get(domain) ?? 0)) result.set(domain, answered.size);
+    }
+  } catch (error) {
+    console.warn('[set-completion] graph roll-up skipped (non-fatal)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return result;
 }
 
 /**

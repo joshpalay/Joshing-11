@@ -9,9 +9,10 @@ import {
 } from '@/server/db/queries/crafter-demand';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
 import { getRetrievalConfig } from '@/server/daily/retrieval-config';
+import { buildSupplyCoverageSummary } from '@/server/daily/supply-coverage';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
-import { KnowledgeAdminClient } from './KnowledgeAdminClient';
+import { KnowledgeAdminClient, type SupplyReadout } from './KnowledgeAdminClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export default async function AdminKnowledgePage() {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
-  const [{ nodes, edges }, corpusDepths, corpusPoints, corpusGenStats] = await Promise.all([
+  const [{ nodes, edges }, corpusDepths, corpusPoints, corpusGenStats, supply] = await Promise.all([
     listKnowledgeGraph(),
     // Per-label question depth (machine + human), so the tree can flag
     // territories too thin to stand alone ("this is too small — condense it").
@@ -34,6 +35,10 @@ export default async function AdminKnowledgePage() {
     // Per-label generation exhaustion (total produced + duplicates), so the tree
     // can flag where NEW questions are hard to find (high duplicate share).
     getCorpusLabelGenStats(),
+    // The supply lens over the SAME areas ("knowledge graph and domain supply
+    // should have the same information") — per-row readout + a link to the
+    // supply table. Fail-open internally: null just means no chips this load.
+    buildSupplyCoverageSummary(),
   ]);
   const ownDepthByKey: Record<string, number> = {};
   const ownMachineDepthByKey: Record<string, number> = {};
@@ -119,6 +124,47 @@ export default async function AdminKnowledgePage() {
     exhaustedByKey[key] = { self: isExhaustedLeaf(key), descendants: exhaustedDescendants };
   }
 
+  // UNFILED areas ("show all areas, not just the ones I did", 2026-07-08):
+  // every corpus label whose folded key has NO authored node — questions exist
+  // there, but the territory isn't in the tree yet. Shown below the tree with
+  // an add-to-tree action, so the graph page is the complete picture instead of
+  // only the authored subset. Display label = the deepest spelling per key
+  // (spelling variants fold to one row); sorted most-questions-first so the
+  // biggest missing territories surface at the top.
+  const nodeKeySet = new Set(nodes.map((n) => n.domainKey));
+  const bestLabelByKey = new Map<string, { label: string; depth: number }>();
+  for (const entry of corpusDepths) {
+    const key = domainKey(entry.label);
+    if (nodeKeySet.has(key)) continue;
+    const depth = entry.machineDepth + entry.humanAuthored;
+    const best = bestLabelByKey.get(key);
+    if (!best || depth > best.depth) bestLabelByKey.set(key, { label: entry.label, depth });
+  }
+  const unfiled = [...bestLabelByKey.entries()]
+    .map(([key, { label }]) => ({
+      domainKey: key,
+      label,
+      questions: ownDepthByKey[key] ?? 0,
+      points: ownPointsByKey[key] ?? 0,
+      genTotal: ownGenByKey[key]?.total ?? 0,
+      genDupes: ownGenByKey[key]?.dupes ?? 0,
+      exhausted: isExhaustedLeaf(key),
+    }))
+    .filter((area) => area.questions > 0)
+    .sort((a, b) => b.questions - a.questions || a.label.localeCompare(b.label));
+
+  // Per-key supply readout for the row chips. Serializable subset only.
+  const supplyByKey: Record<string, SupplyReadout> = {};
+  for (const entry of supply?.entries ?? []) {
+    supplyByKey[entry.domainKey] = {
+      state: entry.state,
+      realized: entry.realized,
+      estimatedQuestions: entry.estimatedQuestions,
+      ratio: entry.ratio,
+      capped: entry.generationCapped,
+    };
+  }
+
   return (
     <KnowledgeAdminClient
       nodes={nodes}
@@ -127,6 +173,8 @@ export default async function AdminKnowledgePage() {
       pointsByKey={pointsByKey}
       genStatsByKey={genStatsByKey}
       exhaustedByKey={exhaustedByKey}
+      unfiled={unfiled}
+      supplyByKey={supplyByKey}
     />
   );
 }

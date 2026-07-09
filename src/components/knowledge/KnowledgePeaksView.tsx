@@ -6,6 +6,7 @@ import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import { freqKey, usePeakDetail } from '@/components/knowledge/usePeakDetail';
 import {
   MIN_SIZE,
   MAX_SIZE,
@@ -78,17 +79,8 @@ function quizHref(name: string): string {
   return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
 }
 
-// A peaks leaf's `node.name` === its `canonicalSubcategory`, which is exactly the
-// key `domainPreferenceFrequency` stores — matched case-insensitively, just like
-// the domain-frequency route. Normalize both sides the same way to resolve it.
-function freqKey(name: string): string {
-  return name.trim().toLowerCase();
-}
-
-// Decision A: a leaf with no explicit preference shows its actual effective
-// default. For an owned peak that's `'sometimes'` ("Sometimes") — the rotation
-// it's already in — so the face is truthful, not blank.
-const DEFAULT_FREQUENCY: TerritoryFrequency = 'sometimes';
+// `freqKey` + `DEFAULT_FREQUENCY` (and the frequency/adopt writes below) live in
+// usePeakDetail so the flat portrait page drives the same PeakDetailCard.
 
 const EMPTY_DOMAIN_SET: ReadonlySet<string> = new Set();
 
@@ -114,7 +106,7 @@ function isOwnedLeaf(node: KnowledgeTreeNode): boolean {
   );
 }
 
-type LeafInfo = {
+export type LeafInfo = {
   node: KnowledgeTreeNode;
   /** Non-root ancestors, top area → leaf's immediate parent (excludes the leaf). */
   path: KnowledgeTreeNode[];
@@ -125,7 +117,7 @@ type LeafInfo = {
 // One walk of the tree: every owned terminal leaf with its lineage. Parents
 // carry their child roster inline, so siblings (owned + addable ghosts) come
 // straight off `parent.children` at render time.
-function indexLeaves(tree: KnowledgeTreeNode): LeafInfo[] {
+export function indexLeaves(tree: KnowledgeTreeNode): LeafInfo[] {
   const out: LeafInfo[] = [];
   const walk = (node: KnowledgeTreeNode, ancestors: KnowledgeTreeNode[]) => {
     if (isOwnedLeaf(node)) {
@@ -164,54 +156,12 @@ export function KnowledgePeaksView({
    */
   fullyExploredDomains?: ReadonlySet<string>;
 }) {
-  const [tree, setTree] = useState<KnowledgeTreeNode>(data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  // Optimistic frequency map, keyed by normalized domain. Seeded from the
-  // server preference and updated in place on write (like `adoptNode`), so the
-  // face pill and detail sheet reflect the change before the round rebuilds.
-  const [freqMap, setFreqMap] = useState<Record<string, TerritoryFrequency>>(() => {
-    const seeded: Record<string, TerritoryFrequency> = {};
-    for (const [domain, frequency] of Object.entries(frequencyByDomain)) {
-      seeded[freqKey(domain)] = frequency;
-    }
-    return seeded;
-  });
-
-  const resolveFrequency = useCallback(
-    (name: string): TerritoryFrequency => freqMap[freqKey(name)] ?? DEFAULT_FREQUENCY,
-    [freqMap],
-  );
-
-  // Optimistic write: flip local state, POST the single-domain change, revert on
-  // failure. The route merges server-side and drops untouched Daily Five queues.
-  const setFrequency = useCallback(
-    async (name: string, frequency: TerritoryFrequency): Promise<boolean> => {
-      const key = freqKey(name);
-      const previous = freqMap[key];
-      setFreqMap((prev) => ({ ...prev, [key]: frequency }));
-      try {
-        const res = await fetch('/api/daily/preferences/domain-frequency', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ domain: name, frequency }),
-        });
-        if (!res.ok) throw new Error('frequency update failed');
-        return true;
-      } catch {
-        setFreqMap((prev) => {
-          const next = { ...prev };
-          if (previous === undefined) delete next[key];
-          else next[key] = previous;
-          return next;
-        });
-        return false;
-      }
-    },
-    [freqMap],
-  );
+  // The optimistic tree, per-leaf rotation map, and the frequency/adopt writes
+  // are shared with the flat portrait page via this controller.
+  const { tree, resolveFrequency, setFrequency, adoptNode } = usePeakDetail(data, frequencyByDomain);
 
   // "Fully explored" honor (P4) — resolve per node by normalized domain key,
   // same match as frequency. Currently the source set is gated/empty.
@@ -357,39 +307,6 @@ export function KnowledgePeaksView({
     if (standalone.length > 0) list.push({ title: 'More', field: null, leaves: standalone });
     return list;
   }, [sorted]);
-
-  // Optimistic confirmed add: flip the target into a real, owned node so it
-  // jumps from "add next" to held; revert on failure. Mirrors the bubble map.
-  // Restore the node's ACTUAL prior state on failure — an unheld sibling falls
-  // back to a ghost, but an already-held container adopted from "Part of" was
-  // never a ghost and must not become one.
-  const adoptNode = useCallback(
-    async (id: string, name: string): Promise<boolean> => {
-      const findPrior = (
-        subtree: KnowledgeTreeNode,
-      ): { ghost?: boolean; value?: number } | null => {
-        if (subtree.id === id) return { ghost: subtree.ghost, value: subtree.value };
-        for (const child of subtree.children ?? []) {
-          const found = findPrior(child);
-          if (found) return found;
-        }
-        return null;
-      };
-      const prior = findPrior(tree) ?? { ghost: true, value: 40 };
-      const setNode = (
-        subtree: KnowledgeTreeNode,
-        next: { ghost?: boolean; value?: number },
-      ): KnowledgeTreeNode =>
-        subtree.id === id
-          ? { ...subtree, ghost: next.ghost || undefined, value: next.value }
-          : { ...subtree, children: subtree.children?.map((c) => setNode(c, next)) };
-      setTree((prev) => setNode(prev, { ghost: false, value: 1 }));
-      const ok = await adoptDomain(name);
-      if (!ok) setTree((prev) => setNode(prev, prior));
-      return ok;
-    },
-    [tree],
-  );
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -785,7 +702,7 @@ type AddPhase =
 
 // The leaf-first detail: identity, the rollup PATH, and the sibling roster —
 // owned siblings you can jump to, plus addable ghosts (the "grow it next" move).
-function PeakDetailCard({
+export function PeakDetailCard({
   leaf,
   variant,
   frequency,

@@ -824,9 +824,10 @@ async function buildDailyQueueForUser(
   // UNVERIFIED fresh generations — the niche-fiction fabrication case ("Ben Ripley
   // vomits" in "Spy School Books 1-6") the factual gate can't catch. Only rows that
   // earned >= machine_verified serve; the rest wait for the async web-search verify
-  // pass. Flag-gated OFF; a no-op until VERIFY_GATE_THIN_DECLARED_ENABLED is flipped
-  // alongside the verifier wiki/fandom allowlist. Applied BEFORE the achieved/floor
-  // check so a gate-induced shortfall degrades or retries like any other.
+  // pass. DEFAULT ON as of 2026-07-08, together with the verifier wiki/fandom
+  // allowlist default (VERIFY_GATE_THIN_DECLARED_ENABLED=false reverts). Applied
+  // BEFORE the achieved/floor check so a gate-induced shortfall degrades or
+  // retries like any other.
   const declaredDomains = new Set(
     knowledgeBase.filter((entry) => entry.territoryType === 'declared').map((entry) => entry.domain),
   );

@@ -14,9 +14,11 @@
  */
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { scoreDomainDepth } from '@/server/llm/domain-depth';
+import { getClusterContext, substantiveDescendants } from '@/server/knowledge/graph';
 import {
   getDepthEstimates,
   upsertDepthEstimate,
+  type DepthEstimateRow,
 } from '@/server/db/queries/domain-depth-estimate';
 
 function numEnv(name: string, fallback: number): number {
@@ -76,10 +78,17 @@ export async function getTargetQuestionCountForDomains(
 
   const cached = await getDepthEstimates(keys).catch(() => new Map());
 
+  // Target-count precedence: admin manual override (0119) > corpus-grounded
+  // estimate (D-SUPPLY-FINITENESS-01) > coefficient·depth² fallback. A resolved
+  // Wikipedia/Wikidata/Fandom count is a truer set size than depth², and a
+  // human's number is truer still.
+  const estimateByKey = new Map<string, number>();
   const depthByKey = new Map<string, number>();
   for (const key of keys) {
     const row = cached.get(key);
     if (row) {
+      const preferred = row.manualEstimatedQuestions ?? row.estimatedQuestions;
+      if (preferred != null) estimateByKey.set(key, preferred);
       depthByKey.set(key, row.depthScore ?? defaultDepth());
       continue;
     }
@@ -102,9 +111,67 @@ export async function getTargetQuestionCountForDomains(
     }).catch(() => {});
   }
 
+  // Parent subtree-union sizing (D-MASTERY-FINEST-NODE-01 §3): a parent's
+  // finite set is the UNION of its substantive descendants' sets — "complete
+  // Shakespeare Tragedies" means breadth across the plays, not one genre
+  // article's section count. For requested domains that are authored nodes
+  // with substantive descendants, the target becomes max(own, Σ descendants)
+  // — max, not sum-of-both, because under total containment the parent's own
+  // pool overlaps the children's sets. Cached rows only (no LLM calls for
+  // unplayed descendants); a manual admin override on the parent wins over
+  // the union; graph faults fall back to per-node sizing. The per-domain
+  // finiteness state machine / discrepancy alarm reads raw rows, not this,
+  // and is deliberately untouched.
+  try {
+    const ctx = await getClusterContext();
+    if (ctx.nodeKeys.size > 0 && ctx.edges.length > 0) {
+      const descendantsByKey = new Map<string, Set<string>>();
+      for (const key of keys) {
+        if (!ctx.nodeKeys.has(key)) continue;
+        const descendants = substantiveDescendants(key, ctx.edges);
+        if (descendants.size > 0) descendantsByKey.set(key, descendants);
+      }
+      if (descendantsByKey.size > 0) {
+        const descendantKeys = new Set<string>();
+        for (const descendants of descendantsByKey.values()) {
+          for (const key of descendants) descendantKeys.add(key);
+        }
+        const missing = [...descendantKeys].filter((key) => !cached.has(key));
+        const fetched: Map<string, DepthEstimateRow> =
+          missing.length > 0 ? await getDepthEstimates(missing) : new Map();
+        const sizeForRow = (row: DepthEstimateRow): number | null =>
+          row.manualEstimatedQuestions ??
+          row.estimatedQuestions ??
+          (row.depthScore != null ? depthToTargetCount(row.depthScore) : null);
+
+        for (const [key, descendants] of descendantsByKey) {
+          if (cached.get(key)?.manualEstimatedQuestions != null) continue;
+          let unionSize = 0;
+          for (const childKey of descendants) {
+            const row = cached.get(childKey) ?? fetched.get(childKey);
+            const size = row ? sizeForRow(row) : null;
+            if (size != null) unionSize += size;
+          }
+          if (unionSize <= 0) continue;
+          const own =
+            estimateByKey.get(key) ?? depthToTargetCount(depthByKey.get(key) ?? defaultDepth());
+          if (unionSize > own) estimateByKey.set(key, unionSize);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[domain-size] subtree-union sizing skipped (non-fatal)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   for (const canonical of unique) {
     const key = keyByCanonical.get(canonical)!;
-    out.set(canonical, depthToTargetCount(depthByKey.get(key) ?? defaultDepth()));
+    const corpus = estimateByKey.get(key);
+    out.set(
+      canonical,
+      corpus != null ? corpus : depthToTargetCount(depthByKey.get(key) ?? defaultDepth()),
+    );
   }
   return out;
 }

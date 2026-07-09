@@ -2115,6 +2115,49 @@ export async function register() {
       `);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "DomainDepthEstimate_domain_key" ON "DomainDepthEstimate" ("domain_key")`);
+      // Migration 0117 (D-SUPPLY-FINITENESS-01): corpus-grounded size columns on
+      // DomainDepthEstimate. Additive + nullable; getTargetQuestionCountForDomains
+      // reads estimated_questions and would 42703 on an un-migrated DB. Same guard
+      // rationale as the 0116 block above.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "estimated_questions" integer`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "corpus_count" integer`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "shape" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "confidence" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "basis" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "wikipedia_title" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "wikidata_qid" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "fandom_host" text`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "resolved_at" timestamp with time zone`);
+      // Migration 0118 (D-SUPPLY-FINITENESS-01 #4): dry-round observation
+      // counters for the supply-state machine. Additive + nullable/defaulted.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "consecutive_dry_rounds" integer NOT NULL DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "last_yield_at" timestamp with time zone`);
+      // Migration 0119: admin manual estimate override + co-calibration stamp.
+      // Additive + nullable; the coverage read selects manual_estimated_questions
+      // and would 42703 on an un-migrated DB. Same guard rationale as 0117/0118.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "manual_estimated_questions" integer`);
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "calibrated_at" timestamp with time zone`);
+      // Migration 0120: daily gate-drop counters. The write path is fire-and-
+      // forget (a missing table never blocks generation) but the weekly quality
+      // digest reads it and would 42P01 on an un-migrated DB. Same rationale as
+      // the 0116 DomainDepthEstimate guard above.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "GateDropStat" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "day" date NOT NULL,
+          "gate" text NOT NULL,
+          "considered" integer NOT NULL DEFAULT 0,
+          "dropped" integer NOT NULL DEFAULT 0,
+          "failed_open" integer NOT NULL DEFAULT 0,
+          "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+          CONSTRAINT "GateDropStat_day_gate_unique" UNIQUE ("day", "gate")
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "GateDropStat" ENABLE ROW LEVEL SECURITY`);
+      // Migration 0121: admin per-domain generation cap. Additive + nullable; the
+      // coverage read + getCappedDomainKeys select generation_capped_at and would
+      // 42703 on an un-migrated DB. Same guard rationale as 0117/0118/0119.
+      await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "generation_capped_at" timestamp with time zone`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

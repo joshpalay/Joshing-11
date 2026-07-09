@@ -10,29 +10,36 @@
  * & Notre Dame School" is narrower than "Medieval & Renaissance Polyphony" and
  * must NOT fold). Add entries only after eyeballing --scan output.
  *
+ * The APPLY/PREVIEW transaction itself now lives in
+ * src/server/db/queries/domain-merges.ts, shared verbatim with the admin
+ * decision UI (/admin/domains) so there is one copy of the prod-mutating logic.
+ * This script owns the hand-curated MERGES map, --scan cluster discovery, and
+ * the CLI reporting; it passes its own pg.Client into the shared applier.
+ *
  * Read-only by default. Run from repo root (Node 24):
  *   node --import tsx --env-file=.env --env-file=.env.local scripts/merge-fragmented-domains.ts --scan  # cluster candidates + per-table row census
  *   node --import tsx --env-file=.env --env-file=.env.local scripts/merge-fragmented-domains.ts         # dry-run the merge map
  *   node --import tsx --env-file=.env --env-file=.env.local scripts/merge-fragmented-domains.ts --apply # execute, one transaction
  *
- * Apply semantics per table class:
- *   - retarget:    UPDATE canonical_subcategory/domain → target (GeneratedQuestion
- *                  also refreshes domain_key; Question/MASTERY_EVENTS/
- *                  SkippedDailyQuestion/CrafterDraftDecision are plain retargets).
- *   - consolidate: tables unique on (user, domain) — PLAYER_MASTERY sums points
- *                  into an existing target row (max tier) then deletes the source;
- *                  DeclaredInterest ORs isActive. Others hard-fail if populated —
- *                  extend deliberately, don't guess.
- *   - drop cache:  DomainRelation rows referencing a source label are deleted
- *                  (the near-ness cache rebuilds lazily); RetrievalDomainHealth
- *                  source rows are deleted (disposable health counters).
- * Any OTHER table that holds a source label (scan census) aborts the apply —
- * silent partial merges are how territories drift apart again.
+ * Apply semantics per table class (see the shared module for the full detail):
+ *   - retarget:    Question/GeneratedQuestion/MASTERY_EVENTS/SkippedDailyQuestion/
+ *                  CrafterDraftDecision (GeneratedQuestion also refreshes domain_key).
+ *   - consolidate: per-(user, domain) tables — PLAYER_MASTERY sums points (max tier);
+ *                  DeclaredInterest ORs isActive; the rest rename-or-drop on collision.
+ *   - drop cache:  DomainRelation / RetrievalDomainHealth source rows deleted.
+ * Any OTHER table that holds a source label aborts the apply — silent partial
+ * merges are how territories drift apart again.
  *
  * Idempotent: re-running after --apply finds 0 source rows everywhere.
  */
 import pg from 'pg';
 
+import {
+  applyDomainMerges,
+  censusDomainLabels,
+  previewDomainMerges,
+  type DomainMergeSpec,
+} from '../src/server/db/queries/domain-merges';
 import { domainKey } from '../src/lib/knowledge/domain-key';
 import { labelSimilarity } from '../src/lib/knowledge/label-similarity';
 
@@ -60,7 +67,7 @@ const SCAN_THRESHOLD = 0.55;
 // "Neuroanatomy & CNS Physiology" vs "Human Anatomy & Physiology", "NASA
 // Apollo Program" vs "…Missions", "Classical Symphonic Music" vs the Romantic
 // Era pair. Those are the graph's job (containment), never a string merge.
-const MERGES: Array<{ target: string; sources: string[] }> = [
+const MERGES: DomainMergeSpec[] = [
   {
     // Word-order/phrasing variants of one territory. The other two "polyphony"
     // labels in the corpus stay out: "Medieval Polyphony & Notre Dame School"
@@ -112,35 +119,6 @@ function sqlLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-// Every (table, column) pair that can hold a domain label, discovered from the
-// live catalog so a future table can't silently escape the census.
-async function domainColumns(client: pg.Client): Promise<Array<{ table: string; column: string }>> {
-  const { rows } = await client.query<{ table_name: string; column_name: string }>(`
-    SELECT table_name, column_name FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND column_name IN ('canonical_subcategory', 'domain', 'child_domain', 'related_domain', 'label')
-      AND table_name NOT IN ('KnowledgeNode')  -- graph labels are authored, never auto-merged
-    ORDER BY table_name, column_name
-  `);
-  return rows.map((r) => ({ table: r.table_name, column: r.column_name }));
-}
-
-async function census(
-  client: pg.Client,
-  labels: string[],
-): Promise<Array<{ table: string; column: string; label: string; rows: number }>> {
-  const out: Array<{ table: string; column: string; label: string; rows: number }> = [];
-  for (const { table, column } of await domainColumns(client)) {
-    const { rows } = await client.query<{ label: string; n: string }>(
-      `SELECT "${column}" AS label, count(*) AS n FROM "${table}"
-       WHERE "${column}" = ANY($1) GROUP BY 1`,
-      [labels],
-    );
-    for (const r of rows) out.push({ table, column, label: r.label, rows: Number(r.n) });
-  }
-  return out;
-}
-
 // ─── --scan: lexical cluster candidates over the whole corpus ────────────────
 async function scan(client: pg.Client): Promise<void> {
   const { rows } = await client.query<{ label: string; n: string }>(`
@@ -177,247 +155,50 @@ async function scan(client: pg.Client): Promise<void> {
       console.log(`  ${labels[k].label}  (corpus rows=${labels[k].n}, sim=${sim})`);
     }
     const involved = cluster.map((k) => labels[k].label);
-    for (const row of await census(client, involved)) {
+    for (const row of await censusDomainLabels(client, involved)) {
       console.log(`    · ${row.table}.${row.column}: ${sqlLiteral(row.label)} × ${row.rows}`);
     }
   }
   if (clusters === 0) console.log('No lexical clusters found — the corpus is clean.');
 }
 
-// ─── dry-run / apply the merge map ───────────────────────────────────────────
-
-// Tables the apply path knows how to handle, by semantics. Anything else that
-// the census finds populated for a source label ABORTS.
-const RETARGET: Array<{ table: string; column: string }> = [
-  { table: 'Question', column: 'canonical_subcategory' },
-  { table: 'GeneratedQuestion', column: 'canonical_subcategory' },
-  { table: 'MASTERY_EVENTS', column: 'canonical_subcategory' },
-  { table: 'SkippedDailyQuestion', column: 'canonical_subcategory' },
-  { table: 'CrafterDraftDecision', column: 'domain' },
-];
-const DROP_CACHE: Array<{ table: string; column: string }> = [
-  { table: 'DomainRelation', column: 'child_domain' },
-  { table: 'DomainRelation', column: 'related_domain' },
-  { table: 'RetrievalDomainHealth', column: 'domain' },
-];
-const CONSOLIDATE_TABLES = new Set([
-  'PLAYER_MASTERY',
-  'DeclaredInterest',
-  'USER_DOMAIN_DIFFICULTY',
-  'PROFILE_DOMAIN_VISIBILITY',
-  'USER_DOMAIN_EXCLUSIONS',
-  'DAILY_REFINE_DECISION',
-]);
-
-// Per-row rename with a unique-collision fallback: when the user already has an
-// equivalent row for the target label, the survivor's state stands and the
-// source row is dropped. Fits any per-user cache/ledger whose unique key
-// includes the label column (USER_DOMAIN_EXCLUSIONS, DAILY_REFINE_DECISION).
-async function renameOrDropRows(
-  client: pg.Client,
-  table: string,
-  column: string,
-  target: string,
-  sources: string[],
-): Promise<void> {
-  const { rows } = await client.query<{ id: string }>(
-    `SELECT id FROM "${table}" WHERE "${column}" = ANY($1)`,
-    [sources],
-  );
-  for (const row of rows) {
-    try {
-      await client.query(`SAVEPOINT rename_row`);
-      await client.query(`UPDATE "${table}" SET "${column}" = $1 WHERE id = $2`, [target, row.id]);
-      await client.query(`RELEASE SAVEPOINT rename_row`);
-    } catch (err) {
-      if ((err as { code?: string }).code !== '23505') throw err;
-      await client.query(`ROLLBACK TO SAVEPOINT rename_row`);
-      await client.query(`DELETE FROM "${table}" WHERE id = $1`, [row.id]);
-    }
-    console.log(`  ${table}: consolidated row ${row.id}`);
-  }
-}
-
-// Schema order (masteryTierEnum) — the stronger tier survives a mastery merge.
-const TIER_RANK: Record<string, number> = { establishing: 0, familiar: 1, solid: 2, mastery: 3 };
-
+// ─── dry-run / apply the merge map (delegates to the shared applier) ──────────
 async function run(client: pg.Client): Promise<void> {
-  const allSources = MERGES.flatMap((m) => m.sources);
-  const rows = await census(client, allSources);
-  if (rows.length === 0) {
-    console.log('Nothing to merge — no source-label rows anywhere (already applied?).');
-    return;
-  }
-
   console.log(`${APPLY ? 'APPLYING' : 'DRY RUN (pass --apply to execute)'} — merge map:`);
   for (const m of MERGES) {
     console.log(`  → ${m.target}`);
     for (const s of m.sources) console.log(`    ← ${s}`);
   }
-  console.log('\nRows holding a source label:');
-  for (const r of rows) console.log(`  ${r.table}.${r.column}: ${sqlLiteral(r.label)} × ${r.rows}`);
 
-  const handled = new Set([
-    ...RETARGET.map((t) => `${t.table}.${t.column}`),
-    ...DROP_CACHE.map((t) => `${t.table}.${t.column}`),
-  ]);
-  const unhandled = rows.filter(
-    (r) => !handled.has(`${r.table}.${r.column}`) && !CONSOLIDATE_TABLES.has(r.table),
-  );
-  if (unhandled.length > 0) {
+  const preview = await previewDomainMerges(client, MERGES);
+  if (preview.census.length === 0) {
+    console.log('\nNothing to merge — no source-label rows anywhere (already applied?).');
+    return;
+  }
+  console.log('\nRows holding a source label:');
+  for (const r of preview.census) {
+    console.log(`  ${r.table}.${r.column}: ${sqlLiteral(r.label)} × ${r.rows}`);
+  }
+
+  if (preview.unhandled.length > 0) {
     console.error('\nABORT — rows exist in tables this script does not consolidate:');
-    for (const r of unhandled) console.error(`  ${r.table}.${r.column}: ${r.rows}`);
-    console.error('Extend the script deliberately for these before applying.');
+    for (const r of preview.unhandled) console.error(`  ${r.table}.${r.column}: ${r.rows}`);
+    console.error('Extend src/server/db/queries/domain-merges.ts deliberately for these before applying.');
     process.exitCode = 1;
     return;
   }
 
   if (!APPLY) return;
 
-  await client.query('BEGIN');
-  try {
-    for (const { target, sources } of MERGES) {
-      const targetKey = domainKey(target);
-
-      for (const { table, column } of RETARGET) {
-        const extra =
-          table === 'GeneratedQuestion' ? `, "domain_key" = ${sqlLiteral(targetKey)}` : '';
-        const res = await client.query(
-          `UPDATE "${table}" SET "${column}" = $1${extra} WHERE "${column}" = ANY($2)`,
-          [target, sources],
-        );
-        if (res.rowCount) console.log(`  ${table}: retargeted ${res.rowCount}`);
-      }
-
-      // PLAYER_MASTERY: unique (user_id, canonical_subcategory). Sum a source
-      // row into an existing target row (max tier wins), else rename in place.
-      const mastery = await client.query<{
-        id: string;
-        user_id: string;
-        canonical_subcategory: string;
-        tier: string;
-      }>(
-        `SELECT id, user_id, canonical_subcategory, tier FROM "PLAYER_MASTERY"
-         WHERE canonical_subcategory = ANY($1)`,
-        [sources],
-      );
-      for (const row of mastery.rows) {
-        const existing = await client.query<{ id: string; tier: string }>(
-          `SELECT id, tier FROM "PLAYER_MASTERY" WHERE user_id = $1 AND canonical_subcategory = $2`,
-          [row.user_id, target],
-        );
-        if (existing.rows.length > 0) {
-          const strongerTier =
-            (TIER_RANK[row.tier] ?? 0) > (TIER_RANK[existing.rows[0].tier] ?? 0)
-              ? row.tier
-              : existing.rows[0].tier;
-          await client.query(
-            `UPDATE "PLAYER_MASTERY" t SET
-               total_points = t.total_points + s.total_points,
-               lifetime_points_baseline = coalesce(t.lifetime_points_baseline, 0) + coalesce(s.lifetime_points_baseline, 0),
-               tier = $3::"MasteryTier",
-               updated_at = greatest(t.updated_at, s.updated_at)
-             FROM "PLAYER_MASTERY" s WHERE t.id = $1 AND s.id = $2`,
-            [existing.rows[0].id, row.id, strongerTier],
-          );
-          await client.query(`DELETE FROM "PLAYER_MASTERY" WHERE id = $1`, [row.id]);
-          console.log(`  PLAYER_MASTERY: summed ${row.canonical_subcategory} into ${target} (user ${row.user_id})`);
-        } else {
-          await client.query(`UPDATE "PLAYER_MASTERY" SET canonical_subcategory = $1 WHERE id = $2`, [
-            target,
-            row.id,
-          ]);
-          console.log(`  PLAYER_MASTERY: renamed for user ${row.user_id}`);
-        }
-      }
-
-      // USER_DOMAIN_DIFFICULTY: unique (user_id, canonical_subcategory) — an
-      // adaptive-difficulty cache. Rename to the target unless the user already
-      // has a target row; then the survivor's ladder state stands and the
-      // source row is dropped.
-      const difficulty = await client.query<{ id: string; user_id: string }>(
-        `SELECT id, user_id FROM "USER_DOMAIN_DIFFICULTY" WHERE canonical_subcategory = ANY($1)`,
-        [sources],
-      );
-      for (const row of difficulty.rows) {
-        const existing = await client.query<{ id: string }>(
-          `SELECT id FROM "USER_DOMAIN_DIFFICULTY" WHERE user_id = $1 AND canonical_subcategory = $2`,
-          [row.user_id, target],
-        );
-        if (existing.rows.length > 0) {
-          await client.query(`DELETE FROM "USER_DOMAIN_DIFFICULTY" WHERE id = $1`, [row.id]);
-        } else {
-          await client.query(
-            `UPDATE "USER_DOMAIN_DIFFICULTY" SET canonical_subcategory = $1 WHERE id = $2`,
-            [target, row.id],
-          );
-        }
-        console.log(`  USER_DOMAIN_DIFFICULTY: consolidated for user ${row.user_id}`);
-      }
-
-      // PROFILE_DOMAIN_VISIBILITY: unique per (user_id, canonical_subcategory)
-      // AND (user_id, domain) — both columns carry the label, both retarget.
-      // On collision the survivor's visibility choice stands.
-      const visibility = await client.query<{ id: string; user_id: string }>(
-        `SELECT id, user_id FROM "PROFILE_DOMAIN_VISIBILITY"
-         WHERE canonical_subcategory = ANY($1) OR domain = ANY($1)`,
-        [sources],
-      );
-      for (const row of visibility.rows) {
-        const existing = await client.query<{ id: string }>(
-          `SELECT id FROM "PROFILE_DOMAIN_VISIBILITY"
-           WHERE user_id = $1 AND (canonical_subcategory = $2 OR domain = $2) AND id <> $3`,
-          [row.user_id, target, row.id],
-        );
-        if (existing.rows.length > 0) {
-          await client.query(`DELETE FROM "PROFILE_DOMAIN_VISIBILITY" WHERE id = $1`, [row.id]);
-        } else {
-          await client.query(
-            `UPDATE "PROFILE_DOMAIN_VISIBILITY" SET canonical_subcategory = $1, domain = $1 WHERE id = $2`,
-            [target, row.id],
-          );
-        }
-        console.log(`  PROFILE_DOMAIN_VISIBILITY: consolidated for user ${row.user_id}`);
-      }
-
-      // DeclaredInterest: unique (userId, domain) — NB camelCase columns on
-      // this older table. OR isActive on collision.
-      const declared = await client.query<{ id: string; userId: string }>(
-        `SELECT id, "userId" FROM "DeclaredInterest" WHERE domain = ANY($1)`,
-        [sources],
-      );
-      for (const row of declared.rows) {
-        const existing = await client.query<{ id: string }>(
-          `SELECT id FROM "DeclaredInterest" WHERE "userId" = $1 AND domain = $2`,
-          [row.userId, target],
-        );
-        if (existing.rows.length > 0) {
-          await client.query(
-            `UPDATE "DeclaredInterest" t SET "isActive" = t."isActive" OR s."isActive"
-             FROM "DeclaredInterest" s WHERE t.id = $1 AND s.id = $2`,
-            [existing.rows[0].id, row.id],
-          );
-          await client.query(`DELETE FROM "DeclaredInterest" WHERE id = $1`, [row.id]);
-        } else {
-          await client.query(`UPDATE "DeclaredInterest" SET domain = $1 WHERE id = $2`, [target, row.id]);
-        }
-        console.log(`  DeclaredInterest: consolidated for user ${row.userId}`);
-      }
-
-      await renameOrDropRows(client, 'USER_DOMAIN_EXCLUSIONS', 'canonical_subcategory', target, sources);
-      await renameOrDropRows(client, 'DAILY_REFINE_DECISION', 'canonical_subcategory', target, sources);
-
-      for (const { table, column } of DROP_CACHE) {
-        const res = await client.query(`DELETE FROM "${table}" WHERE "${column}" = ANY($1)`, [sources]);
-        if (res.rowCount) console.log(`  ${table}: dropped ${res.rowCount} cache rows (${column})`);
-      }
-    }
-    await client.query('COMMIT');
-    console.log('\n✓ Applied. Re-run without flags to confirm 0 remaining source rows.');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
+  const result = await applyDomainMerges(client, MERGES);
+  if (!result.ok) {
+    // Should not happen (preview already gated), but never claim success on !ok.
+    console.error(`\nABORT — apply returned ${result.reason}.`);
+    process.exitCode = 1;
+    return;
   }
+  for (const line of result.log) console.log(`  ${line}`);
+  console.log(`\n✓ Applied (${result.retargeted} rows retargeted). Re-run without flags to confirm 0 remaining source rows.`);
 }
 
 async function main() {

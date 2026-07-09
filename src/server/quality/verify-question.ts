@@ -61,18 +61,23 @@ function isWebSearchEnabled(): boolean {
 const WEB_SEARCH_MAX_USES = Math.max(1, Number(process.env.VERIFY_WEB_SEARCH_MAX_USES ?? 3));
 const VERIFY_TIMEOUT_MS = Math.max(5_000, Number(process.env.VERIFY_TIMEOUT_MS ?? 35_000));
 
-// D-FANDOM-GROUNDING-01 Consumer B (decision F1, env-gated): restrict the
-// verifier's web-search grounding to reference wikis so its fallback searches
-// read the same tiered sources that anchor generation. Comma-separated domain
-// list (e.g. "wikipedia.org,fandom.com" — the F1 posture); unset = unrestricted
-// search, the pre-existing behavior. Read at call time so a flip needs no
-// deploy. F1 is a HARD restriction — watch the 'unverifiable' verdict rate
-// after enabling; a spike on non-wiki-shaped domains is the F1→F2 loosen
-// trigger named in the D-doc.
+// D-FANDOM-GROUNDING-01 Consumer B (decision F1): restrict the verifier's
+// web-search grounding to reference wikis so its fallback searches read the
+// same tiered sources that anchor generation. DEFAULT ON as of 2026-07-08
+// (flipped together with the thin-declared verify gate — held thin-domain rows
+// need this pass to promote them back to serving). Override with a
+// comma-separated domain list, or "*" to restore unrestricted search. Read at
+// call time so a flip needs no deploy. F1 is a HARD restriction — watch the
+// 'unverifiable' verdict rate; a spike on non-wiki-shaped domains is the
+// F1→F2 loosen trigger named in the D-doc.
+const DEFAULT_VERIFY_ALLOWED_DOMAINS = 'wikipedia.org,fandom.com';
 function verifyAllowedDomains(): string[] | null {
   const raw = process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS?.trim();
-  if (!raw) return null;
-  const domains = raw.split(',').map((d) => d.trim()).filter(Boolean);
+  if (raw === '*') return null;
+  const domains = (raw || DEFAULT_VERIFY_ALLOWED_DOMAINS)
+    .split(',')
+    .map((d) => d.trim())
+    .filter(Boolean);
   return domains.length > 0 ? domains : null;
 }
 

@@ -5,6 +5,10 @@ import { useState } from 'react';
 import { AnswerFeedbackSheet } from '@/components/feed/AnswerFeedbackSheet';
 import { AnswerSheet } from '@/components/feed/AnswerSheet';
 import type { StreamAction } from '@/lib/activity-stream';
+import {
+  ANSWER_GRADER_RETRY_MESSAGE,
+  submitAnswerWithRetry,
+} from '@/lib/answer-submit';
 import type { InsideJokeKind } from '@/lib/questions-types';
 
 import { FM, INK, INK3 } from '@/components/lately/tokens';
@@ -24,6 +28,21 @@ type Feedback = {
   unverified: boolean;
 };
 
+// The feed answer route's success payload (Feedback minus the mastery fields the
+// client derives, plus the raw masteryDelta + unverified flag it reads them from).
+type DirectAnswerResponse = Omit<
+  Feedback,
+  'openedNewTerritory' | 'openedTerritoryDomain' | 'unverified'
+> & {
+  masteryDelta?: { openedNewTerritory?: boolean; domain?: string | null };
+  unverified?: boolean;
+};
+
+// A warm in-sheet note while an outage is being auto-retried (tone 'info'), or a
+// terminal reason once retries are spent / a request fails deterministically
+// (tone 'error'). Surfaced through AnswerSheet's status/error slots.
+type AnswerNotice = { tone: 'info' | 'error'; text: string };
+
 // The "ANSWER →" action on a "{friend} sent you a question" stream row. A direct
 // send is backed by a feed item, so this answers in place against
 // /api/feed/{feedItemId}/answer — the same endpoint the home feed uses — and
@@ -40,23 +59,30 @@ export function DirectQuestionAnswer({
   const [submitted, setSubmitted] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [answeredCorrectly, setAnsweredCorrectly] = useState(false);
+  const [notice, setNotice] = useState<AnswerNotice | null>(null);
 
   async function submit(answer: string) {
     setLoading(true);
+    setNotice(null);
     try {
-      const res = await fetch(`/api/feed/${action.feedItemId}/answer`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ submitted_answer: answer }),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | (Omit<Feedback, 'openedNewTerritory' | 'openedTerritoryDomain' | 'unverified'> & {
-            masteryDelta?: { openedNewTerritory?: boolean; domain?: string | null };
-            unverified?: boolean;
-          })
-        | null;
-      if (!res.ok || !body) throw new Error('Could not score that answer.');
+      // A grader outage returns a retryable 503 (never a real 'wrong' verdict),
+      // so auto-retry it with backoff behind a warm in-sheet note, and only ask
+      // the viewer to try again later once the retries are spent. Without this,
+      // any 503/404/500 flipped the button silently back to "Answer" with no
+      // explanation (the swallowed-error bug this replaces).
+      const body = await submitAnswerWithRetry<DirectAnswerResponse>(
+        `/api/feed/${action.feedItemId}/answer`,
+        {
+          body: { submitted_answer: answer },
+          isSuccessBody: (value): value is DirectAnswerResponse =>
+            value != null && typeof value === 'object' && 'isCorrect' in value,
+          onRetry: ({ attempt, maxAttempts }) =>
+            setNotice({
+              tone: 'info',
+              text: `${ANSWER_GRADER_RETRY_MESSAGE} (${attempt}/${maxAttempts})…`,
+            }),
+        },
+      );
       setSubmitted(answer);
       setFeedback({
         isCorrect: body.isCorrect,
@@ -74,9 +100,15 @@ export function DirectQuestionAnswer({
           : null,
         unverified: Boolean(body.unverified),
       });
+      setNotice(null);
       setPhase('result');
-    } catch {
-      // Leave the input sheet open so the viewer can retry.
+    } catch (caught) {
+      // Leave the input sheet open with the answer intact, but tell the viewer
+      // why it didn't go through instead of silently reverting the button.
+      setNotice({
+        tone: 'error',
+        text: caught instanceof Error ? caught.message : 'Could not score that answer.',
+      });
     } finally {
       setLoading(false);
     }
@@ -120,8 +152,13 @@ export function DirectQuestionAnswer({
           question={action.questionText}
           category={action.domain}
           loading={loading}
+          statusMessage={notice?.tone === 'info' ? notice.text : null}
+          errorMessage={notice?.tone === 'error' ? notice.text : null}
           onSubmit={(answer) => void submit(answer)}
-          onClose={() => setPhase('closed')}
+          onClose={() => {
+            setPhase('closed');
+            setNotice(null);
+          }}
         />
       ) : null}
 

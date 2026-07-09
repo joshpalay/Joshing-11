@@ -1755,8 +1755,41 @@ export const domainDepthEstimates = pgTable(
     depthScore: integer('depth_score'),
     // A canonical_subcategory that folded to this key — for debugging only.
     sampleLabel: text('sample_label'),
-    // 'llm' (scored) | 'default' (LLM unavailable/null; using the code default).
+    // 'llm' (depth scored) | 'default' (LLM unavailable) | 'corpus' (0117: resolved
+    // + counted against a real Wikipedia/Wikidata/Fandom anchor).
     source: text('source').notNull().default('llm'),
+    // Corpus-grounded size (0117, D-SUPPLY-FINITENESS-01). estimatedQuestions is
+    // the number getTargetQuestionCountForDomains PREFERS over coefficient·depth²
+    // when present; the rest record the resolution for the coverage dashboard +
+    // the confidence-gated discrepancy alarm. All nullable — absent → depth fallback.
+    estimatedQuestions: integer('estimated_questions'),
+    corpusCount: integer('corpus_count'),
+    shape: text('shape'),
+    confidence: text('confidence'),
+    basis: text('basis'),
+    wikipediaTitle: text('wikipedia_title'),
+    wikidataQid: text('wikidata_qid'),
+    fandomHost: text('fandom_host'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    // Admin override (0119): when set, WINS over estimated_questions and the
+    // depth fallback everywhere the estimate is read. Own column so resolver
+    // re-runs / co-calibration never clobber it; NULL = no override.
+    manualEstimatedQuestions: integer('manual_estimated_questions'),
+    // Co-calibration stamp (0119): last time the raise_estimate loop lifted
+    // estimated_questions to observed yield. Observability only.
+    calibratedAt: timestamp('calibrated_at', { withTimezone: true }),
+    // Admin generation cap (0121): when set, this domain is EXCLUDED from fresh
+    // generation everywhere the daily generator builds its round palette (cron
+    // build + demand-pull replenish) — the system stops searching it for new
+    // facts. Serving is untouched (existing bank still flows) and it never fires
+    // the discrepancy alarm. Distinct from the derived soft_finite state and the
+    // per-player 'resting' tag: a global, deliberate, human stop. NULL = not capped.
+    generationCappedAt: timestamp('generation_capped_at', { withTimezone: true }),
+    // Dry-round observations (0118, D-SUPPLY-FINITENESS-01 #4). Raw counters
+    // only — the supply STATE is derived at read time by classifySupplyState
+    // (src/server/daily/supply-state.ts), so nothing stored can go stale.
+    consecutiveDryRounds: integer('consecutive_dry_rounds').notNull().default(0),
+    lastYieldAt: timestamp('last_yield_at', { withTimezone: true }),
     computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
@@ -1822,4 +1855,30 @@ export const qualityReport = pgTable(
     createdAt: createdAt(),
   },
   (table) => [index('QualityReport_created_at_idx').on(table.createdAt)],
+);
+
+// 0120: daily counters for the generation-time gate chain (quality, factual,
+// dedup, cooldowns, thin-declared). Every gate in that chain FAILS OPEN by
+// design (an LLM outage must not block the daily queue), which means a gate
+// can be silently disabled — timing out, truncating, or erroring on every
+// call — and nothing surfaces it. These counters make that visible: the
+// weekly quality digest reads them and renders per-gate drop rates plus
+// failed-open run counts. One row per (UTC day, gate), incremented
+// fire-and-forget from the gate chain; a write failure never blocks
+// generation. Coarse by design — no per-question rows, no user linkage.
+export const gateDropStat = pgTable(
+  'GateDropStat',
+  {
+    id: id(),
+    day: date('day').notNull(),
+    gate: text('gate').notNull(),
+    /** Questions the gate saw (batch sizes summed across runs). */
+    considered: integer('considered').notNull().default(0),
+    /** Questions the gate dropped. */
+    dropped: integer('dropped').notNull().default(0),
+    /** Runs where the gate errored/timed out and passed everything unchecked. */
+    failedOpen: integer('failed_open').notNull().default(0),
+    updatedAt: updatedAt(),
+  },
+  (table) => [unique('GateDropStat_day_gate_unique').on(table.day, table.gate)],
 );

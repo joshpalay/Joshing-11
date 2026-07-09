@@ -820,6 +820,41 @@
 			"when": 1786579200000,
 			"tag": "0116_domain_depth_estimate",
 			"breakpoints": true
+		},
+		{
+			"idx": 117,
+			"version": "7",
+			"when": 1786665600000,
+			"tag": "0117_domain_size_estimate",
+			"breakpoints": true
+		},
+		{
+			"idx": 118,
+			"version": "7",
+			"when": 1786752000000,
+			"tag": "0118_supply_dry_tracking",
+			"breakpoints": true
+		},
+		{
+			"idx": 119,
+			"version": "7",
+			"when": 1786838400000,
+			"tag": "0119_supply_manual_override_calibration",
+			"breakpoints": true
+		},
+		{
+			"idx": 120,
+			"version": "7",
+			"when": 1786924800000,
+			"tag": "0120_gate_drop_stat",
+			"breakpoints": true
+		},
+		{
+			"idx": 121,
+			"version": "7",
+			"when": 1787011200000,
+			"tag": "0121_domain_generation_cap",
+			"breakpoints": true
 		}
 	]
 }

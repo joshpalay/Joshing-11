@@ -9,6 +9,8 @@ const pair = (over: Partial<FragmentationPair> = {}): FragmentationPair => ({
   domainB: 'Evil Spy School',
   depthB: 4,
   similarity: 0.62,
+  hasNodeA: false,
+  hasNodeB: false,
   ...over,
 });
 
@@ -56,6 +58,24 @@ describe('buildDomainFragmentationEmailTemplate', () => {
     expect(out.text).toContain('70%');
     expect(out.text).toContain('Hamlet');
     expect(out.html).toContain('70%');
+  });
+
+  it('links the merge section to the review dashboard when a reviewUrl is given', () => {
+    const out = buildDomainFragmentationEmailTemplate({
+      pairs: [pair()],
+      narrowDomains: [],
+      reviewUrl: 'https://joshing.app/admin/domains',
+    });
+    expect(out.html).toContain('href="https://joshing.app/admin/domains"');
+    expect(out.text).toContain('https://joshing.app/admin/domains');
+    // The old manual "reply and I’ll merge" loop is gone.
+    expect(out.text).not.toMatch(/reply and I/i);
+  });
+
+  it('omits the dashboard CTA when no reviewUrl is provided', () => {
+    const out = build([pair()]);
+    expect(out.html).not.toContain('/admin/domains');
+    expect(out.text).not.toContain('/admin/domains');
   });
 
   it('HTML-escapes domain and facet names so a stray "&"/"<" cannot break markup', () => {

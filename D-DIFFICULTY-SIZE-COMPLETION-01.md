@@ -80,8 +80,10 @@ completion → **trophy → graduate + author**.
   runs BEFORE `buildExpansionOffer` in the summary so the graduation card surfaces the
   SAME day as completion. Copy valence ("you mastered X → branch out" vs the generic
   "related areas") is a separate owed refinement (D-SUPPLY-FINITE-SET-01 §graduation).
-- **Phase 2 — verifier allowlist flip** ⏳ (env; Josh applies):
-  `VERIFY_WEB_SEARCH_ALLOWED_DOMAINS=wikipedia.org,fandom.com`.
+- **Phase 2 — verifier allowlist flip** ✅ DONE 2026-07-08: shipped as the CODE
+  DEFAULT (`verify-question.ts` — `wikipedia.org,fandom.com` when the env var is
+  unset; `"*"` restores unrestricted), flipped together with the thin-declared
+  verify gate default (`VERIFY_GATE_THIN_DECLARED_ENABLED`, now default ON).
 
 ## Notes
 - **Sizing vs supply:** a target above what the topic can actually supply won't

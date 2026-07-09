@@ -192,6 +192,10 @@ function EditForm({
   const [factualExplanation, setFactualExplanation] = useState(detail.factualExplanation ?? '');
   const [category, setCategory] = useState(detail.category);
   const [visibility, setVisibility] = useState(detail.visibility);
+  // Author: 'person' keeps the current human creator; 'house' re-sources to the
+  // house author. Only a person-authored row can switch (a house/LLM row has no
+  // person to switch back to without a picker), so the control is read-only then.
+  const [authorChoice, setAuthorChoice] = useState<'person' | 'house'>(detail.authorIsPerson ? 'person' : 'house');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -213,6 +217,9 @@ function EditForm({
     }
     if (category !== detail.category) patch.category = category;
     if (visibility !== detail.visibility) patch.visibility = visibility;
+    // Re-attribution: only person → house is a real transition.
+    const toHouse = detail.authorIsPerson && authorChoice === 'house';
+    if (toHouse) patch.attribution = 'house';
 
     if (Object.keys(patch).length === 0) {
       setError('No changes to save.');
@@ -224,6 +231,15 @@ function EditForm({
     if (gradingChanged) {
       const ok = window.confirm(
         'This changes the answer key or accepted alternatives, which changes how past and future answers grade. Save?',
+      );
+      if (!ok) return;
+    }
+
+    // Re-attribution guard: dropping the person link renders the question as house
+    // content and is not reversible from this tool.
+    if (toHouse) {
+      const ok = window.confirm(
+        `Change author from "${detail.authorLabel}" to House? This drops the person's authorship (it leaves their authored list and renders as house content) and can't be reversed here.`,
       );
       if (!ok) return;
     }
@@ -278,6 +294,26 @@ function EditForm({
           Factual explanation
         </label>
         <textarea rows={3} className={inputClass} style={inputStyle} value={factualExplanation} onChange={(e) => setFactualExplanation(e.target.value)} />
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Author
+        </label>
+        <select
+          className={inputClass}
+          style={inputStyle}
+          value={authorChoice}
+          disabled={!detail.authorIsPerson}
+          onChange={(e) => setAuthorChoice(e.target.value as 'person' | 'house')}
+        >
+          {detail.authorIsPerson ? <option value="person">{detail.authorLabel}</option> : null}
+          <option value="house">House (Joshing)</option>
+        </select>
+        {!detail.authorIsPerson ? (
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            Already house/non-person — reassigning to a specific person isn&apos;t supported here.
+          </p>
+        ) : null}
       </div>
       <div className="mb-3 flex gap-3">
         <div className="flex-1">
@@ -618,10 +654,11 @@ export function AdminQuestionsClient({
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-6">
-      <h1 className="mb-3 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Questions</h1>
-      <div className="mb-4">
+      {/* Wide on purpose — a 15-column audit table; the content pages sit at 4xl. */}
+      <div className="mb-3">
         <AdminTabs active="questions" />
       </div>
+      <h1 className="mb-4 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Questions</h1>
 
       {/* Filter bar. Every control combines (AND) with the others server-side. */}
       <form
