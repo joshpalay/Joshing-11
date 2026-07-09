@@ -7,6 +7,7 @@ import {
 } from '@/lib/knowledge/circle-sizing'
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
+import { FrequencyMark } from '@/components/knowledge/FrequencyMark'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import {
   TERRITORY_FREQUENCY_LABEL,
@@ -121,49 +122,23 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
 // grey line — you couldn't tell one circle's rotation from another at a glance.
 // A tiny 3-dot meter fixes that: filled-dot count encodes rotation depth so the
 // whole grid scans without reading a word (Often ●●●, Sometimes ●●○, Never ○○○).
-// The meter is monochrome on purpose — color is reserved for category
-// (STYLE-GUIDE-COLOR §3) and rotation is category-independent — with ONE playful
-// literal exception: "Blue Moon" swaps the dots for an actual small blue crescent
-// moon (the rarest rotation, so the whimsy earns its keep).
-const FREQUENCY_TOTAL_DOTS = 3
-
-const FREQUENCY_FILLED_DOTS: Record<TerritoryFrequency, number> = {
-  often: 3,
-  sometimes: 2,
-  blue_moon: 1,
-  resting: 0,
-}
-
 // Invert the single-source label map so the string coming through
-// `frequencyLabelFor` resolves back to its enum (and thus its meter level)
-// without the caller having to pass both.
+// `frequencyLabelFor` resolves back to its enum (so the shared FrequencyMark can
+// draw the right glyph) without the caller having to pass both.
 const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntries(
   (Object.entries(TERRITORY_FREQUENCY_LABEL) as [TerritoryFrequency, string][]).map(
     ([freq, label]) => [label, freq]
   )
 )
 
-// Filled crescent (lucide "moon" path), rendered blue for the Blue Moon rotation.
-function BlueMoonGlyph() {
-  return (
-    <svg
-      width={11}
-      height={11}
-      viewBox="0 0 24 24"
-      aria-hidden
-      fill="var(--exploring-accent-blue)"
-      style={{ display: 'block' }}
-    >
-      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-    </svg>
-  )
-}
-
-function FrequencyTag({ label, dim }: { label: string; dim: boolean }) {
+// The rotation word with the shared signal mark to its RIGHT (D-FREQUENCY-MARK-01,
+// decision E). The mark inherits the domain's category color on this single-domain
+// face (decision D) — `often`/`sometimes` ascending bars, `resting` the washed
+// baseline line, `blue_moon` the blue crescent — replacing the old monochrome
+// dots meter so every frequency surface reads as one object.
+function FrequencyTag({ label, color, dim }: { label: string; color: string; dim: boolean }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
-  const filled = freq ? FREQUENCY_FILLED_DOTS[freq] : 0
   const resting = freq === 'resting'
-  const blueMoon = freq === 'blue_moon'
   return (
     <span
       style={{
@@ -174,25 +149,6 @@ function FrequencyTag({ label, dim }: { label: string; dim: boolean }) {
         opacity: dim ? 0.5 : 1,
       }}
     >
-      {blueMoon ? (
-        <BlueMoonGlyph />
-      ) : (
-        <span aria-hidden style={{ display: 'inline-flex', gap: 2 }}>
-          {Array.from({ length: FREQUENCY_TOTAL_DOTS }).map((_, i) => (
-            <span
-              key={i}
-              style={{
-                width: 4,
-                height: 4,
-                borderRadius: '50%',
-                boxSizing: 'border-box',
-                background: i < filled ? 'var(--warm-ink-700)' : 'transparent',
-                border: `1px solid ${i < filled ? 'var(--warm-ink-700)' : 'var(--warm-ink-400)'}`,
-              }}
-            />
-          ))}
-        </span>
-      )}
       <span
         style={{
           fontFamily: 'var(--font-mono)',
@@ -204,6 +160,7 @@ function FrequencyTag({ label, dim }: { label: string; dim: boolean }) {
       >
         {label}
       </span>
+      {freq ? <FrequencyMark frequency={freq} color={color} size={11} decorative /> : null}
     </span>
   )
 }
@@ -447,7 +404,7 @@ export function PortraitDomainCircle({
         {entry.canonicalSubcategory}
       </span>
       {frequencyLabel ? (
-        <FrequencyTag label={frequencyLabel} dim={dimForHidden} />
+        <FrequencyTag label={frequencyLabel} color={dc.primary} dim={dimForHidden} />
       ) : null}
     </div>
   )
