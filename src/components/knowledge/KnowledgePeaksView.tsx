@@ -13,6 +13,7 @@ import {
   getCircleSize,
   getCircleOpacity,
 } from '@/components/knowledge/CategoryCircles';
+import { FrequencyMark } from '@/components/knowledge/FrequencyMark';
 import {
   TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_COPY,
@@ -524,9 +525,10 @@ function ControlsBar({
               type="button"
               onClick={() => onToggleFreq(freq)}
               aria-pressed={freqFilter.has(freq)}
-              className={pill}
+              className={`${pill} gap-1`}
               style={pillStyle(freqFilter.has(freq))}
             >
+              <FrequencyMark frequency={freq} color="var(--brand-ink-400)" decorative />
               {TERRITORY_FREQUENCY_LABEL[freq]}
             </button>
           ))}
@@ -661,7 +663,8 @@ function KnowledgeCircleCell({
           ✦ Fully explored
         </span>
       ) : showFrequency ? (
-        <span className="text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
+        <span className="inline-flex items-center gap-1 text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
+          <FrequencyMark frequency={frequency} color={fieldColor(node.field)} decorative />
           {TERRITORY_FREQUENCY_LABEL[frequency]}
         </span>
       ) : null}

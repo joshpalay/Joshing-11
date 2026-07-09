@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import { Plus, Trash2, X } from 'lucide-react';
 
+import { FrequencyMark } from '@/components/knowledge/FrequencyMark';
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
@@ -785,7 +786,10 @@ function TerritoryZone({
   return (
     <section ref={setRef} className="transition">
       <div className="mb-4 border-b border-[var(--border-light)] pb-3">
-        <h2 className="font-serif text-2xl font-semibold text-[var(--ink)]">{zone.title}</h2>
+        <h2 className="flex items-center gap-2 font-serif text-2xl font-semibold text-[var(--ink)]">
+          <FrequencyMark frequency={zone.value} color="var(--brand-ink-400)" size={18} decorative />
+          {zone.title}
+        </h2>
         <p className="mt-1 text-sm leading-6 text-[var(--text-muted-warm)]">{zone.copy}</p>
       </div>
       <div
