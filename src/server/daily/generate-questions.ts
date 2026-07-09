@@ -25,6 +25,7 @@ import {
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
 import {
+  getAnsweredFactKeysAmong,
   getAuthoredExamplesForDomains,
   getAuthoredQuestionTexts,
   getKnowledgeBase,
@@ -46,6 +47,13 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
+import {
+  coCalibrateRaisedEstimates,
+  getCappedDomainKeys,
+  recordSupplyYieldObservation,
+} from '@/server/db/queries/domain-depth-estimate';
+import { nearCompleteRatio } from '@/server/daily/supply-state';
 import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/account';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { adminUserIds } from '@/server/auth/admin';
@@ -74,6 +82,7 @@ import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeBroadCategory } from '@/server/questions/broad-category';
 import {
   domainWeeklyCap,
+  dropCappedDomains,
   isCustomDomainWeightingEnabled,
   selectCustomDomainsForRound,
 } from '@/server/daily/domain-selection';
@@ -762,6 +771,7 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
     console.warn('[daily/generate-questions] batch dedupe failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('batch_dedup');
     return new Set();
   }
 }
@@ -851,6 +861,7 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
     console.warn('[daily/generate-questions] quality gate failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('quality');
     return { toDrop: new Set(), reasons: {} };
   }
 }
@@ -917,8 +928,9 @@ const FACTUAL_GATE_TIMEOUT_MS = FACTUAL_GATE_MODEL === HAIKU_MODEL ? HAIKU_GATE_
 // (this is how the "fifty points" Harry Potter false-premise question reached
 // production despite the gate running on Sonnet, which flags it deterministically).
 // Output is billed per token actually emitted, so this headroom is free unless a
-// response genuinely needs it; the truncation guard below catches any remaining
-// overflow loudly instead of silently.
+// response genuinely needs it; if a verdict still overflows, the guard in
+// findFactualFailures now fails CLOSED (drops the whole batch) rather than
+// shipping it ungated.
 const FACTUAL_GATE_MAX_TOKENS = 2000;
 
 export function parseFactualGateResponse(
@@ -985,23 +997,44 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
       system: FACTUAL_GATE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     }, { timeoutMs: FACTUAL_GATE_TIMEOUT_MS });
-    // A max_tokens stop means the JSON verdict was cut off: the parse below will
-    // fail and return an empty set, so the whole batch passes UNGATED. That used
-    // to be invisible. Surface it loudly so the cap can be raised before it
-    // silently disables the gate again.
+    const raw = extractTextContent(response.content);
+    // A max_tokens stop means the JSON verdict was cut off. A cut-off verdict
+    // almost always means the gate was flagging MANY questions (each drop costs
+    // ~270 output tokens), so shipping the batch on a parse failure is the worst
+    // possible outcome — it fails open on exactly the batches the gate judged
+    // worst (this is how the "fifty points" Harry Potter false premise reached
+    // production). Fail CLOSED instead: drop the whole batch. The chunk-level
+    // retry in generateDailyQuestions regenerates, so the cost is one extra
+    // generation call, not a hole in the day's queue. If the JSON still parses
+    // despite the stop (the object completed and only trailing text was cut),
+    // the verdict is structurally whole — use it, but warn so the cap gets
+    // raised before a real truncation hits.
     if (response.stop_reason === 'max_tokens') {
+      if (!parseJsonObject(raw)) {
+        console.warn(
+          '[daily/generate-questions] factual gate verdict truncated at max_tokens and unparseable — failing CLOSED, dropping whole batch',
+          { batchSize: generated.length, maxTokens: FACTUAL_GATE_MAX_TOKENS },
+        );
+        const toDrop = new Set<number>(generated.map((_, i) => i));
+        const reasons: Record<number, string> = {};
+        for (const index of toDrop) {
+          reasons[index] = 'factual gate verdict truncated at max_tokens; batch dropped unvetted';
+        }
+        return { toDrop, reasons };
+      }
       console.warn(
-        '[daily/generate-questions] factual gate response truncated at max_tokens — batch passed UNGATED',
+        '[daily/generate-questions] factual gate verdict hit max_tokens but parsed — raise FACTUAL_GATE_MAX_TOKENS',
         { batchSize: generated.length, maxTokens: FACTUAL_GATE_MAX_TOKENS },
       );
     }
-    return parseFactualGateResponse(extractTextContent(response.content), generated.length);
+    return parseFactualGateResponse(raw, generated.length);
   } catch (err) {
     // Fail open: a Haiku outage should not block the daily queue. A wrong
     // answer slipping through is no worse than the pre-gate status quo.
     console.warn('[daily/generate-questions] factual gate failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('factual');
     return { toDrop: new Set(), reasons: {} };
   }
 }
@@ -1191,6 +1224,7 @@ Which NEW indices duplicate any RECENT entry?`;
     console.warn('[daily/generate-questions] history dedupe failed', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordGateFailedOpen('recent_history');
     return new Set();
   }
 }
@@ -1748,6 +1782,37 @@ export async function generateDailyQuestions(
     });
   }
 
+  // Gate telemetry (0120): daily per-gate considered/dropped counters, read by
+  // the weekly quality digest. Every gate above fails open, so a sustained
+  // zero-drop LLM gate or a failed_open streak (recorded in each gate's catch)
+  // is the only visible symptom of a silently disabled gate. Fire-and-forget —
+  // never blocks the build. difficulty_floor counts DEFLECTIONS (soft gate),
+  // not drops.
+  void recordGateDrops([
+    { gate: 'quality', considered: generated.length, dropped: qualityResult.toDrop.size },
+    { gate: 'factual', considered: generated.length, dropped: factualResult.toDrop.size },
+    { gate: 'recent_history', considered: generated.length, dropped: recentDuplicates.size },
+    { gate: 'batch_dedup', considered: generated.length, dropped: batchDuplicates.size },
+    {
+      gate: 'intra_batch_embedding',
+      considered: generated.length,
+      dropped: intraBatchDuplicates.size,
+    },
+    {
+      gate: 'answered_history_embedding',
+      considered: generated.length,
+      dropped: answeredHistoryDuplicates.size,
+    },
+    { gate: 'answer_cooldown', considered: generated.length, dropped: answerCooldownDuplicates.size },
+    {
+      gate: 'subject_cooldown',
+      considered: generated.length,
+      dropped: subjectCooldownDuplicates.size,
+    },
+    { gate: 'answer_leak', considered: generated.length, dropped: answerLeaks.toDrop.size },
+    { gate: 'difficulty_floor', considered: generated.length, dropped: underDifficulty.toDrop.size },
+  ]);
+
   const allDrops = new Set<number>([
     ...batchDuplicates,
     ...intraBatchDuplicates,
@@ -1802,7 +1867,7 @@ export async function generateDailyQuestions(
   // multi-answer questions and merge them into acceptable_variants at persist.
   // Distinct from ask-to-answer (which captures the same answer rephrased);
   // additive, batched, and fail-open. Runs in the same parallel wave.
-  const [, askResult, enrichByIndex] = await Promise.all([
+  const [, askResult, enrichByIndex, answeredAmongBatch] = await Promise.all([
     Promise.all(
       toPersist.map(async (question) => {
         const aside = await generateInsideJoke({
@@ -1820,7 +1885,27 @@ export async function generateDailyQuestions(
     enrichAcceptableVariants(
       toPersist.map((q) => ({ questionText: q.question_text, answer: q.answer, explainer: q.explainer })),
     ),
+    // Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exact DB check of this batch's
+    // fact_keys against the viewer's FULL answered history. factKeyAvoidSet is
+    // built from the recency-capped getRecentFactKeys (200), and a 445-fact
+    // history already overflows it — this uncapped check is what makes "never
+    // re-serve an answered fact" hold at any history size. Bounded (≤ batch
+    // size keys), fail-open: a DB miss just leaves the capped set in charge.
+    (async () => {
+      try {
+        return await getAnsweredFactKeysAmong(userId, toPersist.map((q) => q.fact_key));
+      } catch {
+        return new Set<string>();
+      }
+    })(),
   ]);
+  if (answeredAmongBatch.size > 0) {
+    console.warn('[daily/generate-questions] full-set dedup: batch re-proposed answered facts', {
+      count: answeredAmongBatch.size,
+      factKeys: [...answeredAmongBatch],
+    });
+    for (const key of answeredAmongBatch) factKeyAvoidSet.add(key);
+  }
   if (askResult.toDrop.size > 0) {
     console.warn('[daily/generate-questions] dropping ask-to-answer failures', {
       droppedCount: askResult.toDrop.size,
@@ -2074,6 +2159,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     recentSkipCounts,
     culturalAnchor,
     answeredCanonicalTexts,
+    cappedDomainKeys,
   ] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
@@ -2087,6 +2173,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // Cross-table repetition guard (BP-6 / Q8); resilient — a miss just means
     // the avoid list carries no answered-canonical entries this round.
     getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
+    // Admin generation caps (0121): domain keys an admin flagged "stop searching".
+    // Fail-open — a miss just means no domain is capped this round.
+    getCappedDomainKeys().catch(() => new Set<string>()),
   ]);
   const adaptiveLevel = preferences.difficulty === 'adaptive'
     ? await updateAdaptiveLevel(userId)
@@ -2194,6 +2283,15 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       ? firstRunPlan
       : selectDiverseDomains(eligibleKb, count, recentDomainCounts, frequencyByDomain);
   }
+
+  // Admin generation cap (0121): drop capped domains from the round palette so
+  // the generator stops searching them for new facts — global, deliberate, and
+  // applied AFTER all selection/starvation fallbacks so nothing reintroduces a
+  // capped domain. Unlike the weekly-cap starvation guards there is NO fallback:
+  // capped means generate nothing here (serving from the existing bank is
+  // untouched). Covers every entry point in one place — the cron build and
+  // demand-pull replenish both route through this function.
+  domainsForRound = dropCappedDomains(domainsForRound, cappedDomainKeys);
 
   const domainDifficultyOverrides = preferences.difficulty === 'adaptive'
     ? await getDomainDifficultyOverrides(userId, domainsForRound).catch(() => undefined)
@@ -2378,6 +2476,11 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     }
   }
 
+  // Re-apply the generation cap (0121) after narrow-KB / near-ness routing: the
+  // expansion-parent and near-rung paths above can push domains back into the
+  // LLM palette, so filter capped keys out one last time before any Sonnet call.
+  domainsForLlm = dropCappedDomains(domainsForLlm, cappedDomainKeys);
+
   let llmGenerated: GeneratedQuestionRow[] = [];
   if (remainingCount > 0 && domainsForLlm.length > 0) {
     // B-LLM-PROVIDER-AB-SWITCH B2: resolve the generation provider once per run
@@ -2423,6 +2526,30 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         domainReferences,
       },
     );
+
+    // Dry-round observation (D-SUPPLY-FINITENESS-01 #4): of the domains OFFERED
+    // to fresh generation this round, which yielded a surviving row and which
+    // came back empty? Feeds the consecutive_dry_rounds counter the supply-state
+    // machine reads (K in a row → provisionally dry). Matched on the folded
+    // domain_key because the persist path reconciles labels. Fire-and-forget
+    // telemetry: never blocks or fails the build.
+    try {
+      const yieldedKeys = new Set(llmGenerated.map((row) => domainKey(row.canonicalSubcategory)));
+      const offeredKeys = [...new Set(domainsForLlm.map((domain) => domainKey(domain)))];
+      void recordSupplyYieldObservation({
+        yieldedDomainKeys: [...yieldedKeys],
+        dryDomainKeys: offeredKeys.filter((key) => !yieldedKeys.has(key)),
+      }).catch(() => {});
+      // Co-calibration (0119): a domain that just yielded may have crossed its
+      // corpus estimate — raise the estimate to observed yield so it re-enters
+      // `filling` instead of parking in `raise_estimate`. Only yielded keys can
+      // newly cross, so this stays a tiny targeted write. Same fire-and-forget
+      // posture as the observation above; a manual admin override is never
+      // touched (the query skips it).
+      void coCalibrateRaisedEstimates([...yieldedKeys], nearCompleteRatio()).catch(() => {});
+    } catch {
+      // observation-only
+    }
   }
 
   return [...bankPicks, ...llmGenerated];
@@ -2452,7 +2579,7 @@ export async function generateBonusQuestionsForDomains(
   const results: Array<{ domain: string; question: GeneratedQuestionRow }> = [];
   if (domains.length === 0) return results;
 
-  const [previousQuestionTexts, previousFactKeys, authoredTexts, answeredCanonicalTexts] = await Promise.all([
+  const [previousQuestionTexts, previousFactKeys, authoredTexts, answeredCanonicalTexts, cappedDomainKeys] = await Promise.all([
     getRecentDailyQuestionTexts(userId),
     getRecentFactKeys(userId),
     getAuthoredQuestionTexts(userId),
@@ -2461,6 +2588,9 @@ export async function generateBonusQuestionsForDomains(
     // likeliest surface to re-create a just-answered canonical fact. Advisory
     // fold below, mirroring the authored-texts fold; resilient on failure.
     getRecentAnsweredCanonicalTexts(userId).catch(() => [] as AnsweredCanonicalTextEntry[]),
+    // Admin generation caps (0121): a capped domain still SERVES from its bank
+    // below, but the Sonnet fallback (a fresh "search") is skipped. Fail-open.
+    getCappedDomainKeys().catch(() => new Set<string>()),
   ]);
 
   // A +2 bonus must never hand the viewer a question they themselves authored.
@@ -2492,8 +2622,9 @@ export async function generateBonusQuestionsForDomains(
       // Non-accessible bank pick: not-qualifying. Shrink this slot rather than
       // downgrade — and do NOT fall through to Sonnet (the bank answered).
       row = null;
-    } else if (!row) {
-      // Bank miss → Sonnet, accessible target.
+    } else if (!row && !cappedDomainKeys.has(domainKey(domain))) {
+      // Bank miss → Sonnet, accessible target. Skipped for capped domains: the
+      // cap stops fresh searching (the bank pick above still serves them).
       const generated = await generateDailyQuestions(
         [domain],
         1,

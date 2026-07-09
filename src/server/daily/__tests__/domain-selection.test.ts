@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import {
   domainWeeklyCap,
+  dropCappedDomains,
   selectCustomDomainsForRound,
   weightedSampleWithoutReplacement,
 } from '@/server/daily/domain-selection';
@@ -25,6 +26,22 @@ const recent = (entries: Record<string, number>): Map<string, number> => {
   for (const [domain, n] of Object.entries(entries)) m.set(domainKey(domain), n);
   return m;
 };
+
+describe('dropCappedDomains (0121 admin generation cap)', () => {
+  it('removes capped domains, matching by folded domain_key', () => {
+    const capped = new Set([domainKey('Wagner’s Ring Cycle')]);
+    // A case variant of the capped label must still be dropped (domainKey folds case).
+    const out = dropCappedDomains(['Shakespearean Tragedy', 'WAGNER’S RING CYCLE', 'Jazz'], capped);
+    expect(out).toEqual(['Shakespearean Tragedy', 'Jazz']);
+  });
+
+  it('returns everything when nothing is capped, and empties when all are capped (no fallback)', () => {
+    expect(dropCappedDomains(['Opera', 'Jazz'], new Set())).toEqual(['Opera', 'Jazz']);
+    // Deliberately no starvation fallback: capping the whole palette yields nothing.
+    const allCapped = new Set(['Opera', 'Jazz'].map(domainKey));
+    expect(dropCappedDomains(['Opera', 'Jazz'], allCapped)).toEqual([]);
+  });
+});
 
 describe('weightedSampleWithoutReplacement', () => {
   it('draws distinct items, clamped to availability', () => {

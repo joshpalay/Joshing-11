@@ -1,0 +1,24 @@
+-- 0119: manual estimate override + co-calibration stamp (D-SUPPLY-FINITENESS-01
+-- follow-up: admin supply actions + raise_estimate co-calibration).
+--
+-- "manual_estimated_questions" is an ADMIN-SET override of the corpus-grounded
+-- size estimate: when present it wins over "estimated_questions" everywhere the
+-- estimate is read (getTargetQuestionCountForDomains, the supply-state machine,
+-- the /admin/supply dashboard). It lives in its OWN column so a resolver re-run
+-- (upsertCorpusSizeEstimate) or the co-calibration loop can keep refreshing the
+-- corpus estimate without clobbering the human's number; clearing it (NULL)
+-- returns the domain to the corpus/depth path. "calibrated_at" stamps the last
+-- time the co-calibration loop raised "estimated_questions" to observed yield —
+-- observability only, nothing reads it for behavior.
+--
+-- Purely additive: both columns nullable, idempotent (ADD COLUMN IF NOT EXISTS).
+-- Mirrored by a defensive guard in src/instrumentation.ts (same rationale as the
+-- 0117/0118 guards).
+--
+-- Rollback:
+--   ALTER TABLE "DomainDepthEstimate"
+--     DROP COLUMN IF EXISTS "manual_estimated_questions",
+--     DROP COLUMN IF EXISTS "calibrated_at";
+ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "manual_estimated_questions" integer;
+--> statement-breakpoint
+ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "calibrated_at" timestamp with time zone;

@@ -1,7 +1,15 @@
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
-import { db, reviewedDomainPairs } from '@/server/db';
+import {
+  db,
+  generatedQuestions,
+  knowledgeEdges,
+  knowledgeNodes,
+  questions,
+  reviewedDomainPairs,
+} from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import type { DomainQuestionPeek } from '@/server/db/queries/knowledge-graph';
 
 /**
  * The canonical, order-independent key for a reviewed pair (Part 1 of
@@ -54,6 +62,11 @@ export type FragmentationPair = {
   depthB: number;
   /** pg_trgm trigram similarity, 0..1. */
   similarity: number;
+  /** Whether each side's folded key has an authored KnowledgeNode — merge
+      candidates are RAW corpus labels, most of which never got a node, which is
+      why they don't appear on the knowledge-graph page until nested/merged. */
+  hasNodeA: boolean;
+  hasNodeB: boolean;
 };
 
 type FragmentationRow = {
@@ -118,17 +131,50 @@ export async function getDomainFragmentationCandidates(
     (result as unknown as { rows?: FragmentationRow[] }).rows ??
     (result as unknown as FragmentationRow[]);
 
+  // Drop pairs the strengthened domainKey() already auto-folds at write time —
+  // those converge on their own and need no human. Surface only distinct-key
+  // near-duplicates, the genuine judgment calls.
+  const candidates = rows
+    .map((row) => ({ row, keyA: domainKey(row.domain_a), keyB: domainKey(row.domain_b) }))
+    .filter((c) => c.keyA !== c.keyB);
+
   // Permanently dismissed pairs never resurface, including after a similarity
   // recompute (Part 1). Loaded once and filtered in JS because the pair key is
   // the folded domainKey() (a TS function), not a raw column comparison.
   const dismissed = await getReviewedPairKeys();
 
+  // Graph context for the survivors: which sides already have an authored node
+  // (the "in graph" chip), and which pairs are already CONNECTED by an edge —
+  // a nested pair is a decided pair (parent/child, not duplicates), so it stops
+  // appearing here. Without this filter, a Nest decision would nag forever.
+  const keys = [...new Set(candidates.flatMap((c) => [c.keyA, c.keyB]))];
+  const [nodeRows, edgeRows] =
+    keys.length > 0
+      ? await Promise.all([
+          db
+            .select({ domainKey: knowledgeNodes.domainKey })
+            .from(knowledgeNodes)
+            .where(inArray(knowledgeNodes.domainKey, keys)),
+          db
+            .select({
+              childDomainKey: knowledgeEdges.childDomainKey,
+              parentDomainKey: knowledgeEdges.parentDomainKey,
+            })
+            .from(knowledgeEdges)
+            .where(
+              or(
+                inArray(knowledgeEdges.childDomainKey, keys),
+                inArray(knowledgeEdges.parentDomainKey, keys),
+              ),
+            ),
+        ])
+      : [[], []];
+  const nodeKeys = new Set(nodeRows.map((n) => n.domainKey));
+  const connected = new Set(edgeRows.map((e) => `${e.childDomainKey}→${e.parentDomainKey}`));
+
   const pairs: FragmentationPair[] = [];
-  for (const row of rows) {
-    // Drop pairs the strengthened domainKey() already auto-folds at write time —
-    // those converge on their own and need no human. Surface only distinct-key
-    // near-duplicates, the genuine judgment calls.
-    if (domainKey(row.domain_a) === domainKey(row.domain_b)) continue;
+  for (const { row, keyA, keyB } of candidates) {
+    if (connected.has(`${keyA}→${keyB}`) || connected.has(`${keyB}→${keyA}`)) continue;
     if (dismissed.has(reviewedPairKey(row.domain_a, row.domain_b))) continue;
     pairs.push({
       domainA: row.domain_a,
@@ -136,10 +182,65 @@ export async function getDomainFragmentationCandidates(
       domainB: row.domain_b,
       depthB: Number(row.depth_b),
       similarity: Number(row.sim),
+      hasNodeA: nodeKeys.has(keyA),
+      hasNodeB: nodeKeys.has(keyB),
     });
     if (pairs.length >= limit) break;
   }
   return pairs;
+}
+
+/**
+ * Read-only peek at the questions under a raw fragmentation LABEL — the sanity
+ * check before deciding a merge pair is the same scope ("would be good to see
+ * some of the questions in these areas"). Unlike listQuestionsForDomain (which
+ * requires an authored KnowledgeNode), a merge candidate is just a played
+ * canonical_subcategory that usually has NO node, so we key directly off the
+ * label: canonical rows on the exact label, bank rows on the folded domain_key
+ * (so spelling variants still show). Newest first, canonical before bank, capped.
+ */
+export async function getLabelQuestionPeek(
+  label: string,
+  limit = 20,
+): Promise<DomainQuestionPeek[]> {
+  const key = domainKey(label);
+  const [canonical, bank] = await Promise.all([
+    db
+      .select({
+        text: questions.questionText,
+        answer: questions.answerText,
+        status: questions.publicStatus,
+      })
+      .from(questions)
+      .where(and(eq(questions.canonicalSubcategory, label), isNull(questions.deletedAt)))
+      .orderBy(desc(questions.createdAt))
+      .limit(limit),
+    db
+      .select({
+        text: generatedQuestions.questionText,
+        answer: generatedQuestions.answer,
+        isDuplicate: generatedQuestions.isDuplicate,
+      })
+      .from(generatedQuestions)
+      .where(eq(generatedQuestions.domainKey, key))
+      .orderBy(desc(generatedQuestions.createdAt))
+      .limit(limit),
+  ]);
+
+  return [
+    ...canonical.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'canonical' as const,
+      suppressed: q.status === 'needs_review' || q.status === 'rejected',
+    })),
+    ...bank.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'bank' as const,
+      suppressed: q.isDuplicate,
+    })),
+  ].slice(0, limit);
 }
 
 /**

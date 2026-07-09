@@ -26,10 +26,15 @@
  * "Shakespearean Drama") is the graph's job and must NOT come through here.
  */
 
-import type { PoolClient } from 'pg';
+import type pg from 'pg';
 
 import { pool } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
+
+// Minimal query surface — a pg.Client (the merge CLI) and a pooled client both
+// satisfy it, so the shared corpus/graph helpers below serve BOTH merge
+// entry points (this module's node merge and domain-merges.ts's label batch).
+type QueryClient = Pick<pg.ClientBase, 'query'>;
 
 export type MergeDomainResult =
   | { ok: true; targetLabel: string; sourceLabels: string[]; retargeted: number; consolidated: number }
@@ -62,7 +67,7 @@ const TIER_RANK: Record<string, number> = { establishing: 0, familiar: 1, solid:
 // Every (table, column) pair that can hold a domain label, from the live
 // catalog so a future table can't silently escape the census. KnowledgeNode is
 // excluded here because the graph side is handled explicitly below.
-async function domainColumns(client: PoolClient): Promise<Array<{ table: string; column: string }>> {
+async function domainColumns(client: QueryClient): Promise<Array<{ table: string; column: string }>> {
   const { rows } = await client.query<{ table_name: string; column_name: string }>(`
     SELECT table_name, column_name FROM information_schema.columns
     WHERE table_schema = 'public'
@@ -75,11 +80,12 @@ async function domainColumns(client: PoolClient): Promise<Array<{ table: string;
 
 // Per-row rename with a unique-collision fallback (survivor's state stands).
 async function renameOrDropRows(
-  client: PoolClient,
+  client: QueryClient,
   table: string,
   column: string,
   target: string,
   sources: string[],
+  log?: string[],
 ): Promise<number> {
   const { rows } = await client.query<{ id: string }>(
     `SELECT id FROM "${table}" WHERE "${column}" = ANY($1)`,
@@ -95,16 +101,22 @@ async function renameOrDropRows(
       await client.query(`ROLLBACK TO SAVEPOINT rename_row`);
       await client.query(`DELETE FROM "${table}" WHERE id = $1`, [row.id]);
     }
+    log?.push(`${table}: consolidated row ${row.id}`);
   }
   return rows.length;
 }
 
-// The shared corpus-move core (used by merge AND rename follow-through):
-// retargets the label-bearing rows, consolidates the per-user unique tables,
-// drops caches. Runs INSIDE the caller's transaction; graph tables untouched.
-async function applyCorpusRetarget(
-  client: PoolClient,
+// The shared corpus-move core (used by the node merge, the rename
+// follow-through, AND domain-merges.ts's label batch — ONE copy of the logic
+// that retargets a label across the ~10 tables that can hold one): retargets
+// the label-bearing rows, consolidates the per-user unique tables, drops
+// caches. Runs INSIDE the caller's transaction; graph tables untouched. The
+// optional `log` collects the human-readable step lines the /admin/domains UI
+// and merge CLI print.
+export async function applyCorpusRetarget(
+  client: QueryClient,
   { target, targetKey, sources }: { target: string; targetKey: string; sources: string[] },
+  log?: string[],
 ): Promise<{ retargeted: number; consolidated: number }> {
   let retargeted = 0;
   let consolidated = 0;
@@ -117,12 +129,19 @@ async function applyCorpusRetarget(
       [target, sources],
     );
     retargeted += res.rowCount ?? 0;
+    if (res.rowCount) log?.push(`${table}: retargeted ${res.rowCount}`);
   }
 
   // PLAYER_MASTERY: unique (user_id, canonical_subcategory) — sum points into
   // an existing target row (max tier wins), else rename in place.
-  const mastery = await client.query<{ id: string; user_id: string; tier: string }>(
-    `SELECT id, user_id, tier FROM "PLAYER_MASTERY" WHERE canonical_subcategory = ANY($1)`,
+  const mastery = await client.query<{
+    id: string;
+    user_id: string;
+    canonical_subcategory: string;
+    tier: string;
+  }>(
+    `SELECT id, user_id, canonical_subcategory, tier FROM "PLAYER_MASTERY"
+     WHERE canonical_subcategory = ANY($1)`,
     [sources],
   );
   for (const row of mastery.rows) {
@@ -145,11 +164,13 @@ async function applyCorpusRetarget(
         [existing.rows[0].id, row.id, strongerTier],
       );
       await client.query(`DELETE FROM "PLAYER_MASTERY" WHERE id = $1`, [row.id]);
+      log?.push(`PLAYER_MASTERY: summed ${row.canonical_subcategory} into ${target} (user ${row.user_id})`);
     } else {
       await client.query(`UPDATE "PLAYER_MASTERY" SET canonical_subcategory = $1 WHERE id = $2`, [
         target,
         row.id,
       ]);
+      log?.push(`PLAYER_MASTERY: renamed for user ${row.user_id}`);
     }
     consolidated += 1;
   }
@@ -172,6 +193,7 @@ async function applyCorpusRetarget(
         [target, row.id],
       );
     }
+    log?.push(`USER_DOMAIN_DIFFICULTY: consolidated for user ${row.user_id}`);
     consolidated += 1;
   }
 
@@ -196,6 +218,7 @@ async function applyCorpusRetarget(
         [target, row.id],
       );
     }
+    log?.push(`PROFILE_DOMAIN_VISIBILITY: consolidated for user ${row.user_id}`);
     consolidated += 1;
   }
 
@@ -220,27 +243,119 @@ async function applyCorpusRetarget(
     } else {
       await client.query(`UPDATE "DeclaredInterest" SET domain = $1 WHERE id = $2`, [target, row.id]);
     }
+    log?.push(`DeclaredInterest: consolidated for user ${row.userId}`);
     consolidated += 1;
   }
 
   consolidated += await renameOrDropRows(
-    client, 'USER_DOMAIN_EXCLUSIONS', 'canonical_subcategory', target, sources,
+    client, 'USER_DOMAIN_EXCLUSIONS', 'canonical_subcategory', target, sources, log,
   );
   consolidated += await renameOrDropRows(
-    client, 'DAILY_REFINE_DECISION', 'canonical_subcategory', target, sources,
+    client, 'DAILY_REFINE_DECISION', 'canonical_subcategory', target, sources, log,
   );
 
   for (const { table, column } of DROP_CACHE) {
-    await client.query(`DELETE FROM "${table}" WHERE "${column}" = ANY($1)`, [sources]);
+    const res = await client.query(`DELETE FROM "${table}" WHERE "${column}" = ANY($1)`, [sources]);
+    if (res.rowCount) log?.push(`${table}: dropped ${res.rowCount} cache rows (${column})`);
   }
 
   return { retargeted, consolidated };
 }
 
+export type GraphFoldOutcome = 'none' | 'merged_into_target_node' | 'rekeyed_source_node';
+
+/**
+ * The graph side of a merge, shared by BOTH merge entry points. When the source
+ * key has a KnowledgeNode: its edges re-point to the target key (self-edges and
+ * duplicates dropped first — the unique index would reject them) and its frozen
+ * parent-mastery rows re-key (frozen on both keeps the target row, terminal
+ * either way). Then:
+ *  - target node EXISTS  → the source node is deleted (classic node merge);
+ *  - target node ABSENT  → the source node is re-keyed/renamed to the target
+ *    (label folding used to orphan the node here — the authored structure now
+ *    follows the label instead of pointing at an emptied territory).
+ * No source node → nothing to do. Runs INSIDE the caller's transaction.
+ */
+export async function applyGraphFold(
+  client: QueryClient,
+  { sourceKey, targetKey, targetLabel }: { sourceKey: string; targetKey: string; targetLabel: string },
+  log?: string[],
+): Promise<GraphFoldOutcome> {
+  if (sourceKey === targetKey) return 'none';
+  const nodes = await client.query<{ domain_key: string }>(
+    `SELECT domain_key FROM "KnowledgeNode" WHERE domain_key = ANY($1)`,
+    [[sourceKey, targetKey]],
+  );
+  const hasSource = nodes.rows.some((n) => n.domain_key === sourceKey);
+  if (!hasSource) return 'none';
+  const hasTarget = nodes.rows.some((n) => n.domain_key === targetKey);
+
+  // Child edges: the source's children re-file under the target (skip
+  // self-edges and duplicates — the unique index would reject them).
+  await client.query(
+    `DELETE FROM "KnowledgeEdge" e WHERE e.parent_domain_key = $1
+       AND (e.child_domain_key = $2
+            OR EXISTS (SELECT 1 FROM "KnowledgeEdge" t
+                       WHERE t.parent_domain_key = $2 AND t.child_domain_key = e.child_domain_key))`,
+    [sourceKey, targetKey],
+  );
+  await client.query(
+    `UPDATE "KnowledgeEdge" SET parent_domain_key = $2 WHERE parent_domain_key = $1`,
+    [sourceKey, targetKey],
+  );
+  // Parent edges: the source's own memberships transfer to the target.
+  await client.query(
+    `DELETE FROM "KnowledgeEdge" e WHERE e.child_domain_key = $1
+       AND (e.parent_domain_key = $2
+            OR EXISTS (SELECT 1 FROM "KnowledgeEdge" t
+                       WHERE t.child_domain_key = $2 AND t.parent_domain_key = e.parent_domain_key))`,
+    [sourceKey, targetKey],
+  );
+  await client.query(
+    `UPDATE "KnowledgeEdge" SET child_domain_key = $2 WHERE child_domain_key = $1`,
+    [sourceKey, targetKey],
+  );
+
+  // Frozen parent mastery re-keys; a player frozen on BOTH keeps the target
+  // row (terminal either way, §B).
+  const frozen = await client.query<{ id: string; user_id: string }>(
+    `SELECT id, user_id FROM "KnowledgeParentMastery" WHERE parent_domain_key = $1`,
+    [sourceKey],
+  );
+  for (const row of frozen.rows) {
+    const existing = await client.query<{ id: string }>(
+      `SELECT id FROM "KnowledgeParentMastery" WHERE user_id = $1 AND parent_domain_key = $2`,
+      [row.user_id, targetKey],
+    );
+    if (existing.rows.length > 0) {
+      await client.query(`DELETE FROM "KnowledgeParentMastery" WHERE id = $1`, [row.id]);
+    } else {
+      await client.query(
+        `UPDATE "KnowledgeParentMastery" SET parent_domain_key = $2 WHERE id = $1`,
+        [row.id, targetKey],
+      );
+    }
+  }
+
+  if (hasTarget) {
+    // The source node ceases to exist.
+    await client.query(`DELETE FROM "KnowledgeNode" WHERE domain_key = $1`, [sourceKey]);
+    log?.push(`KnowledgeNode: folded graph node into existing "${targetLabel}" node`);
+    return 'merged_into_target_node';
+  }
+  // No target node: the authored node follows the surviving label.
+  await client.query(
+    `UPDATE "KnowledgeNode" SET label = $2, domain_key = $3 WHERE domain_key = $1`,
+    [sourceKey, targetLabel, targetKey],
+  );
+  log?.push(`KnowledgeNode: re-keyed graph node to "${targetLabel}" (structure kept)`);
+  return 'rekeyed_source_node';
+}
+
 // Every distinct corpus spelling that folds onto `key`, across the
 // label-bearing tables — the full set of labels a retarget must move.
 async function collectSourceLabels(
-  client: PoolClient,
+  client: QueryClient,
   key: string,
   seed: string[],
 ): Promise<string[]> {
@@ -258,7 +373,7 @@ async function collectSourceLabels(
 
 // Census guard: any populated (table, column) holding a source label that the
 // apply path doesn't know how to consolidate. Non-empty ⇒ abort BEFORE writes.
-async function findUnhandledTables(client: PoolClient, sources: string[]): Promise<string[]> {
+async function findUnhandledTables(client: QueryClient, sources: string[]): Promise<string[]> {
   const handled = new Set([
     ...RETARGET.map((t) => `${t.table}.${t.column}`),
     ...DROP_CACHE.map((t) => `${t.table}.${t.column}`),
@@ -367,55 +482,13 @@ export async function mergeDomainIntoTarget(
       consolidated = moved.consolidated;
 
       // ── The graph side (this action IS the human authoring act) ──
-      // Child edges: the source's children re-file under the target (skip
-      // self-edges and duplicates — the unique index would reject them).
-      await client.query(
-        `DELETE FROM "KnowledgeEdge" e WHERE e.parent_domain_key = $1
-           AND (e.child_domain_key = $2
-                OR EXISTS (SELECT 1 FROM "KnowledgeEdge" t
-                           WHERE t.parent_domain_key = $2 AND t.child_domain_key = e.child_domain_key))`,
-        [input.sourceDomainKey, targetKey],
-      );
-      await client.query(
-        `UPDATE "KnowledgeEdge" SET parent_domain_key = $2 WHERE parent_domain_key = $1`,
-        [input.sourceDomainKey, targetKey],
-      );
-      // Parent edges: the source's own memberships transfer to the target.
-      await client.query(
-        `DELETE FROM "KnowledgeEdge" e WHERE e.child_domain_key = $1
-           AND (e.parent_domain_key = $2
-                OR EXISTS (SELECT 1 FROM "KnowledgeEdge" t
-                           WHERE t.child_domain_key = $2 AND t.parent_domain_key = e.parent_domain_key))`,
-        [input.sourceDomainKey, targetKey],
-      );
-      await client.query(
-        `UPDATE "KnowledgeEdge" SET child_domain_key = $2 WHERE child_domain_key = $1`,
-        [input.sourceDomainKey, targetKey],
-      );
-      // Frozen parent mastery re-keys; a player frozen on BOTH keeps the
-      // target row (terminal either way, §B).
-      const frozen = await client.query<{ id: string; user_id: string }>(
-        `SELECT id, user_id FROM "KnowledgeParentMastery" WHERE parent_domain_key = $1`,
-        [input.sourceDomainKey],
-      );
-      for (const row of frozen.rows) {
-        const existing = await client.query<{ id: string }>(
-          `SELECT id FROM "KnowledgeParentMastery" WHERE user_id = $1 AND parent_domain_key = $2`,
-          [row.user_id, targetKey],
-        );
-        if (existing.rows.length > 0) {
-          await client.query(`DELETE FROM "KnowledgeParentMastery" WHERE id = $1`, [row.id]);
-        } else {
-          await client.query(
-            `UPDATE "KnowledgeParentMastery" SET parent_domain_key = $2 WHERE id = $1`,
-            [row.id, targetKey],
-          );
-        }
-      }
-      // The source node ceases to exist.
-      await client.query(`DELETE FROM "KnowledgeNode" WHERE domain_key = $1`, [
-        input.sourceDomainKey,
-      ]);
+      // Both nodes exist (checked above), so this is always the classic node
+      // merge: edges re-point, frozen parent mastery re-keys, source node dies.
+      await applyGraphFold(client, {
+        sourceKey: input.sourceDomainKey,
+        targetKey,
+        targetLabel: target,
+      });
 
       await client.query('COMMIT');
     } catch (err) {

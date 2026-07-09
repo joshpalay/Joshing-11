@@ -167,13 +167,15 @@ export function AdminReportsClient({
   ).length;
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
+    <main className="mx-auto min-h-dvh max-w-4xl px-4 pt-6 pb-24">
       <header className="mb-5">
-        <h1 className="mb-3 font-serif text-2xl font-semibold text-[var(--brand-ink)]">
-          Review queue
+        <div className="mb-3">
+          <AdminTabs active="reports" needingReviewCount={openCount} />
+        </div>
+        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
+          Questions needing you
         </h1>
-        <AdminTabs active="reports" needingReviewCount={openCount} />
-        <p className="text-muted-foreground mt-3 text-sm">
+        <p className="text-muted-foreground mt-2 text-sm">
           Two streams, one queue: players reported these, or the verifier pulled them pending your
           call. Nothing here is deleted — flagged questions sit out of circulation until you act.
         </p>

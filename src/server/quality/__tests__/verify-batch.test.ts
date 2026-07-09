@@ -81,14 +81,28 @@ describe('buildVerifyRequestParams — the shared sync/batch request', () => {
     }
   });
 
-  it('leaves search unrestricted when the env var is unset (pre-existing behavior)', () => {
+  it('defaults to the wiki allowlist when the env var is unset (F1 default posture, 2026-07-08)', () => {
     const prev = process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
     try {
       delete process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
       const params = buildVerifyRequestParams(input);
-      expect(params.tools?.[0]).not.toHaveProperty('allowed_domains');
+      expect(params.tools?.[0]).toMatchObject({
+        allowed_domains: ['wikipedia.org', 'fandom.com'],
+      });
     } finally {
       if (prev !== undefined) process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = prev;
+    }
+  });
+
+  it('restores unrestricted search with the "*" escape hatch', () => {
+    const prev = process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
+    try {
+      process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = '*';
+      const params = buildVerifyRequestParams(input);
+      expect(params.tools?.[0]).not.toHaveProperty('allowed_domains');
+    } finally {
+      if (prev === undefined) delete process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS;
+      else process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = prev;
     }
   });
 });

@@ -35,6 +35,22 @@ export function domainFrequencyWeight(frequency: string | undefined): number {
   return (frequency && DOMAIN_FREQUENCY_WEIGHT[frequency]) || DEFAULT_DOMAIN_WEIGHT;
 }
 
+/**
+ * Drop admin-capped domains (0121) from a round palette. `cappedKeys` holds
+ * folded domain_keys (getCappedDomainKeys); domains are matched by domainKey()
+ * so a spelling variant of a capped label is caught too. Unlike the weekly-cap
+ * starvation guards there is deliberately NO fallback — a capped domain must
+ * yield nothing (serving from the existing bank is untouched). Pure so it's
+ * unit-testable and applied identically at every generation chokepoint.
+ */
+export function dropCappedDomains(
+  domains: string[],
+  cappedKeys: ReadonlySet<string>,
+): string[] {
+  if (cappedKeys.size === 0) return domains;
+  return domains.filter((domain) => !cappedKeys.has(domainKey(domain)));
+}
+
 export function domainWeeklyCap(frequency: string | undefined): number {
   return (frequency && DOMAIN_WEEKLY_CAP_BY_FREQUENCY[frequency]) || DOMAIN_PER_WEEK_CAP;
 }

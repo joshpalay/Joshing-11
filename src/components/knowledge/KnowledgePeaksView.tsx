@@ -6,12 +6,14 @@ import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import { freqKey, usePeakDetail } from '@/components/knowledge/usePeakDetail';
 import {
   MIN_SIZE,
   MAX_SIZE,
   getCircleSize,
   getCircleOpacity,
 } from '@/components/knowledge/CategoryCircles';
+import { FrequencyMark } from '@/components/knowledge/FrequencyMark';
 import {
   TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_COPY,
@@ -78,17 +80,8 @@ function quizHref(name: string): string {
   return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
 }
 
-// A peaks leaf's `node.name` === its `canonicalSubcategory`, which is exactly the
-// key `domainPreferenceFrequency` stores — matched case-insensitively, just like
-// the domain-frequency route. Normalize both sides the same way to resolve it.
-function freqKey(name: string): string {
-  return name.trim().toLowerCase();
-}
-
-// Decision A: a leaf with no explicit preference shows its actual effective
-// default. For an owned peak that's `'sometimes'` ("Sometimes") — the rotation
-// it's already in — so the face is truthful, not blank.
-const DEFAULT_FREQUENCY: TerritoryFrequency = 'sometimes';
+// `freqKey` + `DEFAULT_FREQUENCY` (and the frequency/adopt writes below) live in
+// usePeakDetail so the flat portrait page drives the same PeakDetailCard.
 
 const EMPTY_DOMAIN_SET: ReadonlySet<string> = new Set();
 
@@ -114,7 +107,7 @@ function isOwnedLeaf(node: KnowledgeTreeNode): boolean {
   );
 }
 
-type LeafInfo = {
+export type LeafInfo = {
   node: KnowledgeTreeNode;
   /** Non-root ancestors, top area → leaf's immediate parent (excludes the leaf). */
   path: KnowledgeTreeNode[];
@@ -125,7 +118,7 @@ type LeafInfo = {
 // One walk of the tree: every owned terminal leaf with its lineage. Parents
 // carry their child roster inline, so siblings (owned + addable ghosts) come
 // straight off `parent.children` at render time.
-function indexLeaves(tree: KnowledgeTreeNode): LeafInfo[] {
+export function indexLeaves(tree: KnowledgeTreeNode): LeafInfo[] {
   const out: LeafInfo[] = [];
   const walk = (node: KnowledgeTreeNode, ancestors: KnowledgeTreeNode[]) => {
     if (isOwnedLeaf(node)) {
@@ -164,54 +157,12 @@ export function KnowledgePeaksView({
    */
   fullyExploredDomains?: ReadonlySet<string>;
 }) {
-  const [tree, setTree] = useState<KnowledgeTreeNode>(data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  // Optimistic frequency map, keyed by normalized domain. Seeded from the
-  // server preference and updated in place on write (like `adoptNode`), so the
-  // face pill and detail sheet reflect the change before the round rebuilds.
-  const [freqMap, setFreqMap] = useState<Record<string, TerritoryFrequency>>(() => {
-    const seeded: Record<string, TerritoryFrequency> = {};
-    for (const [domain, frequency] of Object.entries(frequencyByDomain)) {
-      seeded[freqKey(domain)] = frequency;
-    }
-    return seeded;
-  });
-
-  const resolveFrequency = useCallback(
-    (name: string): TerritoryFrequency => freqMap[freqKey(name)] ?? DEFAULT_FREQUENCY,
-    [freqMap],
-  );
-
-  // Optimistic write: flip local state, POST the single-domain change, revert on
-  // failure. The route merges server-side and drops untouched Daily Five queues.
-  const setFrequency = useCallback(
-    async (name: string, frequency: TerritoryFrequency): Promise<boolean> => {
-      const key = freqKey(name);
-      const previous = freqMap[key];
-      setFreqMap((prev) => ({ ...prev, [key]: frequency }));
-      try {
-        const res = await fetch('/api/daily/preferences/domain-frequency', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ domain: name, frequency }),
-        });
-        if (!res.ok) throw new Error('frequency update failed');
-        return true;
-      } catch {
-        setFreqMap((prev) => {
-          const next = { ...prev };
-          if (previous === undefined) delete next[key];
-          else next[key] = previous;
-          return next;
-        });
-        return false;
-      }
-    },
-    [freqMap],
-  );
+  // The optimistic tree, per-leaf rotation map, and the frequency/adopt writes
+  // are shared with the flat portrait page via this controller.
+  const { tree, resolveFrequency, setFrequency, adoptNode } = usePeakDetail(data, frequencyByDomain);
 
   // "Fully explored" honor (P4) — resolve per node by normalized domain key,
   // same match as frequency. Currently the source set is gated/empty.
@@ -357,19 +308,6 @@ export function KnowledgePeaksView({
     if (standalone.length > 0) list.push({ title: 'More', field: null, leaves: standalone });
     return list;
   }, [sorted]);
-
-  // Optimistic confirmed add: flip the ghost sibling into a real leaf so it
-  // jumps from "add next" to owned; revert on failure. Mirrors the bubble map.
-  const adoptNode = useCallback(async (id: string, name: string): Promise<boolean> => {
-    const flip = (node: KnowledgeTreeNode, ghost: boolean, value: number): KnowledgeTreeNode =>
-      node.id === id
-        ? { ...node, ghost: ghost || undefined, value }
-        : { ...node, children: node.children?.map((c) => flip(c, ghost, value)) };
-    setTree((prev) => flip(prev, false, 1));
-    const ok = await adoptDomain(name);
-    if (!ok) setTree((prev) => flip(prev, true, 40));
-    return ok;
-  }, []);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -587,10 +525,11 @@ function ControlsBar({
               type="button"
               onClick={() => onToggleFreq(freq)}
               aria-pressed={freqFilter.has(freq)}
-              className={pill}
+              className={`${pill} gap-1`}
               style={pillStyle(freqFilter.has(freq))}
             >
               {TERRITORY_FREQUENCY_LABEL[freq]}
+              <FrequencyMark frequency={freq} color="var(--brand-ink-400)" size={12} decorative />
             </button>
           ))}
         </div>
@@ -724,8 +663,9 @@ function KnowledgeCircleCell({
           ✦ Fully explored
         </span>
       ) : showFrequency ? (
-        <span className="text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
+        <span className="inline-flex items-center gap-1 text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
           {TERRITORY_FREQUENCY_LABEL[frequency]}
+          <FrequencyMark frequency={frequency} color={fieldColor(node.field)} size={11} decorative />
         </span>
       ) : null}
     </>
@@ -765,7 +705,7 @@ type AddPhase =
 
 // The leaf-first detail: identity, the rollup PATH, and the sibling roster —
 // owned siblings you can jump to, plus addable ghosts (the "grow it next" move).
-function PeakDetailCard({
+export function PeakDetailCard({
   leaf,
   variant,
   frequency,
@@ -811,14 +751,24 @@ function PeakDetailCard({
   const heldChildren = ownChildren.filter((c) => !c.ghost && (c.value ?? 0) > 0);
   const ghostChildren = ownChildren.filter((c) => c.ghost);
 
-  // "More in {area}" expands sideways. With a parent (a leaf/sub-area opened from
-  // the list), that's the sibling roster. For a top-level area (no parent) it's
-  // the addable children of this area itself — the same "grow it next" move.
-  const areaName = parent ? parent.name : node.name;
+  // "Related" expands sideways. With a parent (a leaf/sub-area opened from the
+  // list), that's the sibling roster. For a top-level area (no parent) it's the
+  // addable children of this area itself — the same "grow it next" move.
   const jumpSiblings = parent ? ownedSiblings : [];
   const addSiblings = parent ? ghostSiblings : ghostChildren;
-  const showMoreIn = variant === 'own' && (jumpSiblings.length > 0 || addSiblings.length > 0);
+  const showRelated = variant === 'own' && (jumpSiblings.length > 0 || addSiblings.length > 0);
   const sectionBorder = { borderColor: 'var(--border)' };
+
+  // The "Part of" container (own map only): a held area the leaf rolls up into,
+  // but one the player hasn't itself adopted into rotation — it carries no own
+  // points (`value`) and isn't mastered. That's the "add when unowned" case, so
+  // it earns a "+ Add" that folds the whole container into the Daily Five.
+  const parentAddable =
+    variant === 'own' &&
+    parent != null &&
+    !parent.ghost &&
+    parent.value === undefined &&
+    !parent.mastered;
 
   const actionButton =
     'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
@@ -1021,11 +971,24 @@ function PeakDetailCard({
         </button>
       </div>
 
-      {/* Part of — where this area rolls up to (read-only). Empty for a
+      {/* Part of — where this area rolls up to. A held-but-unadopted container
+          (own map only) offers a "+ Add" to fold it into rotation. Empty for a
           top-level area, which rolls up to nothing. */}
       {leaf.path.length > 0 ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
-          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+            {parentAddable && parent ? (
+              <button
+                type="button"
+                onClick={() => setPhase({ step: 'confirm', id: parent.id, name: parent.name })}
+                className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              >
+                <Plus className="size-3.5" aria-hidden /> Add
+              </button>
+            ) : null}
+          </div>
           <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
             {leaf.path.map((ancestor, i) => (
               <span key={ancestor.id} className="flex items-center gap-1">
@@ -1072,11 +1035,11 @@ function PeakDetailCard({
         </div>
       ) : null}
 
-      {/* More in {area} — jump to owned neighbours, or add the ghosts next to it. */}
-      {showMoreIn ? (
+      {/* Related — jump to owned neighbours, or add the ghosts next to it. */}
+      {showRelated ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
-            More in {areaName}
+            Related
           </p>
           {jumpSiblings.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">

@@ -78,6 +78,18 @@ describe('admin questions mutation route — actions (admin)', () => {
     expect(editMock).not.toHaveBeenCalled();
   });
 
+  it('dispatches a re-attribution to house', async () => {
+    const res = await post({ action: 'edit', id: 'q1', attribution: 'house' });
+    expect(res.status).toBe(200);
+    expect(editMock).toHaveBeenCalledWith('q1', expect.objectContaining({ attribution: 'house' }));
+  });
+
+  it('rejects an unsupported attribution target', async () => {
+    const res = await post({ action: 'edit', id: 'q1', attribution: 'person' });
+    expect(res.status).toBe(400);
+    expect(editMock).not.toHaveBeenCalled();
+  });
+
   it('soft-deletes', async () => {
     const res = await post({ action: 'delete', id: 'q1' });
     expect(res.status).toBe(200);

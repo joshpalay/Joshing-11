@@ -1,8 +1,18 @@
 # D-SUPPLY-LADDER-UNIFY-01 — Decision Record
 
-> **⚠ Under revision — see `docs/decisions-pending/D-SUPPLY-FINITE-SET-01-PENDING.md`.** This ladder assumes **infinite-topup** domains; a **finite-completable-set** reframe under review may reshape rungs 2, 3, and 5. **Do not write build prompts from this doc until that decision lands.**
+> **Banner update (2026-07-08):** the finite-set reframe this banner gated on has
+> LANDED — `D-SUPPLY-FINITE-SET-01` was **ratified 2026-07-01** (see that doc and
+> `D-SUPPLY-FINITENESS-01`). The ladder's rungs stand; what the reframe changed is
+> refill's *purpose* (one-time deepening toward a finite target, not perpetual
+> top-up), which is exactly why flip 1 remains PAUSED pending its re-scope (§8).
 
-**Status:** DRAFT — open decisions **A, D, E** require ratification before any build prompt is written. (Decisions **B** and **C** are effectively resolved by live canon — see the Reconciliation note and §5.)
+**Status:** ✅ **RATIFIED** — **A2 + D2 + E2** (2026-07-08, Josh, adopting the
+recommended defaults; recorded during the question/gameplay/cost health review).
+**B2** and **C1** were already closed by live canon (see §5). Ratification settles
+the *definitions* — it does **not** un-pause flip 1: `RETRIEVAL_GROUNDING_ENABLED`
+stays off per `B-SUPPLY-REFILL-EFFORT-REPORT.md`, and the E2 staging clock starts
+only when refill is resumed after its finite-set re-scope. Build prompts may now
+be written in §8 order when that happens.
 **Coordinates with (does NOT couple to):** `D-AREA-EXPANSION-01` (now **SETTLED + §9-amended + largely built**) and `D-QUESTION-QUALITY-AGENTS-01` / `B-QUESTION-QUALITY-AGENTS-01`. Shared seams only — see §4 and §7.
 **Migration head at draft:** `0095_player_mastery_rotation_eligible` (live head; `ls drizzle/*.sql | sort | tail -1`). This doc's *flips* introduce no migration; the §4 `needs_review` seam and the §5-A refill-recovery signal may each require a small storage/derivation decision settled at build time (§8) — so "no migration" is no longer an unconditional promise.
 **Source of truth:** live code, not this doc's paraphrase. Every build prompt that descends from this re-reads the named files and lets live code win on divergence.
@@ -102,11 +112,13 @@ What remains genuinely open — options (i)/(ii)/(iii) above, i.e. whether a hum
 
 ---
 
-## 5. Open decisions (RATIFY THESE)
+## 5. Open decisions (RATIFIED 2026-07-08 — A2 + D2 + E2)
 
-Each carries a recommendation. §6 bundles a coherent default. **B and C are effectively closed by live canon and are recorded here only for the trail** (see notes).
+Each carried a recommendation; Josh ratified the recommended defaults as a set on
+2026-07-08. §6's bundle is now the settled configuration. **B and C were already
+closed by live canon and are recorded here only for the trail** (see notes).
 
-### A — How is "exhausted" defined for the rung-5 expansion trigger? *(OPEN)*
+### A — How is "exhausted" defined for the rung-5 expansion trigger? *(RATIFIED: A2)*
 *(Absorbs `D-AREA-EXPANSION-01` decision A's *content-supply* aspect; note A3 there already settled the **which-domain/when** of the offer — see §7. This decision concerns the **content-exhaustion gate**, which is additive to the existing difficulty-ceiling stamp.)*
 - **A1 —** Effective depth below a fixed threshold (reuse `RETRIEVAL_POOL_DEPTH_THRESHOLD`, default 8). Simple, but a static number, not a true ceiling.
 - **A2 — (recommended)** Effective depth below threshold **AND** the most recent refill run for that domain recovered **zero** new corroborated facts (refill has hit its honest ceiling). This is the §3 definition: exhausted = refill can't deepen it further. Requires refill (flip 1) live to be meaningful.
@@ -128,7 +140,7 @@ Each carries a recommendation. §6 bundles a coherent default. **B and C are eff
 
 **Resolution: C1 (daily-summary `ExpandDomainOfferCard`)** — settled in `D-AREA-EXPANSION-01`, not re-opened here. Recorded so this doc names the correct surface.
 
-### D — What happens to the original leaf domain's **refill demand** after graduation? *(OPEN — this is a refill-budget decision, distinct from territory)*
+### D — What happens to the original leaf domain's **refill demand** after graduation? *(RATIFIED: D2 — this is a refill-budget decision, distinct from territory)*
 *(`D-AREA-EXPANSION-01` E1 already settled the **territory** question: the leaf is **kept**, additive — proven territory is never confiscated. This decision is only about whether the leaf stays a **refill spend target**.)*
 - **D1 —** Leaf stays an active refill target alongside the new broad area (both keep deepening).
 - **D2 — (recommended)** Graduation **freezes refill demand** for the leaf; the broader declared area becomes the new refill target. Prevents tug-of-war and wasted spend re-deepening a domain the player has chosen to grow out of. **Consistent with `D-AREA-EXPANSION-01` §9 R4**, which makes the parent the *overflow reservoir* once the leaf is tapped — so retargeting refill to the parent is the same direction of travel.
@@ -136,7 +148,7 @@ Each carries a recommendation. §6 bundles a coherent default. **B and C are eff
 
 **Recommendation: D2.** Freezes the leaf's *refill demand* only; the leaf's *territory and existing pool* stay (E1). D1 wastes refill budget on a domain the player graduated from.
 
-### E — Staging cadence for the two flips (+ the rung-5 refinement). *(OPEN)*
+### E — Staging cadence for the two flips (+ the rung-5 refinement). *(RATIFIED: E2)*
 - **E1 —** All flip together once refill is verified populating the pool.
 - **E2 — (recommended)** Staged with soak between each: **Flip 1 refill → soak ≥1 week → Flip 2 guard → soak ≥1 week → Rung-5 exhaustion-trigger refinement (decision A) + leaf-refill freeze (decision D).**
 
@@ -144,9 +156,7 @@ Each carries a recommendation. §6 bundles a coherent default. **B and C are eff
 
 ---
 
-## 6. Bundled default configuration
-
-For a single coherent starting point if you ratify the open recommendations as a set, with B/C taken as live canon:
+## 6. Bundled default configuration (RATIFIED as the set, 2026-07-08)
 
 > **A2 + B2(canon) + C1(canon, daily-summary) + D2 + E2.**
 

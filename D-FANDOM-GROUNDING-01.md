@@ -1,7 +1,11 @@
 # D-FANDOM-GROUNDING-01 — Reference-Wiki Grounding for Generation & Validation
 
-**Status:** ✅ **RATIFIED + IMPLEMENTED (flag-off)** — 2026-07-03, Josh, in chat.
+**Status:** ✅ **RATIFIED + IMPLEMENTED** — 2026-07-03, Josh, in chat.
 Ratified set: **A2 + B2 + C(grounding-only) + D1-now/D2-later + E(per-domain daily) + F1.**
+**Consumer B FLIPPED (default ON) 2026-07-08** — `VERIFY_WEB_SEARCH_ALLOWED_DOMAINS`
+now defaults to `wikipedia.org,fandom.com` in code (`"*"` restores unrestricted),
+flipped together with `VERIFY_GATE_THIN_DECLARED_ENABLED` (also default ON) so
+held thin-domain rows have a promote path. Consumer A remains flag-off.
 Originally drafted on `dev2` against pre-#1364 code; implemented on
 `claude/cost-scaling-review-gb93a3` (PR #1364) against the post-refactor seams —
 the doc's original code references (e.g. `verify-question.ts` L122–123) are

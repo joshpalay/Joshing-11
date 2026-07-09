@@ -184,6 +184,23 @@ function QuestionsPageContent() {
   const [cardError, setCardError] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Admin-only affordance: reveal a jump to the /admin/questions pool audit.
+  // isAdmin is resolved server-side (ADMIN_USER_IDS) and delivered by /api/nav —
+  // the client only receives the boolean, and the admin route re-checks the gate.
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/nav', { cache: 'no-store', credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body?.isAdmin === true) setIsAdmin(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadQuestions = useCallback(async () => {
     // Cold load shows the skeleton; a warm cache revalidates silently underneath
@@ -435,6 +452,14 @@ function QuestionsPageContent() {
         >
           Answered
         </button>
+        {isAdmin ? (
+          <a
+            href="/admin/questions"
+            className="ml-auto self-center px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Admin overview →
+          </a>
+        ) : null}
       </div>
 
       {tab === 'authored' ? (

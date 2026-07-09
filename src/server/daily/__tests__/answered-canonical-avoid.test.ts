@@ -24,6 +24,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   getRecentAnsweredCanonicalTexts: mocks.getRecentAnsweredCanonicalTexts,
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
   getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
+  getAnsweredFactKeysAmong: vi.fn(async () => new Set<string>()),
   getRecentDomainCounts: vi.fn(),
   getRecentSkipCountsByDomain: vi.fn(),
   getRecentSubAnglesByDomain: vi.fn(),

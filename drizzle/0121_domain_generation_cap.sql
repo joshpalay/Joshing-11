@@ -1,0 +1,22 @@
+-- 0121: admin per-domain generation cap (D-SUPPLY-FINITENESS-01 follow-up).
+--
+-- "generation_capped_at" is an ADMIN-SET stop switch on a single domain_key. When
+-- present, the domain is EXCLUDED from fresh generation everywhere the daily
+-- generator builds its round palette (generateDailyQuestionsFromKnowledgeBase — so
+-- both the cron build and demand-pull replenish stop searching it for new facts).
+-- SERVING is untouched: the existing bank keeps flowing; only new generation stops.
+-- It is distinct from the derived `soft_finite` supply state (auto, re-probeable)
+-- and from the per-player `resting` frequency tag — this is a global, deliberate,
+-- human cap. A capped domain also never fires the discrepancy alarm (you stopped
+-- it on purpose). Clearing it (NULL) returns the domain to normal generation.
+--
+-- Timestamp (not a bool) so the dashboard can show WHEN it was capped, and so it
+-- reads consistently with the other admin/observability stamps on this table.
+--
+-- Purely additive: nullable, idempotent (ADD COLUMN IF NOT EXISTS). Mirrored by a
+-- defensive guard in src/instrumentation.ts (same rationale as the 0117/0118/0119
+-- guards).
+--
+-- Rollback:
+--   ALTER TABLE "DomainDepthEstimate" DROP COLUMN IF EXISTS "generation_capped_at";
+ALTER TABLE "DomainDepthEstimate" ADD COLUMN IF NOT EXISTS "generation_capped_at" timestamp with time zone;

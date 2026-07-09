@@ -11,18 +11,20 @@
  * queue. Dropped rows stay persisted for that async pass to promote and serve
  * later. "Fewer but true" on exactly the domains where fabrication is likeliest.
  *
- * Flag-gated OFF by default (VERIFY_GATE_THIN_DECLARED_ENABLED) — flip it alongside
- * the verifier wiki/fandom allowlist so held rows have a path back to serving.
- * Fail-open: any error serves the ungated set (never blocks a build).
+ * DEFAULT ON as of 2026-07-08, flipped together with the verifier wiki/fandom
+ * allowlist default (verify-question.ts) so held rows have a path back to
+ * serving. Set VERIFY_GATE_THIN_DECLARED_ENABLED=false to revert without a
+ * deploy. Fail-open: any error serves the ungated set (never blocks a build).
  */
 import { narrowKbThinnessThreshold } from '@/server/daily/kb-exhaustion';
 import { SELF_PRACTICE_TIERS, type TrustTier } from '@/server/daily/verification-gating';
+import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
 import type { GeneratedQuestionRow } from '@/server/daily/generate-questions';
 
 export function isVerifyGateThinEnabled(): boolean {
   const raw = process.env.VERIFY_GATE_THIN_DECLARED_ENABLED?.trim().toLowerCase();
-  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
 }
 
 const SERVEABLE_TIERS = new Set<TrustTier>(SELF_PRACTICE_TIERS);
@@ -69,6 +71,7 @@ export async function verifyGateThinDeclared(
     const thinDeclared = new Set(present.filter((domain) => (depths.get(domain) ?? 0) < threshold));
 
     const { kept, dropped } = filterUnverifiedInDomains(rows, thinDeclared);
+    void recordGateDrops([{ gate: 'thin_declared', considered: rows.length, dropped }]);
     if (dropped > 0) {
       console.info('[verify-gate-thin] held unverified generations in thin declared domains', {
         thinDeclared: [...thinDeclared],
@@ -81,6 +84,7 @@ export async function verifyGateThinDeclared(
     console.warn('[verify-gate-thin] failed; serving ungated', {
       error: error instanceof Error ? error.message : String(error),
     });
+    recordGateFailedOpen('thin_declared');
     return rows;
   }
 }

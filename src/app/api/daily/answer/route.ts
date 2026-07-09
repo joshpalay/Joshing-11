@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 
 import { gradeAnswer, type GradableQuestionType, type GradeOutcome } from '@/server/grading';
@@ -12,7 +12,8 @@ import {
 } from '@/server/db';
 import { deriveAnswerOutcome, recordAnswerSideEffects } from '@/server/answers/answer-pipeline';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
-import { type QueueSlot } from '@/server/daily/types';
+import { isRoundComplete, type QueueSlot } from '@/server/daily/types';
+import { isDailyReplenishEnabled, replenishBankAfterPlay } from '@/server/daily/replenish-bank';
 import { isBonusSlot } from '@/server/daily/bonus';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
@@ -540,6 +541,22 @@ export async function POST(request: NextRequest) {
       }),
     ]);
     marks.mastery = Date.now();
+
+    // Demand-pull bank replenish (D-SUPPLY-DEMAND-PULL-01): THIS answer just
+    // completed the round (transition — the prior slot state was incomplete),
+    // which is the demand signal. Restock the viewer's own bank AFTER the
+    // response flushes (`after()` on Fluid compute), so tomorrow's cron
+    // pre-build assembles from ready stock instead of generating live. Flag
+    // checked here too (cheap) so a disabled flag never even schedules the
+    // callback. Fire-and-forget: replenishBankAfterPlay never throws.
+    if (
+      isDailyReplenishEnabled() &&
+      !isRoundComplete(slots) &&
+      isRoundComplete(nextSlots)
+    ) {
+      const replenishUserId = session.userId;
+      after(() => replenishBankAfterPlay(replenishUserId));
+    }
 
     const response = NextResponse.json({
       isCorrect,

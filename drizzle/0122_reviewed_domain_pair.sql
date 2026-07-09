@@ -1,4 +1,4 @@
--- 0117: ReviewedDomainPair (D-DOMAIN-MERGE-REVIEW-REDESIGN-01, Part 1).
+-- 0122: ReviewedDomainPair (D-DOMAIN-MERGE-REVIEW-REDESIGN-01, Part 1).
 --
 -- Permanent "Dismiss" record for the domain-merge review surface. When a
 -- curator decides a near-duplicate pair is genuinely two different territories
