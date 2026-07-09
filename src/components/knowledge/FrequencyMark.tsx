@@ -1,19 +1,23 @@
-// The rotation-frequency signal mark (B-FREQUENCY-MARK-01). One reusable SVG
-// glyph for the four rotation-frequency states, rendered alongside the existing
-// text label wherever the four `TERRITORY_FREQUENCY_LABEL` strings appear.
+// The rotation-frequency signal mark (B-FREQUENCY-MARK-01 / D-FREQUENCY-MARK-01).
+// One reusable SVG glyph for the four rotation-frequency states, rendered to the
+// RIGHT of the existing text label wherever the four `TERRITORY_FREQUENCY_LABEL`
+// strings appear.
 //
 // Vocabulary (ratified):
-//   often     → three ascending signal bars rising from a baseline rule.
-//   sometimes → the baseline rule + the first two (shortest) bars.
-//   blue_moon → a small blue crescent (a distinct glyph, NOT "one bar"). Its
-//               blue is a fixed cross-category token, never category-tinted.
-//   resting   → no mark at all. Absence is the signal ("Never" = null).
+//   often     → baseline rule + three ascending signal bars (short→tall).
+//   sometimes → baseline rule + the first two (shortest) bars.
+//   resting   → the baseline rule ALONE (no bars), washed to 0.28 stroke-opacity
+//               — "no signal" in the same visual family, mirroring the washed
+//               Never *circle* (coreOpacity = 0.28). Never is not absent and not
+//               neutral-gray; it is the faint floor of the category-tinted set.
+//   blue_moon → a small blue crescent (a distinct glyph, NOT "one bar"). Its blue
+//               is a fixed cross-category token, never category-tinted.
 //
-// The bars inherit the domain's category color via the `color` prop (a CSS var
-// like `var(--cat-literature)`), falling back to `--brand-ink-400`. The label
-// always carries the meaning — the mark is decorative next to its own text, and
-// only self-labels (role="img" + <title>) when a caller renders it label-less.
-// Pure presentational: it reads no preferences and writes nothing.
+// The bars AND the Never line inherit the domain's category color via the `color`
+// prop (a CSS var like `var(--cat-literature)`), falling back to `--brand-ink-400`
+// on category-less surfaces. The label always carries the meaning — the mark is
+// decorative next to its own text, and only self-labels (role="img" + <title>)
+// when a caller renders it label-less. Pure presentational: no preference reads.
 
 import type { ReactElement } from 'react';
 
@@ -26,26 +30,22 @@ export function FrequencyMark({
   frequency,
   color = 'var(--brand-ink-400)',
   size = 14,
-  className,
   decorative = false,
+  className,
 }: {
   frequency: TerritoryFrequency;
-  /** Resolved category color for the bars, e.g. 'var(--cat-literature)'.
-   *  Ignored for blue_moon (fixed blue) and resting (renders nothing).
-   *  Defaults to 'var(--brand-ink-400)' when omitted. */
+  /** Resolved category color for the bars + the Never line, e.g.
+   *  'var(--cat-literature)'. Ignored for blue_moon (fixed blue).
+   *  Defaults to 'var(--brand-ink-400)' for category-less surfaces. */
   color?: string;
   size?: number;
-  className?: string;
-  /** When true, the mark sits next to its own text label → aria-hidden, no
-   *  <title>. When false (default), it self-labels for SR users. */
+  /** When true, an adjacent text label already carries the meaning (the common
+   *  case) → aria-hidden, no <title>. When false, self-labels for SR users. */
   decorative?: boolean;
-}): ReactElement | null {
-  // `resting` ("Never") renders nothing — absence is the signal. No wrapper, no
-  // spacer, so a resting row degrades cleanly to label-only.
-  if (frequency === 'resting') return null;
-
+  className?: string;
+}): ReactElement {
   // Never render below ~11px effective; the bars/crescent lose legibility.
-  const px = Math.max(12, size);
+  const px = Math.max(11, size);
 
   // Decorative marks (the common case, beside their own label) are aria-hidden;
   // label-less marks self-describe via role="img" + <title>.
@@ -72,23 +72,28 @@ export function FrequencyMark({
     );
   }
 
-  // Signal bars (often / sometimes) — strokes only, flat, no fills or gradients.
-  // Uniform stroke width scales with size (≈1px at size 14).
+  // The signal mark (often / sometimes / resting) shares one viewBox so all three
+  // align in a row. viewBox is 14 wide × 10 tall; height maps to `size`, so the
+  // rendered mark is `size` tall and `round(size * 14/10)` wide. Strokes only —
+  // flat, no fills or gradients.
   const strokeWidth = px / 14;
-  // Bar x-slots and tops from the ratified prototype (viewBox 0 0 14 10). Bar 1
-  // is shortest, bar 3 tallest — the signal-strength slant. `sometimes` drops
-  // the tallest bar, keeping the baseline + first two shortest bars.
+  const width = Math.round((px * 14) / 10);
+  // Bar x-slots and tops from the ratified prototype. Bar 1 is shortest, bar 3
+  // tallest — the signal-strength slant. `sometimes` keeps the two shortest;
+  // `resting` shows the baseline rule alone (washed), no bars.
   const bars = [
     { x: 4.3, top: 6 },
     { x: 7.1, top: 3.5 },
     { x: 9.9, top: 1 },
   ];
-  const shown = frequency === 'often' ? bars : bars.slice(0, 2);
+  const shown =
+    frequency === 'often' ? bars : frequency === 'sometimes' ? bars.slice(0, 2) : [];
+  const resting = frequency === 'resting';
 
   return (
     <svg
-      width={px}
-      height={(px * 10) / 14}
+      width={width}
+      height={px}
       viewBox="0 0 14 10"
       fill="none"
       className={className}
@@ -96,6 +101,8 @@ export function FrequencyMark({
       {...a11y}
     >
       {title}
+      {/* Baseline rule. For `resting` it is the whole mark, washed to 0.28 —
+          the faint floor of the same category-tinted family as the raised bars. */}
       <line
         x1={1.5}
         y1={9}
@@ -104,6 +111,7 @@ export function FrequencyMark({
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
+        strokeOpacity={resting ? 0.28 : undefined}
       />
       {shown.map((bar) => (
         <line

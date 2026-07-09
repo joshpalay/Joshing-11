@@ -147,8 +147,8 @@ export function NewTerritoryUndo({
                   : 'var(--brand-rule)',
               }}
             >
-              <FrequencyMark frequency={frequency} color="var(--brand-ink-400)" decorative />
               {TERRITORY_FREQUENCY_LABEL[frequency]}
+              <FrequencyMark frequency={frequency} color="var(--brand-ink-400)" size={13} decorative />
             </button>
           );
         })}

@@ -528,8 +528,8 @@ function ControlsBar({
               className={`${pill} gap-1`}
               style={pillStyle(freqFilter.has(freq))}
             >
-              <FrequencyMark frequency={freq} color="var(--brand-ink-400)" decorative />
               {TERRITORY_FREQUENCY_LABEL[freq]}
+              <FrequencyMark frequency={freq} color="var(--brand-ink-400)" size={12} decorative />
             </button>
           ))}
         </div>
@@ -664,8 +664,8 @@ function KnowledgeCircleCell({
         </span>
       ) : showFrequency ? (
         <span className="inline-flex items-center gap-1 text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
-          <FrequencyMark frequency={frequency} color={fieldColor(node.field)} decorative />
           {TERRITORY_FREQUENCY_LABEL[frequency]}
+          <FrequencyMark frequency={frequency} color={fieldColor(node.field)} size={11} decorative />
         </span>
       ) : null}
     </>
