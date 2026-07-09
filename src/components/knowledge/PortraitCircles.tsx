@@ -194,9 +194,10 @@ function BlueMoonGlyph({ px }: { px: number }) {
   )
 }
 
-// The corner badge itself — a paper chip pinned to the bubble's top-right so it
-// reads as a rotation marker, not a second knowledge circle. Rounded rectangle
-// (not a disc) so the badge itself adds no circle to the grid.
+// The rotation mark — pinned to the bubble's top-right as a bare geometric glyph.
+// No chip, border, or shadow (Alvin Lustig flat-modernist register): just the
+// ink/blue shape sitting on the corner, so it reads as a printed mark, not a UI
+// badge.
 function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
   if (!freq) return null
@@ -207,23 +208,17 @@ function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
       title={label}
       style={{
         position: 'absolute',
-        top: -4,
-        right: -4,
-        width: 18,
-        height: 17,
-        borderRadius: 5,
-        background: 'var(--warm-paper)',
-        border: '1px solid var(--warm-border-soft)',
+        top: -2,
+        right: -2,
         display: 'grid',
         placeItems: 'center',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
         opacity: dim ? 0.5 : 1,
       }}
     >
       {freq === 'blue_moon' ? (
-        <BlueMoonGlyph px={12} />
+        <BlueMoonGlyph px={13} />
       ) : (
-        <SignalBarsGlyph freq={freq} px={11} />
+        <SignalBarsGlyph freq={freq} px={13} />
       )}
     </div>
   )
