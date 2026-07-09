@@ -1,145 +1,216 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { FragmentationPair } from '@/server/db/queries/domain-fragmentation';
-import type {
-  DomainMergeSpec,
-  MergeApplyResult,
-  MergePreview,
-} from '@/server/db/queries/domain-merges';
+import type { MergePreview } from '@/server/db/queries/domain-merges';
+import type { DomainQuestionPeek } from '@/server/db/queries/knowledge-graph';
 
-// Deliberately minimal — an internal ops tool. Per candidate pair the admin picks
-// the surviving label (or leaves the pair); a batch is previewed (read-only census
-// of the exact rows that would move) before it can be applied. Apply stays disabled
-// until a preview of the CURRENT selection came back clean, so nothing mutates prod
-// on a stale or unhandled-table selection.
+// D-DOMAIN-MERGE-REVIEW-REDESIGN-01 — the consolidated near-duplicate review
+// surface. It fuses the two earlier takes: the progressive-disclosure UX (the
+// real decision is two-level — is this pair related? → if so, how? — so a
+// collapsed row shows just Merge/Nest + a quiet Dismiss, and expanding reveals
+// the four specific choices grouped by scope) with the raw-corpus-label backend
+// (/api/admin/domain-merges) that can merge labels with no graph node and NEST
+// by authoring both sides into the graph on the fly. Merge folds raw labels via
+// the shared applier (census-guarded, same transaction the CLI runs); Nest draws
+// a containment edge, creating nodes as needed. Dismiss writes a permanent
+// reviewed-pair record so a genuinely-different pair never resurfaces.
 
-type Choice = 'leave' | 'A' | 'B';
+type ActionKind = 'keepA' | 'keepB' | 'aUnderB' | 'bUnderA';
 
-// A stable key per pair — the label strings are unique enough for a keyed map.
-function pairKey(p: FragmentationPair): string {
-  return `${p.domainA} ${p.domainB}`;
-}
+// The optimistic-apply window. Undo within it means the API call never fires —
+// the only honest undo for a merge (irreversible once the applier runs) and a
+// uniform, atomic restore for nest too. A new action auto-commits the prior one.
+const UNDO_MS = 6000;
 
-function pct(fraction: number): string {
-  return `${Math.round(fraction * 100)}%`;
-}
+// Combined depth above which the destructive-ish Dismiss asks for a confirm tap.
+const BIG_PAIR_DEPTH = 20;
+
+const pairId = (p: FragmentationPair) => `${p.domainA} ${p.domainB}`;
+const pct = (fraction: number) => `${Math.round(fraction * 100)}%`;
 
 /**
  * The side that should survive a merge, by question count: folding the smaller
- * side into the larger moves the fewest rows and keeps the label most questions
- * already file under. A tie (or near-tie) is a real judgment call — return null
- * so the UI recommends nothing rather than a coin-flip. "Near" = within 15%.
+ * side into the larger moves the fewest rows. A tie (within 15%) is a real
+ * judgment call — return null so the ★ marks nothing rather than a coin-flip.
  */
 function recommendedSurvivor(p: FragmentationPair): 'A' | 'B' | null {
-  const a = p.depthA;
-  const b = p.depthB;
-  const max = Math.max(a, b);
+  const max = Math.max(p.depthA, p.depthB);
   if (max === 0) return null;
-  if (Math.abs(a - b) / max < 0.15) return null;
-  return a > b ? 'A' : 'B';
+  if (Math.abs(p.depthA - p.depthB) / max < 0.15) return null;
+  return p.depthA > p.depthB ? 'A' : 'B';
 }
 
-type PeekItem = { text: string; answer: string; source: 'canonical' | 'bank'; suppressed: boolean };
+type PostResult = { ok: boolean; status: number; body: unknown };
 
-/** Turn the per-pair choices into merge specs (target survives, other folds in). */
-function selectionsToMerges(pairs: FragmentationPair[], choices: Map<string, Choice>): DomainMergeSpec[] {
-  const merges: DomainMergeSpec[] = [];
-  for (const p of pairs) {
-    const choice = choices.get(pairKey(p));
-    if (choice === 'A') merges.push({ target: p.domainA, sources: [p.domainB] });
-    else if (choice === 'B') merges.push({ target: p.domainB, sources: [p.domainA] });
+async function postMerges(body: Record<string, unknown>): Promise<PostResult> {
+  try {
+    const res = await fetch('/api/admin/domain-merges', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    return { ok: res.ok, status: res.status, body: await res.json().catch(() => null) };
+  } catch {
+    return { ok: false, status: 0, body: null };
   }
-  return merges;
 }
 
-/**
- * A label that is a target in one selected merge and a source in another (or a
- * source in two) would chain ambiguously in a single batch. Detect it so the admin
- * resolves it across rounds rather than applying an order-dependent result.
- */
-function conflictingLabels(merges: DomainMergeSpec[]): string[] {
-  const targets = new Set(merges.map((m) => m.target));
-  const sourceCounts = new Map<string, number>();
-  for (const m of merges) {
-    for (const s of m.sources) sourceCounts.set(s, (sourceCounts.get(s) ?? 0) + 1);
+async function postKnowledge(body: Record<string, unknown>): Promise<PostResult> {
+  try {
+    const res = await fetch('/api/admin/knowledge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    return { ok: res.ok, status: res.status, body: await res.json().catch(() => null) };
+  } catch {
+    return { ok: false, status: 0, body: null };
   }
-  const bad = new Set<string>();
-  for (const [label, count] of sourceCounts) {
-    if (count > 1 || targets.has(label)) bad.add(label);
-  }
-  return [...bad];
 }
+
+// The commit body + human label for each of the four choices, resolved against a
+// pair. Keep-X folds the OTHER label into X via the corpus applier; X-under-Y
+// authors the containment edge (both sides become graph territories).
+function actionSpec(
+  pair: FragmentationPair,
+  action: ActionKind,
+): { label: string; body: Record<string, unknown> } {
+  switch (action) {
+    case 'keepA':
+      return {
+        label: `Merged into “${pair.domainA}”`,
+        body: { action: 'apply', merges: [{ target: pair.domainA, sources: [pair.domainB] }] },
+      };
+    case 'keepB':
+      return {
+        label: `Merged into “${pair.domainB}”`,
+        body: { action: 'apply', merges: [{ target: pair.domainB, sources: [pair.domainA] }] },
+      };
+    case 'aUnderB':
+      return {
+        label: `Nested “${pair.domainA}” under “${pair.domainB}”`,
+        body: { action: 'nest', childLabel: pair.domainA, parentLabel: pair.domainB },
+      };
+    case 'bUnderA':
+      return {
+        label: `Nested “${pair.domainB}” under “${pair.domainA}”`,
+        body: { action: 'nest', childLabel: pair.domainB, parentLabel: pair.domainA },
+      };
+  }
+}
+
+// Translate a merge/nest failure body into one admin-readable line.
+function failureMessage(label: string, res: PostResult): string {
+  const body = res.body as { reason?: string; error?: string } | null;
+  const reason = body?.reason ?? body?.error;
+  if (reason === 'no_source_rows') return `Nothing to merge — “${label}” looks already merged.`;
+  if (reason === 'unhandled_tables')
+    return `Aborted — a label lives in a table the merge path can’t consolidate. Extend domain-merges.ts first.`;
+  if (reason === 'self_edge') return 'That nesting would loop — check the direction.';
+  return `That didn’t apply (${res.status}). The pair is back in the list.`;
+}
+
+type Pending = { id: string; label: string; body: Record<string, unknown> };
 
 export function DomainMergeClient({ pairs }: { pairs: FragmentationPair[] }) {
-  const router = useRouter();
-  const [choices, setChoices] = useState<Map<string, Choice>>(new Map());
-  const [preview, setPreview] = useState<MergePreview | null>(null);
-  const [applied, setApplied] = useState<MergeApplyResult | null>(null);
-  const [busy, setBusy] = useState<null | 'preview' | 'apply'>(null);
+  // Server truth stays in props; the client only tracks which rows to HIDE
+  // (an optimistic apply/dismiss), so a reload — which re-excludes merged,
+  // nested, and dismissed pairs server-side — reconciles cleanly.
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const pendingRef = useRef<Pending | null>(null);
+  const timerRef = useRef<number | null>(null);
 
-  const merges = useMemo(() => selectionsToMerges(pairs, choices), [pairs, choices]);
-  const conflicts = useMemo(() => conflictingLabels(merges), [merges]);
-  const selectedCount = merges.length;
+  const hide = useCallback((id: string) => setRemoved((prev) => new Set(prev).add(id)), []);
+  const unhide = useCallback(
+    (id: string) =>
+      setRemoved((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }),
+    [],
+  );
 
-  // Any change to the selection invalidates a prior preview — force a re-preview.
-  const setChoice = (key: string, choice: Choice) => {
-    setChoices((prev) => {
-      const next = new Map(prev);
-      if (choice === 'leave') next.delete(key);
-      else next.set(key, choice);
-      return next;
+  const commitPending = useCallback(async () => {
+    const pend = pendingRef.current;
+    if (!pend) return;
+    pendingRef.current = null;
+    setPending(null);
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const res = await postMerges(pend.body);
+    // Nest returns { ok:true }; merge apply returns { ok:true, retargeted }.
+    const applied = res.ok && (res.body as { ok?: boolean } | null)?.ok !== false;
+    if (!applied) {
+      unhide(pend.id);
+      setError(failureMessage(pend.label, res));
+    }
+  }, [unhide]);
+
+  const flushPending = useCallback(() => {
+    if (pendingRef.current) void commitPending();
+  }, [commitPending]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      void commitPending();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function apply(pair: FragmentationPair, action: ActionKind) {
+    flushPending();
+    const spec = actionSpec(pair, action);
+    const id = pairId(pair);
+    setError(null);
+    setExpandedId(null);
+    hide(id);
+    const pend: Pending = { id, label: spec.label, body: spec.body };
+    pendingRef.current = pend;
+    setPending(pend);
+    timerRef.current = window.setTimeout(() => void commitPending(), UNDO_MS);
+  }
+
+  function undo() {
+    const pend = pendingRef.current;
+    if (!pend) return;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    pendingRef.current = null;
+    setPending(null);
+    unhide(pend.id); // restores row + edge/label state — nothing was committed
+  }
+
+  async function dismiss(pair: FragmentationPair) {
+    flushPending();
+    const id = pairId(pair);
+    setError(null);
+    setExpandedId(null);
+    hide(id);
+    const res = await postKnowledge({
+      action: 'dismiss_pair',
+      domainA: pair.domainA,
+      domainB: pair.domainB,
     });
-    setPreview(null);
-    setApplied(null);
-    setError(null);
-  };
-
-  const previewClean = preview?.ok === true && preview.census.length > 0;
-
-  async function post(action: 'preview' | 'apply') {
-    setBusy(action);
-    setError(null);
-    try {
-      const res = await fetch('/api/admin/domain-merges', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, merges }),
-      });
-      const data = await res.json().catch(() => null);
-      if (action === 'preview') {
-        if (!res.ok || !data) {
-          setError('Preview failed — see server logs.');
-          return;
-        }
-        setPreview(data as MergePreview);
-        setApplied(null);
-      } else {
-        if (!res.ok || !data) {
-          const result = data as MergeApplyResult | null;
-          if (result && !result.ok && result.reason === 'unhandled_tables') {
-            setPreview({ census: [], unhandled: result.unhandled, ok: false, reason: 'unhandled_tables' });
-            setError('Apply aborted — a source label lives in a table this tool cannot consolidate.');
-          } else {
-            setError('Apply failed — see server logs.');
-          }
-          return;
-        }
-        setApplied(data as MergeApplyResult);
-        setPreview(null);
-        setChoices(new Map());
-        // Re-pull candidates: the merged labels should drop off the list.
-        router.refresh();
-      }
-    } catch {
-      setError('Network error — nothing was changed.');
-    } finally {
-      setBusy(null);
+    if (!res.ok) {
+      unhide(id);
+      setError(`Couldn’t dismiss that pair (${res.status}).`);
     }
   }
+
+  const visible = pairs.filter((p) => !removed.has(pairId(p)));
 
   if (pairs.length === 0) {
     return (
@@ -149,297 +220,419 @@ export function DomainMergeClient({ pairs }: { pairs: FragmentationPair[] }) {
     );
   }
 
-  const btn = 'rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-40';
-
   return (
-    <div className="flex flex-col gap-6">
-      {applied && applied.ok ? (
-        <div
-          className="rounded-md border p-3 text-sm"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-        >
-          <strong style={{ color: 'var(--brand-navy)' }}>
-            Applied — {applied.retargeted} row{applied.retargeted === 1 ? '' : 's'} retargeted.
-          </strong>
-          <ul className="mt-2 list-disc pl-5">
-            {applied.log.slice(0, 40).map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <table className="w-full text-sm">
-        <thead>
-          <tr
-            className="border-b text-left"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-          >
-            <th className="py-2 pr-3 font-medium">Domain A</th>
-            <th className="py-2 pr-3 font-medium">Domain B</th>
-            <th className="py-2 pr-3 text-right font-medium">Similar</th>
-            <th className="py-2 pr-3 font-medium">Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pairs.map((p) => {
-            const key = pairKey(p);
-            const choice = choices.get(key) ?? 'leave';
-            const isConflict =
-              (choice === 'A' || choice === 'B') &&
-              (conflicts.includes(p.domainA) || conflicts.includes(p.domainB));
-            return (
-              <PairRow
-                key={key}
-                pair={p}
-                choice={choice}
-                isConflict={isConflict}
-                onChoose={(next) => setChoice(key, next)}
-              />
-            );
-          })}
-        </tbody>
-      </table>
-
-      {conflicts.length > 0 ? (
-        <p className="text-sm" style={{ color: 'var(--danger)' }}>
-          A label is both a survivor and a fold-in target in your selection (
-          {conflicts.join(', ')}). Resolve these across separate rounds — apply one, then the next.
-        </p>
-      ) : null}
-
-      {preview && !applied ? (
-        <div
-          className="rounded-md border p-3 text-sm"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          {preview.reason === 'no_source_rows' ? (
-            <p style={{ color: 'var(--text-muted)' }}>
-              Nothing to merge — no rows hold the fold-in labels (already merged?).
-            </p>
-          ) : (
-            <>
-              <p className="mb-2">
-                <strong style={{ color: preview.ok ? 'var(--brand-navy)' : 'var(--danger)' }}>
-                  {preview.ok
-                    ? `${preview.census.length} label/table locations would move`
-                    : 'Cannot apply — unhandled tables'}
-                </strong>
-              </p>
-              {preview.unhandled.length > 0 ? (
-                <p className="mb-2" style={{ color: 'var(--danger)' }}>
-                  These tables hold a fold-in label but the merge path cannot consolidate them —
-                  extend <code>domain-merges.ts</code> first:{' '}
-                  {preview.unhandled.map((r) => `${r.table}.${r.column} (${r.rows})`).join(', ')}
-                </p>
-              ) : null}
-              <ul className="list-disc pl-5" style={{ color: 'var(--text-muted)' }}>
-                {preview.census.slice(0, 40).map((r, i) => (
-                  <li key={i}>
-                    {r.table}.{r.column}: “{r.label}” × {r.rows}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      ) : null}
-
+    <div className="flex flex-col gap-2">
       {error ? (
         <p className="text-sm" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          {selectedCount} pair{selectedCount === 1 ? '' : 's'} selected to merge
-        </span>
-        <button
-          type="button"
-          className={btn}
-          style={{ borderColor: 'var(--border)', color: 'var(--brand-navy)' }}
-          disabled={selectedCount === 0 || conflicts.length > 0 || busy !== null}
-          onClick={() => post('preview')}
+      {visible.length === 0 ? (
+        <p
+          className="rounded-md border px-3 py-6 text-center text-sm"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
         >
-          {busy === 'preview' ? 'Previewing…' : 'Preview'}
-        </button>
-        <button
-          type="button"
-          className={btn}
-          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-          disabled={!previewClean || conflicts.length > 0 || busy !== null}
-          onClick={() => post('apply')}
-        >
-          {busy === 'apply' ? 'Applying…' : 'Apply merges'}
-        </button>
-      </div>
+          All caught up — every pair here has been merged, nested, or dismissed.
+        </p>
+      ) : (
+        visible.map((pair) => (
+          <MergeRow
+            key={pairId(pair)}
+            pair={pair}
+            expanded={expandedId === pairId(pair)}
+            onToggle={() => setExpandedId((cur) => (cur === pairId(pair) ? null : pairId(pair)))}
+            onApply={(action) => apply(pair, action)}
+            onDismiss={() => void dismiss(pair)}
+          />
+        ))
+      )}
+
+      {/* Persist-with-undo toast — one at a time, fixed in reach. */}
+      {pending ? (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+          <div
+            className="flex w-full max-w-lg items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-[var(--shadow-overlay)]"
+            style={{
+              background: 'var(--brand-card)',
+              borderColor: 'var(--brand-navy)',
+              color: 'var(--brand-ink-700)',
+            }}
+            aria-live="polite"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              <span aria-hidden className="mr-1">
+                ✓
+              </span>
+              {pending.label}
+            </span>
+            <button
+              type="button"
+              onClick={undo}
+              className="inline-flex min-h-11 shrink-0 items-center rounded-md border px-4 text-sm font-semibold"
+              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-// One candidate pair: the two labels with their question counts, an "in graph"
-// chip (merge candidates are RAW corpus labels — most have no KnowledgeNode,
-// which is why they don't appear on the knowledge-graph page), a per-side
-// "see questions" peek, a recommended survivor (by count), and the decision.
-// Three decisions, not two: same scope → Keep one (merge); CONTAINMENT (a work
-// inside its series/genre) → Nest, which authors both into the graph and draws
-// the edge — the pair then stops appearing here; unrelated → Leave.
-// Peek/nest state is per-row, so a component (not an inline map) is needed.
-function PairRow({
+function graphBadge(hasNode: boolean) {
+  return hasNode ? (
+    <span
+      className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+      style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+      title="This label has an authored territory on the Knowledge graph page"
+    >
+      in graph
+    </span>
+  ) : (
+    <span
+      className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+      style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+      title="A raw question label — not in the knowledge graph. Nest or merge adds it."
+    >
+      label only
+    </span>
+  );
+}
+
+function MergeRow({
   pair,
-  choice,
-  isConflict,
-  onChoose,
+  expanded,
+  onToggle,
+  onApply,
+  onDismiss,
 }: {
   pair: FragmentationPair;
-  choice: Choice;
-  isConflict: boolean;
-  onChoose: (choice: Choice) => void;
+  expanded: boolean;
+  onToggle: () => void;
+  onApply: (action: ActionKind) => void;
+  onDismiss: () => void;
 }) {
-  const router = useRouter();
-  const [peek, setPeek] = useState<'A' | 'B' | null>(null);
-  const [nesting, setNesting] = useState(false);
-  const [nestError, setNestError] = useState<string | null>(null);
-  const recommended = recommendedSurvivor(pair);
+  const [choice, setChoice] = useState<ActionKind | null>(null);
+  const [peekSide, setPeekSide] = useState<'A' | 'B' | null>(null);
+  const [preview, setPreview] = useState<MergePreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [confirmingDismiss, setConfirmingDismiss] = useState(false);
 
-  // Containment decision: child nests under parent. Nodes are created for
-  // labels not yet in the graph; on success the refresh drops the pair (the
-  // candidate query filters connected pairs).
-  async function nest(childLabel: string, parentLabel: string) {
-    if (nesting) return;
-    setNesting(true);
-    setNestError(null);
-    try {
-      const res = await fetch('/api/admin/domain-merges', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'nest', childLabel, parentLabel }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setNestError(
-          body?.error === 'self_edge'
-            ? 'That nesting would loop — check the direction.'
-            : `Nest failed (${res.status}).`,
-        );
-        return;
-      }
-      router.refresh();
-    } catch {
-      setNestError('Nest failed — nothing was changed.');
-    } finally {
-      setNesting(false);
+  const star = recommendedSurvivor(pair);
+  const bigPair = pair.depthA + pair.depthB >= BIG_PAIR_DEPTH;
+  const isMerge = choice === 'keepA' || choice === 'keepB';
+
+  // Preview the exact rows a merge would move (census). Only meaningful for the
+  // merge choices — nesting moves no question rows, it just draws an edge.
+  async function loadPreview() {
+    if (previewBusy || !isMerge) return;
+    if (preview) {
+      setPreview(null);
+      return;
     }
+    setPreviewBusy(true);
+    const spec =
+      choice === 'keepA'
+        ? { target: pair.domainA, sources: [pair.domainB] }
+        : { target: pair.domainB, sources: [pair.domainA] };
+    const res = await postMerges({ action: 'preview', merges: [spec] });
+    setPreview(res.ok ? (res.body as MergePreview) : null);
+    setPreviewBusy(false);
   }
 
-  const side = (which: 'A' | 'B', label: string, depth: number, hasNode: boolean) => (
-    <td className="py-2 pr-3 align-top">
-      <div className="flex flex-col gap-0.5">
-        <span>
-          {label}
-          {recommended === which ? (
-            <span
-              className="ml-1.5 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-              title="Recommended survivor — it holds more questions, so folding the other side in moves the fewest rows"
-            >
-              ★ keep
-            </span>
-          ) : null}
-          {hasNode ? (
-            <span
-              className="ml-1.5 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
-              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-              title="This label has an authored territory on the Knowledge graph page"
-            >
-              in graph
-            </span>
-          ) : (
-            <span
-              className="ml-1.5 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-              title="A raw question label — not in the knowledge graph. Nest or merge adds it."
-            >
-              label only
-            </span>
-          )}
-        </span>
-        <button
-          type="button"
-          onClick={() => setPeek((cur) => (cur === which ? null : which))}
-          className="self-start text-xs underline-offset-2 hover:underline"
-          style={{ color: 'var(--text-muted)' }}
-          aria-expanded={peek === which}
-        >
-          {depth} question{depth === 1 ? '' : 's'} · {peek === which ? 'hide' : 'see'}
-        </button>
-      </div>
-    </td>
-  );
+  const menuBtn =
+    'inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-semibold disabled:opacity-40';
 
   return (
-    <>
-      <tr
-        className="border-b align-top"
-        style={{ borderColor: 'var(--border)', background: isConflict ? 'rgba(220,50,50,0.06)' : undefined }}
-      >
-        {side('A', pair.domainA, pair.depthA, pair.hasNodeA)}
-        {side('B', pair.domainB, pair.depthB, pair.hasNodeB)}
-        <td className="py-2 pr-3 text-right align-top" style={{ color: 'var(--text-muted)' }}>
-          {pct(pair.similarity)}
-        </td>
-        <td className="py-2 pr-3 align-top">
-          <div className="flex flex-wrap gap-2">
-            <ChoiceButton active={choice === 'A'} onClick={() => onChoose('A')}>
-              Keep A
-            </ChoiceButton>
-            <ChoiceButton active={choice === 'B'} onClick={() => onChoose('B')}>
-              Keep B
-            </ChoiceButton>
-            <ChoiceButton active={choice === 'leave'} onClick={() => onChoose('leave')}>
-              Leave
-            </ChoiceButton>
+    <div
+      className="rounded-md border transition-colors"
+      style={{ borderColor: expanded ? 'var(--brand-navy)' : 'var(--border)' }}
+    >
+      {/* ── Collapsed header ── */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3 py-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="flex min-w-0 items-center text-sm font-medium text-[var(--brand-ink)]">
+              <span className="truncate">{pair.domainA}</span>
+              {star === 'A' ? <StarKeep /> : null}
+              {graphBadge(pair.hasNodeA)}
+            </span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }} aria-hidden>
+              ≈
+            </span>
+            <span className="flex min-w-0 items-center text-sm font-medium text-[var(--brand-ink)]">
+              <span className="truncate">{pair.domainB}</span>
+              {star === 'B' ? <StarKeep /> : null}
+              {graphBadge(pair.hasNodeB)}
+            </span>
+            <span
+              className="ml-auto shrink-0 text-xs font-semibold"
+              style={{ color: 'var(--brand-ink-700)' }}
+              title="Trigram similarity"
+            >
+              {pct(pair.similarity)}
+            </span>
           </div>
-          {/* Containment path — immediate (not part of the merge batch). */}
-          <div className="mt-1.5 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-x-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <PeekToggle
+              side="A"
+              depth={pair.depthA}
+              open={peekSide === 'A'}
+              onToggle={() => setPeekSide((cur) => (cur === 'A' ? null : 'A'))}
+            />
+            <PeekToggle
+              side="B"
+              depth={pair.depthB}
+              open={peekSide === 'B'}
+              onToggle={() => setPeekSide((cur) => (cur === 'B' ? null : 'B'))}
+            />
+          </div>
+        </div>
+
+        {/* Two controls when collapsed — primary Merge/Nest + quiet Dismiss. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className={menuBtn}
+            style={
+              expanded
+                ? {
+                    borderColor: 'var(--brand-navy)',
+                    background: 'var(--brand-navy)',
+                    color: 'var(--brand-cream-page)',
+                  }
+                : { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
+            }
+          >
+            Merge / Nest
+          </button>
+          {confirmingDismiss ? (
             <button
               type="button"
-              onClick={() => void nest(pair.domainA, pair.domainB)}
-              disabled={nesting}
-              className="rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-              title={`Parent/child, not duplicates: put “${pair.domainA}” INSIDE “${pair.domainB}” on the knowledge graph (both get territories; the pair leaves this list)`}
+              onClick={onDismiss}
+              className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold"
+              style={{ color: 'var(--danger)' }}
             >
-              {nesting ? 'Nesting…' : 'A under B'}
+              Dismiss — sure?
             </button>
+          ) : (
             <button
               type="button"
-              onClick={() => void nest(pair.domainB, pair.domainA)}
-              disabled={nesting}
-              className="rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-              title={`Parent/child, not duplicates: put “${pair.domainB}” INSIDE “${pair.domainA}” on the knowledge graph (both get territories; the pair leaves this list)`}
+              onClick={() => (bigPair ? setConfirmingDismiss(true) : onDismiss())}
+              className="inline-flex min-h-11 items-center px-2 text-sm font-medium underline underline-offset-4"
+              style={{ color: 'var(--text-muted)' }}
+              title="Genuinely two different territories — never show this pair again"
             >
-              B under A
+              Dismiss
             </button>
+          )}
+        </div>
+
+        {/* Per-side question peek spans the row when open. */}
+        {peekSide ? (
+          <div className="w-full">
+            <LabelPeek
+              key={peekSide}
+              label={peekSide === 'A' ? pair.domainA : pair.domainB}
+            />
           </div>
-          {nestError ? (
-            <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
-              {nestError}
-            </p>
-          ) : null}
-        </td>
-      </tr>
-      {peek ? (
-        <tr style={{ background: 'var(--brand-field)' }}>
-          <td colSpan={4} className="px-3 pb-3">
-            {/* key by label so switching sides remounts fresh (no reset-in-effect). */}
-            <LabelPeek key={peek} label={peek === 'A' ? pair.domainA : pair.domainB} />
-          </td>
-        </tr>
+        ) : null}
+      </div>
+
+      {/* ── Expanded drawer ── */}
+      {expanded ? (
+        <div className="border-t px-3 py-3" style={{ borderColor: 'var(--border)' }}>
+          <fieldset className="space-y-4">
+            <legend className="sr-only">Choose how to resolve this pair</legend>
+
+            <div>
+              <p
+                className="mb-1.5 text-xs font-semibold uppercase tracking-[0.08em]"
+                style={{ color: 'var(--brand-ink-700)' }}
+              >
+                Same scope — merge into one domain
+              </p>
+              <div className="space-y-1">
+                <ChoiceRadio
+                  name={`${pairId(pair)}-choice`}
+                  checked={choice === 'keepA'}
+                  onSelect={() => {
+                    setChoice('keepA');
+                    setPreview(null);
+                  }}
+                  label={`Keep “${pair.domainA}”`}
+                  hint={`${pair.depthA} q${star === 'A' ? '  ★ more questions' : ''}`}
+                />
+                <ChoiceRadio
+                  name={`${pairId(pair)}-choice`}
+                  checked={choice === 'keepB'}
+                  onSelect={() => {
+                    setChoice('keepB');
+                    setPreview(null);
+                  }}
+                  label={`Keep “${pair.domainB}”`}
+                  hint={`${pair.depthB} q${star === 'B' ? '  ★ more questions' : ''}`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <p
+                className="mb-1.5 text-xs font-semibold uppercase tracking-[0.08em]"
+                style={{ color: 'var(--brand-ink-700)' }}
+              >
+                Different scope — nest one under the other
+              </p>
+              <div className="space-y-1">
+                <ChoiceRadio
+                  name={`${pairId(pair)}-choice`}
+                  checked={choice === 'aUnderB'}
+                  onSelect={() => {
+                    setChoice('aUnderB');
+                    setPreview(null);
+                  }}
+                  label={`“${pair.domainA}” under “${pair.domainB}”`}
+                />
+                <ChoiceRadio
+                  name={`${pairId(pair)}-choice`}
+                  checked={choice === 'bUnderA'}
+                  onSelect={() => {
+                    setChoice('bUnderA');
+                    setPreview(null);
+                  }}
+                  label={`“${pair.domainB}” under “${pair.domainA}”`}
+                />
+              </div>
+            </div>
+
+            {preview ? <PreviewCensus preview={preview} /> : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadPreview()}
+                disabled={!isMerge || previewBusy}
+                className={menuBtn}
+                style={
+                  isMerge
+                    ? { borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }
+                    : { borderColor: 'var(--border)', color: 'var(--text-muted)' }
+                }
+                title={
+                  isMerge
+                    ? 'Show the exact rows this merge would move'
+                    : 'Nesting moves no question rows — it only draws the graph edge'
+                }
+              >
+                {previewBusy ? 'Loading…' : preview ? 'Hide preview' : 'Preview'}
+              </button>
+              <span className="ml-auto flex gap-2">
+                <button
+                  type="button"
+                  onClick={onToggle}
+                  className={menuBtn}
+                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!choice}
+                  onClick={() => choice && onApply(choice)}
+                  className={menuBtn}
+                  style={
+                    choice
+                      ? { borderColor: 'var(--success)', color: 'var(--success)' }
+                      : { borderColor: 'var(--border)', color: 'var(--text-muted)' }
+                  }
+                >
+                  Apply
+                </button>
+              </span>
+            </div>
+          </fieldset>
+        </div>
       ) : null}
-    </>
+    </div>
+  );
+}
+
+function StarKeep() {
+  return (
+    <span
+      className="ml-1.5 shrink-0 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+      style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+      title="Recommended survivor — it holds more questions, so folding the other side in moves the fewest rows"
+    >
+      ★ keep
+    </span>
+  );
+}
+
+function PeekToggle({
+  side,
+  depth,
+  open,
+  onToggle,
+}: {
+  side: 'A' | 'B';
+  depth: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="inline-flex min-h-9 items-center underline-offset-2 hover:underline"
+      style={{ color: 'var(--text-muted)' }}
+    >
+      {side}: {depth} question{depth === 1 ? '' : 's'} · {open ? 'hide' : 'see'}
+    </button>
+  );
+}
+
+function PreviewCensus({ preview }: { preview: MergePreview }) {
+  if (preview.reason === 'no_source_rows') {
+    return (
+      <p
+        className="rounded-md border p-2 text-xs"
+        style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+      >
+        Nothing to merge — no rows hold the fold-in label (already merged?).
+      </p>
+    );
+  }
+  return (
+    <div
+      className="rounded-md border p-2 text-xs"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+    >
+      <p className="mb-1 font-semibold" style={{ color: preview.ok ? 'var(--brand-navy)' : 'var(--danger)' }}>
+        {preview.ok
+          ? `${preview.census.length} label/table location${preview.census.length === 1 ? '' : 's'} would move`
+          : 'Cannot apply — unhandled tables'}
+      </p>
+      {preview.unhandled.length > 0 ? (
+        <p className="mb-1" style={{ color: 'var(--danger)' }}>
+          These tables hold a fold-in label but the merge path can’t consolidate them — extend{' '}
+          <code>domain-merges.ts</code> first:{' '}
+          {preview.unhandled.map((r) => `${r.table}.${r.column} (${r.rows})`).join(', ')}
+        </p>
+      ) : null}
+      <ul className="list-disc space-y-0.5 pl-5" style={{ color: 'var(--text-muted)' }}>
+        {preview.census.slice(0, 40).map((r, i) => (
+          <li key={i}>
+            {r.table}.{r.column}: “{r.label}” × {r.rows}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -447,28 +640,20 @@ function PairRow({
 // check before calling a pair the same scope. Loads once per open via the
 // merges route's `peek` action (keyed on the raw label, no KnowledgeNode needed).
 function LabelPeek({ label }: { label: string }) {
-  const [items, setItems] = useState<PeekItem[] | null>(null);
+  const [items, setItems] = useState<DomainQuestionPeek[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
     void (async () => {
-      try {
-        const res = await fetch('/api/admin/domain-merges', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'peek', label }),
-        });
-        const data = (await res.json().catch(() => null)) as { questions?: PeekItem[] } | null;
-        if (!live) return;
-        if (!res.ok || !data) {
-          setError('Could not load questions.');
-          return;
-        }
-        setItems(data.questions ?? []);
-      } catch {
-        if (live) setError('Could not load questions.');
+      const res = await postMerges({ action: 'peek', label });
+      if (!live) return;
+      const data = res.body as { questions?: DomainQuestionPeek[] } | null;
+      if (!res.ok || !data) {
+        setError('Could not load questions.');
+        return;
       }
+      setItems(data.questions ?? []);
     })();
     return () => {
       live = false;
@@ -476,7 +661,10 @@ function LabelPeek({ label }: { label: string }) {
   }, [label]);
 
   return (
-    <div className="text-[13px]">
+    <div
+      className="mt-1 rounded-md border p-2 text-[13px]"
+      style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
+    >
       <p className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>
         Questions filed under “{label}”:
       </p>
@@ -508,28 +696,44 @@ function LabelPeek({ label }: { label: string }) {
   );
 }
 
-function ChoiceButton({
-  active,
-  onClick,
-  children,
+function ChoiceRadio({
+  name,
+  checked,
+  onSelect,
+  label,
+  hint,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  name: string;
+  checked: boolean;
+  onSelect: () => void;
+  label: string;
+  hint?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-md border px-2.5 py-1 text-xs font-medium"
+    <label
+      className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md border px-3 text-sm transition-colors"
       style={
-        active
-          ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)', background: 'rgba(30,58,95,0.06)' }
-          : { borderColor: 'var(--border)', color: 'var(--text-muted)' }
+        checked
+          ? {
+              borderColor: 'var(--brand-navy)',
+              background: 'color-mix(in srgb, var(--brand-navy) 6%, transparent)',
+            }
+          : { borderColor: 'var(--border)' }
       }
-      aria-pressed={active}
     >
-      {children}
-    </button>
+      <input
+        type="radio"
+        name={name}
+        checked={checked}
+        onChange={onSelect}
+        className="size-4 accent-[var(--brand-navy)]"
+      />
+      <span style={{ color: 'var(--brand-ink)' }}>{label}</span>
+      {hint ? (
+        <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>
+          {hint}
+        </span>
+      ) : null}
+    </label>
   );
 }
