@@ -407,14 +407,33 @@ function KnowledgeTreeEditor({
     [picking, descendantsOf],
   );
 
+  // The global burn-down queue: every leaf flagged ⛔ exhausted (self) anywhere
+  // in the graph — the actionable read of the per-parent "⛔ N exhausted"
+  // counters. Grouped by home parent so sibling exhaustions sit together.
+  const exhaustedLeaves = useMemo(() => {
+    const parentLabelOf = (k: string) => {
+      const p = parentsByChild.get(k)?.[0];
+      return p ? nodeByKey.get(p)?.label ?? p : '';
+    };
+    const labelOf = (k: string) => nodeByKey.get(k)?.label ?? k;
+    return Object.keys(exhaustedByKey)
+      .filter((k) => exhaustedByKey[k]?.self && nodeByKey.has(k))
+      .sort(
+        (a, b) =>
+          parentLabelOf(a).localeCompare(parentLabelOf(b)) || labelOf(a).localeCompare(labelOf(b)),
+      );
+  }, [exhaustedByKey, nodeByKey, parentsByChild]);
+
   // "Show all the places and I can go to any of them" — jump to a specific
   // instance of a multi-parent node: expand every ancestor path of the target
   // parent, scroll its row into view, and flash it.
   const [flashInstance, setFlashInstance] = useState<string | null>(null);
   const flashTimer = useRef<number | null>(null);
-  function jumpToInstance(childKey: string, parentKey: string) {
-    const toExpand = new Set<string>([parentKey]);
-    const queue = [parentKey];
+  function jumpToInstance(childKey: string, parentKey: string | null) {
+    // parentKey null ⇒ a top-level instance (the worklist can target roots); its
+    // row id uses the 'root' sentinel and it has no ancestors to expand.
+    const toExpand = new Set<string>(parentKey ? [parentKey] : []);
+    const queue = parentKey ? [parentKey] : [];
     while (queue.length > 0) {
       const next = queue.pop()!;
       for (const grand of parentsByChild.get(next) ?? []) {
@@ -425,7 +444,7 @@ function KnowledgeTreeEditor({
       }
     }
     setExpanded((prev) => new Set([...prev, ...toExpand]));
-    const instanceId = `${parentKey}::${childKey}`;
+    const instanceId = `${parentKey ?? 'root'}::${childKey}`;
     setFlashInstance(instanceId);
     if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
     flashTimer.current = window.setTimeout(() => setFlashInstance(null), 2000);
@@ -884,6 +903,18 @@ function KnowledgeTreeEditor({
         </p>
       ) : null}
 
+      {exhaustedLeaves.length > 0 ? (
+        <ExhaustedWorklist
+          leaves={exhaustedLeaves}
+          nodeByKey={nodeByKey}
+          parentsByChild={parentsByChild}
+          pointsByKey={pointsByKey}
+          depthByKey={depthByKey}
+          genStatsByKey={genStatsByKey}
+          onJump={jumpToInstance}
+        />
+      ) : null}
+
       <DndContext
         sensors={sensors}
         // The drop target is wherever the FINGER is, not a rectangle overlap —
@@ -1100,6 +1131,114 @@ function RootDropZone({ dragActive }: { dragActive: boolean }) {
     >
       top level — drop here to un-nest
     </div>
+  );
+}
+
+// ─── the exhausted-leaves worklist ───────────────────────────────────────────
+// A global burn-down queue for every leaf flagged ⛔ exhausted (self) across the
+// whole graph — the actionable read of the per-parent "⛔ N exhausted" counters.
+// Exhaustion is a leaf-only property (page.tsx never self-flags a parent), so
+// this list is exactly the leaves that need a human decision: hand-author more,
+// merge into a sibling that names the same scope, or shrink the set target. The
+// mutating levers all live in the tree, so each row JUMPS there (expand + scroll
+// + flash) rather than duplicating the merge/edit state machines; a read-only
+// Questions peek is inlined so you can diagnose before deciding.
+function ExhaustedWorklist({
+  leaves,
+  nodeByKey,
+  parentsByChild,
+  pointsByKey,
+  depthByKey,
+  genStatsByKey,
+  onJump,
+}: {
+  leaves: string[];
+  nodeByKey: Map<string, KnowledgeNodeRow>;
+  parentsByChild: Map<string, string[]>;
+  pointsByKey: Record<string, number>;
+  depthByKey: Record<string, number>;
+  genStatsByKey: Record<string, { total: number; dupes: number }>;
+  onJump: (childKey: string, parentKey: string | null) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const [peekKey, setPeekKey] = useState<string | null>(null);
+
+  return (
+    <section
+      className="mb-3 rounded-md border"
+      style={{ borderColor: 'var(--danger)', background: 'var(--brand-field)' }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <span className="font-semibold" style={{ color: 'var(--danger)' }}>
+          ⛔ Exhausted — {leaves.length} need{leaves.length === 1 ? 's' : ''} a decision
+        </span>
+        <span className="text-muted-foreground ml-auto text-xs">{open ? 'hide' : 'show'}</span>
+      </button>
+      {open ? (
+        <ul className="space-y-1 px-2 pb-2">
+          {leaves.map((key) => {
+            const node = nodeByKey.get(key);
+            if (!node) return null;
+            const parents = parentsByChild.get(key) ?? [];
+            const firstParent = parents[0] ?? null;
+            const parentLabel = firstParent
+              ? nodeByKey.get(firstParent)?.label ?? firstParent
+              : 'top level';
+            const g = genStatsByKey[key];
+            const dupPct = g && g.total > 0 ? Math.round((g.dupes / g.total) * 100) : null;
+            return (
+              <li
+                key={key}
+                className="rounded-md border bg-[var(--brand-card)] p-2"
+                style={{ borderColor: 'var(--border)' }}
+              >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium text-[var(--brand-ink)]">{node.label}</span>
+                  <span className="text-muted-foreground text-xs">
+                    under {parentLabel}
+                    {parents.length > 1 ? ` +${parents.length - 1}` : ''}
+                  </span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onJump(key, firstParent)}
+                      className="inline-flex min-h-8 items-center rounded-md border px-2 text-xs font-medium"
+                      style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                    >
+                      Go there →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeekKey((k) => (k === key ? null : key))}
+                      aria-expanded={peekKey === key}
+                      className="inline-flex min-h-8 items-center rounded-md border px-2 text-xs font-medium"
+                      style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                    >
+                      Questions
+                    </button>
+                  </span>
+                </div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  {(pointsByKey[key] ?? 0).toLocaleString()} avail ·{' '}
+                  {node.masteryThreshold
+                    ? `${node.masteryThreshold.toLocaleString()} to master`
+                    : 'no threshold'}{' '}
+                  · {depthByKey[key] ?? 0} Qs{dupPct !== null ? ` · ${dupPct}% dup` : ''}
+                </div>
+                {peekKey === key ? (
+                  <QuestionsPeek domainKeyValue={key} onClose={() => setPeekKey(null)} />
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
