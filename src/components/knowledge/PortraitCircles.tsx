@@ -121,13 +121,15 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
 // undifferentiated grey line and, spelled out under every circle, made the grid
 // busy. Move it into a small badge on the circle's top-right corner instead: one
 // glyph per circle, read as chrome rather than an inline field. The glyph is a
-// row of three rising triangles (little peaks) whose filled count encodes
-// rotation depth (Often = 3 filled, Sometimes = 2, Never = 0 / all empty
-// outlines). Triangles rather than rectangular bars so it reads as an abstract
-// mark, not a phone signal indicator. Blue Moon is the one literal exception: it
-// drops the peaks for an actual small blue crescent moon (its own blue is the
-// sole color escape from the category-reserved palette, STYLE-GUIDE-COLOR §3).
-// The word rides along as the badge's aria-label / title.
+// rising three-column bar chart built from stacked flat squares (a Lustig-style
+// color-block column): columns hold 1 / 2 / 3 squares. A column's squares are lit
+// in a color when that step is reached and drawn as empty outlines otherwise, so
+// the number of colored columns encodes rotation depth (Often = 3, Sometimes = 2,
+// Never = 0 / all outlines). The square colors come from the on-system category
+// hues purely as a decorative mosaic — at this size it reads as color-blocking,
+// not category encoding. Blue Moon is the one literal exception: it drops the
+// columns for an actual small blue crescent moon. The word rides along as the
+// badge's aria-label / title.
 //
 // Invert the single-source label map so the string coming through
 // `frequencyLabelFor` resolves back to its enum (and thus its glyph) without the
@@ -145,35 +147,49 @@ const ROTATION_LEVEL: Record<TerritoryFrequency, number> = {
   resting: 0,
 }
 
-// Three upward triangles, bases aligned at y=21, rising 6 → 12 → 18 in a 24×24
-// viewBox. Lit peaks are filled ink; unlit peaks are empty outlines so an
-// all-empty mark reads as "Never."
+// Flat color-block palette for the lit squares — on-system category hues reused
+// as a decorative mosaic (no new colors on the ratchet).
+const SQUARE_PALETTE = [
+  'var(--cat-literature)',
+  'var(--cat-sports)',
+  'var(--cat-history)',
+  'var(--cat-film-tv)',
+  'var(--accent-gold)',
+  'var(--cat-science)',
+]
+
+// Squares in bottom-to-top, left-to-right order: column 0 → 1 square, column 1 →
+// 2, column 2 → 3, so the columns rise as a staircase in a 24×24 viewBox.
+const ROTATION_SQUARES = [
+  { col: 0, x: 2, y: 16 },
+  { col: 1, x: 9, y: 16 },
+  { col: 1, x: 9, y: 9 },
+  { col: 2, x: 16, y: 16 },
+  { col: 2, x: 16, y: 9 },
+  { col: 2, x: 16, y: 2 },
+]
+const SQUARE_SIZE = 6
+
 function RotationMeterGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
   const level = ROTATION_LEVEL[freq]
-  const baseY = 21
-  const halfW = 3.6
-  const peaks = [
-    { cx: 4, top: 15 },
-    { cx: 11.5, top: 9 },
-    { cx: 19, top: 3 },
-  ]
   return (
     <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden style={{ display: 'block' }}>
-      {peaks.map((p, i) => {
-        const points = `${p.cx},${p.top} ${p.cx - halfW},${baseY} ${p.cx + halfW},${baseY}`
-        return i < level ? (
-          <polygon key={i} points={points} fill="var(--warm-ink)" />
+      {ROTATION_SQUARES.map((sq, i) =>
+        sq.col < level ? (
+          <rect key={i} x={sq.x} y={sq.y} width={SQUARE_SIZE} height={SQUARE_SIZE} fill={SQUARE_PALETTE[i]} />
         ) : (
-          <polygon
+          <rect
             key={i}
-            points={points}
+            x={sq.x}
+            y={sq.y}
+            width={SQUARE_SIZE}
+            height={SQUARE_SIZE}
             fill="none"
             stroke="var(--warm-ink-400)"
-            strokeWidth={1.6}
-            strokeLinejoin="round"
+            strokeWidth={1.4}
           />
         )
-      })}
+      )}
     </svg>
   )
 }
@@ -216,9 +232,9 @@ function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
       }}
     >
       {freq === 'blue_moon' ? (
-        <BlueMoonGlyph px={13} />
+        <BlueMoonGlyph px={14} />
       ) : (
-        <RotationMeterGlyph freq={freq} px={13} />
+        <RotationMeterGlyph freq={freq} px={14} />
       )}
     </div>
   )
