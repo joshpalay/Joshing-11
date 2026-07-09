@@ -1,7 +1,40 @@
 import { sql } from 'drizzle-orm';
 
-import { db } from '@/server/db';
+import { db, reviewedDomainPairs } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
+
+/**
+ * The canonical, order-independent key for a reviewed pair (Part 1 of
+ * D-DOMAIN-MERGE-REVIEW-REDESIGN-01). The two domains' FOLDED keys sorted
+ * ascending and '::'-joined, so (A,B) and (B,A) collapse to one key and a
+ * cosmetic rename that folds to the same key does not resurrect a dismissed
+ * pair. Deliberately keyed on domainKey(), never the raw label.
+ */
+export function reviewedPairKey(a: string, b: string): string {
+  return [domainKey(a), domainKey(b)].sort().join('::');
+}
+
+/** The set of pair keys a curator has permanently dismissed (Part 1). */
+export async function getReviewedPairKeys(): Promise<Set<string>> {
+  const rows = await db.select({ pairKey: reviewedDomainPairs.pairKey }).from(reviewedDomainPairs);
+  return new Set(rows.map((r) => r.pairKey));
+}
+
+/**
+ * Record a permanent Dismiss for a near-duplicate pair. Idempotent on the
+ * order-independent key — a re-dismiss (or a (B,A) re-order) is a no-op that
+ * refreshes the display spellings. Never surfaces again after this.
+ */
+export async function recordReviewedDomainPair(domainA: string, domainB: string): Promise<void> {
+  const pairKey = reviewedPairKey(domainA, domainB);
+  await db
+    .insert(reviewedDomainPairs)
+    .values({ pairKey, domainA, domainB })
+    .onConflictDoUpdate({
+      target: reviewedDomainPairs.pairKey,
+      set: { domainA, domainB, reviewedAt: sql`now()` },
+    });
+}
 
 /**
  * Tier-2 fragmentation surfacing (D-NARROW-KB-FABRICATION-01 follow-up). Tier-1
@@ -85,12 +118,18 @@ export async function getDomainFragmentationCandidates(
     (result as unknown as { rows?: FragmentationRow[] }).rows ??
     (result as unknown as FragmentationRow[]);
 
+  // Permanently dismissed pairs never resurface, including after a similarity
+  // recompute (Part 1). Loaded once and filtered in JS because the pair key is
+  // the folded domainKey() (a TS function), not a raw column comparison.
+  const dismissed = await getReviewedPairKeys();
+
   const pairs: FragmentationPair[] = [];
   for (const row of rows) {
     // Drop pairs the strengthened domainKey() already auto-folds at write time —
     // those converge on their own and need no human. Surface only distinct-key
     // near-duplicates, the genuine judgment calls.
     if (domainKey(row.domain_a) === domainKey(row.domain_b)) continue;
+    if (dismissed.has(reviewedPairKey(row.domain_a, row.domain_b))) continue;
     pairs.push({
       domainA: row.domain_a,
       depthA: Number(row.depth_a),

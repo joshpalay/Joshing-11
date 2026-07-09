@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   DndContext,
@@ -78,6 +79,14 @@ export function KnowledgeAdminClient({
           touches questions or any player&apos;s mastery.
         </p>
       </header>
+
+      <Link
+        href="/admin/knowledge/merge-review"
+        className="mb-4 inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
+        style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+      >
+        Merge review — near-duplicate pairs →
+      </Link>
 
       <StructureSuggester graphIsEmpty={nodes.length === 0} onDone={() => router.refresh()} />
 
