@@ -205,8 +205,8 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
   });
 });
 
-describe('ActivityStreamItem — collapsed bundle summary expands in place (not a page link)', () => {
-  it('renders the triangle summary with a Play affordance and no link to a streak page', () => {
+describe('ActivityStreamItem — bundle summary defaults OPEN and expands in place (not a page link)', () => {
+  it('opens by default: the streak questions show inline and the affordance reads Close', () => {
     const html = renderToStaticMarkup(
       <ActivityStreamItem
         item={MILESTONE_ITEM}
@@ -215,9 +215,12 @@ describe('ActivityStreamItem — collapsed bundle summary expands in place (not 
         showTimestamp={false}
       />,
     );
-    // Collapsed summary: the remaining count + a Play affordance, tapped to expand.
+    // The From Friends card defaults to OPEN (request 2026-07-09), so the still-
+    // answerable question is already revealed inline and the disclosure reads
+    // "Close" rather than "Play".
     expect(html).toContain('1 of 3 questions');
-    expect(html).toContain('Play');
+    expect(html).toContain('Close');
+    expect(html).toContain('Name the Enterprise-D android.');
     // It is NOT a navigation to a separate streak page — it expands in place.
     expect(html).not.toContain('href="/from-friends/');
   });

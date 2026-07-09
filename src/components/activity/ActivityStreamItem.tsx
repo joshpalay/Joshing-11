@@ -108,8 +108,14 @@ export function ActivityStreamItem({
   // served window on return; surfaces that don't care simply omit it.
   onQuestionResolved?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const expandable = questionBacked(item.expand);
+  // From Friends milestone cards on the home/elevated surface default to OPEN so
+  // the friend's questions are visible without a tap (request 2026-07-09). The
+  // flat /activities one-liners and texture reveals still default closed — this
+  // is scoped to the elevated, playable milestone bundle (the From Friends card).
+  const [open, setOpen] = useState(
+    () => expandable && elevated && !nested && item.expand?.kind === 'milestone',
+  );
 
   // CORRECTION 3 (revised): the answered-of-total state is conveyed by the
   // bundle triangle mark (solid → hollow as questions are answered), so the
