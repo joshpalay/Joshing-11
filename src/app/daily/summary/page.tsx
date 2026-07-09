@@ -166,6 +166,10 @@ export default function DailySummaryPage() {
   const coreCorrect = coreQuestions.filter((q) => q.isCorrect).length
   const coreTotal = coreQuestions.length
 
+  // Questions from friends still waiting across the "For You"/"To You" surfaces —
+  // powers the quiet nudge in the sticky footer. 0 hides the line entirely.
+  const pendingFriendQuestions = summary.pendingFriendQuestions
+
   return (
     <main className="min-h-dvh bg-[var(--brand-cream-page)] px-4 py-6 text-[var(--brand-ink)]">
       {/* B-CRAFTER-LIFECYCLE-01: an unseen author invitation takes over the
@@ -283,14 +287,27 @@ export default function DailySummaryPage() {
           </section>
         ) : null}
 
-        <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
-          <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
+        {/* Sticky footer bar — narrow, centered, and pinned to the bottom of the
+            viewport so "Back home" is always reachable while the recap scrolls.
+            bottom-4 floats it off the edge; the shadow lifts it above the cards
+            that scroll behind its sides. */}
+        <section className="sticky bottom-4 z-20 mx-auto mt-8 max-w-xs rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4 text-center shadow-[var(--shadow-overlay)] sm:max-w-sm">
+          <p className="text-sm leading-6 text-[var(--brand-ink-700)]">
             {tomorrowWeekday}’s five arrive at noon.
           </p>
-          <div className="mt-5 flex flex-col items-center gap-3">
-            <Link className="btn-primary w-full sm:w-auto sm:min-w-56" href="/">
+          <div className="mt-3 flex flex-col items-center gap-2">
+            <Link className="btn-primary w-full" href="/">
               Back home
             </Link>
+            {pendingFriendQuestions > 0 ? (
+              <Link
+                className="text-sm font-medium text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"
+                href="/for-you"
+              >
+                You have {pendingFriendQuestions} question
+                {pendingFriendQuestions === 1 ? '' : 's'} from friends
+              </Link>
+            ) : null}
             <Link
               className="text-muted-foreground text-sm font-medium underline underline-offset-4 transition hover:text-foreground"
               href="/knowledge"
