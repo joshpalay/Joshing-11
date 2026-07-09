@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
 import { ThreadCard } from '@/components/play/ThreadCard';
+import { FrequencyMark } from '@/components/knowledge/FrequencyMark';
 import {
   TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_LABEL,
@@ -134,7 +135,7 @@ export function NewTerritoryUndo({
               onClick={() => void handleSelect(frequency)}
               disabled={busy}
               aria-pressed={isSelected}
-              className="inline-flex min-h-9 items-center rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-60"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-60"
               style={{
                 fontWeight: isSelected ? 700 : 500,
                 color: isSelected ? GOLD_INK : 'var(--text-muted)',
@@ -146,6 +147,7 @@ export function NewTerritoryUndo({
                   : 'var(--brand-rule)',
               }}
             >
+              <FrequencyMark frequency={frequency} color="var(--brand-ink-400)" decorative />
               {TERRITORY_FREQUENCY_LABEL[frequency]}
             </button>
           );

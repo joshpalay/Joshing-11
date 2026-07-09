@@ -162,6 +162,7 @@
     --cat-pop-culture-text: #5c0e2a;
     --cat-language:         #2e6e7e;  /* teal — moved off the CORRECT green       */
     --cat-language-text:    #173f4a;
+    --freq-blue-moon:       #65a8bb;  /* Blue Moon crescent — the rotation exception */
     /* Shared width for every left-aligned card in the play thread (question,
        bonus, result, reflection, session-close) so the column reads as one
        coherent conversation with a consistent left + right edge. A percentage of
