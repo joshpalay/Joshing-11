@@ -199,6 +199,15 @@ type PickState = {
   fromParentKey: string | null;
 } | null;
 
+// The tree filter's derived sets: matched rows, the ancestors that must show
+// (and force-expand) so a match is on screen, and every visible key (matches +
+// their ancestors + their subtrees). null when no filter is active.
+type FilterState = {
+  visible: Set<string>;
+  ancestors: Set<string>;
+  matches: Set<string>;
+} | null;
+
 // A leaf under this many questions is "too small to stand alone" — the signal
 // to condense it upward (Move it under a parent). Matches the exhaustion
 // story: a thin leaf gets played out fast.
@@ -305,6 +314,40 @@ function KnowledgeTreeEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newTopLabel, setNewTopLabel] = useState('');
+
+  // Free-text filter over the tree (128 territories is a lot to scroll). A row
+  // is VISIBLE when its label matches, when it's an ANCESTOR of a match (so the
+  // path down to it renders), or when it's a DESCENDANT of a match (so filtering
+  // to "American History" shows that whole branch). Ancestors of a match are
+  // force-expanded so every match lands on screen; a matched node keeps its own
+  // expand toggle so its subtree stays collapsible.
+  const [filter, setFilter] = useState('');
+  const filterState = useMemo(() => {
+    const query = filter.trim().toLowerCase();
+    if (!query) return null;
+    const matches = new Set<string>();
+    for (const n of nodes) {
+      if (n.label.toLowerCase().includes(query)) matches.add(n.domainKey);
+    }
+    const visible = new Set<string>();
+    const ancestors = new Set<string>();
+    for (const key of matches) {
+      visible.add(key);
+      for (const d of descendantsOf(key)) visible.add(d);
+    }
+    const queue = [...matches];
+    while (queue.length > 0) {
+      const next = queue.pop()!;
+      for (const parent of parentsByChild.get(next) ?? []) {
+        if (!ancestors.has(parent)) {
+          ancestors.add(parent);
+          visible.add(parent);
+          queue.push(parent);
+        }
+      }
+    }
+    return { visible, ancestors, matches };
+  }, [filter, nodes, descendantsOf, parentsByChild]);
 
   // Drag-and-drop state: what's being dragged (label for the overlay; key +
   // from-parent so every row can show whether it's a legal target), and the
@@ -614,6 +657,47 @@ function KnowledgeTreeEditor({
         </div>
       </div>
 
+      {/* Filter the tree by name — narrows to matching territories plus their
+          path and subtree, so a match deep in 128 rows is one type away. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 sm:max-w-xs">
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setFilter('');
+            }}
+            placeholder="Filter territories…"
+            className="w-full rounded-md border bg-[var(--brand-field)] py-1.5 pl-8 pr-8 text-sm focus:border-[var(--brand-navy)]"
+            style={{ borderColor: 'var(--border)' }}
+            aria-label="Filter territories by name"
+          />
+          <span
+            className="text-muted-foreground pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-sm"
+            aria-hidden
+          >
+            ⌕
+          </span>
+          {filter ? (
+            <button
+              type="button"
+              onClick={() => setFilter('')}
+              aria-label="Clear filter"
+              className="text-muted-foreground absolute inset-y-0 right-1.5 flex items-center px-1 text-base hover:text-[var(--brand-ink)]"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
+        {filterState ? (
+          <span className="text-muted-foreground text-xs" aria-live="polite">
+            {filterState.matches.size === 0
+              ? 'No matches'
+              : `${filterState.matches.size} match${filterState.matches.size === 1 ? '' : 'es'}`}
+          </span>
+        ) : null}
+      </div>
+
       {/* Drop-choice — the multi-parent moment: Move re-files; Also list keeps
           the old home AND adds the new one. Fixed to the bottom so it's in
           reach no matter where in a long tree the drop happened. */}
@@ -809,38 +893,45 @@ function KnowledgeTreeEditor({
             <p className="text-muted-foreground px-3 py-2 text-sm">
               Nothing in the tree yet — accept a suggested group above or add a territory.
             </p>
+          ) : filterState && filterState.matches.size === 0 ? (
+            <p className="text-muted-foreground px-3 py-2 text-sm">
+              No territories match “{filter.trim()}”.
+            </p>
           ) : (
-            roots.map((key) => (
-              <TreeRow
-                key={key}
-                nodeKey={key}
-                parentKey={null}
-                depth={0}
-                ancestors={new Set()}
-                nodeByKey={nodeByKey}
-                depthByKey={depthByKey}
-                pointsByKey={pointsByKey}
-                genStatsByKey={genStatsByKey}
-                exhaustedByKey={exhaustedByKey}
-                supplyByKey={supplyByKey}
-                childrenByParent={childrenByParent}
-                parentCountByChild={parentCountByChild}
-                parentsByChild={parentsByChild}
-                onJump={jumpToInstance}
-                flashInstance={flashInstance}
-                expanded={expanded}
-                setExpanded={setExpanded}
-                picking={picking}
-                pickedSubtree={pickedSubtree}
-                dragKey={drag?.childKey ?? null}
-                dragSubtree={dragSubtree}
-                busy={busy}
-                onPick={pickUnlessJustDragged}
-                onPlace={placeInto}
-                onAct={act}
-                onDone={onDone}
-              />
-            ))
+            roots
+              .filter((key) => !filterState || filterState.visible.has(key))
+              .map((key) => (
+                <TreeRow
+                  key={key}
+                  nodeKey={key}
+                  parentKey={null}
+                  depth={0}
+                  ancestors={new Set()}
+                  nodeByKey={nodeByKey}
+                  depthByKey={depthByKey}
+                  pointsByKey={pointsByKey}
+                  genStatsByKey={genStatsByKey}
+                  exhaustedByKey={exhaustedByKey}
+                  supplyByKey={supplyByKey}
+                  childrenByParent={childrenByParent}
+                  parentCountByChild={parentCountByChild}
+                  parentsByChild={parentsByChild}
+                  onJump={jumpToInstance}
+                  flashInstance={flashInstance}
+                  expanded={expanded}
+                  setExpanded={setExpanded}
+                  filterState={filterState}
+                  picking={picking}
+                  pickedSubtree={pickedSubtree}
+                  dragKey={drag?.childKey ?? null}
+                  dragSubtree={dragSubtree}
+                  busy={busy}
+                  onPick={pickUnlessJustDragged}
+                  onPlace={placeInto}
+                  onAct={act}
+                  onDone={onDone}
+                />
+              ))
           )}
         </div>
         <DragOverlay>
@@ -1021,6 +1112,7 @@ function TreeRow({
   flashInstance,
   expanded,
   setExpanded,
+  filterState,
   picking,
   pickedSubtree,
   dragKey,
@@ -1048,6 +1140,7 @@ function TreeRow({
   flashInstance: string | null;
   expanded: Set<string>;
   setExpanded: (updater: (prev: Set<string>) => Set<string>) => void;
+  filterState: FilterState;
   picking: PickState;
   pickedSubtree: Set<string>;
   dragKey: string | null;
@@ -1090,10 +1183,16 @@ function TreeRow({
 
   if (!node || ancestors.has(nodeKey)) return null; // cycle guard
 
-  const children = childrenByParent.get(nodeKey) ?? [];
-  const isOpen = expanded.has(nodeKey);
+  const allChildren = childrenByParent.get(nodeKey) ?? [];
+  // Under an active filter only visible children render — so a filtered parent
+  // shows just the path/subtree that reached a match, not every sibling.
+  const children = filterState ? allChildren.filter((c) => filterState.visible.has(c)) : allChildren;
+  // Ancestors of a match are force-open so the match is on screen; a matched
+  // node itself keeps the human's expand state so its subtree stays collapsible.
+  const isOpen = filterState?.ancestors.has(nodeKey) ? true : expanded.has(nodeKey);
+  const isMatch = filterState?.matches.has(nodeKey) ?? false;
   const parentCount = parentCountByChild.get(nodeKey) ?? 0;
-  const isParentish = node.nodeKind !== 'leaf' || children.length > 0;
+  const isParentish = node.nodeKind !== 'leaf' || allChildren.length > 0;
 
   // The picked row's CURRENT parent stays tappable — placing there offers the
   // flip (child becomes the parent's parent) instead of a no-op.
@@ -1174,7 +1273,11 @@ function TreeRow({
               ? 'inset 0 0 0 2px var(--brand-navy)'
               : dropEligible
                 ? 'inset 0 0 0 1px var(--brand-navy)'
-                : undefined,
+                : // A filter match gets a gold left bar so it stands out from the
+                  // ancestor rows that only exist to carry the path down to it.
+                  isMatch
+                  ? 'inset 3px 0 0 var(--accent-gold)'
+                  : undefined,
           borderRadius: isFlashed || isOver || dropEligible ? 6 : undefined,
         }}
       >
@@ -1608,6 +1711,7 @@ function TreeRow({
               flashInstance={flashInstance}
               expanded={expanded}
               setExpanded={setExpanded}
+              filterState={filterState}
               picking={picking}
               pickedSubtree={pickedSubtree}
               dragKey={dragKey}
