@@ -1,8 +1,48 @@
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
-import { db, generatedQuestions, knowledgeEdges, knowledgeNodes, questions } from '@/server/db';
+import {
+  db,
+  generatedQuestions,
+  knowledgeEdges,
+  knowledgeNodes,
+  questions,
+  reviewedDomainPairs,
+} from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import type { DomainQuestionPeek } from '@/server/db/queries/knowledge-graph';
+
+/**
+ * The canonical, order-independent key for a reviewed pair (Part 1 of
+ * D-DOMAIN-MERGE-REVIEW-REDESIGN-01). The two domains' FOLDED keys sorted
+ * ascending and '::'-joined, so (A,B) and (B,A) collapse to one key and a
+ * cosmetic rename that folds to the same key does not resurrect a dismissed
+ * pair. Deliberately keyed on domainKey(), never the raw label.
+ */
+export function reviewedPairKey(a: string, b: string): string {
+  return [domainKey(a), domainKey(b)].sort().join('::');
+}
+
+/** The set of pair keys a curator has permanently dismissed (Part 1). */
+export async function getReviewedPairKeys(): Promise<Set<string>> {
+  const rows = await db.select({ pairKey: reviewedDomainPairs.pairKey }).from(reviewedDomainPairs);
+  return new Set(rows.map((r) => r.pairKey));
+}
+
+/**
+ * Record a permanent Dismiss for a near-duplicate pair. Idempotent on the
+ * order-independent key — a re-dismiss (or a (B,A) re-order) is a no-op that
+ * refreshes the display spellings. Never surfaces again after this.
+ */
+export async function recordReviewedDomainPair(domainA: string, domainB: string): Promise<void> {
+  const pairKey = reviewedPairKey(domainA, domainB);
+  await db
+    .insert(reviewedDomainPairs)
+    .values({ pairKey, domainA, domainB })
+    .onConflictDoUpdate({
+      target: reviewedDomainPairs.pairKey,
+      set: { domainA, domainB, reviewedAt: sql`now()` },
+    });
+}
 
 /**
  * Tier-2 fragmentation surfacing (D-NARROW-KB-FABRICATION-01 follow-up). Tier-1
@@ -98,6 +138,11 @@ export async function getDomainFragmentationCandidates(
     .map((row) => ({ row, keyA: domainKey(row.domain_a), keyB: domainKey(row.domain_b) }))
     .filter((c) => c.keyA !== c.keyB);
 
+  // Permanently dismissed pairs never resurface, including after a similarity
+  // recompute (Part 1). Loaded once and filtered in JS because the pair key is
+  // the folded domainKey() (a TS function), not a raw column comparison.
+  const dismissed = await getReviewedPairKeys();
+
   // Graph context for the survivors: which sides already have an authored node
   // (the "in graph" chip), and which pairs are already CONNECTED by an edge —
   // a nested pair is a decided pair (parent/child, not duplicates), so it stops
@@ -130,6 +175,7 @@ export async function getDomainFragmentationCandidates(
   const pairs: FragmentationPair[] = [];
   for (const { row, keyA, keyB } of candidates) {
     if (connected.has(`${keyA}→${keyB}`) || connected.has(`${keyB}→${keyA}`)) continue;
+    if (dismissed.has(reviewedPairKey(row.domain_a, row.domain_b))) continue;
     pairs.push({
       domainA: row.domain_a,
       depthA: Number(row.depth_a),
