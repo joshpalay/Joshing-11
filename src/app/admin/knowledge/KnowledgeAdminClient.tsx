@@ -43,6 +43,18 @@ async function post(body: Record<string, unknown>): Promise<{
 }
 
 
+// A corpus area with questions but no authored node — real territory that
+// exists only as a raw label until it's added to the tree.
+export type UnfiledArea = {
+  domainKey: string;
+  label: string;
+  questions: number;
+  points: number;
+  genTotal: number;
+  genDupes: number;
+  exhausted: boolean;
+};
+
 export function KnowledgeAdminClient({
   nodes,
   edges,
@@ -50,6 +62,7 @@ export function KnowledgeAdminClient({
   pointsByKey,
   genStatsByKey,
   exhaustedByKey,
+  unfiled,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
@@ -57,6 +70,7 @@ export function KnowledgeAdminClient({
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
+  unfiled: UnfiledArea[];
 }) {
   const router = useRouter();
 
@@ -70,13 +84,13 @@ export function KnowledgeAdminClient({
           Knowledge graph
         </h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          The territory structure — <strong>only what you&apos;ve authored appears here</strong>{' '}
-          (raw question labels live on Domain merges until you nest or merge them in). Under every
-          name: the points to master it (color-coded by size — green small, gold moderate, red
-          large; edit via ⋯), how many questions live there, and the points currently available —
-          both rolled up through the subtree for parents. <em>⟳ duplicates</em> marks where new
-          questions are hard to find; <em>⛔ exhausted</em> marks a tapped-out area at the
-          expansion gate (author more to refill it). Nothing here touches questions or any
+          The whole map: <strong>the tree is what you&apos;ve authored</strong>; every other area
+          with questions waits in <strong>Unfiled areas</strong> below until you add it. Under
+          every name: the points to master it (color-coded by size — green small, gold moderate,
+          red large; edit via ⋯), how many questions live there, and the points currently
+          available — both rolled up through the subtree for parents. <em>⟳ duplicates</em> marks
+          where new questions are hard to find; <em>⛔ exhausted</em> marks a tapped-out area at
+          the expansion gate (author more to refill it). Nothing here touches questions or any
           player&apos;s mastery.
         </p>
       </header>
@@ -92,6 +106,8 @@ export function KnowledgeAdminClient({
         exhaustedByKey={exhaustedByKey}
         onDone={() => router.refresh()}
       />
+
+      <UnfiledAreas unfiled={unfiled} onDone={() => router.refresh()} />
 
       {/* Only the two tools with NO tree equivalent live here: the orphan
           check (structural gaps at a glance) and the edge composer (typed
@@ -789,6 +805,119 @@ function KnowledgeTreeEditor({
           ) : null}
         </DragOverlay>
       </DndContext>
+    </section>
+  );
+}
+
+// ─── unfiled areas ──────────────────────────────────────────────────────────
+// Every corpus area that has questions but NO authored territory ("show all
+// areas, not just the ones I did"). The tree above is the curated structure;
+// this is the complete rest-of-the-map, biggest first. "Add to tree" creates
+// the node (it appears as a top-level territory on refresh — drag it into
+// place from there); everything else about the area is read-only until then.
+const UNFILED_PREVIEW_COUNT = 40;
+
+function UnfiledAreas({ unfiled, onDone }: { unfiled: UnfiledArea[]; onDone: () => void }) {
+  const [showAll, setShowAll] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (unfiled.length === 0) return null;
+  const visible = showAll ? unfiled : unfiled.slice(0, UNFILED_PREVIEW_COUNT);
+
+  async function addToTree(area: UnfiledArea) {
+    if (busyKey) return;
+    setBusyKey(area.domainKey);
+    setError(null);
+    const res = await post({ action: 'create_node', label: area.label, nodeKind: 'leaf' });
+    setBusyKey(null);
+    // 409 = a node raced into existence for this key — that IS the goal.
+    if (!res.ok && res.status !== 409) {
+      setError(`Couldn't add "${area.label}" (${res.status}).`);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <section className="mt-8">
+      <h2 className="mb-1 font-serif text-lg font-semibold text-[var(--brand-ink)]">
+        Unfiled areas ({unfiled.length})
+      </h2>
+      <p className="text-muted-foreground mb-2 text-xs">
+        Areas with questions that aren&apos;t in your tree yet — the categorizer filed content
+        here, but no territory exists. <strong>Add to tree</strong> makes one (it lands at the top
+        level; drag it into place). Biggest first.
+      </p>
+      {error ? (
+        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+      <div className="rounded-md border py-1" style={{ borderColor: 'var(--border)' }}>
+        {visible.map((area) => {
+          const dupRate = area.genTotal > 0 ? area.genDupes / area.genTotal : 0;
+          const showDup =
+            area.genTotal >= HARD_TO_SOURCE_MIN_SAMPLE && dupRate >= HARD_TO_SOURCE_MIN_RATE;
+          return (
+            <div
+              key={area.domainKey}
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-1.5 text-sm last:border-b-0"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <span className="flex min-w-0 flex-1 flex-col gap-y-0.5 py-0.5">
+                <span className="min-w-0 break-words text-[var(--brand-ink)]">{area.label}</span>
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                  <span className="text-muted-foreground" title="Questions filed under this label">
+                    {area.questions} question{area.questions === 1 ? '' : 's'}
+                  </span>
+                  <span className="text-muted-foreground" title="Points currently earnable here (difficulty-weighted)">
+                    {area.points.toLocaleString()} pts available
+                  </span>
+                  {area.exhausted ? (
+                    <span
+                      className="font-semibold"
+                      style={{ color: 'var(--danger)' }}
+                      title="Exhausted — few servable facts remain despite generation"
+                    >
+                      ⛔ exhausted
+                    </span>
+                  ) : showDup ? (
+                    <span
+                      className="font-medium"
+                      style={{ color: dupRateColor(dupRate) }}
+                      title={`${Math.round(dupRate * 100)}% of generated questions here came back as duplicates (${area.genDupes}/${area.genTotal})`}
+                    >
+                      ⟳ {Math.round(dupRate * 100)}% duplicates
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void addToTree(area)}
+                disabled={busyKey !== null}
+                className="inline-flex min-h-9 shrink-0 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                title="Create a territory for this area — it appears at the top level of the tree; drag it into place from there"
+              >
+                {busyKey === area.domainKey ? 'Adding…' : '+ Add to tree'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {unfiled.length > UNFILED_PREVIEW_COUNT ? (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="text-muted-foreground mt-2 text-xs underline-offset-2 hover:underline"
+        >
+          {showAll
+            ? 'show fewer'
+            : `show all ${unfiled.length} (${unfiled.length - UNFILED_PREVIEW_COUNT} more)`}
+        </button>
+      ) : null}
     </section>
   );
 }
