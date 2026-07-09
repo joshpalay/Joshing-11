@@ -9,9 +9,10 @@ import {
 } from '@/server/db/queries/crafter-demand';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
 import { getRetrievalConfig } from '@/server/daily/retrieval-config';
+import { buildSupplyCoverageSummary } from '@/server/daily/supply-coverage';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
-import { KnowledgeAdminClient } from './KnowledgeAdminClient';
+import { KnowledgeAdminClient, type SupplyReadout } from './KnowledgeAdminClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export default async function AdminKnowledgePage() {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
-  const [{ nodes, edges }, corpusDepths, corpusPoints, corpusGenStats] = await Promise.all([
+  const [{ nodes, edges }, corpusDepths, corpusPoints, corpusGenStats, supply] = await Promise.all([
     listKnowledgeGraph(),
     // Per-label question depth (machine + human), so the tree can flag
     // territories too thin to stand alone ("this is too small — condense it").
@@ -34,6 +35,10 @@ export default async function AdminKnowledgePage() {
     // Per-label generation exhaustion (total produced + duplicates), so the tree
     // can flag where NEW questions are hard to find (high duplicate share).
     getCorpusLabelGenStats(),
+    // The supply lens over the SAME areas ("knowledge graph and domain supply
+    // should have the same information") — per-row readout + a link to the
+    // supply table. Fail-open internally: null just means no chips this load.
+    buildSupplyCoverageSummary(),
   ]);
   const ownDepthByKey: Record<string, number> = {};
   const ownMachineDepthByKey: Record<string, number> = {};
@@ -148,6 +153,18 @@ export default async function AdminKnowledgePage() {
     .filter((area) => area.questions > 0)
     .sort((a, b) => b.questions - a.questions || a.label.localeCompare(b.label));
 
+  // Per-key supply readout for the row chips. Serializable subset only.
+  const supplyByKey: Record<string, SupplyReadout> = {};
+  for (const entry of supply?.entries ?? []) {
+    supplyByKey[entry.domainKey] = {
+      state: entry.state,
+      realized: entry.realized,
+      estimatedQuestions: entry.estimatedQuestions,
+      ratio: entry.ratio,
+      capped: entry.generationCapped,
+    };
+  }
+
   return (
     <KnowledgeAdminClient
       nodes={nodes}
@@ -157,6 +174,7 @@ export default async function AdminKnowledgePage() {
       genStatsByKey={genStatsByKey}
       exhaustedByKey={exhaustedByKey}
       unfiled={unfiled}
+      supplyByKey={supplyByKey}
     />
   );
 }

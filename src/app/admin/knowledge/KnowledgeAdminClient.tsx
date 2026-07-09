@@ -55,6 +55,52 @@ export type UnfiledArea = {
   exhausted: boolean;
 };
 
+// The supply lens for one area ("knowledge graph and domain supply should have
+// the same information") — the same classification the supply table shows,
+// rendered as a compact readout on every row here, linking to the full row.
+export type SupplyReadout = {
+  state: 'unsized' | 'filling' | 'raise_estimate' | 'soft_finite' | 'discrepancy';
+  realized: number;
+  estimatedQuestions: number | null;
+  ratio: number | null;
+  capped: boolean;
+};
+
+const SUPPLY_STATE_TEXT: Record<SupplyReadout['state'], string> = {
+  discrepancy: '⚠ discrepancy',
+  raise_estimate: 'raise estimate',
+  filling: 'filling',
+  soft_finite: 'resting',
+  unsized: 'unsized',
+};
+
+function SupplyChip({ domainKeyValue, supply }: { domainKeyValue: string; supply?: SupplyReadout }) {
+  if (!supply) return null;
+  const tone =
+    supply.capped || supply.state === 'discrepancy'
+      ? 'var(--danger)'
+      : supply.state === 'raise_estimate'
+        ? 'var(--brand-navy)'
+        : 'var(--text-muted)';
+  const text = supply.capped
+    ? `⛔ capped · ${supply.realized} made`
+    : supply.estimatedQuestions != null
+      ? `${SUPPLY_STATE_TEXT[supply.state]} · ${supply.realized}/${supply.estimatedQuestions}${
+          supply.ratio != null ? ` (${Math.round(supply.ratio * 100)}%)` : ''
+        }`
+      : `unsized · ${supply.realized} made`;
+  return (
+    <a
+      href={`/admin/supply#supply-${domainKeyValue}`}
+      className="underline-offset-2 hover:underline"
+      style={{ color: tone }}
+      title="Generation supply for this exact area (made / estimated) — tap for its full supply row: estimate basis, dry rounds, cap and re-size actions"
+    >
+      supply: {text} →
+    </a>
+  );
+}
+
 export function KnowledgeAdminClient({
   nodes,
   edges,
@@ -63,6 +109,7 @@ export function KnowledgeAdminClient({
   genStatsByKey,
   exhaustedByKey,
   unfiled,
+  supplyByKey,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
@@ -71,6 +118,7 @@ export function KnowledgeAdminClient({
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
   unfiled: UnfiledArea[];
+  supplyByKey: Record<string, SupplyReadout>;
 }) {
   const router = useRouter();
 
@@ -104,10 +152,11 @@ export function KnowledgeAdminClient({
         pointsByKey={pointsByKey}
         genStatsByKey={genStatsByKey}
         exhaustedByKey={exhaustedByKey}
+        supplyByKey={supplyByKey}
         onDone={() => router.refresh()}
       />
 
-      <UnfiledAreas unfiled={unfiled} onDone={() => router.refresh()} />
+      <UnfiledAreas unfiled={unfiled} supplyByKey={supplyByKey} onDone={() => router.refresh()} />
 
       {/* Only the two tools with NO tree equivalent live here: the orphan
           check (structural gaps at a glance) and the edge composer (typed
@@ -186,6 +235,7 @@ function KnowledgeTreeEditor({
   pointsByKey,
   genStatsByKey,
   exhaustedByKey,
+  supplyByKey,
   onDone,
 }: {
   nodes: KnowledgeNodeRow[];
@@ -194,6 +244,7 @@ function KnowledgeTreeEditor({
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
+  supplyByKey: Record<string, SupplyReadout>;
   onDone: () => void;
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -771,6 +822,7 @@ function KnowledgeTreeEditor({
                 pointsByKey={pointsByKey}
                 genStatsByKey={genStatsByKey}
                 exhaustedByKey={exhaustedByKey}
+                supplyByKey={supplyByKey}
                 childrenByParent={childrenByParent}
                 parentCountByChild={parentCountByChild}
                 parentsByChild={parentsByChild}
@@ -817,7 +869,15 @@ function KnowledgeTreeEditor({
 // place from there); everything else about the area is read-only until then.
 const UNFILED_PREVIEW_COUNT = 40;
 
-function UnfiledAreas({ unfiled, onDone }: { unfiled: UnfiledArea[]; onDone: () => void }) {
+function UnfiledAreas({
+  unfiled,
+  supplyByKey,
+  onDone,
+}: {
+  unfiled: UnfiledArea[];
+  supplyByKey: Record<string, SupplyReadout>;
+  onDone: () => void;
+}) {
   const [showAll, setShowAll] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -891,6 +951,7 @@ function UnfiledAreas({ unfiled, onDone }: { unfiled: UnfiledArea[]; onDone: () 
                       ⟳ {Math.round(dupRate * 100)}% duplicates
                     </span>
                   ) : null}
+                  <SupplyChip domainKeyValue={area.domainKey} supply={supplyByKey[area.domainKey]} />
                 </span>
               </span>
               <button
@@ -952,6 +1013,7 @@ function TreeRow({
   pointsByKey,
   genStatsByKey,
   exhaustedByKey,
+  supplyByKey,
   childrenByParent,
   parentCountByChild,
   parentsByChild,
@@ -978,6 +1040,7 @@ function TreeRow({
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
+  supplyByKey: Record<string, SupplyReadout>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
   parentsByChild: Map<string, string[]>;
@@ -1301,6 +1364,7 @@ function TreeRow({
                   </span>
                 );
               })()}
+              <SupplyChip domainKeyValue={nodeKey} supply={supplyByKey[nodeKey]} />
             </span>
           </span>
         )}
@@ -1536,6 +1600,7 @@ function TreeRow({
               pointsByKey={pointsByKey}
               genStatsByKey={genStatsByKey}
               exhaustedByKey={exhaustedByKey}
+              supplyByKey={supplyByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               parentsByChild={parentsByChild}
