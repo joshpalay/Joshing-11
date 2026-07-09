@@ -122,14 +122,14 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
 // busy. Move it into a small badge on the circle's top-right corner instead: one
 // glyph per circle, read as chrome rather than an inline field. The glyph is a
 // signal-strength meter — three rising bars whose filled count encodes rotation
-// depth (Often = 3, Sometimes = 2, Blue Moon = 1, Never = 0). No circles, so it
-// doesn't echo the knowledge bubbles. Blue Moon keeps its blue: its single lit
-// bar is drawn in the blue accent, the one color exception (color otherwise
-// reserved for category, STYLE-GUIDE-COLOR §3). The word rides along as the
-// badge's aria-label / hover title.
+// depth (Often = 3 filled, Sometimes = 2, Never = 0 / all empty outlines). No
+// circles, so it doesn't echo the knowledge bubbles. Blue Moon is the one literal
+// exception: it drops the bars for an actual small blue crescent moon (its own
+// blue is the sole color escape from the category-reserved palette,
+// STYLE-GUIDE-COLOR §3). The word rides along as the badge's aria-label / title.
 //
 // Invert the single-source label map so the string coming through
-// `frequencyLabelFor` resolves back to its enum (and thus its level) without the
+// `frequencyLabelFor` resolves back to its enum (and thus its glyph) without the
 // caller having to pass both.
 const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntries(
   (Object.entries(TERRITORY_FREQUENCY_LABEL) as [TerritoryFrequency, string][]).map(
@@ -144,33 +144,50 @@ const SIGNAL_LEVEL: Record<TerritoryFrequency, number> = {
   resting: 0,
 }
 
-// Three rising bars, bottoms aligned, in a 24×24 viewBox. Lit bars carry the
-// state; unlit bars stay as faint ghosts so the meter's full height reads.
+// Three rising bars, bottoms aligned, in a 24×24 viewBox. Lit bars are filled
+// ink; unlit bars are empty outlines so an all-empty meter reads as "Never."
 function SignalBarsGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
   const level = SIGNAL_LEVEL[freq]
-  const blueMoon = freq === 'blue_moon'
   const bars = [
-    { x: 3, y: 13, h: 8 },
-    { x: 10, y: 8, h: 13 },
+    { x: 2, y: 13, h: 8 },
+    { x: 9.5, y: 8, h: 13 },
     { x: 17, y: 3, h: 18 },
   ]
   return (
     <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden style={{ display: 'block' }}>
-      {bars.map((b, i) => {
-        const lit = i < level
-        return (
+      {bars.map((b, i) =>
+        i < level ? (
+          <rect key={i} x={b.x} y={b.y} width={5} height={b.h} rx={1} fill="var(--warm-ink)" />
+        ) : (
           <rect
             key={i}
             x={b.x}
             y={b.y}
-            width={4}
+            width={5}
             height={b.h}
             rx={1}
-            fill={lit ? (blueMoon ? 'var(--exploring-accent-blue)' : 'var(--warm-ink)') : 'var(--warm-ink-400)'}
-            fillOpacity={lit ? 1 : 0.3}
+            fill="none"
+            stroke="var(--warm-ink-400)"
+            strokeWidth={1.6}
           />
         )
-      })}
+      )}
+    </svg>
+  )
+}
+
+// Filled crescent (lucide "moon" path) in the blue accent — the literal Blue Moon.
+function BlueMoonGlyph({ px }: { px: number }) {
+  return (
+    <svg
+      width={px}
+      height={px}
+      viewBox="0 0 24 24"
+      aria-hidden
+      fill="var(--exploring-accent-blue)"
+      style={{ display: 'block' }}
+    >
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
     </svg>
   )
 }
@@ -201,7 +218,11 @@ function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
         opacity: dim ? 0.5 : 1,
       }}
     >
-      <SignalBarsGlyph freq={freq} px={11} />
+      {freq === 'blue_moon' ? (
+        <BlueMoonGlyph px={12} />
+      ) : (
+        <SignalBarsGlyph freq={freq} px={11} />
+      )}
     </div>
   )
 }
