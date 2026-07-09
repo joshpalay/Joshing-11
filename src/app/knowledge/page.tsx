@@ -1,5 +1,11 @@
+import { redirect } from 'next/navigation';
+
 import { KnowledgeFlatClient } from './KnowledgeFlatClient';
 import { KnowledgeViewSwitcher, type KnowledgeView } from '@/components/knowledge/KnowledgeViewSwitcher';
+import { getSession } from '@/server/auth/session';
+import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree';
+import { getFullyExploredDomains } from '@/server/knowledge/fully-explored';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,12 +36,29 @@ export default async function KnowledgePage({
   }
 
   if (view === 'previous') {
+    const session = await getSession();
+    if (!session) redirect('/login');
+
+    // The flat portrait still self-loads /api/knowledge, but the per-circle
+    // frequency word and the tapped-circle detail pop-up need the knowledge tree
+    // + rotation preferences (same reads the "peaks" view makes). Fetch them here
+    // and thread them in — an additive read, no change to the portrait's own load.
+    const [{ tree }, preferences, fullyExplored] = await Promise.all([
+      getKnowledgeMapData(session.userId),
+      getDailyPreferences(session.userId),
+      getFullyExploredDomains(session.userId),
+    ]);
+
     return (
       <>
         <div className="mx-auto flex w-[min(672px,94vw)] items-center justify-center pt-5">
           <KnowledgeViewSwitcher current="previous" />
         </div>
-        <KnowledgeFlatClient />
+        <KnowledgeFlatClient
+          tree={tree}
+          frequencyByDomain={preferences.domainPreferenceFrequency}
+          fullyExploredDomains={fullyExplored}
+        />
       </>
     );
   }

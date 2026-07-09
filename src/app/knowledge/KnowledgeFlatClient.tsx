@@ -13,10 +13,14 @@ import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
 import { useSharePortraitCapture } from '@/components/knowledge/useSharePortraitCapture';
 import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/RecentlyExpanding';
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
+import { PeakDetailCard, type LeafInfo } from '@/components/knowledge/KnowledgePeaksView';
+import { usePeakDetail, freqKey } from '@/components/knowledge/usePeakDetail';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { TERRITORY_FREQUENCY_LABEL, type DomainPreferenceFrequency } from '@/lib/daily/territory-model';
+import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import type { MasteryTier } from '@/types/db';
 
 type DomainMastery = {
@@ -133,6 +137,69 @@ function emptyDomain(domain: string): DomainMastery {
   };
 }
 
+// Detail-pop-up inputs threaded from the server (page.tsx). The flat portrait
+// itself still loads from /api/knowledge client-side; these ride alongside so a
+// tapped circle can open the same PeakDetailCard the "peaks" view uses.
+type PeaksDetailData = {
+  tree: KnowledgeTreeNode;
+  frequencyByDomain: DomainPreferenceFrequency;
+  fullyExploredDomains: ReadonlySet<string>;
+};
+
+type TreeIndex = { byId: Map<string, LeafInfo>; byFreqKey: Map<string, LeafInfo> };
+
+function isOwnedTreeLeaf(node: KnowledgeTreeNode): boolean {
+  return !node.ghost && (node.value ?? 0) > 0 && (!node.children || node.children.length === 0);
+}
+
+// One walk of the tree → every non-root node as a LeafInfo (with its lineage),
+// indexed by id (for sibling/child jumps) and by normalized name (for resolving
+// a tapped portrait circle). Top-level nodes get parent/topParent = null, exactly
+// like KnowledgePeaksView's `areas`, so the detail card's "More in…" reads right.
+// When a name collides, an owned terminal leaf wins over a container/ghost.
+function indexTree(tree: KnowledgeTreeNode): TreeIndex {
+  const byId = new Map<string, LeafInfo>();
+  const byFreqKey = new Map<string, LeafInfo>();
+  const walk = (node: KnowledgeTreeNode, ancestors: KnowledgeTreeNode[]) => {
+    if (ancestors.length > 0) {
+      const topLevel = ancestors.length === 1; // only the synthetic root above it
+      const path = topLevel ? [] : ancestors.slice(1);
+      const info: LeafInfo = {
+        node,
+        path,
+        parent: topLevel ? null : ancestors.at(-1) ?? null,
+        topParent: path[0] ?? null,
+      };
+      byId.set(node.id, info);
+      const key = freqKey(node.name);
+      const existing = byFreqKey.get(key);
+      if (!existing || (isOwnedTreeLeaf(node) && !isOwnedTreeLeaf(existing.node))) {
+        byFreqKey.set(key, info);
+      }
+    }
+    for (const child of node.children ?? []) walk(child, [...ancestors, node]);
+  };
+  walk(tree, []);
+  return { byId, byFreqKey };
+}
+
+// A portrait domain with no matching tree node still gets a pop-up: a bare leaf
+// (no lineage, no siblings) so the identity header and frequency editor work.
+function synthesizeLeaf(domain: DomainMastery): LeafInfo {
+  return {
+    node: {
+      id: `flat:${domain.domain}`,
+      name: domain.displayName,
+      field: null,
+      value: domain.points,
+      mastered: domain.tier === 'mastery',
+    },
+    path: [],
+    parent: null,
+    topParent: null,
+  };
+}
+
 function LoadingSkeleton() {
   return (
     <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
@@ -150,15 +217,15 @@ function LoadingSkeleton() {
   );
 }
 
-export function KnowledgeFlatClient() {
+export function KnowledgeFlatClient(props: PeaksDetailData) {
   return (
     <Suspense fallback={<LoadingSkeleton />}>
-      <KnowledgePageContent />
+      <KnowledgePageContent {...props} />
     </Suspense>
   );
 }
 
-function KnowledgePageContent() {
+function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }: PeaksDetailData) {
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
@@ -189,6 +256,21 @@ function KnowledgePageContent() {
   const [hiddenOverrides, setHiddenOverrides] = useState<Record<string, boolean>>({});
   const [hidePending, setHidePending] = useState<string | null>(null);
   const [hideError, setHideError] = useState<string | null>(null);
+
+  // Detail pop-up controller (shared with the peaks view): owns the optimistic
+  // tree + rotation map and the frequency/adopt writes. `selectedLeaf` is the
+  // tapped circle resolved to a tree leaf (or a synthesized bare leaf).
+  const { tree: detailTree, resolveFrequency, setFrequency, adoptNode } = usePeakDetail(
+    tree,
+    frequencyByDomain,
+  );
+  const [selectedLeaf, setSelectedLeaf] = useState<LeafInfo | null>(null);
+  const treeIndex = useMemo(() => indexTree(detailTree), [detailTree]);
+  const fullyExploredKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const domain of fullyExploredDomains) set.add(freqKey(domain));
+    return set;
+  }, [fullyExploredDomains]);
 
   const loadKnowledge = async () => {
     const response = await fetch('/api/knowledge', { cache: 'no-store', credentials: 'include' });
@@ -276,6 +358,25 @@ function KnowledgePageContent() {
     [annotatedDomains],
   );
   const hiddenCount = annotatedDomains.length - visibleDomains.length;
+
+  // Rotation word shown under every circle's name — resolves through the same
+  // frequency map that seeds the detail pop-up, so face and sheet always agree.
+  const frequencyLabelFor = (canonicalSubcategory: string): string =>
+    TERRITORY_FREQUENCY_LABEL[resolveFrequency(canonicalSubcategory)];
+
+  // A tapped circle (outside edit mode) opens the peaks detail pop-up. Prefer the
+  // real tree leaf; fall back to a synthesized bare leaf for a domain the tree
+  // doesn't carry, so the frequency editor still works everywhere.
+  const openDomainDetail = (canonicalSubcategory: string) => {
+    const key = freqKey(canonicalSubcategory);
+    const fromTree = treeIndex.byFreqKey.get(key);
+    if (fromTree) {
+      setSelectedLeaf(fromTree);
+      return;
+    }
+    const domain = annotatedDomains.find((entry) => freqKey(entry.displayName) === key);
+    setSelectedLeaf(domain ? synthesizeLeaf(domain) : null);
+  };
 
   const portraitEntries = useMemo(
     () => (editMode ? annotatedDomains : visibleDomains).map(toPortraitEntry),
@@ -674,6 +775,8 @@ function KnowledgePageContent() {
               editMode={editMode}
               onToggleHidden={(canonical, nextHidden) => void toggleDomainHidden(canonical, nextHidden)}
               pendingDomain={hidePending}
+              frequencyLabelFor={frequencyLabelFor}
+              onSelectDomain={openDomainDetail}
             />
             {hideError ? (
               <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
@@ -945,6 +1048,33 @@ function KnowledgePageContent() {
                 onCancel={() => setActiveModal(null)}
               />
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Domain detail pop-up — the same PeakDetailCard the "peaks" view uses,
+          opened by tapping a circle. Backdrop tap closes; the card owns its X. */}
+      {selectedLeaf ? (
+        <div
+          className="fixed inset-0 z-[55] flex items-end justify-center bg-black/30 p-4 sm:items-center"
+          onClick={() => setSelectedLeaf(null)}
+        >
+          <div className="w-[min(480px,100%)]" onClick={(event) => event.stopPropagation()}>
+            <PeakDetailCard
+              key={selectedLeaf.node.id}
+              leaf={selectedLeaf}
+              variant="own"
+              frequency={resolveFrequency(selectedLeaf.node.name)}
+              fullyExplored={fullyExploredKeys.has(freqKey(selectedLeaf.node.name))}
+              adopted={false}
+              onClose={() => setSelectedLeaf(null)}
+              onSelectSibling={(id) => {
+                const info = treeIndex.byId.get(id);
+                if (info) setSelectedLeaf(info);
+              }}
+              onAdd={adoptNode}
+              onSetFrequency={setFrequency}
+            />
           </div>
         </div>
       ) : null}
