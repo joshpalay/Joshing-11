@@ -38,10 +38,15 @@ export function CrafterClient({
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
+    <main className="mx-auto min-h-dvh max-w-4xl px-4 pt-6 pb-24">
       <header className="mb-5">
-        <h1 className="mb-3 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Crafter</h1>
-        <AdminTabs active="crafter" needingReviewCount={needingReviewCount} />
+        <div className="mb-3">
+          <AdminTabs active="crafter" needingReviewCount={needingReviewCount} />
+        </div>
+        {/* The voice lives here; the nav tab says what the page is ("Crafter"). */}
+        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
+          Where your craft is wanted
+        </h1>
       </header>
 
       {crafting ? (

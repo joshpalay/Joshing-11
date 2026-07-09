@@ -6,6 +6,7 @@ import { isAdminUser } from '@/server/auth/admin';
 import { estimateDomainSize, SIZE_CEIL } from '@/server/daily/domain-size-estimate';
 import {
   getDepthEstimates,
+  setGenerationCap,
   setManualEstimate,
   upsertCorpusSizeEstimate,
 } from '@/server/db/queries/domain-depth-estimate';
@@ -21,6 +22,11 @@ export const dynamic = 'force-dynamic';
 //  - set_estimate: write the manual override (manual_estimated_questions); it
 //                  wins over the corpus estimate everywhere and is never touched
 //                  by resolver re-runs or co-calibration. null clears it.
+//  - set_cap:      stamp/clear the generation cap (generation_capped_at). A
+//                  capped domain is dropped from every generation round's palette
+//                  (cron build + demand-pull replenish) so the system stops
+//                  searching it for new facts; serving is untouched and it never
+//                  fires the discrepancy alarm. capped=false clears it.
 // Same admin gate as every /admin surface: non-admins get a 404 that doesn't
 // reveal the route exists.
 
@@ -32,6 +38,11 @@ const bodySchema = z.discriminatedUnion('action', [
     // Bounded well past SIZE_CEIL — an admin may know a franchise outsizes the
     // resolver's clamp — but still finite to keep fat-finger entries out.
     estimate: z.number().int().min(1).max(SIZE_CEIL * 10).nullable(),
+  }),
+  z.object({
+    action: z.literal('set_cap'),
+    domainKey: z.string().trim().min(1),
+    capped: z.boolean(),
   }),
 ]);
 
@@ -49,6 +60,12 @@ export async function POST(request: NextRequest) {
 
   if (data.action === 'set_estimate') {
     const updated = await setManualEstimate(data.domainKey, data.estimate);
+    if (!updated) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (data.action === 'set_cap') {
+    const updated = await setGenerationCap(data.domainKey, data.capped);
     if (!updated) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   }

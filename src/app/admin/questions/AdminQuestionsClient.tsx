@@ -654,10 +654,11 @@ export function AdminQuestionsClient({
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-6">
-      <h1 className="mb-3 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Questions</h1>
-      <div className="mb-4">
+      {/* Wide on purpose — a 15-column audit table; the content pages sit at 4xl. */}
+      <div className="mb-3">
         <AdminTabs active="questions" />
       </div>
+      <h1 className="mb-4 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Questions</h1>
 
       {/* Filter bar. Every control combines (AND) with the others server-side. */}
       <form

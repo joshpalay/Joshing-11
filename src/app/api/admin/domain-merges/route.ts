@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import { runDomainMergeApply, runDomainMergePreview } from '@/server/db/queries/domain-merges';
+import { getLabelQuestionPeek } from '@/server/db/queries/domain-fragmentation';
 
 export const dynamic = 'force-dynamic';
 // Apply is one transaction over the low-hundreds of rows a label spans; preview is
@@ -18,10 +19,22 @@ const mergeSpec = z.object({
   target: z.string().trim().min(1).max(200),
   sources: z.array(z.string().trim().min(1).max(200)).min(1).max(10),
 });
-const bodySchema = z.object({
-  action: z.enum(['preview', 'apply']),
-  merges: z.array(mergeSpec).min(1).max(50),
-});
+// preview/apply act on a batch of merge specs; peek is a read-only sample of one
+// label's questions (the "see the questions before you decide" sanity check).
+const bodySchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('preview'),
+    merges: z.array(mergeSpec).min(1).max(50),
+  }),
+  z.object({
+    action: z.literal('apply'),
+    merges: z.array(mergeSpec).min(1).max(50),
+  }),
+  z.object({
+    action: z.literal('peek'),
+    label: z.string().trim().min(1).max(200),
+  }),
+]);
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -35,10 +48,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'validation' }, { status: 400 });
   }
 
-  const { action, merges } = parsed.data;
+  const data = parsed.data;
 
   try {
-    if (action === 'preview') {
+    if (data.action === 'peek') {
+      const questions = await getLabelQuestionPeek(data.label);
+      return NextResponse.json({ questions });
+    }
+    const { merges } = data;
+    if (data.action === 'preview') {
       const preview = await runDomainMergePreview(merges);
       return NextResponse.json(preview);
     }

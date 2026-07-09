@@ -15,6 +15,7 @@ function row(overrides: Partial<DomainSupplyCoverageRow>): DomainSupplyCoverageR
     source: 'corpus',
     consecutiveDryRounds: 0,
     lastYieldAt: null,
+    generationCappedAt: null,
     realized: 10,
     ...overrides,
   };
@@ -104,6 +105,26 @@ describe('summarizeSupplyCoverage (the shared #5 surface summary)', () => {
     expect(summary.entries[0].state).toBe('discrepancy');
     expect(summary.entries[0].confidence).toBe('high');
     expect(summary.discrepancies).toHaveLength(1);
+  });
+
+  it('a capped domain is kept out of the alarm list and counted separately', () => {
+    // Same dry shortfall as a discrepancy, but the admin capped it: it stopped
+    // generating on purpose, so it must not alarm — and it's tallied as capped.
+    const summary = summarizeSupplyCoverage([
+      row({
+        domainKey: 'a',
+        sampleLabel: 'Retired Franchise',
+        realized: 3,
+        consecutiveDryRounds: 5,
+        generationCappedAt: new Date('2026-07-08T00:00:00Z'),
+      }),
+      row({ domainKey: 'b', sampleLabel: 'Live', realized: 3, consecutiveDryRounds: 5 }),
+    ]);
+    // The uncapped 'Live' still alarms; the capped one is suppressed.
+    expect(summary.discrepancies.map((entry) => entry.label)).toEqual(['Live']);
+    expect(summary.cappedCount).toBe(1);
+    // State is still derived (orthogonal to the cap) — it just doesn't alarm.
+    expect(summary.entries.find((entry) => entry.label === 'Retired Franchise')?.generationCapped).toBe(true);
   });
 
   it('empty coverage produces an empty, well-formed summary', () => {

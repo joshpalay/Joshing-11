@@ -1,7 +1,8 @@
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
-import { db } from '@/server/db';
+import { db, generatedQuestions, questions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import type { DomainQuestionPeek } from '@/server/db/queries/knowledge-graph';
 
 /**
  * Tier-2 fragmentation surfacing (D-NARROW-KB-FABRICATION-01 follow-up). Tier-1
@@ -101,6 +102,59 @@ export async function getDomainFragmentationCandidates(
     if (pairs.length >= limit) break;
   }
   return pairs;
+}
+
+/**
+ * Read-only peek at the questions under a raw fragmentation LABEL — the sanity
+ * check before deciding a merge pair is the same scope ("would be good to see
+ * some of the questions in these areas"). Unlike listQuestionsForDomain (which
+ * requires an authored KnowledgeNode), a merge candidate is just a played
+ * canonical_subcategory that usually has NO node, so we key directly off the
+ * label: canonical rows on the exact label, bank rows on the folded domain_key
+ * (so spelling variants still show). Newest first, canonical before bank, capped.
+ */
+export async function getLabelQuestionPeek(
+  label: string,
+  limit = 20,
+): Promise<DomainQuestionPeek[]> {
+  const key = domainKey(label);
+  const [canonical, bank] = await Promise.all([
+    db
+      .select({
+        text: questions.questionText,
+        answer: questions.answerText,
+        status: questions.publicStatus,
+      })
+      .from(questions)
+      .where(and(eq(questions.canonicalSubcategory, label), isNull(questions.deletedAt)))
+      .orderBy(desc(questions.createdAt))
+      .limit(limit),
+    db
+      .select({
+        text: generatedQuestions.questionText,
+        answer: generatedQuestions.answer,
+        isDuplicate: generatedQuestions.isDuplicate,
+      })
+      .from(generatedQuestions)
+      .where(eq(generatedQuestions.domainKey, key))
+      .orderBy(desc(generatedQuestions.createdAt))
+      .limit(limit),
+  ]);
+
+  return [
+    ...canonical.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'canonical' as const,
+      suppressed: q.status === 'needs_review' || q.status === 'rejected',
+    })),
+    ...bank.map((q) => ({
+      text: q.text,
+      answer: q.answer,
+      source: 'bank' as const,
+      suppressed: q.isDuplicate,
+    })),
+  ].slice(0, limit);
 }
 
 /**

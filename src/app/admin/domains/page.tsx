@@ -29,15 +29,20 @@ export default async function AdminDomainsPage() {
       <div className="mb-6 flex flex-col gap-4">
         <AdminTabs active="domains" />
         <div>
-          <h1 className="text-2xl font-semibold" style={{ color: 'var(--brand-navy)' }}>
+          <h1 className="font-serif text-2xl font-semibold" style={{ color: 'var(--brand-ink)' }}>
             Domain merges
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
             Near-duplicate domain labels the auto-reconcile left for a human call. If a pair is the{' '}
             <strong>same scope</strong>, pick which spelling survives — the other folds into it
             everywhere. If they are genuinely different (a specific work vs its genre, two
-            siblings), leave the pair. <strong>Preview</strong> shows the exact rows that would move
-            before anything changes.
+            siblings), leave the pair. Each side shows its question count and a{' '}
+            <strong>see</strong> link to peek at the actual questions before you decide; the{' '}
+            <strong>★ keep</strong> tag marks the side that holds more (folding into it moves the
+            fewest rows). <strong>Preview</strong> shows the exact rows that would move before
+            anything changes. The knowledge graph follows automatically: if a folded label has a
+            graph node, its edges and structure move with it (same engine as the tree&apos;s
+            “Merge into…”).
           </p>
         </div>
       </div>
