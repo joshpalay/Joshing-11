@@ -121,15 +121,11 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
 // undifferentiated grey line and, spelled out under every circle, made the grid
 // busy. Move it into a small badge on the circle's top-right corner instead: one
 // glyph per circle, read as chrome rather than an inline field. The glyph is a
-// rising three-column bar chart built from stacked flat squares (a Lustig-style
-// color-block column): columns hold 1 / 2 / 3 squares. A column's squares are lit
-// in a color when that step is reached and drawn as empty outlines otherwise, so
-// the number of colored columns encodes rotation depth (Often = 3, Sometimes = 2,
-// Never = 0 / all outlines). The square colors come from the on-system category
-// hues purely as a decorative mosaic — at this size it reads as color-blocking,
-// not category encoding. Blue Moon is the one literal exception: it drops the
-// columns for an actual small blue crescent moon. The word rides along as the
-// badge's aria-label / title.
+// single isosceles right triangle (right angle bottom-left) that fills from the
+// bottom up with rotation depth: Never = empty outline, Sometimes ≈ half filled,
+// Often = solid. One ink color, one shape — a quiet gauge, not a busy meter. Blue
+// Moon is the one literal exception: it drops the triangle for an actual small
+// blue crescent moon. The word rides along as the badge's aria-label / title.
 //
 // Invert the single-source label map so the string coming through
 // `frequencyLabelFor` resolves back to its enum (and thus its glyph) without the
@@ -147,49 +143,26 @@ const ROTATION_LEVEL: Record<TerritoryFrequency, number> = {
   resting: 0,
 }
 
-// Flat color-block palette for the lit squares — on-system category hues reused
-// as a decorative mosaic (no new colors on the ratchet).
-const SQUARE_PALETTE = [
-  'var(--cat-literature)',
-  'var(--cat-sports)',
-  'var(--cat-history)',
-  'var(--cat-film-tv)',
-  'var(--accent-gold)',
-  'var(--cat-science)',
-]
-
-// Squares in bottom-to-top, left-to-right order: column 0 → 1 square, column 1 →
-// 2, column 2 → 3, so the columns rise as a staircase in a 24×24 viewBox.
-const ROTATION_SQUARES = [
-  { col: 0, x: 2, y: 16 },
-  { col: 1, x: 9, y: 16 },
-  { col: 1, x: 9, y: 9 },
-  { col: 2, x: 16, y: 16 },
-  { col: 2, x: 16, y: 9 },
-  { col: 2, x: 16, y: 2 },
-]
-const SQUARE_SIZE = 6
+// Isosceles right triangle, right angle bottom-left, equal legs (bottom + left),
+// hypotenuse rising from bottom-left to top. The full outline is always drawn; a
+// fill polygon covers the bottom slice up to the level's height (bottom-up gauge).
+const TRIANGLE_OUTLINE = '3,3 3,21 21,21'
+// Fill up to y=16 leaves ~half the area — a clear "half full" for Sometimes.
+const TRIANGLE_FILL_HALF = '3,16 16,16 21,21 3,21'
 
 function RotationMeterGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
   const level = ROTATION_LEVEL[freq]
+  const fill = level >= 3 ? TRIANGLE_OUTLINE : level >= 2 ? TRIANGLE_FILL_HALF : null
   return (
     <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden style={{ display: 'block' }}>
-      {ROTATION_SQUARES.map((sq, i) =>
-        sq.col < level ? (
-          <rect key={i} x={sq.x} y={sq.y} width={SQUARE_SIZE} height={SQUARE_SIZE} fill={SQUARE_PALETTE[i]} />
-        ) : (
-          <rect
-            key={i}
-            x={sq.x}
-            y={sq.y}
-            width={SQUARE_SIZE}
-            height={SQUARE_SIZE}
-            fill="none"
-            stroke="var(--warm-ink-400)"
-            strokeWidth={1.4}
-          />
-        )
-      )}
+      {fill ? <polygon points={fill} fill="var(--warm-ink)" /> : null}
+      <polygon
+        points={TRIANGLE_OUTLINE}
+        fill="none"
+        stroke="var(--warm-ink-400)"
+        strokeWidth={1.4}
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
