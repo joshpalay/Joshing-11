@@ -278,9 +278,14 @@ export function DomainMergeClient({ pairs }: { pairs: FragmentationPair[] }) {
   );
 }
 
-// One candidate pair: the two labels with their question counts and a per-side
-// "see questions" peek, a recommended survivor (by count), and the Keep/Leave
-// decision. Peek state is per-row, so a component (not an inline map) is needed.
+// One candidate pair: the two labels with their question counts, an "in graph"
+// chip (merge candidates are RAW corpus labels — most have no KnowledgeNode,
+// which is why they don't appear on the knowledge-graph page), a per-side
+// "see questions" peek, a recommended survivor (by count), and the decision.
+// Three decisions, not two: same scope → Keep one (merge); CONTAINMENT (a work
+// inside its series/genre) → Nest, which authors both into the graph and draws
+// the edge — the pair then stops appearing here; unrelated → Leave.
+// Peek/nest state is per-row, so a component (not an inline map) is needed.
 function PairRow({
   pair,
   choice,
@@ -292,10 +297,43 @@ function PairRow({
   isConflict: boolean;
   onChoose: (choice: Choice) => void;
 }) {
+  const router = useRouter();
   const [peek, setPeek] = useState<'A' | 'B' | null>(null);
+  const [nesting, setNesting] = useState(false);
+  const [nestError, setNestError] = useState<string | null>(null);
   const recommended = recommendedSurvivor(pair);
 
-  const side = (which: 'A' | 'B', label: string, depth: number) => (
+  // Containment decision: child nests under parent. Nodes are created for
+  // labels not yet in the graph; on success the refresh drops the pair (the
+  // candidate query filters connected pairs).
+  async function nest(childLabel: string, parentLabel: string) {
+    if (nesting) return;
+    setNesting(true);
+    setNestError(null);
+    try {
+      const res = await fetch('/api/admin/domain-merges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'nest', childLabel, parentLabel }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setNestError(
+          body?.error === 'self_edge'
+            ? 'That nesting would loop — check the direction.'
+            : `Nest failed (${res.status}).`,
+        );
+        return;
+      }
+      router.refresh();
+    } catch {
+      setNestError('Nest failed — nothing was changed.');
+    } finally {
+      setNesting(false);
+    }
+  }
+
+  const side = (which: 'A' | 'B', label: string, depth: number, hasNode: boolean) => (
     <td className="py-2 pr-3 align-top">
       <div className="flex flex-col gap-0.5">
         <span>
@@ -309,6 +347,23 @@ function PairRow({
               ★ keep
             </span>
           ) : null}
+          {hasNode ? (
+            <span
+              className="ml-1.5 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+              title="This label has an authored territory on the Knowledge graph page"
+            >
+              in graph
+            </span>
+          ) : (
+            <span
+              className="ml-1.5 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+              title="A raw question label — not in the knowledge graph. Nest or merge adds it."
+            >
+              label only
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -329,8 +384,8 @@ function PairRow({
         className="border-b align-top"
         style={{ borderColor: 'var(--border)', background: isConflict ? 'rgba(220,50,50,0.06)' : undefined }}
       >
-        {side('A', pair.domainA, pair.depthA)}
-        {side('B', pair.domainB, pair.depthB)}
+        {side('A', pair.domainA, pair.depthA, pair.hasNodeA)}
+        {side('B', pair.domainB, pair.depthB, pair.hasNodeB)}
         <td className="py-2 pr-3 text-right align-top" style={{ color: 'var(--text-muted)' }}>
           {pct(pair.similarity)}
         </td>
@@ -346,6 +401,34 @@ function PairRow({
               Leave
             </ChoiceButton>
           </div>
+          {/* Containment path — immediate (not part of the merge batch). */}
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void nest(pair.domainA, pair.domainB)}
+              disabled={nesting}
+              className="rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+              title={`Parent/child, not duplicates: put “${pair.domainA}” INSIDE “${pair.domainB}” on the knowledge graph (both get territories; the pair leaves this list)`}
+            >
+              {nesting ? 'Nesting…' : 'A under B'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void nest(pair.domainB, pair.domainA)}
+              disabled={nesting}
+              className="rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
+              title={`Parent/child, not duplicates: put “${pair.domainB}” INSIDE “${pair.domainA}” on the knowledge graph (both get territories; the pair leaves this list)`}
+            >
+              B under A
+            </button>
+          </div>
+          {nestError ? (
+            <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+              {nestError}
+            </p>
+          ) : null}
         </td>
       </tr>
       {peek ? (

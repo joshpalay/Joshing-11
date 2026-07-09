@@ -71,10 +71,12 @@ export default async function AdminSupplyPage() {
             Domain supply
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Corpus-grounded size estimate vs realized generation, per domain. A{' '}
-            <strong>discrepancy</strong> is a domain that went dry far short of a trusted
-            estimate — a supply problem, not completion. Resting domains are believed complete
-            and stay re-probeable. <strong>Cap</strong> a domain to stop generating new
+            Corpus-grounded size estimate vs realized generation, per domain.{' '}
+            <strong>Rows appear here once the sizing machinery has touched a domain</strong> — a
+            different population from the authored Knowledge graph and the raw labels on Domain
+            merges. A <strong>discrepancy</strong> is a domain that went dry far short of a
+            trusted estimate — a supply problem, not completion. Resting domains are believed
+            complete and stay re-probeable. <strong>Cap</strong> a domain to stop generating new
             questions for it entirely — existing questions still serve, and it stops alarming.
           </p>
         </div>

@@ -70,14 +70,14 @@ export function KnowledgeAdminClient({
           Knowledge graph
         </h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          The territory structure — human-authored, always. Nodes are leaves/parents. Each row
-          shows its <strong>mastery threshold</strong> (<em>pts</em> — the points to master the
-          topic, color-coded by size; edit it via ⋯), its question count (<em>Qs</em>), and the
-          points currently <em>avail</em>able there (difficulty-weighted) — the latter two rolled
-          up through the subtree for parents. A <em>⟳ dup</em> flag marks where new questions are
-          hard to find (a high share of generations come back duplicates); <em>⛔ exhausted</em>
-          marks a tapped-out area at the expansion gate (author more to refill it). Nothing here
-          touches questions or any player&apos;s mastery.
+          The territory structure — <strong>only what you&apos;ve authored appears here</strong>{' '}
+          (raw question labels live on Domain merges until you nest or merge them in). Under every
+          name: the points to master it (color-coded by size — green small, gold moderate, red
+          large; edit via ⋯), how many questions live there, and the points currently available —
+          both rolled up through the subtree for parents. <em>⟳ duplicates</em> marks where new
+          questions are hard to find; <em>⛔ exhausted</em> marks a tapped-out area at the
+          expansion gate (author more to refill it). Nothing here touches questions or any
+          player&apos;s mastery.
         </p>
       </header>
 
@@ -986,8 +986,8 @@ function TreeRow({
           borderRadius: isFlashed || isOver || dropEligible ? 6 : undefined,
         }}
       >
-        {/* Left group is ONE non-wrapping line (min-w-0 + truncate) so a long
-            label can never shove the ⋯ button onto its own row. */}
+        {/* Left group: handle + expander + a two-line content column (name
+            wraps; stats beneath). min-w-0 keeps the ⋯ button on the row. */}
         <span className="flex min-w-0 flex-1 items-center gap-x-2">
         {/* Drag handle — a real 44px control, not a bare glyph. Drag it to
             re-file; a plain TAP falls back to pick-up mode (big "Place here"
@@ -1063,38 +1063,73 @@ function TreeRow({
             </button>
           </span>
         ) : (
-          <>
-            <span
-              className={
-                (isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]') +
-                ' min-w-0 truncate'
-              }
-            >
-              {node.label}
+          /* Two lines, always (2026-07-08: "sometimes can't read the category"):
+             the NAME gets the full row width and WRAPS — never truncates — and
+             the stats live on their own line beneath in plain words, so a long
+             territory name and its numbers can both be read on a phone. */
+          <span className="flex min-w-0 flex-1 flex-col gap-y-0.5 py-0.5">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span
+                className={
+                  (isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]') +
+                  ' min-w-0 break-words'
+                }
+              >
+                {node.label}
+              </span>
+              {/* Multi-parent chip: tap to see every place this territory lives
+                  and jump to any of them. */}
+              {parentCount > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setPlacesOpen((v) => !v)}
+                  aria-expanded={placesOpen}
+                  aria-label={`${node.label} is in ${parentCount} places — show them`}
+                  title="This territory lives in more than one place — tap to see and jump"
+                  className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs font-medium"
+                  style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                >
+                  ⧉ {parentCount}
+                </button>
+              ) : null}
+              {/* "This is too small" — a thin leaf that isn't already nested is a
+                  condense-me candidate (Move it under a parent). */}
+              {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
+                <span
+                  className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                  style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
+                  title="Too few questions to stand alone — Move it under a broader parent"
+                >
+                  thin
+                </span>
+              ) : null}
             </span>
-            {/* Two facts under every name (leaves included): the node's mastery
-                THRESHOLD in points (color-coded by size; master at 75% of it) and
-                the question count (rolled up through the subtree for parents). */}
-            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">
+            {/* The stats line — spelled out, not abbreviated ("stats hard to
+                decipher"): mastery target (color = size), question count and
+                points available (both rolled up through the subtree for
+                parents), then the escalating supply flag. */}
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
               <span
                 className="font-medium"
                 style={{ color: node.masteryThreshold ? thresholdColor(node.masteryThreshold) : 'var(--warning)' }}
                 title={
                   node.masteryThreshold
-                    ? `Mastery threshold: ${node.masteryThreshold.toLocaleString()} pts (master at 75%)`
-                    : 'No threshold set — tap ⋯ to set one'
+                    ? `Mastery threshold: ${node.masteryThreshold.toLocaleString()} pts (a player masters this at 75% of it)`
+                    : 'No mastery target set — tap ⋯ → Edit to set one'
                 }
               >
-                {node.masteryThreshold ? `${node.masteryThreshold.toLocaleString()} pts` : '— pts'}
+                {node.masteryThreshold
+                  ? `${node.masteryThreshold.toLocaleString()} pts to master`
+                  : 'no mastery target'}
               </span>
-              <span className="text-muted-foreground" title="Questions in this area">
-                {depthByKey[nodeKey] ?? 0} Qs
+              <span className="text-muted-foreground" title="Questions filed in this area (rolled up through the subtree for parents)">
+                {depthByKey[nodeKey] ?? 0} questions
               </span>
               <span
                 className="text-muted-foreground"
-                title="Points currently available here (difficulty-weighted, rolled up) — eyeball against the threshold"
+                title="Points currently earnable here (difficulty-weighted, rolled up) — eyeball against the mastery target"
               >
-                {(pointsByKey[nodeKey] ?? 0).toLocaleString()} avail
+                {(pointsByKey[nodeKey] ?? 0).toLocaleString()} pts available
               </span>
               {(() => {
                 // Escalating supply signal: EXHAUSTED (at the expansion gate) beats
@@ -1105,7 +1140,7 @@ function TreeRow({
                     <span
                       className="font-semibold"
                       style={{ color: 'var(--danger)' }}
-                      title="Exhausted — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh Qs here and offers area-expansion instead. Author more by hand to refill it."
+                      title="Exhausted — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh questions here and offers area-expansion instead. Author more by hand to refill it."
                     >
                       ⛔ exhausted
                     </span>
@@ -1131,40 +1166,14 @@ function TreeRow({
                   <span
                     className="font-medium"
                     style={{ color: dupRateColor(rate) }}
-                    title={`${pct}% of generated questions here are duplicates — new ones are hard to find (${g.dupes}/${g.total} generated)`}
+                    title={`${pct}% of generated questions here came back as duplicates — new ones are hard to find (${g.dupes}/${g.total} generated)`}
                   >
-                    ⟳ {pct}% dup
+                    ⟳ {pct}% duplicates
                   </span>
                 );
               })()}
             </span>
-            {/* Multi-parent chip: tap to see every place this territory lives
-                and jump to any of them. */}
-            {parentCount > 1 ? (
-              <button
-                type="button"
-                onClick={() => setPlacesOpen((v) => !v)}
-                aria-expanded={placesOpen}
-                aria-label={`${node.label} is in ${parentCount} places — show them`}
-                title="This territory lives in more than one place — tap to see and jump"
-                className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs font-medium"
-                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-              >
-                ⧉ {parentCount}
-              </button>
-            ) : null}
-            {/* "This is too small" — a thin leaf that isn't already nested is a
-                condense-me candidate (Move it under a parent). */}
-            {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
-              <span
-                className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
-                style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
-                title="Too few questions to stand alone — Move it under a broader parent"
-              >
-                thin
-              </span>
-            ) : null}
-          </>
+          </span>
         )}
         </span>
 
