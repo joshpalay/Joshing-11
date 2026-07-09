@@ -82,18 +82,38 @@ export function usePeakDetail(
     [freqMap],
   );
 
-  // Optimistic confirmed add: flip the ghost sibling into a real leaf so it jumps
-  // from "add next" to owned; revert on failure. Mirrors the bubble map.
-  const adoptNode = useCallback(async (id: string, name: string): Promise<boolean> => {
-    const flip = (node: KnowledgeTreeNode, ghost: boolean, value: number): KnowledgeTreeNode =>
-      node.id === id
-        ? { ...node, ghost: ghost || undefined, value }
-        : { ...node, children: node.children?.map((c) => flip(c, ghost, value)) };
-    setTree((prev) => flip(prev, false, 1));
-    const ok = await adoptDomain(name);
-    if (!ok) setTree((prev) => flip(prev, true, 40));
-    return ok;
-  }, []);
+  // Optimistic confirmed add: flip the target into a real, owned node so it jumps
+  // from "add next" to held; revert on failure. Mirrors the bubble map. Restore
+  // the node's ACTUAL prior state on failure — an unheld sibling falls back to a
+  // ghost, but an already-held container adopted from "Part of" was never a ghost
+  // and must not become one.
+  const adoptNode = useCallback(
+    async (id: string, name: string): Promise<boolean> => {
+      const findPrior = (
+        subtree: KnowledgeTreeNode,
+      ): { ghost?: boolean; value?: number } | null => {
+        if (subtree.id === id) return { ghost: subtree.ghost, value: subtree.value };
+        for (const child of subtree.children ?? []) {
+          const found = findPrior(child);
+          if (found) return found;
+        }
+        return null;
+      };
+      const prior = findPrior(tree) ?? { ghost: true, value: 40 };
+      const setNode = (
+        subtree: KnowledgeTreeNode,
+        next: { ghost?: boolean; value?: number },
+      ): KnowledgeTreeNode =>
+        subtree.id === id
+          ? { ...subtree, ghost: next.ghost || undefined, value: next.value }
+          : { ...subtree, children: subtree.children?.map((c) => setNode(c, next)) };
+      setTree((prev) => setNode(prev, { ghost: false, value: 1 }));
+      const ok = await adoptDomain(name);
+      if (!ok) setTree((prev) => setNode(prev, prior));
+      return ok;
+    },
+    [tree],
+  );
 
   return { tree, setTree, resolveFrequency, setFrequency, adoptNode };
 }
