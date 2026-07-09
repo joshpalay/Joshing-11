@@ -148,9 +148,11 @@ const SIGNAL_LEVEL: Record<TerritoryFrequency, number> = {
 // ink; unlit bars are empty outlines so an all-empty meter reads as "Never."
 function SignalBarsGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
   const level = SIGNAL_LEVEL[freq]
+  // Bottoms aligned at y=21, heights stepping up 6 → 12 → 18 for a clear
+  // rising-staircase read.
   const bars = [
-    { x: 2, y: 13, h: 8 },
-    { x: 9.5, y: 8, h: 13 },
+    { x: 2, y: 15, h: 6 },
+    { x: 9.5, y: 9, h: 12 },
     { x: 17, y: 3, h: 18 },
   ]
   return (
