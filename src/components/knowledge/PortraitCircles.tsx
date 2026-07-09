@@ -116,95 +116,98 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
   }
 }
 
-// ── Rotation frequency indicator ──────────────────────────────────────────────
-// The rotation word alone ("Sometimes" / "Never" / …) read as an undifferentiated
-// grey line — you couldn't tell one circle's rotation from another at a glance.
-// A tiny 3-dot meter fixes that: filled-dot count encodes rotation depth so the
-// whole grid scans without reading a word (Often ●●●, Sometimes ●●○, Never ○○○).
-// The meter is monochrome on purpose — color is reserved for category
-// (STYLE-GUIDE-COLOR §3) and rotation is category-independent — with ONE playful
-// literal exception: "Blue Moon" swaps the dots for an actual small blue crescent
-// moon (the rarest rotation, so the whimsy earns its keep).
-const FREQUENCY_TOTAL_DOTS = 3
-
-const FREQUENCY_FILLED_DOTS: Record<TerritoryFrequency, number> = {
-  often: 3,
-  sometimes: 2,
-  blue_moon: 1,
-  resting: 0,
-}
-
+// ── Rotation frequency badge ──────────────────────────────────────────────────
+// The rotation word under each name ("Sometimes" / "Never" / …) read as an
+// undifferentiated grey line and, spelled out under every circle, made the grid
+// busy. Move it into a small badge on the circle's top-right corner instead: one
+// glyph per circle, read as chrome rather than an inline field. The glyph is a
+// moon phase — rotation is "how often a territory comes back around," a natural
+// lunar-cycle metaphor, and it makes the existing Blue Moon literal one of a
+// family: Often = full moon, Sometimes = half, Blue Moon = the blue crescent,
+// Never = new (empty ring). Fuller = more often, so the grid scans at a glance;
+// the word rides along as the badge's aria-label / hover title.
+//
 // Invert the single-source label map so the string coming through
-// `frequencyLabelFor` resolves back to its enum (and thus its meter level)
-// without the caller having to pass both.
+// `frequencyLabelFor` resolves back to its enum (and thus its phase) without the
+// caller having to pass both.
 const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntries(
   (Object.entries(TERRITORY_FREQUENCY_LABEL) as [TerritoryFrequency, string][]).map(
     ([freq, label]) => [label, freq]
   )
 )
 
-// Filled crescent (lucide "moon" path), rendered blue for the Blue Moon rotation.
-function BlueMoonGlyph() {
-  return (
-    <svg
-      width={11}
-      height={11}
-      viewBox="0 0 24 24"
-      aria-hidden
-      fill="var(--exploring-accent-blue)"
-      style={{ display: 'block' }}
-    >
-      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-    </svg>
-  )
+const MOON_INK = 'var(--warm-ink)'
+
+// Moon-phase glyph for a rotation tier, drawn in a 24×24 viewBox. Blue Moon is
+// the lucide crescent filled with the blue accent; the rest are neutral ink
+// (color stays reserved for category, STYLE-GUIDE-COLOR §3).
+function MoonPhaseGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
+  const common = {
+    width: px,
+    height: px,
+    viewBox: '0 0 24 24',
+    'aria-hidden': true,
+    style: { display: 'block' as const },
+  }
+  switch (freq) {
+    case 'often':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" fill={MOON_INK} />
+        </svg>
+      )
+    case 'sometimes':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9.3" fill="none" stroke={MOON_INK} strokeWidth={1.6} />
+          <path d="M12 2.7 A9.3 9.3 0 0 1 12 21.3 Z" fill={MOON_INK} />
+        </svg>
+      )
+    case 'blue_moon':
+      return (
+        <svg {...common}>
+          <path
+            d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"
+            fill="var(--exploring-accent-blue)"
+          />
+        </svg>
+      )
+    case 'resting':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="var(--warm-ink-400)" strokeWidth={1.6} />
+        </svg>
+      )
+  }
 }
 
-function FrequencyTag({ label, dim }: { label: string; dim: boolean }) {
+// The corner badge itself — a paper chip pinned to the bubble's top-right so it
+// reads as a rotation marker, not a second knowledge circle.
+function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
-  const filled = freq ? FREQUENCY_FILLED_DOTS[freq] : 0
-  const resting = freq === 'resting'
-  const blueMoon = freq === 'blue_moon'
+  if (!freq) return null
   return (
-    <span
+    <div
+      role="img"
+      aria-label={`Rotation: ${label}`}
+      title={label}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        whiteSpace: 'nowrap',
+        position: 'absolute',
+        top: -3,
+        right: -3,
+        width: 18,
+        height: 18,
+        borderRadius: '50%',
+        background: 'var(--warm-paper)',
+        border: '1px solid var(--warm-border-soft)',
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
         opacity: dim ? 0.5 : 1,
       }}
     >
-      {blueMoon ? (
-        <BlueMoonGlyph />
-      ) : (
-        <span aria-hidden style={{ display: 'inline-flex', gap: 2 }}>
-          {Array.from({ length: FREQUENCY_TOTAL_DOTS }).map((_, i) => (
-            <span
-              key={i}
-              style={{
-                width: 4,
-                height: 4,
-                borderRadius: '50%',
-                boxSizing: 'border-box',
-                background: i < filled ? 'var(--warm-ink-700)' : 'transparent',
-                border: `1px solid ${i < filled ? 'var(--warm-ink-700)' : 'var(--warm-ink-400)'}`,
-              }}
-            />
-          ))}
-        </span>
-      )}
-      <span
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 8.5,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color: resting ? 'var(--warm-ink-400)' : 'var(--warm-ink-700)',
-        }}
-      >
-        {label}
-      </span>
-    </span>
+      <MoonPhaseGlyph freq={freq} px={11} />
+    </div>
   )
 }
 
@@ -429,6 +432,11 @@ export function PortraitDomainCircle({
               {isHidden ? '+' : '×'}
             </div>
           )}
+          {/* Rotation lives in the corner badge; the edit-mode +/× owns this
+              corner while editing, so only show one at a time. */}
+          {!editMode && frequencyLabel ? (
+            <RotationBadge label={frequencyLabel} dim={dimForHidden} />
+          ) : null}
         </div>
       </div>
       <span
@@ -446,9 +454,6 @@ export function PortraitDomainCircle({
       >
         {entry.canonicalSubcategory}
       </span>
-      {frequencyLabel ? (
-        <FrequencyTag label={frequencyLabel} dim={dimForHidden} />
-      ) : null}
     </div>
   )
 }
