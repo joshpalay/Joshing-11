@@ -8,6 +8,10 @@ import {
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category'
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
+import {
+  TERRITORY_FREQUENCY_LABEL,
+  type TerritoryFrequency,
+} from '@/lib/daily/territory-model'
 import type { MasteryTier } from '@/types/db'
 
 type PortraitTier = MasteryTier
@@ -110,6 +114,98 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
     border: c.primary,
     fill: `color-mix(in srgb, ${c.primary} 15%, transparent)`,
   }
+}
+
+// ── Rotation frequency indicator ──────────────────────────────────────────────
+// The rotation word alone ("Sometimes" / "Never" / …) read as an undifferentiated
+// grey line — you couldn't tell one circle's rotation from another at a glance.
+// A tiny 3-dot meter fixes that: filled-dot count encodes rotation depth so the
+// whole grid scans without reading a word (Often ●●●, Sometimes ●●○, Never ○○○).
+// The meter is monochrome on purpose — color is reserved for category
+// (STYLE-GUIDE-COLOR §3) and rotation is category-independent — with ONE playful
+// literal exception: "Blue Moon" swaps the dots for an actual small blue crescent
+// moon (the rarest rotation, so the whimsy earns its keep).
+const FREQUENCY_TOTAL_DOTS = 3
+
+const FREQUENCY_FILLED_DOTS: Record<TerritoryFrequency, number> = {
+  often: 3,
+  sometimes: 2,
+  blue_moon: 1,
+  resting: 0,
+}
+
+// Invert the single-source label map so the string coming through
+// `frequencyLabelFor` resolves back to its enum (and thus its meter level)
+// without the caller having to pass both.
+const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntries(
+  (Object.entries(TERRITORY_FREQUENCY_LABEL) as [TerritoryFrequency, string][]).map(
+    ([freq, label]) => [label, freq]
+  )
+)
+
+// Filled crescent (lucide "moon" path), rendered blue for the Blue Moon rotation.
+function BlueMoonGlyph() {
+  return (
+    <svg
+      width={11}
+      height={11}
+      viewBox="0 0 24 24"
+      aria-hidden
+      fill="var(--exploring-accent-blue)"
+      style={{ display: 'block' }}
+    >
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
+  )
+}
+
+function FrequencyTag({ label, dim }: { label: string; dim: boolean }) {
+  const freq = FREQUENCY_BY_LABEL[label] ?? null
+  const filled = freq ? FREQUENCY_FILLED_DOTS[freq] : 0
+  const resting = freq === 'resting'
+  const blueMoon = freq === 'blue_moon'
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        whiteSpace: 'nowrap',
+        opacity: dim ? 0.5 : 1,
+      }}
+    >
+      {blueMoon ? (
+        <BlueMoonGlyph />
+      ) : (
+        <span aria-hidden style={{ display: 'inline-flex', gap: 2 }}>
+          {Array.from({ length: FREQUENCY_TOTAL_DOTS }).map((_, i) => (
+            <span
+              key={i}
+              style={{
+                width: 4,
+                height: 4,
+                borderRadius: '50%',
+                boxSizing: 'border-box',
+                background: i < filled ? 'var(--warm-ink-700)' : 'transparent',
+                border: `1px solid ${i < filled ? 'var(--warm-ink-700)' : 'var(--warm-ink-400)'}`,
+              }}
+            />
+          ))}
+        </span>
+      )}
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 8.5,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: resting ? 'var(--warm-ink-400)' : 'var(--warm-ink-700)',
+        }}
+      >
+        {label}
+      </span>
+    </span>
+  )
 }
 
 const SPARSE_THRESHOLD = 5
@@ -351,19 +447,7 @@ export function PortraitDomainCircle({
         {entry.canonicalSubcategory}
       </span>
       {frequencyLabel ? (
-        <span
-          style={{
-            fontSize: 9,
-            color: 'var(--warm-ink-400)',
-            fontFamily: 'var(--font-serif)',
-            textAlign: 'center',
-            lineHeight: 1.2,
-            letterSpacing: '0.02em',
-            opacity: dimForHidden ? 0.5 : 1,
-          }}
-        >
-          {frequencyLabel}
-        </span>
+        <FrequencyTag label={frequencyLabel} dim={dimForHidden} />
       ) : null}
     </div>
   )
