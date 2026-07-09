@@ -6,6 +6,7 @@ import { isAdminUser } from '@/server/auth/admin';
 import { estimateDomainSize, SIZE_CEIL } from '@/server/daily/domain-size-estimate';
 import {
   getDepthEstimates,
+  resolveSampleLabelForKey,
   setGenerationCap,
   setManualEstimate,
   upsertCorpusSizeEstimate,
@@ -58,23 +59,28 @@ export async function POST(request: NextRequest) {
   }
   const data = parsed.data;
 
+  // The dashboard now lists every knowledge area, sized or not — a key may have
+  // no DomainDepthEstimate row yet. The label is ALWAYS resolved server-side
+  // (stored sample_label, else the corpus spelling for the key — never client
+  // input); actions on a row-less key seed the row through the upsert paths.
+  const row = (await getDepthEstimates([data.domainKey])).get(data.domainKey);
+  const label = row?.sampleLabel ?? (await resolveSampleLabelForKey(data.domainKey));
+  if (!label) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
   if (data.action === 'set_estimate') {
-    const updated = await setManualEstimate(data.domainKey, data.estimate);
+    const updated = await setManualEstimate(data.domainKey, data.estimate, label);
     if (!updated) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   }
 
   if (data.action === 'set_cap') {
-    const updated = await setGenerationCap(data.domainKey, data.capped);
+    const updated = await setGenerationCap(data.domainKey, data.capped, label);
     if (!updated) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   }
 
-  // resize — resolve the row's stored label against the live corpus.
-  const row = (await getDepthEstimates([data.domainKey])).get(data.domainKey);
-  if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-
-  const label = row.sampleLabel ?? data.domainKey;
+  // resize — run the corpus resolver against the resolved label; the upsert
+  // below creates the estimate row when the key never had one.
   const estimate = await estimateDomainSize(label).catch(() => null);
   if (!estimate || estimate.estimatedQuestions == null) {
     // Resolver miss or bespoke shape — nothing trustworthy to write. The row

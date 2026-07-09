@@ -57,6 +57,9 @@ export default async function AdminSupplyPage() {
     ? [...summary.entries].sort((a, b) => {
         const stateDelta = STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state);
         if (stateDelta !== 0) return stateDelta;
+        // Unsized rows have no ratio — biggest areas first so the ones most
+        // worth sizing surface at the top of that band.
+        if (a.ratio == null && b.ratio == null) return b.realized - a.realized;
         return (a.ratio ?? 1) - (b.ratio ?? 1);
       })
     : [];
@@ -71,7 +74,10 @@ export default async function AdminSupplyPage() {
             Domain supply
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Corpus-grounded size estimate vs realized generation, per domain. A{' '}
+            Corpus-grounded size estimate vs realized generation.{' '}
+            <strong>Every knowledge area appears here</strong> — the same population as the
+            Knowledge graph page, seen through the supply lens. Un-sized areas read{' '}
+            <strong>Unsized</strong> (biggest first) until you Re-size or set an estimate. A{' '}
             <strong>discrepancy</strong> is a domain that went dry far short of a trusted
             estimate — a supply problem, not completion. Resting domains are believed complete
             and stay re-probeable. <strong>Cap</strong> a domain to stop generating new
@@ -133,7 +139,9 @@ export default async function AdminSupplyPage() {
                 {ordered.map((entry) => (
                   <tr
                     key={entry.domainKey}
-                    className="border-b"
+                    // Anchor target for the knowledge page's per-row supply link.
+                    id={`supply-${entry.domainKey}`}
+                    className="border-b scroll-mt-24"
                     style={{ borderColor: 'var(--border-light)' }}
                   >
                     <td className="py-2 pr-3">{entry.label}</td>

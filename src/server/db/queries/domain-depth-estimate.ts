@@ -1,9 +1,10 @@
 // D-DIFFICULTY-SIZE-COMPLETION-01 — read/write for the cached topic depth score
 // (DomainDepthEstimate, migration 0116). Keyed on the folded domain_key so it
 // covers every played canonical_subcategory, not just authored KnowledgeNodes.
-import { eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 
-import { db, domainDepthEstimates, generatedQuestions } from '@/server/db';
+import { db, domainDepthEstimates, generatedQuestions, questions } from '@/server/db';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 export type DepthEstimateRow = {
   domainKey: string;
@@ -173,40 +174,97 @@ export async function coCalibrateRaisedEstimates(
 }
 
 /**
+ * The display label for a folded domain key, resolved SERVER-SIDE (the resolver
+ * and estimate rows must never be seeded from client input): the most common
+ * generated spelling, else a human-authored label that folds to the key. Null =
+ * the key has no corpus presence at all.
+ */
+export async function resolveSampleLabelForKey(key: string): Promise<string | null> {
+  const [gen] = await db
+    .select({ label: sql<string | null>`min(${generatedQuestions.canonicalSubcategory})` })
+    .from(generatedQuestions)
+    .where(eq(generatedQuestions.domainKey, key));
+  if (gen?.label) return gen.label;
+  // Human-authored-only area: Question has no domain_key column — fold in TS.
+  const humanLabels = await db
+    .selectDistinct({ label: questions.canonicalSubcategory })
+    .from(questions)
+    .where(
+      and(
+        isNotNull(questions.canonicalSubcategory),
+        isNotNull(questions.creatorId),
+        isNull(questions.deletedAt),
+        ne(questions.visibility, 'blocked'),
+      ),
+    );
+  for (const row of humanLabels) {
+    const label = row.label?.trim();
+    if (label && domainKey(label) === key) return label;
+  }
+  return null;
+}
+
+/**
  * Admin manual estimate override (0119). value=null clears the override so the
- * domain returns to its corpus/depth path. UPDATE-only: the /admin/supply rows
- * all exist in the table by construction; returns false when the key has no
- * row so the API can 404 instead of silently no-oping.
+ * domain returns to its corpus/depth path. Upserts (2026-07-09): the supply
+ * dashboard now lists EVERY knowledge area, not just sized ones, so an admin
+ * may set an estimate on a key with no row yet — `sampleLabel` (resolved
+ * server-side) seeds the insert. Clearing a nonexistent row is an idempotent
+ * success; setting one without a resolvable label fails so the API can 404.
  */
 export async function setManualEstimate(
   domainKeyValue: string,
   value: number | null,
+  sampleLabel?: string | null,
 ): Promise<boolean> {
   const rows = await db
     .update(domainDepthEstimates)
     .set({ manualEstimatedQuestions: value })
     .where(eq(domainDepthEstimates.domainKey, domainKeyValue))
     .returning({ domainKey: domainDepthEstimates.domainKey });
-  return rows.length > 0;
+  if (rows.length > 0) return true;
+  if (value === null) return true; // nothing to clear
+  if (!sampleLabel) return false;
+  await db
+    .insert(domainDepthEstimates)
+    .values({ domainKey: domainKeyValue, sampleLabel, source: 'default', manualEstimatedQuestions: value })
+    .onConflictDoUpdate({
+      target: domainDepthEstimates.domainKey,
+      set: { manualEstimatedQuestions: value },
+    });
+  return true;
 }
 
 /**
  * Admin generation cap (0121). value=true stamps generation_capped_at (now);
  * value=false clears it. A capped domain is excluded from fresh generation
  * everywhere generateDailyQuestionsFromKnowledgeBase builds its palette; serving
- * is untouched. UPDATE-only like setManualEstimate: the /admin/supply rows all
- * exist by construction; returns false when the key has no row so the API 404s.
+ * is untouched. Upserts like setManualEstimate (2026-07-09): capping an unsized
+ * area seeds its row from the server-resolved `sampleLabel`; un-capping a
+ * nonexistent row is an idempotent success.
  */
 export async function setGenerationCap(
   domainKeyValue: string,
   capped: boolean,
+  sampleLabel?: string | null,
 ): Promise<boolean> {
+  const stamp = capped ? new Date() : null;
   const rows = await db
     .update(domainDepthEstimates)
-    .set({ generationCappedAt: capped ? new Date() : null })
+    .set({ generationCappedAt: stamp })
     .where(eq(domainDepthEstimates.domainKey, domainKeyValue))
     .returning({ domainKey: domainDepthEstimates.domainKey });
-  return rows.length > 0;
+  if (rows.length > 0) return true;
+  if (!capped) return true; // nothing to un-cap
+  if (!sampleLabel) return false;
+  await db
+    .insert(domainDepthEstimates)
+    .values({ domainKey: domainKeyValue, sampleLabel, source: 'default', generationCappedAt: stamp })
+    .onConflictDoUpdate({
+      target: domainDepthEstimates.domainKey,
+      set: { generationCappedAt: stamp },
+    });
+  return true;
 }
 
 /**
@@ -242,9 +300,13 @@ export type DomainSupplyCoverageRow = {
 
 /**
  * Coverage read for the supply-state machine's two surfaces (weekly digest +
- * admin dashboard, D-SUPPLY-FINITENESS-01 #5): every sized domain joined with
- * its REALIZED distinct-fact count from the shared bank. State classification
- * happens in TS (classifySupplyState) so the query stays pure observation.
+ * admin dashboard, D-SUPPLY-FINITENESS-01 #5). Covers EVERY knowledge area
+ * (2026-07-09, "knowledge graph and domain supply should have the same
+ * information of all knowledge areas"), not just sized ones: a FULL JOIN of
+ * estimate rows against every generated domain_key, plus human-authored-only
+ * labels folded in TS (Question has no domain_key column). Areas with no
+ * estimate row classify `unsized` downstream. State classification happens in
+ * TS (classifySupplyState) so the query stays pure observation.
  */
 export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow[]> {
   const realized = db.$with('realized').as(
@@ -252,28 +314,67 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       .select({
         domainKey: generatedQuestions.domainKey,
         realized: sql<number>`count(distinct ${generatedQuestions.factKey})::int`.as('realized'),
+        genLabel: sql<string>`min(${generatedQuestions.canonicalSubcategory})`.as('gen_label'),
       })
       .from(generatedQuestions)
       .where(isNotNull(generatedQuestions.factKey))
       .groupBy(generatedQuestions.domainKey),
   );
-  const rows = await db
+  const joined = await db
     .with(realized)
     .select({
-      domainKey: domainDepthEstimates.domainKey,
-      sampleLabel: domainDepthEstimates.sampleLabel,
+      domainKey: sql<string>`coalesce(${domainDepthEstimates.domainKey}, ${realized.domainKey})`,
+      sampleLabel: sql<string | null>`coalesce(${domainDepthEstimates.sampleLabel}, ${realized.genLabel})`,
       estimatedQuestions: domainDepthEstimates.estimatedQuestions,
       manualEstimatedQuestions: domainDepthEstimates.manualEstimatedQuestions,
       confidence: domainDepthEstimates.confidence,
       shape: domainDepthEstimates.shape,
       basis: domainDepthEstimates.basis,
-      source: domainDepthEstimates.source,
-      consecutiveDryRounds: domainDepthEstimates.consecutiveDryRounds,
+      source: sql<string>`coalesce(${domainDepthEstimates.source}, 'none')`,
+      consecutiveDryRounds: sql<number>`coalesce(${domainDepthEstimates.consecutiveDryRounds}, 0)::int`,
       lastYieldAt: domainDepthEstimates.lastYieldAt,
       generationCappedAt: domainDepthEstimates.generationCappedAt,
       realized: sql<number>`coalesce(${realized.realized}, 0)::int`,
     })
     .from(domainDepthEstimates)
-    .leftJoin(realized, eq(realized.domainKey, domainDepthEstimates.domainKey));
-  return rows;
+    .fullJoin(realized, eq(realized.domainKey, domainDepthEstimates.domainKey));
+
+  // Human-authored-only areas: live, non-blocked authored questions whose
+  // folded key has neither an estimate row nor any generated rows.
+  const humanLabels = await db
+    .selectDistinct({ label: questions.canonicalSubcategory })
+    .from(questions)
+    .where(
+      and(
+        isNotNull(questions.canonicalSubcategory),
+        isNotNull(questions.creatorId),
+        isNull(questions.deletedAt),
+        ne(questions.visibility, 'blocked'),
+      ),
+    );
+  const present = new Set(joined.map((row) => row.domainKey));
+  const humanOnly = new Map<string, string>();
+  for (const row of humanLabels) {
+    const label = row.label?.trim();
+    if (!label) continue;
+    const key = domainKey(label);
+    if (!present.has(key) && !humanOnly.has(key)) humanOnly.set(key, label);
+  }
+  for (const [key, label] of humanOnly) {
+    joined.push({
+      domainKey: key,
+      sampleLabel: label,
+      estimatedQuestions: null,
+      manualEstimatedQuestions: null,
+      confidence: null,
+      shape: null,
+      basis: null,
+      source: 'none',
+      consecutiveDryRounds: 0,
+      lastYieldAt: null,
+      generationCappedAt: null,
+      realized: 0,
+    });
+  }
+  return joined;
 }

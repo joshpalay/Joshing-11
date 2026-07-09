@@ -33,16 +33,17 @@ export default async function AdminDomainsPage() {
             Domain merges
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Near-duplicate domain labels the auto-reconcile left for a human call. If a pair is the{' '}
-            <strong>same scope</strong>, pick which spelling survives — the other folds into it
-            everywhere. If they are genuinely different (a specific work vs its genre, two
-            siblings), leave the pair. Each side shows its question count and a{' '}
-            <strong>see</strong> link to peek at the actual questions before you decide; the{' '}
-            <strong>★ keep</strong> tag marks the side that holds more (folding into it moves the
-            fewest rows). <strong>Preview</strong> shows the exact rows that would move before
-            anything changes. The knowledge graph follows automatically: if a folded label has a
-            graph node, its edges and structure move with it (same engine as the tree&apos;s
-            “Merge into…”).
+            Candidates here are <strong>raw labels from the question corpus</strong> — what the
+            categorizer filed questions under — paired by spelling similarity. Most are not on the
+            Knowledge graph page (that shows only territories you authored; the chips mark which
+            is which). Three calls per pair: <strong>same scope</strong> → pick which spelling
+            survives (the other folds into it everywhere, graph included);{' '}
+            <strong>parent/child</strong> (a work inside its series or genre) →{' '}
+            <strong>Nest</strong> it — both labels become graph territories with the edge drawn,
+            and the pair leaves this list; genuinely unrelated → leave it. Each side shows its
+            question count and a <strong>see</strong> peek; <strong>★ keep</strong> marks the side
+            holding more questions; <strong>Preview</strong> shows the exact rows a merge would
+            move before anything changes.
           </p>
         </div>
       </div>

@@ -9,6 +9,8 @@ const pair = (over: Partial<FragmentationPair> = {}): FragmentationPair => ({
   domainB: 'Evil Spy School',
   depthB: 4,
   similarity: 0.62,
+  hasNodeA: false,
+  hasNodeB: false,
   ...over,
 });
 

@@ -43,6 +43,64 @@ async function post(body: Record<string, unknown>): Promise<{
 }
 
 
+// A corpus area with questions but no authored node — real territory that
+// exists only as a raw label until it's added to the tree.
+export type UnfiledArea = {
+  domainKey: string;
+  label: string;
+  questions: number;
+  points: number;
+  genTotal: number;
+  genDupes: number;
+  exhausted: boolean;
+};
+
+// The supply lens for one area ("knowledge graph and domain supply should have
+// the same information") — the same classification the supply table shows,
+// rendered as a compact readout on every row here, linking to the full row.
+export type SupplyReadout = {
+  state: 'unsized' | 'filling' | 'raise_estimate' | 'soft_finite' | 'discrepancy';
+  realized: number;
+  estimatedQuestions: number | null;
+  ratio: number | null;
+  capped: boolean;
+};
+
+const SUPPLY_STATE_TEXT: Record<SupplyReadout['state'], string> = {
+  discrepancy: '⚠ discrepancy',
+  raise_estimate: 'raise estimate',
+  filling: 'filling',
+  soft_finite: 'resting',
+  unsized: 'unsized',
+};
+
+function SupplyChip({ domainKeyValue, supply }: { domainKeyValue: string; supply?: SupplyReadout }) {
+  if (!supply) return null;
+  const tone =
+    supply.capped || supply.state === 'discrepancy'
+      ? 'var(--danger)'
+      : supply.state === 'raise_estimate'
+        ? 'var(--brand-navy)'
+        : 'var(--text-muted)';
+  const text = supply.capped
+    ? `⛔ capped · ${supply.realized} made`
+    : supply.estimatedQuestions != null
+      ? `${SUPPLY_STATE_TEXT[supply.state]} · ${supply.realized}/${supply.estimatedQuestions}${
+          supply.ratio != null ? ` (${Math.round(supply.ratio * 100)}%)` : ''
+        }`
+      : `unsized · ${supply.realized} made`;
+  return (
+    <a
+      href={`/admin/supply#supply-${domainKeyValue}`}
+      className="underline-offset-2 hover:underline"
+      style={{ color: tone }}
+      title="Generation supply for this exact area (made / estimated) — tap for its full supply row: estimate basis, dry rounds, cap and re-size actions"
+    >
+      supply: {text} →
+    </a>
+  );
+}
+
 export function KnowledgeAdminClient({
   nodes,
   edges,
@@ -50,6 +108,8 @@ export function KnowledgeAdminClient({
   pointsByKey,
   genStatsByKey,
   exhaustedByKey,
+  unfiled,
+  supplyByKey,
 }: {
   nodes: KnowledgeNodeRow[];
   edges: KnowledgeEdgeRow[];
@@ -57,6 +117,8 @@ export function KnowledgeAdminClient({
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
+  unfiled: UnfiledArea[];
+  supplyByKey: Record<string, SupplyReadout>;
 }) {
   const router = useRouter();
 
@@ -70,14 +132,14 @@ export function KnowledgeAdminClient({
           Knowledge graph
         </h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          The territory structure — human-authored, always. Nodes are leaves/parents. Each row
-          shows its <strong>mastery threshold</strong> (<em>pts</em> — the points to master the
-          topic, color-coded by size; edit it via ⋯), its question count (<em>Qs</em>), and the
-          points currently <em>avail</em>able there (difficulty-weighted) — the latter two rolled
-          up through the subtree for parents. A <em>⟳ dup</em> flag marks where new questions are
-          hard to find (a high share of generations come back duplicates); <em>⛔ exhausted</em>
-          marks a tapped-out area at the expansion gate (author more to refill it). Nothing here
-          touches questions or any player&apos;s mastery.
+          The whole map: <strong>the tree is what you&apos;ve authored</strong>; every other area
+          with questions waits in <strong>Unfiled areas</strong> below until you add it. Under
+          every name: the points to master it (color-coded by size — green small, gold moderate,
+          red large; edit via ⋯), how many questions live there, and the points currently
+          available — both rolled up through the subtree for parents. <em>⟳ duplicates</em> marks
+          where new questions are hard to find; <em>⛔ exhausted</em> marks a tapped-out area at
+          the expansion gate (author more to refill it). Nothing here touches questions or any
+          player&apos;s mastery.
         </p>
       </header>
 
@@ -90,8 +152,11 @@ export function KnowledgeAdminClient({
         pointsByKey={pointsByKey}
         genStatsByKey={genStatsByKey}
         exhaustedByKey={exhaustedByKey}
+        supplyByKey={supplyByKey}
         onDone={() => router.refresh()}
       />
+
+      <UnfiledAreas unfiled={unfiled} supplyByKey={supplyByKey} onDone={() => router.refresh()} />
 
       {/* Only the two tools with NO tree equivalent live here: the orphan
           check (structural gaps at a glance) and the edge composer (typed
@@ -170,6 +235,7 @@ function KnowledgeTreeEditor({
   pointsByKey,
   genStatsByKey,
   exhaustedByKey,
+  supplyByKey,
   onDone,
 }: {
   nodes: KnowledgeNodeRow[];
@@ -178,6 +244,7 @@ function KnowledgeTreeEditor({
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
+  supplyByKey: Record<string, SupplyReadout>;
   onDone: () => void;
 }) {
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.domainKey, n])), [nodes]);
@@ -755,6 +822,7 @@ function KnowledgeTreeEditor({
                 pointsByKey={pointsByKey}
                 genStatsByKey={genStatsByKey}
                 exhaustedByKey={exhaustedByKey}
+                supplyByKey={supplyByKey}
                 childrenByParent={childrenByParent}
                 parentCountByChild={parentCountByChild}
                 parentsByChild={parentsByChild}
@@ -793,6 +861,128 @@ function KnowledgeTreeEditor({
   );
 }
 
+// ─── unfiled areas ──────────────────────────────────────────────────────────
+// Every corpus area that has questions but NO authored territory ("show all
+// areas, not just the ones I did"). The tree above is the curated structure;
+// this is the complete rest-of-the-map, biggest first. "Add to tree" creates
+// the node (it appears as a top-level territory on refresh — drag it into
+// place from there); everything else about the area is read-only until then.
+const UNFILED_PREVIEW_COUNT = 40;
+
+function UnfiledAreas({
+  unfiled,
+  supplyByKey,
+  onDone,
+}: {
+  unfiled: UnfiledArea[];
+  supplyByKey: Record<string, SupplyReadout>;
+  onDone: () => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (unfiled.length === 0) return null;
+  const visible = showAll ? unfiled : unfiled.slice(0, UNFILED_PREVIEW_COUNT);
+
+  async function addToTree(area: UnfiledArea) {
+    if (busyKey) return;
+    setBusyKey(area.domainKey);
+    setError(null);
+    const res = await post({ action: 'create_node', label: area.label, nodeKind: 'leaf' });
+    setBusyKey(null);
+    // 409 = a node raced into existence for this key — that IS the goal.
+    if (!res.ok && res.status !== 409) {
+      setError(`Couldn't add "${area.label}" (${res.status}).`);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <section className="mt-8">
+      <h2 className="mb-1 font-serif text-lg font-semibold text-[var(--brand-ink)]">
+        Unfiled areas ({unfiled.length})
+      </h2>
+      <p className="text-muted-foreground mb-2 text-xs">
+        Areas with questions that aren&apos;t in your tree yet — the categorizer filed content
+        here, but no territory exists. <strong>Add to tree</strong> makes one (it lands at the top
+        level; drag it into place). Biggest first.
+      </p>
+      {error ? (
+        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+          {error}
+        </p>
+      ) : null}
+      <div className="rounded-md border py-1" style={{ borderColor: 'var(--border)' }}>
+        {visible.map((area) => {
+          const dupRate = area.genTotal > 0 ? area.genDupes / area.genTotal : 0;
+          const showDup =
+            area.genTotal >= HARD_TO_SOURCE_MIN_SAMPLE && dupRate >= HARD_TO_SOURCE_MIN_RATE;
+          return (
+            <div
+              key={area.domainKey}
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-1.5 text-sm last:border-b-0"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <span className="flex min-w-0 flex-1 flex-col gap-y-0.5 py-0.5">
+                <span className="min-w-0 break-words text-[var(--brand-ink)]">{area.label}</span>
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                  <span className="text-muted-foreground" title="Questions filed under this label">
+                    {area.questions} question{area.questions === 1 ? '' : 's'}
+                  </span>
+                  <span className="text-muted-foreground" title="Points currently earnable here (difficulty-weighted)">
+                    {area.points.toLocaleString()} pts available
+                  </span>
+                  {area.exhausted ? (
+                    <span
+                      className="font-semibold"
+                      style={{ color: 'var(--danger)' }}
+                      title="Exhausted — few servable facts remain despite generation"
+                    >
+                      ⛔ exhausted
+                    </span>
+                  ) : showDup ? (
+                    <span
+                      className="font-medium"
+                      style={{ color: dupRateColor(dupRate) }}
+                      title={`${Math.round(dupRate * 100)}% of generated questions here came back as duplicates (${area.genDupes}/${area.genTotal})`}
+                    >
+                      ⟳ {Math.round(dupRate * 100)}% duplicates
+                    </span>
+                  ) : null}
+                  <SupplyChip domainKeyValue={area.domainKey} supply={supplyByKey[area.domainKey]} />
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void addToTree(area)}
+                disabled={busyKey !== null}
+                className="inline-flex min-h-9 shrink-0 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-40"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                title="Create a territory for this area — it appears at the top level of the tree; drag it into place from there"
+              >
+                {busyKey === area.domainKey ? 'Adding…' : '+ Add to tree'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {unfiled.length > UNFILED_PREVIEW_COUNT ? (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="text-muted-foreground mt-2 text-xs underline-offset-2 hover:underline"
+        >
+          {showAll
+            ? 'show fewer'
+            : `show all ${unfiled.length} (${unfiled.length - UNFILED_PREVIEW_COUNT} more)`}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 // The drop target for un-nesting: drag a nested row here to make it top-level.
 // Lights up the moment a drag starts, so the option is discoverable mid-drag.
 function RootDropZone({ dragActive }: { dragActive: boolean }) {
@@ -823,6 +1013,7 @@ function TreeRow({
   pointsByKey,
   genStatsByKey,
   exhaustedByKey,
+  supplyByKey,
   childrenByParent,
   parentCountByChild,
   parentsByChild,
@@ -849,6 +1040,7 @@ function TreeRow({
   pointsByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
   exhaustedByKey: Record<string, { self: boolean; descendants: number }>;
+  supplyByKey: Record<string, SupplyReadout>;
   childrenByParent: Map<string, string[]>;
   parentCountByChild: Map<string, number>;
   parentsByChild: Map<string, string[]>;
@@ -986,8 +1178,8 @@ function TreeRow({
           borderRadius: isFlashed || isOver || dropEligible ? 6 : undefined,
         }}
       >
-        {/* Left group is ONE non-wrapping line (min-w-0 + truncate) so a long
-            label can never shove the ⋯ button onto its own row. */}
+        {/* Left group: handle + expander + a two-line content column (name
+            wraps; stats beneath). min-w-0 keeps the ⋯ button on the row. */}
         <span className="flex min-w-0 flex-1 items-center gap-x-2">
         {/* Drag handle — a real 44px control, not a bare glyph. Drag it to
             re-file; a plain TAP falls back to pick-up mode (big "Place here"
@@ -1063,38 +1255,73 @@ function TreeRow({
             </button>
           </span>
         ) : (
-          <>
-            <span
-              className={
-                (isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]') +
-                ' min-w-0 truncate'
-              }
-            >
-              {node.label}
+          /* Two lines, always (2026-07-08: "sometimes can't read the category"):
+             the NAME gets the full row width and WRAPS — never truncates — and
+             the stats live on their own line beneath in plain words, so a long
+             territory name and its numbers can both be read on a phone. */
+          <span className="flex min-w-0 flex-1 flex-col gap-y-0.5 py-0.5">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span
+                className={
+                  (isParentish ? 'font-medium text-[var(--brand-ink)]' : 'text-[var(--brand-ink)]') +
+                  ' min-w-0 break-words'
+                }
+              >
+                {node.label}
+              </span>
+              {/* Multi-parent chip: tap to see every place this territory lives
+                  and jump to any of them. */}
+              {parentCount > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setPlacesOpen((v) => !v)}
+                  aria-expanded={placesOpen}
+                  aria-label={`${node.label} is in ${parentCount} places — show them`}
+                  title="This territory lives in more than one place — tap to see and jump"
+                  className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs font-medium"
+                  style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                >
+                  ⧉ {parentCount}
+                </button>
+              ) : null}
+              {/* "This is too small" — a thin leaf that isn't already nested is a
+                  condense-me candidate (Move it under a parent). */}
+              {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
+                <span
+                  className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                  style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
+                  title="Too few questions to stand alone — Move it under a broader parent"
+                >
+                  thin
+                </span>
+              ) : null}
             </span>
-            {/* Two facts under every name (leaves included): the node's mastery
-                THRESHOLD in points (color-coded by size; master at 75% of it) and
-                the question count (rolled up through the subtree for parents). */}
-            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">
+            {/* The stats line — spelled out, not abbreviated ("stats hard to
+                decipher"): mastery target (color = size), question count and
+                points available (both rolled up through the subtree for
+                parents), then the escalating supply flag. */}
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
               <span
                 className="font-medium"
                 style={{ color: node.masteryThreshold ? thresholdColor(node.masteryThreshold) : 'var(--warning)' }}
                 title={
                   node.masteryThreshold
-                    ? `Mastery threshold: ${node.masteryThreshold.toLocaleString()} pts (master at 75%)`
-                    : 'No threshold set — tap ⋯ to set one'
+                    ? `Mastery threshold: ${node.masteryThreshold.toLocaleString()} pts (a player masters this at 75% of it)`
+                    : 'No mastery target set — tap ⋯ → Edit to set one'
                 }
               >
-                {node.masteryThreshold ? `${node.masteryThreshold.toLocaleString()} pts` : '— pts'}
+                {node.masteryThreshold
+                  ? `${node.masteryThreshold.toLocaleString()} pts to master`
+                  : 'no mastery target'}
               </span>
-              <span className="text-muted-foreground" title="Questions in this area">
-                {depthByKey[nodeKey] ?? 0} Qs
+              <span className="text-muted-foreground" title="Questions filed in this area (rolled up through the subtree for parents)">
+                {depthByKey[nodeKey] ?? 0} questions
               </span>
               <span
                 className="text-muted-foreground"
-                title="Points currently available here (difficulty-weighted, rolled up) — eyeball against the threshold"
+                title="Points currently earnable here (difficulty-weighted, rolled up) — eyeball against the mastery target"
               >
-                {(pointsByKey[nodeKey] ?? 0).toLocaleString()} avail
+                {(pointsByKey[nodeKey] ?? 0).toLocaleString()} pts available
               </span>
               {(() => {
                 // Escalating supply signal: EXHAUSTED (at the expansion gate) beats
@@ -1105,7 +1332,7 @@ function TreeRow({
                     <span
                       className="font-semibold"
                       style={{ color: 'var(--danger)' }}
-                      title="Exhausted — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh Qs here and offers area-expansion instead. Author more by hand to refill it."
+                      title="Exhausted — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh questions here and offers area-expansion instead. Author more by hand to refill it."
                     >
                       ⛔ exhausted
                     </span>
@@ -1131,40 +1358,15 @@ function TreeRow({
                   <span
                     className="font-medium"
                     style={{ color: dupRateColor(rate) }}
-                    title={`${pct}% of generated questions here are duplicates — new ones are hard to find (${g.dupes}/${g.total} generated)`}
+                    title={`${pct}% of generated questions here came back as duplicates — new ones are hard to find (${g.dupes}/${g.total} generated)`}
                   >
-                    ⟳ {pct}% dup
+                    ⟳ {pct}% duplicates
                   </span>
                 );
               })()}
+              <SupplyChip domainKeyValue={nodeKey} supply={supplyByKey[nodeKey]} />
             </span>
-            {/* Multi-parent chip: tap to see every place this territory lives
-                and jump to any of them. */}
-            {parentCount > 1 ? (
-              <button
-                type="button"
-                onClick={() => setPlacesOpen((v) => !v)}
-                aria-expanded={placesOpen}
-                aria-label={`${node.label} is in ${parentCount} places — show them`}
-                title="This territory lives in more than one place — tap to see and jump"
-                className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs font-medium"
-                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-              >
-                ⧉ {parentCount}
-              </button>
-            ) : null}
-            {/* "This is too small" — a thin leaf that isn't already nested is a
-                condense-me candidate (Move it under a parent). */}
-            {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
-              <span
-                className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
-                style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
-                title="Too few questions to stand alone — Move it under a broader parent"
-              >
-                thin
-              </span>
-            ) : null}
-          </>
+          </span>
         )}
         </span>
 
@@ -1398,6 +1600,7 @@ function TreeRow({
               pointsByKey={pointsByKey}
               genStatsByKey={genStatsByKey}
               exhaustedByKey={exhaustedByKey}
+              supplyByKey={supplyByKey}
               childrenByParent={childrenByParent}
               parentCountByChild={parentCountByChild}
               parentsByChild={parentsByChild}

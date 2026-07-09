@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
-import { db, generatedQuestions, questions } from '@/server/db';
+import { db, generatedQuestions, knowledgeEdges, knowledgeNodes, questions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import type { DomainQuestionPeek } from '@/server/db/queries/knowledge-graph';
 
@@ -22,6 +22,11 @@ export type FragmentationPair = {
   depthB: number;
   /** pg_trgm trigram similarity, 0..1. */
   similarity: number;
+  /** Whether each side's folded key has an authored KnowledgeNode — merge
+      candidates are RAW corpus labels, most of which never got a node, which is
+      why they don't appear on the knowledge-graph page until nested/merged. */
+  hasNodeA: boolean;
+  hasNodeB: boolean;
 };
 
 type FragmentationRow = {
@@ -86,18 +91,53 @@ export async function getDomainFragmentationCandidates(
     (result as unknown as { rows?: FragmentationRow[] }).rows ??
     (result as unknown as FragmentationRow[]);
 
+  // Drop pairs the strengthened domainKey() already auto-folds at write time —
+  // those converge on their own and need no human. Surface only distinct-key
+  // near-duplicates, the genuine judgment calls.
+  const candidates = rows
+    .map((row) => ({ row, keyA: domainKey(row.domain_a), keyB: domainKey(row.domain_b) }))
+    .filter((c) => c.keyA !== c.keyB);
+
+  // Graph context for the survivors: which sides already have an authored node
+  // (the "in graph" chip), and which pairs are already CONNECTED by an edge —
+  // a nested pair is a decided pair (parent/child, not duplicates), so it stops
+  // appearing here. Without this filter, a Nest decision would nag forever.
+  const keys = [...new Set(candidates.flatMap((c) => [c.keyA, c.keyB]))];
+  const [nodeRows, edgeRows] =
+    keys.length > 0
+      ? await Promise.all([
+          db
+            .select({ domainKey: knowledgeNodes.domainKey })
+            .from(knowledgeNodes)
+            .where(inArray(knowledgeNodes.domainKey, keys)),
+          db
+            .select({
+              childDomainKey: knowledgeEdges.childDomainKey,
+              parentDomainKey: knowledgeEdges.parentDomainKey,
+            })
+            .from(knowledgeEdges)
+            .where(
+              or(
+                inArray(knowledgeEdges.childDomainKey, keys),
+                inArray(knowledgeEdges.parentDomainKey, keys),
+              ),
+            ),
+        ])
+      : [[], []];
+  const nodeKeys = new Set(nodeRows.map((n) => n.domainKey));
+  const connected = new Set(edgeRows.map((e) => `${e.childDomainKey}→${e.parentDomainKey}`));
+
   const pairs: FragmentationPair[] = [];
-  for (const row of rows) {
-    // Drop pairs the strengthened domainKey() already auto-folds at write time —
-    // those converge on their own and need no human. Surface only distinct-key
-    // near-duplicates, the genuine judgment calls.
-    if (domainKey(row.domain_a) === domainKey(row.domain_b)) continue;
+  for (const { row, keyA, keyB } of candidates) {
+    if (connected.has(`${keyA}→${keyB}`) || connected.has(`${keyB}→${keyA}`)) continue;
     pairs.push({
       domainA: row.domain_a,
       depthA: Number(row.depth_a),
       domainB: row.domain_b,
       depthB: Number(row.depth_b),
       similarity: Number(row.sim),
+      hasNodeA: nodeKeys.has(keyA),
+      hasNodeB: nodeKeys.has(keyB),
     });
     if (pairs.length >= limit) break;
   }
