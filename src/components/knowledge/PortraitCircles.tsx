@@ -121,14 +121,15 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
 // undifferentiated grey line and, spelled out under every circle, made the grid
 // busy. Move it into a small badge on the circle's top-right corner instead: one
 // glyph per circle, read as chrome rather than an inline field. The glyph is a
-// moon phase — rotation is "how often a territory comes back around," a natural
-// lunar-cycle metaphor, and it makes the existing Blue Moon literal one of a
-// family: Often = full moon, Sometimes = half, Blue Moon = the blue crescent,
-// Never = new (empty ring). Fuller = more often, so the grid scans at a glance;
-// the word rides along as the badge's aria-label / hover title.
+// signal-strength meter — three rising bars whose filled count encodes rotation
+// depth (Often = 3, Sometimes = 2, Blue Moon = 1, Never = 0). No circles, so it
+// doesn't echo the knowledge bubbles. Blue Moon keeps its blue: its single lit
+// bar is drawn in the blue accent, the one color exception (color otherwise
+// reserved for category, STYLE-GUIDE-COLOR §3). The word rides along as the
+// badge's aria-label / hover title.
 //
 // Invert the single-source label map so the string coming through
-// `frequencyLabelFor` resolves back to its enum (and thus its phase) without the
+// `frequencyLabelFor` resolves back to its enum (and thus its level) without the
 // caller having to pass both.
 const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntries(
   (Object.entries(TERRITORY_FREQUENCY_LABEL) as [TerritoryFrequency, string][]).map(
@@ -136,53 +137,47 @@ const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntrie
   )
 )
 
-const MOON_INK = 'var(--warm-ink)'
+const SIGNAL_LEVEL: Record<TerritoryFrequency, number> = {
+  often: 3,
+  sometimes: 2,
+  blue_moon: 1,
+  resting: 0,
+}
 
-// Moon-phase glyph for a rotation tier, drawn in a 24×24 viewBox. Blue Moon is
-// the lucide crescent filled with the blue accent; the rest are neutral ink
-// (color stays reserved for category, STYLE-GUIDE-COLOR §3).
-function MoonPhaseGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
-  const common = {
-    width: px,
-    height: px,
-    viewBox: '0 0 24 24',
-    'aria-hidden': true,
-    style: { display: 'block' as const },
-  }
-  switch (freq) {
-    case 'often':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="10" fill={MOON_INK} />
-        </svg>
-      )
-    case 'sometimes':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9.3" fill="none" stroke={MOON_INK} strokeWidth={1.6} />
-          <path d="M12 2.7 A9.3 9.3 0 0 1 12 21.3 Z" fill={MOON_INK} />
-        </svg>
-      )
-    case 'blue_moon':
-      return (
-        <svg {...common}>
-          <path
-            d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"
-            fill="var(--exploring-accent-blue)"
+// Three rising bars, bottoms aligned, in a 24×24 viewBox. Lit bars carry the
+// state; unlit bars stay as faint ghosts so the meter's full height reads.
+function SignalBarsGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
+  const level = SIGNAL_LEVEL[freq]
+  const blueMoon = freq === 'blue_moon'
+  const bars = [
+    { x: 3, y: 13, h: 8 },
+    { x: 10, y: 8, h: 13 },
+    { x: 17, y: 3, h: 18 },
+  ]
+  return (
+    <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden style={{ display: 'block' }}>
+      {bars.map((b, i) => {
+        const lit = i < level
+        return (
+          <rect
+            key={i}
+            x={b.x}
+            y={b.y}
+            width={4}
+            height={b.h}
+            rx={1}
+            fill={lit ? (blueMoon ? 'var(--exploring-accent-blue)' : 'var(--warm-ink)') : 'var(--warm-ink-400)'}
+            fillOpacity={lit ? 1 : 0.3}
           />
-        </svg>
-      )
-    case 'resting':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" fill="none" stroke="var(--warm-ink-400)" strokeWidth={1.6} />
-        </svg>
-      )
-  }
+        )
+      })}
+    </svg>
+  )
 }
 
 // The corner badge itself — a paper chip pinned to the bubble's top-right so it
-// reads as a rotation marker, not a second knowledge circle.
+// reads as a rotation marker, not a second knowledge circle. Rounded rectangle
+// (not a disc) so the badge itself adds no circle to the grid.
 function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
   if (!freq) return null
@@ -193,11 +188,11 @@ function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
       title={label}
       style={{
         position: 'absolute',
-        top: -3,
-        right: -3,
+        top: -4,
+        right: -4,
         width: 18,
-        height: 18,
-        borderRadius: '50%',
+        height: 17,
+        borderRadius: 5,
         background: 'var(--warm-paper)',
         border: '1px solid var(--warm-border-soft)',
         display: 'grid',
@@ -206,7 +201,7 @@ function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
         opacity: dim ? 0.5 : 1,
       }}
     >
-      <MoonPhaseGlyph freq={freq} px={11} />
+      <SignalBarsGlyph freq={freq} px={11} />
     </div>
   )
 }
