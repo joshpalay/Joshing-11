@@ -36,14 +36,17 @@ export default async function AdminDomainsPage() {
             Candidates here are <strong>raw labels from the question corpus</strong> — what the
             categorizer filed questions under — paired by spelling similarity. Most are not on the
             Knowledge graph page (that shows only territories you authored; the chips mark which
-            is which). Three calls per pair: <strong>same scope</strong> → pick which spelling
-            survives (the other folds into it everywhere, graph included);{' '}
-            <strong>parent/child</strong> (a work inside its series or genre) →{' '}
-            <strong>Nest</strong> it — both labels become graph territories with the edge drawn,
-            and the pair leaves this list; genuinely unrelated → leave it. Each side shows its
-            question count and a <strong>see</strong> peek; <strong>★ keep</strong> marks the side
-            holding more questions; <strong>Preview</strong> shows the exact rows a merge would
-            move before anything changes.
+            is which). Each row collapses to two controls — <strong>Merge / Nest</strong> opens
+            the decision, <strong>Dismiss</strong> retires the pair. Expand and the four choices
+            group by the real question: <strong>same scope</strong> → pick which spelling survives
+            (the other folds into it everywhere, graph included); <strong>different scope</strong>{' '}
+            (a work inside its series or genre) → <strong>Nest</strong> it — both labels become
+            graph territories with the edge drawn, and the pair leaves this list.{' '}
+            <strong>Dismiss</strong> is permanent (a genuinely-different pair never resurfaces),
+            while a merge or nest shows an <strong>Undo</strong> toast for a few seconds before it
+            commits. Each side shows its question count and a <strong>see</strong> peek;{' '}
+            <strong>★ keep</strong> marks the side holding more questions; <strong>Preview</strong>{' '}
+            shows the exact rows a merge would move before anything changes.
           </p>
         </div>
       </div>
