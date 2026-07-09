@@ -27,6 +27,16 @@ type PortraitCirclesProps = {
   editMode?: boolean
   onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
   pendingDomain?: string | null
+  /**
+   * Rotation word ("Often" / "Sometimes" / "Blue Moon" / "Never") shown under
+   * each circle's name. Returns null to omit the line for a given domain.
+   */
+  frequencyLabelFor?: (canonicalSubcategory: string) => string | null
+  /**
+   * Tap handler for a circle when NOT in edit mode — opens the domain's detail
+   * pop-up. Edit mode keeps its own hide/show tap (onToggleHidden).
+   */
+  onSelectDomain?: (canonicalSubcategory: string) => void
 }
 
 const TIER_ORDER: PortraitTier[] = [
@@ -159,6 +169,8 @@ export function PortraitDomainCircle({
   editMode = false,
   onToggleHidden,
   pending = false,
+  frequencyLabel = null,
+  onSelectDomain,
 }: {
   entry: PortraitEntry
   maxPointsForTier: number
@@ -170,6 +182,8 @@ export function PortraitDomainCircle({
   editMode?: boolean
   onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
   pending?: boolean
+  frequencyLabel?: string | null
+  onSelectDomain?: (canonicalSubcategory: string) => void
 }) {
   const broadCategory = normalizeBroadCategory(entry.broadCategory) ?? 'General Knowledge'
   const dc = getPortraitDomainColor(broadCategory)
@@ -197,21 +211,28 @@ export function PortraitDomainCircle({
   const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
 
   const handleClick = () => {
-    if (!editMode || !onToggleHidden || pending) return
-    onToggleHidden(entry.canonicalSubcategory, !isHidden)
+    if (pending) return
+    if (editMode) {
+      onToggleHidden?.(entry.canonicalSubcategory, !isHidden)
+      return
+    }
+    onSelectDomain?.(entry.canonicalSubcategory)
   }
 
-  const interactive = editMode && Boolean(onToggleHidden)
+  const interactive =
+    (editMode && Boolean(onToggleHidden)) || (!editMode && Boolean(onSelectDomain))
 
   return (
     <div
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
-      aria-pressed={interactive ? isHidden : undefined}
+      aria-pressed={editMode && interactive ? isHidden : undefined}
       aria-label={
-        interactive
-          ? `${isHidden ? 'Show' : 'Hide'} ${entry.canonicalSubcategory} ${isHidden ? 'on your portrait' : 'from friends'}`
-          : undefined
+        !interactive
+          ? undefined
+          : editMode
+            ? `${isHidden ? 'Show' : 'Hide'} ${entry.canonicalSubcategory} ${isHidden ? 'on your portrait' : 'from friends'}`
+            : `View ${entry.canonicalSubcategory} details`
       }
       onClick={interactive ? handleClick : undefined}
       onKeyDown={
@@ -329,6 +350,21 @@ export function PortraitDomainCircle({
       >
         {entry.canonicalSubcategory}
       </span>
+      {frequencyLabel ? (
+        <span
+          style={{
+            fontSize: 9,
+            color: 'var(--warm-ink-400)',
+            fontFamily: 'var(--font-serif)',
+            textAlign: 'center',
+            lineHeight: 1.2,
+            letterSpacing: '0.02em',
+            opacity: dimForHidden ? 0.5 : 1,
+          }}
+        >
+          {frequencyLabel}
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -346,7 +382,14 @@ function getPortraitEntryCircleSize(
   )
 }
 
-export function PortraitCircles({ entries, editMode = false, onToggleHidden, pendingDomain = null }: PortraitCirclesProps) {
+export function PortraitCircles({
+  entries,
+  editMode = false,
+  onToggleHidden,
+  pendingDomain = null,
+  frequencyLabelFor,
+  onSelectDomain,
+}: PortraitCirclesProps) {
   const [sortMode, setSortMode] = useState<SortMode>('domain')
 
   const validEntries = useMemo(
@@ -493,6 +536,8 @@ export function PortraitCircles({ entries, editMode = false, onToggleHidden, pen
                     editMode={editMode}
                     onToggleHidden={onToggleHidden}
                     pending={pendingDomain === entry.canonicalSubcategory}
+                    frequencyLabel={frequencyLabelFor?.(entry.canonicalSubcategory) ?? null}
+                    onSelectDomain={onSelectDomain}
                   />
                 ))}
               </div>
