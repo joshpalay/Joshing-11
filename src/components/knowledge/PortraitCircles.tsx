@@ -121,12 +121,13 @@ export function expandingTerritoryAccent(domain: string): { border: string; fill
 // undifferentiated grey line and, spelled out under every circle, made the grid
 // busy. Move it into a small badge on the circle's top-right corner instead: one
 // glyph per circle, read as chrome rather than an inline field. The glyph is a
-// signal-strength meter — three rising bars whose filled count encodes rotation
-// depth (Often = 3 filled, Sometimes = 2, Never = 0 / all empty outlines). No
-// circles, so it doesn't echo the knowledge bubbles. Blue Moon is the one literal
-// exception: it drops the bars for an actual small blue crescent moon (its own
-// blue is the sole color escape from the category-reserved palette,
-// STYLE-GUIDE-COLOR §3). The word rides along as the badge's aria-label / title.
+// row of three rising triangles (little peaks) whose filled count encodes
+// rotation depth (Often = 3 filled, Sometimes = 2, Never = 0 / all empty
+// outlines). Triangles rather than rectangular bars so it reads as an abstract
+// mark, not a phone signal indicator. Blue Moon is the one literal exception: it
+// drops the peaks for an actual small blue crescent moon (its own blue is the
+// sole color escape from the category-reserved palette, STYLE-GUIDE-COLOR §3).
+// The word rides along as the badge's aria-label / title.
 //
 // Invert the single-source label map so the string coming through
 // `frequencyLabelFor` resolves back to its enum (and thus its glyph) without the
@@ -137,43 +138,42 @@ const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntrie
   )
 )
 
-const SIGNAL_LEVEL: Record<TerritoryFrequency, number> = {
+const ROTATION_LEVEL: Record<TerritoryFrequency, number> = {
   often: 3,
   sometimes: 2,
   blue_moon: 1,
   resting: 0,
 }
 
-// Three rising bars, bottoms aligned, in a 24×24 viewBox. Lit bars are filled
-// ink; unlit bars are empty outlines so an all-empty meter reads as "Never."
-function SignalBarsGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
-  const level = SIGNAL_LEVEL[freq]
-  // Bottoms aligned at y=21, heights stepping up 6 → 12 → 18 for a clear
-  // rising-staircase read.
-  const bars = [
-    { x: 2, y: 15, h: 6 },
-    { x: 9.5, y: 9, h: 12 },
-    { x: 17, y: 3, h: 18 },
+// Three upward triangles, bases aligned at y=21, rising 6 → 12 → 18 in a 24×24
+// viewBox. Lit peaks are filled ink; unlit peaks are empty outlines so an
+// all-empty mark reads as "Never."
+function RotationMeterGlyph({ freq, px }: { freq: TerritoryFrequency; px: number }) {
+  const level = ROTATION_LEVEL[freq]
+  const baseY = 21
+  const halfW = 3.6
+  const peaks = [
+    { cx: 4, top: 15 },
+    { cx: 11.5, top: 9 },
+    { cx: 19, top: 3 },
   ]
   return (
     <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden style={{ display: 'block' }}>
-      {bars.map((b, i) =>
-        i < level ? (
-          <rect key={i} x={b.x} y={b.y} width={5} height={b.h} rx={1} fill="var(--warm-ink)" />
+      {peaks.map((p, i) => {
+        const points = `${p.cx},${p.top} ${p.cx - halfW},${baseY} ${p.cx + halfW},${baseY}`
+        return i < level ? (
+          <polygon key={i} points={points} fill="var(--warm-ink)" />
         ) : (
-          <rect
+          <polygon
             key={i}
-            x={b.x}
-            y={b.y}
-            width={5}
-            height={b.h}
-            rx={1}
+            points={points}
             fill="none"
             stroke="var(--warm-ink-400)"
             strokeWidth={1.6}
+            strokeLinejoin="round"
           />
         )
-      )}
+      })}
     </svg>
   )
 }
@@ -218,7 +218,7 @@ function RotationBadge({ label, dim }: { label: string; dim: boolean }) {
       {freq === 'blue_moon' ? (
         <BlueMoonGlyph px={13} />
       ) : (
-        <SignalBarsGlyph freq={freq} px={13} />
+        <RotationMeterGlyph freq={freq} px={13} />
       )}
     </div>
   )
