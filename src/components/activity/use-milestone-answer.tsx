@@ -5,6 +5,10 @@ import { useState, type ReactNode } from 'react';
 import { AnswerFeedbackSheet } from '@/components/feed/AnswerFeedbackSheet';
 import { AnswerSheet } from '@/components/feed/AnswerSheet';
 import type { StreamQuestion } from '@/lib/activity-stream';
+import {
+  ANSWER_GRADER_RETRY_MESSAGE,
+  submitAnswerWithRetry,
+} from '@/lib/answer-submit';
 import type { InsideJokeKind } from '@/lib/questions-types';
 
 type Feedback = {
@@ -20,6 +24,20 @@ type Feedback = {
   openedNewTerritory: boolean;
   openedTerritoryDomain: string | null;
 };
+
+// The milestone answer route's success payload (Feedback minus the mastery
+// fields the client derives, plus the raw masteryDelta it derives them from).
+type MilestoneAnswerResponse = Omit<
+  Feedback,
+  'openedNewTerritory' | 'openedTerritoryDomain'
+> & {
+  masteryDelta?: { openedNewTerritory?: boolean; domain?: string | null };
+};
+
+// A warm in-sheet note while an outage is being auto-retried (tone 'info'), or a
+// terminal reason once retries are spent / a request fails deterministically
+// (tone 'error'). Surfaced through AnswerSheet's status/error slots.
+type AnswerNotice = { tone: 'info' | 'error'; text: string };
 
 // The milestone answer/grade flow, lifted out of InlineAnswerFlow so the From
 // Friends streak cards (B-FROMFRIENDS-STREAK-HEADER-01) and the inline list row
@@ -40,22 +58,30 @@ export function useMilestoneAnswer(
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [notice, setNotice] = useState<AnswerNotice | null>(null);
 
   async function submit(answer: string) {
     setLoading(true);
+    setNotice(null);
     try {
-      const res = await fetch('/api/lately/milestone/answer', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ questionId: question.questionId, submitted_answer: answer }),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | (Omit<Feedback, 'openedNewTerritory' | 'openedTerritoryDomain'> & {
-            masteryDelta?: { openedNewTerritory?: boolean; domain?: string | null };
-          })
-        | null;
-      if (!res.ok || !body) throw new Error('Could not score that answer.');
+      // A grader outage returns a retryable 503 (never a real 'wrong' verdict),
+      // so auto-retry it with backoff behind a warm in-sheet note, and only ask
+      // the player to try again later once the retries are spent. Without this,
+      // any 503/404/500 flipped the button silently back to "Answer" with no
+      // explanation (the swallowed-error bug this replaces).
+      const body = await submitAnswerWithRetry<MilestoneAnswerResponse>(
+        '/api/lately/milestone/answer',
+        {
+          body: { questionId: question.questionId, submitted_answer: answer },
+          isSuccessBody: (value): value is MilestoneAnswerResponse =>
+            value != null && typeof value === 'object' && 'isCorrect' in value,
+          onRetry: ({ attempt, maxAttempts }) =>
+            setNotice({
+              tone: 'info',
+              text: `${ANSWER_GRADER_RETRY_MESSAGE} (${attempt}/${maxAttempts})…`,
+            }),
+        },
+      );
       setSubmitted(answer);
       setFeedback({
         isCorrect: body.isCorrect,
@@ -72,9 +98,15 @@ export function useMilestoneAnswer(
           ? (body.masteryDelta?.domain ?? null)
           : null,
       });
+      setNotice(null);
       setPhase('result');
-    } catch {
-      // Leave the input sheet open so the viewer can retry.
+    } catch (caught) {
+      // Leave the input sheet open with the answer intact, but tell the viewer
+      // why it didn't go through instead of silently reverting the button.
+      setNotice({
+        tone: 'error',
+        text: caught instanceof Error ? caught.message : 'Could not score that answer.',
+      });
     } finally {
       setLoading(false);
     }
@@ -131,8 +163,13 @@ export function useMilestoneAnswer(
           question={question.text}
           category={question.domain}
           loading={loading}
+          statusMessage={notice?.tone === 'info' ? notice.text : null}
+          errorMessage={notice?.tone === 'error' ? notice.text : null}
           onSubmit={(answer) => void submit(answer)}
-          onClose={() => setPhase('closed')}
+          onClose={() => {
+            setPhase('closed');
+            setNotice(null);
+          }}
         />
       ) : null}
 
