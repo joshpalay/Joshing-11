@@ -2115,6 +2115,19 @@ export async function register() {
       `);
       await db.execute(sql`ALTER TABLE "DomainDepthEstimate" ENABLE ROW LEVEL SECURITY`);
       await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "DomainDepthEstimate_domain_key" ON "DomainDepthEstimate" ("domain_key")`);
+      // Migration 0117 (D-DOMAIN-MERGE-REVIEW-REDESIGN-01): permanent Dismiss
+      // records for the domain-merge review surface. getDomainFragmentationCandidates
+      // reads it on every review load and would 42P01 if the migration recorded
+      // without the table. Self-contained; same rationale as the 0116 guard.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "ReviewedDomainPair" (
+          "pair_key" text PRIMARY KEY NOT NULL,
+          "domain_a" text NOT NULL,
+          "domain_b" text NOT NULL,
+          "reviewed_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "ReviewedDomainPair" ENABLE ROW LEVEL SECURITY`);
     } catch {
       // Non-fatal — migrate() creates the tables from 0090/0091/0092 immediately after.
     }

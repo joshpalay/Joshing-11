@@ -1765,6 +1765,19 @@ export const domainDepthEstimates = pgTable(
   ],
 );
 
+// ReviewedDomainPair (0117, D-DOMAIN-MERGE-REVIEW-REDESIGN-01): permanent
+// "Dismiss" record for the domain-merge review surface. pair_key is the two
+// domains' folded domain_key values sorted + '::'-joined (order-independent,
+// rename-surviving — see reviewedPairKey). getDomainFragmentationCandidates
+// excludes any pair whose key sits here, so a dismissed pair never resurfaces
+// after a similarity recompute. domain_a/domain_b are display spellings only.
+export const reviewedDomainPairs = pgTable('ReviewedDomainPair', {
+  pairKey: text('pair_key').primaryKey(),
+  domainA: text('domain_a').notNull(),
+  domainB: text('domain_b').notNull(),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Batch-verify async mode (0106): one row per Anthropic Message Batch of
 // verification requests submitted by /api/cron/batch-verify-questions when
 // BATCH_VERIFY_ASYNC_ENABLED is on. The daily cron harvests 'submitted' runs

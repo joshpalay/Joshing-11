@@ -16,6 +16,10 @@ import {
 } from '@/server/db/queries/knowledge-graph';
 import { proposeKnowledgeStructure } from '@/server/knowledge/propose-structure';
 import { mergeDomainIntoTarget } from '@/server/knowledge/merge-domain';
+import {
+  recordReviewedDomainPair,
+  reviewedPairKey,
+} from '@/server/db/queries/domain-fragmentation';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 export const dynamic = 'force-dynamic';
@@ -99,6 +103,14 @@ const bodySchema = z.discriminatedUnion('action', [
     action: z.literal('merge_node'),
     sourceDomainKey: keySchema,
     targetDomainKey: keySchema,
+  }),
+  // Domain-merge review (D-DOMAIN-MERGE-REVIEW-REDESIGN-01 Part 1): permanently
+  // dismiss a near-duplicate pair so it never resurfaces. Non-destructive —
+  // nothing moves; the pair is just excluded from future review lists.
+  z.object({
+    action: z.literal('dismiss_pair'),
+    domainA: z.string().trim().min(1).max(160),
+    domainB: z.string().trim().min(1).max(160),
   }),
   // The structure suggester: one LLM pass drafts a full grouping of the real
   // corpus; NOTHING persists (suggestions live only in the response).
@@ -302,6 +314,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: result.reason, detail: result.detail }, { status });
       }
       return NextResponse.json(result);
+    }
+
+    case 'dismiss_pair': {
+      await recordReviewedDomainPair(data.domainA, data.domainB);
+      console.info('[knowledge-admin] merge pair dismissed', {
+        actorUserId: session.userId,
+        pairKey: reviewedPairKey(data.domainA, data.domainB),
+      });
+      return NextResponse.json({ ok: true });
     }
 
     case 'propose_structure': {
