@@ -53,6 +53,13 @@ export type DailySummaryView = {
   newTerritory: string[];
   tierCrossings: TierCrossing[];
   recentFriendBridge: RecentFriendBridge | null;
+  /**
+   * Count of question cards from friends still waiting for the player across the
+   * two direct surfaces — "Sent" (a friend sent it straight to you) plus
+   * "Broadcasts" (a friend created/shared it). Drives the recap's quiet "you have
+   * N questions from friends" nudge; 0 hides the line.
+   */
+  pendingFriendQuestions: number;
   isFirstCompletedRound: boolean;
   reminderPromptState: 'show' | 'hidden';
   /** Contextual "Refine Your Game" offers derived from this daily (empty → reassurance state). */
@@ -345,7 +352,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
   const pointsEarned = [...pointsByDomain.values()].reduce((sum, points) => sum + points, 0);
   const gainedDomains = [...touchedDomains].filter((domain) => (pointsByDomain.get(domain) ?? 0) > 0);
 
-  const recentFriendBridge = await getRecentFriendBridge(userId);
+  const { recentFriendBridge, pendingFriendQuestions } =
+    await getFriendSummarySignals(userId);
   const { isFirstCompletedRound, reminderPromptState } =
     await computeReminderPromptState(userId, dateString, totalAnswered);
   const refine: RefineSectionView = queue
@@ -390,6 +398,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     newTerritory,
     tierCrossings,
     recentFriendBridge,
+    pendingFriendQuestions,
     isFirstCompletedRound,
     reminderPromptState,
     refine,
@@ -611,9 +620,21 @@ async function computeReminderPromptState(
   };
 }
 
-async function getRecentFriendBridge(userId: string): Promise<RecentFriendBridge | null> {
+// Both friend-facing recap signals come from a single feed read: the "Meanwhile"
+// bridge (the most recent in-window friend event) and the pending-questions count
+// that drives the sticky bar's nudge. The count sums the two direct surfaces —
+// Broadcasts (friend created/shared) + Sent (friend sent you directly) — which are
+// exactly the "For You"/"To You" pools the recap points the player back to.
+async function getFriendSummarySignals(userId: string): Promise<{
+  recentFriendBridge: RecentFriendBridge | null;
+  pendingFriendQuestions: number;
+}> {
   const mostRecentReset = new Date(getNextDailyResetBoundary().getTime() - ONE_DAY_MS);
   const page = await getFeedPagePayload(userId, { limit: 5, cursor: null, filter: 'all' });
+  const pendingFriendQuestions =
+    (page.meta.broadcasts_item_count ?? 0) + (page.meta.sent_item_count ?? 0);
+
+  let recentFriendBridge: RecentFriendBridge | null = null;
   for (const item of page.items) {
     if (item.card_type === 'answered_by_you') continue;
     const eventAtRaw = typeof item.source_event_at === 'string' ? item.source_event_at : null;
@@ -621,11 +642,13 @@ async function getRecentFriendBridge(userId: string): Promise<RecentFriendBridge
     const eventAt = new Date(eventAtRaw);
     if (Number.isNaN(eventAt.getTime())) continue;
     if (eventAt < mostRecentReset) continue;
-    return {
+    recentFriendBridge = {
       friendName: item.source_friend_display_name ?? 'A friend',
       cardType: item.card_type,
       domainDisplayName: item.domain_pill ?? null,
     };
+    break;
   }
-  return null;
+
+  return { recentFriendBridge, pendingFriendQuestions };
 }
