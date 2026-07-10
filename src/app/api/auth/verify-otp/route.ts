@@ -14,6 +14,7 @@ import {
   acceptFriendInvitation,
   getInvitePrefillByToken,
   getValidInvitationForPhone,
+  getValidPendingInvitationForPhone,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE,
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations'
@@ -242,10 +243,21 @@ export async function POST(request: Request) {
       })
     }
 
-    // New-user path: an invitation is a hard precondition. Either a
-    // FriendInvitation token (SMS-style) or a per-user invite link
-    // (B-Friends-3) satisfies the gate.
-    if (!hasUsableToken && !userInvite) {
+    // New-user path: an invitation is a hard precondition. It can be
+    // satisfied three ways: a FriendInvitation token (SMS-style), a per-user
+    // invite link (B-Friends-3), or a pending FriendInvitation matched by the
+    // verified phone number. The phone-match path covers contact-invited users
+    // who open the app directly instead of tapping the invite link — the token
+    // never rides along, but the invite is real. request-otp already honors
+    // this phone-match (hasValidPendingInvitationForPhone), so verify-otp must
+    // too; otherwise those users clear the code screen and then hit a false
+    // invite-only wall (B-AUTH-INVITE-PHONEMATCH).
+    const phoneInvitation =
+      !hasUsableToken && !userInvite
+        ? await getValidPendingInvitationForPhone(normalizedPhone)
+        : null
+
+    if (!hasUsableToken && !userInvite && !phoneInvitation) {
       return inviteRequiredRejection()
     }
 
@@ -290,6 +302,22 @@ export async function POST(request: Request) {
         token: userInvite.token,
         inviteeUserId: user.id,
       })
+    } else if (phoneInvitation) {
+      // Phone-matched invite path: claim the specific pending invitation we
+      // resolved above by its token, reusing the same acceptance +
+      // friendship-forming logic as the SMS token flow.
+      invitation = await acceptFriendInvitation({
+        token: phoneInvitation.token,
+        inviteeUserId: user.id,
+        verifiedPhone: normalizedPhone,
+      })
+
+      if (!invitation.accepted) {
+        // The invitation was claimed or cancelled between resolve and accept.
+        // Same posture as the token path: reject rather than mint a session
+        // for a new account with no accepted invitation.
+        return invitationRejection()
+      }
     }
 
     await createSession(user.id, {

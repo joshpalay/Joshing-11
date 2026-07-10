@@ -331,14 +331,14 @@ export async function hasAcceptedInvitationForUser(
   return !!row
 }
 
-export async function hasValidPendingInvitationForPhone(
+export async function getValidPendingInvitationForPhone(
   phoneNumber: string,
   now: Date = new Date()
-): Promise<boolean> {
-  if (!phoneNumber) return false
+): Promise<FriendInvitation | null> {
+  if (!phoneNumber) return null
 
-  const [row] = await db
-    .select({ id: friendInvitations.id })
+  const [invitation] = await db
+    .select()
     .from(friendInvitations)
     .where(
       and(
@@ -348,9 +348,19 @@ export async function hasValidPendingInvitationForPhone(
         gt(friendInvitations.expiresAt, now)
       )
     )
+    // Deterministic pick when the same number was invited more than once:
+    // the invite that lives longest is the most recently sent one.
+    .orderBy(desc(friendInvitations.expiresAt))
     .limit(1)
 
-  return !!row
+  return invitation ?? null
+}
+
+export async function hasValidPendingInvitationForPhone(
+  phoneNumber: string,
+  now: Date = new Date()
+): Promise<boolean> {
+  return Boolean(await getValidPendingInvitationForPhone(phoneNumber, now))
 }
 
 export async function getValidInvitationForPhone({
