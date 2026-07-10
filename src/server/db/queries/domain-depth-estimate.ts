@@ -378,3 +378,31 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
   }
   return joined;
 }
+
+/**
+ * Of the given domain LABELS, return the subset whose folded domain_key has a
+ * fandom_host set in DomainDepthEstimate — i.e. the domains where retrieval
+ * grounding pays off (thin fandoms the model can't recall). Measured 2026-07-10:
+ * grounding is a wash on canonical works the model knows and decisive on thin
+ * fandoms, so the generation path routes the wiki anchor to THIS subset only.
+ * Fail-open at the caller: an empty result just means no grounding this round.
+ */
+export async function getFandomHostedDomains(labels: string[]): Promise<string[]> {
+  if (labels.length === 0) return [];
+  const keyToLabels = new Map<string, string[]>();
+  for (const label of labels) {
+    const k = domainKey(label);
+    if (!keyToLabels.has(k)) keyToLabels.set(k, []);
+    keyToLabels.get(k)!.push(label);
+  }
+  const rows = await db
+    .select({ domainKey: domainDepthEstimates.domainKey })
+    .from(domainDepthEstimates)
+    .where(
+      and(
+        inArray(domainDepthEstimates.domainKey, [...keyToLabels.keys()]),
+        isNotNull(domainDepthEstimates.fandomHost),
+      ),
+    );
+  return rows.flatMap((r) => keyToLabels.get(r.domainKey) ?? []);
+}
