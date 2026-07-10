@@ -13,6 +13,28 @@ import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 
 export type AddTopicCandidate = { label: string; broadCategory?: string | null };
 
+/**
+ * Split a raw field value into distinct topic tokens. People read a "pick 3"
+ * prompt and type "Byzantine Coinage, Jazz, Chess" into the one field expecting
+ * three topics — so we treat commas and newlines as separators, trim, drop
+ * blanks, and dedupe case-insensitively (first spelling wins). A single topic
+ * with no separators comes back as a one-element list, so callers can branch on
+ * length without special-casing.
+ */
+export function parseTopicTokens(raw: string): string[] {
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const part of raw.split(/[,\n]+/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tokens.push(trimmed);
+  }
+  return tokens;
+}
+
 // Callers throw this from onAdd so the field can react to known persistence
 // outcomes: re-expand on a too-broad backstop, or show the cap affordance.
 export type AddTopicError = Error & { code?: 'limit_reached' | 'too_broad' };
@@ -51,6 +73,12 @@ type AddTopicFieldProps = {
   /** Lets a parent focus the input (e.g. a "create your own" CTA). */
   inputRef?: RefObject<HTMLInputElement | null>;
   /**
+   * Discoverability hint shown under the field so people know the one input
+   * accepts several comma-separated topics. Defaults to a standard line; pass
+   * `false` to hide it on surfaces where the affordance is obvious.
+   */
+  multiAddHint?: ReactNode | false;
+  /**
    * Before adding a specific topic, run it through POST /api/knowledge/converge
    * to align it onto an existing canonical domain across the game. An exact
    * match is applied transparently (same domain); fuzzy matches surface as a
@@ -82,6 +110,7 @@ export function AddTopicField({
   disabled = false,
   limitReachedNode,
   inputRef,
+  multiAddHint = 'Add one at a time, or a few at once separated by commas.',
   convergeBeforeAdd = false,
   className,
   inputClassName = DEFAULT_INPUT_CLASS,
@@ -104,6 +133,15 @@ export function AddTopicField({
   const [convergence, setConvergence] = useState<
     { typed: AddTopicCandidate; suggestions: AddTopicCandidate[] } | null
   >(null);
+  // Remaining tokens from a comma/newline-separated submission, added one at a
+  // time so each still gets the full expand / "did you mean?" treatment. The
+  // ref drives the drain loop across awaits; the count mirrors it for the UI.
+  const queueRef = useRef<string[]>([]);
+  const [queueLen, setQueueLen] = useState(0);
+  const setQueue = useCallback((items: string[]) => {
+    queueRef.current = items;
+    setQueueLen(items.length);
+  }, []);
 
   const isDuplicate = useCallback(
     (label: string) =>
@@ -151,19 +189,25 @@ export function AddTopicField({
       } finally {
         setBusy(false);
       }
+      // Expansion never persists — it either surfaced choices or an error, both
+      // of which pause the queue driver.
+      return false;
     },
     [isDuplicate],
   );
 
   // The actual persistence step. Shared by every path; convergence (below)
   // resolves WHICH label to persist before calling this.
+  // Returns true only when the topic was added cleanly — the queue driver uses
+  // that to decide whether to advance or pause (a too-broad backstop expands, a
+  // failure surfaces an error; both stop the drain until the user acts).
   const persistTopic = useCallback(
-    async (candidate: AddTopicCandidate) => {
+    async (candidate: AddTopicCandidate): Promise<boolean> => {
       const label = candidate.label.trim();
-      if (!label || busy) return;
+      if (!label || busy) return false;
       if (isDuplicate(label)) {
         setError('You already added that one.');
-        return;
+        return false;
       }
       setBusy(true);
       setError(null);
@@ -180,14 +224,16 @@ export function AddTopicField({
           );
           return next.length > 0 ? next : null;
         });
+        return true;
       } catch (caught) {
         const coded = caught as AddTopicError;
         if (coded?.code === 'too_broad') {
           await expand(label);
-          return;
+          return false;
         }
         if (coded?.code === 'limit_reached') setLimitReached(true);
         setError(caught instanceof Error ? caught.message : 'Could not add that topic.');
+        return false;
       } finally {
         setBusy(false);
         setPendingLabel(null);
@@ -201,16 +247,15 @@ export function AddTopicField({
   // transparently; fuzzy matches surface a "did you mean?" choice; otherwise we
   // persist the typed label. Any converge failure falls through to a plain add.
   const commit = useCallback(
-    async (candidate: AddTopicCandidate) => {
+    async (candidate: AddTopicCandidate): Promise<boolean> => {
       if (!convergeBeforeAdd) {
-        await persistTopic(candidate);
-        return;
+        return persistTopic(candidate);
       }
       const label = candidate.label.trim();
-      if (!label || busy) return;
+      if (!label || busy) return false;
       if (isDuplicate(label)) {
         setError('You already added that one.');
-        return;
+        return false;
       }
       setBusy(true);
       setError(null);
@@ -267,27 +312,82 @@ export function AddTopicField({
 
       if (prompt) {
         setConvergence(prompt);
-        return;
+        return false;
       }
-      if (resolved) await persistTopic(resolved);
+      if (resolved) return persistTopic(resolved);
+      return false;
     },
     [convergeBeforeAdd, persistTopic, busy, isDuplicate],
   );
 
+  // Route one typed label to the right path: broad buckets expand into specific
+  // choices, everything else commits (converging first when enabled). Shared by
+  // the single-add path and the multi-token queue below. Returns whether the
+  // topic was added cleanly (false when it paused for input or errored).
+  const processToken = useCallback(
+    async (raw: string): Promise<boolean> => {
+      const label = raw.trim();
+      if (!label) return false;
+      if (isDuplicate(label)) {
+        setError('You already added that one.');
+        return false;
+      }
+      if (isTooBroadInterest(label)) {
+        return expand(label);
+      }
+      return commit({ label });
+    },
+    [isDuplicate, expand, commit],
+  );
+
+  // Drain the remaining comma/newline-separated tokens one at a time, moving on
+  // only after each is added cleanly. A token that needs input (expands into
+  // choices or a "did you mean?") or errors returns false and stops the drain;
+  // the interactive handlers below resume it once the user resolves that step.
+  const runQueue = useCallback(async () => {
+    while (queueRef.current.length > 0) {
+      const [next, ...rest] = queueRef.current;
+      setQueue(rest);
+      // Moving on discards any leftover choices from a prior token's expansion.
+      setCandidates(null);
+      setConvergence(null);
+      const added = await processToken(next);
+      if (!added) break;
+    }
+  }, [setQueue, processToken]);
+
+  // Await an interactive resolution (a candidate pick or a "did you mean?"
+  // choice), then keep draining any queued tokens behind it.
+  const resolveThenDrain = useCallback(
+    async (op: Promise<boolean>) => {
+      const added = await op;
+      if (added && queueRef.current.length > 0) void runQueue();
+    },
+    [runQueue],
+  );
+
   const submit = useCallback(async () => {
     if (busy || disabled) return;
-    const label = value.trim();
-    if (!label) return;
-    if (isDuplicate(label)) {
-      setError('You already added that one.');
+    const tokens = parseTopicTokens(value);
+    if (tokens.length === 0) return;
+    // One topic: keep the classic behavior — the value clears on a successful
+    // add (persistTopic) and survives an error so it can be corrected.
+    if (tokens.length === 1) {
+      await processToken(tokens[0]);
       return;
     }
-    if (isTooBroadInterest(label)) {
-      await expand(label);
+    // Several topics pasted at once. Drop any that already exist, then clear the
+    // field and drain them one at a time.
+    const fresh = tokens.filter((token) => !isDuplicate(token));
+    if (fresh.length === 0) {
+      setError('You already added those.');
       return;
     }
-    await commit({ label });
-  }, [busy, disabled, value, isDuplicate, expand, commit]);
+    setValue('');
+    setError(null);
+    setQueue(fresh);
+    await runQueue();
+  }, [busy, disabled, value, isDuplicate, processToken, setQueue, runQueue]);
 
   return (
     <div className={className}>
@@ -329,6 +429,33 @@ export function AddTopicField({
         </div>
       </form>
 
+      {multiAddHint && queueLen === 0 && !candidates && !convergence ? (
+        <p className={`${mutedClassName} mt-2`}>{multiAddHint}</p>
+      ) : null}
+
+      {queueLen > 0 ? (
+        <p className={`${mutedClassName} mt-2`}>
+          {error ? (
+            <>
+              {`${queueLen} more from your list waiting. `}
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  void runQueue();
+                }}
+                disabled={busy}
+                className="font-medium underline underline-offset-2 disabled:opacity-50"
+              >
+                {`Skip and add the rest`}
+              </button>
+            </>
+          ) : (
+            `${queueLen} more from your list to add.`
+          )}
+        </p>
+      ) : null}
+
       {candidates ? (
         <div className="mt-4">
           <p className={mutedClassName}>
@@ -341,7 +468,7 @@ export function AddTopicField({
               <button
                 key={candidate.label}
                 type="button"
-                onClick={() => void commit(candidate)}
+                onClick={() => void resolveThenDrain(commit(candidate))}
                 disabled={busy}
                 className={chipClassName}
               >
@@ -363,7 +490,7 @@ export function AddTopicField({
               <button
                 key={suggestion.label}
                 type="button"
-                onClick={() => void persistTopic(suggestion)}
+                onClick={() => void resolveThenDrain(persistTopic(suggestion))}
                 disabled={busy}
                 className={chipClassName}
               >
@@ -372,7 +499,7 @@ export function AddTopicField({
             ))}
             <button
               type="button"
-              onClick={() => void persistTopic(convergence.typed)}
+              onClick={() => void resolveThenDrain(persistTopic(convergence.typed))}
               disabled={busy}
               className={chipClassName}
             >
