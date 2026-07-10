@@ -399,21 +399,30 @@ function KnowledgeTreeEditor({
   );
 
   // The global burn-down queue: every leaf flagged ⛔ exhausted (self) anywhere
-  // in the graph — the actionable read of the per-parent "⛔ N exhausted"
-  // counters. Grouped by home parent so sibling exhaustions sit together.
+  // in the graph that ACTUALLY needs a decision — the actionable read of the
+  // per-parent "⛔ N exhausted" counters. A leaf already holding enough to master
+  // (avail ≥ its threshold) is dropped: generation being walled doesn't matter if
+  // a player can already reach mastery from the existing supply, so there's no
+  // decision to make. Leaves with no threshold set are kept (setting one is
+  // itself a decision). Grouped by home parent so sibling exhaustions sit together.
   const exhaustedLeaves = useMemo(() => {
     const parentLabelOf = (k: string) => {
       const p = parentsByChild.get(k)?.[0];
       return p ? nodeByKey.get(p)?.label ?? p : '';
     };
     const labelOf = (k: string) => nodeByKey.get(k)?.label ?? k;
+    const needsDecision = (k: string) => {
+      const threshold = nodeByKey.get(k)?.masteryThreshold ?? null;
+      if (threshold == null) return true; // no target set — deciding one is the work
+      return (pointsByKey[k] ?? 0) < threshold; // still short of masterable
+    };
     return Object.keys(exhaustedByKey)
-      .filter((k) => exhaustedByKey[k]?.self && nodeByKey.has(k))
+      .filter((k) => exhaustedByKey[k]?.self && nodeByKey.has(k) && needsDecision(k))
       .sort(
         (a, b) =>
           parentLabelOf(a).localeCompare(parentLabelOf(b)) || labelOf(a).localeCompare(labelOf(b)),
       );
-  }, [exhaustedByKey, nodeByKey, parentsByChild]);
+  }, [exhaustedByKey, nodeByKey, parentsByChild, pointsByKey]);
 
   // "Show all the places and I can go to any of them" — jump to a specific
   // instance of a multi-parent node: expand every ancestor path of the target
@@ -1134,6 +1143,30 @@ function RootDropZone({ dragActive }: { dragActive: boolean }) {
 // mutating levers all live in the tree, so each row JUMPS there (expand + scroll
 // + flash) rather than duplicating the merge/edit state machines; a read-only
 // Questions peek is inlined so you can diagnose before deciding.
+// The likely lever for an exhausted leaf, inferred from the only signals we have:
+// the gap between current supply (avail) and the mastery target, and how granular
+// the leaf is (question count). It is a SUGGESTION, not a verdict — the system has
+// no world knowledge, so a genuinely rich topic the generator simply failed (a
+// handful of Simpsons Qs) looks identical to a truly finite one. All three levers
+// stay open on every row; this only leads with the most probable one.
+function exhaustedDecisionHint(
+  threshold: number | null,
+  avail: number,
+  qs: number,
+  parentLabel: string | null,
+): string {
+  if (threshold == null) {
+    return 'no mastery target set — set one to size it, or merge up / hand-author';
+  }
+  if (qs < THIN_LEAF_THRESHOLD && parentLabel) {
+    return `likely too granular — merge up into ${parentLabel} (or hand-author, if it's actually a rich topic)`;
+  }
+  if (avail < threshold / 2) {
+    return 'target looks too high for the real supply — shrink it to fit, or hand-author / ground more';
+  }
+  return 'close to masterable — hand-author or ground the rest, or trim the target';
+}
+
 function ExhaustedWorklist({
   leaves,
   nodeByKey,
@@ -1171,7 +1204,18 @@ function ExhaustedWorklist({
         <span className="text-muted-foreground ml-auto text-xs">{open ? 'hide' : 'show'}</span>
       </button>
       {open ? (
-        <ul className="space-y-1 px-2 pb-2">
+        <>
+          <p className="text-muted-foreground px-3 pb-2 text-xs leading-relaxed">
+            These leaves stopped producing new questions — the generator keeps
+            repeating itself (the <em>% dup</em>), so supply is frozen below what
+            mastering them needs. For each, pick a lever:{' '}
+            <strong>shrink the target</strong> to what the topic can really yield,{' '}
+            <strong>merge it up</strong> into a broader parent if it&apos;s too granular to
+            stand alone, or <strong>hand-author / ground</strong> more if it&apos;s a rich
+            topic the machine just failed. Leaves already holding enough to master are
+            hidden — nothing to decide there.
+          </p>
+          <ul className="space-y-1 px-2 pb-2">
           {leaves.map((key) => {
             const node = nodeByKey.get(key);
             if (!node) return null;
@@ -1221,13 +1265,23 @@ function ExhaustedWorklist({
                     : 'no threshold'}{' '}
                   · {depthByKey[key] ?? 0} Qs{dupPct !== null ? ` · ${dupPct}% dup` : ''}
                 </div>
+                <div className="mt-1 text-xs" style={{ color: 'var(--brand-ink-700)' }}>
+                  <span style={{ color: 'var(--danger)' }}>→ likely:</span>{' '}
+                  {exhaustedDecisionHint(
+                    node.masteryThreshold ?? null,
+                    pointsByKey[key] ?? 0,
+                    depthByKey[key] ?? 0,
+                    firstParent ? parentLabel : null,
+                  )}
+                </div>
                 {peekKey === key ? (
                   <QuestionsPeek domainKeyValue={key} onClose={() => setPeekKey(null)} />
                 ) : null}
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </>
       ) : null}
     </section>
   );
