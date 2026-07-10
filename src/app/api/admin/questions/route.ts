@@ -28,6 +28,8 @@ const editSchema = z.object({
   answerText: z.string().trim().min(1).max(1000).optional(),
   acceptedAlternatives: z.array(z.string().trim().min(1).max(1000)).max(50).optional(),
   factualExplanation: z.string().trim().max(4000).nullable().optional(),
+  // The "between us" aside — flavor text, not grading-adjacent.
+  insideJoke: z.string().trim().max(2000).nullable().optional(),
   category: z.enum(CATEGORIES).optional(),
   visibility: z.enum(['public', 'friends', 'private']).optional(),
   // Re-attribution to the house author (creator_id NULL + source house_authored).
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
     answerText: fields.answerText,
     acceptedAlternatives: fields.acceptedAlternatives,
     factualExplanation: fields.factualExplanation,
+    insideJoke: fields.insideJoke,
     category: fields.category,
     visibility: fields.visibility,
     attribution: fields.attribution,

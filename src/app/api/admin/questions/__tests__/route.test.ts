@@ -72,6 +72,17 @@ describe('admin questions mutation route — actions (admin)', () => {
     expect(editMock).toHaveBeenCalledWith('q1', expect.objectContaining({ questionText: 'New?', visibility: 'private' }));
   });
 
+  it('dispatches an inside-joke edit (including clearing it to empty)', async () => {
+    const set = await post({ action: 'edit', id: 'q1', insideJoke: 'between us' });
+    expect(set.status).toBe(200);
+    expect(editMock).toHaveBeenCalledWith('q1', expect.objectContaining({ insideJoke: 'between us' }));
+
+    editMock.mockClear();
+    const clear = await post({ action: 'edit', id: 'q1', insideJoke: '' });
+    expect(clear.status).toBe(200);
+    expect(editMock).toHaveBeenCalledWith('q1', expect.objectContaining({ insideJoke: '' }));
+  });
+
   it('rejects an edit with no editable fields', async () => {
     const res = await post({ action: 'edit', id: 'q1' });
     expect(res.status).toBe(400);
