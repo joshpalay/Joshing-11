@@ -1895,3 +1895,27 @@ export const gateDropStat = pgTable(
   },
   (table) => [unique('GateDropStat_day_gate_unique').on(table.day, table.gate)],
 );
+
+// D-MASTERY-FINEST-NODE-01 observability — one daily snapshot of the mastery-v2
+// calibration picture, captured in SHADOW (computed via the pure resolveV2Mastery
+// without enabling KNOWLEDGE_MASTERY_V2 or writing the freeze ledger). `metrics`
+// holds the structured aggregate (reachability buckets, v1↔v2 badge divergence,
+// per-node headroom, threshold-vs-supply classification, flip-readiness verdict)
+// so trends chart without re-parsing markdown; `markdown` is the rendered digest
+// (identical to the email body). One row per UTC day, replaced on a same-day re-run.
+export const masteryCalibrationSnapshot = pgTable(
+  'MasteryCalibrationSnapshot',
+  {
+    id: id(),
+    day: date('day').notNull(),
+    // Was KNOWLEDGE_MASTERY_V2 actually live when captured? false = pure shadow.
+    flagEnabled: boolean('flag_enabled').notNull().default(false),
+    metrics: jsonb('metrics').notNull(),
+    markdown: text('markdown').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('MasteryCalibrationSnapshot_day_unique').on(table.day),
+    index('MasteryCalibrationSnapshot_day_idx').on(table.day),
+  ],
+);
