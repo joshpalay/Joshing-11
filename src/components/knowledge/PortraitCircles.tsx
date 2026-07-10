@@ -131,36 +131,24 @@ const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntrie
   )
 )
 
-// The rotation word with the shared signal mark to its RIGHT (D-FREQUENCY-MARK-01,
-// decision E). The mark inherits the domain's category color on this single-domain
-// face (decision D) — `often`/`sometimes` ascending bars, `resting` the washed
-// baseline line, `blue_moon` the blue crescent — replacing the old monochrome
-// dots meter so every frequency surface reads as one object.
+// The shared rotation signal mark alone (D-FREQUENCY-MARK-01, decision E), with
+// the rotation word dropped — the icon carries the meaning on its own. The mark
+// inherits the domain's category color on this single-domain face (decision D)
+// — `often`/`sometimes` ascending bars, `resting` the washed baseline line,
+// `blue_moon` the blue crescent. With no adjacent text label, the mark
+// self-labels (non-decorative) so screen readers still announce the frequency.
 function FrequencyTag({ label, color, dim }: { label: string; color: string; dim: boolean }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
-  const resting = freq === 'resting'
+  if (!freq) return null
   return (
     <span
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 4,
-        whiteSpace: 'nowrap',
         opacity: dim ? 0.5 : 1,
       }}
     >
-      <span
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 8.5,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color: resting ? 'var(--warm-ink-400)' : 'var(--warm-ink-700)',
-        }}
-      >
-        {label}
-      </span>
-      {freq ? <FrequencyMark frequency={freq} color={color} size={11} decorative /> : null}
+      <FrequencyMark frequency={freq} color={color} size={11} />
     </span>
   )
 }
