@@ -190,6 +190,7 @@ function EditForm({
   const [answerText, setAnswerText] = useState(detail.answerText);
   const [acceptedAlternatives, setAcceptedAlternatives] = useState(detail.acceptedAlternatives.join('\n'));
   const [factualExplanation, setFactualExplanation] = useState(detail.factualExplanation ?? '');
+  const [insideJoke, setInsideJoke] = useState(detail.insideJoke ?? '');
   const [category, setCategory] = useState(detail.category);
   const [visibility, setVisibility] = useState(detail.visibility);
   // Author: 'person' keeps the current human creator; 'house' re-sources to the
@@ -214,6 +215,9 @@ function EditForm({
     }
     if ((factualExplanation.trim() || null) !== (detail.factualExplanation ?? null)) {
       patch.factualExplanation = factualExplanation.trim() || null;
+    }
+    if ((insideJoke.trim() || null) !== (detail.insideJoke ?? null)) {
+      patch.insideJoke = insideJoke.trim() || null;
     }
     if (category !== detail.category) patch.category = category;
     if (visibility !== detail.visibility) patch.visibility = visibility;
@@ -294,6 +298,15 @@ function EditForm({
           Factual explanation
         </label>
         <textarea rows={3} className={inputClass} style={inputStyle} value={factualExplanation} onChange={(e) => setFactualExplanation(e.target.value)} />
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Inside joke
+        </label>
+        <textarea rows={2} className={inputClass} style={inputStyle} value={insideJoke} onChange={(e) => setInsideJoke(e.target.value)} />
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          The &ldquo;between us&rdquo; aside. Leave blank to clear it.
+        </p>
       </div>
       <div className="mb-3">
         <label className={labelClass} style={labelStyle}>
