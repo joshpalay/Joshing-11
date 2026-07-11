@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { AdminTabs } from '@/app/admin/AdminTabs';
+import { HOUSE_AUTHOR } from '@/lib/questions-types';
 
 // Per-line error returned by /api/admin/bulk-upload-questions.
 type RowError = { line: number; message: string };
@@ -34,7 +35,10 @@ export function BulkUploadClient({
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState('');
-  const [authorId, setAuthorId] = useState(currentUserId);
+  // Defaults to the house identity (no personal byline) — uploads previously
+  // defaulted to the uploading admin, which misattributed pool content to a
+  // person. Attributing to a specific admin is now the explicit choice.
+  const [authorId, setAuthorId] = useState<string>(HOUSE_AUTHOR.id);
   const [pending, setPending] = useState<'dry' | 'commit' | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +91,8 @@ export function BulkUploadClient({
         </div>
         <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">Import CSV</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Create questions in bulk from a CSV, attributed to the selected admin author.
+          Create questions in bulk from a CSV. Attribution defaults to the House identity —
+          pick a specific admin author only when a personal byline is intended.
         </p>
         <p
           className="mt-2 rounded-md px-3 py-2 text-sm font-medium"
@@ -132,6 +137,7 @@ export function BulkUploadClient({
           className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
           style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
         >
+          <option value={HOUSE_AUTHOR.id}>House ({HOUSE_AUTHOR.displayName}) — no personal byline</option>
           {adminAccounts.length === 0 ? (
             <option value={currentUserId}>You</option>
           ) : (

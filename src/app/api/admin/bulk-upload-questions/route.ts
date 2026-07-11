@@ -5,6 +5,7 @@ import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import { createQuestion } from '@/server/db/queries/questions';
 import { MAX_BULK_UPLOAD_ROWS, parseBulkUploadCsv } from '@/server/questions/bulk-upload';
+import { HOUSE_AUTHOR } from '@/lib/questions-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,9 +67,13 @@ export async function POST(request: NextRequest) {
 
   // Author defaults to the uploader; an explicit choice must itself be an admin
   // (the picker only lists admins, but never trust the client) — otherwise an
-  // admin could attribute questions to any arbitrary user id.
+  // admin could attribute questions to any arbitrary user id. The HOUSE_AUTHOR.id
+  // sentinel ('house') is the exception: it attributes rows to the house identity
+  // (creator_id NULL + source 'house_authored') rather than any person — added
+  // after uploads landed under the uploading admin's personal byline.
   const authorId = read.authorId ?? session.userId;
-  if (!isAdminUser(authorId)) {
+  const attributeToHouse = authorId === HOUSE_AUTHOR.id;
+  if (!attributeToHouse && !isAdminUser(authorId)) {
     return NextResponse.json({ error: 'invalid_author' }, { status: 400 });
   }
 
@@ -97,7 +102,10 @@ export async function POST(request: NextRequest) {
   for (const row of parsed.rows) {
     try {
       const result = await createQuestion({
-        authorId,
+        // Under house attribution, authorId records who performed the upload
+        // (createQuestion nulls creatorId when attributedSource is set).
+        authorId: attributeToHouse ? session.userId : authorId,
+        ...(attributeToHouse ? { attributedSource: 'house_authored' as const } : {}),
         text: row.text,
         correctAnswer: row.correctAnswer,
         alternateAnswers: row.alternateAnswers,
