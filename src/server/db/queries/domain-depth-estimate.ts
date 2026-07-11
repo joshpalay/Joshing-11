@@ -294,6 +294,9 @@ export type DomainSupplyCoverageRow = {
   lastYieldAt: Date | null;
   /** Admin generation cap stamp (0121); non-null = capped, excluded from generation. */
   generationCappedAt: Date | null;
+  /** Dedicated Fandom wiki host, when the sizer found one — a richness signal:
+   * a leaf with a fandom is a rich topic the generator can mine, not a granular one. */
+  fandomHost: string | null;
   /** Distinct facts generated for the domain, bank-wide (all users). */
   realized: number;
 };
@@ -334,6 +337,7 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       consecutiveDryRounds: sql<number>`coalesce(${domainDepthEstimates.consecutiveDryRounds}, 0)::int`,
       lastYieldAt: domainDepthEstimates.lastYieldAt,
       generationCappedAt: domainDepthEstimates.generationCappedAt,
+      fandomHost: domainDepthEstimates.fandomHost,
       realized: sql<number>`coalesce(${realized.realized}, 0)::int`,
     })
     .from(domainDepthEstimates)
@@ -373,6 +377,7 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       consecutiveDryRounds: 0,
       lastYieldAt: null,
       generationCappedAt: null,
+      fandomHost: null,
       realized: 0,
     });
   }

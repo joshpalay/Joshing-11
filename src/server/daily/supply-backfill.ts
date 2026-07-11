@@ -108,6 +108,33 @@ async function loadDemand(): Promise<Map<string, number>> {
   return new Map([...byKey].map(([k, users]) => [k, users.size]));
 }
 
+// A corpus estimate at/above this (or any dedicated fandom wiki) marks a topic
+// as genuinely RICH — kept in lockstep with the worklist's isRichTopic gate.
+const RICH_CORPUS_ESTIMATE = 60;
+
+// DEMONSTRATED demand: leaf nodes that are live mastery targets (a threshold is
+// set — a player progresses through them) whose domain is RICH (fandom-backed or
+// deep corpus). These are the Simpsons/HP-Book-3 class: real demand that arrives
+// via a mastered PARENT, so no one declares the leaf directly, yet it must stay
+// stocked. Gating on richness keeps genuinely-granular leaves OUT — those still
+// want a human merge/shrink decision, not more generation. Returns folded keys.
+async function loadDemonstratedDemand(): Promise<Set<string>> {
+  const richRows = (await pool.query(
+    'SELECT domain_key FROM "DomainDepthEstimate" WHERE fandom_host IS NOT NULL OR COALESCE(estimated_questions, 0) >= $1',
+    [RICH_CORPUS_ESTIMATE],
+  )).rows as { domain_key: string }[];
+  const rich = new Set(richRows.map((r) => r.domain_key));
+  const leafRows = (await pool.query(
+    `SELECT label FROM "KnowledgeNode" WHERE node_kind = 'leaf' AND mastery_threshold IS NOT NULL`,
+  )).rows as { label: string }[];
+  const out = new Set<string>();
+  for (const r of leafRows) {
+    const k = domainKey(r.label);
+    if (rich.has(k)) out.add(k);
+  }
+  return out;
+}
+
 async function loadDomains(onlyDomain?: string | null): Promise<DomainRow[]> {
   const where = onlyDomain ? 'WHERE d.domain_key ILIKE $1' : '';
   const params = onlyDomain ? [`%${onlyDomain.toLowerCase()}%`] : [];
@@ -278,7 +305,15 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
     bufferFloor: opts.bufferFloor ?? DEFAULTS.bufferFloor,
     batchCap: opts.batchCap ?? DEFAULTS.batchCap,
   };
-  const [demand, domains] = await Promise.all([loadDemand(), loadDomains(opts.onlyDomain)]);
+  const [demand, demonstrated, domains] = await Promise.all([
+    loadDemand(),
+    loadDemonstratedDemand(),
+    loadDomains(opts.onlyDomain),
+  ]);
+  // Fold DEMONSTRATED demand (rich mastery-path leaves) into the declared count:
+  // a leaf nobody declared but a player is mastering counts as ≥1 interested, so
+  // it earns a buffer instead of being skipped for "no demand".
+  for (const key of demonstrated) demand.set(key, Math.max(demand.get(key) ?? 0, 1));
   const plans = buildPlan(domains, demand, cfg);
   const actionable = plans.filter((p) => p.batch > 0);
 

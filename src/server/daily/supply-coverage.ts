@@ -31,6 +31,9 @@ export interface SupplyCoverageEntry {
   lastYieldAt: Date | null;
   /** Admin generation cap (0121): true = excluded from generation, never alarms. */
   generationCapped: boolean;
+  /** Dedicated Fandom wiki host, when the sizer found one — a richness signal
+   * (a fandom-backed leaf that ran dry is a generator failure, not a granular topic). */
+  fandomHost: string | null;
 }
 
 export interface SupplyCoverageSummary {
@@ -77,6 +80,7 @@ export function summarizeSupplyCoverage(
       consecutiveDryRounds: row.consecutiveDryRounds,
       lastYieldAt: row.lastYieldAt,
       generationCapped: row.generationCappedAt != null,
+      fandomHost: row.fandomHost,
     };
   });
 
