@@ -106,10 +106,10 @@ export function SupplyRowActions({
         className={buttonClass}
         style={buttonStyle}
         disabled={busy}
-        onClick={() => post({ action: 'resize', domainKey }, 'Re-size')}
-        title="Re-run the corpus resolver for this domain"
+        onClick={() => post({ action: 'resize', domainKey }, 'Re-estimate')}
+        title="Re-run the corpus resolver to size this domain again"
       >
-        Re-size
+        Re-estimate
       </button>
       <button
         type="button"
@@ -117,9 +117,9 @@ export function SupplyRowActions({
         style={buttonStyle}
         disabled={busy}
         onClick={() => setEditing(true)}
-        title="Manually set the estimate (wins over the corpus number)"
+        title="Set the estimate by hand — a manual estimate wins over the corpus number"
       >
-        Set est.
+        Set estimate
       </button>
       {manualEstimatedQuestions != null ? (
         <button

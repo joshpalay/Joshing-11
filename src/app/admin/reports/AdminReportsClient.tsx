@@ -9,6 +9,12 @@ import type { AdminReviewReport, BlockedReviewItem } from '@/server/db/queries/c
 import type { MachineDemotionReviewItem } from '@/server/db/queries/machine-demotions';
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 import { AdminTabs } from '@/app/admin/AdminTabs';
+import { InfoTerm } from '@/app/admin/InfoTerm';
+
+// Human labels for the two question stores — the raw table names ('question' /
+// 'generated') read as opaque status words, so they never render verbatim.
+const TARGET_LABEL = { question: 'canonical', generated: 'machine-drafted' } as const;
+const TARGET_TERM = { question: 'canonical_question', generated: 'machine_drafted' } as const;
 
 // Deliberately minimal — an internal ops tool, not a product surface. Two views:
 // the NEEDING-REVIEW queue (B-CRAFTER-LIFECYCLE-01 Phase 1: player reports and
@@ -138,29 +144,25 @@ export function AdminReportsClient({
 
   const hiddenKey = (key: string) => cleared.has(key) || staged?.key === key;
 
-  // One queue, two streams. Player inappropriate reports stay pinned first
-  // (high-priority, matching the query's ordering); everything else — incorrect
-  // reports and machine demotions — merges oldest-first so the longest-suppressed
-  // content is reviewed soonest.
-  const inappropriate = reports.filter(
-    (r) => r.category === 'inappropriate' && !hiddenKey(`report:${r.id}`),
-  );
-  const rest: Array<
-    | { kind: 'report'; at: number; report: AdminReviewReport }
-    | { kind: 'demotion'; at: number; item: MachineDemotionReviewItem }
-  > = [
-    ...reports
-      .filter((r) => r.category !== 'inappropriate' && !hiddenKey(`report:${r.id}`))
-      .map((report) => ({ kind: 'report' as const, at: new Date(report.createdAt).getTime(), report })),
-    ...demotions
-      .filter((item) => !hiddenKey(`demotion:${item.questionId}`))
-      .map((item) => ({
-        kind: 'demotion' as const,
-        at: item.verifiedAt ? new Date(item.verifiedAt).getTime() : 0,
-        item,
-      })),
-  ].sort((a, b) => a.at - b.at);
-  const openCount = inappropriate.length + rest.length;
+  // One queue, two labelled sections (the streams used to interleave, telling
+  // the reader nothing about why the order was what it was). Player reports:
+  // inappropriate pinned first (high-priority), then oldest-first. Demotions:
+  // oldest-first, so the longest-suppressed content is reviewed soonest.
+  const visibleReports = reports
+    .filter((r) => !hiddenKey(`report:${r.id}`))
+    .sort((a, b) => {
+      const aPin = a.category === 'inappropriate' ? 0 : 1;
+      const bPin = b.category === 'inappropriate' ? 0 : 1;
+      return aPin - bPin || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  const visibleDemotions = demotions
+    .filter((item) => !hiddenKey(`demotion:${item.questionId}`))
+    .sort(
+      (a, b) =>
+        (a.verifiedAt ? new Date(a.verifiedAt).getTime() : 0) -
+        (b.verifiedAt ? new Date(b.verifiedAt).getTime() : 0),
+    );
+  const openCount = visibleReports.length + visibleDemotions.length;
   // D-QUALITY-SALVAGE-01: how many demotions have a ready one-click fix waiting.
   const readyFixCount = demotions.filter(
     (item) => item.proposal && !hiddenKey(`demotion:${item.questionId}`),
@@ -172,12 +174,17 @@ export function AdminReportsClient({
         <div className="mb-3">
           <AdminTabs active="reports" needingReviewCount={openCount} />
         </div>
-        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
-          Questions needing you
-        </h1>
+        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">Review queue</h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          Two streams, one queue: players reported these, or the verifier pulled them pending your
-          call. Nothing here is deleted — flagged questions sit out of circulation until you act.
+          Questions out of circulation, waiting on your call — reported by a player or pulled by
+          the verifier. Nothing here is deleted until you decide.
+        </p>
+        <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
+          Your calls: <strong>Uphold</strong> agrees with a report and removes the question ·{' '}
+          <strong>Dismiss</strong> closes a report <em>permanently</em> ·{' '}
+          <strong>Edit &amp; re-run</strong> fixes it and re-verifies · <strong>Restore</strong>{' '}
+          puts it back unchanged · <strong>Retire</strong> shelves it (recoverable). One-tap calls
+          show a 6-second Undo before anything is sent.
         </p>
         {readyFixCount > 0 ? (
           <p className="mt-2 text-sm font-medium text-[var(--success)]">
@@ -185,7 +192,7 @@ export function AdminReportsClient({
             clean — look for “Approve fix”.
           </p>
         ) : null}
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex gap-4 border-b pb-px" style={{ borderColor: 'var(--border)' }}>
           <TabButton active={view === 'open'} onClick={() => setView('open')}>
             Needing review ({openCount})
           </TabButton>
@@ -198,10 +205,18 @@ export function AdminReportsClient({
       {view === 'open' ? (
         <div className="space-y-3">
           {openCount === 0 ? (
-            <p className="text-muted-foreground text-sm">Nothing needing review.</p>
+            <p className="text-muted-foreground text-sm">
+              Nothing needing review — new player reports and verifier demotions land here.
+            </p>
           ) : (
             <>
-              {inappropriate.map((report) => (
+              {visibleReports.length > 0 ? (
+                <SectionHeading
+                  label={`Player reports (${visibleReports.length})`}
+                  term="player_report"
+                />
+              ) : null}
+              {visibleReports.map((report) => (
                 <ReportRow
                   key={report.id}
                   report={report}
@@ -209,30 +224,30 @@ export function AdminReportsClient({
                   onStage={stageAction}
                 />
               ))}
-              {rest.map((entry) =>
-                entry.kind === 'report' ? (
-                  <ReportRow
-                    key={entry.report.id}
-                    report={entry.report}
-                    onCleared={() => clear(`report:${entry.report.id}`)}
-                    onStage={stageAction}
-                  />
-                ) : (
-                  <DemotionRow
-                    key={entry.item.questionId}
-                    item={entry.item}
-                    onCleared={() => clear(`demotion:${entry.item.questionId}`)}
-                    onStage={stageAction}
-                  />
-                ),
-              )}
+              {visibleDemotions.length > 0 ? (
+                <SectionHeading
+                  label={`Verifier demotions (${visibleDemotions.length})`}
+                  term="verifier_demotion"
+                />
+              ) : null}
+              {visibleDemotions.map((item) => (
+                <DemotionRow
+                  key={item.questionId}
+                  item={item}
+                  onCleared={() => clear(`demotion:${item.questionId}`)}
+                  onStage={stageAction}
+                />
+              ))}
             </>
           )}
         </div>
       ) : (
         <div className="space-y-3">
           {blocked.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Nothing blocked.</p>
+            <p className="text-muted-foreground text-sm">
+              Nothing blocked — content removed by an upheld report, a vetting verdict, or a sweep
+              lands here and can be un-blocked.
+            </p>
           ) : (
             blocked.map((item) =>
               hiddenKey(`blocked:${item.target.table}:${item.target.id}`) ? null : (
@@ -289,6 +304,8 @@ export function AdminReportsClient({
   );
 }
 
+// In-page view switcher — underline style, deliberately different from the
+// bordered nav pills above so it can't be mistaken for site navigation.
 function TabButton({
   active,
   onClick,
@@ -302,15 +319,34 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-md border px-3 py-1.5 text-sm font-medium"
+      className="border-b-2 px-0.5 pb-1 text-sm font-medium"
       style={
         active
-          ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
-          : { borderColor: 'var(--border)', color: 'var(--text-muted)' }
+          ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-ink)' }
+          : { borderColor: 'transparent', color: 'var(--text-muted)' }
       }
     >
       {children}
     </button>
+  );
+}
+
+// A labelled stream divider for the open queue, with the definition one tap
+// away (the provenance chips alone made the mixed list hard to scan).
+function SectionHeading({
+  label,
+  term,
+}: {
+  label: string;
+  term: 'player_report' | 'verifier_demotion';
+}) {
+  return (
+    <h2
+      className="pt-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
+      style={{ color: 'var(--text-muted)' }}
+    >
+      <InfoTerm term={term}>{label}</InfoTerm>
+    </h2>
   );
 }
 
@@ -538,7 +574,7 @@ function EditPanel({
       if (!res.ok) {
         setError(
           res.status === 503
-            ? 'The machine is unavailable right now — try again shortly.'
+            ? 'The verifier is unavailable right now — try again shortly.'
             : `Re-run failed (${res.status}).`,
         );
         return;
@@ -691,7 +727,7 @@ function EditPanel({
           </span>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[var(--brand-ink-700)]">
             <span>
-              LLM answer: <strong>{rerun.suggestedAnswer}</strong>
+              Verifier&rsquo;s answer: <strong>{rerun.suggestedAnswer}</strong>
             </span>
             {rerun.suggestedAnswer.trim().toLowerCase() !== answerText.trim().toLowerCase() ? (
               <button
@@ -712,8 +748,8 @@ function EditPanel({
         </div>
       ) : (
         <p className="text-muted-foreground text-[0.7rem]">
-          Re-run the machine to get a fresh answer and a fact-check, then approve it back into
-          circulation.
+          Re-run the verifier to get a fresh answer and a fact-check — Approve unlocks once it
+          passes.
         </p>
       )}
 
@@ -725,13 +761,13 @@ function EditPanel({
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
         >
-          {pending === 'rerun' ? 'Re-running…' : rerun ? 'Re-run again' : 'Re-run through the LLM'}
+          {pending === 'rerun' ? 'Re-running…' : rerun ? 'Re-run again' : 'Re-run the verifier'}
         </button>
         <button
           type="button"
           onClick={() => void approve()}
           disabled={pending !== null || !canApprove}
-          title={canApprove ? undefined : 'Re-run the machine first, then approve'}
+          title={canApprove ? undefined : 'Re-run the verifier first, then approve'}
           className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
         >
@@ -795,10 +831,8 @@ function ReportRow({
       key: `report:${report.id}`,
       label:
         action === 'uphold'
-          ? report.category === 'inappropriate'
-            ? 'Report upheld — content removed'
-            : 'Report upheld'
-          : 'Report dismissed',
+          ? 'Report upheld — question removed from circulation'
+          : 'Report dismissed — permanent once this fades',
       body: {
         reportId: report.id,
         action,
@@ -818,12 +852,13 @@ function ReportRow({
     <article className="rounded-md border p-4 text-sm" style={{ borderColor: 'var(--border)' }}>
       <div className="flex flex-wrap items-center gap-2">
         {/* Player stream chip — reporter provenance. */}
-        <span
+        <InfoTerm
+          term="player_report"
           className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
         >
           Player report
-        </span>
+        </InfoTerm>
         <span
           className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
           style={
@@ -836,7 +871,10 @@ function ReportRow({
           {kindLabel ? ` · ${kindLabel}` : ''}
         </span>
         <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
-          {report.target.table} · {new Date(report.createdAt).toLocaleString()}
+          <InfoTerm term={TARGET_TERM[report.target.table]}>
+            {TARGET_LABEL[report.target.table]}
+          </InfoTerm>{' '}
+          · {new Date(report.createdAt).toLocaleString()}
         </span>
       </div>
 
@@ -887,6 +925,7 @@ function ReportRow({
           <button
             type="button"
             onClick={() => act('uphold')}
+            title="Agree with the report — the question is removed from circulation"
             className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
           >
@@ -905,6 +944,7 @@ function ReportRow({
           <button
             type="button"
             onClick={() => act('dismiss')}
+            title="Close this report for good — a dismissed report cannot be re-opened (Undo is only the 6-second toast)"
             className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--border)' }}
           >
@@ -1006,12 +1046,13 @@ function DemotionRow({
   return (
     <article className="rounded-md border p-4 text-sm" style={{ borderColor: 'var(--border)' }}>
       <div className="flex flex-wrap items-center gap-2">
-        <span
+        <InfoTerm
+          term="verifier_demotion"
           className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
           style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
         >
           Verifier
-        </span>
+        </InfoTerm>
         <span
           className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
           style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
@@ -1130,6 +1171,7 @@ function DemotionRow({
           <button
             type="button"
             onClick={() => act('retire_demoted')}
+            title="Shelve it softly — stays out of circulation but can be brought back later"
             className="rounded-md border px-3 py-1.5 text-sm font-medium"
             style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
           >
@@ -1139,6 +1181,7 @@ function DemotionRow({
             <button
               type="button"
               onClick={rejectFix}
+              title="Discard the suggested fix — the question stays here for a manual call"
               className="rounded-md px-2 py-1.5 text-xs font-medium"
               style={{ color: 'var(--text-muted)' }}
             >
@@ -1202,10 +1245,17 @@ function BlockedRow({
           {badge.label}
         </span>
         <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
-          {item.target.table}
-          {item.actionedAt
-            ? ` · removed ${new Date(item.actionedAt).toLocaleString()}`
-            : ' · removed (vet/cron)'}
+          <InfoTerm term={TARGET_TERM[item.target.table]}>
+            {TARGET_LABEL[item.target.table]}
+          </InfoTerm>
+          {item.actionedAt ? (
+            ` · removed ${new Date(item.actionedAt).toLocaleString()}`
+          ) : (
+            <>
+              {' · '}
+              <InfoTerm term="removed_automatically">removed automatically</InfoTerm>
+            </>
+          )}
         </span>
       </div>
 
