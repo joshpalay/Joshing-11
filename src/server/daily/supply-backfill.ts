@@ -164,9 +164,18 @@ async function loadDemonstratedDemand(): Promise<Set<string>> {
   return out;
 }
 
-async function loadDomains(onlyDomain?: string | null): Promise<DomainRow[]> {
-  const where = onlyDomain ? 'WHERE d.domain_key ILIKE $1' : '';
-  const params = onlyDomain ? [`%${onlyDomain.toLowerCase()}%`] : [];
+async function loadDomains(onlyDomain?: string | null, systemUserId?: string | null): Promise<DomainRow[]> {
+  // $1 = the system backfill user to EXCLUDE from own_max. Its bank rows serve to
+  // EVERY real viewer (pickBackfill only excludes a viewer's OWN rows, and the
+  // system user is never a viewer), so they are not part of any player's
+  // worst-case self-owned stock. Counting them would make every domain the
+  // backfill fills read as servable = have − system_owned ≈ its few non-system
+  // rows — perpetually "dry to one user" — and re-generate it forever. An empty
+  // string matches no real (uuid) user id, so an unset system user is a no-op.
+  const sysExcl = (systemUserId ?? process.env.RETRIEVAL_SYSTEM_USER_ID)?.trim() || '';
+  const params: string[] = [sysExcl];
+  const where = onlyDomain ? 'WHERE d.domain_key ILIKE $2' : '';
+  if (onlyDomain) params.push(`%${onlyDomain.toLowerCase()}%`);
   return (
     await pool.query(
       `SELECT d.domain_key, d.sample_label, d.fandom_host,
@@ -176,6 +185,7 @@ async function loadDomains(onlyDomain?: string | null): Promise<DomainRow[]> {
               COALESCE((SELECT MAX(cnt)::int FROM (
                  SELECT COUNT(*) AS cnt FROM "GeneratedQuestion" g2
                    WHERE g2.domain_key = d.domain_key AND g2.is_duplicate = false
+                     AND g2.user_id <> $1
                    GROUP BY g2.user_id
               ) owner_counts), 0) AS own_max,
               COALESCE(d.consecutive_dry_rounds, 0) AS consecutive_dry_rounds
@@ -368,7 +378,7 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
   const [demand, demonstrated, domains] = await Promise.all([
     loadDemand(),
     loadDemonstratedDemand(),
-    loadDomains(opts.onlyDomain),
+    loadDomains(opts.onlyDomain, opts.systemUserId),
   ]);
   // Fold DEMONSTRATED demand (rich mastery-path leaves) into the declared count:
   // a leaf nobody declared but a player is mastering counts as ≥1 interested, so
