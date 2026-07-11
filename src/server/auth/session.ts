@@ -57,12 +57,19 @@ function readConfiguredSessionSecret(): string | null {
     if (value) return value;
   }
 
+  // CRON_SECRET is a convenience fallback for local/dev only. It MUST NOT sign
+  // user sessions in production: CRON_SECRET also authorizes the cron/admin
+  // routes (src/server/auth/cron.ts), so reusing it for JWT signing means a
+  // leaked cron secret becomes session forgery. In production we refuse the
+  // fallback and let getJwtSecret() throw MISSING_SECRET_ERROR instead.
   const cronFallback = process.env.CRON_SECRET?.trim();
   if (cronFallback) {
     if (process.env.NODE_ENV === 'production') {
-      console.warn(
-        '[auth/session] Using CRON_SECRET as JWT fallback. Set JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) in deployment env vars.',
+      console.error(
+        '[auth/session] Refusing to use CRON_SECRET as JWT fallback in production. ' +
+          'Set JWT_SECRET (or AUTH_SECRET/NEXTAUTH_SECRET) in deployment env vars.',
       );
+      return null;
     }
     return cronFallback;
   }
