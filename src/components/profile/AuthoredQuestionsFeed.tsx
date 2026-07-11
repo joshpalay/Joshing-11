@@ -125,13 +125,7 @@ function ProfileQuestionRow({
       ) : null}
 
       <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
-        <span aria-hidden className="opacity-60">
-          &ldquo;
-        </span>
         {item.questionText}
-        <span aria-hidden className="opacity-60">
-          &rdquo;
-        </span>
       </p>
 
       {answered ? (
