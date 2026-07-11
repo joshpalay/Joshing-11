@@ -35,6 +35,10 @@ const editSchema = z.object({
   insideJoke: z.string().trim().max(2000).nullable().optional(),
   category: z.enum(CATEGORIES).optional(),
   visibility: z.enum(['public', 'friends', 'private']).optional(),
+  // The domain / knowledge label shown on the card (e.g. re-tagging a
+  // Sesame-Street question mis-filed under "New Testament"). Server-side the
+  // helper rejects generic bucket labels and normalizes to a KnowledgeNode.
+  canonicalSubcategory: z.string().trim().min(1).max(120).optional(),
   // Re-attribution to the house author (creator_id NULL + source house_authored).
   // Only 'house' is settable here — reassigning to a specific person would need a
   // person picker this tool doesn't have.
@@ -95,6 +99,7 @@ export async function POST(request: NextRequest) {
     insideJoke: fields.insideJoke,
     category: fields.category,
     visibility: fields.visibility,
+    canonicalSubcategory: fields.canonicalSubcategory,
     attribution: fields.attribution,
   };
   if (Object.values(patch).every((v) => v === undefined)) {
@@ -102,6 +107,7 @@ export async function POST(request: NextRequest) {
   }
   const result = await adminEditQuestion(id, patch);
   if (!result.ok) {
+    // not_found ⇒ 404; a rejected domain or empty patch ⇒ 400.
     return NextResponse.json({ error: result.reason }, { status: result.reason === 'not_found' ? 404 : 400 });
   }
   return NextResponse.json(result);
