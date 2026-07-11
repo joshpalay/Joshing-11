@@ -5,6 +5,8 @@ import { isAdminUser } from '@/server/auth/admin';
 import { buildSupplyCoverageSummary } from '@/server/daily/supply-coverage';
 import type { SupplyState } from '@/server/daily/supply-state';
 import { AdminTabs } from '../AdminTabs';
+import { InfoTerm } from '../InfoTerm';
+import type { GlossaryKey } from '../glossary';
 import { SupplyRowActions } from './SupplyRowActions';
 
 export const dynamic = 'force-dynamic';
@@ -17,13 +19,26 @@ export const dynamic = 'force-dynamic';
 // override — the override wins over the corpus number everywhere and shows here
 // with the corpus value alongside. Same admin gate as every /admin page:
 // ADMIN_USER_IDS or a 404 that doesn't reveal the route.
+//
+// State labels are plain speech, never the raw enum (soft_finite etc.); each
+// carries its glossary definition one tap away via <InfoTerm>. Keep these in
+// lockstep with SUPPLY_STATE_TEXT in KnowledgeAdminClient — the tree's supply
+// chips must speak the same words.
 
 const STATE_LABEL: Record<SupplyState, string> = {
-  discrepancy: 'Discrepancy',
-  raise_estimate: 'Raise estimate',
+  discrepancy: 'Ran dry early',
+  raise_estimate: 'Estimate too low',
   filling: 'Filling',
-  soft_finite: 'Resting (believed complete)',
+  soft_finite: 'Likely complete',
   unsized: 'Unsized',
+};
+
+const STATE_TERM: Record<SupplyState, GlossaryKey> = {
+  discrepancy: 'supply_ran_dry',
+  raise_estimate: 'supply_estimate_too_low',
+  filling: 'supply_filling',
+  soft_finite: 'supply_likely_complete',
+  unsized: 'supply_unsized',
 };
 
 const STATE_COLOR: Record<SupplyState, string> = {
@@ -74,14 +89,10 @@ export default async function AdminSupplyPage() {
             Domain supply
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Corpus-grounded size estimate vs realized generation.{' '}
-            <strong>Every knowledge area appears here</strong> — the same population as the
-            Knowledge graph page, seen through the supply lens. Un-sized areas read{' '}
-            <strong>Unsized</strong> (biggest first) until you Re-size or set an estimate. A{' '}
-            <strong>discrepancy</strong> is a domain that went dry far short of a trusted
-            estimate — a supply problem, not completion. Resting domains are believed complete
-            and stay re-probeable. <strong>Cap</strong> a domain to stop generating new
-            questions for it entirely — existing questions still serve, and it stops alarming.
+            How question generation is doing per domain: what it has <strong>made</strong> vs the{' '}
+            <strong>estimated</strong> size of the topic. Same population as the Tree view, seen
+            through the supply lens — tap any state or column name for what it means. Sorted
+            alarm-first.
           </p>
         </div>
       </div>
@@ -93,27 +104,27 @@ export default async function AdminSupplyPage() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap gap-3 text-sm" style={{ color: 'var(--text-muted)' }}>
-            <span>
-              <strong style={{ color: 'var(--danger)' }}>{summary.counts.discrepancy}</strong>{' '}
-              discrepancy
-            </span>
-            <span>
+            <InfoTerm term="supply_ran_dry">
+              <strong style={{ color: 'var(--danger)' }}>{summary.counts.discrepancy}</strong> ran
+              dry early
+            </InfoTerm>
+            <InfoTerm term="supply_estimate_too_low">
               <strong style={{ color: 'var(--brand-navy)' }}>{summary.counts.raise_estimate}</strong>{' '}
-              raise estimate
-            </span>
-            <span>
+              estimate too low
+            </InfoTerm>
+            <InfoTerm term="supply_filling">
               <strong>{summary.counts.filling}</strong> filling
-            </span>
-            <span>
-              <strong>{summary.counts.soft_finite}</strong> resting
-            </span>
-            <span>
+            </InfoTerm>
+            <InfoTerm term="supply_likely_complete">
+              <strong>{summary.counts.soft_finite}</strong> likely complete
+            </InfoTerm>
+            <InfoTerm term="supply_unsized">
               <strong>{summary.counts.unsized}</strong> unsized
-            </span>
+            </InfoTerm>
             {summary.cappedCount > 0 ? (
-              <span>
+              <InfoTerm term="supply_capped">
                 <strong style={{ color: 'var(--danger)' }}>{summary.cappedCount}</strong> capped
-              </span>
+              </InfoTerm>
             ) : null}
           </div>
 
@@ -126,12 +137,24 @@ export default async function AdminSupplyPage() {
                 >
                   <th className="py-2 pr-3 font-medium">Domain</th>
                   <th className="py-2 pr-3 font-medium">State</th>
-                  <th className="py-2 pr-3 text-right font-medium">Have</th>
-                  <th className="py-2 pr-3 text-right font-medium">Est.</th>
-                  <th className="py-2 pr-3 text-right font-medium">Coverage</th>
-                  <th className="py-2 pr-3 text-right font-medium">Dry rounds</th>
-                  <th className="py-2 pr-3 font-medium">Confidence</th>
-                  <th className="py-2 pr-3 font-medium">Basis</th>
+                  <th className="py-2 pr-3 text-right font-medium">Made</th>
+                  <th className="py-2 pr-3 text-right font-medium">
+                    <InfoTerm term="supply_estimate">Estimate</InfoTerm>
+                  </th>
+                  <th className="py-2 pr-3 text-right font-medium">
+                    <InfoTerm def="Made ÷ estimate — how much of the believed topic size has been generated.">
+                      Coverage
+                    </InfoTerm>
+                  </th>
+                  <th className="py-2 pr-3 text-right font-medium">
+                    <InfoTerm term="dry_rounds">Dry rounds</InfoTerm>
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    <InfoTerm term="supply_confidence">Confidence</InfoTerm>
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    <InfoTerm term="supply_basis">Basis</InfoTerm>
+                  </th>
                   <th className="py-2 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -145,15 +168,18 @@ export default async function AdminSupplyPage() {
                     style={{ borderColor: 'var(--border-light)' }}
                   >
                     <td className="py-2 pr-3">{entry.label}</td>
-                    <td className="py-2 pr-3" style={{ color: STATE_COLOR[entry.state] }}>
-                      {STATE_LABEL[entry.state]}
+                    <td className="py-2 pr-3">
+                      <InfoTerm
+                        term={STATE_TERM[entry.state]}
+                        style={{ color: STATE_COLOR[entry.state] }}
+                      >
+                        {STATE_LABEL[entry.state]}
+                      </InfoTerm>
                       {entry.generationCapped ? (
-                        <span
-                          className="block text-xs font-semibold"
-                          style={{ color: 'var(--danger)' }}
-                          title="Capped — excluded from generation; existing questions still serve, and it never fires the discrepancy alarm"
-                        >
-                          ⛔ capped
+                        <span className="block text-xs font-semibold">
+                          <InfoTerm term="supply_capped" style={{ color: 'var(--danger)' }}>
+                            ⛔ capped
+                          </InfoTerm>
                         </span>
                       ) : null}
                     </td>

@@ -34,16 +34,18 @@ export type MasteryRow = {
 
 export type PortraitState = 'empty' | 'sparse' | 'developing' | 'rich';
 
+// Phase 8 (friend profiles) is not built yet. These throw rather than return
+// `null as unknown as X`: the cast lied to callers (a non-null type that is null
+// at runtime), and returning null would be indistinguishable from a legitimate
+// "empty profile". Throwing makes any accidental use fail loudly at the call site.
 export async function getPortraitData(userId: string): Promise<PortraitResponse> {
-  // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
-  return null as unknown as PortraitResponse;
+  throw new Error('getPortraitData: not implemented (Phase 8 — friend profiles)');
 }
 
 export async function getMasteryData(userId: string): Promise<MasteryRow[]> {
-  // TODO Phase 8: port to Drizzle when friend profiles are built
   void userId;
-  return null as unknown as MasteryRow[];
+  throw new Error('getMasteryData: not implemented (Phase 8 — friend profiles)');
 }
 
 export async function getLatestRoundIdForUser(userId: string): Promise<string | null> {

@@ -51,6 +51,7 @@ import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-
 import {
   coCalibrateRaisedEstimates,
   getCappedDomainKeys,
+  getFandomHostedDomains,
   recordSupplyYieldObservation,
 } from '@/server/db/queries/domain-depth-estimate';
 import { nearCompleteRatio } from '@/server/daily/supply-state';
@@ -2495,13 +2496,20 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     // block this round, same contract as the authored-examples anchor above.
     let domainReferences: DomainReferences | undefined;
     if (isGenerationWikiAnchorEnabled()) {
-      domainReferences = await getReferencePassagesForDomains(domainsForLlm).catch((error) => {
-        console.warn('[daily/generate-questions] reference retrieval failed; proceeding unanchored', {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
+      // Route grounding to FANDOM domains only (fandom_host set). Measured
+      // 2026-07-10: the wiki anchor is a wash on canonical works the model knows
+      // (Hamlet 18 vs 17 survivors) and decisive on thin fandoms it can't recall
+      // (Spy School 0 vs 18), so canonical domains skip the retrieval entirely.
+      const fandomDomains = await getFandomHostedDomains(domainsForLlm).catch(() => []);
+      if (fandomDomains.length > 0) {
+        domainReferences = await getReferencePassagesForDomains(fandomDomains).catch((error) => {
+          console.warn('[daily/generate-questions] reference retrieval failed; proceeding unanchored', {
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return undefined;
         });
-        return undefined;
-      });
+      }
     }
 
     llmGenerated = await generateDailyQuestions(

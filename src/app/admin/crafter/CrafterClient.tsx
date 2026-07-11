@@ -43,10 +43,11 @@ export function CrafterClient({
         <div className="mb-3">
           <AdminTabs active="crafter" needingReviewCount={needingReviewCount} />
         </div>
-        {/* The voice lives here; the nav tab says what the page is ("Crafter"). */}
+        {/* Plain function in the title; the voice lives in the subtitle. */}
         <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
-          Where your craft is wanted
+          Write questions
         </h1>
+        <p className="text-muted-foreground mt-0.5 text-sm italic">Where your craft is wanted.</p>
       </header>
 
       {crafting ? (
@@ -97,7 +98,7 @@ function GateCalibrationReadout({ calibration }: { calibration: GateCalibration 
   return (
     <section className="mt-8">
       <h2 className="mb-1 font-serif text-lg font-semibold text-[var(--brand-ink)]">
-        Machine doubt calibration
+        How often the machine&apos;s doubts were right
       </h2>
       {totalVerdicts === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -151,9 +152,11 @@ const FLAG_LABEL: Record<string, string> = {
   tier_mismatch: 'tier mismatch',
 };
 
+// Plain-speech demand labels (the old "wanted & thin" / "getting there" read
+// as riddles): how much a human's authoring would matter here right now.
 const HEAT_LABEL: Record<CrafterWorklistRow['heat'], string> = {
-  high: 'wanted & thin',
-  mid: 'getting there',
+  high: 'high need',
+  mid: 'some need',
   low: 'niche',
   covered: 'covered',
 };
@@ -279,31 +282,28 @@ function DomainRow({ row, onCraft }: { row: CrafterWorklistRow; onCraft: () => v
           </div>
           {noHumanStory ? (
             <div className="mt-0.5 text-xs text-[var(--brand-ink-700)]">
-              <button
-                type="button"
-                onClick={() => void togglePlayers()}
-                className="underline-offset-2 hover:underline"
-                title="Show who's playing here and flip author invitations"
-              >
-                {row.activePlayers} people are playing here
-              </button>{' '}
-              and no human has ever written for them.
+              {row.activePlayers} people are playing here and no human has ever written for them.
               <span className="text-muted-foreground"> · {row.machineDepth} machine questions</span>
             </div>
           ) : (
             <div className="text-muted-foreground mt-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => void togglePlayers()}
-                className="underline-offset-2 hover:underline"
-                title="Show who's playing here and flip author invitations"
-              >
-                {row.activePlayers} player{row.activePlayers === 1 ? '' : 's'} active
-              </button>{' '}
-              · {row.machineDepth} machine · {row.humanAuthored} human-authored
+              {row.activePlayers} player{row.activePlayers === 1 ? '' : 's'} active ·{' '}
+              {row.machineDepth} machine · {row.humanAuthored} human-authored
               {row.lastActivity ? ` · last played ${new Date(row.lastActivity).toLocaleDateString()}` : ''}
             </div>
           )}
+          {/* The player list used to hide behind the count text itself — an
+              invisible affordance. Now it's a real button. */}
+          <button
+            type="button"
+            onClick={() => void togglePlayers()}
+            aria-expanded={open}
+            className="mt-1 inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-medium"
+            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            title="See who's playing here and invite them to author"
+          >
+            {open ? 'Hide players ▴' : 'Players & invitations ▾'}
+          </button>
           {row.clusterLabels.length > 0 ? (
             <div className="text-muted-foreground mt-0.5 text-xs">
               with variant labels: {row.clusterMachineDepth} machine · {row.clusterHumanAuthored}{' '}

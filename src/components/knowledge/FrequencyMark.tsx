@@ -67,7 +67,9 @@ export function FrequencyMark({
         {...a11y}
       >
         {title}
-        <path d="M9.5 2.2a5 5 0 1 0 2.3 6.8A5.6 5.6 0 0 1 9.5 2.2Z" fill="var(--freq-blue-moon)" />
+        {/* Thin sliver crescent: outer edge (r=5) and a slightly flatter inner
+            cut (r=6) both bow the same way, leaving a narrow lune. */}
+        <path d="M8 2.5A5 5 0 0 0 8 11.5A6 6 0 0 1 8 2.5Z" fill="var(--freq-blue-moon)" />
       </svg>
     );
   }

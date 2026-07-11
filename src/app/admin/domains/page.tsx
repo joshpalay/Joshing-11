@@ -30,23 +30,15 @@ export default async function AdminDomainsPage() {
         <AdminTabs active="domains" />
         <div>
           <h1 className="font-serif text-2xl font-semibold" style={{ color: 'var(--brand-ink)' }}>
-            Domain merges
+            Merge suggestions
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Candidates here are <strong>raw labels from the question corpus</strong> — what the
-            categorizer filed questions under — paired by spelling similarity. Most are not on the
-            Knowledge graph page (that shows only territories you authored; the chips mark which
-            is which). Each row collapses to two controls — <strong>Merge / Nest</strong> opens
-            the decision, <strong>Dismiss</strong> retires the pair. Expand and the four choices
-            group by the real question: <strong>same scope</strong> → pick which spelling survives
-            (the other folds into it everywhere, graph included); <strong>different scope</strong>{' '}
-            (a work inside its series or genre) → <strong>Nest</strong> it — both labels become
-            graph territories with the edge drawn, and the pair leaves this list.{' '}
-            <strong>Dismiss</strong> is permanent (a genuinely-different pair never resurfaces),
-            while a merge or nest shows an <strong>Undo</strong> toast for a few seconds before it
-            commits. Each side shows its question count and a <strong>see</strong> peek;{' '}
-            <strong>★ keep</strong> marks the side holding more questions; <strong>Preview</strong>{' '}
-            shows the exact rows a merge would move before anything changes.
+            Pairs of near-duplicate <strong>labels from the question corpus</strong>, matched by
+            spelling. For each pair, decide: the <strong>same thing</strong> → merge them into one
+            spelling; <strong>one inside the other</strong> → nest it; <strong>genuinely
+            different</strong> → dismiss the pair for good. Merges and nests show a few-second
+            Undo before committing; a dismiss is permanent. Tap <em>see</em> on either side to
+            read its actual questions before deciding.
           </p>
         </div>
       </div>
