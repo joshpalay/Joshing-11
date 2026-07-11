@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { AdminTabs } from '@/app/admin/AdminTabs';
+
 // Per-line error returned by /api/admin/bulk-upload-questions.
 type RowError = { line: number; message: string };
 
@@ -80,10 +82,20 @@ export function BulkUploadClient({
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-6 pb-24">
       <header className="mb-5">
-        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">Bulk upload questions</h1>
+        <div className="mb-3">
+          <AdminTabs active="bulk-upload" />
+        </div>
+        <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">Import CSV</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Upload a CSV to create questions in bulk. They are saved as verified and public, attributed
-          to the selected admin author.
+          Create questions in bulk from a CSV, attributed to the selected admin author.
+        </p>
+        <p
+          className="mt-2 rounded-md px-3 py-2 text-sm font-medium"
+          style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink)' }}
+        >
+          Uploads publish immediately: every created row is saved as{' '}
+          <strong>verified and public</strong> — no review step. Run{' '}
+          <strong>Validate (dry run)</strong> first.
         </p>
       </header>
 

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { AdminTabs } from '@/app/admin/AdminTabs';
+import { InfoTerm } from '@/app/admin/InfoTerm';
 import { CATEGORIES } from '@/lib/questions-types';
 import type {
   AdminQuestionDetail,
@@ -26,6 +27,12 @@ import type {
 const TRUST_TIERS = ['unverified', 'machine_verified', 'human_validated', 'author_confirmed'];
 const VISIBILITIES = ['public', 'friends', 'private', 'blocked'];
 const VERDICTS = ['ok', 'demoted', 'unverifiable', 'skipped'];
+
+// Enum values render in plain words ('machine verified', not the raw
+// 'machine_verified') — the underscore form is a database detail.
+function humanize(value: string | null | undefined): string {
+  return value ? value.replace(/_/g, ' ') : '—';
+}
 
 function fmtDate(iso: string): string {
   return iso.slice(0, 10);
@@ -61,17 +68,44 @@ function Badge({ label, tone }: { label: string; tone?: 'muted' | 'danger' | 'na
 }
 
 function FlagBadges({ row }: { row: AdminQuestionRow }) {
-  const flags: { label: string; tone: 'danger' | 'warning' | 'muted' }[] = [];
-  if (row.deletedAt) flags.push({ label: 'deleted', tone: 'danger' });
-  if (row.authorDeleted) flags.push({ label: 'tombstone', tone: 'muted' });
-  if (row.nobodyCorrectFlag) flags.push({ label: 'nobody-correct', tone: 'warning' });
-  if (row.isDuplicate) flags.push({ label: 'duplicate', tone: 'warning' });
-  if (row.perishable) flags.push({ label: 'perishable', tone: 'muted' });
+  const flags: { label: string; tone: 'danger' | 'warning' | 'muted'; hint: string }[] = [];
+  if (row.deletedAt)
+    flags.push({
+      label: 'deleted',
+      tone: 'danger',
+      hint: 'Soft-deleted — hidden from players, restorable from Inspect',
+    });
+  if (row.authorDeleted)
+    flags.push({
+      label: 'author left',
+      tone: 'muted',
+      hint: 'The author deleted their account; the question stays, attributed to the house',
+    });
+  if (row.nobodyCorrectFlag)
+    flags.push({
+      label: 'nobody correct',
+      tone: 'warning',
+      hint: 'Nobody has ever answered this correctly — possible bad answer key',
+    });
+  if (row.isDuplicate)
+    flags.push({
+      label: 'duplicate',
+      tone: 'warning',
+      hint: 'Flagged as a near-copy of another question',
+    });
+  if (row.perishable)
+    flags.push({
+      label: 'perishable',
+      tone: 'muted',
+      hint: 'Tied to a point in time — its answer can go stale',
+    });
   if (flags.length === 0) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
   return (
     <span className="flex flex-wrap gap-1">
       {flags.map((f) => (
-        <Badge key={f.label} label={f.label} tone={f.tone} />
+        <span key={f.label} title={f.hint}>
+          <Badge label={f.label} tone={f.tone} />
+        </span>
       ))}
     </span>
   );
@@ -198,14 +232,17 @@ function EditForm({
   const [authorChoice, setAuthorChoice] = useState<'person' | 'house'>(detail.authorIsPerson ? 'person' : 'house');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Consequential-save gate: instead of a browser confirm() dialog, warnings
+  // render inline and Save becomes a two-step act (standard admin pattern —
+  // irreversible or grading-adjacent actions get an explicit visible confirm).
+  const [confirming, setConfirming] = useState(false);
 
-  async function save() {
+  // Build a patch of only the fields that actually changed.
+  function buildPatch(): Record<string, unknown> {
     const altsArray = acceptedAlternatives
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean);
-
-    // Build a patch of only the fields that actually changed.
     const patch: Record<string, unknown> = {};
     if (questionText.trim() !== detail.questionText) patch.questionText = questionText.trim();
     if (answerText.trim() !== detail.answerText) patch.answerText = answerText.trim();
@@ -218,30 +255,37 @@ function EditForm({
     if (category !== detail.category) patch.category = category;
     if (visibility !== detail.visibility) patch.visibility = visibility;
     // Re-attribution: only person → house is a real transition.
-    const toHouse = detail.authorIsPerson && authorChoice === 'house';
-    if (toHouse) patch.attribution = 'house';
+    if (detail.authorIsPerson && authorChoice === 'house') patch.attribution = 'house';
+    return patch;
+  }
 
+  // The consequences worth a second look before they persist.
+  function warningsFor(patch: Record<string, unknown>): string[] {
+    const warnings: string[] = [];
+    if ('answerText' in patch || 'acceptedAlternatives' in patch) {
+      warnings.push(
+        'This changes the answer key or accepted alternatives — it changes how past and future answers grade.',
+      );
+    }
+    if ('attribution' in patch) {
+      warnings.push(
+        `The author changes from "${detail.authorLabel}" to House. Their authorship is dropped (it leaves their authored list, renders as house content) and can't be restored from this tool.`,
+      );
+    }
+    return warnings;
+  }
+
+  async function save() {
+    const patch = buildPatch();
     if (Object.keys(patch).length === 0) {
       setError('No changes to save.');
+      setConfirming(false);
       return;
     }
-
-    // Grading-adjacent guard: confirm before changing how answers grade.
-    const gradingChanged = 'answerText' in patch || 'acceptedAlternatives' in patch;
-    if (gradingChanged) {
-      const ok = window.confirm(
-        'This changes the answer key or accepted alternatives, which changes how past and future answers grade. Save?',
-      );
-      if (!ok) return;
-    }
-
-    // Re-attribution guard: dropping the person link renders the question as house
-    // content and is not reversible from this tool.
-    if (toHouse) {
-      const ok = window.confirm(
-        `Change author from "${detail.authorLabel}" to House? This drops the person's authorship (it leaves their authored list and renders as house content) and can't be reversed here.`,
-      );
-      if (!ok) return;
+    if (warningsFor(patch).length > 0 && !confirming) {
+      setError(null);
+      setConfirming(true);
+      return;
     }
 
     setBusy(true);
@@ -350,26 +394,60 @@ function EditForm({
         </p>
       ) : null}
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={save}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+      {confirming ? (
+        <div
+          className="mb-3 rounded-md border px-3 py-2 text-[13px] leading-relaxed"
+          style={{ borderColor: 'var(--warning)', background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
         >
-          {busy ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onCancel}
-          className="rounded-md border px-3 py-1.5 text-sm"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-        >
-          Cancel
-        </button>
-      </div>
+          <p className="font-semibold">Before this saves:</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {warningsFor(buildPatch()).map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={save}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              style={{ borderColor: 'var(--warning)', color: 'var(--brand-ink)' }}
+            >
+              {busy ? 'Saving…' : 'Save anyway'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+              className="rounded-md border px-3 py-1.5 text-sm"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+            >
+              Keep editing
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={save}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-md border px-3 py-1.5 text-sm"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -378,12 +456,10 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function mutate(action: 'delete' | 'restore') {
-    if (action === 'delete' && !window.confirm('Soft-delete this question? It stays inspectable under "show deleted" and can be restored.')) {
-      return;
-    }
     setBusy(true);
     setActionError(null);
     try {
@@ -467,15 +543,41 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
                   Edit
                 </button>
               ) : null}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => mutate('delete')}
-                className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-                style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
-              >
-                Delete
-              </button>
+              {confirmingDelete ? (
+                <>
+                  <span className="text-[13px]" style={{ color: 'var(--brand-ink-700)' }}>
+                    Soft-delete? Hidden from players; stays under “Show deleted” and restorable.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => mutate('delete')}
+                    className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                  >
+                    {busy ? 'Deleting…' : 'Confirm delete'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmingDelete(false)}
+                    className="rounded-md border px-3 py-1.5 text-sm"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setConfirmingDelete(true)}
+                  className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                  style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                >
+                  Delete
+                </button>
+              )}
             </>
           )}
         </div>
@@ -645,11 +747,11 @@ export function AdminQuestionsClient({
 
   const isDeleted = result.showDeleted;
 
-  const boolFilters: { key: string; label: string }[] = [
-    { key: 'nobodyCorrect', label: 'Nobody correct' },
-    { key: 'duplicate', label: 'Duplicate' },
-    { key: 'tombstone', label: 'Tombstone' },
-    { key: 'perishable', label: 'Perishable' },
+  const boolFilters: { key: string; label: string; term: 'nobody_correct' | 'duplicate' | 'tombstone' | 'perishable' }[] = [
+    { key: 'nobodyCorrect', label: 'Nobody correct', term: 'nobody_correct' },
+    { key: 'duplicate', label: 'Duplicate', term: 'duplicate' },
+    { key: 'tombstone', label: 'Author left', term: 'tombstone' },
+    { key: 'perishable', label: 'Perishable', term: 'perishable' },
   ];
 
   return (
@@ -658,7 +760,12 @@ export function AdminQuestionsClient({
       <div className="mb-3">
         <AdminTabs active="questions" />
       </div>
-      <h1 className="mb-4 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Questions</h1>
+      <h1 className="mb-1 font-serif text-2xl font-semibold text-[var(--brand-ink)]">Questions</h1>
+      <p className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+        Every question in the pool — human, house, and machine-drafted, plus soft-deleted rows.{' '}
+        <strong>Inspect</strong> opens the full record; edit, delete, and restore live there.
+        Filters combine, and apply across the whole pool.
+      </p>
 
       {/* Filter bar. Every control combines (AND) with the others server-side. */}
       <form
@@ -698,7 +805,7 @@ export function AdminQuestionsClient({
         </label>
 
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
-          Trust tier
+          <InfoTerm term="trust_tier">Trust tier</InfoTerm>
           <select
             value={searchParams.get('trustTier') ?? ''}
             onChange={(e) => setFilter('trustTier', e.target.value || null)}
@@ -708,14 +815,14 @@ export function AdminQuestionsClient({
             <option value="">All</option>
             {TRUST_TIERS.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {humanize(t)}
               </option>
             ))}
           </select>
         </label>
 
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
-          Visibility
+          <InfoTerm term="visibility">Visibility</InfoTerm>
           <select
             value={searchParams.get('visibility') ?? ''}
             onChange={(e) => setFilter('visibility', e.target.value || null)}
@@ -732,7 +839,7 @@ export function AdminQuestionsClient({
         </label>
 
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
-          Verdict
+          <InfoTerm term="verdict">Verdict</InfoTerm>
           <select
             value={searchParams.get('verdict') ?? ''}
             onChange={(e) => setFilter('verdict', e.target.value || null)}
@@ -774,7 +881,7 @@ export function AdminQuestionsClient({
               checked={searchParams.get(f.key) === '1'}
               onChange={(e) => toggleFlag(f.key, e.target.checked)}
             />
-            {f.label}
+            <InfoTerm term={f.term}>{f.label}</InfoTerm>
           </label>
         ))}
         <label className="flex items-center gap-1.5">
@@ -857,10 +964,10 @@ export function AdminQuestionsClient({
                     {row.authorIsPerson ? row.authorLabel : <Badge label={row.authorLabel} tone="muted" />}
                   </td>
                   <td className={`${CELL} whitespace-nowrap`}>{row.source}</td>
-                  <td className={`${CELL} whitespace-nowrap`}>{row.trustTier}</td>
+                  <td className={`${CELL} whitespace-nowrap`}>{humanize(row.trustTier)}</td>
                   <td className={`${CELL} whitespace-nowrap`}>{row.visibility}</td>
-                  <td className={`${CELL} whitespace-nowrap`}>{row.publicStatus}</td>
-                  <td className={`${CELL} whitespace-nowrap`}>{row.verificationVerdict ?? '—'}</td>
+                  <td className={`${CELL} whitespace-nowrap`}>{humanize(row.publicStatus)}</td>
+                  <td className={`${CELL} whitespace-nowrap`}>{humanize(row.verificationVerdict)}</td>
                   <td className={`${CELL} text-right tabular-nums`}>{row.askedCount}</td>
                   <td className={`${CELL} text-right tabular-nums`}>{row.correctCount}</td>
                   <td className={`${CELL} text-right tabular-nums`}>{fmtRate(row)}</td>

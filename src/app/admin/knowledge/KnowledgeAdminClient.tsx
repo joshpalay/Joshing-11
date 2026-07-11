@@ -17,6 +17,7 @@ import {
 
 import type { KnowledgeEdgeRow, KnowledgeNodeRow } from '@/server/db/queries/knowledge-graph';
 import { AdminTabs } from '@/app/admin/AdminTabs';
+import { InfoTerm } from '@/app/admin/InfoTerm';
 
 // B-KNOWLEDGE-ADMIN-01 P1 — nodes, edges, thresholds, edge types. Internal ops
 // idiom (AdminReportsClient precedent). Every commit here is a deliberate
@@ -66,11 +67,13 @@ export type SupplyReadout = {
   capped: boolean;
 };
 
+// Same plain-speech vocabulary as the Supply view's STATE_LABEL — the two
+// surfaces must speak the same words for the same states.
 const SUPPLY_STATE_TEXT: Record<SupplyReadout['state'], string> = {
-  discrepancy: '⚠ discrepancy',
-  raise_estimate: 'raise estimate',
+  discrepancy: '⚠ ran dry early',
+  raise_estimate: 'estimate too low',
   filling: 'filling',
-  soft_finite: 'resting',
+  soft_finite: 'likely complete',
   unsized: 'unsized',
 };
 
@@ -94,7 +97,7 @@ function SupplyChip({ domainKeyValue, supply }: { domainKeyValue: string; supply
       href={`/admin/supply#supply-${domainKeyValue}`}
       className="underline-offset-2 hover:underline"
       style={{ color: tone }}
-      title="Generation supply for this exact area (made / estimated) — tap for its full supply row: estimate basis, dry rounds, cap and re-size actions"
+      title="Generation supply for this exact area (made / estimated) — tap for its full Supply row: estimate basis, dry rounds, cap and re-estimate actions"
     >
       supply: {text} →
     </a>
@@ -129,17 +132,14 @@ export function KnowledgeAdminClient({
           <AdminTabs active="knowledge" />
         </div>
         <h1 className="font-serif text-2xl font-semibold text-[var(--brand-ink)]">
-          Knowledge graph
+          Territory tree
         </h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          The whole map: <strong>the tree is what you&apos;ve authored</strong>; every other area
-          with questions waits in <strong>Unfiled areas</strong> below until you add it. Under
-          every name: the points to master it (color-coded by size — green small, gold moderate,
-          red large; edit via ⋯), how many questions live there, and the points currently
-          available — both rolled up through the subtree for parents. <em>⟳ duplicates</em> marks
-          where new questions are hard to find; <em>⛔ exhausted</em> marks a tapped-out area at
-          the expansion gate (author more to refill it). Nothing here touches questions or any
-          player&apos;s mastery.
+          The subject structure you&apos;ve authored — every{' '}
+          <InfoTerm term="territory">territory</InfoTerm>, its children, and its mastery target.
+          Areas with questions but no territory yet wait in{' '}
+          <InfoTerm term="unfiled">Unfiled areas</InfoTerm> below. Tap any underlined stat or flag
+          for what it means. Nothing here touches questions or any player&apos;s mastery.
         </p>
       </header>
 
@@ -774,14 +774,17 @@ function KnowledgeTreeEditor({
         </div>
       ) : null}
       {confirmMerge ? (
+        // Deliberately NOT the same quiet card as the move/flip/pick bars — a
+        // merge is the one irreversible act here, and it must look like one.
         <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
           <div
-            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
-            style={{ background: 'var(--brand-card)', borderColor: 'var(--danger)', color: 'var(--brand-ink-700)' }}
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            style={{ background: 'var(--destructive-surface, var(--brand-card))', borderColor: 'var(--danger)', color: 'var(--brand-ink)' }}
             aria-live="polite"
           >
             <span className="w-full">
-              Fold <strong>{confirmMerge.sourceLabel}</strong> into{' '}
+              <strong style={{ color: 'var(--danger)' }}>⚠ Irreversible merge.</strong> Fold{' '}
+              <strong>{confirmMerge.sourceLabel}</strong> into{' '}
               <strong>{confirmMerge.targetLabel}</strong>? Its questions, player progress, and
               history move over, and <strong>{confirmMerge.sourceLabel}</strong> ceases to exist.
               This cannot be undone.
@@ -794,10 +797,10 @@ function KnowledgeTreeEditor({
                 void act({ action: 'merge_node', sourceDomainKey: m.sourceKey, targetDomainKey: m.targetKey });
               }}
               disabled={busy}
-              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium disabled:opacity-50"
-              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-semibold disabled:opacity-50"
+              style={{ borderColor: 'var(--danger)', background: 'var(--danger)', color: 'var(--brand-cream-page)' }}
             >
-              Merge them
+              Merge — cannot be undone
             </button>
             <button
               type="button"
@@ -1066,21 +1069,17 @@ function UnfiledAreas({
                     {area.points.toLocaleString()} pts available
                   </span>
                   {area.exhausted ? (
-                    <span
-                      className="font-semibold"
-                      style={{ color: 'var(--danger)' }}
-                      title="Exhausted — few servable facts remain despite generation"
-                    >
+                    <InfoTerm term="exhausted" className="font-semibold" style={{ color: 'var(--danger)' }}>
                       ⛔ exhausted
-                    </span>
+                    </InfoTerm>
                   ) : showDup ? (
-                    <span
+                    <InfoTerm
+                      def={`${Math.round(dupRate * 100)}% of the questions generated here came back as duplicates (${area.genDupes} of ${area.genTotal}) — fresh facts are getting hard to find.`}
                       className="font-medium"
                       style={{ color: dupRateColor(dupRate) }}
-                      title={`${Math.round(dupRate * 100)}% of generated questions here came back as duplicates (${area.genDupes}/${area.genTotal})`}
                     >
                       ⟳ {Math.round(dupRate * 100)}% duplicates
-                    </span>
+                    </InfoTerm>
                   ) : null}
                   <SupplyChip domainKeyValue={area.domainKey} supply={supplyByKey[area.domainKey]} />
                 </span>
@@ -1212,8 +1211,9 @@ function ExhaustedWorklist({
             <strong>shrink the target</strong> to what the topic can really yield,{' '}
             <strong>merge it up</strong> into a broader parent if it&apos;s too granular to
             stand alone, or <strong>hand-author / ground</strong> more if it&apos;s a rich
-            topic the machine just failed. Leaves already holding enough to master are
-            hidden — nothing to decide there.
+            topic the machine just failed. The <em>best guess</em> on each row is a
+            heuristic, not a verdict — all three levers stay open. Leaves already holding
+            enough to master are hidden — nothing to decide there.
           </p>
           <ul className="space-y-1 px-2 pb-2">
           {leaves.map((key) => {
@@ -1266,7 +1266,7 @@ function ExhaustedWorklist({
                   · {depthByKey[key] ?? 0} Qs{dupPct !== null ? ` · ${dupPct}% dup` : ''}
                 </div>
                 <div className="mt-1 text-xs" style={{ color: 'var(--brand-ink-700)' }}>
-                  <span style={{ color: 'var(--danger)' }}>→ likely:</span>{' '}
+                  <span style={{ color: 'var(--danger)' }}>→ best guess:</span>{' '}
                   {exhaustedDecisionHint(
                     node.masteryThreshold ?? null,
                     pointsByKey[key] ?? 0,
@@ -1583,13 +1583,13 @@ function TreeRow({
               {/* "This is too small" — a thin leaf that isn't already nested is a
                   condense-me candidate (Move it under a parent). */}
               {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
-                <span
+                <InfoTerm
+                  term="thin_leaf"
                   className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
                   style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
-                  title="Too few questions to stand alone — Move it under a broader parent"
                 >
                   thin
-                </span>
+                </InfoTerm>
               ) : null}
             </span>
             {/* The stats line — spelled out, not abbreviated ("stats hard to
@@ -1597,52 +1597,41 @@ function TreeRow({
                 points available (both rolled up through the subtree for
                 parents), then the escalating supply flag. */}
             <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-              <span
+              <InfoTerm
+                term="pts_to_master"
                 className="font-medium"
                 style={{ color: node.masteryThreshold ? thresholdColor(node.masteryThreshold) : 'var(--warning)' }}
-                title={
-                  node.masteryThreshold
-                    ? `Mastery threshold: ${node.masteryThreshold.toLocaleString()} pts (a player masters this at 75% of it)`
-                    : 'No mastery target set — tap ⋯ → Edit to set one'
-                }
               >
                 {node.masteryThreshold
                   ? `${node.masteryThreshold.toLocaleString()} pts to master`
                   : 'no mastery target'}
-              </span>
+              </InfoTerm>
               <span className="text-muted-foreground" title="Questions filed in this area (rolled up through the subtree for parents)">
                 {depthByKey[nodeKey] ?? 0} questions
               </span>
-              <span
-                className="text-muted-foreground"
-                title="Points currently earnable here (difficulty-weighted, rolled up) — eyeball against the mastery target"
-              >
+              <InfoTerm term="pts_available" className="text-muted-foreground">
                 {(pointsByKey[nodeKey] ?? 0).toLocaleString()} pts available
-              </span>
+              </InfoTerm>
               {(() => {
                 // Escalating supply signal: EXHAUSTED (at the expansion gate) beats
                 // "hard to source" (high dup) beats nothing.
                 const ex = exhaustedByKey[nodeKey];
                 if (ex?.self) {
                   return (
-                    <span
-                      className="font-semibold"
-                      style={{ color: 'var(--danger)' }}
-                      title="Exhausted — at the narrow-KB expansion gate: few servable facts remain despite generation, so the system stops serving fresh questions here and offers area-expansion instead. Author more by hand to refill it."
-                    >
+                    <InfoTerm term="exhausted" className="font-semibold" style={{ color: 'var(--danger)' }}>
                       ⛔ exhausted
-                    </span>
+                    </InfoTerm>
                   );
                 }
                 if (ex && ex.descendants > 0) {
                   return (
-                    <span
+                    <InfoTerm
+                      def={`${ex.descendants} sub-area${ex.descendants === 1 ? '' : 's'} inside this one ${ex.descendants === 1 ? 'is' : 'are'} exhausted — generation dried up there and a human decision is needed.`}
                       className="font-medium"
                       style={{ color: 'var(--danger)' }}
-                      title={`${ex.descendants} sub-area${ex.descendants === 1 ? '' : 's'} here ${ex.descendants === 1 ? 'is' : 'are'} exhausted (at the expansion gate)`}
                     >
                       ⛔ {ex.descendants} exhausted
-                    </span>
+                    </InfoTerm>
                   );
                 }
                 const g = genStatsByKey[nodeKey];
@@ -1651,13 +1640,13 @@ function TreeRow({
                 if (rate < HARD_TO_SOURCE_MIN_RATE) return null; // only flag where it's hard
                 const pct = Math.round(rate * 100);
                 return (
-                  <span
+                  <InfoTerm
+                    def={`${pct}% of the questions generated here came back as duplicates (${g.dupes} of ${g.total}) — fresh facts are getting hard to find.`}
                     className="font-medium"
                     style={{ color: dupRateColor(rate) }}
-                    title={`${pct}% of generated questions here came back as duplicates — new ones are hard to find (${g.dupes}/${g.total} generated)`}
                   >
                     ⟳ {pct}% duplicates
-                  </span>
+                  </InfoTerm>
                 );
               })()}
               <SupplyChip domainKeyValue={nodeKey} supply={supplyByKey[nodeKey]} />
@@ -1972,7 +1961,7 @@ function QuestionsPeek({
               <span className="text-[var(--brand-ink)]">{q.text}</span>{' '}
               <span className="text-muted-foreground">
                 — {q.answer}
-                {q.source === 'bank' ? ' · bank' : ''}
+                {q.source === 'bank' ? ' · machine bank' : ''}
                 {q.suppressed ? ' · out of circulation' : ''}
               </span>
             </li>
