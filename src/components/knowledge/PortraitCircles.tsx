@@ -145,7 +145,9 @@ function FrequencyTag({ label, color, dim }: { label: string; color: string; dim
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        opacity: dim ? 0.5 : 1,
+        // Indicators sit above the title now; hold them back to 80% so they
+        // read as a quiet signal rather than competing with the name.
+        opacity: dim ? 0.4 : 0.8,
       }}
     >
       <FrequencyMark frequency={freq} color={color} size={11} />
@@ -241,9 +243,6 @@ export function PortraitDomainCircle({
   const isHidden = Boolean(entry.isHidden)
   const dimForHidden = editMode && isHidden
   const opacity = dimForHidden ? baseOpacity * 0.35 : baseOpacity
-  const labelOpacity =
-    (0.5 + (entry.totalMasteryPoints / Math.max(maxPointsForTier, 1)) * 0.5) *
-    (dimForHidden ? 0.5 : 1)
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' &&
@@ -376,6 +375,9 @@ export function PortraitDomainCircle({
           )}
         </div>
       </div>
+      {frequencyLabel ? (
+        <FrequencyTag label={frequencyLabel} color={dc.primary} dim={dimForHidden} />
+      ) : null}
       <span
         style={{
           fontSize: 10.5,
@@ -385,15 +387,12 @@ export function PortraitDomainCircle({
           lineHeight: 1.3,
           maxWidth: Math.max(90, resolvedCircleSlotSize),
           wordWrap: 'break-word',
-          opacity: labelOpacity,
+          opacity: dimForHidden ? 0.5 : undefined,
           textDecoration: dimForHidden ? 'line-through' : undefined,
         }}
       >
         {entry.canonicalSubcategory}
       </span>
-      {frequencyLabel ? (
-        <FrequencyTag label={frequencyLabel} color={dc.primary} dim={dimForHidden} />
-      ) : null}
     </div>
   )
 }

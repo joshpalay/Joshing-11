@@ -111,6 +111,10 @@ export type AdminEditQuestionInput = {
   answerText?: string;
   acceptedAlternatives?: string[];
   factualExplanation?: string | null;
+  // The "between us" aside. Flavor text, not grading-adjacent — editing it does
+  // NOT clear the verification stamp (verification fact-checks the answer, not
+  // the aside). Empty string normalizes to null.
+  insideJoke?: string | null;
   category?: string;
   visibility?: string;
   // Re-attribution. 'house' re-sources the question to the labeled non-human
@@ -151,6 +155,11 @@ export async function adminEditQuestion(
   if (input.factualExplanation !== undefined) {
     values.factualExplanation = input.factualExplanation || null;
     contentChanged = true;
+  }
+  if (input.insideJoke !== undefined) {
+    // Metadata, not content: the aside is flavor and isn't fact-checked, so it
+    // does NOT flip contentChanged (the verification stamp stays put).
+    values.insideJoke = input.insideJoke || null;
   }
   if (input.category !== undefined) {
     values.category = input.category as typeof questions.$inferInsert.category;

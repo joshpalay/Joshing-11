@@ -862,6 +862,13 @@
 			"when": 1787097600000,
 			"tag": "0122_reviewed_domain_pair",
 			"breakpoints": true
+		},
+		{
+			"idx": 123,
+			"version": "7",
+			"when": 1787184000000,
+			"tag": "0123_mastery_calibration_snapshot",
+			"breakpoints": true
 		}
 	]
 }

@@ -71,13 +71,7 @@ export function MyQuestionCard({
         </div>
 
         <p className="mt-2 break-words font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
-          <span aria-hidden className="opacity-60">
-            &ldquo;
-          </span>
           {question.text}
-          <span aria-hidden className="opacity-60">
-            &rdquo;
-          </span>
         </p>
 
         {answerersLine ? (

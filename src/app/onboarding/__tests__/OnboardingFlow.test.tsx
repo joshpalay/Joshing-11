@@ -114,4 +114,16 @@ describe('OnboardingFlow display-name gate', () => {
     expect(html).not.toContain('Set up your profile')
     expect(html).toContain('Welcome to Joshing')
   })
+
+  it('hints that the add-topic field accepts several comma-separated topics', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        preSeededInterests={[]}
+        initialDisplayName="Existing Name"
+        initialHandle="existingname"
+      />
+    )
+
+    expect(html).toContain('separated by commas')
+  })
 })

@@ -7,6 +7,7 @@ const {
   findUserSelectMock,
   hasAcceptedInvitationForUserMock,
   getValidInvitationForPhoneMock,
+  getValidPendingInvitationForPhoneMock,
   getInvitePrefillByTokenMock,
   provisionUserInsertMock,
   verifyOtpMock,
@@ -40,6 +41,7 @@ const {
     findUserSelectMock,
     hasAcceptedInvitationForUserMock: vi.fn(async () => false),
     getValidInvitationForPhoneMock: vi.fn(async () => null as unknown),
+    getValidPendingInvitationForPhoneMock: vi.fn(async () => null as unknown),
     getInvitePrefillByTokenMock: vi.fn(async () => null as unknown),
     provisionUserInsertMock,
     verifyOtpMock: vi.fn(async (phone: string, code: string) =>
@@ -71,6 +73,7 @@ vi.mock('@/server/db', () => ({
 vi.mock('@/server/friends/invitations', () => ({
   acceptFriendInvitation: acceptFriendInvitationMock,
   getValidInvitationForPhone: getValidInvitationForPhoneMock,
+  getValidPendingInvitationForPhone: getValidPendingInvitationForPhoneMock,
   getInvitePrefillByToken: getInvitePrefillByTokenMock,
   hasAcceptedInvitationForUser: hasAcceptedInvitationForUserMock,
   INVITATION_ACCEPTANCE_ERROR_MESSAGE: 'This invitation could not be accepted.',
@@ -129,6 +132,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
     provisionUserInsertMock.mockReset()
     hasAcceptedInvitationForUserMock.mockReset()
     getValidInvitationForPhoneMock.mockReset()
+    getValidPendingInvitationForPhoneMock.mockReset()
     getInvitePrefillByTokenMock.mockReset()
     acceptFriendInvitationMock.mockReset()
 
@@ -136,6 +140,7 @@ describe('/api/auth/verify-otp invitation gate', () => {
     provisionUserInsertMock.mockResolvedValue([])
     hasAcceptedInvitationForUserMock.mockResolvedValue(false)
     getValidInvitationForPhoneMock.mockResolvedValue(null)
+    getValidPendingInvitationForPhoneMock.mockResolvedValue(null)
     getInvitePrefillByTokenMock.mockResolvedValue(null)
     acceptFriendInvitationMock.mockResolvedValue({ accepted: true })
   })
@@ -390,6 +395,59 @@ describe('/api/auth/verify-otp invitation gate', () => {
           code: '000000',
           invitationToken: 'invite-token',
         })
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(body.error).toBe('invalid_invitation')
+      expect(createSessionMock).not.toHaveBeenCalled()
+    })
+
+    it('provisions and accepts a phone-matched pending invite when no token or link rode along (B-AUTH-INVITE-PHONEMATCH)', async () => {
+      // Contact-invited user who opened the app directly and typed their
+      // number: request-otp let them through on the phone-match, so they must
+      // clear verify-otp too even with no token/link in the request body.
+      findUserSelectMock.mockResolvedValueOnce([])
+      getValidPendingInvitationForPhoneMock.mockResolvedValueOnce(
+        VALID_INVITATION
+      )
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
+      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
+
+      const response = await POST(
+        jsonRequest({ phone: '+15559876543', code: '000000' })
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body.user.id).toBe('user-2')
+      expect(body.invitation).toEqual({ accepted: true })
+      expect(provisionUserInsertMock).toHaveBeenCalled()
+      // Claims the resolved invitation by ITS token — the body carried none.
+      expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
+        token: 'invite-token',
+        inviteeUserId: 'user-2',
+        verifiedPhone: '+15559876543',
+      })
+      expect(createSessionMock).toHaveBeenCalledWith('user-2', {
+        invitationAccepted: true,
+        onboardingComplete: false,
+      })
+    })
+
+    it('rejects the phone-match path when the accept races and fails after provisioning', async () => {
+      findUserSelectMock.mockResolvedValueOnce([])
+      getValidPendingInvitationForPhoneMock.mockResolvedValueOnce(
+        VALID_INVITATION
+      )
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
+      acceptFriendInvitationMock.mockResolvedValueOnce({
+        accepted: false,
+        reason: 'claim_failed',
+      })
+
+      const response = await POST(
+        jsonRequest({ phone: '+15559876543', code: '000000' })
       )
       const body = await response.json()
 

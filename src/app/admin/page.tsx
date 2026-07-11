@@ -11,17 +11,18 @@ import { getMachineDemotionsForReview } from '@/server/db/queries/machine-demoti
 import { getDomainFragmentationCandidates } from '@/server/db/queries/domain-fragmentation';
 import { getAllQuestionsForAdmin } from '@/server/db/queries/admin-questions';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
+import { getCrafterWorklist } from '@/server/db/queries/crafter-demand';
 import { buildSupplyCoverageSummary } from '@/server/daily/supply-coverage';
 
 import { AdminTabs } from './AdminTabs';
 
 export const dynamic = 'force-dynamic';
 
-// The admin landing — "where is the work?" at a glance. One card per tab, each
-// carrying the live counts its page computes, so a curator sees the queue
-// pressure across ALL surfaces without visiting six routes. Every read is
+// The admin landing — "where is the work?" at a glance, grouped by the four
+// jobs the tool does (Review / Author / Library / Domains) so the cards mirror
+// the nav. Each card carries the live counts its page computes; every read is
 // fail-open (a card shows "—" instead of breaking the others) and reuses the
-// exact query its tab uses, so the numbers here always agree with the pages.
+// exact query its page uses, so the numbers here always agree with the pages.
 // Same admin gate as every /admin page: ADMIN_USER_IDS or a 404 that never
 // reveals the route.
 
@@ -73,13 +74,24 @@ function OverviewCard({
   );
 }
 
+function GroupHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2
+      className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.08em] first:mt-0"
+      style={{ color: 'var(--text-muted)' }}
+    >
+      {children}
+    </h2>
+  );
+}
+
 export default async function AdminOverviewPage() {
   const session = await getSession();
   if (!session || !isAdminUser(session.userId)) notFound();
 
   // Every read independent + fail-open: one broken surface must not blank the
-  // other five cards. null ⇒ that card renders "—".
-  const [reports, demotions, blocked, supply, mergePairs, graph, questionsPage] =
+  // other cards. null ⇒ that card renders "—".
+  const [reports, demotions, blocked, supply, mergePairs, graph, questionsPage, crafterWorklist] =
     await Promise.all([
       getOpenReportsForReview().catch(() => null),
       getMachineDemotionsForReview().catch(() => null),
@@ -88,6 +100,7 @@ export default async function AdminOverviewPage() {
       getDomainFragmentationCandidates().catch(() => null),
       listKnowledgeGraph().catch(() => null),
       getAllQuestionsForAdmin({ pageSize: 1 }).catch(() => null),
+      getCrafterWorklist(session.userId).catch(() => null),
     ]);
 
   const n = (value: number | null | undefined): string =>
@@ -98,6 +111,7 @@ export default async function AdminOverviewPage() {
       ? null
       : (reports?.length ?? 0) + (demotions?.length ?? 0);
   const readyFixCount = demotions?.filter((d) => d.proposal).length ?? null;
+  const highNeedCount = crafterWorklist?.filter((row) => row.heat === 'high').length ?? null;
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -113,30 +127,77 @@ export default async function AdminOverviewPage() {
         </div>
       </div>
 
+      <GroupHeading>Review</GroupHeading>
       <div className="grid gap-3 sm:grid-cols-2">
         <OverviewCard
           href="/admin/reports"
-          title="Questions needing you"
-          description="Player reports and machine demotions waiting on a human call."
+          title="Review queue"
+          description="Player reports and verifier demotions waiting on a human call."
           stats={[
             { value: n(openCount), label: 'needing review', tone: openCount ? 'danger' : undefined },
             { value: n(readyFixCount), label: 'with a ready fix', tone: readyFixCount ? 'navy' : undefined },
             { value: n(blocked?.length), label: 'blocked / actioned' },
           ]}
         />
+      </div>
+
+      <GroupHeading>Author</GroupHeading>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <OverviewCard
+          href="/admin/crafter"
+          title="Write questions"
+          description="Where your craft is wanted — active domains ranked by how much hand-authoring would matter."
+          stats={[
+            {
+              value: n(highNeedCount),
+              label: 'domains in high need',
+              tone: highNeedCount ? 'danger' : undefined,
+            },
+            { value: n(crafterWorklist?.length), label: 'active domains' },
+          ]}
+        />
+        <OverviewCard
+          href="/admin/bulk-upload"
+          title="Import CSV"
+          description="Create questions in bulk from a CSV. Uploads publish immediately as verified and public."
+          stats={[]}
+        />
+      </div>
+
+      <GroupHeading>Library</GroupHeading>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <OverviewCard
+          href="/admin/questions"
+          title="Questions"
+          description="The full canonical pool — inspect, edit, soft-delete."
+          stats={[{ value: n(questionsPage?.total), label: 'questions' }]}
+        />
+      </div>
+
+      <GroupHeading>Domains</GroupHeading>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <OverviewCard
+          href="/admin/knowledge"
+          title="Tree"
+          description="The authored territory structure — nodes, edges, mastery targets."
+          stats={[
+            { value: n(graph?.nodes.length), label: 'territories' },
+            { value: n(graph?.edges.length), label: 'edges' },
+          ]}
+        />
         <OverviewCard
           href="/admin/supply"
-          title="Domain supply"
-          description="Size estimates vs realized generation; discrepancies are supply problems, not completion."
+          title="Supply"
+          description="Size estimates vs realized generation — which domains ran dry early, and which beat their estimates."
           stats={[
             {
               value: n(supply?.counts.discrepancy),
-              label: 'discrepancies',
+              label: 'ran dry early',
               tone: supply?.counts.discrepancy ? 'danger' : undefined,
             },
             {
               value: n(supply?.counts.raise_estimate),
-              label: 'raise estimate',
+              label: 'estimate too low',
               tone: supply?.counts.raise_estimate ? 'navy' : undefined,
             },
             { value: n(supply?.cappedCount), label: 'capped' },
@@ -144,8 +205,8 @@ export default async function AdminOverviewPage() {
         />
         <OverviewCard
           href="/admin/domains"
-          title="Domain merges"
-          description="Near-duplicate labels awaiting a same-scope-or-siblings call. The graph follows a merge automatically."
+          title="Merge suggestions"
+          description="Near-duplicate labels awaiting a call: merge, nest, or dismiss. The tree follows a merge automatically."
           stats={[
             {
               value: n(mergePairs?.length),
@@ -153,27 +214,6 @@ export default async function AdminOverviewPage() {
               tone: mergePairs?.length ? 'navy' : undefined,
             },
           ]}
-        />
-        <OverviewCard
-          href="/admin/knowledge"
-          title="Knowledge graph"
-          description="The authored territory structure — nodes, edges, thresholds."
-          stats={[
-            { value: n(graph?.nodes.length), label: 'territories' },
-            { value: n(graph?.edges.length), label: 'edges' },
-          ]}
-        />
-        <OverviewCard
-          href="/admin/questions"
-          title="Questions"
-          description="The full canonical pool — inspect, edit, soft-delete."
-          stats={[{ value: n(questionsPage?.total), label: 'questions' }]}
-        />
-        <OverviewCard
-          href="/admin/crafter"
-          title="Crafter"
-          description="Where your craft is wanted — the territories asking for hand-written questions."
-          stats={[]}
         />
       </div>
     </main>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FragmentationPair } from '@/server/db/queries/domain-fragmentation';
 import type { MergePreview } from '@/server/db/queries/domain-merges';
 import type { DomainQuestionPeek } from '@/server/db/queries/knowledge-graph';
+import { InfoTerm } from '@/app/admin/InfoTerm';
 
 // D-DOMAIN-MERGE-REVIEW-REDESIGN-01 — the consolidated near-duplicate review
 // surface. It fuses the two earlier takes: the progressive-disclosure UX (the
@@ -283,21 +284,21 @@ export function DomainMergeClient({ pairs }: { pairs: FragmentationPair[] }) {
 
 function graphBadge(hasNode: boolean) {
   return hasNode ? (
-    <span
+    <InfoTerm
+      term="in_graph"
       className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
       style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
-      title="This label has an authored territory on the Knowledge graph page"
     >
-      in graph
-    </span>
+      in tree
+    </InfoTerm>
   ) : (
-    <span
+    <InfoTerm
+      term="label_only"
       className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
       style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-      title="A raw question label — not in the knowledge graph. Nest or merge adds it."
     >
       label only
-    </span>
+    </InfoTerm>
   );
 }
 
@@ -367,12 +368,13 @@ function MergeRow({
               {star === 'B' ? <StarKeep /> : null}
               {graphBadge(pair.hasNodeB)}
             </span>
-            <span
-              className="ml-auto shrink-0 text-xs font-semibold"
-              style={{ color: 'var(--brand-ink-700)' }}
-              title="Trigram similarity"
-            >
-              {pct(pair.similarity)}
+            <span className="ml-auto shrink-0 text-xs font-semibold">
+              <InfoTerm
+                def="How alike the two spellings are (trigram similarity) — the reason this pair was suggested."
+                style={{ color: 'var(--brand-ink-700)' }}
+              >
+                {pct(pair.similarity)} alike
+              </InfoTerm>
             </span>
           </div>
           <div className="flex flex-wrap gap-x-4 text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -685,7 +687,7 @@ function LabelPeek({ label }: { label: string }) {
               <span style={{ color: 'var(--brand-ink)' }}>{q.text}</span>{' '}
               <span style={{ color: 'var(--text-muted)' }}>
                 — {q.answer}
-                {q.source === 'bank' ? ' · bank' : ''}
+                {q.source === 'bank' ? ' · machine bank' : ''}
                 {q.suppressed ? ' · out of circulation' : ''}
               </span>
             </li>

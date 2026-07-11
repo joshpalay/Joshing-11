@@ -573,7 +573,14 @@ export function ActivityStreamItem({
         {rowInner}
       </div>
 
-      {item.action ? <ItemAction action={item.action} /> : null}
+      {/* The action button sits UNDER the row's header text, not flush to the
+          far-left edge below the icon column — same EXPANSION_INDENT the opened
+          reveal uses, so the button's left edge lines up with where the copy
+          begins. Nested rows carry no icon column, so their text is already
+          flush; no indent there. */}
+      {item.action ? (
+        <ItemAction action={item.action} indent={nested ? 0 : EXPANSION_INDENT} />
+      ) : null}
 
       {expandable && open && expand ? (
         <div style={{ marginLeft: EXPANSION_INDENT }}>
@@ -623,9 +630,17 @@ export function ActivityStreamItem({
   );
 }
 
-function ItemAction({ action }: { action: NonNullable<StreamItem['action']> }) {
+function ItemAction({
+  action,
+  indent = 0,
+}: {
+  action: NonNullable<StreamItem['action']>;
+  // Left indent so the action aligns with the row's header copy (which starts
+  // past the fixed icon column) rather than the far-left icon edge.
+  indent?: number;
+}) {
   return (
-    <div style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+    <div style={{ marginTop: 8, marginLeft: indent }} onClick={(e) => e.stopPropagation()}>
       {action.kind === 'link' ? (
         <Link
           href={action.href}
