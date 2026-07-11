@@ -31,6 +31,7 @@ type AdminQuestionsSearchParams = {
   sort?: string;
   dir?: string;
   q?: string;
+  author?: string;
   category?: string;
   trustTier?: string;
   visibility?: string;
@@ -65,6 +66,7 @@ export default async function AdminQuestionsPage({
     sortDir: (params.dir === 'asc' ? 'asc' : 'desc') as AdminQuestionSortDir,
     filters: {
       search: trimmed(params.q),
+      authorSearch: trimmed(params.author),
       category: trimmed(params.category),
       trustTier: trimmed(params.trustTier),
       visibility: trimmed(params.visibility),

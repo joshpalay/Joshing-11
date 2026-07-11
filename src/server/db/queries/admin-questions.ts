@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db, questions, users } from '@/server/db';
 import { resolveAuthorDisplay, parseQuestionSource } from '@/lib/questions-types';
@@ -24,6 +24,9 @@ const SORT_COLUMNS = {
 export type AdminQuestionFilters = {
   // Free text — matches question_text OR answer_text (case-insensitive contains).
   search?: string;
+  // Author display-name contains-match (case-insensitive). Implies a human
+  // creator (creator_id IS NOT NULL) — house/LLM rows have no person to match.
+  authorSearch?: string;
   category?: string;
   trustTier?: string;
   visibility?: string;
@@ -199,6 +202,25 @@ export async function adminEditQuestion(
 
   await db.update(questions).set(values).where(eq(questions.id, id));
   return { ok: true };
+}
+
+// Bulk person → house re-attribution. Same marker the single-row attribution
+// edit above applies (creator_id NULL + source 'house_authored'; authorDeleted
+// stays false — a deliberate re-attribution, not a tombstone), and like it the
+// verification stamp is untouched (attribution is metadata, not content). Only
+// live rows that currently carry a human creator transition; deleted, house,
+// and LLM rows in the selection are counted as skipped, not errors. One-way:
+// the original creator link is dropped with no reverse path in this tool.
+export type AdminBulkReattributeResult = { ok: true; updated: number; skipped: number };
+
+export async function adminBulkReattributeToHouse(ids: string[]): Promise<AdminBulkReattributeResult> {
+  if (ids.length === 0) return { ok: true, updated: 0, skipped: 0 };
+  const updated = await db
+    .update(questions)
+    .set({ creatorId: null, source: 'house_authored', updatedAt: new Date() })
+    .where(and(inArray(questions.id, ids), isNull(questions.deletedAt), isNotNull(questions.creatorId)))
+    .returning({ id: questions.id });
+  return { ok: true, updated: updated.length, skipped: ids.length - updated.length };
 }
 
 // Admin soft-delete — reuses the canonical soft-delete primitive (deletedAt),
@@ -395,6 +417,11 @@ function buildWhere(query: AdminQuestionsQuery): SQL | undefined {
     const match = or(ilike(questions.questionText, needle), ilike(questions.answerText, needle));
     if (match) clauses.push(match);
   }
+  if (f.authorSearch) {
+    // Requires the users join both queries in getAllQuestionsForAdmin carry.
+    clauses.push(isNotNull(questions.creatorId));
+    clauses.push(ilike(users.displayName, `%${f.authorSearch}%`));
+  }
   if (f.category) clauses.push(eq(questions.category, f.category as typeof questions.$inferSelect.category));
   if (f.trustTier) clauses.push(eq(questions.trustTier, f.trustTier as typeof questions.$inferSelect.trustTier));
   if (f.visibility) clauses.push(eq(questions.visibility, f.visibility as typeof questions.$inferSelect.visibility));
@@ -456,6 +483,9 @@ export async function getAllQuestionsForAdmin(query: AdminQuestionsQuery = {}): 
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(questions)
+      // Same join as the page query so authorSearch can reference users.
+      // users.id is unique, so a left join never multiplies the count.
+      .leftJoin(users, eq(users.id, questions.creatorId))
       .where(where),
   ]);
 

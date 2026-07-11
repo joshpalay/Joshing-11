@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import {
+  adminBulkReattributeToHouse,
   adminEditQuestion,
   adminRestoreQuestion,
   adminSoftDeleteQuestion,
@@ -17,7 +18,9 @@ export const dynamic = 'force-dynamic';
 // delete is a SOFT delete (deletedAt) and restore is its inverse — never a hard
 // DELETE. Every mutation re-checks isAdminUser on the server (the client is never
 // trusted). Field set is the ratified minimal set (Decision B); no audit log
-// (Decision A1); no bulk actions (Decision C).
+// (Decision A1). Decision C (no bulk actions) was revised 2026-07-11 for exactly
+// one bulk act — person → house re-attribution — after admin bulk uploads landed
+// attributed to the uploading admin personally; everything else stays per-row.
 
 // visibility is limited to the admin-settable values ('blocked' is a safety
 // terminal state set by the vet path, not hand-editable here).
@@ -42,6 +45,13 @@ const bodySchema = z.discriminatedUnion('action', [
   editSchema,
   z.object({ action: z.literal('delete'), id: z.string().trim().min(1) }),
   z.object({ action: z.literal('restore'), id: z.string().trim().min(1) }),
+  // Bulk person → house re-attribution. Capped at one admin page of rows per
+  // request (MAX_PAGE_SIZE in admin-questions.ts) — the client selects from the
+  // rendered table, so a larger sweep is several requests, each deliberate.
+  z.object({
+    action: z.literal('reattribute_house'),
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
+  }),
 ]);
 
 export async function POST(request: NextRequest) {
@@ -66,6 +76,12 @@ export async function POST(request: NextRequest) {
   if (data.action === 'restore') {
     const result = await adminRestoreQuestion(data.id);
     if (!result.ok) return NextResponse.json({ error: result.reason }, { status: 404 });
+    return NextResponse.json(result);
+  }
+
+  if (data.action === 'reattribute_house') {
+    // Skipped rows (already house/LLM, or deleted) are reported, not errors.
+    const result = await adminBulkReattributeToHouse(data.ids);
     return NextResponse.json(result);
   }
 
