@@ -52,6 +52,7 @@ import {
   coCalibrateRaisedEstimates,
   getCappedDomainKeys,
   getFandomHostedDomains,
+  getReferenceRoutingHints,
   recordSupplyYieldObservation,
 } from '@/server/db/queries/domain-depth-estimate';
 import { nearCompleteRatio } from '@/server/daily/supply-state';
@@ -2502,7 +2503,19 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       // (Spy School 0 vs 18), so canonical domains skip the retrieval entirely.
       const fandomDomains = await getFandomHostedDomains(domainsForLlm).catch(() => []);
       if (fandomDomains.length > 0) {
-        domainReferences = await getReferencePassagesForDomains(fandomDomains).catch((error) => {
+        // Layer 3 (source routing): these domains are all Fandom-hosted, so ground
+        // them from the SAME well that sized them — the in-universe-canon Fandom
+        // prompt, NOT the Wikipedia-first default that hands a deep fan domain a
+        // shallow game-as-product blurb (the Zelda: TotK 1,200-est / 0-yield case).
+        // The routing hints carry the resolved fandom_host so the search lands on
+        // the right wiki. Fail-open: no hints just means default (Wikipedia) routing.
+        const routingHints = await getReferenceRoutingHints(
+          fandomDomains.map((domain) => domainKey(domain)),
+        ).catch(() => new Map());
+        const hintByDomain = new Map(
+          fandomDomains.map((domain) => [domain, routingHints.get(domainKey(domain))]),
+        );
+        domainReferences = await getReferencePassagesForDomains(fandomDomains, hintByDomain).catch((error) => {
           console.warn('[daily/generate-questions] reference retrieval failed; proceeding unanchored', {
             userId,
             error: error instanceof Error ? error.message : String(error),

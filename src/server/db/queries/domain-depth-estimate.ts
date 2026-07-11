@@ -281,6 +281,45 @@ export async function getCappedDomainKeys(): Promise<Set<string>> {
   return new Set(rows.map((row) => row.domainKey));
 }
 
+/**
+ * Grounding source-routing hints per domain key (Layer 3, D-FANDOM-GROUNDING-01
+ * follow-up). The reference-passage retriever defaults to Wikipedia-first, which
+ * hands a DEEP fan domain a shallow "game-as-product" Wikipedia blurb even though
+ * the domain was SIZED off its Fandom category tree — the exact mismatch that let
+ * a 1,200-question domain (Zelda: TotK) serve zero. These hints let the retriever
+ * ground a domain from the SAME well that sized it: a `basis` of `fandom:*` (or a
+ * resolved `fandom_host`) routes to a Fandom-in-universe-canon prompt; otherwise
+ * the Wikipedia-first default stands. `wikipediaTitle`/`fandomHost` further scope
+ * the search when present. Keyed by folded domain_key; a domain with no estimate
+ * row simply has no hint (default routing).
+ */
+export type ReferenceRoutingHint = {
+  basis: string | null;
+  fandomHost: string | null;
+  wikipediaTitle: string | null;
+};
+
+export async function getReferenceRoutingHints(
+  domainKeys: string[],
+): Promise<Map<string, ReferenceRoutingHint>> {
+  if (domainKeys.length === 0) return new Map();
+  const rows = await db
+    .select({
+      domainKey: domainDepthEstimates.domainKey,
+      basis: domainDepthEstimates.basis,
+      fandomHost: domainDepthEstimates.fandomHost,
+      wikipediaTitle: domainDepthEstimates.wikipediaTitle,
+    })
+    .from(domainDepthEstimates)
+    .where(inArray(domainDepthEstimates.domainKey, domainKeys));
+  return new Map(
+    rows.map((row) => [
+      row.domainKey,
+      { basis: row.basis, fandomHost: row.fandomHost, wikipediaTitle: row.wikipediaTitle },
+    ]),
+  );
+}
+
 export type DomainSupplyCoverageRow = {
   domainKey: string;
   sampleLabel: string | null;
