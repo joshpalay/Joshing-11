@@ -92,6 +92,25 @@ describe('admin questions mutation route — actions (admin)', () => {
     expect(editMock).not.toHaveBeenCalled();
   });
 
+  it('dispatches a domain (canonicalSubcategory) edit', async () => {
+    const res = await post({ action: 'edit', id: 'q1', canonicalSubcategory: 'Sesame Street' });
+    expect(res.status).toBe(200);
+    expect(editMock).toHaveBeenCalledWith('q1', expect.objectContaining({ canonicalSubcategory: 'Sesame Street' }));
+  });
+
+  it('surfaces a rejected generic domain as 400', async () => {
+    editMock.mockResolvedValue({ ok: false, reason: 'generic_domain' });
+    const res = await post({ action: 'edit', id: 'q1', canonicalSubcategory: 'general' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'generic_domain' });
+  });
+
+  it('rejects an empty domain string before dispatch', async () => {
+    const res = await post({ action: 'edit', id: 'q1', canonicalSubcategory: '   ' });
+    expect(res.status).toBe(400);
+    expect(editMock).not.toHaveBeenCalled();
+  });
+
   it('dispatches a re-attribution to house', async () => {
     const res = await post({ action: 'edit', id: 'q1', attribution: 'house' });
     expect(res.status).toBe(200);

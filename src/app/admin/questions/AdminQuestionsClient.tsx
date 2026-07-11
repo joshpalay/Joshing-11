@@ -227,6 +227,11 @@ function EditForm({
   const [insideJoke, setInsideJoke] = useState(detail.insideJoke ?? '');
   const [category, setCategory] = useState(detail.category);
   const [visibility, setVisibility] = useState(detail.visibility);
+  // The domain / knowledge label shown on the card (canonicalSubcategory). Editing
+  // it fixes a mis-tagged question (e.g. a Sesame-Street question filed under
+  // "New Testament"). Empty falls back to the current value — the domain can be
+  // changed but not cleared here.
+  const [domain, setDomain] = useState(detail.canonicalSubcategory ?? '');
   // Author: 'person' keeps the current human creator; 'house' re-sources to the
   // house author. Only a person-authored row can switch (a house/LLM row has no
   // person to switch back to without a picker), so the control is read-only then.
@@ -258,6 +263,10 @@ function EditForm({
     }
     if (category !== detail.category) patch.category = category;
     if (visibility !== detail.visibility) patch.visibility = visibility;
+    const trimmedDomain = domain.trim();
+    if (trimmedDomain && trimmedDomain !== (detail.canonicalSubcategory ?? '')) {
+      patch.canonicalSubcategory = trimmedDomain;
+    }
     // Re-attribution: only person → house is a real transition.
     if (detail.authorIsPerson && authorChoice === 'house') patch.attribution = 'house';
     return patch;
@@ -301,7 +310,12 @@ function EditForm({
         body: JSON.stringify({ action: 'edit', id: detail.id, ...patch }),
       });
       if (!res.ok) {
-        setError(`Save failed (${res.status}).`);
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(
+          body?.error === 'generic_domain'
+            ? 'That domain is too generic — use a specific label (not “general”, “trivia”, etc.).'
+            : `Save failed (${res.status}).`,
+        );
         setBusy(false);
         return;
       }
@@ -371,6 +385,16 @@ function EditForm({
             Already house/non-person — reassigning to a specific person isn&apos;t supported here.
           </p>
         ) : null}
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Domain (subcategory)
+        </label>
+        <input className={inputClass} style={inputStyle} value={domain} onChange={(e) => setDomain(e.target.value)} />
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          The label shown above the question (e.g. “Sesame Street”). Fixes a mis-tagged domain.
+          Category above is the top-level bucket; this is the specific one.
+        </p>
       </div>
       <div className="mb-3 flex gap-3">
         <div className="flex-1">

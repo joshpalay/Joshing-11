@@ -2,6 +2,8 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQ
 
 import { db, questions, users } from '@/server/db';
 import { resolveAuthorDisplay, parseQuestionSource } from '@/lib/questions-types';
+import { resolveFinestNode } from '@/server/knowledge/graph';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 // B-ADMIN-QUESTIONS-OVERVIEW-01 — the admin-only "what's actually in the pool"
 // audit surface. UNLIKE every player-facing read path, this query is deliberately
@@ -120,6 +122,15 @@ export type AdminEditQuestionInput = {
   insideJoke?: string | null;
   category?: string;
   visibility?: string;
+  // The domain / knowledge label the card shows above the question (e.g. the
+  // mis-tagged "New Testament" on a Sesame-Street question). Written to BOTH
+  // subcategory (raw) and canonicalSubcategory (normalized to the finest
+  // KnowledgeNode) — the pair createQuestion/bulk-upload keep in sync and the
+  // pair domainDisplayName reads from. Guarded against generic bucket labels
+  // (assertSpecificCanonicalSubcategory's blocklist). Metadata, not content —
+  // it does NOT clear the verification stamp (that vouches for the answer, not
+  // the categorization). The top-level category enum is edited separately above.
+  canonicalSubcategory?: string;
   // Re-attribution. 'house' re-sources the question to the labeled non-human
   // house author (creator_id NULL + source 'house_authored') — the same override
   // the crafter "keep" flow applies. NOT a tombstone: authorDeleted stays false
@@ -129,7 +140,10 @@ export type AdminEditQuestionInput = {
   attribution?: 'house';
 };
 
-export type AdminMutationResult = { ok: boolean; reason?: 'not_found' | 'no_fields' };
+export type AdminMutationResult = {
+  ok: boolean;
+  reason?: 'not_found' | 'no_fields' | 'generic_domain';
+};
 
 // Edit a question as an admin. Grading-adjacent fields (question/answer/
 // alternatives/explanation) trigger the same canon editQuestionContent applies:
@@ -171,6 +185,16 @@ export async function adminEditQuestion(
   }
   if (input.visibility !== undefined) {
     values.visibility = input.visibility as typeof questions.$inferInsert.visibility;
+  }
+  if (input.canonicalSubcategory !== undefined) {
+    // Reject generic bucket labels (the same guard every canonical_subcategory
+    // write boundary enforces) before touching the row.
+    const domain = input.canonicalSubcategory.trim();
+    if (isGenericSubcategory(domain)) return { ok: false, reason: 'generic_domain' };
+    // Normalize to the finest existing KnowledgeNode's label (flag-off ⇒
+    // pass-through), mirroring createQuestion. subcategory holds the raw label.
+    values.canonicalSubcategory = await resolveFinestNode(domain);
+    values.subcategory = domain;
   }
   if (input.attribution === 'house') {
     // House marker: creator_id NULL + source 'house_authored' (crafter-keep
