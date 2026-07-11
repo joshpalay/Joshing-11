@@ -434,14 +434,51 @@ function RerunProgress() {
   );
 }
 
-async function postAdminAction(body: Record<string, unknown>): Promise<string | null> {
-  try {
-    const res = await fetch('/api/admin/content-reports', {
+// A 401 here comes from the proxy (src/proxy.ts), never the route (which 404s
+// non-admins): the session cookie went bad under an open tab. Retrying the
+// action can't succeed, so say what actually fixes it instead of a bare code.
+const SESSION_EXPIRED_MESSAGE = 'Your session has expired — reload the page and sign in again.';
+
+function proxyErrorCode(res: Response): Promise<string | null> {
+  return res
+    .clone()
+    .json()
+    .then((body: { error?: unknown }) => (typeof body.error === 'string' ? body.error : null))
+    .catch(() => null);
+}
+
+// POST to the admin endpoint, transparently repairing the repairable 401: the
+// proxy rejects a legacy JWT missing the `inv` claim with
+// {error: 'session_refresh_required'}, and /api/auth/refresh-session (excluded
+// from the proxy matcher) re-mints the cookie from the live DB session — so
+// one refresh + one retry fixes it without a re-login. A plain
+// 'unauthenticated' 401 (expired/cleared cookie) is not repairable here;
+// callers surface SESSION_EXPIRED_MESSAGE for any 401 that survives.
+async function postContentReports(body: Record<string, unknown>): Promise<Response> {
+  const send = () =>
+    fetch('/api/admin/content-reports', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(body),
     });
+  const res = await send();
+  if (res.status !== 401 || (await proxyErrorCode(res)) !== 'session_refresh_required') {
+    return res;
+  }
+  // redirect: 'manual' — the endpoint sets the cookie then redirects; the
+  // Set-Cookie has landed by the redirect, so the target page isn't needed.
+  await fetch('/api/auth/refresh-session', {
+    credentials: 'include',
+    redirect: 'manual',
+  }).catch(() => null);
+  return send();
+}
+
+async function postAdminAction(body: Record<string, unknown>): Promise<string | null> {
+  try {
+    const res = await postContentReports(body);
+    if (res.status === 401) return SESSION_EXPIRED_MESSAGE;
     if (!res.ok) return `Action failed (${res.status}).`;
     return null;
   } catch {
@@ -523,23 +560,20 @@ function EditPanel({
     setPending('rerun');
     setError(null);
     try {
-      const res = await fetch('/api/admin/content-reports', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          action: 'rerun_verify',
-          questionText: questionText.trim(),
-          answerText: answerText.trim() || undefined,
-          canonicalSubcategory,
-          broadCategory,
-        }),
+      const res = await postContentReports({
+        action: 'rerun_verify',
+        questionText: questionText.trim(),
+        answerText: answerText.trim() || undefined,
+        canonicalSubcategory,
+        broadCategory,
       });
       if (!res.ok) {
         setError(
-          res.status === 503
-            ? 'The machine is unavailable right now — try again shortly.'
-            : `Re-run failed (${res.status}).`,
+          res.status === 401
+            ? SESSION_EXPIRED_MESSAGE
+            : res.status === 503
+              ? 'The machine is unavailable right now — try again shortly.'
+              : `Re-run failed (${res.status}).`,
         );
         return;
       }
@@ -569,20 +603,15 @@ function EditPanel({
     setPending('approve');
     setError(null);
     try {
-      const res = await fetch('/api/admin/content-reports', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          action: 'approve',
-          target,
-          questionText: questionText.trim(),
-          answerText: answerText.trim(),
-          explanation: showExplanation ? explanation.trim() || null : undefined,
-        }),
+      const res = await postContentReports({
+        action: 'approve',
+        target,
+        questionText: questionText.trim(),
+        answerText: answerText.trim(),
+        explanation: showExplanation ? explanation.trim() || null : undefined,
       });
       if (!res.ok) {
-        setError(`Approve failed (${res.status}).`);
+        setError(res.status === 401 ? SESSION_EXPIRED_MESSAGE : `Approve failed (${res.status}).`);
         setPending(null);
         return;
       }
