@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDownToLine, Undo2, X } from 'lucide-react';
+import { Undo2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
@@ -238,9 +238,8 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
                     type="button"
                     onClick={dismissCurrent}
                     disabled={busy}
-                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
                   >
-                    <ArrowDownToLine className="size-3.5" aria-hidden="true" />
                     Dismiss — take it out of circulation
                   </button>
                 </div>
