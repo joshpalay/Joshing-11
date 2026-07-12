@@ -451,6 +451,14 @@ function StreakQuestionCard({
               </FeedActionLink>
             }
           />
+        ) : revealed ? (
+          // A "View Answer" peek settles in the SAME leading slot as the graded
+          // verdict (request 2026-07-12): right, wrong, or gave-up, the result
+          // always sits above the question so a column of settled cards scans
+          // uniformly.
+          <div style={{ marginBottom: 10 }}>
+            <RevealedAnswer state={revealed} />
+          </div>
         ) : null}
 
         <p
@@ -470,13 +478,6 @@ function StreakQuestionCard({
 
         {spent ? null : (
           <>
-            {/* The revealed answer sits above the actions once View Answer is
-                tapped; the card then reads like a spent "gave up" card. */}
-            {revealed ? (
-              <div style={{ marginBottom: 12 }}>
-                <RevealedAnswer state={revealed} />
-              </div>
-            ) : null}
             <CardRow
               left={
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
