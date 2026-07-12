@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 
 import { db, masteryEvents, questions, recoveredSetAside } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -11,12 +11,12 @@ import { pgErrorCode } from '@/server/db/pg-error';
  * (computeAnswerState, src/server/answer-state.ts), written at insert time by
  * the shared answer pipeline across all five live answer surfaces.
  *
- * This surface is READ-ONLY and does NOT check answers. The reflective pool is
- * a single SELECT; the review interaction is a no-check reveal — the card ships
- * the canonical answer collapsed and reveals it on demand (a native <details>,
- * see RecoveredCard). Nothing is graded and nothing is written: a review
- * submission mints zero `mastery_events` rows and never touches mastery, feed
- * fan-out, or promotion.
+ * This surface is READ-ONLY on the pool and does NOT check answers. The review
+ * interaction is a no-check reveal — the deck ships the canonical answers
+ * collapsed and reveals each on demand (see RecoveredDeck). Nothing is graded:
+ * a review session mints zero `mastery_events` rows and never touches mastery,
+ * feed fan-out, or promotion. The only write on the surface is the reversible
+ * dismiss/restore (RecoveredSetAside, via /api/recovered/set-aside).
  *
  * Decisions A–D:
  *   A. Pool = whole "ever recovered" set (no latest-state reduction, no
@@ -24,9 +24,11 @@ import { pgErrorCode } from '@/server/db/pg-error';
  *      current status, is what `first_correct_after_wrong` records.
  *   B. No-check reveal: the player recalls the answer in their head, then
  *      reveals the canonical answer to check themselves. No grader, no verdict.
- *   C. Ordering is random: the pool is shuffled server-side on every load
- *      (revised from recency — each visit deals a fresh hand). An optional
- *      `withinDays` bound limits the pool to moments recovered that recently.
+ *   C. The surface deals ONE question at a time from a shuffled deck (revised
+ *      from the original recency-ordered list). An optional `withinDays` bound
+ *      limits the deck to moments recovered that recently. Dismissed questions
+ *      are out of circulation entirely — returned separately (all time, most
+ *      recent first) so the viewer can browse and restore them.
  *
  * `answer_state` only carries a value on the `live_correct` / `catchup_correct`
  * source types, and `question_id` is nullable on mastery_events — hence the
@@ -56,8 +58,19 @@ export type RecoveredQuestion = {
   /** Revealed alongside the answer when present. */
   explanation: string | null;
   creatorNote: string | null;
-  /** The viewer has set this one aside — it sorts to the bottom and dims. */
+  /** The viewer has dismissed this one — it is out of the deck's circulation. */
   setAside: boolean;
+};
+
+export type RecoveredPool = {
+  /** Shuffled, range-bounded, not dismissed — the one-at-a-time rotation. */
+  deck: RecoveredQuestion[];
+  /**
+   * Everything the viewer has dismissed, regardless of the range bound (the
+   * dismissed shelf is a browsable archive, not a window), most recently
+   * recovered first.
+   */
+  dismissed: RecoveredQuestion[];
 };
 
 const CATEGORY_ENUM_PRETTY: Record<string, string> = {
@@ -109,24 +122,20 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 /**
- * Returns the viewer's "ever recovered" pool, optionally bounded to moments
- * recovered within the last `withinDays` days (null/undefined = all time).
- * Read-only: SELECTs only, no mastery coupling. The answer and explainer ship
- * with the pool so the card can reveal them client-side with no further
- * round-trip and no grading — they sit collapsed until the player chooses to
- * check themselves.
+ * Returns the viewer's recovered pool, split for the one-at-a-time surface:
+ * a shuffled DECK of questions still in circulation (optionally bounded to
+ * moments recovered within the last `withinDays` days; null/undefined = all
+ * time) and the DISMISSED shelf (every set-aside question, all time, most
+ * recently recovered first — the range bound never hides a dismissal).
  *
- * Ordering: random (a fresh shuffle per call), but questions the viewer has
- * SET ASIDE are demoted to the bottom. The card dims a set-aside question and
- * offers to restore it.
+ * Read-only: SELECTs only, no mastery coupling. Answers and explainers ship
+ * with both lists so the deck can reveal them client-side with no further
+ * round-trip and no grading.
  */
 export async function getRecoveredQuestionsForUser(
   userId: string,
   { withinDays }: { withinDays?: number | null } = {},
-): Promise<RecoveredQuestion[]> {
-  const since =
-    withinDays == null ? undefined : new Date(Date.now() - withinDays * 24 * 60 * 60 * 1000);
-
+): Promise<RecoveredPool> {
   const [rows, setAsideIds] = await Promise.all([
     db
       .select({
@@ -150,13 +159,14 @@ export async function getRecoveredQuestionsForUser(
           inArray(masteryEvents.sourceType, ANSWER_STATE_SOURCE_TYPES),
           eq(masteryEvents.answerState, RECOVERED_STATE),
           isNotNull(masteryEvents.questionId),
-          since ? gte(masteryEvents.createdAt, since) : undefined,
         ),
-      ),
+      )
+      // Recency order is kept for the dismissed shelf; the deck is shuffled below.
+      .orderBy(desc(masteryEvents.createdAt)),
     getSetAsideQuestionIds(userId),
   ]);
 
-  const mapped: RecoveredQuestion[] = shuffle(rows).map((row) => ({
+  const mapped: RecoveredQuestion[] = rows.map((row) => ({
     id: row.id,
     questionId: row.questionId,
     questionText: row.questionText,
@@ -168,15 +178,23 @@ export async function getRecoveredQuestionsForUser(
     setAside: setAsideIds.has(row.questionId),
   }));
 
-  // Demote set-aside questions to the bottom; the stable partition preserves
-  // the shuffled order within each group.
-  return [...mapped.filter((q) => !q.setAside), ...mapped.filter((q) => q.setAside)];
+  const cutoff = withinDays == null ? null : Date.now() - withinDays * 24 * 60 * 60 * 1000;
+
+  const deck = shuffle(
+    mapped.filter(
+      (q) => !q.setAside && (cutoff === null || q.recoveredAt.getTime() >= cutoff),
+    ),
+  );
+  const dismissed = mapped.filter((q) => q.setAside);
+
+  return { deck, dismissed };
 }
 
 /**
- * Set a recovered question aside for the viewer (reversible soft-dismiss). A
- * no-op if it is already set aside. The partial unique index guarantees at most
- * one active row per (user, question). Mirrors dismissDomain.
+ * Dismiss a recovered question for the viewer (reversible — takes it out of
+ * the deck's circulation). A no-op if it is already dismissed. The partial
+ * unique index guarantees at most one active row per (user, question). Mirrors
+ * dismissDomain.
  */
 export async function setAsideRecoveredQuestion(userId: string, questionId: string): Promise<void> {
   const [existing] = await db
@@ -197,8 +215,9 @@ export async function setAsideRecoveredQuestion(userId: string, questionId: stri
 }
 
 /**
- * Restore a set-aside recovered question (un-demote it) by marking the active
- * row reinstated. A no-op if it was not set aside. Mirrors reinstateDomain.
+ * Restore a dismissed recovered question (put it back in circulation) by
+ * marking the active row reinstated. A no-op if it was not dismissed. Mirrors
+ * reinstateDomain.
  */
 export async function restoreRecoveredQuestion(userId: string, questionId: string): Promise<void> {
   await db

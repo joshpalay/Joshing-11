@@ -50,7 +50,8 @@ Start with `SKIP_BOOT_DB_GUARDS=1 npm run dev` (guards are noisy on a
 half-local DB; migrate() is a no-op after step 2).
 
 **Turbopack CSS gotcha:** Tailwind v4 auto-scans the repo and compiles the
-literal `rounded-[var(--radius-*)]` strings inside comments in
+literal "rounded-[var(--radius-" + "*)]" strings (written split here so THIS
+file doesn't retrigger it) inside comments in
 `scripts/check-radius-ratchet.mjs` / `CLAUDE.md` / `.github/` into invalid
 CSS → every page 500s in dev. Local-only workaround (do not commit):
 

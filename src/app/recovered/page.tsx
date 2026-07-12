@@ -1,26 +1,28 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { RecoveredCard } from '@/components/recovered/RecoveredCard';
+import { RecoveredDeck } from '@/components/recovered/RecoveredDeck';
 import { getSession } from '@/server/auth/session';
 import { getRecoveredQuestionsForUser } from '@/server/db/queries/recovered-questions';
 
 /**
  * D-REVIEW-RECOVERED-01 — the Recovered-Questions review surface (Version A).
  *
- * A personal, profile-resident, read-only pool of the questions the viewer got
- * wrong and then later got right. Self-initiated from the profile — never
- * pushed, no "due" badge, no streak, no denominator. The whole page is a server
- * component with no client JS: the reveal is a native <details> on each card,
- * the how-far-back filter is plain links over a `?range=` search param, and the
- * order is a fresh server-side shuffle per load — so this surface still mints
- * no writes (see RecoveredCard / the query module).
+ * A personal, profile-resident pool of the questions the viewer got wrong and
+ * then later got right. Self-initiated from the profile — never pushed, no
+ * "due" badge, no streak. The surface deals ONE question at a time from a
+ * server-shuffled deck: reveal the answer, move to the next, or dismiss the
+ * question out of circulation (reversible; the dismissed shelf lists them all
+ * with Restore). The how-far-back filter is plain links over a `?range=`
+ * search param — a reload deals a fresh shuffle. The deck interaction lives in
+ * the RecoveredDeck client island; the pool itself stays read-only (see the
+ * query module), with dismiss/restore as the surface's only write.
  */
 export const dynamic = 'force-dynamic';
 
-// How far back the pool reaches, keyed by the `?range=` search param. `null`
+// How far back the deck reaches, keyed by the `?range=` search param. `null`
 // days means unbounded (all time) — the default, and the fallback for any
-// unrecognized param value.
+// unrecognized param value. The dismissed shelf is always all-time.
 const RANGES = [
   { key: 'week', label: 'Past week', days: 7 },
   { key: 'month', label: 'Past month', days: 30 },
@@ -43,7 +45,9 @@ export default async function RecoveredQuestionsPage({
 
   const params = await searchParams;
   const range = resolveRange(params.range);
-  const recovered = await getRecoveredQuestionsForUser(session.userId, { withinDays: range.days });
+  const { deck, dismissed } = await getRecoveredQuestionsForUser(session.userId, {
+    withinDays: range.days,
+  });
 
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6 pb-20">
@@ -58,7 +62,8 @@ export default async function RecoveredQuestionsPage({
           The ones you turned around
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Questions you once missed and later got right, in a random order. Sit with one, recall the answer, then reveal it to check yourself.
+          Questions you once missed and later got right, dealt one at a time in a random order.
+          Recall the answer, reveal it to check yourself, then move on to the next.
         </p>
       </header>
 
@@ -83,23 +88,11 @@ export default async function RecoveredQuestionsPage({
         )}
       </nav>
 
-      {recovered.length === 0 ? (
-        // Cold-start register (Decision D): discovery-framed, not a failure /
-        // "nothing here" note. Most players (and every new player) land here.
-        // A bounded range that comes up empty says so instead, since the pool
-        // may simply be older than the window.
-        <section className="mt-10 flex min-h-48 items-center justify-center text-center text-sm text-muted-foreground">
-          {range.days === null
-            ? 'The ones you turned around will gather here as you play.'
-            : `Nothing turned around in the ${range.label.toLowerCase()} — try a longer stretch.`}
-        </section>
-      ) : (
-        <section className="mt-6 space-y-3">
-          {recovered.map((question) => (
-            <RecoveredCard key={question.id} question={question} />
-          ))}
-        </section>
-      )}
+      <RecoveredDeck
+        deck={deck}
+        dismissed={dismissed}
+        rangeLabel={range.days === null ? null : range.label.toLowerCase()}
+      />
     </main>
   );
 }
