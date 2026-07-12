@@ -10,13 +10,14 @@ import { getRecoveredQuestionsForUser } from '@/server/db/queries/recovered-ques
  *
  * A personal, profile-resident pool of the questions the viewer got wrong and
  * then later got right. Self-initiated from the profile — never pushed, no
- * "due" badge, no streak. The surface deals ONE question at a time from a
- * server-shuffled deck: reveal the answer, move to the next, or dismiss the
- * question out of circulation (reversible; the dismissed shelf lists them all
- * with Restore). The how-far-back filter is plain links over a `?range=`
- * search param — a reload deals a fresh shuffle. The deck interaction lives in
- * the RecoveredDeck client island; the pool itself stays read-only (see the
- * query module), with dismiss/restore as the surface's only write.
+ * "due" badge, no streak. The page is a LANDING (count, Start, the dismissed
+ * shelf); Start opens a full-screen review MODE that deals one question at a
+ * time from the shuffled deck — Cancel (X) top right, a sticky Show answer /
+ * Next bar at the bottom, Dismiss to take a question out of circulation
+ * (reversible; the shelf lists them all with Restore). The how-far-back
+ * filter is plain links over a `?range=` search param. The interaction lives
+ * in the RecoveredDeck client island; the pool itself stays read-only (see
+ * the query module), with dismiss/restore as the surface's only write.
  */
 export const dynamic = 'force-dynamic';
 
