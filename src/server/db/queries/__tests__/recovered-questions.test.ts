@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The drizzle layer is mocked as inert builders that record the WHERE / ORDER BY
 // and resolve to canned rows. We assert:
 //   - the pool definition (answer_state = first_correct_after_wrong +
-//     question_id IS NOT NULL, ordered created_at DESC);
+//     question_id IS NOT NULL, optional `since` lower bound, shuffled — no SQL
+//     ORDER BY);
 //   - set-aside questions carry the flag and sort to the bottom;
 //   - the set-aside / restore mutations issue the expected insert / update.
 interface Node {
@@ -30,7 +31,7 @@ let deleteCalls = 0;
 vi.mock('drizzle-orm', () => ({
   and: vi.fn((...parts: Node[]) => ({ op: 'and', parts })),
   eq: vi.fn((column, value) => ({ op: 'eq', column, value })),
-  desc: vi.fn((column) => ({ op: 'desc', column })),
+  gte: vi.fn((column, value) => ({ op: 'gte', column, value })),
   inArray: vi.fn((column, values) => ({ op: 'inArray', column, values })),
   isNotNull: vi.fn((column) => ({ op: 'isNotNull', column })),
   isNull: vi.fn((column) => ({ op: 'isNull', column })),
@@ -178,9 +179,27 @@ describe('getRecoveredQuestionsForUser — pool definition', () => {
     expect(match!.value).toBe(VIEWER);
   });
 
-  it('orders by created_at DESC (recency, Decision C)', async () => {
+  it('applies no SQL ORDER BY (ordering is a server-side shuffle, Decision C revised)', async () => {
     await getRecoveredQuestionsForUser(VIEWER);
-    expect(capturedOrderBy).toEqual({ op: 'desc', column: 'me.createdAt' });
+    expect(capturedOrderBy).toBeNull();
+  });
+
+  it('adds a created_at lower bound when `withinDays` is given', async () => {
+    const before = Date.now();
+    await getRecoveredQuestionsForUser(VIEWER, { withinDays: 30 });
+    const after = Date.now();
+    const match = allWhereNodes().find((n) => n.op === 'gte' && n.column === 'me.createdAt');
+    expect(match).toBeDefined();
+    const cutoff = (match!.value as Date).getTime();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    expect(cutoff).toBeGreaterThanOrEqual(before - thirtyDaysMs);
+    expect(cutoff).toBeLessThanOrEqual(after - thirtyDaysMs);
+  });
+
+  it('applies no created_at bound when `withinDays` is null or omitted', async () => {
+    await getRecoveredQuestionsForUser(VIEWER);
+    await getRecoveredQuestionsForUser(VIEWER, { withinDays: null });
+    expect(allWhereNodes().find((n) => n.op === 'gte')).toBeUndefined();
   });
 
   it('issues no insert/update/delete on the read path', async () => {
@@ -211,9 +230,32 @@ describe('getRecoveredQuestionsForUser — set-aside flag and ordering', () => {
       [{ questionId: 'q-b' }], // active set-aside ids
     ];
     const result = await getRecoveredQuestionsForUser(VIEWER);
-    expect(result.map((q) => q.questionId)).toEqual(['q-a', 'q-c', 'q-b']);
+    // The shuffle makes within-group order nondeterministic, so assert the
+    // partition: the set-aside question is last, the others precede it.
+    expect(result.map((q) => q.questionId).sort()).toEqual(['q-a', 'q-b', 'q-c']);
+    expect(result[result.length - 1].questionId).toBe('q-b');
     expect(result.find((q) => q.questionId === 'q-b')!.setAside).toBe(true);
     expect(result.find((q) => q.questionId === 'q-a')!.setAside).toBe(false);
+  });
+
+  it('shuffles the pool (order follows Math.random, not row order)', async () => {
+    selectQueue = [
+      [
+        poolRow({ id: 'me-a', questionId: 'q-a' }),
+        poolRow({ id: 'me-b', questionId: 'q-b' }),
+        poolRow({ id: 'me-c', questionId: 'q-c' }),
+      ],
+      [],
+    ];
+    // Fisher–Yates with random() = 0 swaps each element to the front:
+    // [a,b,c] → i=2 swaps a/c → [c,b,a] → i=1 swaps c→? j=0 swaps b/c → [b,c,a].
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    try {
+      const result = await getRecoveredQuestionsForUser(VIEWER);
+      expect(result.map((q) => q.questionId)).toEqual(['q-b', 'q-c', 'q-a']);
+    } finally {
+      randomSpy.mockRestore();
+    }
   });
 });
 

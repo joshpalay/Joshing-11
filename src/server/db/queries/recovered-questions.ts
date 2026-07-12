@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull } from 'drizzle-orm';
 
 import { db, masteryEvents, questions, recoveredSetAside } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
@@ -24,7 +24,9 @@ import { pgErrorCode } from '@/server/db/pg-error';
  *      current status, is what `first_correct_after_wrong` records.
  *   B. No-check reveal: the player recalls the answer in their head, then
  *      reveals the canonical answer to check themselves. No grader, no verdict.
- *   C. Ordering is recency: ORDER BY created_at DESC.
+ *   C. Ordering is random: the pool is shuffled server-side on every load
+ *      (revised from recency — each visit deals a fresh hand). An optional
+ *      `withinDays` bound limits the pool to moments recovered that recently.
  *
  * `answer_state` only carries a value on the `live_correct` / `catchup_correct`
  * source types, and `question_id` is nullable on mastery_events — hence the
@@ -97,17 +99,34 @@ async function getSetAsideQuestionIds(userId: string): Promise<Set<string>> {
   }
 }
 
+/** Unbiased in-place Fisher–Yates shuffle. */
+function shuffle<T>(items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
+
 /**
- * Returns the viewer's whole "ever recovered" pool. Read-only: SELECTs only, no
- * mastery coupling. The answer and explainer ship with the pool so the card can
- * reveal them client-side with no further round-trip and no grading — they sit
- * collapsed until the player chooses to check themselves.
+ * Returns the viewer's "ever recovered" pool, optionally bounded to moments
+ * recovered within the last `withinDays` days (null/undefined = all time).
+ * Read-only: SELECTs only, no mastery coupling. The answer and explainer ship
+ * with the pool so the card can reveal them client-side with no further
+ * round-trip and no grading — they sit collapsed until the player chooses to
+ * check themselves.
  *
- * Ordering: most recently recovered first, but questions the viewer has SET
- * ASIDE are demoted to the bottom (recency preserved within each group). The
- * card dims a set-aside question and offers to restore it.
+ * Ordering: random (a fresh shuffle per call), but questions the viewer has
+ * SET ASIDE are demoted to the bottom. The card dims a set-aside question and
+ * offers to restore it.
  */
-export async function getRecoveredQuestionsForUser(userId: string): Promise<RecoveredQuestion[]> {
+export async function getRecoveredQuestionsForUser(
+  userId: string,
+  { withinDays }: { withinDays?: number | null } = {},
+): Promise<RecoveredQuestion[]> {
+  const since =
+    withinDays == null ? undefined : new Date(Date.now() - withinDays * 24 * 60 * 60 * 1000);
+
   const [rows, setAsideIds] = await Promise.all([
     db
       .select({
@@ -131,13 +150,13 @@ export async function getRecoveredQuestionsForUser(userId: string): Promise<Reco
           inArray(masteryEvents.sourceType, ANSWER_STATE_SOURCE_TYPES),
           eq(masteryEvents.answerState, RECOVERED_STATE),
           isNotNull(masteryEvents.questionId),
+          since ? gte(masteryEvents.createdAt, since) : undefined,
         ),
-      )
-      .orderBy(desc(masteryEvents.createdAt)),
+      ),
     getSetAsideQuestionIds(userId),
   ]);
 
-  const mapped: RecoveredQuestion[] = rows.map((row) => ({
+  const mapped: RecoveredQuestion[] = shuffle(rows).map((row) => ({
     id: row.id,
     questionId: row.questionId,
     questionText: row.questionText,
@@ -149,8 +168,8 @@ export async function getRecoveredQuestionsForUser(userId: string): Promise<Reco
     setAside: setAsideIds.has(row.questionId),
   }));
 
-  // Demote set-aside questions to the bottom; recency order is already in place
-  // within each group from the ORDER BY, and a stable partition preserves it.
+  // Demote set-aside questions to the bottom; the stable partition preserves
+  // the shuffled order within each group.
   return [...mapped.filter((q) => !q.setAside), ...mapped.filter((q) => q.setAside)];
 }
 
