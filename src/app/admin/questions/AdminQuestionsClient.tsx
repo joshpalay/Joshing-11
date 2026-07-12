@@ -227,6 +227,11 @@ function EditForm({
   const [insideJoke, setInsideJoke] = useState(detail.insideJoke ?? '');
   const [category, setCategory] = useState(detail.category);
   const [visibility, setVisibility] = useState(detail.visibility);
+  // The domain / knowledge label shown on the card (canonicalSubcategory). Editing
+  // it fixes a mis-tagged question (e.g. a Sesame-Street question filed under
+  // "New Testament"). Empty falls back to the current value — the domain can be
+  // changed but not cleared here.
+  const [domain, setDomain] = useState(detail.canonicalSubcategory ?? '');
   // Author: 'person' keeps the current human creator; 'house' re-sources to the
   // house author. Only a person-authored row can switch (a house/LLM row has no
   // person to switch back to without a picker), so the control is read-only then.
@@ -258,6 +263,10 @@ function EditForm({
     }
     if (category !== detail.category) patch.category = category;
     if (visibility !== detail.visibility) patch.visibility = visibility;
+    const trimmedDomain = domain.trim();
+    if (trimmedDomain && trimmedDomain !== (detail.canonicalSubcategory ?? '')) {
+      patch.canonicalSubcategory = trimmedDomain;
+    }
     // Re-attribution: only person → house is a real transition.
     if (detail.authorIsPerson && authorChoice === 'house') patch.attribution = 'house';
     return patch;
@@ -301,7 +310,12 @@ function EditForm({
         body: JSON.stringify({ action: 'edit', id: detail.id, ...patch }),
       });
       if (!res.ok) {
-        setError(`Save failed (${res.status}).`);
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(
+          body?.error === 'generic_domain'
+            ? 'That domain is too generic — use a specific label (not “general”, “trivia”, etc.).'
+            : `Save failed (${res.status}).`,
+        );
         setBusy(false);
         return;
       }
@@ -371,6 +385,16 @@ function EditForm({
             Already house/non-person — reassigning to a specific person isn&apos;t supported here.
           </p>
         ) : null}
+      </div>
+      <div className="mb-3">
+        <label className={labelClass} style={labelStyle}>
+          Domain (subcategory)
+        </label>
+        <input className={inputClass} style={inputStyle} value={domain} onChange={(e) => setDomain(e.target.value)} />
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          The label shown above the question (e.g. “Sesame Street”). Fixes a mis-tagged domain.
+          Category above is the top-level bucket; this is the specific one.
+        </p>
       </div>
       <div className="mb-3 flex gap-3">
         <div className="flex-1">
@@ -712,6 +736,72 @@ export function AdminQuestionsClient({
   const searchParams = useSearchParams();
 
   const [search, setSearch] = useState(searchParams.get('q') ?? '');
+  const [author, setAuthor] = useState(searchParams.get('author') ?? '');
+
+  // Bulk person → house re-attribution. Selection is by id so it survives a
+  // page/sort change; only live person-authored rows are selectable (a house or
+  // LLM row has no personal byline to drop, a deleted row is restored first).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+
+  const selectableRows = result.rows.filter((r) => r.authorIsPerson && !r.deletedAt);
+  const allPageSelected = selectableRows.length > 0 && selectableRows.every((r) => selected.has(r.id));
+
+  function toggleSelected(id: string, on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    setBulkConfirming(false);
+    setBulkNotice(null);
+  }
+
+  function togglePageSelection(on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const row of selectableRows) {
+        if (on) next.add(row.id);
+        else next.delete(row.id);
+      }
+      return next;
+    });
+    setBulkConfirming(false);
+    setBulkNotice(null);
+  }
+
+  async function reattributeSelected() {
+    if (selected.size === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      const res = await fetch('/api/admin/questions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'reattribute_house', ids: [...selected] }),
+      });
+      const data = (await res.json().catch(() => null)) as { updated?: number; skipped?: number } | null;
+      if (!res.ok) {
+        setBulkError(`Re-attribution failed (${res.status}).`);
+        setBulkBusy(false);
+        return;
+      }
+      setBulkNotice(
+        `Re-attributed ${data?.updated ?? 0} to House${data?.skipped ? ` (${data.skipped} skipped — already house or deleted)` : ''}.`,
+      );
+      setSelected(new Set());
+      setBulkConfirming(false);
+      setBulkBusy(false);
+      router.refresh();
+    } catch {
+      setBulkError('Re-attribution failed.');
+      setBulkBusy(false);
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
 
@@ -755,6 +845,7 @@ export function AdminQuestionsClient({
 
   function resetFilters() {
     setSearch('');
+    setAuthor('');
     router.push('/admin/questions');
   }
 
@@ -777,7 +868,8 @@ export function AdminQuestionsClient({
       <p className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
         Every question in the pool — human, house, and machine-drafted, plus soft-deleted rows.{' '}
         <strong>Inspect</strong> opens the full record; edit, delete, and restore live there.
-        Filters combine, and apply across the whole pool.
+        Filters combine, and apply across the whole pool. Check person-authored rows to
+        re-attribute them to House (Joshing) in bulk.
       </p>
 
       {/* Filter bar. Every control combines (AND) with the others server-side. */}
@@ -785,7 +877,7 @@ export function AdminQuestionsClient({
         className="mb-3 flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          setFilter('q', search.trim() || null);
+          navigate({ q: search.trim() || null, author: author.trim() || null });
         }}
       >
         <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
@@ -797,6 +889,18 @@ export function AdminQuestionsClient({
             placeholder="question or answer"
             className={CONTROL}
             style={{ borderColor: 'var(--border)', minWidth: '200px' }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+          Author
+          <input
+            type="search"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            placeholder="person name"
+            className={CONTROL}
+            style={{ borderColor: 'var(--border)', minWidth: '140px' }}
           />
         </label>
 
@@ -908,10 +1012,91 @@ export function AdminQuestionsClient({
         {isDeleted ? ' (including deleted)' : ''}
       </p>
 
+      {/* Bulk re-attribution bar. The one sanctioned bulk act (route Decision C
+          revision): person → house. Same two-step inline confirm the edit form
+          uses for consequential saves. */}
+      {bulkNotice ? (
+        <p className="mb-3 text-sm" style={{ color: 'var(--brand-navy)' }}>
+          {bulkNotice}
+        </p>
+      ) : null}
+      {selected.size > 0 ? (
+        <div
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm"
+          style={{
+            borderColor: bulkConfirming ? 'var(--warning)' : 'var(--border)',
+            background: bulkConfirming ? 'var(--warning-surface)' : 'var(--surface-2)',
+            color: 'var(--brand-ink-700)',
+          }}
+        >
+          <span>
+            {selected.size} selected
+            {bulkConfirming
+              ? ' — each loses its personal byline (leaves the author’s authored list, renders as house content). No undo from this tool.'
+              : ''}
+          </span>
+          {bulkConfirming ? (
+            <>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => void reattributeSelected()}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                style={{ borderColor: 'var(--warning)', color: 'var(--brand-ink)' }}
+              >
+                {bulkBusy ? 'Re-attributing…' : 'Confirm: attribute to House'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => setBulkConfirming(false)}
+                className="rounded-md border px-3 py-1.5 text-sm"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setBulkConfirming(true)}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium"
+                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              >
+                Attribute to House (Joshing)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelected(new Set());
+                  setBulkNotice(null);
+                }}
+                className="rounded-md border px-3 py-1.5 text-sm"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+              >
+                Clear selection
+              </button>
+            </>
+          )}
+          {bulkError ? <span style={{ color: 'var(--danger)' }}>{bulkError}</span> : null}
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto rounded-md border" style={{ borderColor: 'var(--border)' }}>
         <table className="w-full border-collapse text-left">
           <thead>
             <tr style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
+              <th className={HEAD}>
+                {/* Page-wide toggle over the selectable (live, person-authored) rows. */}
+                <input
+                  type="checkbox"
+                  aria-label="Select all person-authored questions on this page"
+                  checked={allPageSelected}
+                  disabled={selectableRows.length === 0}
+                  onChange={(e) => togglePageSelection(e.target.checked)}
+                />
+              </th>
               <th className={HEAD}>
                 <span className="sr-only">Inspect</span>
               </th>
@@ -934,7 +1119,7 @@ export function AdminQuestionsClient({
           <tbody>
             {result.rows.length === 0 ? (
               <tr>
-                <td className={CELL} colSpan={15} style={{ color: 'var(--text-muted)' }}>
+                <td className={CELL} colSpan={16} style={{ color: 'var(--text-muted)' }}>
                   No questions match.
                 </td>
               </tr>
@@ -949,6 +1134,16 @@ export function AdminQuestionsClient({
                     color: 'var(--brand-ink)',
                   }}
                 >
+                  <td className={`${CELL} whitespace-nowrap`}>
+                    {row.authorIsPerson && !row.deletedAt ? (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select question by ${row.authorLabel} for re-attribution`}
+                        checked={selected.has(row.id)}
+                        onChange={(e) => toggleSelected(row.id, e.target.checked)}
+                      />
+                    ) : null}
+                  </td>
                   <td className={`${CELL} whitespace-nowrap`}>
                     <button
                       type="button"

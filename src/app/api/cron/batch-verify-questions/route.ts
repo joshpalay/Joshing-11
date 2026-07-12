@@ -200,7 +200,12 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
     const routed: BatchRowInput[] = [];
     const routeOrSkip = async (row: PendingRow, store: 'q' | 'g', tally: Tally) => {
       const decision = prefilterForVerification(
-        { questionText: row.questionText, answer: row.answer, explanation: row.explanation },
+        {
+          questionText: row.questionText,
+          answer: row.answer,
+          explanation: row.explanation,
+          canonicalSubcategory: row.canonicalSubcategory,
+        },
         options,
       );
       if (!decision.needsVerification) {
@@ -273,6 +278,7 @@ async function runSyncSweep(now: Date, options: PrefilterOptions) {
       questionText: row.questionText,
       answer: row.answer,
       explanation: row.explanation,
+      canonicalSubcategory: row.canonicalSubcategory,
     }, options);
     if (!decision.needsVerification) return { verdict: 'skipped' };
 

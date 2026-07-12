@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE } from '@/server/daily/types';
+import { DAILY_BONUS_SLOT_MAX, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE } from '@/server/daily/types';
 
 // fillDailyQueueForUser orchestrates DB pickers + LLM generation; every one of
 // those touches @/server/db, which throws at module load without a connection
@@ -232,5 +232,120 @@ describe('fillDailyQueueForUser — minimum-size floor', () => {
     // One initial generation + two top-up rounds reaching the target.
     expect(mocks.generateDailyQuestionsFromKnowledgeBase).toHaveBeenCalledTimes(3);
     expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+  });
+});
+
+// A friend-domain candidate as getFriendDomainsForBonus returns it — the
+// orchestrator reads `.domain` and `.presenceSources[0]` (via toBonusPresence).
+function friendDomain(domain: string, sourceId = `src-${domain}`) {
+  return {
+    domain,
+    presenceSources: [{ userId: sourceId, displayName: `Owner of ${domain}`, lastActivityAt: null }],
+  } as never;
+}
+// A freshly generated friend question as generateBonusQuestionsForDomains returns it.
+function friendQ(domain: string, id = `f-${domain}`) {
+  return { domain, question: genq(id, domain) };
+}
+
+// The persisted BONUS slots (bot rows carrying a presence_source_id).
+function persistedBonusSlots(): Array<Record<string, unknown>> {
+  return persistedSlots().filter((slot) => Boolean(slot.presence_source_id));
+}
+
+describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () => {
+  it('promotes friend-domain questions into CORE when the own palette lands short, then fills +2', async () => {
+    // Own palette yields only 4 distinct questions and never recovers a 5th.
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3'), genq('q4')])
+      .mockResolvedValue([genq('q1')]);
+    // Three friend domains are available; each generates one fresh question.
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('Chess'),
+      friendDomain('Opera'),
+      friendDomain('Sushi'),
+    ]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([
+      friendQ('Chess'),
+      friendQ('Opera'),
+      friendQ('Sushi'),
+    ]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // One friend question is promoted into the core to reach the full five (the
+    // 4 own questions + 1 friend), and the remaining two become +2 bonus slots.
+    const core = persistedBotSlots();
+    expect(core).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(core.map((slot) => slot.generated_question_id)).toEqual([
+      'q1',
+      'q2',
+      'q3',
+      'q4',
+      'f-Chess',
+    ]);
+    expect(persistedBonusSlots().map((slot) => slot.generated_question_id)).toEqual([
+      'f-Opera',
+      'f-Sushi',
+    ]);
+  });
+
+  it('requests coreShortfall + DAILY_BONUS_SLOT_MAX friend domains so the +2 is not cannibalized', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3')]) // 2 short
+      .mockResolvedValue([genq('q1')]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // Core short by 2 → asks for 2 + DAILY_BONUS_SLOT_MAX candidates.
+    expect(mocks.getFriendDomainsForBonus).toHaveBeenCalledWith(
+      USER,
+      2 + DAILY_BONUS_SLOT_MAX,
+      expect.anything(),
+    );
+  });
+
+  it('uses every friend question for core (0 bonus) when the shortfall consumes them all', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3'), genq('q4')])
+      .mockResolvedValue([genq('q1')]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    // Only one friend question materializes — it must go to CORE, not bonus.
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(persistedBonusSlots()).toHaveLength(0);
+  });
+
+  it('leaves a FULL core untouched — friend questions all become +2 bonus (unchanged behavior)', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('Chess'),
+      friendDomain('Opera'),
+    ]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([
+      friendQ('Chess'),
+      friendQ('Opera'),
+    ]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // Core is the five own questions; both friend questions are bonus.
+    expect(persistedBotSlots().map((slot) => slot.generated_question_id)).toEqual([
+      'q1', 'q2', 'q3', 'q4', 'q5',
+    ]);
+    expect(persistedBonusSlots()).toHaveLength(DAILY_BONUS_SLOT_MAX);
+    // Core full → asks only for the standard +2 (coreShortfall 0).
+    expect(mocks.getFriendDomainsForBonus).toHaveBeenCalledWith(
+      USER,
+      DAILY_BONUS_SLOT_MAX,
+      expect.anything(),
+    );
   });
 });

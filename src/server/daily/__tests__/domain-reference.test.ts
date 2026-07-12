@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildRetrievalUserMessage,
   parseReferenceResponse,
   questionLeaksPassageText,
+  resolveReferenceSourcePreference,
 } from '@/server/daily/domain-reference';
 import { buildUserPrompt } from '@/server/daily/generate-questions';
 
@@ -82,6 +84,58 @@ describe('questionLeaksPassageText (decision C guard)', () => {
         passage,
       ),
     ).toBe(true);
+  });
+});
+
+describe('resolveReferenceSourcePreference (Layer 3 source routing)', () => {
+  it('routes a Fandom-sized domain (basis fandom:*) to fandom', () => {
+    expect(
+      resolveReferenceSourcePreference({ basis: 'fandom:scoped-categories', fandomHost: null, wikipediaTitle: null }),
+    ).toBe('fandom');
+  });
+
+  it('routes a domain with a resolved fandom_host to fandom even without a fandom basis', () => {
+    expect(
+      resolveReferenceSourcePreference({ basis: 'wp:sections', fandomHost: 'zelda.fandom.com', wikipediaTitle: null }),
+    ).toBe('fandom');
+  });
+
+  it('keeps a Wikipedia-sectioned real-world domain on wikipedia', () => {
+    expect(
+      resolveReferenceSourcePreference({ basis: 'wp:sections', fandomHost: null, wikipediaTitle: 'Hamlet' }),
+    ).toBe('wikipedia');
+  });
+
+  it('defaults an unsized/hint-less domain to wikipedia (unchanged behavior)', () => {
+    expect(resolveReferenceSourcePreference(undefined)).toBe('wikipedia');
+    expect(resolveReferenceSourcePreference({ basis: null, fandomHost: '  ', wikipediaTitle: null })).toBe('wikipedia');
+  });
+});
+
+describe('buildRetrievalUserMessage (Layer 3 search scoping)', () => {
+  it('scopes a fandom fetch to the resolved wiki host', () => {
+    const msg = buildRetrievalUserMessage(
+      'The Legend of Zelda: Tears of the Kingdom',
+      { basis: 'fandom:scoped-categories', fandomHost: 'zelda.fandom.com', wikipediaTitle: null },
+      'fandom',
+    );
+    expect(msg).toContain('zelda.fandom.com');
+    expect(msg).toContain('search there first');
+  });
+
+  it('scopes a wikipedia fetch to the resolved article title', () => {
+    const msg = buildRetrievalUserMessage(
+      'Hamlet',
+      { basis: 'wp:sections', fandomHost: null, wikipediaTitle: 'Hamlet' },
+      'wikipedia',
+    );
+    expect(msg).toContain('"Hamlet"');
+  });
+
+  it('degrades to a bare domain line when no scoping hint is present', () => {
+    const msg = buildRetrievalUserMessage('Tennis', undefined, 'wikipedia');
+    expect(msg).toContain('Domain: Tennis');
+    expect(msg).not.toContain('fandom.com');
   });
 });
 

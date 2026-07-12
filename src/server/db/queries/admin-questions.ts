@@ -1,7 +1,9 @@
-import { and, asc, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db, questions, users } from '@/server/db';
 import { resolveAuthorDisplay, parseQuestionSource } from '@/lib/questions-types';
+import { resolveFinestNode } from '@/server/knowledge/graph';
+import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 
 // B-ADMIN-QUESTIONS-OVERVIEW-01 — the admin-only "what's actually in the pool"
 // audit surface. UNLIKE every player-facing read path, this query is deliberately
@@ -24,6 +26,9 @@ const SORT_COLUMNS = {
 export type AdminQuestionFilters = {
   // Free text — matches question_text OR answer_text (case-insensitive contains).
   search?: string;
+  // Author display-name contains-match (case-insensitive). Implies a human
+  // creator (creator_id IS NOT NULL) — house/LLM rows have no person to match.
+  authorSearch?: string;
   category?: string;
   trustTier?: string;
   visibility?: string;
@@ -117,6 +122,15 @@ export type AdminEditQuestionInput = {
   insideJoke?: string | null;
   category?: string;
   visibility?: string;
+  // The domain / knowledge label the card shows above the question (e.g. the
+  // mis-tagged "New Testament" on a Sesame-Street question). Written to BOTH
+  // subcategory (raw) and canonicalSubcategory (normalized to the finest
+  // KnowledgeNode) — the pair createQuestion/bulk-upload keep in sync and the
+  // pair domainDisplayName reads from. Guarded against generic bucket labels
+  // (assertSpecificCanonicalSubcategory's blocklist). Metadata, not content —
+  // it does NOT clear the verification stamp (that vouches for the answer, not
+  // the categorization). The top-level category enum is edited separately above.
+  canonicalSubcategory?: string;
   // Re-attribution. 'house' re-sources the question to the labeled non-human
   // house author (creator_id NULL + source 'house_authored') — the same override
   // the crafter "keep" flow applies. NOT a tombstone: authorDeleted stays false
@@ -126,7 +140,10 @@ export type AdminEditQuestionInput = {
   attribution?: 'house';
 };
 
-export type AdminMutationResult = { ok: boolean; reason?: 'not_found' | 'no_fields' };
+export type AdminMutationResult = {
+  ok: boolean;
+  reason?: 'not_found' | 'no_fields' | 'generic_domain';
+};
 
 // Edit a question as an admin. Grading-adjacent fields (question/answer/
 // alternatives/explanation) trigger the same canon editQuestionContent applies:
@@ -169,6 +186,16 @@ export async function adminEditQuestion(
   if (input.visibility !== undefined) {
     values.visibility = input.visibility as typeof questions.$inferInsert.visibility;
   }
+  if (input.canonicalSubcategory !== undefined) {
+    // Reject generic bucket labels (the same guard every canonical_subcategory
+    // write boundary enforces) before touching the row.
+    const domain = input.canonicalSubcategory.trim();
+    if (isGenericSubcategory(domain)) return { ok: false, reason: 'generic_domain' };
+    // Normalize to the finest existing KnowledgeNode's label (flag-off ⇒
+    // pass-through), mirroring createQuestion. subcategory holds the raw label.
+    values.canonicalSubcategory = await resolveFinestNode(domain);
+    values.subcategory = domain;
+  }
   if (input.attribution === 'house') {
     // House marker: creator_id NULL + source 'house_authored' (crafter-keep
     // precedent). Not a content change — the verification stamp is untouched.
@@ -199,6 +226,25 @@ export async function adminEditQuestion(
 
   await db.update(questions).set(values).where(eq(questions.id, id));
   return { ok: true };
+}
+
+// Bulk person → house re-attribution. Same marker the single-row attribution
+// edit above applies (creator_id NULL + source 'house_authored'; authorDeleted
+// stays false — a deliberate re-attribution, not a tombstone), and like it the
+// verification stamp is untouched (attribution is metadata, not content). Only
+// live rows that currently carry a human creator transition; deleted, house,
+// and LLM rows in the selection are counted as skipped, not errors. One-way:
+// the original creator link is dropped with no reverse path in this tool.
+export type AdminBulkReattributeResult = { ok: true; updated: number; skipped: number };
+
+export async function adminBulkReattributeToHouse(ids: string[]): Promise<AdminBulkReattributeResult> {
+  if (ids.length === 0) return { ok: true, updated: 0, skipped: 0 };
+  const updated = await db
+    .update(questions)
+    .set({ creatorId: null, source: 'house_authored', updatedAt: new Date() })
+    .where(and(inArray(questions.id, ids), isNull(questions.deletedAt), isNotNull(questions.creatorId)))
+    .returning({ id: questions.id });
+  return { ok: true, updated: updated.length, skipped: ids.length - updated.length };
 }
 
 // Admin soft-delete — reuses the canonical soft-delete primitive (deletedAt),
@@ -395,6 +441,11 @@ function buildWhere(query: AdminQuestionsQuery): SQL | undefined {
     const match = or(ilike(questions.questionText, needle), ilike(questions.answerText, needle));
     if (match) clauses.push(match);
   }
+  if (f.authorSearch) {
+    // Requires the users join both queries in getAllQuestionsForAdmin carry.
+    clauses.push(isNotNull(questions.creatorId));
+    clauses.push(ilike(users.displayName, `%${f.authorSearch}%`));
+  }
   if (f.category) clauses.push(eq(questions.category, f.category as typeof questions.$inferSelect.category));
   if (f.trustTier) clauses.push(eq(questions.trustTier, f.trustTier as typeof questions.$inferSelect.trustTier));
   if (f.visibility) clauses.push(eq(questions.visibility, f.visibility as typeof questions.$inferSelect.visibility));
@@ -456,6 +507,9 @@ export async function getAllQuestionsForAdmin(query: AdminQuestionsQuery = {}): 
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(questions)
+      // Same join as the page query so authorSearch can reference users.
+      // users.id is unique, so a left join never multiplies the count.
+      .leftJoin(users, eq(users.id, questions.creatorId))
       .where(where),
   ]);
 

@@ -65,6 +65,11 @@ export type SupplyReadout = {
   estimatedQuestions: number | null;
   ratio: number | null;
   capped: boolean;
+  /** Corpus-resolved size estimate + fandom host — the richness signals that tell
+   * an exhausted leaf apart: a deep-corpus / fandom-backed topic that ran dry is a
+   * generator failure (author/ground it), not a too-granular leaf (merge it up). */
+  corpusEstimatedQuestions: number | null;
+  fandomHost: string | null;
 };
 
 // Same plain-speech vocabulary as the Supply view's STATE_LABEL — the two
@@ -914,6 +919,7 @@ function KnowledgeTreeEditor({
           pointsByKey={pointsByKey}
           depthByKey={depthByKey}
           genStatsByKey={genStatsByKey}
+          supplyByKey={supplyByKey}
           onJump={jumpToInstance}
         />
       ) : null}
@@ -1148,14 +1154,34 @@ function RootDropZone({ dragActive }: { dragActive: boolean }) {
 // no world knowledge, so a genuinely rich topic the generator simply failed (a
 // handful of Simpsons Qs) looks identical to a truly finite one. All three levers
 // stay open on every row; this only leads with the most probable one.
+// A topic is RICH when the corpus sizer found real breadth — a dedicated Fandom
+// wiki, or a corpus estimate well above the granular floor. Distinguishes a rich
+// leaf the generator merely FAILED on (a handful of Simpsons Qs at 50% dup) from
+// a genuinely too-granular one, which the bare question count cannot.
+const RICH_CORPUS_ESTIMATE = 60;
+function isRichTopic(supply: SupplyReadout | undefined): boolean {
+  if (!supply) return false;
+  return supply.fandomHost != null || (supply.corpusEstimatedQuestions ?? 0) >= RICH_CORPUS_ESTIMATE;
+}
+
 function exhaustedDecisionHint(
   threshold: number | null,
   avail: number,
   qs: number,
   parentLabel: string | null,
+  rich: boolean,
 ): string {
   if (threshold == null) {
     return 'no mastery target set — set one to size it, or merge up / hand-author';
+  }
+  // A RICH topic (deep corpus / dedicated fandom wiki) that ran dry is almost
+  // always the generator failing to mine it, NOT a leaf too granular to stand
+  // alone — so lead with author/ground, and never suggest merging it away. This
+  // is the Simpsons/Hamlet class: a "handful of Qs" that actually has hundreds.
+  if (rich) {
+    return parentLabel
+      ? `rich topic the generator stalled on — hand-author or ground more (don't merge it into ${parentLabel})`
+      : 'rich topic the generator stalled on — hand-author or ground more';
   }
   if (qs < THIN_LEAF_THRESHOLD && parentLabel) {
     return `likely too granular — merge up into ${parentLabel} (or hand-author, if it's actually a rich topic)`;
@@ -1173,6 +1199,7 @@ function ExhaustedWorklist({
   pointsByKey,
   depthByKey,
   genStatsByKey,
+  supplyByKey,
   onJump,
 }: {
   leaves: string[];
@@ -1181,6 +1208,7 @@ function ExhaustedWorklist({
   pointsByKey: Record<string, number>;
   depthByKey: Record<string, number>;
   genStatsByKey: Record<string, { total: number; dupes: number }>;
+  supplyByKey: Record<string, SupplyReadout>;
   onJump: (childKey: string, parentKey: string | null) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -1272,6 +1300,7 @@ function ExhaustedWorklist({
                     pointsByKey[key] ?? 0,
                     depthByKey[key] ?? 0,
                     firstParent ? parentLabel : null,
+                    isRichTopic(supplyByKey[key]),
                   )}
                 </div>
                 {peekKey === key ? (

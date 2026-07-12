@@ -28,9 +28,11 @@ import {
   type LlmQuestion,
 } from '@/server/daily/generate-questions';
 import { getReferencePassagesForDomains, type DomainReference } from '@/server/daily/domain-reference';
+import { getReferenceRoutingHints } from '@/server/db/queries/domain-depth-estimate';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveMachineTrustTier } from '@/server/daily/ask-to-answer';
 import { resolveFinestNode } from '@/server/knowledge/graph';
+import { dryRoundsThreshold } from '@/server/daily/supply-state';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { estimateCostUsd } from '@/server/llm/pricing';
@@ -47,6 +49,15 @@ export interface BackfillOptions {
   daysRunway?: number;
   bufferFloor?: number;
   batchCap?: number;
+  /**
+   * Only backfill domains with PROVEN unmet demand — those a real player already
+   * ran dry on (consecutive_dry_rounds ≥ dryK, the discrepancy signal). Default
+   * true: a merely-declared domain that's still serving fine from its bank is not
+   * worth spend at low scale. Set false (SUPPLY_BACKFILL_ONLY_DRY=false) for the
+   * broader PREDICTIVE mode — pre-fill any servable-short declared domain before a
+   * player hits the wall — once scale justifies the volume.
+   */
+  onlyDry?: boolean;
 }
 
 const DEFAULTS = {
@@ -54,6 +65,13 @@ const DEFAULTS = {
   bufferFloor: Number(process.env.SUPPLY_BACKFILL_BUFFER_FLOOR ?? 10),
   batchCap: Number(process.env.SUPPLY_BACKFILL_BATCH_CAP ?? 20),
 };
+
+// Default ON: spend only where demand is UNMET (a domain went dry), not merely
+// where interest was declared. Disable for predictive pre-fill at scale.
+function isOnlyDryDefault(): boolean {
+  const raw = process.env.SUPPLY_BACKFILL_ONLY_DRY?.trim().toLowerCase();
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
 const GATE_PASS_RATE = 0.85; // measured survivor rate through quality+factual
 const GEN_TIMEOUT_MS = 150_000;
 const GEN_MAX_TOKENS = 6000;
@@ -92,6 +110,17 @@ type DomainRow = {
   fandom_host: string | null;
   effective_est: number | null;
   have: number;
+  /**
+   * Rows owned by the SINGLE largest contributor to this domain. The bank serves
+   * cross-user (pickBankSource: userId <> viewer), so a domain's neediest declarer
+   * — usually its top contributor — can be served only `have − own_max` of its
+   * rows; their own generations are excluded. Worst-case servable = have − own_max
+   * is what the buffer must actually cover (the Zelda: TotK case, where one player
+   * generated 13 of 16 rows and is served 3).
+   */
+  own_max: number;
+  /** Consecutive offered-but-zero-yield generation rounds (the dry/discrepancy signal). */
+  consecutive_dry_rounds: number;
 };
 
 async function loadDemand(): Promise<Map<string, number>> {
@@ -108,15 +137,58 @@ async function loadDemand(): Promise<Map<string, number>> {
   return new Map([...byKey].map(([k, users]) => [k, users.size]));
 }
 
-async function loadDomains(onlyDomain?: string | null): Promise<DomainRow[]> {
-  const where = onlyDomain ? 'WHERE d.domain_key ILIKE $1' : '';
-  const params = onlyDomain ? [`%${onlyDomain.toLowerCase()}%`] : [];
+// A corpus estimate at/above this (or any dedicated fandom wiki) marks a topic
+// as genuinely RICH — kept in lockstep with the worklist's isRichTopic gate.
+const RICH_CORPUS_ESTIMATE = 60;
+
+// DEMONSTRATED demand: leaf nodes that are live mastery targets (a threshold is
+// set — a player progresses through them) whose domain is RICH (fandom-backed or
+// deep corpus). These are the Simpsons/HP-Book-3 class: real demand that arrives
+// via a mastered PARENT, so no one declares the leaf directly, yet it must stay
+// stocked. Gating on richness keeps genuinely-granular leaves OUT — those still
+// want a human merge/shrink decision, not more generation. Returns folded keys.
+async function loadDemonstratedDemand(): Promise<Set<string>> {
+  const richRows = (await pool.query(
+    'SELECT domain_key FROM "DomainDepthEstimate" WHERE fandom_host IS NOT NULL OR COALESCE(estimated_questions, 0) >= $1',
+    [RICH_CORPUS_ESTIMATE],
+  )).rows as { domain_key: string }[];
+  const rich = new Set(richRows.map((r) => r.domain_key));
+  const leafRows = (await pool.query(
+    `SELECT label FROM "KnowledgeNode" WHERE node_kind = 'leaf' AND mastery_threshold IS NOT NULL`,
+  )).rows as { label: string }[];
+  const out = new Set<string>();
+  for (const r of leafRows) {
+    const k = domainKey(r.label);
+    if (rich.has(k)) out.add(k);
+  }
+  return out;
+}
+
+async function loadDomains(onlyDomain?: string | null, systemUserId?: string | null): Promise<DomainRow[]> {
+  // $1 = the system backfill user to EXCLUDE from own_max. Its bank rows serve to
+  // EVERY real viewer (pickBackfill only excludes a viewer's OWN rows, and the
+  // system user is never a viewer), so they are not part of any player's
+  // worst-case self-owned stock. Counting them would make every domain the
+  // backfill fills read as servable = have − system_owned ≈ its few non-system
+  // rows — perpetually "dry to one user" — and re-generate it forever. An empty
+  // string matches no real (uuid) user id, so an unset system user is a no-op.
+  const sysExcl = (systemUserId ?? process.env.RETRIEVAL_SYSTEM_USER_ID)?.trim() || '';
+  const params: string[] = [sysExcl];
+  const where = onlyDomain ? 'WHERE d.domain_key ILIKE $2' : '';
+  if (onlyDomain) params.push(`%${onlyDomain.toLowerCase()}%`);
   return (
     await pool.query(
       `SELECT d.domain_key, d.sample_label, d.fandom_host,
               COALESCE(d.manual_estimated_questions, d.estimated_questions) AS effective_est,
               (SELECT COUNT(*)::int FROM "GeneratedQuestion" g
-                 WHERE g.domain_key = d.domain_key AND g.is_duplicate = false) AS have
+                 WHERE g.domain_key = d.domain_key AND g.is_duplicate = false) AS have,
+              COALESCE((SELECT MAX(cnt)::int FROM (
+                 SELECT COUNT(*) AS cnt FROM "GeneratedQuestion" g2
+                   WHERE g2.domain_key = d.domain_key AND g2.is_duplicate = false
+                     AND g2.user_id <> $1
+                   GROUP BY g2.user_id
+              ) owner_counts), 0) AS own_max,
+              COALESCE(d.consecutive_dry_rounds, 0) AS consecutive_dry_rounds
        FROM "DomainDepthEstimate" d ${where}`,
       params,
     )
@@ -136,14 +208,21 @@ function estimateBatchCost(batch: number, ground: boolean): number {
 export function buildPlan(
   domains: DomainRow[],
   demand: Map<string, number>,
-  cfg: { daysRunway: number; bufferFloor: number; batchCap: number },
+  cfg: { daysRunway: number; bufferFloor: number; batchCap: number; onlyDry?: boolean; dryK?: number },
 ): BackfillPlan[] {
+  const onlyDry = cfg.onlyDry ?? true;
+  const dryK = cfg.dryK ?? 3;
   const plans: BackfillPlan[] = [];
   for (const d of domains) {
     const label = d.sample_label || d.domain_key;
     const interested = demand.get(d.domain_key) ?? 0;
     const cap = d.effective_est ?? 0;
     const ground = Boolean(d.fandom_host);
+    // Worst-case SERVABLE stock, not total inventory: the neediest interested
+    // player is served only the rows they did NOT generate (bank excludes own
+    // rows), so a domain one heavy player mined out reads as stocked to everyone
+    // else yet dry to them. Gate the buffer on what that player can actually see.
+    const servableHave = Math.max(0, d.have - d.own_max);
     let bufferTarget = 0;
     let batch = 0;
     let skipReason: string | null = null;
@@ -151,11 +230,18 @@ export function buildPlan(
       skipReason = 'no demand (0 declared interests)';
     } else if (cap <= 0) {
       skipReason = 'no estimate';
+    } else if (onlyDry && d.consecutive_dry_rounds < dryK) {
+      // Proven-demand gate: only spend where a player actually ran the domain dry
+      // (the discrepancy signal), not merely where it was declared. A declared
+      // domain still serving fine from its bank needs nothing.
+      skipReason = `not exhausted (dry ${d.consecutive_dry_rounds} < ${dryK}); declared, not yet run dry`;
     } else {
       bufferTarget = clamp(cfg.daysRunway * interested, cfg.bufferFloor, cap);
-      const gap = Math.max(0, bufferTarget - d.have);
+      const gap = Math.max(0, bufferTarget - servableHave);
       batch = Math.min(cfg.batchCap, Math.ceil(gap / GATE_PASS_RATE));
-      if (batch === 0) skipReason = `already stocked (have ${d.have} ≥ target ${bufferTarget})`;
+      if (batch === 0) {
+        skipReason = `already stocked (servable ${servableHave} ≥ target ${bufferTarget})`;
+      }
     }
     plans.push({
       domainKey: d.domain_key,
@@ -221,7 +307,16 @@ async function loadAvoid(domainKeyVal: string): Promise<{
 async function buildDomain(p: BackfillPlan, systemUserId: string | null): Promise<{ generated: number; persisted: number }> {
   const avoid = await loadAvoid(p.domainKey);
   let refs: Map<string, DomainReference> | undefined;
-  if (p.ground) refs = await getReferencePassagesForDomains([p.label]).catch(() => undefined);
+  if (p.ground) {
+    // Layer 3 source routing: p.ground means this domain has a fandom_host, so
+    // ground it from its IN-UNIVERSE CANON, not the Wikipedia-first default that
+    // hands a deep fan domain a shallow game-as-product blurb (the Zelda: TotK
+    // 1,200-est / 0-yield case). The routing hint carries the resolved host so the
+    // search lands on the right wiki. Fail-open: a miss just means no reference.
+    const hints = await getReferenceRoutingHints([p.domainKey]).catch(() => new Map());
+    const hintByDomain = new Map([[p.label, hints.get(p.domainKey)]]);
+    refs = await getReferencePassagesForDomains([p.label], hintByDomain).catch(() => undefined);
+  }
 
   const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, refs);
   if (generated.length === 0) return { generated: 0, persisted: 0 };
@@ -277,8 +372,18 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
     daysRunway: opts.daysRunway ?? DEFAULTS.daysRunway,
     bufferFloor: opts.bufferFloor ?? DEFAULTS.bufferFloor,
     batchCap: opts.batchCap ?? DEFAULTS.batchCap,
+    onlyDry: opts.onlyDry ?? isOnlyDryDefault(),
+    dryK: dryRoundsThreshold(),
   };
-  const [demand, domains] = await Promise.all([loadDemand(), loadDomains(opts.onlyDomain)]);
+  const [demand, demonstrated, domains] = await Promise.all([
+    loadDemand(),
+    loadDemonstratedDemand(),
+    loadDomains(opts.onlyDomain, opts.systemUserId),
+  ]);
+  // Fold DEMONSTRATED demand (rich mastery-path leaves) into the declared count:
+  // a leaf nobody declared but a player is mastering counts as ≥1 interested, so
+  // it earns a buffer instead of being skipped for "no demand".
+  for (const key of demonstrated) demand.set(key, Math.max(demand.get(key) ?? 0, 1));
   const plans = buildPlan(domains, demand, cfg);
   const actionable = plans.filter((p) => p.batch > 0);
 

@@ -11,9 +11,14 @@
 // drift. `rounded-[var(--…)]` consumers never match — they're the point.
 //
 // To LOWER the ceiling after a cleanup: run the script, take the count, update
-// CEILING. To raise it: don't — use `rounded-md`/`rounded-lg` or
-// `rounded-[var(--radius-*)]`. A genuinely new radius value is a deliberate
+// CEILING. To raise it: don't — use `rounded-md`/`rounded-lg` or the
+// `var(--radius-*)` token form. A genuinely new radius value is a deliberate
 // token decision in globals.css, not a new literal arbitrary.
+//
+// NOTE (dev breakage): never write the token form as one contiguous
+// rounded-[…] literal in comments/docs — Tailwind v4 scans this file, and a
+// `*` inside a var() arbitrary compiles into invalid CSS that 500s every page
+// in `next dev`. Spell it `var(--radius-*)` without the utility prefix.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -21,7 +26,7 @@ import { join, relative } from 'node:path';
 // ── The ceiling ──────────────────────────────────────────────────────────────
 // Baseline recorded 2026-06-15 (CONS-6). Freezes literal arbitrary radii at
 // today's count. Burn down by routing them through the scale/tokens
-// (`rounded-md`, `rounded-[var(--radius-*)]`) and lowering this number. Note the
+// (`rounded-md`, the `var(--radius-*)` token form) and lowering this number. Note the
 // pervasive `rounded-[4px]` is the button/card corner — a candidate for a
 // `--radius-xs` token (added 2026-06-15) — burn-down 1 snapped the nine
 // `rounded-[4px]` to `rounded-[var(--radius-xs)]`, lowering this 25 → 16.
@@ -87,8 +92,8 @@ if (count > CEILING) {
   for (const o of offenders.slice(0, 60)) console.error(`  ${o.loc} (${o.n}): ${o.text}`);
   if (offenders.length > 60) console.error(`  … and ${offenders.length - 60} more lines`);
   console.error(
-    '\nUse the rounded-* scale or the radius tokens (rounded-md / rounded-[var(--radius-*)])' +
-      ' instead of literal rounded-[Npx]/[Nrem]. Do not raise the ceiling.',
+    '\nUse the rounded-* scale or the radius tokens (rounded-md / the var(--radius-*) token form)' +
+      ' instead of literal Npx/Nrem arbitraries. Do not raise the ceiling.',
   );
   process.exit(1);
 }
