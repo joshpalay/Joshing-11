@@ -4,14 +4,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RecoveredDeck } from '../RecoveredDeck';
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
 
-// D-REVIEW-RECOVERED-01 (Decision B + revised C) — the one-at-a-time deck.
-// SSR-renderable assertions (initial state only; interaction is client-side):
-//   - exactly ONE deck question is visible at a time, with a position counter;
-//   - the answer is NOT in the initial markup (revealed on demand — no-check
-//     reveal, no form, no grading);
+// D-REVIEW-RECOVERED-01 (Decision B + revised C) — landing + full-screen mode.
+// SSR-renderable assertions (initial state only; the takeover itself is
+// client-side interaction):
+//   - the page lands on a count + Start CTA, with NO question text and no
+//     answers in the initial markup (questions are dealt inside the mode);
 //   - dismissed questions live on a collapsed shelf with a Restore action;
 //   - the three empty registers (cold start / bounded range / all dismissed)
-//     each render their own copy.
+//     each render their own copy, and Start disappears with an empty deck.
 
 function question(over: Partial<RecoveredQuestion> = {}): RecoveredQuestion {
   return {
@@ -33,8 +33,8 @@ const DECK = [
   question({ id: 'me-2', questionId: 'q-2', questionText: 'Largest planet?', answer: 'Jupiter' }),
 ];
 
-describe('RecoveredDeck — one at a time', () => {
-  it('shows only the first question, a counter, and no answer or form up front', () => {
+describe('RecoveredDeck — landing', () => {
+  it('shows the circulation count and Start, with no question or answer up front', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -42,20 +42,25 @@ describe('RecoveredDeck — one at a time', () => {
       <RecoveredDeck deck={DECK} dismissed={[]} rangeLabel={null} />,
     );
 
-    expect(html).toContain('Who wrote the Storia d’Italia?');
-    expect(html).not.toContain('Largest planet?'); // one at a time
-    expect(html).toContain('1 of 2');
-    expect(html).toContain('Show answer');
-    expect(html).toContain('Dismiss');
+    expect(html).toContain('questions in circulation');
+    expect(html).toContain('Start revisiting');
 
-    // No-check reveal: the answer arrives only when asked for, and nothing is
-    // graded — no form, no input, no network call on first paint.
+    // Questions are dealt inside the full-screen mode, not on the landing.
+    expect(html).not.toContain('Who wrote the Storia d’Italia?');
+    expect(html).not.toContain('Largest planet?');
     expect(html).not.toContain('Francesco Guicciardini');
     expect(html).not.toContain('<form');
     expect(html).not.toContain('<input');
     expect(fetchSpy).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+
+  it('names the active range in the count line', () => {
+    const html = renderToStaticMarkup(
+      <RecoveredDeck deck={DECK} dismissed={[]} rangeLabel="past week" />,
+    );
+    expect(html).toContain('from the past week');
   });
 
   it('lists dismissed questions on a collapsed shelf with a Restore action', () => {
@@ -85,10 +90,13 @@ describe('RecoveredDeck — one at a time', () => {
     );
     expect(html).not.toContain('Dismissed (');
   });
+});
 
+describe('RecoveredDeck — empty registers', () => {
   it('renders the cold-start register when there is nothing at all', () => {
     const html = renderToStaticMarkup(<RecoveredDeck deck={[]} dismissed={[]} rangeLabel={null} />);
     expect(html).toContain('will gather here as you play');
+    expect(html).not.toContain('Start revisiting');
   });
 
   it('renders the bounded-empty register when a range window comes up empty', () => {
