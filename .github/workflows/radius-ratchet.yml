@@ -2,8 +2,8 @@
 # (Tailwind rounded-[Npx]/[Nrem] arbitraries) in src/ rises above the recorded
 # ceiling. The ceiling and the exemption list live in
 # scripts/check-radius-ratchet.mjs. Independent of the color/font/spacing
-# ratchets by design. rounded-[var(--radius-*)] consumers are on-system and not
-# counted (see the script header).
+# ratchets by design. Consumers of the radius tokens (the var(--radius-*)
+# arbitrary form) are on-system and not counted (see the script header).
 name: Radius ratchet
 
 on:
