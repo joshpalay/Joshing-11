@@ -30,7 +30,7 @@ const incorrectSchema = z.object({
   incorrectKind: z.enum(['answer_key', 'premise']),
   note: z.string().trim().min(1),
   suggestedAnswer: z.string().trim().min(1).optional(),
-  surface: z.enum(['round_recap', 'lately_result', 'answered_list', 'feed', 'recovered']),
+  surface: z.enum(['round_recap', 'lately_result', 'answered_list', 'feed', 'catchup_thread', 'recovered']),
   ...target,
 });
 
@@ -42,7 +42,7 @@ const inappropriateSchema = z.object({
   incorrectKind: z.undefined().optional(),
   suggestedAnswer: z.undefined().optional(),
   note: z.string().trim().min(1),
-  surface: z.enum(['round_recap', 'lately_result', 'answered_list', 'feed', 'recovered']),
+  surface: z.enum(['round_recap', 'lately_result', 'answered_list', 'feed', 'catchup_thread', 'recovered']),
   ...target,
 });
 
