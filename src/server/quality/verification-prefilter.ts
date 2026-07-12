@@ -22,13 +22,22 @@
  * the LLM for `needsVerification: true`.
  */
 
-export type VerificationDimension = 'false_premise' | 'extra_fact';
+export type VerificationDimension = 'false_premise' | 'extra_fact' | 'ambiguous_source';
 
 export type PrefilterInput = {
   questionText: string;
   answer: string;
   /** factual_explanation / explainer prose that may carry adjacent claims. */
   explanation?: string | null;
+  /**
+   * The domain the question belongs to (canonical_subcategory). Load-bearing ONLY
+   * for the ambiguous_source (self-containment) check: the served card shows the
+   * player the question text + a BROAD category, never this subcategory, so a
+   * fiction/franchise question that never names its own source reads as broken.
+   * When omitted the ambiguous_source route is inert (existing callers/tests keep
+   * their exact behavior); the cron threads it through.
+   */
+  canonicalSubcategory?: string | null;
 };
 
 export type PrefilterDecision =
@@ -97,6 +106,83 @@ const OPINION_RE =
 
 function isOpinionAdjacent(text: string): boolean {
   return OPINION_RE.test(text);
+}
+
+// ─── ambiguous_source (self-containment) routing ─────────────────────────────
+// A question about a specific named work/franchise that never NAMES that source
+// in its own text is unanswerable when served: the card shows the player only
+// the question text and a broad category (e.g. "Film & Television"), never the
+// canonical_subcategory. "At the start of most episodes, Candace notices the
+// boys' project…" is broken — nothing says it is Phineas and Ferb. This is a
+// demote-worthy defect distinct from any factual error, so it gets its own
+// dimension. The verifier makes the final, semantic call; this pure router only
+// decides which rows are worth that (free-on-already-routed) check.
+
+// English stopwords + bare interrogative/scaffolding openers that a capitalized
+// first letter does NOT make a proper noun. Kept small and lowercase.
+const SELF_CONTAINMENT_STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'by', 'with',
+  'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
+  'this', 'that', 'these', 'those', 'after', 'before', 'during', 'is', 'are', 'was', 'were',
+]);
+
+// Significant (≥3-char, non-stopword) lowercased tokens of a label.
+function significantTokens(label: string): string[] {
+  return label
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !SELF_CONTAINMENT_STOPWORDS.has(t));
+}
+
+// True when at least one of the subcategory's significant tokens appears as a
+// whole word in the stem — i.e. the question lexically NAMES its own source
+// (possibly via an alias the subcategory string also contains: "In Ulysses…"
+// matches "James Joyce's Ulysses"). Such a question is self-contained; skip it.
+function stemNamesSubject(stem: string, subjectTokens: string[]): boolean {
+  const lowerStem = ` ${stem.toLowerCase()} `;
+  return subjectTokens.some((t) => new RegExp(`\\b${escapeRegExp(t)}\\b`).test(lowerStem));
+}
+
+// True when the stem references a mid-text proper noun (a named character,
+// place, or work) that is NOT one of the subject's own tokens — the tell that a
+// question is leaning on a specific fictional world it never names. Excludes the
+// very first token of each sentence (a sentence-initial capital is usually just
+// the opener, "What"/"At"/"Which") and common openers via the stopword set.
+function hasForeignProperNoun(stem: string, subjectTokens: string[]): boolean {
+  const subjectSet = new Set(subjectTokens);
+  // Split into sentences so we can drop each sentence's first word.
+  for (const sentence of stem.split(/[.!?]+/)) {
+    const words = sentence.trim().split(/\s+/).filter(Boolean);
+    for (let i = 1; i < words.length; i += 1) {
+      const stripped = words[i].replace(/[^A-Za-z']/g, '');
+      if (stripped.length < 3) continue;
+      if (!/^[A-Z][a-z]/.test(stripped)) continue; // not a proper-noun shape
+      const lower = stripped.toLowerCase();
+      if (SELF_CONTAINMENT_STOPWORDS.has(lower)) continue;
+      if (subjectSet.has(lower)) continue; // names the subject → not "foreign"
+      return true;
+    }
+  }
+  return false;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Route ambiguous_source when the question is about a specific named subject
+// (subcategory provided, with real tokens) that the stem does NOT name, yet the
+// stem leans on a foreign proper noun. Inert without a subcategory so existing
+// callers/tests are unaffected.
+export function isAmbiguousSourceCandidate(
+  stem: string,
+  canonicalSubcategory: string | null | undefined,
+): boolean {
+  if (!canonicalSubcategory) return false;
+  const subjectTokens = significantTokens(canonicalSubcategory);
+  if (subjectTokens.length === 0) return false;
+  if (stemNamesSubject(stem, subjectTokens)) return false;
+  return hasForeignProperNoun(stem, subjectTokens);
 }
 
 // LEGACY (pre-2026-07-05): substance ≈ claims — ≥60 chars AND (any one signal OR
@@ -243,6 +329,13 @@ export function prefilterForVerification(
     : explanationCarriesAdjacentClaims(input.explanation, stem, answer);
   if (explanationRoutes || answerRoutes) {
     dimensions.push('extra_fact');
+  }
+
+  // ambiguous_source: the question is about a specific named subject it never
+  // names in its own text (self-containment defect). Independent of the factual
+  // routes — a question can be factually clean yet unanswerable out of context.
+  if (isAmbiguousSourceCandidate(stem, input.canonicalSubcategory)) {
+    dimensions.push('ambiguous_source');
   }
 
   if (dimensions.length === 0) {
