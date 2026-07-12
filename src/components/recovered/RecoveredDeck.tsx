@@ -3,6 +3,7 @@
 import { Undo2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import type { RecoveredQuestion } from '@/server/db/queries/recovered-questions';
 
 /**
@@ -218,9 +219,30 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
             <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
               {current ? `${index + 1} of ${deck.length}` : 'Revisit'}
             </p>
-            <button type="button" className="btn-icon" aria-label="Exit review" onClick={exit}>
-              <X className="size-5" aria-hidden="true" />
-            </button>
+            <div className="flex items-center gap-1">
+              {current ? (
+                // The same ⋯ report menu the answered list and round recap use
+                // ("This is incorrect" / "This is inappropriate" → the shared
+                // ReportReasonSheet). Keyed by the card so menu/sheet state
+                // never carries over to the next question. A card reported as
+                // inappropriate vanishes from the session (matching the recap);
+                // an incorrect one stays — the sheet acknowledges quietly.
+                <AnsweredRowActions
+                  key={current.id}
+                  target={{ questionId: current.questionId }}
+                  surface="recovered"
+                  onReportSubmitted={(category) => {
+                    if (category !== 'inappropriate') return;
+                    const reported = current;
+                    setDeck((d) => d.filter((q) => q.id !== reported.id));
+                    setRevealed(false);
+                  }}
+                />
+              ) : null}
+              <button type="button" className="btn-icon" aria-label="Exit review" onClick={exit}>
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
           </header>
 
           <div className="flex-1 overflow-y-auto px-5 py-8">
