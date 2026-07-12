@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, ne, notExists, or, sql } from
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 import { contentReports, db, generatedQuestions, questions, users } from '@/server/db';
+import { pgErrorCode } from '@/server/db/pg-error';
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { type QuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 
@@ -34,16 +35,15 @@ export type InsertContentReportInput = {
 export type InsertContentReportResult = 'inserted' | 'duplicate';
 
 // Postgres unique_violation. The ContentReport_one_open_per_{question,generated_question}
-// partial unique indexes raise this when an open report already exists.
+// partial unique indexes raise this when an open report already exists. Read via
+// pgErrorCode: drizzle wraps the pg error in a DrizzleQueryError whose `.code`
+// describes the wrapper — the Postgres code sits on `.cause`, so checking
+// `err.code` directly turned every idempotent re-report into a 500 instead of
+// the documented quiet 'duplicate' success.
 const PG_UNIQUE_VIOLATION = '23505';
 
 function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code?: unknown }).code === PG_UNIQUE_VIOLATION
-  );
+  return pgErrorCode(err) === PG_UNIQUE_VIOLATION;
 }
 
 export async function insertContentReport(

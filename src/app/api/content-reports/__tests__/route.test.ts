@@ -131,6 +131,14 @@ describe('POST /api/content-reports', () => {
     expect(insertContentReportMock).not.toHaveBeenCalled();
   });
 
+  it('accepts the recovered review surface', async () => {
+    const res = await post({ ...validIncorrect, surface: 'recovered' });
+    expect(res.status).toBe(200);
+    expect(insertContentReportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: 'recovered' }),
+    );
+  });
+
   it('soft-429s at the daily cap without writing', async () => {
     countContentReportsTodayMock.mockResolvedValueOnce(10);
     const res = await post(validIncorrect);
