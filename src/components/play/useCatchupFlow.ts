@@ -185,6 +185,9 @@ export function buildCatchupResultMessage(params: {
     pointsAwarded,
     pointsLabel: 'Catch-up - 0.25x points',
     recheckAction: recheckAction ?? null,
+    // The result card's ⋯ menu — flag the revealed answer without waiting for
+    // the round recap. Same target the recap card reports against.
+    reportTarget: item.reportTarget ?? null,
   };
 }
 
@@ -209,6 +212,9 @@ function questionMessage(item: CatchupQueueItem, position: number): ChatMessage 
     // the current round. Catch-up has no bonus questions, so `bonus` is never set.
     numberMarker: { value: position, bonus: false },
     badges,
+    // The live card's ⋯ menu ("This is incorrect" / "This is inappropriate") —
+    // the same report affordance the round recap carries, available mid-round.
+    reportTarget: item.reportTarget ?? null,
   };
 }
 
@@ -464,6 +470,7 @@ export function useCatchupFlow() {
         creatorName: item.authorName ?? LLM_QUESTION_ATTRIBUTION,
         creatorIsHouse: item.authorIsHouse ?? false,
         canonicalSubcategory: item.domain,
+        reportTarget: item.reportTarget ?? null,
       },
     ]);
     window.setTimeout(() => {
