@@ -208,7 +208,6 @@ export function PortraitDomainCircle({
   showCount = true,
   circleScale = 1,
   selected = false,
-  circleSlotSize,
   editMode = false,
   onToggleHidden,
   pending = false,
@@ -221,7 +220,6 @@ export function PortraitDomainCircle({
   showCount?: boolean
   circleScale?: number
   selected?: boolean
-  circleSlotSize?: number
   editMode?: boolean
   onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
   pending?: boolean
@@ -247,7 +245,6 @@ export function PortraitDomainCircle({
     showCount &&
     entry.tier !== 'establishing' &&
     entry.authoredAnsweredCount > 0
-  const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size)
   const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
 
   const handleClick = () => {
@@ -287,93 +284,85 @@ export function PortraitDomainCircle({
       }
       style={{
         ...circleItemStyle,
-        width: Math.max(90, resolvedCircleSlotSize + 8),
+        width: Math.max(90, size + 8),
         maxWidth: '100%',
         cursor: interactive ? (pending ? 'wait' : 'pointer') : undefined,
         userSelect: interactive ? 'none' : undefined,
         opacity: pending ? 0.6 : 1,
       }}
     >
-      <div
-        style={{
-          ...portraitCircleSlotStyle,
-          width: resolvedCircleSlotSize,
-          height: resolvedCircleSlotSize,
-        }}
-      >
-        <div style={{ position: 'relative', width: size, height: size }}>
-          <KnowledgeBubble
-            diameter={size}
-            tint={dc.primary}
-            opacity={opacity}
-            style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
-          >
-            {showMasteryCount && (
-              <span
-                style={{
-                  fontSize: countFontSize,
-                  color: dc.primary,
-                  fontFamily: 'var(--font-serif)',
-                  fontWeight: 'bold',
-                  lineHeight: 1,
-                }}
-              >
-                {entry.authoredAnsweredCount}
-              </span>
-            )}
-          </KnowledgeBubble>
-          {selected && (
-            <div
-              aria-hidden
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <KnowledgeBubble
+          diameter={size}
+          tint={dc.primary}
+          opacity={opacity}
+          style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
+        >
+          {showMasteryCount && (
+            <span
               style={{
-                position: 'absolute',
-                inset: -4,
-                borderRadius: '50%',
-                border: `2px solid ${dc.primary}`,
-                display: 'grid',
-                placeItems: 'center',
-                pointerEvents: 'none',
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  right: -2,
-                  bottom: -2,
-                  fontSize: 12,
-                  color: dc.primary,
-                }}
-              >
-                ✓
-              </span>
-            </div>
-          )}
-          {editMode && (
-            <div
-              aria-hidden
-              style={{
-                position: 'absolute',
-                top: -4,
-                right: -4,
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: isHidden ? 'var(--warm-paper)' : 'var(--warm-ink)',
-                color: isHidden ? 'var(--warm-ink)' : 'var(--warm-paper)',
-                border: `1.5px solid var(--warm-ink)`,
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: 12,
-                fontWeight: 700,
+                fontSize: countFontSize,
+                color: dc.primary,
                 fontFamily: 'var(--font-serif)',
+                fontWeight: 'bold',
                 lineHeight: 1,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
               }}
             >
-              {isHidden ? '+' : '×'}
-            </div>
+              {entry.authoredAnsweredCount}
+            </span>
           )}
-        </div>
+        </KnowledgeBubble>
+        {selected && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: -4,
+              borderRadius: '50%',
+              border: `2px solid ${dc.primary}`,
+              display: 'grid',
+              placeItems: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                right: -2,
+                bottom: -2,
+                fontSize: 12,
+                color: dc.primary,
+              }}
+            >
+              ✓
+            </span>
+          </div>
+        )}
+        {editMode && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: isHidden ? 'var(--warm-paper)' : 'var(--warm-ink)',
+              color: isHidden ? 'var(--warm-ink)' : 'var(--warm-paper)',
+              border: `1.5px solid var(--warm-ink)`,
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 12,
+              fontWeight: 700,
+              fontFamily: 'var(--font-serif)',
+              lineHeight: 1,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+            }}
+          >
+            {isHidden ? '+' : '×'}
+          </div>
+        )}
       </div>
       {frequencyLabel ? (
         <FrequencyTag label={frequencyLabel} color={dc.primary} dim={dimForHidden} />
@@ -385,7 +374,7 @@ export function PortraitDomainCircle({
           fontFamily: 'var(--font-serif)',
           textAlign: 'center',
           lineHeight: 1.3,
-          maxWidth: Math.max(90, resolvedCircleSlotSize),
+          maxWidth: Math.max(90, size),
           wordWrap: 'break-word',
           opacity: dimForHidden ? 0.5 : undefined,
           textDecoration: dimForHidden ? 'line-through' : undefined,
@@ -394,19 +383,6 @@ export function PortraitDomainCircle({
         {entry.canonicalSubcategory}
       </span>
     </div>
-  )
-}
-
-function getPortraitEntryCircleSize(
-  entry: PortraitEntry,
-  maxPointsForTier: number
-): number {
-  return Math.round(
-    getPortraitCircleSize(
-      entry.tier as CircleSizingTier,
-      entry.totalMasteryPoints,
-      maxPointsForTier
-    )
   )
 }
 
@@ -528,16 +504,6 @@ export function PortraitCircles({
 
       <div>
         {sections.map(({ label, color, entries: sectionEntries }) => {
-          const circleSlotSize = Math.max(
-            ...sectionEntries.map((entry) =>
-              getPortraitEntryCircleSize(
-                entry,
-                maxPointsByTier[entry.tier] ?? 1
-              )
-            ),
-            0
-          )
-
           return (
             <div key={label} style={{ marginTop: 24 }}>
               <div
@@ -560,7 +526,6 @@ export function PortraitCircles({
                     key={entry.canonicalSubcategory}
                     entry={entry}
                     maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
-                    circleSlotSize={circleSlotSize}
                     editMode={editMode}
                     onToggleHidden={onToggleHidden}
                     pending={pendingDomain === entry.canonicalSubcategory}
@@ -593,17 +558,14 @@ const circleItemStyle: CSSProperties = {
   padding: '4px 2px',
 }
 
-const portraitCircleSlotStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-}
-
+// Each item's height hugs its own circle and rows center on a shared axis —
+// a small circle next to a large one must not inherit the large one's square
+// slot (that stranded labels ~100px below establishing-tier bubbles).
 const circlesRowStyle: CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: 14,
-  alignItems: 'flex-start',
+  alignItems: 'center',
 }
 
 const toggleWrapStyle: CSSProperties = {
