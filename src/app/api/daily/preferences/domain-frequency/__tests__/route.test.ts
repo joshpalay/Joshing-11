@@ -78,12 +78,64 @@ describe('POST /api/daily/preferences/domain-frequency', () => {
 
     expect(response.status).toBe(200);
     // Canonical KB casing is used for the new entry; existing entries survive.
+    // Tagging a KB domain with an active frequency also enrolls it in the
+    // custom-mode selection (territory-model invariant: selectedDomains =
+    // every tagged, non-rested domain).
     expect(updateDailyPreferencesMock).toHaveBeenCalledWith('user-1', {
       domainPreferenceFrequency: { Dune: 'often', 'Harry Potter Book 3': 'blue_moon' },
+      selectedDomains: ['Dune', 'Harry Potter Book 3'],
     });
     const body = await response.json();
     expect(body.previousFrequency).toBeNull();
     expect(invalidateUntouchedDailyQueuesMock).toHaveBeenCalledWith('user-1');
+  });
+
+  it('resting removes the domain from the custom-mode selection', async () => {
+    const response = await POST(request({ domain: 'Dune', frequency: 'resting' }));
+
+    expect(response.status).toBe(200);
+    expect(updateDailyPreferencesMock).toHaveBeenCalledWith('user-1', {
+      domainPreferenceFrequency: { Dune: 'resting' },
+      selectedDomains: [],
+    });
+  });
+
+  it('undoing a rest (frequency null after resting) restores the domain to the selection', async () => {
+    getDailyPreferencesMock.mockResolvedValue({
+      userId: 'user-1',
+      difficulty: 'adaptive',
+      domainMode: 'custom',
+      // Dune was rested via this endpoint: tagged resting AND already out of the list.
+      selectedDomains: [],
+      domainPreferenceFrequency: { Dune: 'resting' },
+      updatedAt: null,
+    });
+
+    const response = await POST(request({ domain: 'Dune', frequency: null }));
+
+    expect(response.status).toBe(200);
+    expect(updateDailyPreferencesMock).toHaveBeenCalledWith('user-1', {
+      domainPreferenceFrequency: {},
+      selectedDomains: ['Dune'],
+    });
+  });
+
+  it('leaves selectedDomains untouched in random mode', async () => {
+    getDailyPreferencesMock.mockResolvedValue({
+      userId: 'user-1',
+      difficulty: 'adaptive',
+      domainMode: 'random',
+      selectedDomains: [],
+      domainPreferenceFrequency: {},
+      updatedAt: null,
+    });
+
+    const response = await POST(request({ domain: 'Dune', frequency: 'resting' }));
+
+    expect(response.status).toBe(200);
+    expect(updateDailyPreferencesMock).toHaveBeenCalledWith('user-1', {
+      domainPreferenceFrequency: { Dune: 'resting' },
+    });
   });
 
   it('captures the prior frequency case-insensitively', async () => {

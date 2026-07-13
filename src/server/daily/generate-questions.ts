@@ -2225,6 +2225,23 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       (domain) => domain,
     );
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
+    // 'resting' means "won't be asked" in custom mode too. The territory-setup
+    // save keeps rested domains out of selectedDomains, but the single-domain
+    // frequency endpoint didn't always sync the list, so prod rows can carry
+    // rested strays (observed 2026-07-12: two rested domains took ~6 core
+    // slots in a week). Filter here so the weighted path, the legacy path, AND
+    // the short-sample fallback below all honor the tag. If every selected
+    // domain is rested, keep the unfiltered list rather than starve the queue
+    // (mirrors random mode's all-rested fallback).
+    const restingSelected = new Set(
+      Object.entries(frequencyByDomain)
+        .filter(([, frequency]) => frequency === 'resting')
+        .map(([domain]) => domain.toLowerCase()),
+    );
+    const nonResting = selectable.filter(
+      (domain) => !restingSelected.has(domain.toLowerCase()),
+    );
+    const active = nonResting.length > 0 ? nonResting : selectable;
     if (isCustomDomainWeightingEnabled()) {
       // Change 1+2: deterministic, frequency-weighted, recency-aware sample of
       // just the day's domains. Handing generation a SHORT palette (≈ count) is
@@ -2233,17 +2250,17 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       // days. Falls back to the full set inside the helper if the weekly cap
       // would otherwise empty the palette.
       const sampled = selectCustomDomainsForRound(
-        selectable,
+        active,
         frequencyByDomain,
         recentDomainCounts,
         count,
       );
-      domainsForRound = sampled.length > 0 ? sampled : (selectable.length > 0 ? selectable : allDomains);
+      domainsForRound = sampled.length > 0 ? sampled : (active.length > 0 ? active : allDomains);
     } else {
       // Legacy path (CUSTOM_DOMAIN_WEIGHTING=0): order the WHOLE list least-recent
       // first, then by frequency rank, and hand it all to generation. Kept as an
       // instant, no-redeploy rollback for the weighted pick above.
-      const ordered = orderCustomDomainsByLeastRecent(selectable, recentDomainCounts);
+      const ordered = orderCustomDomainsByLeastRecent(active, recentDomainCounts);
       const frequencyRank = (domain: string) => {
         const frequency = frequencyByDomain[domain];
         if (frequency === 'often') return 0;
@@ -2256,9 +2273,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
-    // 'resting' domains are honored here too (custom mode filters them out of
-    // selectedDomains upstream) so "Resting" means "won't be asked" in both
-    // modes; fall back to the full base if everything has been rested.
+    // 'resting' domains are honored here too (custom mode filters them in its
+    // branch above) so "Resting" means "won't be asked" in both modes; fall
+    // back to the full base if everything has been rested.
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
     const resting = new Set(
       Object.entries(frequencyByDomain)
