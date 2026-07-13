@@ -21,7 +21,7 @@ import {
   bucketForScope,
 } from '@/server/db/queries/llm-cost-report';
 
-// Scopes observed in the live LlmUsageEvent ledger (30-day snapshot, 2026-07-06).
+// Scopes observed in the live LlmUsageEvent ledger (7-day snapshot, 2026-07-13).
 // Every one must resolve to a NAMED bucket — none may fall into "Other / unmapped",
 // which is what let the whole verification pipeline + topic-sizing hide from the
 // weekly digest. A new scope added to the codebase should be added to a bucket
@@ -38,6 +38,11 @@ const LIVE_SCOPES = [
   'interests-expand', 'interests-proofread', 'categorize-deleak',
   // Flag-gated / lower-volume scopes that must still be named when they fire:
   'domain-reference', 'nearness-tree',
+  // Previously in "Other / unmapped" (2026-07-13 reattribution): the Haiku
+  // self-containment healing sweep (its own bucket), supply backfill + two legacy
+  // generation experiments (→ generate), and the domain-size resolver (→ sizing).
+  'self-containment', 'backfill-supply-generate', 'fill-rich-generate',
+  'hamlet-ab-generate', 'domain-size-resolve',
 ];
 
 describe('LLM cost-report surface taxonomy', () => {
