@@ -48,10 +48,6 @@
     {
       "path": "/api/cron/quality-aggregation",
       "schedule": "0 14 * * 1"
-    },
-    {
-      "path": "/api/cron/mastery-calibration-report",
-      "schedule": "0 11 * * *"
     }
   ]
 }
