@@ -49,7 +49,18 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
     key: 'generate',
     label: 'Generating questions',
     playerFacing: false,
-    scopes: ['generate-questions', 'pool-refill-generate', 'multitudes', 'crafter-draft'],
+    scopes: [
+      'generate-questions',
+      'pool-refill-generate',
+      'multitudes',
+      'crafter-draft',
+      // Demand-weighted supply backfill (src/server/daily/supply-backfill.ts) plus
+      // two legacy generation experiments (fill-rich, hamlet A/B) that still have
+      // rows in history. All are question generation — was in "Other / unmapped".
+      'backfill-supply-generate',
+      'fill-rich-generate',
+      'hamlet-ab-generate',
+    ],
   },
   {
     key: 'quality',
@@ -67,6 +78,17 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
       'salvage-propose',
       'enrich-variants',
     ],
+  },
+  {
+    key: 'self-containment',
+    label: 'Making questions self-contained',
+    playerFacing: false,
+    // The name-the-source healing sweep (src/server/quality/self-containment.ts):
+    // a Haiku pass that rewrites/flags questions referencing an unnamed source. A
+    // one-off, migration-shaped backfill rather than steady-state per-question
+    // cost, so it gets its own line instead of inflating "Checking question
+    // quality" — kept visible because it's the single largest scope by call count.
+    scopes: ['self-containment'],
   },
   {
     key: 'verify',
@@ -118,6 +140,9 @@ export const SURFACE_BUCKETS: SurfaceBucket[] = [
       'mastery-threshold-points',
       'knowledge-structure-proposal',
       'nearness-tree',
+      // Trusted domain-size estimate (src/server/daily/domain-size-estimate.ts) —
+      // the "Est." column on the supply readout. Was in "Other / unmapped".
+      'domain-size-resolve',
     ],
   },
   {
