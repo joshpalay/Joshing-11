@@ -412,24 +412,28 @@ async function buildDailyQueueForUser(
   // any vetted public question regardless of the viewer's declared or
   // demonstrated interests.
   //
-  // In random mode, also drop domains the player parked in "Resting" on the
-  // Game settings page. "Resting" means "won't be asked for now" (see the
-  // territory setup zones), and the LLM generator already honors it in both
-  // modes — but the authored/house pickers only filtered by this allow-set, so
-  // a rested category could still leak into the Daily Five via a vetted friend
-  // or house question. Custom mode needs no extra handling here: buildSavePayload
-  // excludes rested domains from selectedDomains upstream, so they're already out.
+  // In BOTH modes, drop domains the player parked in "Resting" on the Game
+  // settings page. "Resting" means "won't be asked for now" (see the territory
+  // setup zones), and the LLM generator already honors it in both modes — but
+  // the authored/house pickers only filter by this allow-set, so a rested
+  // category could still leak into the Daily Five via a vetted friend or house
+  // question. Custom mode normally has no rested entries in selectedDomains
+  // (buildSavePayload excludes them), but the single-domain frequency endpoint
+  // didn't always sync the list, so prod rows written through it carry rested
+  // strays — filter here rather than trust the invariant. The starvation guard
+  // keeps the unfiltered selection if EVERY selected domain is rested,
+  // mirroring the generator's all-rested fallback.
   const restingDomains = new Set(
     Object.entries(preferences.domainPreferenceFrequency ?? {})
       .filter(([, frequency]) => frequency === 'resting')
       .map(([domain]) => domain.toLowerCase()),
   );
+  const notResting = (domain: string) => !restingDomains.has(domain.toLowerCase());
+  const selectedNotResting = preferences.selectedDomains.filter(notResting);
   const allowedSubcategories: ReadonlySet<string> = new Set(
     preferences.domainMode === 'custom'
-      ? preferences.selectedDomains
-      : knowledgeBase
-          .map((domain) => domain.domain)
-          .filter((domain) => !restingDomains.has(domain.toLowerCase())),
+      ? (selectedNotResting.length > 0 ? selectedNotResting : preferences.selectedDomains)
+      : knowledgeBase.map((domain) => domain.domain).filter(notResting),
   );
 
   // Intra-day diversity cap (D: "5-question botany run" / "3-Hamlet day"). One
