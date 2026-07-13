@@ -3,6 +3,7 @@ import {
   type DomainSupplyCoverageRow,
 } from '@/server/db/queries/domain-depth-estimate';
 import { classifySupplyState, type SupplyState } from '@/server/daily/supply-state';
+import { SIZE_CEIL } from '@/server/daily/domain-size-estimate';
 
 /**
  * Shared coverage summary for the supply-state machine's two surfaces
@@ -34,6 +35,17 @@ export interface SupplyCoverageEntry {
   /** Dedicated Fandom wiki host, when the sizer found one — a richness signal
    * (a fandom-backed leaf that ran dry is a generator failure, not a granular topic). */
   fandomHost: string | null;
+  /** Worst-case servable bank stock — the backfill's own "already stocked" number.
+   * Feeds classification (a stocked domain is never dry) and the dashboards. */
+  servable: number;
+  /**
+   * The corpus estimate hit SIZE_CEIL, i.e. it means "at least this big", not a
+   * measured size (Star Trek's 65k wiki articles clamp to 1,200). Surfaces
+   * render the estimate as "≥N" and suppress the coverage percentage — a % of a
+   * clamp reads as near-zero coverage forever and is meaningless. A manual
+   * override is a human-set target, never clamped.
+   */
+  estimateClamped: boolean;
 }
 
 export interface SupplyCoverageSummary {
@@ -63,6 +75,7 @@ export function summarizeSupplyCoverage(
       estimatedQuestions: effectiveEstimate,
       confidence: effectiveConfidence,
       consecutiveDryRounds: row.consecutiveDryRounds,
+      servableStock: row.servable,
     });
     return {
       domainKey: row.domainKey,
@@ -81,6 +94,8 @@ export function summarizeSupplyCoverage(
       lastYieldAt: row.lastYieldAt,
       generationCapped: row.generationCappedAt != null,
       fandomHost: row.fandomHost,
+      servable: row.servable,
+      estimateClamped: !overridden && row.estimatedQuestions != null && row.estimatedQuestions >= SIZE_CEIL,
     };
   });
 

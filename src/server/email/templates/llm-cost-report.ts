@@ -90,8 +90,13 @@ function supplySectionHtml(supply: SupplyCoverageSummary | null | undefined): st
   const discRows = discrepancies
     .slice(0, 8)
     .map((entry) => {
-      const est = entry.estimatedQuestions == null ? '—' : num(entry.estimatedQuestions);
-      const ratio = entry.ratio == null ? '—' : pct(entry.ratio);
+      // A ceiling-clamped estimate means "at least this big", not a measured
+      // size — show "≥N" and no coverage % (a % of a clamp is meaningless).
+      const est =
+        entry.estimatedQuestions == null
+          ? '—'
+          : `${entry.estimateClamped ? '≥' : ''}${num(entry.estimatedQuestions)}`;
+      const ratio = entry.ratio == null || entry.estimateClamped ? '—' : pct(entry.ratio);
       return `<tr>${td(escapeHtml(entry.label), 'left')}${td(num(entry.realized), 'right')}${td(est, 'right')}${td(ratio, 'right')}</tr>`;
     })
     .join('');
@@ -136,9 +141,13 @@ function supplySectionText(supply: SupplyCoverageSummary | null | undefined): st
       `${supply.discrepancies.length} domain(s) went dry far short of a trusted size estimate (supply problem, not completion):`,
     );
     for (const entry of supply.discrepancies.slice(0, 8)) {
+      const est =
+        entry.estimatedQuestions == null
+          ? '—'
+          : `${entry.estimateClamped ? '≥' : ''}${entry.estimatedQuestions}`;
       lines.push(
-        `- ${entry.label}: ${entry.realized}/${entry.estimatedQuestions ?? '—'} (${
-          entry.ratio == null ? '—' : `${Math.round(entry.ratio * 100)}%`
+        `- ${entry.label}: ${entry.realized}/${est} (${
+          entry.ratio == null || entry.estimateClamped ? '—' : `${Math.round(entry.ratio * 100)}%`
         }), dry ${entry.consecutiveDryRounds} rounds`,
       );
     }

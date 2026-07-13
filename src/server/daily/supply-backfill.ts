@@ -28,11 +28,15 @@ import {
   type LlmQuestion,
 } from '@/server/daily/generate-questions';
 import { getReferencePassagesForDomains, type DomainReference } from '@/server/daily/domain-reference';
-import { getReferenceRoutingHints } from '@/server/db/queries/domain-depth-estimate';
+import {
+  coCalibrateLoweredEstimates,
+  getReferenceRoutingHints,
+  recordSupplyYieldObservation,
+} from '@/server/db/queries/domain-depth-estimate';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveMachineTrustTier } from '@/server/daily/ask-to-answer';
 import { resolveFinestNode } from '@/server/knowledge/graph';
-import { dryRoundsThreshold } from '@/server/daily/supply-state';
+import { dryRoundsThreshold, nearCompleteRatio } from '@/server/daily/supply-state';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { estimateCostUsd } from '@/server/llm/pricing';
@@ -304,7 +308,10 @@ async function loadAvoid(domainKeyVal: string): Promise<{
   return { texts: rows.map((r) => ({ domain: domainKeyVal, text: r.question_text })), fks, factKeys };
 }
 
-async function buildDomain(p: BackfillPlan, systemUserId: string | null): Promise<{ generated: number; persisted: number }> {
+async function buildDomain(
+  p: BackfillPlan,
+  systemUserId: string | null,
+): Promise<{ generated: number; persisted: number; survivors: number; persistedKeys: string[] }> {
   const avoid = await loadAvoid(p.domainKey);
   let refs: Map<string, DomainReference> | undefined;
   if (p.ground) {
@@ -319,7 +326,7 @@ async function buildDomain(p: BackfillPlan, systemUserId: string | null): Promis
   }
 
   const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, refs);
-  if (generated.length === 0) return { generated: 0, persisted: 0 };
+  if (generated.length === 0) return { generated: 0, persisted: 0, survivors: 0, persistedKeys: [] };
 
   const [ql, fa] = await Promise.all([findQualityFailures(generated), findFactualFailures(generated)]);
   const seen = new Set(avoid.factKeys);
@@ -332,12 +339,15 @@ async function buildDomain(p: BackfillPlan, systemUserId: string | null): Promis
     survivors.push(q);
   });
 
-  if (!systemUserId) return { generated: generated.length, persisted: 0 };
+  if (!systemUserId) {
+    return { generated: generated.length, persisted: 0, survivors: survivors.length, persistedKeys: [] };
+  }
 
   // Persist as unverified machine rows (mirrors the non-corroborated per-user
   // path). The batch-verify + embedding-dedup sweeps promote/dedupe them later.
   const trustTier = resolveMachineTrustTier({ askToAnswerVerified: false, corroborated: false });
   let persisted = 0;
+  const persistedKeys: string[] = [];
   for (const q of survivors) {
     try {
       const taggedDomain = await resolveFinestNode(q.canonical_subcategory);
@@ -360,11 +370,12 @@ async function buildDomain(p: BackfillPlan, systemUserId: string | null): Promis
         usedInQueue: false,
       });
       persisted += 1;
+      persistedKeys.push(domainKey(taggedDomain));
     } catch (err) {
       console.warn('[supply-backfill] persist failed', { domain: p.label, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  return { generated: generated.length, persisted };
+  return { generated: generated.length, persisted, survivors: survivors.length, persistedKeys };
 }
 
 export async function runSupplyBackfill(opts: BackfillOptions): Promise<BackfillReport> {
@@ -401,7 +412,41 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
 
   for (const p of actionable.slice(0, opts.limit)) {
     const r = await buildDomain(p, opts.systemUserId ?? null);
-    report.built.push({ label: p.label, ...r });
+    report.built.push({ label: p.label, generated: r.generated, persisted: r.persisted });
+
+    // Feed the supply-state machine from THIS path too. The dry-round counter
+    // was written only by the per-user JIT round, so a domain the backfill
+    // restocked every night still read "dry" forever (the 2026-07-13 email:
+    // 10 alarmed domains, 5 of them refilled that same morning). Only the
+    // production persisting run observes — a generate-only run adds no stock.
+    if (opts.systemUserId) {
+      try {
+        if (r.persisted > 0) {
+          // Credit the probed key AND the keys the rows actually landed on —
+          // resolveFinestNode can retag a survivor to a finer node, and that
+          // finer domain's counter deserves the reset too.
+          await recordSupplyYieldObservation({
+            yieldedDomainKeys: [p.domainKey, ...r.persistedKeys],
+            dryDomainKeys: [],
+          });
+        } else if (r.generated > 0) {
+          // A dedicated probe (domain alone, full avoid list, grounded when
+          // possible) produced zero survivors — the strongest dry evidence.
+          await recordSupplyYieldObservation({ yieldedDomainKeys: [], dryDomainKeys: [p.domainKey] });
+          // Downward co-calibration: accept realized as ≈ the realizable size
+          // so the domain rests as soft_finite instead of alarming forever.
+          // Fandom-hosted and admin-overridden rows are excluded inside.
+          await coCalibrateLoweredEstimates([p.domainKey], nearCompleteRatio());
+        }
+        // r.generated === 0 → the model/parse returned nothing at all; that is
+        // an outage signal, not evidence about the domain — record nothing.
+      } catch (err) {
+        console.warn('[supply-backfill] yield observation failed (non-fatal)', {
+          domain: p.label,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
   return report;
 }

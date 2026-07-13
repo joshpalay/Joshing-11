@@ -16,7 +16,9 @@ function row(overrides: Partial<DomainSupplyCoverageRow>): DomainSupplyCoverageR
     consecutiveDryRounds: 0,
     lastYieldAt: null,
     generationCappedAt: null,
+    fandomHost: null,
     realized: 10,
+    servable: 0,
     ...overrides,
   };
 }
@@ -132,5 +134,37 @@ describe('summarizeSupplyCoverage (the shared #5 surface summary)', () => {
     expect(summary.entries).toHaveLength(0);
     expect(summary.discrepancies).toHaveLength(0);
     expect(summary.counts.discrepancy).toBe(0);
+  });
+
+  it('a stocked bank keeps a counter-dry domain out of the alarm list (backfill-supplied)', () => {
+    // The 2026-07-13 false-alarm shape: dry counter climbed (only the JIT path
+    // writes it) while the nightly backfill kept the domain stocked. Servable
+    // stock ≥ the floor → classifies filling, no discrepancy.
+    const summary = summarizeSupplyCoverage([
+      row({
+        domainKey: 'sesame street',
+        sampleLabel: 'Sesame Street',
+        realized: 15,
+        estimatedQuestions: 1200,
+        consecutiveDryRounds: 5,
+        servable: 14,
+      }),
+    ]);
+    expect(summary.entries[0].state).toBe('filling');
+    expect(summary.discrepancies).toHaveLength(0);
+  });
+
+  it('flags a ceiling-clamped corpus estimate; a manual override is never clamped', () => {
+    const summary = summarizeSupplyCoverage([
+      // SIZE_CEIL is 1200: a corpus estimate at the ceiling means "at least".
+      row({ domainKey: 'star trek', estimatedQuestions: 1200 }),
+      row({ domainKey: 'wtc', estimatedQuestions: 198 }),
+      // The same number set by hand is a human target, not a clamp.
+      row({ domainKey: 'manual', estimatedQuestions: 1200, manualEstimatedQuestions: 1200 }),
+    ]);
+    const byKey = new Map(summary.entries.map((entry) => [entry.domainKey, entry]));
+    expect(byKey.get('star trek')?.estimateClamped).toBe(true);
+    expect(byKey.get('wtc')?.estimateClamped).toBe(false);
+    expect(byKey.get('manual')?.estimateClamped).toBe(false);
   });
 });

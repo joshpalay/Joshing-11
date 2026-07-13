@@ -3,7 +3,7 @@
 // covers every played canonical_subcategory, not just authored KnowledgeNodes.
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 
-import { db, domainDepthEstimates, generatedQuestions, questions } from '@/server/db';
+import { db, pool, domainDepthEstimates, generatedQuestions, questions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 export type DepthEstimateRow = {
@@ -174,6 +174,53 @@ export async function coCalibrateRaisedEstimates(
 }
 
 /**
+ * DOWNWARD co-calibration — the mirror of coCalibrateRaisedEstimates, closing
+ * the loop the size estimator's K_PER_SHAPE constants leave open (they assume
+ * every counted work/section sustains 3–5 gate-passing questions, which
+ * overestimates mid-size text domains like a single author or one composition).
+ * Callers pass domains where a DEDICATED backfill probe — the domain alone in
+ * the prompt, full avoid list, grounding when available — just returned ZERO
+ * survivors: the strongest evidence that realizable size ≈ realized. The row's
+ * estimate drops to ceil(realized / nearRatio), exactly the soft_finite
+ * boundary, so the domain reads "resting (believed complete)" instead of
+ * alarming as a discrepancy forever. Guardrails:
+ *  - only lowers (new value < current estimate is in the WHERE);
+ *  - skips manual admin overrides (a human anchor is not ours to move);
+ *  - skips fandom-hosted rows — a fandom-backed domain that runs dry is a
+ *    generator/grounding failure, NOT a small topic; its alarm must survive;
+ *  - skips realized = 0 (nothing observed → nothing to calibrate to);
+ *  - realized = count(distinct fact_key), the same definition the coverage
+ *    read and the upward calibration use.
+ * A later yielding round resets the dry counter and can re-raise the estimate
+ * via coCalibrateRaisedEstimates, so this stays provisional in both directions.
+ * Fire-and-forget telemetry-grade: callers void+catch.
+ */
+export async function coCalibrateLoweredEstimates(
+  domainKeys: string[],
+  nearRatio: number,
+): Promise<void> {
+  const keys = [...new Set(domainKeys)].filter(Boolean);
+  if (keys.length === 0 || !(nearRatio > 0)) return;
+  await db.execute(sql`
+    UPDATE "DomainDepthEstimate" d
+    SET "estimated_questions" = CEIL(r.realized / ${nearRatio}::float8)::int,
+        "calibrated_at" = now()
+    FROM (
+      SELECT "domain_key", count(distinct "fact_key")::int AS realized
+      FROM "GeneratedQuestion"
+      WHERE "fact_key" IS NOT NULL AND "domain_key" = ANY(${keys})
+      GROUP BY "domain_key"
+    ) r
+    WHERE d."domain_key" = r."domain_key"
+      AND d."estimated_questions" IS NOT NULL
+      AND d."manual_estimated_questions" IS NULL
+      AND d."fandom_host" IS NULL
+      AND r.realized > 0
+      AND CEIL(r.realized / ${nearRatio}::float8)::int < d."estimated_questions"
+  `);
+}
+
+/**
  * The display label for a folded domain key, resolved SERVER-SIDE (the resolver
  * and estimate rows must never be seeded from client input): the most common
  * generated spelling, else a human-authored label that folds to the key. Null =
@@ -338,6 +385,14 @@ export type DomainSupplyCoverageRow = {
   fandomHost: string | null;
   /** Distinct facts generated for the domain, bank-wide (all users). */
   realized: number;
+  /**
+   * Worst-case SERVABLE stock: non-duplicate rows minus the largest single
+   * non-system owner's rows (the bank excludes a viewer's own rows, so the
+   * heaviest contributor sees the least). Same numbers as the backfill's
+   * "already stocked" gate — a domain this read calls stocked is one the
+   * backfill would skip, and classifySupplyState treats it as not-dry.
+   */
+  servable: number;
 };
 
 /**
@@ -362,7 +417,7 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       .where(isNotNull(generatedQuestions.factKey))
       .groupBy(generatedQuestions.domainKey),
   );
-  const joined = await db
+  const joinedRows = await db
     .with(realized)
     .select({
       domainKey: sql<string>`coalesce(${domainDepthEstimates.domainKey}, ${realized.domainKey})`,
@@ -381,6 +436,34 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
     })
     .from(domainDepthEstimates)
     .fullJoin(realized, eq(realized.domainKey, domainDepthEstimates.domainKey));
+
+  // Worst-case servable stock per domain, mirroring the backfill's loadDomains
+  // (have − largest single non-system owner; the system backfill user's rows
+  // serve every real viewer, so they never count as anyone's own stock). An
+  // empty string matches no real user id, so an unset system user is a no-op.
+  const sysExcl = process.env.RETRIEVAL_SYSTEM_USER_ID?.trim() || '';
+  const servableByKey = new Map<string, number>(
+    (
+      (await pool.query(
+        `SELECT domain_key,
+                (SUM(cnt) - COALESCE(MAX(cnt) FILTER (WHERE user_id <> $1), 0))::int AS servable
+         FROM (
+           SELECT domain_key, user_id, COUNT(*)::int AS cnt
+           FROM "GeneratedQuestion"
+           -- Mirror pickBankSource's hard predicates: demotes land as
+           -- is_duplicate = true, and a null fact_key row is never pickable.
+           WHERE is_duplicate = false AND fact_key IS NOT NULL AND domain_key IS NOT NULL
+           GROUP BY domain_key, user_id
+         ) per_owner
+         GROUP BY domain_key`,
+        [sysExcl],
+      )).rows as { domain_key: string; servable: number }[]
+    ).map((row) => [row.domain_key, row.servable]),
+  );
+  const joined: DomainSupplyCoverageRow[] = joinedRows.map((row) => ({
+    ...row,
+    servable: servableByKey.get(row.domainKey) ?? 0,
+  }));
 
   // Human-authored-only areas: live, non-blocked authored questions whose
   // folded key has neither an estimate row nor any generated rows.
@@ -418,6 +501,7 @@ export async function getDomainSupplyCoverage(): Promise<DomainSupplyCoverageRow
       generationCappedAt: null,
       fandomHost: null,
       realized: 0,
+      servable: 0,
     });
   }
   return joined;
