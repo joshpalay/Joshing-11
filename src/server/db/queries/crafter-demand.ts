@@ -152,7 +152,22 @@ export async function getExpensiveDomains(): Promise<ExpensiveDomain[]> {
         demoted: sql<number>`count(*) filter (where ${generatedQuestions.verificationVerdict} = 'demoted')::int`,
       })
       .from(generatedQuestions)
-      .where(isNotNull(generatedQuestions.verificationVerdict))
+      // Substantive verdicts only. Self-containment ("names-the-source") demotions
+      // are EXCLUDED from both numerator and denominator: they're a uniform
+      // formatting rule, not subject difficulty — already prevented at generation
+      // (Rule 2b) and one-click salvageable (prepend the title), so counting them
+      // as machine futility falsely routes fine domains (Breaking Bad, Avatar, …)
+      // to "curate by hand". A one-time healing sweep dumping same-day demotions
+      // must not masquerade as "the machine struggles here". Excluding from the
+      // denominator too keeps a domain's REAL error rate undiluted (4 factual
+      // misses among 4 substantive verdicts reads 100%, not 33% padded by 8
+      // formatting demotions).
+      .where(
+        and(
+          isNotNull(generatedQuestions.verificationVerdict),
+          sql`(${generatedQuestions.verificationReason} is null or ${generatedQuestions.verificationReason} not ilike 'self-containment%')`,
+        ),
+      )
       .groupBy(generatedQuestions.canonicalSubcategory),
     db
       .select({
