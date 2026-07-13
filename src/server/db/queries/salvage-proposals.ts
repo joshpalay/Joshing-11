@@ -8,6 +8,11 @@ export type SalvageProposalRow = {
   proposedStem: string | null;
   proposedExplanation: string | null;
   reverifyReason: string | null;
+  // 'ready' = a pre-re-verified fix awaiting one-click approval; 'unsalvageable'
+  // = the machine looked and found no safe minimal fix (needs human judgment).
+  // Terminal statuses (applied/rejected) are never returned — the human already
+  // decided those, so the card shows nothing.
+  status: 'ready' | 'unsalvageable';
 };
 
 type InsertSalvageProposal = {
@@ -38,8 +43,12 @@ export async function upsertSalvageProposal(row: InsertSalvageProposal): Promise
   await db.insert(questionSalvageProposals).values(row);
 }
 
-/** The latest live proposal per question id — for the review-queue join. */
-export async function getReadyProposalsForQuestions(
+/**
+ * The latest live-or-triaged proposal per question id — for the review-queue
+ * join. Includes 'unsalvageable' so the card can distinguish "machine looked,
+ * no safe fix — this genuinely needs you" from "machine hasn't looked yet".
+ */
+export async function getLatestProposalsForQuestions(
   questionIds: string[],
 ): Promise<Map<string, SalvageProposalRow>> {
   if (questionIds.length === 0) return new Map();
@@ -50,17 +59,22 @@ export async function getReadyProposalsForQuestions(
       proposedStem: questionSalvageProposals.proposedStem,
       proposedExplanation: questionSalvageProposals.proposedExplanation,
       reverifyReason: questionSalvageProposals.reverifyReason,
+      status: questionSalvageProposals.status,
     })
     .from(questionSalvageProposals)
     .where(
       and(
         inArray(questionSalvageProposals.questionId, questionIds),
-        eq(questionSalvageProposals.status, 'ready'),
+        inArray(questionSalvageProposals.status, ['ready', 'unsalvageable']),
       ),
     )
     .orderBy(desc(questionSalvageProposals.createdAt));
   const out = new Map<string, SalvageProposalRow>();
-  for (const r of rows) if (!out.has(r.questionId)) out.set(r.questionId, r);
+  for (const r of rows) {
+    if (!out.has(r.questionId)) {
+      out.set(r.questionId, r as SalvageProposalRow);
+    }
+  }
   return out;
 }
 
