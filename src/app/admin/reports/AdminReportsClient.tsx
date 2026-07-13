@@ -1110,19 +1110,45 @@ function DemotionRow({
         {item.verificationReason ?? 'reason not captured (demoted before reasons were stored)'}
       </p>
 
-      {/* D-QUALITY-SALVAGE-01: a machine-proposed minimal fix that already
-          re-verified clean. Conservative — "Review fix" opens the same edit panel
-          pre-filled; the human still re-runs + approves. Nothing auto-applies. */}
+      {/* D-QUALITY-SALVAGE-01: the salvage sweep now chases every demotion
+          automatically (batch-verify cron), so each card tells the human exactly
+          where the machine got to: a ready fix (green, one click), a triage
+          verdict (no safe fix — genuinely needs a human), or still pending. */}
+      {!proposal && item.triage && !editing ? (
+        <div
+          className="mt-2 rounded-md border px-3 py-2 text-[13px]"
+          style={{ borderColor: 'var(--border)' }}
+        >
+          <p className="font-semibold" style={{ color: 'var(--brand-ink-700)' }}>
+            No safe machine fix — needs your call
+          </p>
+          <p className="text-muted-foreground mt-0.5">
+            The machine tried and couldn&apos;t produce a fix that passes fact-check — the answer
+            or premise itself may be at fault.
+            {item.triage.reason ? ` Its note: ${item.triage.reason}` : ''}
+          </p>
+        </div>
+      ) : null}
+      {!proposal && !item.triage && !editing ? (
+        <p className="text-muted-foreground mt-2 text-[12px] italic">
+          Machine fix pending — the salvage sweep proposes one automatically after the next verify
+          run. Waiting is free; only step in now if this row is urgent.
+        </p>
+      ) : null}
+      {/* A machine-proposed minimal fix that already re-verified clean.
+          Conservative — "Review fix" opens the same edit panel pre-filled; the
+          human still re-runs + approves. Nothing auto-applies. */}
       {proposal && !editing ? (
         <div
           className="mt-2 rounded-md border px-3 py-2 text-[13px]"
           style={{ borderColor: 'var(--success)', background: 'var(--success-surface, transparent)' }}
         >
           <p className="font-semibold text-[var(--success)]">
-            Suggested fix — verifier re-checked, now passes
+            Machine fix ready — verifier re-checked, now passes
           </p>
           <p className="text-muted-foreground mt-0.5">
-            {proposal.kind === 'extra_fact_explainer' ? 'Explainer' : 'Question'} · {proposal.reverifyReason ?? 'minimal edit'}
+            {proposal.kind === 'extra_fact_explainer' ? 'Explainer' : 'Question'} edited · {proposal.reverifyReason ?? 'minimal edit'} · Approve returns it
+            to circulation with no further re-run.
           </p>
           {proposal.proposedStem ? (
             <p className="mt-1 text-[var(--brand-ink)]">
