@@ -634,6 +634,20 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
   }, [])
 
   const [isExplainerOpen, setIsExplainerOpen] = useState(false)
+  // Only offer "More context" when the 3-line clamp is actually hiding text;
+  // for short explanations there is no more context and the link is noise.
+  const [isExplainerClamped, setIsExplainerClamped] = useState(false)
+  const explainerRef = useRef<HTMLParagraphElement | null>(null)
+  useEffect(() => {
+    if (isExplainerOpen) return
+    const el = explainerRef.current
+    if (!el) return
+    const measure = () => setIsExplainerClamped(el.scrollHeight > el.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [isExplainerOpen, question.explanation])
   const statusLabel = question.isSkipped
     ? 'Skipped'
     : question.isCorrect
@@ -754,6 +768,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             Why this is the answer
           </h3>
           <p
+            ref={explainerRef}
             className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]"
             style={
               isExplainerOpen
@@ -768,7 +783,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           >
             {question.explanation}
           </p>
-          {!isExplainerOpen ? (
+          {!isExplainerOpen && isExplainerClamped ? (
             <button
               type="button"
               onClick={() => setIsExplainerOpen(true)}
