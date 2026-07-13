@@ -46,6 +46,17 @@ export const dryRoundsThreshold = (): number => Math.round(numEnv('SUPPLY_DRY_RO
 /** realized/estimate ratio at or above which a dry domain reads as complete. */
 export const nearCompleteRatio = (): number => numEnv('SUPPLY_NEAR_COMPLETE_RATIO', 0.7);
 
+/**
+ * Worst-case servable bank rows at or above which a domain reads as STOCKED —
+ * and a stocked domain is never dry, whatever its counter says. The dry-round
+ * counter is written only by the per-user JIT generation path; the nightly
+ * backfill and bank serving supply a domain without touching it (the 2026-07-13
+ * false-alarm email: 10 "dry" domains that the backfill had restocked that same
+ * morning). Kept in lockstep with the backfill's BUFFER_FLOOR default: report
+ * says stocked ⟺ the backfill's own gate says stocked.
+ */
+export const stockedFloor = (): number => Math.round(numEnv('SUPPLY_STOCKED_FLOOR', 10));
+
 export interface SupplyObservation {
   /** Distinct facts actually generated for the domain (bank-wide). */
   realized: number;
@@ -55,16 +66,28 @@ export interface SupplyObservation {
   confidence: string | null;
   /** Consecutive offered-but-zero-yield generation rounds. */
   consecutiveDryRounds: number;
+  /**
+   * Worst-case SERVABLE bank stock (have − largest single non-system owner),
+   * the same number the backfill's "already stocked" gate uses. Optional so
+   * callers without a stock read keep the pure counter-driven behavior.
+   */
+  servableStock?: number | null;
 }
 
 export function classifySupplyState(
   observation: SupplyObservation,
-  opts?: { dryK?: number; nearRatio?: number },
+  opts?: { dryK?: number; nearRatio?: number; stockedFloor?: number },
 ): SupplyState {
   const { realized, estimatedQuestions, confidence, consecutiveDryRounds } = observation;
   if (estimatedQuestions == null || estimatedQuestions <= 0) return 'unsized';
 
-  const dry = consecutiveDryRounds >= (opts?.dryK ?? dryRoundsThreshold());
+  // A stocked bank overrides the dry counter: the counter only sees the JIT
+  // path, so a domain the backfill keeps stocked would otherwise read dry
+  // forever (its counter can climb but nothing on the serving path resets it).
+  const stocked =
+    observation.servableStock != null &&
+    observation.servableStock >= (opts?.stockedFloor ?? stockedFloor());
+  const dry = !stocked && consecutiveDryRounds >= (opts?.dryK ?? dryRoundsThreshold());
   if (!dry) {
     return realized >= estimatedQuestions ? 'raise_estimate' : 'filling';
   }
