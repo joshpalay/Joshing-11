@@ -7,6 +7,7 @@ import {
   carryForwardQueueWithSlots,
   clearStaleShortTodayQueue,
   countDailyQueues,
+  getExcludedKnowledgeDomains,
   getKnowledgeBase,
   getPriorInWindowDailyQueue,
   getTodaysDailyQueue,
@@ -369,9 +370,10 @@ async function buildDailyQueueForUser(
   // still have unplayed questions — don't regenerate from scratch" (flag-gated).
   if (await topUpAndCarryForwardPartialQueue(userId)) return;
 
-  const [knowledgeBase, preferences] = await Promise.all([
+  const [knowledgeBase, preferences, excludedDomains] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
+    getExcludedKnowledgeDomains(userId),
   ]);
 
   // First Daily Five seeding (PRD prompt 5). We've passed the existing-queue and
@@ -429,10 +431,21 @@ async function buildDailyQueueForUser(
       .map(([domain]) => domain.toLowerCase()),
   );
   const notResting = (domain: string) => !restingDomains.has(domain.toLowerCase());
-  const selectedNotResting = preferences.selectedDomains.filter(notResting);
+  // D-DOMAIN-REST-01: also drop domains the player Rested (a domain-exclusion
+  // with a live expiry) or permanently Muted from the game summary. Random mode
+  // already excludes these via getKnowledgeBase, but custom mode is constrained
+  // to the explicit selectedDomains list, which never sees exclusions — so a
+  // Rested/Muted category would otherwise still leak into a custom-mode Daily
+  // Five through the authored/house pickers (the exact gap the resting filter
+  // above closes for the frequency tier). Rest/Mute write subcategory scope, so
+  // match on the subcategory set; expired Rests are already gone from this set.
+  const notExcluded = (domain: string) =>
+    !excludedDomains.subcategories.has(domain.toLowerCase());
+  const notRestingOrExcluded = (domain: string) => notResting(domain) && notExcluded(domain);
+  const selectedActive = preferences.selectedDomains.filter(notRestingOrExcluded);
   const allowedSubcategories: ReadonlySet<string> = new Set(
     preferences.domainMode === 'custom'
-      ? (selectedNotResting.length > 0 ? selectedNotResting : preferences.selectedDomains)
+      ? (selectedActive.length > 0 ? selectedActive : preferences.selectedDomains)
       : knowledgeBase.map((domain) => domain.domain).filter(notResting),
   );
 

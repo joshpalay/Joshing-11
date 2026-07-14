@@ -7,6 +7,15 @@ import { db, userDomainExclusions } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
+// D-DOMAIN-REST-01: how long a "Rest a topic" pause lasts before the domain
+// returns to circulation on its own. Env-tunable (adjust without a redeploy);
+// defaults to 21 days. The window is decided SERVER-SIDE so a client can't set
+// its own expiry — the request only signals `rest: true`.
+export function getDomainRestDays(): number {
+  const raw = Number(process.env.DOMAIN_REST_DAYS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 21;
+}
+
 const exclusionPayloadSchema = z.object({
   canonical_subcategory: z
     .string()
@@ -14,6 +23,10 @@ const exclusionPayloadSchema = z.object({
     .min(1)
     .transform((value) => value.replace(/\s+/g, ' ')),
   scope: z.enum(['subcategory', 'broad_category', 'category']).default('subcategory'),
+  // When true, this is a temporary Rest (auto-expires after DOMAIN_REST_DAYS)
+  // rather than a permanent Mute/"Never appear". Optional + defaults false so
+  // existing callers (settings, refine/commit) keep writing permanent rows.
+  rest: z.boolean().default(false),
 });
 
 async function parsePayload(request: NextRequest) {
@@ -34,22 +47,32 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // A Rest sets an expiry DOMAIN_REST_DAYS out; a permanent mute leaves it NULL.
+  // On conflict we UPDATE rest_until (not DoNothing) so re-resting refreshes the
+  // clock, and choosing Rest over an existing permanent mute (or vice versa)
+  // switches the row's kind rather than silently keeping the old one.
+  const restUntil = payload.rest
+    ? new Date(Date.now() + getDomainRestDays() * 24 * 60 * 60 * 1000)
+    : null;
+
   await db
     .insert(userDomainExclusions)
     .values({
       userId: session.userId,
       canonicalSubcategory: payload.canonical_subcategory,
       scope: payload.scope,
+      restUntil,
     })
-    .onConflictDoNothing({
+    .onConflictDoUpdate({
       target: [
         userDomainExclusions.userId,
         userDomainExclusions.scope,
         userDomainExclusions.canonicalSubcategory,
       ],
+      set: { restUntil },
     });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, restUntil });
 }
 
 export async function DELETE(request: NextRequest) {

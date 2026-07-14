@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   clearStaleShortTodayQueue: vi.fn(),
   countDailyQueues: vi.fn(),
   getKnowledgeBase: vi.fn(),
+  getExcludedKnowledgeDomains: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
   persistDailyQueue: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   clearStaleShortTodayQueue: mocks.clearStaleShortTodayQueue,
   countDailyQueues: mocks.countDailyQueues,
   getKnowledgeBase: mocks.getKnowledgeBase,
+  getExcludedKnowledgeDomains: mocks.getExcludedKnowledgeDomains,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
@@ -97,6 +99,13 @@ beforeEach(() => {
   // Returning player; this suite checks the resting allow-set, not first-run seeding.
   mocks.countDailyQueues.mockResolvedValue(3);
 
+  // No Rested/Muted domains by default; the custom-mode suppression test
+  // overrides this with an active exclusion set.
+  mocks.getExcludedKnowledgeDomains.mockResolvedValue({
+    subcategories: new Set<string>(),
+    broadCategories: new Set<string>(),
+  });
+
   mocks.pickEligibleAuthoredQuestions.mockResolvedValue([]);
   mocks.pickHouseQuestions.mockResolvedValue([]);
   mocks.getFriendAndFoFUserIds.mockResolvedValue({ direct: new Set(), extended: new Set() });
@@ -153,5 +162,36 @@ describe('fillDailyQueueForUser — Game settings categories drive selection', (
     );
     expect(allowed!.has('Jazz')).toBe(true);
     expect(allowed!.has('Opera')).toBe(true);
+  });
+
+  // D-DOMAIN-REST-01: a Rested/Muted domain is an active domain-exclusion, which
+  // custom mode never saw before (it trusts selectedDomains). getExcluded-
+  // KnowledgeDomains returns only ACTIVE exclusions (expired Rests already
+  // dropped), so this covers "Rest {domain}" from the game summary suppressing a
+  // custom-mode player's selected domain.
+  it('excludes Rested/Muted domains from authored + house picks in custom mode', async () => {
+    mocks.getKnowledgeBase.mockResolvedValue([{ domain: 'Jazz' }, { domain: 'Opera' }]);
+    mocks.getDailyPreferences.mockResolvedValue({
+      difficulty: 'adaptive',
+      domainMode: 'custom',
+      selectedDomains: ['Jazz', 'Opera'],
+      domainPreferenceFrequency: {},
+    });
+    // "Jazz" Rested from the game summary → an active subcategory exclusion.
+    mocks.getExcludedKnowledgeDomains.mockResolvedValue({
+      subcategories: new Set(['jazz']),
+      broadCategories: new Set<string>(),
+    });
+
+    await fillDailyQueueForUser(USER);
+
+    for (const picker of [mocks.pickEligibleAuthoredQuestions, mocks.pickHouseQuestions]) {
+      const allowed = picker.mock.calls[0].find(
+        (arg): arg is ReadonlySet<string> => arg instanceof Set,
+      );
+      expect(allowed).toBeDefined();
+      expect(allowed!.has('Jazz')).toBe(false);
+      expect(allowed!.has('Opera')).toBe(true);
+    }
   });
 });
