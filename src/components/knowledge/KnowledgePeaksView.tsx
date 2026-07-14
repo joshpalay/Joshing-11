@@ -771,8 +771,6 @@ export function PeakDetailCard({
     parent.value === undefined &&
     !parent.mastered;
 
-  const actionButton =
-    'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
   const confirmAdd = async (id: string, name: string) => {
     setPhase({ step: 'adding', id, name });
@@ -821,12 +819,10 @@ export function PeakDetailCard({
         type="button"
         disabled={busy || added}
         onClick={() => void inlineAdd(id, name)}
-        className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        style={
-          added
-            ? { borderColor: 'var(--border)', color: 'var(--text-muted)' }
-            : { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
-        }
+        // Compact sibling of .btn-ghost (same corners/border/type, row-friendly
+        // height) — the full 44px system ghost overwhelms a single text row.
+        className="inline-flex min-h-9 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={added ? { color: 'var(--text-muted)' } : undefined}
         aria-label={
           added
             ? `${name} added to your map`
@@ -883,8 +879,7 @@ export function PeakDetailCard({
             <button
               type="button"
               onClick={() => setPhase({ step: 'idle' })}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+              className="btn-primary"
             >
               Done
             </button>
@@ -899,16 +894,14 @@ export function PeakDetailCard({
             <button
               type="button"
               onClick={() => void confirmAdd(phase.id, name)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              className="btn-primary"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => setPhase({ step: 'idle' })}
-              className={actionButton}
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              className="btn-ghost"
             >
               Back
             </button>
@@ -945,16 +938,14 @@ export function PeakDetailCard({
           <button
             type="button"
             onClick={() => void confirmAdd(node.id, node.name)}
-            className={actionButton}
-            style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+            className="btn-primary gap-1.5"
           >
             <Plus className="size-4" aria-hidden /> Add it
           </button>
           <button
             type="button"
             onClick={onClose}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            className="btn-ghost"
           >
             Not now
           </button>
@@ -1158,7 +1149,18 @@ export function PeakDetailCard({
                     )}
                   </span>
                   <span className="min-w-0">
-                    <span className="block font-serif text-[15px] leading-tight">{title}</span>
+                    {/* Rotation mark rides right of the label (D-FREQUENCY-MARK-01);
+                        on the selected navy row it flips to card color to stay
+                        visible. */}
+                    <span className="flex items-center gap-2 font-serif text-[15px] leading-tight">
+                      {title}
+                      <FrequencyMark
+                        frequency={value}
+                        color={selectedFreq ? 'var(--brand-card)' : fieldColor(node.field)}
+                        size={12}
+                        decorative
+                      />
+                    </span>
                     <span
                       className={selectedFreq ? 'block text-xs opacity-80' : 'block text-xs'}
                       style={selectedFreq ? undefined : { color: 'var(--text-muted)' }}
@@ -1202,16 +1204,14 @@ export function PeakDetailCard({
                   type="button"
                   disabled={adoptBusy}
                   onClick={() => void confirmAdopt()}
-                  className={actionButton}
-                  style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+                  className="btn-primary gap-1.5"
                 >
                   <Plus className="size-4" aria-hidden /> {adoptBusy ? 'Adding…' : 'Add it'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAdoptConfirm(false)}
-                  className={actionButton}
-                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                  className="btn-ghost"
                 >
                   Not now
                 </button>
@@ -1221,8 +1221,7 @@ export function PeakDetailCard({
             <button
               type="button"
               onClick={() => setAdoptConfirm(true)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              className="btn-ghost gap-1.5"
             >
               <Plus className="size-4" aria-hidden /> Add to my map
             </button>
