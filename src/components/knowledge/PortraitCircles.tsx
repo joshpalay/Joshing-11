@@ -26,23 +26,16 @@ export type PortraitEntry = {
   totalMasteryPoints: number
   tier: PortraitTier
   authoredAnsweredCount: number
-  isHidden?: boolean
 }
 
 type PortraitCirclesProps = {
   entries: PortraitEntry[]
-  editMode?: boolean
-  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
-  pendingDomain?: string | null
   /**
    * Rotation word ("Often" / "Sometimes" / "Blue Moon" / "Never") shown under
    * each circle's name. Returns null to omit the line for a given domain.
    */
   frequencyLabelFor?: (canonicalSubcategory: string) => string | null
-  /**
-   * Tap handler for a circle when NOT in edit mode — opens the domain's detail
-   * pop-up. Edit mode keeps its own hide/show tap (onToggleHidden).
-   */
+  /** Tap handler for a circle — opens the domain's detail pop-up. */
   onSelectDomain?: (canonicalSubcategory: string) => void
 }
 
@@ -139,7 +132,7 @@ const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntrie
 // — `often`/`sometimes` ascending bars, `resting` the washed baseline line,
 // `blue_moon` the blue crescent. With no adjacent text label, the mark
 // self-labels (non-decorative) so screen readers still announce the frequency.
-function FrequencyTag({ label, color, dim }: { label: string; color: string; dim: boolean }) {
+function FrequencyTag({ label, color }: { label: string; color: string }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
   if (!freq) return null
   return (
@@ -149,7 +142,7 @@ function FrequencyTag({ label, color, dim }: { label: string; color: string; dim
         alignItems: 'center',
         // Indicators sit above the title now; hold them back to 80% so they
         // read as a quiet signal rather than competing with the name.
-        opacity: dim ? 0.4 : 0.8,
+        opacity: 0.8,
       }}
     >
       <FrequencyMark frequency={freq} color={color} size={11} />
@@ -275,9 +268,6 @@ export function PortraitDomainCircle({
   showCount = true,
   circleScale = 1,
   selected = false,
-  editMode = false,
-  onToggleHidden,
-  pending = false,
   frequencyLabel = null,
   onSelectDomain,
 }: {
@@ -287,9 +277,6 @@ export function PortraitDomainCircle({
   showCount?: boolean
   circleScale?: number
   selected?: boolean
-  editMode?: boolean
-  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
-  pending?: boolean
   frequencyLabel?: string | null
   onSelectDomain?: (canonicalSubcategory: string) => void
 }) {
@@ -302,12 +289,9 @@ export function PortraitDomainCircle({
       maxPointsForTier
     ) * circleScale
   )
-  const baseOpacity = forceFullOpacity
+  const opacity = forceFullOpacity
     ? 1
     : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier)
-  const isHidden = Boolean(entry.isHidden)
-  const dimForHidden = editMode && isHidden
-  const opacity = dimForHidden ? baseOpacity * 0.35 : baseOpacity
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' &&
@@ -315,29 +299,16 @@ export function PortraitDomainCircle({
   const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
 
   const handleClick = () => {
-    if (pending) return
-    if (editMode) {
-      onToggleHidden?.(entry.canonicalSubcategory, !isHidden)
-      return
-    }
     onSelectDomain?.(entry.canonicalSubcategory)
   }
 
-  const interactive =
-    (editMode && Boolean(onToggleHidden)) || (!editMode && Boolean(onSelectDomain))
+  const interactive = Boolean(onSelectDomain)
 
   return (
     <div
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
-      aria-pressed={editMode && interactive ? isHidden : undefined}
-      aria-label={
-        !interactive
-          ? undefined
-          : editMode
-            ? `${isHidden ? 'Show' : 'Hide'} ${entry.canonicalSubcategory} ${isHidden ? 'on your portrait' : 'from friends'}`
-            : `View ${entry.canonicalSubcategory} details`
-      }
+      aria-label={interactive ? `View ${entry.canonicalSubcategory} details` : undefined}
       onClick={interactive ? handleClick : undefined}
       onKeyDown={
         interactive
@@ -353,9 +324,8 @@ export function PortraitDomainCircle({
         ...circleItemStyle,
         width: Math.max(90, size + 8),
         maxWidth: '100%',
-        cursor: interactive ? (pending ? 'wait' : 'pointer') : undefined,
+        cursor: interactive ? 'pointer' : undefined,
         userSelect: interactive ? 'none' : undefined,
-        opacity: pending ? 0.6 : 1,
       }}
     >
       <div style={{ position: 'relative', width: size, height: size }}>
@@ -371,14 +341,12 @@ export function PortraitDomainCircle({
             borderRadius: '50%',
             border: `1px solid color-mix(in srgb, ${dc.primary} 45%, transparent)`,
             pointerEvents: 'none',
-            opacity: dimForHidden ? 0.4 : undefined,
           }}
         />
         <KnowledgeBubble
           diameter={size}
           tint={dc.primary}
           opacity={opacity}
-          style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
         >
           {showMasteryCount && (
             <span
@@ -420,34 +388,9 @@ export function PortraitDomainCircle({
             </span>
           </div>
         )}
-        {editMode && (
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              top: -4,
-              right: -4,
-              width: 22,
-              height: 22,
-              borderRadius: '50%',
-              background: isHidden ? 'var(--warm-paper)' : 'var(--warm-ink)',
-              color: isHidden ? 'var(--warm-ink)' : 'var(--warm-paper)',
-              border: `1.5px solid var(--warm-ink)`,
-              display: 'grid',
-              placeItems: 'center',
-              fontSize: 12,
-              fontWeight: 700,
-              fontFamily: 'var(--font-serif)',
-              lineHeight: 1,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
-            }}
-          >
-            {isHidden ? '+' : '×'}
-          </div>
-        )}
       </div>
       {frequencyLabel ? (
-        <FrequencyTag label={frequencyLabel} color={dc.primary} dim={dimForHidden} />
+        <FrequencyTag label={frequencyLabel} color={dc.primary} />
       ) : null}
       <span
         style={{
@@ -458,8 +401,6 @@ export function PortraitDomainCircle({
           lineHeight: 1.3,
           maxWidth: Math.max(90, size),
           wordWrap: 'break-word',
-          opacity: dimForHidden ? 0.5 : undefined,
-          textDecoration: dimForHidden ? 'line-through' : undefined,
         }}
       >
         {entry.canonicalSubcategory}
@@ -470,9 +411,6 @@ export function PortraitDomainCircle({
 
 export function PortraitCircles({
   entries,
-  editMode = false,
-  onToggleHidden,
-  pendingDomain = null,
   frequencyLabelFor,
   onSelectDomain,
 }: PortraitCirclesProps) {
@@ -612,9 +550,6 @@ export function PortraitCircles({
                   key={entry.canonicalSubcategory}
                   entry={entry}
                   maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
-                  editMode={editMode}
-                  onToggleHidden={onToggleHidden}
-                  pending={pendingDomain === entry.canonicalSubcategory}
                   frequencyLabel={frequencyLabelFor?.(entry.canonicalSubcategory) ?? null}
                   onSelectDomain={onSelectDomain}
                 />
