@@ -253,8 +253,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
   const [interestError, setInterestError] = useState<string | null>(null);
   const [tidying, setTidying] = useState(false);
   const [tidyNotice, setTidyNotice] = useState<string | null>(null);
-  const [dismissedDomains, setDismissedDomains] = useState<string[]>([]);
-  const [reinstating, setReinstating] = useState<string | null>(null);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
   const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
 
@@ -284,18 +282,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
 
   useEffect(() => {
     let active = true;
-    const loadDismissedDomains = async () => {
-      try {
-        const response = await fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' });
-        const body = await response.json().catch(() => null) as { domains?: string[] } | null;
-        if (active && response.ok && body?.domains) setDismissedDomains(body.domains);
-      } catch {
-        if (active) setDismissedDomains([]);
-      }
-    };
-
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial page hydration is fetched client-side for this route.
-    Promise.all([loadKnowledge(), loadDismissedDomains()])
+    loadKnowledge()
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
       })
@@ -692,23 +680,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     window.setTimeout(() => setActiveModal(null), SUCCESS_HOLD_MS);
   };
 
-  const reinstateDomain = async (domain: string) => {
-    setReinstating(domain);
-    try {
-      const response = await fetch('/api/feed/dismiss-domain', {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ domain }),
-      });
-      if (response.ok) {
-        setDismissedDomains((current) => current.filter((d) => d !== domain));
-      }
-    } finally {
-      setReinstating(null);
-    }
-  };
-
   const confirmTidy = async () => {
     setTidying(true);
     try {
@@ -874,29 +845,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
           </div>
         </section>
       ) : null}
-
-      {dismissedDomains.length > 0 && (
-        <section id="focused-feed" className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
-          <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
-          <div className="mt-3 flex flex-col gap-2">
-            {dismissedDomains.map((domain) => (
-              <div key={domain} className="flex items-center justify-between gap-2">
-                <span className="text-sm">{domain}</span>
-                <button
-                  type="button"
-                  className="border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
-                  onClick={() => void reinstateDomain(domain)}
-                  disabled={reinstating === domain}
-                  aria-label={`Un-hide ${domain} in your feed`}
-                >
-                  {reinstating === domain ? 'Un-hiding…' : 'Un-hide'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-3.5 px-1">
         <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>

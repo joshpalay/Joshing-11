@@ -260,27 +260,8 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
     expect(rendered).toContain('Dismiss')
   })
 
-  it('shows Dismissed, Undo, and the category mute affordance in the inline bar', () => {
-    const rendered = html(
-      <DismissedFeedBar
-        category="Roman aqueducts"
-        onUndo={() => undefined}
-        onMute={() => undefined}
-      />
-    )
-    expect(rendered).toContain('Dismissed')
-    expect(rendered).toContain('Undo')
-    expect(rendered).toContain('Not into Roman aqueducts?')
-  })
-
-  it('hides the mute affordance when there is no category', () => {
-    const rendered = html(
-      <DismissedFeedBar
-        category={null}
-        onUndo={() => undefined}
-        onMute={() => undefined}
-      />
-    )
+  it('shows Dismissed and Undo, and no category mute affordance (feed-mute retired)', () => {
+    const rendered = html(<DismissedFeedBar onUndo={() => undefined} />)
     expect(rendered).toContain('Dismissed')
     expect(rendered).toContain('Undo')
     expect(rendered).not.toContain('Not into')
@@ -289,11 +270,9 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
   it('reveals the answer on the card back when loaded', () => {
     const rendered = html(
       <DismissedFeedBar
-        category="Roman aqueducts"
         answer="Pont du Gard"
         answerLoading={false}
         onUndo={() => undefined}
-        onMute={() => undefined}
       />
     )
     expect(rendered).toContain('Dismissed')
@@ -302,12 +281,7 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
 
   it('shows a loading state while the answer is being fetched', () => {
     const rendered = html(
-      <DismissedFeedBar
-        category={null}
-        answerLoading
-        onUndo={() => undefined}
-        onMute={() => undefined}
-      />
+      <DismissedFeedBar answerLoading onUndo={() => undefined} />
     )
     expect(rendered).toContain('Revealing answer')
   })
@@ -315,11 +289,9 @@ describe('Feed card dismiss (B-Feed-Swipe-1)', () => {
   it('falls back to an unavailable message when the answer fetch errors', () => {
     const rendered = html(
       <DismissedFeedBar
-        category={null}
         answerError
         answerLoading={false}
         onUndo={() => undefined}
-        onMute={() => undefined}
       />
     )
     expect(rendered).toContain('Answer unavailable')
