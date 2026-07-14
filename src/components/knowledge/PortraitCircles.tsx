@@ -359,6 +359,21 @@ export function PortraitDomainCircle({
       }}
     >
       <div style={{ position: 'relative', width: size, height: size }}>
+        {/* Hairline ring OUTSIDE the bubble's depth-opacity: the gradient fill
+            (22%→12% tint × opacity ≥ 0.22) bottoms out near-invisible on cream
+            for low-point domains, so the ring is what keeps every circle
+            findable. Fill opacity still carries the depth signal. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            border: `1px solid color-mix(in srgb, ${dc.primary} 45%, transparent)`,
+            pointerEvents: 'none',
+            opacity: dimForHidden ? 0.4 : undefined,
+          }}
+        />
         <KnowledgeBubble
           diameter={size}
           tint={dc.primary}
