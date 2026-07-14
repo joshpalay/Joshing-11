@@ -10,13 +10,14 @@ import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { FrequencyMark } from '@/components/knowledge/FrequencyMark'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import {
+  TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_LABEL,
   type TerritoryFrequency,
 } from '@/lib/daily/territory-model'
 import type { MasteryTier } from '@/types/db'
 
 type PortraitTier = MasteryTier
-type SortMode = 'domain' | 'mastery'
+type SortMode = 'domain' | 'mastery' | 'frequency'
 
 export type PortraitEntry = {
   canonicalSubcategory: string
@@ -165,10 +166,26 @@ export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
 
 type Section = { label: string; color: string; entries: PortraitEntry[] }
 
-function buildSections(
+// Exported for tests only — the component is the sole runtime caller.
+export function buildSections(
   entries: PortraitEntry[],
-  sortMode: SortMode
+  sortMode: SortMode,
+  frequencyFor?: (canonicalSubcategory: string) => TerritoryFrequency | null
 ): Section[] {
+  if (sortMode === 'frequency') {
+    // Rotation-depth order (Often → Sometimes → Blue Moon → Never). A domain
+    // whose frequency can't be resolved has no explicit rotation, which is
+    // what "Never" (resting) means — bucket it there rather than dropping it.
+    return TERRITORY_FREQUENCIES.map((freq) => ({
+      label: TERRITORY_FREQUENCY_LABEL[freq],
+      color: 'var(--warm-ink-700)',
+      entries: entries
+        .filter(
+          (e) => (frequencyFor?.(e.canonicalSubcategory) ?? 'resting') === freq
+        )
+        .sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
+    })).filter((s) => s.entries.length > 0)
+  }
   if (sortMode === 'domain') {
     const domainMap = new Map<string, PortraitEntry[]>()
     for (const e of entries) {
@@ -405,10 +422,15 @@ export function PortraitCircles({
     [entries]
   )
   const isSparse = validEntries.length < SPARSE_THRESHOLD
-  const sections = useMemo(
-    () => buildSections(validEntries, sortMode),
-    [validEntries, sortMode]
-  )
+  // Frequency sort groups by the same rotation the label/mark under each circle
+  // shows — resolve the label back to its enum so face and grouping agree.
+  const frequencyFor = frequencyLabelFor
+    ? (canonicalSubcategory: string): TerritoryFrequency | null => {
+        const label = frequencyLabelFor(canonicalSubcategory)
+        return label ? (FREQUENCY_BY_LABEL[label] ?? null) : null
+      }
+    : undefined
+  const sections = buildSections(validEntries, sortMode, frequencyFor)
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<string, number> = {
@@ -428,7 +450,17 @@ export function PortraitCircles({
   return (
     <div>
       <div style={toggleWrapStyle} aria-label="Portrait sort mode">
-        {(['domain', 'mastery'] as const).map((mode) => (
+        {/* Frequency grouping only makes sense where rotation data is threaded
+            in (the owner's knowledge page); other portraits keep two modes. */}
+        {(
+          [
+            { mode: 'domain', label: 'Domain' },
+            { mode: 'mastery', label: 'Mastery' },
+            ...(frequencyLabelFor
+              ? [{ mode: 'frequency', label: 'Frequency' } as const]
+              : []),
+          ] as const
+        ).map(({ mode, label }) => (
           <button
             key={mode}
             type="button"
@@ -436,7 +468,7 @@ export function PortraitCircles({
             style={sortMode === mode ? activeToggleStyle : inactiveToggleStyle}
             aria-pressed={sortMode === mode}
           >
-            {mode === 'domain' ? 'Domain' : 'Mastery'}
+            {label}
           </button>
         ))}
       </div>
@@ -463,6 +495,22 @@ export function PortraitCircles({
               </div>
             )
           })}
+        </div>
+      ) : sortMode === 'frequency' ? (
+        <div style={legendStyle}>
+          {TERRITORY_FREQUENCIES.map((freq) => (
+            <div key={freq} style={legendItemStyle}>
+              <FrequencyMark
+                frequency={freq}
+                color="var(--warm-ink-500)"
+                size={11}
+                decorative
+              />
+              <span style={{ fontSize: 9.5, color: 'var(--warm-ink-500)' }}>
+                {TERRITORY_FREQUENCY_LABEL[freq]}
+              </span>
+            </div>
+          ))}
         </div>
       ) : (
         <div style={legendStyle}>
