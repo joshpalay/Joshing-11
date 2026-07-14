@@ -151,12 +151,6 @@ function FrequencyTag({ label, color }: { label: string; color: string }) {
 }
 
 const SPARSE_THRESHOLD = 5
-const MIN_OPACITY = 0.22
-
-export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
-  const n = pts / Math.max(maxPts, 1)
-  return MIN_OPACITY + n * (1 - MIN_OPACITY)
-}
 
 type SectionGroup = { label: string; color: string; entries: PortraitEntry[] }
 
@@ -264,7 +258,6 @@ export function buildSections(
 export function PortraitDomainCircle({
   entry,
   maxPointsForTier,
-  forceFullOpacity = false,
   showCount = true,
   circleScale = 1,
   selected = false,
@@ -273,7 +266,6 @@ export function PortraitDomainCircle({
 }: {
   entry: PortraitEntry
   maxPointsForTier: number
-  forceFullOpacity?: boolean
   showCount?: boolean
   circleScale?: number
   selected?: boolean
@@ -289,9 +281,6 @@ export function PortraitDomainCircle({
       maxPointsForTier
     ) * circleScale
   )
-  const opacity = forceFullOpacity
-    ? 1
-    : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier)
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' &&
@@ -329,24 +318,15 @@ export function PortraitDomainCircle({
       }}
     >
       <div style={{ position: 'relative', width: size, height: size }}>
-        {/* Hairline ring OUTSIDE the bubble's depth-opacity: the gradient fill
-            (22%→12% tint × opacity ≥ 0.22) bottoms out near-invisible on cream
-            for low-point domains, so the ring is what keeps every circle
-            findable. Fill opacity still carries the depth signal. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            border: `1px solid color-mix(in srgb, ${dc.primary} 45%, transparent)`,
-            pointerEvents: 'none',
-          }}
-        />
+        {/* Full-opacity fill + a hairline category border and a soft lift —
+            the flat portrait mirrors the configure page's circle treatment
+            (darker, crisper) rather than fading low-point domains. Size, not
+            opacity, carries depth. */}
         <KnowledgeBubble
           diameter={size}
           tint={dc.primary}
-          opacity={opacity}
+          border={`1px solid color-mix(in srgb, ${dc.primary} 27%, transparent)`}
+          style={{ boxShadow: 'var(--shadow-card-strong)' }}
         >
           {showMasteryCount && (
             <span
