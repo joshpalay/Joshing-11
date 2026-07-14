@@ -120,7 +120,6 @@ function toPortraitEntry(domain: DomainMastery): PortraitEntry {
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
     authoredAnsweredCount: domain.questionsAnswered,
-    isHidden: Boolean(domain.isHidden),
   };
 }
 
@@ -258,10 +257,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
   const [reinstating, setReinstating] = useState<string | null>(null);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
   const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [hiddenOverrides, setHiddenOverrides] = useState<Record<string, boolean>>({});
-  const [hidePending, setHidePending] = useState<string | null>(null);
-  const [hideError, setHideError] = useState<string | null>(null);
 
   // Detail pop-up controller (shared with the peaks view): owns the optimistic
   // tree + rotation map and the frequency/adopt writes. `selectedLeaf` is the
@@ -347,23 +342,14 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     [data],
   );
 
-  const isDomainHidden = useMemo(() => {
-    return (domain: DomainMastery) => {
-      const override = hiddenOverrides[domain.displayName];
-      if (typeof override === 'boolean') return override;
-      return Boolean(domain.isHidden);
-    };
-  }, [hiddenOverrides]);
-
-  const annotatedDomains = useMemo(
-    () => sortedDomains.map((domain) => ({ ...domain, isHidden: isDomainHidden(domain) })),
-    [sortedDomains, isDomainHidden],
-  );
+  // Non-hidden domains feed the portrait and every public-facing surface (the
+  // share card, the "your mind" line, the point/territory signature). A domain
+  // set to private drops out here; that visibility is now managed per-domain on
+  // its detail page, not by an edit mode on this portrait.
   const visibleDomains = useMemo(
-    () => annotatedDomains.filter((domain) => !domain.isHidden),
-    [annotatedDomains],
+    () => sortedDomains.filter((domain) => !domain.isHidden),
+    [sortedDomains],
   );
-  const hiddenCount = annotatedDomains.length - visibleDomains.length;
 
   // Rotation word shown under every circle's name — resolves through the same
   // frequency map that seeds the detail pop-up, so face and sheet always agree.
@@ -419,8 +405,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     return () => window.cancelAnimationFrame(frame);
   }, []);
   const nearbySuggestions = useMemo(
-    () => getNearbyTerritories(annotatedDomains.map((domain) => domain.displayName)),
-    [annotatedDomains],
+    () => getNearbyTerritories(sortedDomains.map((domain) => domain.displayName)),
+    [sortedDomains],
   );
   const visibleNearby = useMemo(() => {
     const SHOWN = 3;
@@ -465,13 +451,13 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
       setSelectedLeaf(fromTree);
       return;
     }
-    const domain = annotatedDomains.find((entry) => freqKey(entry.displayName) === key);
+    const domain = sortedDomains.find((entry) => freqKey(entry.displayName) === key);
     setSelectedLeaf(domain ? synthesizeLeaf(domain) : null);
   };
 
   const portraitEntries = useMemo(
-    () => (editMode ? annotatedDomains : visibleDomains).map(toPortraitEntry),
-    [annotatedDomains, visibleDomains, editMode],
+    () => visibleDomains.map(toPortraitEntry),
+    [visibleDomains],
   );
   // One entry per declared interest — no fixed slot count and no cap. The manage
   // modal renders these plus a trailing "add interest" affordance, so the list
@@ -497,7 +483,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
   };
   const yourMind = data ? displayMind(visibleDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
-  const hasAnything = annotatedDomains.length > 0;
+  const hasAnything = sortedDomains.length > 0;
 
   // Share payload for the Knowledge Portrait card, shared by the off-screen
   // capture card, the direct-share handler, and the modal fallback.
@@ -530,34 +516,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     // before the background capture finishes, fall back to the preview modal
     // (which captures on its own mount) rather than failing silently.
     if (!sharePortraitNow()) setShareModalOpen(true);
-  };
-
-  const toggleDomainHidden = async (canonicalSubcategory: string, nextHidden: boolean) => {
-    setHideError(null);
-    setHidePending(canonicalSubcategory);
-    setHiddenOverrides((current) => ({ ...current, [canonicalSubcategory]: nextHidden }));
-    try {
-      const response = await fetch(`/api/knowledge/${encodeURIComponent(canonicalSubcategory)}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ visibility: nextHidden ? 'private' : 'public' }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { message?: string } | null;
-        throw new Error(body?.message ?? 'Could not save that change.');
-      }
-    } catch (caught) {
-      setHiddenOverrides((current) => {
-        const next = { ...current };
-        delete next[canonicalSubcategory];
-        return next;
-      });
-      setHideError(caught instanceof Error ? caught.message : 'Could not save that change.');
-      window.setTimeout(() => setHideError(null), 3200);
-    } finally {
-      setHidePending((current) => (current === canonicalSubcategory ? null : current));
-    }
   };
 
   // openInterestModal is always triggered from within manage-interests, so closing returns there.
@@ -826,52 +784,19 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
 
       {hasAnything && (
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div>
-              <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
-              <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
-                {editMode ? 'TAP A CIRCLE TO HIDE OR SHOW IT' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditMode((current) => !current)}
-              className="shrink-0 min-h-8 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer"
-              aria-pressed={editMode}
-            >
-              {editMode ? 'Done' : 'Edit'}
-            </button>
+          <div className="mb-2">
+            <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
+            <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
+              SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;
+            </p>
           </div>
-
-          {editMode ? (
-            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)] leading-[1.5]">
-              Tap a circle to hide it from friends. Hidden circles stay visible to you here while editing.
-            </p>
-          ) : hiddenCount > 0 ? (
-            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)]">
-              {hiddenCount} hidden from friends —{' '}
-              <button
-                type="button"
-                className="underline bg-transparent border-none p-0 text-[var(--text-muted-warm)] cursor-pointer"
-                onClick={() => setEditMode(true)}
-              >
-                Edit to show
-              </button>
-            </p>
-          ) : null}
 
           <div id="portrait-circles-section">
             <PortraitCircles
               entries={portraitEntries}
-              editMode={editMode}
-              onToggleHidden={(canonical, nextHidden) => void toggleDomainHidden(canonical, nextHidden)}
-              pendingDomain={hidePending}
               frequencyLabelFor={frequencyLabelFor}
               onSelectDomain={openDomainDetail}
             />
-            {hideError ? (
-              <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
-            ) : null}
           </div>
 
           {/* Add a Territory — ported from the retired Configure page: nearby
