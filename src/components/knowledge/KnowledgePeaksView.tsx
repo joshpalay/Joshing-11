@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import Link from 'next/link';
-import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
+import { Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
@@ -74,10 +73,6 @@ function subtreeRealPoints(node: KnowledgeTreeNode): number {
   if (node.ghost) return 0;
   const own = node.value ?? 0;
   return own + (node.children ?? []).reduce((sum, child) => sum + subtreeRealPoints(child), 0);
-}
-
-function quizHref(name: string): string {
-  return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
 }
 
 // `freqKey` + `DEFAULT_FREQUENCY` (and the frequency/adopt writes below) live in
@@ -696,9 +691,11 @@ function KnowledgeCircleCell({
   );
 }
 
+// The ghost-area adopt (tapping an unstarted "+" area) still runs through this
+// small progress machine. Inline "grow the map" adds from Related / Part of do
+// NOT — they add in place and never take over the card (see `addStatus`).
 type AddPhase =
   | { step: 'idle' }
-  | { step: 'confirm'; id: string; name: string }
   | { step: 'adding'; id: string; name: string }
   | { step: 'added'; id: string; name: string }
   | { step: 'failed'; id: string; name: string };
@@ -740,6 +737,10 @@ export function PeakDetailCard({
   const [freqSaving, setFreqSaving] = useState(false);
   const [freqChanged, setFreqChanged] = useState(false);
   const [freqError, setFreqError] = useState(false);
+  // Inline "grow the map" adds — Related ghosts and the Part-of container. The
+  // add lands in place (optimistic) and only the tapped row's button changes;
+  // it never swaps the detail card for a separate confirm/added screen.
+  const [addStatus, setAddStatus] = useState<Record<string, 'adding' | 'added' | 'failed'>>({});
   const node = leaf.node;
   const parent = leaf.parent;
   const siblings = (parent?.children ?? []).filter((c) => c.id !== node.id);
@@ -800,6 +801,57 @@ export function PeakDetailCard({
     setAdoptConfirm(false);
   };
 
+  // Add a Related ghost / the Part-of container in place — no card takeover.
+  const inlineAdd = async (id: string, name: string) => {
+    if (addStatus[id] === 'adding' || addStatus[id] === 'added') return;
+    setAddStatus((prev) => ({ ...prev, [id]: 'adding' }));
+    const ok = await onAdd(id, name);
+    setAddStatus((prev) => ({ ...prev, [id]: ok ? 'added' : 'failed' }));
+  };
+
+  // The small "+ Add" pill used by Related/Part of: reflects adding → added →
+  // (on failure) try again on the row itself, so the detail card never unmounts.
+  const inlineAddButton = (id: string, name: string) => {
+    const status = addStatus[id];
+    const added = status === 'added';
+    const busy = status === 'adding';
+    const failed = status === 'failed';
+    return (
+      <button
+        type="button"
+        disabled={busy || added}
+        onClick={() => void inlineAdd(id, name)}
+        className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={
+          added
+            ? { borderColor: 'var(--border)', color: 'var(--text-muted)' }
+            : { borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }
+        }
+        aria-label={
+          added
+            ? `${name} added to your map`
+            : failed
+              ? `Retry adding ${name}`
+              : `Add ${name} to your map`
+        }
+      >
+        {added ? (
+          <>
+            <Check className="size-3.5" aria-hidden /> Added
+          </>
+        ) : busy ? (
+          'Adding…'
+        ) : failed ? (
+          'Try again'
+        ) : (
+          <>
+            <Plus className="size-3.5" aria-hidden /> Add
+          </>
+        )}
+      </button>
+    );
+  };
+
   const card = (children: ReactNode) => (
     <section
       aria-label={`${node.name} details`}
@@ -810,38 +862,12 @@ export function PeakDetailCard({
     </section>
   );
 
-  // ── Add confirm / added / failed take over the card body (C1) ──────────────
+  // ── Ghost-area adopt progress (adding / added / failed) takes over the card.
+  // Inline Related / Part-of adds do NOT route through here — see inlineAdd. ──
   if (phase.step !== 'idle') {
     const { name } = phase;
     return card(
-      phase.step === 'confirm' ? (
-        <>
-          <p className="font-serif text-base text-[var(--brand-ink)]">
-            Add <strong>{name}</strong> to your map?
-          </p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Questions will start appearing in your Daily Five.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => void confirmAdd(phase.id, name)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
-            >
-              <Plus className="size-4" aria-hidden /> Add it
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhase({ step: 'idle' })}
-              className={actionButton}
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-            >
-              Not now
-            </button>
-          </div>
-        </>
-      ) : phase.step === 'adding' ? (
+      phase.step === 'adding' ? (
         <p className="font-serif text-base text-[var(--brand-ink)]" aria-live="polite">
           Adding {name}…
         </p>
@@ -851,21 +877,14 @@ export function PeakDetailCard({
             <strong>{name}</strong> is on your map.
           </p>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Questions will start appearing in your Daily Five — or dive in right now.
+            Questions will start appearing in your Daily Five.
           </p>
           <div className="mt-3 flex gap-2">
-            <Link
-              href={quizHref(name)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
-            >
-              Quiz me now <ArrowUpRight className="size-4" aria-hidden />
-            </Link>
             <button
               type="button"
               onClick={() => setPhase({ step: 'idle' })}
               className={actionButton}
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
             >
               Done
             </button>
@@ -978,16 +997,7 @@ export function PeakDetailCard({
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <div className="flex items-start justify-between gap-2">
             <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
-            {parentAddable && parent ? (
-              <button
-                type="button"
-                onClick={() => setPhase({ step: 'confirm', id: parent.id, name: parent.name })}
-                className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-              >
-                <Plus className="size-3.5" aria-hidden /> Add
-              </button>
-            ) : null}
+            {parentAddable && parent ? inlineAddButton(parent.id, parent.name) : null}
           </div>
           <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
             {leaf.path.map((ancestor, i) => (
@@ -1068,14 +1078,7 @@ export function PeakDetailCard({
                   <span className="truncate font-serif text-sm text-[var(--brand-ink)]">
                     {ghost.name}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setPhase({ step: 'confirm', id: ghost.id, name: ghost.name })}
-                    className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-                  >
-                    <Plus className="size-3.5" aria-hidden /> Add
-                  </button>
+                  {inlineAddButton(ghost.id, ghost.name)}
                 </li>
               ))}
             </ul>
