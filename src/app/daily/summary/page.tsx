@@ -559,14 +559,13 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
   const [rating, setRating] = useState<FeedbackSignal | null>(null)
   const [isFeedbackPending, startFeedbackTransition] = useTransition()
-  const [exclusionState, setExclusionState] = useState<ExclusionState>({
+  const [actionState, setActionState] = useState<PostRoundActionState>({
     kind: 'idle',
   })
   // B-Report-2: which "why" sheet is open, if any. Null = no sheet.
   const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null)
   // Optimistic confirmation that the user flagged this recap as incorrect.
   const [reportedIncorrect, setReportedIncorrect] = useState(false)
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateFeedback = useCallback(
     (next: FeedbackSignal) => {
@@ -590,48 +589,72 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
     [question.questionId, rating]
   )
 
-  const handleExcludeDomain = useCallback(async () => {
+  // "Rest {domain}" — a temporary pause. Writes a domain-exclusion with an
+  // expiry (D-DOMAIN-REST-01); the server owns the window and returns the
+  // rest_until instant so we can name the return date. Optimistic: the banner
+  // shows immediately and folds in the real date when the POST lands.
+  const handleRestDomain = useCallback(async () => {
     setIsOverflowOpen(false)
-    setExclusionState({ kind: 'confirmed' })
-    undoTimerRef.current = setTimeout(() => {
-      undoTimerRef.current = null
-    }, 5000)
+    setActionState({ kind: 'rested', restUntil: null })
     try {
-      await fetch('/api/users/domain-exclusions', {
+      const response = await fetch('/api/users/domain-exclusions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ canonical_subcategory: question.domain }),
+        body: JSON.stringify({ canonical_subcategory: question.domain, rest: true }),
       })
+      const body = (await response.json().catch(() => null)) as { restUntil?: string } | null
+      if (response.ok && body?.restUntil) {
+        setActionState((prev) =>
+          prev.kind === 'rested' ? { kind: 'rested', restUntil: body.restUntil! } : prev,
+        )
+      }
     } catch {
-      // Optimistic UI is acceptable here; the next summary load will reflect persisted state.
+      // Optimistic UI is acceptable here; the next summary load reflects persisted state.
     }
   }, [question.domain])
 
-  const handleUndoExcludeDomain = useCallback(async () => {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current)
-      undoTimerRef.current = null
-    }
-    setExclusionState({ kind: 'undone' })
+  // "Move {domain} to Never" — the permanent tier. Reuses the single-domain
+  // frequency endpoint (frequency: 'resting' = the "Never" label), which also
+  // drops the domain from selectedDomains for custom-mode players.
+  const handleNeverDomain = useCallback(async () => {
+    setIsOverflowOpen(false)
+    setActionState({ kind: 'nevered' })
     try {
-      await fetch(
-        `/api/users/domain-exclusions/${encodeURIComponent(question.domain)}`,
-        {
+      await fetch('/api/daily/preferences/domain-frequency', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ domain: question.domain, frequency: 'resting' }),
+      })
+    } catch {
+      // Optimistic UI is acceptable here; the next summary load reflects persisted state.
+    }
+  }, [question.domain])
+
+  // One Undo for whichever action was just taken — delete the Rest row, or clear
+  // the Never frequency back to the default (frequency: null).
+  const handleUndoAction = useCallback(async () => {
+    const undoing = actionState
+    setActionState({ kind: 'undone' })
+    try {
+      if (undoing.kind === 'rested') {
+        await fetch(`/api/users/domain-exclusions/${encodeURIComponent(question.domain)}`, {
           method: 'DELETE',
           credentials: 'include',
-        }
-      )
+        })
+      } else if (undoing.kind === 'nevered') {
+        await fetch('/api/daily/preferences/domain-frequency', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ domain: question.domain, frequency: null }),
+        })
+      }
     } catch {
       // Fire-and-forget; the affordance returns on reload if persistence failed.
     }
-  }, [question.domain])
-
-  useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
-    }
-  }, [])
+  }, [actionState, question.domain])
 
   const [isExplainerOpen, setIsExplainerOpen] = useState(false)
   // Only offer "More context" when the 3-line clamp is actually hiding text;
@@ -797,15 +820,16 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
 
       {note ? <CreatorNote text={note.text} provenance={note.provenance} /> : null}
 
-      {exclusionState.kind === 'confirmed' ? (
+      {actionState.kind === 'rested' || actionState.kind === 'nevered' ? (
         <div className="bg-muted/35 text-muted-foreground mt-4 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
           <span>
-            {question.domainDisplayName} won&apos;t appear in your daily queue
-            anymore.
+            {actionState.kind === 'rested'
+              ? `Resting ${question.domainDisplayName}${restBackText(actionState.restUntil)}.`
+              : `${question.domainDisplayName} won’t appear anymore.`}
           </span>
           <button
             type="button"
-            onClick={handleUndoExcludeDomain}
+            onClick={handleUndoAction}
             className="ml-auto font-medium tracking-[0.08em] uppercase underline underline-offset-4"
           >
             Undo
@@ -852,8 +876,8 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         <QuestionCardOverflowMenu
           question={question}
           onClose={() => setIsOverflowOpen(false)}
-          onHideQuestionsLikeThis={handleExcludeDomain}
-          onMuteCategory={handleExcludeDomain}
+          onRest={handleRestDomain}
+          onNever={handleNeverDomain}
           canReport={question.reportTarget !== null}
           onReportIncorrect={() => {
             setIsOverflowOpen(false)
@@ -885,16 +909,16 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
 function QuestionCardOverflowMenu({
   question,
   onClose,
-  onHideQuestionsLikeThis,
-  onMuteCategory,
+  onRest,
+  onNever,
   canReport,
   onReportIncorrect,
   onReportInappropriate,
 }: {
   question: QuestionRecap
   onClose: () => void
-  onHideQuestionsLikeThis: () => void
-  onMuteCategory: () => void
+  onRest: () => void
+  onNever: () => void
   canReport: boolean
   onReportIncorrect: () => void
   onReportInappropriate: () => void
@@ -921,17 +945,17 @@ function QuestionCardOverflowMenu({
         </div>
         <button
           type="button"
-          onClick={onHideQuestionsLikeThis}
+          onClick={onRest}
           className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
         >
-          Hide questions like this
+          Rest {question.domainDisplayName}
         </button>
         <button
           type="button"
-          onClick={onMuteCategory}
+          onClick={onNever}
           className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
         >
-          Mute {question.domainDisplayName}
+          Move {question.domainDisplayName} to Never
         </button>
         <button
           type="button"
@@ -972,7 +996,23 @@ function QuestionCardOverflowMenu({
   )
 }
 
-type ExclusionState =
+// The post-round menu action just taken on this recap card, driving the inline
+// confirmation banner + its Undo. 'rested' carries the server's rest_until (null
+// until the POST returns) so the banner can name the return date.
+type PostRoundActionState =
   | { kind: 'idle' }
-  | { kind: 'confirmed' }
+  | { kind: 'rested'; restUntil: string | null }
+  | { kind: 'nevered' }
   | { kind: 'undone' }
+
+// " — back around Aug 4" for the Rest banner, or '' before the server date lands
+// (or if it's unparseable). Month + day is enough; the exact time isn't useful.
+function restBackText(restUntil: string | null): string {
+  if (!restUntil) return ''
+  const date = new Date(restUntil)
+  if (Number.isNaN(date.getTime())) return ''
+  return ` — back around ${date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })}`
+}

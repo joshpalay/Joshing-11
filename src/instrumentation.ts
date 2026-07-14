@@ -851,6 +851,23 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0124 (D-DOMAIN-REST-01) adds a nullable rest_until column to
+    // USER_DOMAIN_EXCLUSIONS: the game-summary "Rest a topic" action writes an
+    // exclusion with an expiry instead of a permanent one. The queue-build read
+    // path (getExcludedKnowledgeDomains) references this column, so a
+    // preview/production database that records the migration without the column
+    // present would fail there before migrate() can repair it. Additive +
+    // nullable — same repair rationale as the 0036 scope guard above.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "USER_DOMAIN_EXCLUSIONS"
+          ADD COLUMN IF NOT EXISTS "rest_until" timestamptz
+      `);
+    } catch {
+      // USER_DOMAIN_EXCLUSIONS may not exist yet on a fresh database — migrate()
+      // creates it before this migration runs.
+    }
+
     // Migration 0037 adds the EmailOptIn enum and four columns on User for the
     // round-open reminder opt-in (email_opt_in, email_verified, pending_email,
     // reminder_prompt_dismissed_at). If a preview/production database has this

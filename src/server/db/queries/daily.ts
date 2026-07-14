@@ -145,12 +145,25 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-type ScopedExclusions = {
+export type ScopedExclusions = {
   subcategories: Set<string>;
   broadCategories: Set<string>;
 };
 
-async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclusions> {
+// Exported for the queue orchestrator: custom-mode selection is constrained to
+// the player's explicit selectedDomains list, which getKnowledgeBase never
+// touches, so exclusions (permanent Mutes and active Rests) must be re-applied
+// there directly. Returns only ACTIVE exclusions (expired Rests already dropped).
+export async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclusions> {
+  // D-DOMAIN-REST-01: a row only excludes while it is ACTIVE — permanent mutes
+  // (rest_until IS NULL) always, and Rest rows only until their expiry. An
+  // expired Rest simply stops matching here, so the domain returns to
+  // circulation on the next queue build with no cron. Evaluated in SQL against
+  // now() so it's consistent with the DB clock.
+  const activeExclusion = and(
+    eq(userDomainExclusions.userId, userId),
+    or(isNull(userDomainExclusions.restUntil), sql`${userDomainExclusions.restUntil} > now()`),
+  );
   let rows: { domain: string; scope: 'subcategory' | 'broad_category' | 'category' }[];
   try {
     rows = await db
@@ -159,12 +172,14 @@ async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclus
         scope: userDomainExclusions.scope,
       })
       .from(userDomainExclusions)
-      .where(eq(userDomainExclusions.userId, userId));
+      .where(activeExclusion);
   } catch (error) {
     if (pgErrorCode(error) === '42P01') return { subcategories: new Set(), broadCategories: new Set() };
-    // 42703 = scope column missing on a database where the additive migration
-    // hasn't landed yet. Fall back to a scope='subcategory' read so the feature
-    // degrades to its pre-migration behavior instead of failing.
+    // 42703 = the scope OR rest_until column is missing on a database where the
+    // additive migration (0036 / 0124) hasn't landed yet. Fall back to a
+    // scope='subcategory', treat-all-as-permanent read so the feature degrades
+    // to its pre-migration behavior instead of failing. No Rest rows can exist
+    // before 0124, so treating every row as active is correct in that window.
     if (pgErrorCode(error) === '42703') {
       const legacy = await db
         .select({ domain: userDomainExclusions.canonicalSubcategory })
