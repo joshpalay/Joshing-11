@@ -2172,10 +2172,10 @@ function FeedListContent({
             {visibleFeedCategory(freqToast.domain) ?? freqToast.domain} less often.
           </span>
           <Link
-            href="/daily/setup"
+            href="/knowledge"
             className="text-foreground text-xs font-medium not-italic underline-offset-4 hover:underline"
           >
-            Adjust in Game settings →
+            Adjust your rotation →
           </Link>
         </div>
       ) : null}

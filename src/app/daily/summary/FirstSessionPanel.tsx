@@ -60,12 +60,12 @@ export function FirstSessionPanel({
       </h2>
       <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
         New questions come every day at noon — next up {nextWeekday} at noon. You
-        can change the types of questions anytime through{' '}
+        can change the types of questions anytime on{' '}
         <Link
-          href="/daily/setup"
+          href="/knowledge"
           className="text-[var(--brand-link)] underline underline-offset-4"
         >
-          configure
+          your Knowledge page
         </Link>
         .
       </p>

@@ -137,7 +137,7 @@ export function KnowledgeOverviewClient({
         <p style={eyebrowStyle}>Your Mind</p>
         <h1 style={sentenceStyle}>{overview.yourMind}</h1>
         <p style={{ margin: '10px 0 0', fontSize: '0.82rem' }}>
-          <Link href="/daily/setup" className="text-[var(--text-muted)] underline underline-offset-2">
+          <Link href="/knowledge" className="text-[var(--text-muted)] underline underline-offset-2">
             Personal Daily
           </Link>
         </p>

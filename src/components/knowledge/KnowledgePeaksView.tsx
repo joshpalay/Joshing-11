@@ -713,6 +713,7 @@ export function PeakDetailCard({
   onAdd,
   onSetFrequency,
   onAdopt,
+  onRemove,
 }: {
   leaf: LeafInfo;
   variant: 'own' | 'friend';
@@ -727,6 +728,10 @@ export function PeakDetailCard({
   onSetFrequency: (name: string, frequency: TerritoryFrequency) => Promise<boolean>;
   /** P4/D9 — friend variant only: adopt this area onto the viewer's own map. */
   onAdopt?: (name: string) => Promise<boolean>;
+  /** Own variant only: take this domain off the map entirely (domain
+   *  exclusion). Renders the "Remove from your map" link under the frequency
+   *  editor when provided; the caller closes the card on success. */
+  onRemove?: (name: string) => Promise<boolean>;
 }) {
   const [phase, setPhase] = useState<AddPhase>({ step: 'idle' });
   // Friend-adopt confirm (D8/D9): "+" → confirm → adopt onto the viewer's map.
@@ -737,6 +742,11 @@ export function PeakDetailCard({
   const [freqSaving, setFreqSaving] = useState(false);
   const [freqChanged, setFreqChanged] = useState(false);
   const [freqError, setFreqError] = useState(false);
+  // "Remove from your map" (own variant): link → can't-be-undone warning →
+  // confirmed removal. The caller closes the card when the removal lands.
+  const [removeConfirm, setRemoveConfirm] = useState(false);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState(false);
   // Inline "grow the map" adds — Related ghosts and the Part-of container. The
   // add lands in place (optimistic) and only the tapped row's button changes;
   // it never swaps the detail card for a separate confirm/added screen.
@@ -1182,6 +1192,67 @@ export function PeakDetailCard({
             <p className="mt-2 text-xs" aria-live="polite" style={{ color: 'var(--game-wrong-strong)' }}>
               Couldn’t update it. Try again.
             </p>
+          ) : null}
+          {/* Remove from map — a quiet link under Never; the click swaps in a
+              can't-be-undone warning before anything happens. */}
+          {onRemove ? (
+            removeConfirm ? (
+              <div
+                className="mt-3 rounded-lg border p-3"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--game-wrong-strong) 40%, var(--border))',
+                  background: 'color-mix(in srgb, var(--game-wrong-strong) 6%, var(--brand-card))',
+                }}
+              >
+                <p className="text-sm text-[var(--brand-ink)]">
+                  This can’t be undone. <strong>{node.name}</strong> comes off your map and out of
+                  your rotation.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={removeBusy}
+                    onClick={() => {
+                      void (async () => {
+                        setRemoveBusy(true);
+                        setRemoveError(false);
+                        const ok = await onRemove(node.name);
+                        setRemoveBusy(false);
+                        if (!ok) setRemoveError(true);
+                      })();
+                    }}
+                    className="btn-danger"
+                  >
+                    {removeBusy ? 'Removing…' : 'Remove it'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={removeBusy}
+                    onClick={() => {
+                      setRemoveConfirm(false);
+                      setRemoveError(false);
+                    }}
+                    className="btn-ghost"
+                  >
+                    Keep it
+                  </button>
+                </div>
+                {removeError ? (
+                  <p className="mt-2 text-xs" aria-live="polite" style={{ color: 'var(--game-wrong-strong)' }}>
+                    Couldn’t remove it. Try again.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRemoveConfirm(true)}
+                className="mt-3 text-xs underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Remove from your map
+              </button>
+            )
           ) : null}
         </div>
       ) : null}

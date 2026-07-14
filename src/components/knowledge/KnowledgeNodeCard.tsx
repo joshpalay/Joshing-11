@@ -41,8 +41,10 @@ function formatPts(value: number): string {
   return new Intl.NumberFormat().format(Math.round(value));
 }
 
-function quizHref(name: string): string {
-  return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
+// The custom-round Configure flow retired with /daily/setup; "quiz me" now
+// heads to today's round directly.
+function quizHref(_name: string): string {
+  return '/daily';
 }
 
 export function KnowledgeNodeCard({

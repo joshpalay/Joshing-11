@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     failed: 0,
     // Breakdown of `failed` by cause so a non-zero count is self-explaining:
     //  - no_knowledge_base: benign — user hasn't declared interests yet, so
-    //    there's nothing to generate from (they're routed to /daily/setup, not 503).
+    //    there's nothing to generate from (they're routed to /knowledge, not 503).
     //  - generation: the real failure mode — generation came up short / errored.
     //  - other: an unexpected (non-DailyQueueFillError) exception.
     failedNoKnowledgeBase: 0,
@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
           const oneClickUrl = `${baseUrl}/api/email/unsubscribe?token=${unsubToken}`;
           const template = buildDailyReminderTemplate({
             dailyUrl: `${baseUrl}/daily`,
-            interestsUrl: `${baseUrl}/daily/setup`,
+            interestsUrl: `${baseUrl}/knowledge`,
             topics: topicsForReminder(slots),
             activity,
             teaser: { questionText: teaserSlot.question_text, domain: teaserSlot.domain },
