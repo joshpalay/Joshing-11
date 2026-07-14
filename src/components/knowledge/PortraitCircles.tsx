@@ -10,13 +10,15 @@ import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { FrequencyMark } from '@/components/knowledge/FrequencyMark'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import {
+  TERRITORY_FREQUENCIES,
+  TERRITORY_FREQUENCY_COPY,
   TERRITORY_FREQUENCY_LABEL,
   type TerritoryFrequency,
 } from '@/lib/daily/territory-model'
 import type { MasteryTier } from '@/types/db'
 
 type PortraitTier = MasteryTier
-type SortMode = 'domain' | 'mastery'
+type SortMode = 'domain' | 'mastery' | 'frequency'
 
 export type PortraitEntry = {
   canonicalSubcategory: string
@@ -163,12 +165,77 @@ export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
   return MIN_OPACITY + n * (1 - MIN_OPACITY)
 }
 
-type Section = { label: string; color: string; entries: PortraitEntry[] }
+type SectionGroup = { label: string; color: string; entries: PortraitEntry[] }
 
-function buildSections(
+type Section = {
+  label: string
+  color: string
+  entries: PortraitEntry[]
+  /** Set on frequency-mode sections: drives the configure-page-style zone
+   *  header (serif title + rotation mark + copy line). */
+  frequency?: TerritoryFrequency
+  copy?: string
+  /** Frequency-mode secondary grouping by category, mirroring the configure
+   *  page's zones: heaviest category first, the catch-all bucket last. */
+  groups?: SectionGroup[]
+}
+
+// Category sub-groups within a frequency bucket — the same ordering the
+// configure page (TerritorySetupClient.groupByCategory) uses: heaviest
+// category first, ties alphabetical, "General Knowledge" (shown as "Other
+// interests") always last. Entries within a category sort by points.
+function groupEntriesByCategory(entries: PortraitEntry[]): SectionGroup[] {
+  const byCategory = new Map<string, PortraitEntry[]>()
+  for (const e of entries) {
+    const category = normalizeBroadCategory(e.broadCategory) ?? 'General Knowledge'
+    const list = byCategory.get(category) ?? []
+    list.push(e)
+    byCategory.set(category, list)
+  }
+  return [...byCategory.entries()]
+    .map(([category, items]) => ({
+      category,
+      items: [...items].sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
+      totalPoints: items.reduce((sum, e) => sum + e.totalMasteryPoints, 0),
+    }))
+    .sort((a, b) => {
+      if (a.category === 'General Knowledge') return 1
+      if (b.category === 'General Knowledge') return -1
+      return b.totalPoints - a.totalPoints || a.category.localeCompare(b.category)
+    })
+    .map(({ category, items }) => ({
+      label: displaySectionLabel(category),
+      color: getPortraitDomainColor(category).text,
+      entries: items,
+    }))
+}
+
+// Exported for tests only — the component is the sole runtime caller.
+export function buildSections(
   entries: PortraitEntry[],
-  sortMode: SortMode
+  sortMode: SortMode,
+  frequencyFor?: (canonicalSubcategory: string) => TerritoryFrequency | null
 ): Section[] {
+  if (sortMode === 'frequency') {
+    // Rotation-depth order (Often → Sometimes → Blue Moon → Never). A domain
+    // whose frequency can't be resolved has no explicit rotation, which is
+    // what "Never" (resting) means — bucket it there rather than dropping it.
+    return TERRITORY_FREQUENCIES.map((freq) => {
+      const groups = groupEntriesByCategory(
+        entries.filter(
+          (e) => (frequencyFor?.(e.canonicalSubcategory) ?? 'resting') === freq
+        )
+      )
+      return {
+        label: TERRITORY_FREQUENCY_LABEL[freq],
+        color: 'var(--warm-ink-700)',
+        frequency: freq,
+        copy: TERRITORY_FREQUENCY_COPY[freq],
+        entries: groups.flatMap((g) => g.entries),
+        groups,
+      }
+    }).filter((s) => s.entries.length > 0)
+  }
   if (sortMode === 'domain') {
     const domainMap = new Map<string, PortraitEntry[]>()
     for (const e of entries) {
@@ -405,10 +472,15 @@ export function PortraitCircles({
     [entries]
   )
   const isSparse = validEntries.length < SPARSE_THRESHOLD
-  const sections = useMemo(
-    () => buildSections(validEntries, sortMode),
-    [validEntries, sortMode]
-  )
+  // Frequency sort groups by the same rotation the label/mark under each circle
+  // shows — resolve the label back to its enum so face and grouping agree.
+  const frequencyFor = frequencyLabelFor
+    ? (canonicalSubcategory: string): TerritoryFrequency | null => {
+        const label = frequencyLabelFor(canonicalSubcategory)
+        return label ? (FREQUENCY_BY_LABEL[label] ?? null) : null
+      }
+    : undefined
+  const sections = buildSections(validEntries, sortMode, frequencyFor)
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<string, number> = {
@@ -428,7 +500,17 @@ export function PortraitCircles({
   return (
     <div>
       <div style={toggleWrapStyle} aria-label="Portrait sort mode">
-        {(['domain', 'mastery'] as const).map((mode) => (
+        {/* Frequency grouping only makes sense where rotation data is threaded
+            in (the owner's knowledge page); other portraits keep two modes. */}
+        {(
+          [
+            { mode: 'domain', label: 'Domain' },
+            { mode: 'mastery', label: 'Mastery' },
+            ...(frequencyLabelFor
+              ? [{ mode: 'frequency', label: 'Frequency' } as const]
+              : []),
+          ] as const
+        ).map(({ mode, label }) => (
           <button
             key={mode}
             type="button"
@@ -436,7 +518,7 @@ export function PortraitCircles({
             style={sortMode === mode ? activeToggleStyle : inactiveToggleStyle}
             aria-pressed={sortMode === mode}
           >
-            {mode === 'domain' ? 'Domain' : 'Mastery'}
+            {label}
           </button>
         ))}
       </div>
@@ -464,6 +546,10 @@ export function PortraitCircles({
             )
           })}
         </div>
+      ) : sortMode === 'frequency' ? (
+        // Frequency mode needs no legend — its zone headers already carry the
+        // rotation mark, label, and copy.
+        null
       ) : (
         <div style={legendStyle}>
           {TIER_ORDER.map((tier) => (
@@ -503,37 +589,113 @@ export function PortraitCircles({
       </p>
 
       <div>
-        {sections.map(({ label, color, entries: sectionEntries }) => {
+        {sections.map(({ label, color, entries: sectionEntries, frequency, copy, groups }) => {
+          const circlesRow = (rowEntries: PortraitEntry[]) => (
+            <div style={circlesRowStyle}>
+              {rowEntries.map((entry) => (
+                <PortraitDomainCircle
+                  key={entry.canonicalSubcategory}
+                  entry={entry}
+                  maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
+                  editMode={editMode}
+                  onToggleHidden={onToggleHidden}
+                  pending={pendingDomain === entry.canonicalSubcategory}
+                  frequencyLabel={frequencyLabelFor?.(entry.canonicalSubcategory) ?? null}
+                  onSelectDomain={onSelectDomain}
+                />
+              ))}
+            </div>
+          )
+
           return (
             <div key={label} style={{ marginTop: 24 }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  letterSpacing: '0.18em',
-                  textTransform: 'uppercase',
-                  color,
-                  marginBottom: 14,
-                  paddingBottom: 6,
-                  borderBottom: `1px solid ${color}33`,
-                  fontFamily: 'var(--font-serif)',
-                }}
-              >
-                {label}
-              </div>
-              <div style={circlesRowStyle}>
-                {sectionEntries.map((entry) => (
-                  <PortraitDomainCircle
-                    key={entry.canonicalSubcategory}
-                    entry={entry}
-                    maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
-                    editMode={editMode}
-                    onToggleHidden={onToggleHidden}
-                    pending={pendingDomain === entry.canonicalSubcategory}
-                    frequencyLabel={frequencyLabelFor?.(entry.canonicalSubcategory) ?? null}
-                    onSelectDomain={onSelectDomain}
-                  />
-                ))}
-              </div>
+              {frequency ? (
+                // Frequency sections mirror the configure page's zone header:
+                // serif title with the rotation mark beside it + the shared
+                // one-line copy, so the two rotation surfaces read as one.
+                <div
+                  style={{
+                    marginBottom: 14,
+                    paddingBottom: 10,
+                    borderBottom: '1px solid var(--border-light)',
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 20,
+                      fontFamily: 'var(--font-serif)',
+                      fontWeight: 600,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {label}
+                    <FrequencyMark
+                      frequency={frequency}
+                      color="var(--brand-ink-400)"
+                      size={18}
+                      decorative
+                    />
+                  </h3>
+                  {copy ? (
+                    <p
+                      style={{
+                        margin: '4px 0 0',
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                        color: 'var(--text-muted-warm)',
+                      }}
+                    >
+                      {copy}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    color,
+                    marginBottom: 14,
+                    paddingBottom: 6,
+                    borderBottom: `1px solid ${color}33`,
+                    fontFamily: 'var(--font-serif)',
+                  }}
+                >
+                  {label}
+                </div>
+              )}
+              {groups ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  {groups.map((group) => (
+                    <div key={group.label}>
+                      {/* Category sub-header, only when a zone spans more than
+                          one category — same rule as the configure page. */}
+                      {groups.length > 1 ? (
+                        <p
+                          style={{
+                            margin: '0 0 8px',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            letterSpacing: '0.14em',
+                            textTransform: 'uppercase',
+                            color: group.color,
+                          }}
+                        >
+                          {group.label}
+                        </p>
+                      ) : null}
+                      {circlesRow(group.entries)}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                circlesRow(sectionEntries)
+              )}
             </div>
           )
         })}
