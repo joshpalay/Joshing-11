@@ -71,7 +71,7 @@ export function FirstGamePanel({ gameId }: { gameId: string }) {
         </h2>
         <p className="mt-2 text-sm leading-6 text-foreground">
           New questions come every day. Want different ones?{' '}
-          <Link href="/daily/setup" className="underline underline-offset-2">
+          <Link href="/knowledge" className="underline underline-offset-2">
             Set your topics here
           </Link>
           .

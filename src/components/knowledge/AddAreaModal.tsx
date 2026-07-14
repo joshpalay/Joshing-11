@@ -60,7 +60,7 @@ export function AddAreaModal({
             </p>
             <div className="mt-4 flex gap-2">
               <Link
-                href={`/daily/setup?domainMode=custom&domain=${encodeURIComponent(added)}`}
+                href="/daily"
                 className={actionButton}
                 style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
               >

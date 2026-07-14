@@ -1,8 +1,8 @@
 import type { InferSelectModel } from 'drizzle-orm';
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { cache } from 'react';
 
-import { db, declaredInterests, friendInvitations, playerMastery, users } from '@/server/db';
+import { db, declaredInterests, friendInvitations, playerMastery, userDomainExclusions, users } from '@/server/db';
 import {
   assertAnswerableInterest,
   categorizeInterestDomain,
@@ -299,9 +299,26 @@ export async function addDeclaredInterest(
     .from(declaredInterests)
     .where(and(eq(declaredInterests.userId, userId), eq(declaredInterests.isActive, true)));
 
+  // Declaring an interest revives a domain that "Remove from your map" (or a
+  // daily-summary "don't ask") excluded: clear any matching subcategory-scope
+  // exclusion so the domain returns to rotation and the knowledge surfaces.
+  // Mirrors the refine add path's exclusion delete.
+  const clearSubcategoryExclusion = async (label: string) => {
+    await db
+      .delete(userDomainExclusions)
+      .where(
+        and(
+          eq(userDomainExclusions.userId, userId),
+          eq(userDomainExclusions.scope, 'subcategory'),
+          sql`lower(${userDomainExclusions.canonicalSubcategory}) = ${label.toLowerCase()}`,
+        ),
+      );
+  };
+
   const key = clean.label.toLowerCase();
   const existing = active.find((row) => row.domain.toLowerCase() === key);
   if (existing) {
+    await clearSubcategoryExclusion(existing.domain);
     return { created: false, domain: existing.domain, broadCategory: existing.broadCategory };
   }
 
@@ -316,6 +333,7 @@ export async function addDeclaredInterest(
   await db.transaction(async (tx) => {
     await upsertDeclaredInterestRow(tx, userId, interest);
   });
+  await clearSubcategoryExclusion(interest.label);
 
   return { created: true, domain: interest.label, broadCategory: interest.broadCategory ?? null };
 }

@@ -281,11 +281,12 @@ export default function TodaysFiveCard({
             on a near-card cream fill + softened hairline border, no shadow so it
             reads as part of the header rather than a floating chip). The row is
             items-center so the pill sits on the "Today's Five" eyebrow baseline.
-            Same destination as before (/daily/setup). The 44px min height keeps
+            Destination is /knowledge — the Configure page retired into the
+            knowledge portrait's rotation module. The 44px min height keeps
             the tap target accessible; `shrink-0` protects it from being squeezed
             by the eyebrow on narrow widths. */}
         <Link
-          href="/daily/setup"
+          href="/knowledge"
           data-tour="customize"
           className={CUSTOMIZE_DAILY_LINK_CLASS}
           aria-label="Customize your Daily Five"

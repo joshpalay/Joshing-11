@@ -9,6 +9,7 @@ import {
   playerMastery,
   profileDomainVisibility,
   questions,
+  userDomainExclusions,
 } from '@/server/db';
 import type { QueueSlot } from '@/server/daily/types';
 import {
@@ -585,9 +586,60 @@ export function mergeDomainStats(rows: DomainAggregateRow[]): MergedDomainStats 
 // count against the max-5 pool). The mastery events themselves are no longer
 // pulled in full — aggregated per-domain in SQL — except the 10 most recent rows
 // the overview needs for its recent-activity feed.
+// Subcategory-scope exclusions ("Remove from map" / "don't ask about this"),
+// folded to domainKey so spelling variants match the knowledge derivation.
+// Mirrors daily.ts's degradation: missing table (42P01) → none; missing scope
+// column (42703, pre-migration DB) → treat every row as subcategory-scope.
+async function getExcludedSubcategoryKeys(userId: string): Promise<Set<string>> {
+  let rows: { domain: string }[];
+  try {
+    rows = await db
+      .select({ domain: userDomainExclusions.canonicalSubcategory })
+      .from(userDomainExclusions)
+      .where(and(eq(userDomainExclusions.userId, userId), eq(userDomainExclusions.scope, 'subcategory')));
+  } catch (error) {
+    if (pgErrorCode(error) === '42P01') return new Set();
+    if (pgErrorCode(error) !== '42703') throw error;
+    rows = await db
+      .select({ domain: userDomainExclusions.canonicalSubcategory })
+      .from(userDomainExclusions)
+      .where(eq(userDomainExclusions.userId, userId));
+  }
+  return new Set(rows.map((row) => domainKey(row.domain)).filter(Boolean));
+}
+
+async function getExcludedSubcategoryKeysBulk(
+  userIds: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+  if (userIds.length === 0) return result;
+  let rows: { userId: string; domain: string }[];
+  try {
+    rows = await db
+      .select({ userId: userDomainExclusions.userId, domain: userDomainExclusions.canonicalSubcategory })
+      .from(userDomainExclusions)
+      .where(and(inArray(userDomainExclusions.userId, [...userIds]), eq(userDomainExclusions.scope, 'subcategory')));
+  } catch (error) {
+    if (pgErrorCode(error) === '42P01') return result;
+    if (pgErrorCode(error) !== '42703') throw error;
+    rows = await db
+      .select({ userId: userDomainExclusions.userId, domain: userDomainExclusions.canonicalSubcategory })
+      .from(userDomainExclusions)
+      .where(inArray(userDomainExclusions.userId, [...userIds]));
+  }
+  for (const row of rows) {
+    const key = domainKey(row.domain);
+    if (!key) continue;
+    const set = result.get(row.userId) ?? new Set<string>();
+    set.add(key);
+    result.set(row.userId, set);
+  }
+  return result;
+}
+
 export async function loadKnowledgeInputs(userId: string) {
   const since = expansionWindowStart();
-  const [declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys] = await Promise.all([
+  const [declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys, excludedDomainKeys] = await Promise.all([
     getActiveDeclaredInterests(userId),
     getPlayerMasteryRows(userId, true),
     loadDomainAggregates(userId, since),
@@ -604,8 +656,9 @@ export async function loadKnowledgeInputs(userId: string) {
       .orderBy(desc(masteryEvents.createdAt))
       .limit(10),
     getHiddenDomainKeys(userId),
+    getExcludedSubcategoryKeys(userId),
   ]);
-  return { declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys };
+  return { declaredRows, masteryRows, domainAggregates, recentEvents, hiddenDomainKeys, excludedDomainKeys };
 }
 
 export type KnowledgeInputs = Awaited<ReturnType<typeof loadKnowledgeInputs>>;
@@ -682,7 +735,7 @@ export async function getKnowledgePageData(
   userId: string,
   inputs?: KnowledgeInputs,
 ): Promise<KnowledgePageData> {
-  const { declaredRows, masteryRows, domainAggregates, hiddenDomainKeys } =
+  const { declaredRows, masteryRows, domainAggregates, hiddenDomainKeys, excludedDomainKeys } =
     inputs ?? (await loadKnowledgeInputs(userId));
 
   const { statsByDomain } = mergeDomainStats(domainAggregates);
@@ -737,6 +790,13 @@ export async function getKnowledgePageData(
     });
   }
 
+  // "Remove from map" (subcategory exclusions) takes the domain off the
+  // knowledge surfaces entirely — own portrait, friend view, overview — to
+  // match the rotation removal the exclusion already performs. Mastery rows
+  // and history survive; re-adding the interest deletes the exclusion and
+  // the domain returns.
+  for (const key of excludedDomainKeys) knowledgeDomainNames.delete(key);
+
   const allDomains = [...knowledgeDomainNames.values()]
     .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys))
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
@@ -767,11 +827,12 @@ export async function getKnowledgePageDataForUsers(
   if (ids.length === 0) return result;
 
   const since = expansionWindowStart();
-  const [declaredByUser, masteryByUser, aggregatesByUser, hiddenByUser] = await Promise.all([
+  const [declaredByUser, masteryByUser, aggregatesByUser, hiddenByUser, excludedByUser] = await Promise.all([
     getActiveDeclaredInterestsBulk(ids),
     getPlayerMasteryRowsBulk(ids),
     loadDomainAggregatesBulk(ids, since),
     getHiddenDomainKeysBulk(ids),
+    getExcludedSubcategoryKeysBulk(ids),
   ]);
 
   for (const userId of ids) {
@@ -783,6 +844,7 @@ export async function getKnowledgePageDataForUsers(
       // reads recentEvents, so the bonus path never fetches it.
       recentEvents: [],
       hiddenDomainKeys: hiddenByUser.get(userId) ?? new Set<string>(),
+      excludedDomainKeys: excludedByUser.get(userId) ?? new Set<string>(),
     };
     const { allDomains } = await getKnowledgePageData(userId, inputs);
     result.set(userId, allDomains);

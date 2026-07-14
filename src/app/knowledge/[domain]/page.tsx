@@ -219,18 +219,12 @@ export default function DomainDetailPage() {
         <p className="mt-3 text-sm text-muted-foreground">{visibilityHelp}</p>
       </section>
 
-      <section className="mb-7 grid gap-3 sm:grid-cols-2">
-        <Link
-          href={`/daily/setup?domainMode=custom&domain=${encodeURIComponent(detail.domain)}`}
-          className="rounded-lg border bg-card p-4 font-medium transition hover:border-foreground/30"
-        >
-          Answer questions in {detail.displayName}
-        </Link>
-        {/*
+      {/* The "Answer questions in {domain}" card routed to /daily/setup's
+          custom-round mode, which retired with the Configure page (rotation
+          now lives in the knowledge portrait's detail pop-up). Dropped, like
+          the detail card's play-now link before it (PR #1514).
           // v11.1: Joshing Game creation disabled at FAB level. Re-enable
-          // when game creation flow is restored.
-        */}
-      </section>
+          // when game creation flow is restored. */}
 
       <section className="mb-7">
         <h2 className="font-serif text-2xl font-semibold">Recent activity in this domain</h2>

@@ -19,7 +19,13 @@ import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
-import { TERRITORY_FREQUENCY_LABEL, type DomainPreferenceFrequency } from '@/lib/daily/territory-model';
+import {
+  TERRITORY_FREQUENCY_LABEL,
+  getNearbyTerritories,
+  type DomainPreferenceFrequency,
+  type NearbyTerritory,
+} from '@/lib/daily/territory-model';
+import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import type { MasteryTier } from '@/types/db';
 
@@ -363,6 +369,91 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
   // frequency map that seeds the detail pop-up, so face and sheet always agree.
   const frequencyLabelFor = (canonicalSubcategory: string): string =>
     TERRITORY_FREQUENCY_LABEL[resolveFrequency(canonicalSubcategory)];
+
+  // "Remove from your map" (detail pop-up, confirmed): writes a subcategory
+  // exclusion — the same removal the retired Configure page performed — then
+  // drops the circle optimistically and refreshes from the server, which now
+  // filters excluded domains out of the knowledge read.
+  const removeFromMap = async (canonicalSubcategory: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/users/domain-exclusions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ canonical_subcategory: canonicalSubcategory, scope: 'subcategory' }),
+      });
+      if (!response.ok) return false;
+    } catch {
+      return false;
+    }
+    const removedKey = freqKey(canonicalSubcategory);
+    setSelectedLeaf(null);
+    setData((previous) =>
+      previous
+        ? {
+            ...previous,
+            pageData: {
+              ...previous.pageData,
+              allDomains: previous.pageData.allDomains.filter(
+                (domain) => freqKey(domain.displayName) !== removedKey,
+              ),
+            },
+          }
+        : previous,
+    );
+    void loadKnowledge().catch(() => undefined);
+    return true;
+  };
+
+  // "Add a Territory" — ported from the retired Configure page. Suggestions
+  // come from the deterministic nearby-territory rules over the domains
+  // already held; the offset rotates the visible window per visit (set in a
+  // deferred frame, client-only, so SSR markup never disagrees).
+  const [suggestionOffset, setSuggestionOffset] = useState(0);
+  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() =>
+      setSuggestionOffset(Math.floor(Math.random() * 1000)),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  const nearbySuggestions = useMemo(
+    () => getNearbyTerritories(annotatedDomains.map((domain) => domain.displayName)),
+    [annotatedDomains],
+  );
+  const visibleNearby = useMemo(() => {
+    const SHOWN = 3;
+    if (nearbySuggestions.length <= SHOWN) return nearbySuggestions;
+    const start = suggestionOffset % nearbySuggestions.length;
+    return [...nearbySuggestions.slice(start), ...nearbySuggestions.slice(0, start)].slice(0, SHOWN);
+  }, [nearbySuggestions, suggestionOffset]);
+
+  const addSuggestion = async (territory: NearbyTerritory) => {
+    if (addingSuggestion) return;
+    setAddingSuggestion(territory.domain);
+    setSuggestError(null);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          label: territory.domain,
+          ...(territory.broadCategory ? { broadCategory: territory.broadCategory } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message ?? 'Could not add that territory.');
+      }
+      await loadKnowledge();
+    } catch (caught) {
+      setSuggestError(caught instanceof Error ? caught.message : 'Could not add that territory.');
+    } finally {
+      setAddingSuggestion(null);
+    }
+  };
 
   // A tapped circle (outside edit mode) opens the peaks detail pop-up. Prefer the
   // real tree leaf; fall back to a synthesized bare leaf for a domain the tree
@@ -782,6 +873,64 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
               <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
             ) : null}
           </div>
+
+          {/* Add a Territory — ported from the retired Configure page: nearby
+              suggestions from the shape of the map plus the create-your-own
+              flow (the existing declared-interests modal). */}
+          <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
+            <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
+            <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
+              {visibleNearby.length > 0
+                ? 'Suggestions based on the shape of your map — or create your own.'
+                : 'Create your own, and more suggestions will appear as your map grows.'}
+            </p>
+            <button
+              type="button"
+              className="btn-ghost gap-1.5"
+              onClick={() => setActiveModal({ type: 'manage-interests' })}
+            >
+              <Plus className="size-4" aria-hidden /> Create your own
+            </button>
+            {visibleNearby.length > 0 ? (
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {visibleNearby.map((territory) => (
+                  <GhostTerritoryCircle
+                    key={territory.domain}
+                    territory={territory}
+                    disabled={addingSuggestion !== null}
+                    onAdd={() => void addSuggestion(territory)}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {suggestError ? (
+              <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
+            ) : null}
+          </div>
+        </section>
+      )}
+
+      {/* First-territory moment — the retired Configure page's empty state,
+          now living where the map does. */}
+      {!hasAnything && (
+        <section
+          className="bg-[var(--brand-card)] border border-dashed border-[var(--border-warm)] p-6 text-center"
+          aria-label="Add your first territory"
+        >
+          <h2 className="m-0 font-[var(--font-serif)] text-2xl font-semibold text-[var(--ink)]">
+            Your map is ready for its first territory.
+          </h2>
+          <p className="mx-auto mt-2 max-w-sm text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+            Add something you&rsquo;d be delighted to be asked about, and Joshing will start shaping
+            around it.
+          </p>
+          <button
+            type="button"
+            className="btn-primary mx-auto mt-4 gap-1.5"
+            onClick={() => setActiveModal({ type: 'manage-interests' })}
+          >
+            <Plus className="size-5" aria-hidden /> Create your own
+          </button>
         </section>
       )}
 
@@ -1074,6 +1223,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
               }}
               onAdd={adoptNode}
               onSetFrequency={setFrequency}
+              onRemove={removeFromMap}
             />
           </div>
         </div>

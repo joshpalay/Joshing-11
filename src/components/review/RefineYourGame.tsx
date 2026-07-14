@@ -20,7 +20,8 @@ const titleStyle: CSSProperties = {
 
 // Mirrors the Customize pill on the home page's Daily Five box
 // (CUSTOMIZE_DAILY_LINK_CLASS in TodaysFiveCard.tsx) so the two surfaces share
-// one customize affordance and route to the same /daily/setup screen.
+// one customize affordance and route to the same /knowledge rotation module
+// (the retired Configure page's replacement).
 const CUSTOMIZE_DAILY_LINK_CLASS = [
   'inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full',
   'border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-3 py-2',
@@ -40,7 +41,7 @@ export function RefineYourGame({ refine }: { refine: RefineSectionView }) {
       <div className="flex items-center justify-between gap-3">
         <h2 style={titleStyle}>Refine Your Game</h2>
         <Link
-          href="/daily/setup"
+          href="/knowledge"
           className={CUSTOMIZE_DAILY_LINK_CLASS}
           aria-label="Customize your Daily Five"
         >
