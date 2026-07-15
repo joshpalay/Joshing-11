@@ -793,7 +793,7 @@ export default function CeremonyPage() {
       {shareUrl ? (
         <div
           className="fixed inset-0 z-30 flex items-center justify-center overflow-y-auto px-5 py-8"
-          style={{ background: 'rgba(10, 31, 61, 0.86)' }}
+          style={{ background: 'color-mix(in srgb, var(--brand-ink) 86%, transparent)' }}
           role="dialog"
           aria-modal="true"
           aria-label="Share your week"

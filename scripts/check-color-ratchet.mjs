@@ -21,13 +21,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 // ── The ceiling ──────────────────────────────────────────────────────────────
-// Baseline recorded 2026-06-11 after the color fix-list steps 1–5 (grading
-// consolidation, neutrals reconciliation, category --cat-* scale + feed/
-// expanding routing, gold collapse, triangle decision) — down from the
-// audit's ~312. The remainder is dominated by: the ceremony gradient palette
-// (open PRs touch it), the LoadingScreen/visual.ts mirrors of brand values,
-// warm shadow/scrim rgba() tuples, and SVG art fills.
-const CEILING = 180;
+// Baseline re-recorded 2026-07-15 after the design-consistency sweep (scrim
+// tokens --scrim-soft/--scrim/--scrim-heavy, shadow stamp tokens, stray-hex
+// snaps, dev-tool exemption) — down from the 2026-06-11 baseline of 180. The
+// remainder is dominated by documented "raw hex required" literals
+// (LoadingScreen/FeedEmptyArt art fills, html2canvas mirrors, visual.ts
+// isDarkColor round-trips) and the remaining warm shadow rgba() tuples
+// (GameplayChat, TerritorySetup, login dual-shadows).
+const CEILING = 41;
 
 // ── Exemptions (mirrors the font ratchet; keep this list short) ─────────────
 const EXEMPT = [
@@ -42,12 +43,17 @@ const EXEMPT = [
   // ratchet's checkpoint).
   'src/app/dev/',
   'src/app/feed/debug/',
+  // Dev-only floating palette switcher (renders only behind the dev flag);
+  // its swatches/chrome are deliberately literal.
+  'src/components/dev/',
 ];
 
 const isTest = (p) => /(\.test\.|__tests__\/)/.test(p);
 const isExempt = (p) => EXEMPT.some((e) => p === e || p.startsWith(e)) || isTest(p);
 
-const HEX = /#[0-9a-fA-F]{3,8}\b/g;
+// Negative lookbehind: a "#" preceded by "/" or a word char is a URL fragment
+// (href="/#feed") or an entity, not a color.
+const HEX = /(?<![\w/])#[0-9a-fA-F]{3,8}\b/g;
 const RGB_HSL = /\b(?:rgba?|hsla?)\(/g;
 const TW_RAW_COLOR =
   /(?:bg|text|border|ring|shadow|fill|stroke|from|via|to|decoration|outline|accent|caret)-\[#[0-9a-fA-F]{3,8}/g;

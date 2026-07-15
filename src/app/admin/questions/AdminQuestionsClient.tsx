@@ -519,8 +519,8 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end"
-      style={{ background: 'rgba(0,0,0,0.3)' }}
+      className="fixed inset-0 z-[var(--z-sheet)] flex justify-end"
+      style={{ background: 'var(--scrim)' }}
       onClick={onClose}
       role="presentation"
     >

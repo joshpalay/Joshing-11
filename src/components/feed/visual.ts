@@ -26,6 +26,8 @@ export const AVATAR_COLORS = [
 
 export type AvatarColor = (typeof AVATAR_COLORS)[number]
 
+const FALLBACK_MUTED = '#8a8a8a' // raw hex required: callers pass this through isDarkColor(); mirrors --brand-ink-400
+
 function hashString(str: string): number {
   return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)
 }
@@ -40,14 +42,14 @@ export function colorForCategory(
 ): string {
   const broad = normalizeBroadCategory(broadCategory) ?? broadCategory?.trim()
   if (broad) return getPortraitDomainColor(broad).primary
-  if (!category) return '#9ca3af'
+  if (!category) return FALLBACK_MUTED
   return CATEGORY_COLORS[
     hashString(category.toLowerCase()) % CATEGORY_COLORS.length
   ]!
 }
 
 export function colorForUser(userId?: string | null): string {
-  if (!userId) return '#9ca3af'
+  if (!userId) return FALLBACK_MUTED
   return AVATAR_COLORS[hashString(userId) % AVATAR_COLORS.length]!
 }
 

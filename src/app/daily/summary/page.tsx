@@ -924,7 +924,7 @@ function QuestionCardOverflowMenu({
   onReportInappropriate: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:top-14 sm:right-3 sm:block sm:bg-transparent sm:p-0">
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center bg-[var(--scrim-soft)] px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:top-14 sm:right-3 sm:block sm:bg-transparent sm:p-0">
       <button
         className="absolute inset-0 cursor-default sm:hidden"
         type="button"

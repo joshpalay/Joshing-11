@@ -151,7 +151,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
   if (!isOpen) {
     return toast ? (
-      <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+      <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
         {toast}
       </div>
     ) : null;
@@ -159,9 +159,9 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
   return (
     <>
-      <div className="fixed inset-0 z-[55] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
+      <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end bg-[var(--scrim)] md:items-stretch md:justify-end" role="dialog" aria-modal="true">
         <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={onClose} />
-        <aside className="relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-lg bg-background shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
+        <aside className="relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-lg bg-background shadow-[var(--shadow-overlay)] md:h-full md:max-h-none md:w-[440px] md:rounded-none">
           <header className="flex items-center justify-between gap-3 border-b p-5">
             <h2 className="font-serif text-2xl font-semibold">Send to a friend</h2>
             <button className="inline-flex size-10 items-center justify-center rounded-md border hover:bg-muted" type="button" onClick={onClose} title="Close">
@@ -249,7 +249,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
         </aside>
       </div>
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
           {toast}
         </div>
       ) : null}

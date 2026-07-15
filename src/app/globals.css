@@ -382,11 +382,34 @@
     /* Elevation registers (CONS-7, Option B — two intentional registers).
        card / card-strong = the soft rest/raised lift for cards;
        overlay = the single heavy blur for modals, dialogs, and overlays.
-       (The flat "press" register's only live usages are two #3a3a3a buttons —
-       a color-drift item left to B-VISUAL-TOKEN-BUDGET-01, not a shadow snap.) */
+       The flat "press"/stamp register is tokenized below as --shadow-stamp/-sm
+       (the former #3a3a3a drift item, B-VISUAL-TOKEN-BUDGET-01, is resolved). */
     --shadow-card: 0 4px 12px rgba(40, 32, 30, 0.04);
     --shadow-card-strong: 0 4px 12px rgba(40, 32, 30, 0.1);
     --shadow-overlay: 0 12px 28px rgba(26, 18, 8, 0.16);
+    /* Offset "stamp" register — the neobrutalist hard shadow used by the
+       share/map surfaces (OverlapMap, ShareCard, knowledge overview). One
+       offset, ink-colored; -sm is the compact press variant. */
+    --shadow-stamp: 4px 4px 0 var(--brand-ink);
+    --shadow-stamp-sm: 2px 2px 0 var(--brand-ink);
+    /* Scrim registers — the backdrop behind sheets/modals/overlays. Ink-based
+       so overlays read as the brand navy, not neutral black. soft = anchored
+       menus/popovers; (default) = sheets + modals; heavy = immersive share/
+       photo backdrops. Bespoke intensities (e.g. the ceremony reveal) derive
+       inline via the same color-mix(var(--brand-ink)) recipe. */
+    --scrim-soft: color-mix(in srgb, var(--brand-ink) 20%, transparent);
+    --scrim: color-mix(in srgb, var(--brand-ink) 40%, transparent);
+    --scrim-heavy: color-mix(in srgb, var(--brand-ink) 60%, transparent);
+    /* Z-scale — the ONLY sanctioned layers above page content. Use
+       z-[var(--z-*)] (or inline zIndex: 'var(--z-*)'); never a raw number.
+       nav(40) chrome < sheet(50) drawers/bottom-sheets/anchored menus <
+       modal(60) dialogs (may open above a sheet) < toast(70) notices (never
+       hidden) < takeover(80) full-screen moments (tour, mastery, loading). */
+    --z-nav: 40;
+    --z-sheet: 50;
+    --z-modal: 60;
+    --z-toast: 70;
+    --z-takeover: 80;
 }
 
 .dark {

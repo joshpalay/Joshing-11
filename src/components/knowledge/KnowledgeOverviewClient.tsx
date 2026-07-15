@@ -315,8 +315,7 @@ const sharePortraitBtnStyle: CSSProperties = {
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
   cursor: 'pointer',
-  // The offset-shadow grey is a known color-drift item owned by
-  // B-VISUAL-TOKEN-BUDGET-01 (see globals.css "press register" note), not a
-  // shadow snap — left raw here deliberately rather than collapsed onto --warm-ink.
-  boxShadow: '2px 2px 0 #3a3a3a',
+  // Press register — snapped onto the ink stamp token (was a raw #3a3a3a grey;
+  // resolves the B-VISUAL-TOKEN-BUDGET-01 color-drift item).
+  boxShadow: 'var(--shadow-stamp-sm)',
 };

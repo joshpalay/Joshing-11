@@ -636,7 +636,7 @@ export function TerritorySetupClient({
 
       {dragState && draggingDomain ? (
         <div
-          className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2"
+          className="pointer-events-none fixed z-[var(--z-modal)] -translate-x-1/2 -translate-y-1/2"
           style={{ left: dragState.x, top: dragState.y }}
         >
           <DragPreview domain={draggingDomain} />
@@ -644,7 +644,7 @@ export function TerritorySetupClient({
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-[80] -translate-x-1/2">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2">
           <div
             role="status"
             aria-live="polite"
@@ -669,7 +669,7 @@ export function TerritorySetupClient({
 
       {pendingRemoval ? (
         <div
-          className="fixed inset-0 z-[70] grid place-items-center bg-[rgba(26,18,8,0.32)] px-6"
+          className="fixed inset-0 z-[var(--z-modal)] grid place-items-center bg-[var(--scrim)] px-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="throw-out-title"

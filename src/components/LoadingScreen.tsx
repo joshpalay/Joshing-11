@@ -196,7 +196,7 @@ export default function LoadingScreen({
   const wrapperClass = [
     "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
     fullScreen
-      ? "fixed inset-0 z-[60]"
+      ? "fixed inset-0 z-[var(--z-takeover)]"
       : "relative h-full w-full min-h-[480px]",
     className ?? "",
   ]
@@ -246,7 +246,7 @@ export default function LoadingScreen({
         aria-hidden="true"
       />
 
-      <div className="relative z-10 mx-6 w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
+      <div className="relative z-10 mx-6 w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5">
         <p className="font-wordmark text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
           JOSHING
         </p>

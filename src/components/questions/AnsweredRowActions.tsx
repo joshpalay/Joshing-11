@@ -57,7 +57,7 @@ export function AnsweredRowActions({
       </button>
 
       {isMenuOpen ? (
-        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-[color-mix(in_srgb,var(--brand-ink)_20%,transparent)] px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
+        <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center bg-[var(--scrim-soft)] px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
           <button
             type="button"
             className="absolute inset-0 cursor-default sm:hidden"

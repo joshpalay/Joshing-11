@@ -142,7 +142,7 @@ export function FeedOverflowMenu({
         <MoreHorizontal className="size-5" />
       </button>
       {open ? (
-        <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/20 px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
+        <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center bg-[var(--scrim-soft)] px-3 pt-16 pb-3 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:block sm:bg-transparent sm:p-0">
           <button
             className="absolute inset-0 cursor-default sm:hidden"
             type="button"

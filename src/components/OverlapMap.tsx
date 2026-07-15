@@ -31,7 +31,7 @@ const MUTED_INK = 'var(--brand-ink-700)';
 const cardStyle: CSSProperties = {
   background: CREAM,
   border: `2px solid ${INK}`,
-  boxShadow: `6px 6px 0 ${INK}`,
+  boxShadow: 'var(--shadow-stamp)',
   borderRadius: 0,
   padding: '24px 22px 22px',
   color: INK,
@@ -295,7 +295,7 @@ export function OverlapMap({ players, cells }: OverlapMapProps): ReactElement | 
             padding: '16px 18px',
             background: CREAM,
             border: `2px solid ${INK}`,
-            boxShadow: `4px 4px 0 ${INK}`,
+            boxShadow: 'var(--shadow-stamp)',
           }}
         >
           <p style={{ ...monoLabel, margin: 0 }}>Your strongest overlap</p>
