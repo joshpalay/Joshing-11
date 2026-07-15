@@ -62,7 +62,7 @@ describe('getPortraitCircleSize', () => {
     expect(getPortraitCircleSize('mastery', 100, 100)).toBe(384);
     expect(getPortraitCircleSize('mastery', 0, 100)).toBe(304);
     expect(getPortraitCircleSize('solid', 100, 100)).toBe(216);
-    expect(getPortraitCircleSize('familiar', 100, 100)).toBe(48);
+    expect(getPortraitCircleSize('familiar', 100, 100)).toBe(40);
     expect(getPortraitCircleSize('establishing', 0, 100)).toBe(18);
   });
 

@@ -185,7 +185,15 @@ export default async function AdminSupplyPage() {
                     </td>
                     <td className="py-2 pr-3 text-right">{entry.realized}</td>
                     <td className="py-2 pr-3 text-right">
-                      {entry.estimatedQuestions ?? '—'}
+                      {entry.estimatedQuestions == null ? (
+                        '—'
+                      ) : entry.estimateClamped ? (
+                        <span title="Corpus count hit the sizing ceiling — the topic is at least this big, not measured at it.">
+                          ≥{entry.estimatedQuestions}
+                        </span>
+                      ) : (
+                        entry.estimatedQuestions
+                      )}
                       {entry.manualEstimatedQuestions != null ? (
                         <span
                           className="block text-xs"
@@ -196,7 +204,10 @@ export default async function AdminSupplyPage() {
                         </span>
                       ) : null}
                     </td>
-                    <td className="py-2 pr-3 text-right">{pctLabel(entry.ratio)}</td>
+                    <td className="py-2 pr-3 text-right">
+                      {/* Coverage of a ceiling clamp is meaningless — suppress it. */}
+                      {entry.estimateClamped ? '—' : pctLabel(entry.ratio)}
+                    </td>
                     <td className="py-2 pr-3 text-right">{entry.consecutiveDryRounds}</td>
                     <td className="py-2 pr-3">{entry.confidence ?? '—'}</td>
                     <td className="py-2 pr-3" style={{ color: 'var(--text-muted)' }}>

@@ -28,7 +28,7 @@ export function ReportReasonSheet({
 }: {
   category: ReportCategory
   target: ReportReasonTarget
-  surface: 'round_recap' | 'lately_result' | 'answered_list' | 'feed'
+  surface: 'round_recap' | 'lately_result' | 'answered_list' | 'feed' | 'catchup_thread' | 'recovered'
   onClose: () => void
   // Fires once on a successful submit (including an idempotent duplicate). For
   // 'inappropriate' the parent removes the card from view; for 'incorrect' the card
@@ -102,15 +102,15 @@ export function ReportReasonSheet({
     category === 'incorrect' ? 'What looks off?' : 'What feels wrong here?'
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center">
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0"
-        style={{ background: 'rgba(0,0,0,0.4)' }}
+        style={{ background: 'var(--scrim)' }}
         onClick={onClose}
         aria-label="Dismiss"
       />
-      <div className="relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl">
+      <div className="relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-[var(--shadow-overlay)]">
         <div className="flex items-center justify-between px-5 pt-4 pb-1">
           <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-[var(--brand-ink-400)]">
             {category === 'incorrect' ? 'A second look' : 'Between us'}

@@ -37,8 +37,8 @@ export function AddAreaModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center px-0 pb-0 md:items-center md:px-4 md:pb-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
+      className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center px-0 pb-0 md:items-center md:px-4 md:pb-4"
+      style={{ backgroundColor: 'var(--scrim)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-area-title"
@@ -60,7 +60,7 @@ export function AddAreaModal({
             </p>
             <div className="mt-4 flex gap-2">
               <Link
-                href={`/daily/setup?domainMode=custom&domain=${encodeURIComponent(added)}`}
+                href="/daily"
                 className={actionButton}
                 style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
               >

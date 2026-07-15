@@ -315,16 +315,21 @@ function DomainRow({ row, onCraft }: { row: CrafterWorklistRow; onCraft: () => v
           ) : null}
           {/* The machine-futility story: WHY this row outranks its heat-mates.
               The machine failing here is exactly where a human is
-              irreplaceable — a costly domain, not just a thin one. */}
+              irreplaceable — a costly domain, not just a thin one. The rate
+              counts only SUBSTANTIVE verifier rejections (fact/spoiler/quality);
+              self-containment "name-the-source" demotions are excluded upstream
+              (they're a salvageable formatting slip, not the machine struggling
+              with the subject), so this number can be trusted at face value. */}
           {row.demotionRate !== null && row.demotionRate > 0 ? (
             <div className="mt-0.5 text-xs" style={{ color: 'var(--danger)' }}>
-              the machine struggles here — {Math.round(row.demotionRate * 100)}% of its questions
-              get pulled by the verifier ({row.machineDemoted} of {row.machineVerified})
-              {row.generationStruggling ? ' · generation keeps timing out' : ''}
+              the verifier rejects the machine here — {row.machineDemoted} of{' '}
+              {row.machineVerified} fact-checked questions came back wrong (
+              {Math.round(row.demotionRate * 100)}%)
+              {row.generationStruggling ? ' · and generation keeps timing out' : ''}
             </div>
           ) : row.generationStruggling ? (
             <div className="mt-0.5 text-xs" style={{ color: 'var(--danger)' }}>
-              the machine struggles here — generation keeps timing out
+              the machine can’t generate here — refill keeps timing out
             </div>
           ) : null}
         </div>

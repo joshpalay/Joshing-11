@@ -10,13 +10,15 @@ import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble'
 import { FrequencyMark } from '@/components/knowledge/FrequencyMark'
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy'
 import {
+  TERRITORY_FREQUENCIES,
+  TERRITORY_FREQUENCY_COPY,
   TERRITORY_FREQUENCY_LABEL,
   type TerritoryFrequency,
 } from '@/lib/daily/territory-model'
 import type { MasteryTier } from '@/types/db'
 
 type PortraitTier = MasteryTier
-type SortMode = 'domain' | 'mastery'
+type SortMode = 'domain' | 'mastery' | 'frequency'
 
 export type PortraitEntry = {
   canonicalSubcategory: string
@@ -24,23 +26,16 @@ export type PortraitEntry = {
   totalMasteryPoints: number
   tier: PortraitTier
   authoredAnsweredCount: number
-  isHidden?: boolean
 }
 
 type PortraitCirclesProps = {
   entries: PortraitEntry[]
-  editMode?: boolean
-  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
-  pendingDomain?: string | null
   /**
    * Rotation word ("Often" / "Sometimes" / "Blue Moon" / "Never") shown under
    * each circle's name. Returns null to omit the line for a given domain.
    */
   frequencyLabelFor?: (canonicalSubcategory: string) => string | null
-  /**
-   * Tap handler for a circle when NOT in edit mode — opens the domain's detail
-   * pop-up. Edit mode keeps its own hide/show tap (onToggleHidden).
-   */
+  /** Tap handler for a circle — opens the domain's detail pop-up. */
   onSelectDomain?: (canonicalSubcategory: string) => void
 }
 
@@ -137,7 +132,7 @@ const FREQUENCY_BY_LABEL: Record<string, TerritoryFrequency> = Object.fromEntrie
 // — `often`/`sometimes` ascending bars, `resting` the washed baseline line,
 // `blue_moon` the blue crescent. With no adjacent text label, the mark
 // self-labels (non-decorative) so screen readers still announce the frequency.
-function FrequencyTag({ label, color, dim }: { label: string; color: string; dim: boolean }) {
+function FrequencyTag({ label, color }: { label: string; color: string }) {
   const freq = FREQUENCY_BY_LABEL[label] ?? null
   if (!freq) return null
   return (
@@ -147,7 +142,7 @@ function FrequencyTag({ label, color, dim }: { label: string; color: string; dim
         alignItems: 'center',
         // Indicators sit above the title now; hold them back to 80% so they
         // read as a quiet signal rather than competing with the name.
-        opacity: dim ? 0.4 : 0.8,
+        opacity: 0.8,
       }}
     >
       <FrequencyMark frequency={freq} color={color} size={11} />
@@ -156,19 +151,78 @@ function FrequencyTag({ label, color, dim }: { label: string; color: string; dim
 }
 
 const SPARSE_THRESHOLD = 5
-const MIN_OPACITY = 0.22
 
-export function getPortraitCircleOpacity(pts: number, maxPts: number): number {
-  const n = pts / Math.max(maxPts, 1)
-  return MIN_OPACITY + n * (1 - MIN_OPACITY)
+type SectionGroup = { label: string; color: string; entries: PortraitEntry[] }
+
+type Section = {
+  label: string
+  color: string
+  entries: PortraitEntry[]
+  /** Set on frequency-mode sections: drives the configure-page-style zone
+   *  header (serif title + rotation mark + copy line). */
+  frequency?: TerritoryFrequency
+  copy?: string
+  /** Frequency-mode secondary grouping by category, mirroring the configure
+   *  page's zones: heaviest category first, the catch-all bucket last. */
+  groups?: SectionGroup[]
 }
 
-type Section = { label: string; color: string; entries: PortraitEntry[] }
+// Category sub-groups within a frequency bucket — the same ordering the
+// configure page (TerritorySetupClient.groupByCategory) uses: heaviest
+// category first, ties alphabetical, "General Knowledge" (shown as "Other
+// interests") always last. Entries within a category sort by points.
+function groupEntriesByCategory(entries: PortraitEntry[]): SectionGroup[] {
+  const byCategory = new Map<string, PortraitEntry[]>()
+  for (const e of entries) {
+    const category = normalizeBroadCategory(e.broadCategory) ?? 'General Knowledge'
+    const list = byCategory.get(category) ?? []
+    list.push(e)
+    byCategory.set(category, list)
+  }
+  return [...byCategory.entries()]
+    .map(([category, items]) => ({
+      category,
+      items: [...items].sort((a, b) => b.totalMasteryPoints - a.totalMasteryPoints),
+      totalPoints: items.reduce((sum, e) => sum + e.totalMasteryPoints, 0),
+    }))
+    .sort((a, b) => {
+      if (a.category === 'General Knowledge') return 1
+      if (b.category === 'General Knowledge') return -1
+      return b.totalPoints - a.totalPoints || a.category.localeCompare(b.category)
+    })
+    .map(({ category, items }) => ({
+      label: displaySectionLabel(category),
+      color: getPortraitDomainColor(category).text,
+      entries: items,
+    }))
+}
 
-function buildSections(
+// Exported for tests only — the component is the sole runtime caller.
+export function buildSections(
   entries: PortraitEntry[],
-  sortMode: SortMode
+  sortMode: SortMode,
+  frequencyFor?: (canonicalSubcategory: string) => TerritoryFrequency | null
 ): Section[] {
+  if (sortMode === 'frequency') {
+    // Rotation-depth order (Often → Sometimes → Blue Moon → Never). A domain
+    // whose frequency can't be resolved has no explicit rotation, which is
+    // what "Never" (resting) means — bucket it there rather than dropping it.
+    return TERRITORY_FREQUENCIES.map((freq) => {
+      const groups = groupEntriesByCategory(
+        entries.filter(
+          (e) => (frequencyFor?.(e.canonicalSubcategory) ?? 'resting') === freq
+        )
+      )
+      return {
+        label: TERRITORY_FREQUENCY_LABEL[freq],
+        color: 'var(--warm-ink-700)',
+        frequency: freq,
+        copy: TERRITORY_FREQUENCY_COPY[freq],
+        entries: groups.flatMap((g) => g.entries),
+        groups,
+      }
+    }).filter((s) => s.entries.length > 0)
+  }
   if (sortMode === 'domain') {
     const domainMap = new Map<string, PortraitEntry[]>()
     for (const e of entries) {
@@ -204,27 +258,17 @@ function buildSections(
 export function PortraitDomainCircle({
   entry,
   maxPointsForTier,
-  forceFullOpacity = false,
   showCount = true,
   circleScale = 1,
   selected = false,
-  circleSlotSize,
-  editMode = false,
-  onToggleHidden,
-  pending = false,
   frequencyLabel = null,
   onSelectDomain,
 }: {
   entry: PortraitEntry
   maxPointsForTier: number
-  forceFullOpacity?: boolean
   showCount?: boolean
   circleScale?: number
   selected?: boolean
-  circleSlotSize?: number
-  editMode?: boolean
-  onToggleHidden?: (canonicalSubcategory: string, nextHidden: boolean) => void
-  pending?: boolean
   frequencyLabel?: string | null
   onSelectDomain?: (canonicalSubcategory: string) => void
 }) {
@@ -237,43 +281,23 @@ export function PortraitDomainCircle({
       maxPointsForTier
     ) * circleScale
   )
-  const baseOpacity = forceFullOpacity
-    ? 1
-    : getPortraitCircleOpacity(entry.totalMasteryPoints, maxPointsForTier)
-  const isHidden = Boolean(entry.isHidden)
-  const dimForHidden = editMode && isHidden
-  const opacity = dimForHidden ? baseOpacity * 0.35 : baseOpacity
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' &&
     entry.authoredAnsweredCount > 0
-  const resolvedCircleSlotSize = Math.max(circleSlotSize ?? size, size)
   const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
 
   const handleClick = () => {
-    if (pending) return
-    if (editMode) {
-      onToggleHidden?.(entry.canonicalSubcategory, !isHidden)
-      return
-    }
     onSelectDomain?.(entry.canonicalSubcategory)
   }
 
-  const interactive =
-    (editMode && Boolean(onToggleHidden)) || (!editMode && Boolean(onSelectDomain))
+  const interactive = Boolean(onSelectDomain)
 
   return (
     <div
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
-      aria-pressed={editMode && interactive ? isHidden : undefined}
-      aria-label={
-        !interactive
-          ? undefined
-          : editMode
-            ? `${isHidden ? 'Show' : 'Hide'} ${entry.canonicalSubcategory} ${isHidden ? 'on your portrait' : 'from friends'}`
-            : `View ${entry.canonicalSubcategory} details`
-      }
+      aria-label={interactive ? `View ${entry.canonicalSubcategory} details` : undefined}
       onClick={interactive ? handleClick : undefined}
       onKeyDown={
         interactive
@@ -287,96 +311,66 @@ export function PortraitDomainCircle({
       }
       style={{
         ...circleItemStyle,
-        width: Math.max(90, resolvedCircleSlotSize + 8),
+        width: Math.max(90, size + 8),
         maxWidth: '100%',
-        cursor: interactive ? (pending ? 'wait' : 'pointer') : undefined,
+        cursor: interactive ? 'pointer' : undefined,
         userSelect: interactive ? 'none' : undefined,
-        opacity: pending ? 0.6 : 1,
       }}
     >
-      <div
-        style={{
-          ...portraitCircleSlotStyle,
-          width: resolvedCircleSlotSize,
-          height: resolvedCircleSlotSize,
-        }}
-      >
-        <div style={{ position: 'relative', width: size, height: size }}>
-          <KnowledgeBubble
-            diameter={size}
-            tint={dc.primary}
-            opacity={opacity}
-            style={{ filter: dimForHidden ? 'grayscale(0.6)' : undefined }}
-          >
-            {showMasteryCount && (
-              <span
-                style={{
-                  fontSize: countFontSize,
-                  color: dc.primary,
-                  fontFamily: 'var(--font-serif)',
-                  fontWeight: 'bold',
-                  lineHeight: 1,
-                }}
-              >
-                {entry.authoredAnsweredCount}
-              </span>
-            )}
-          </KnowledgeBubble>
-          {selected && (
-            <div
-              aria-hidden
+      <div style={{ position: 'relative', width: size, height: size }}>
+        {/* Full-opacity fill + a hairline category border and a soft lift —
+            the flat portrait mirrors the configure page's circle treatment
+            (darker, crisper) rather than fading low-point domains. Size, not
+            opacity, carries depth. */}
+        <KnowledgeBubble
+          diameter={size}
+          tint={dc.primary}
+          border={`1px solid color-mix(in srgb, ${dc.primary} 27%, transparent)`}
+          style={{ boxShadow: 'var(--shadow-card-strong)' }}
+        >
+          {showMasteryCount && (
+            <span
               style={{
-                position: 'absolute',
-                inset: -4,
-                borderRadius: '50%',
-                border: `2px solid ${dc.primary}`,
-                display: 'grid',
-                placeItems: 'center',
-                pointerEvents: 'none',
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  right: -2,
-                  bottom: -2,
-                  fontSize: 12,
-                  color: dc.primary,
-                }}
-              >
-                ✓
-              </span>
-            </div>
-          )}
-          {editMode && (
-            <div
-              aria-hidden
-              style={{
-                position: 'absolute',
-                top: -4,
-                right: -4,
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: isHidden ? 'var(--warm-paper)' : 'var(--warm-ink)',
-                color: isHidden ? 'var(--warm-ink)' : 'var(--warm-paper)',
-                border: `1.5px solid var(--warm-ink)`,
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: 12,
-                fontWeight: 700,
+                fontSize: countFontSize,
+                color: dc.primary,
                 fontFamily: 'var(--font-serif)',
+                fontWeight: 'bold',
                 lineHeight: 1,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
               }}
             >
-              {isHidden ? '+' : '×'}
-            </div>
+              {entry.authoredAnsweredCount}
+            </span>
           )}
-        </div>
+        </KnowledgeBubble>
+        {selected && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: -4,
+              borderRadius: '50%',
+              border: `2px solid ${dc.primary}`,
+              display: 'grid',
+              placeItems: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                right: -2,
+                bottom: -2,
+                fontSize: 12,
+                color: dc.primary,
+              }}
+            >
+              ✓
+            </span>
+          </div>
+        )}
       </div>
       {frequencyLabel ? (
-        <FrequencyTag label={frequencyLabel} color={dc.primary} dim={dimForHidden} />
+        <FrequencyTag label={frequencyLabel} color={dc.primary} />
       ) : null}
       <span
         style={{
@@ -385,10 +379,8 @@ export function PortraitDomainCircle({
           fontFamily: 'var(--font-serif)',
           textAlign: 'center',
           lineHeight: 1.3,
-          maxWidth: Math.max(90, resolvedCircleSlotSize),
+          maxWidth: Math.max(90, size),
           wordWrap: 'break-word',
-          opacity: dimForHidden ? 0.5 : undefined,
-          textDecoration: dimForHidden ? 'line-through' : undefined,
         }}
       >
         {entry.canonicalSubcategory}
@@ -397,24 +389,8 @@ export function PortraitDomainCircle({
   )
 }
 
-function getPortraitEntryCircleSize(
-  entry: PortraitEntry,
-  maxPointsForTier: number
-): number {
-  return Math.round(
-    getPortraitCircleSize(
-      entry.tier as CircleSizingTier,
-      entry.totalMasteryPoints,
-      maxPointsForTier
-    )
-  )
-}
-
 export function PortraitCircles({
   entries,
-  editMode = false,
-  onToggleHidden,
-  pendingDomain = null,
   frequencyLabelFor,
   onSelectDomain,
 }: PortraitCirclesProps) {
@@ -429,10 +405,15 @@ export function PortraitCircles({
     [entries]
   )
   const isSparse = validEntries.length < SPARSE_THRESHOLD
-  const sections = useMemo(
-    () => buildSections(validEntries, sortMode),
-    [validEntries, sortMode]
-  )
+  // Frequency sort groups by the same rotation the label/mark under each circle
+  // shows — resolve the label back to its enum so face and grouping agree.
+  const frequencyFor = frequencyLabelFor
+    ? (canonicalSubcategory: string): TerritoryFrequency | null => {
+        const label = frequencyLabelFor(canonicalSubcategory)
+        return label ? (FREQUENCY_BY_LABEL[label] ?? null) : null
+      }
+    : undefined
+  const sections = buildSections(validEntries, sortMode, frequencyFor)
 
   const maxPointsByTier = useMemo(() => {
     const result: Record<string, number> = {
@@ -452,7 +433,17 @@ export function PortraitCircles({
   return (
     <div>
       <div style={toggleWrapStyle} aria-label="Portrait sort mode">
-        {(['domain', 'mastery'] as const).map((mode) => (
+        {/* Frequency grouping only makes sense where rotation data is threaded
+            in (the owner's knowledge page); other portraits keep two modes. */}
+        {(
+          [
+            { mode: 'domain', label: 'Domain' },
+            { mode: 'mastery', label: 'Mastery' },
+            ...(frequencyLabelFor
+              ? [{ mode: 'frequency', label: 'Frequency' } as const]
+              : []),
+          ] as const
+        ).map(({ mode, label }) => (
           <button
             key={mode}
             type="button"
@@ -460,7 +451,7 @@ export function PortraitCircles({
             style={sortMode === mode ? activeToggleStyle : inactiveToggleStyle}
             aria-pressed={sortMode === mode}
           >
-            {mode === 'domain' ? 'Domain' : 'Mastery'}
+            {label}
           </button>
         ))}
       </div>
@@ -488,6 +479,10 @@ export function PortraitCircles({
             )
           })}
         </div>
+      ) : sortMode === 'frequency' ? (
+        // Frequency mode needs no legend — its zone headers already carry the
+        // rotation mark, label, and copy.
+        null
       ) : (
         <div style={legendStyle}>
           {TIER_ORDER.map((tier) => (
@@ -527,48 +522,110 @@ export function PortraitCircles({
       </p>
 
       <div>
-        {sections.map(({ label, color, entries: sectionEntries }) => {
-          const circleSlotSize = Math.max(
-            ...sectionEntries.map((entry) =>
-              getPortraitEntryCircleSize(
-                entry,
-                maxPointsByTier[entry.tier] ?? 1
-              )
-            ),
-            0
+        {sections.map(({ label, color, entries: sectionEntries, frequency, copy, groups }) => {
+          const circlesRow = (rowEntries: PortraitEntry[]) => (
+            <div style={circlesRowStyle}>
+              {rowEntries.map((entry) => (
+                <PortraitDomainCircle
+                  key={entry.canonicalSubcategory}
+                  entry={entry}
+                  maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
+                  frequencyLabel={frequencyLabelFor?.(entry.canonicalSubcategory) ?? null}
+                  onSelectDomain={onSelectDomain}
+                />
+              ))}
+            </div>
           )
 
           return (
             <div key={label} style={{ marginTop: 24 }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  letterSpacing: '0.18em',
-                  textTransform: 'uppercase',
-                  color,
-                  marginBottom: 14,
-                  paddingBottom: 6,
-                  borderBottom: `1px solid ${color}33`,
-                  fontFamily: 'var(--font-serif)',
-                }}
-              >
-                {label}
-              </div>
-              <div style={circlesRowStyle}>
-                {sectionEntries.map((entry) => (
-                  <PortraitDomainCircle
-                    key={entry.canonicalSubcategory}
-                    entry={entry}
-                    maxPointsForTier={maxPointsByTier[entry.tier] ?? 1}
-                    circleSlotSize={circleSlotSize}
-                    editMode={editMode}
-                    onToggleHidden={onToggleHidden}
-                    pending={pendingDomain === entry.canonicalSubcategory}
-                    frequencyLabel={frequencyLabelFor?.(entry.canonicalSubcategory) ?? null}
-                    onSelectDomain={onSelectDomain}
-                  />
-                ))}
-              </div>
+              {frequency ? (
+                // Frequency sections mirror the configure page's zone header:
+                // serif title with the rotation mark beside it + the shared
+                // one-line copy, so the two rotation surfaces read as one.
+                <div
+                  style={{
+                    marginBottom: 14,
+                    paddingBottom: 10,
+                    borderBottom: '1px solid var(--border-light)',
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 20,
+                      fontFamily: 'var(--font-serif)',
+                      fontWeight: 600,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {label}
+                    <FrequencyMark
+                      frequency={frequency}
+                      color="var(--brand-ink-400)"
+                      size={18}
+                      decorative
+                    />
+                  </h3>
+                  {copy ? (
+                    <p
+                      style={{
+                        margin: '4px 0 0',
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                        color: 'var(--text-muted-warm)',
+                      }}
+                    >
+                      {copy}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    color,
+                    marginBottom: 14,
+                    paddingBottom: 6,
+                    borderBottom: `1px solid ${color}33`,
+                    fontFamily: 'var(--font-serif)',
+                  }}
+                >
+                  {label}
+                </div>
+              )}
+              {groups ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  {groups.map((group) => (
+                    <div key={group.label}>
+                      {/* Category sub-header, only when a zone spans more than
+                          one category — same rule as the configure page. */}
+                      {groups.length > 1 ? (
+                        <p
+                          style={{
+                            margin: '0 0 8px',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            letterSpacing: '0.14em',
+                            textTransform: 'uppercase',
+                            color: group.color,
+                          }}
+                        >
+                          {group.label}
+                        </p>
+                      ) : null}
+                      {circlesRow(group.entries)}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                circlesRow(sectionEntries)
+              )}
             </div>
           )
         })}
@@ -593,17 +650,14 @@ const circleItemStyle: CSSProperties = {
   padding: '4px 2px',
 }
 
-const portraitCircleSlotStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-}
-
+// Each item's height hugs its own circle and rows center on a shared axis —
+// a small circle next to a large one must not inherit the large one's square
+// slot (that stranded labels ~100px below establishing-tier bubbles).
 const circlesRowStyle: CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: 14,
-  alignItems: 'flex-start',
+  alignItems: 'center',
 }
 
 const toggleWrapStyle: CSSProperties = {

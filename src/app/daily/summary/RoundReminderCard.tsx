@@ -17,7 +17,7 @@ const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '1.05rem',
   fontWeight: 600,
-  color: '#111111',
+  color: 'var(--ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
 }

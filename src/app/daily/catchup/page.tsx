@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
@@ -345,6 +345,20 @@ function CatchupResultDots({ records }: { records: CatchupBatchRecord[] }) {
 
 function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
   const [isExplainerOpen, setIsExplainerOpen] = useState(false);
+  // Only offer "More context" when the 3-line clamp is actually hiding text;
+  // for short explanations there is no more context and the link is noise.
+  const [isExplainerClamped, setIsExplainerClamped] = useState(false);
+  const explainerRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    if (isExplainerOpen) return;
+    const el = explainerRef.current;
+    if (!el) return;
+    const measure = () => setIsExplainerClamped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isExplainerOpen, record.explanation]);
   // Parity with the daily-summary recap (round_recap surface): a card the viewer
   // reports as inappropriate vanishes — the card going away is the feedback. An
   // "incorrect" report leaves the card in place (the sheet acknowledges it itself).
@@ -447,6 +461,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
         <section className="mt-5 pl-1">
           <h3 className="text-sm font-semibold text-[var(--brand-ink)]">Why this is the answer</h3>
           <p
+            ref={explainerRef}
             className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]"
             style={
               isExplainerOpen
@@ -461,7 +476,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
           >
             {record.explanation}
           </p>
-          {!isExplainerOpen ? (
+          {!isExplainerOpen && isExplainerClamped ? (
             <button
               type="button"
               onClick={() => setIsExplainerOpen(true)}

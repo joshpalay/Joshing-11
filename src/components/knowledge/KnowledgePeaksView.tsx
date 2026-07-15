@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import Link from 'next/link';
-import { ArrowUpRight, Check, ChevronRight, Plus, X } from 'lucide-react';
+import { Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
@@ -74,10 +73,6 @@ function subtreeRealPoints(node: KnowledgeTreeNode): number {
   if (node.ghost) return 0;
   const own = node.value ?? 0;
   return own + (node.children ?? []).reduce((sum, child) => sum + subtreeRealPoints(child), 0);
-}
-
-function quizHref(name: string): string {
-  return `/daily/setup?domainMode=custom&domain=${encodeURIComponent(name)}`;
 }
 
 // `freqKey` + `DEFAULT_FREQUENCY` (and the frequency/adopt writes below) live in
@@ -696,9 +691,11 @@ function KnowledgeCircleCell({
   );
 }
 
+// The ghost-area adopt (tapping an unstarted "+" area) still runs through this
+// small progress machine. Inline "grow the map" adds from Related / Part of do
+// NOT — they add in place and never take over the card (see `addStatus`).
 type AddPhase =
   | { step: 'idle' }
-  | { step: 'confirm'; id: string; name: string }
   | { step: 'adding'; id: string; name: string }
   | { step: 'added'; id: string; name: string }
   | { step: 'failed'; id: string; name: string };
@@ -716,6 +713,7 @@ export function PeakDetailCard({
   onAdd,
   onSetFrequency,
   onAdopt,
+  onRemove,
 }: {
   leaf: LeafInfo;
   variant: 'own' | 'friend';
@@ -730,6 +728,10 @@ export function PeakDetailCard({
   onSetFrequency: (name: string, frequency: TerritoryFrequency) => Promise<boolean>;
   /** P4/D9 — friend variant only: adopt this area onto the viewer's own map. */
   onAdopt?: (name: string) => Promise<boolean>;
+  /** Own variant only: take this domain off the map entirely (domain
+   *  exclusion). Renders the "Remove from your map" link under the frequency
+   *  editor when provided; the caller closes the card on success. */
+  onRemove?: (name: string) => Promise<boolean>;
 }) {
   const [phase, setPhase] = useState<AddPhase>({ step: 'idle' });
   // Friend-adopt confirm (D8/D9): "+" → confirm → adopt onto the viewer's map.
@@ -740,6 +742,15 @@ export function PeakDetailCard({
   const [freqSaving, setFreqSaving] = useState(false);
   const [freqChanged, setFreqChanged] = useState(false);
   const [freqError, setFreqError] = useState(false);
+  // "Remove from your map" (own variant): link → can't-be-undone warning →
+  // confirmed removal. The caller closes the card when the removal lands.
+  const [removeConfirm, setRemoveConfirm] = useState(false);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState(false);
+  // Inline "grow the map" adds — Related ghosts and the Part-of container. The
+  // add lands in place (optimistic) and only the tapped row's button changes;
+  // it never swaps the detail card for a separate confirm/added screen.
+  const [addStatus, setAddStatus] = useState<Record<string, 'adding' | 'added' | 'failed'>>({});
   const node = leaf.node;
   const parent = leaf.parent;
   const siblings = (parent?.children ?? []).filter((c) => c.id !== node.id);
@@ -770,8 +781,6 @@ export function PeakDetailCard({
     parent.value === undefined &&
     !parent.mastered;
 
-  const actionButton =
-    'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
   const confirmAdd = async (id: string, name: string) => {
     setPhase({ step: 'adding', id, name });
@@ -800,6 +809,55 @@ export function PeakDetailCard({
     setAdoptConfirm(false);
   };
 
+  // Add a Related ghost / the Part-of container in place — no card takeover.
+  const inlineAdd = async (id: string, name: string) => {
+    if (addStatus[id] === 'adding' || addStatus[id] === 'added') return;
+    setAddStatus((prev) => ({ ...prev, [id]: 'adding' }));
+    const ok = await onAdd(id, name);
+    setAddStatus((prev) => ({ ...prev, [id]: ok ? 'added' : 'failed' }));
+  };
+
+  // The small "+ Add" pill used by Related/Part of: reflects adding → added →
+  // (on failure) try again on the row itself, so the detail card never unmounts.
+  const inlineAddButton = (id: string, name: string) => {
+    const status = addStatus[id];
+    const added = status === 'added';
+    const busy = status === 'adding';
+    const failed = status === 'failed';
+    return (
+      <button
+        type="button"
+        disabled={busy || added}
+        onClick={() => void inlineAdd(id, name)}
+        // Compact sibling of .btn-ghost (same corners/border/type, row-friendly
+        // height) — the full 44px system ghost overwhelms a single text row.
+        className="inline-flex min-h-9 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={added ? { color: 'var(--text-muted)' } : undefined}
+        aria-label={
+          added
+            ? `${name} added to your map`
+            : failed
+              ? `Retry adding ${name}`
+              : `Add ${name} to your map`
+        }
+      >
+        {added ? (
+          <>
+            <Check className="size-3.5" aria-hidden /> Added
+          </>
+        ) : busy ? (
+          'Adding…'
+        ) : failed ? (
+          'Try again'
+        ) : (
+          <>
+            <Plus className="size-3.5" aria-hidden /> Add
+          </>
+        )}
+      </button>
+    );
+  };
+
   const card = (children: ReactNode) => (
     <section
       aria-label={`${node.name} details`}
@@ -810,38 +868,12 @@ export function PeakDetailCard({
     </section>
   );
 
-  // ── Add confirm / added / failed take over the card body (C1) ──────────────
+  // ── Ghost-area adopt progress (adding / added / failed) takes over the card.
+  // Inline Related / Part-of adds do NOT route through here — see inlineAdd. ──
   if (phase.step !== 'idle') {
     const { name } = phase;
     return card(
-      phase.step === 'confirm' ? (
-        <>
-          <p className="font-serif text-base text-[var(--brand-ink)]">
-            Add <strong>{name}</strong> to your map?
-          </p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Questions will start appearing in your Daily Five.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => void confirmAdd(phase.id, name)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
-            >
-              <Plus className="size-4" aria-hidden /> Add it
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhase({ step: 'idle' })}
-              className={actionButton}
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-            >
-              Not now
-            </button>
-          </div>
-        </>
-      ) : phase.step === 'adding' ? (
+      phase.step === 'adding' ? (
         <p className="font-serif text-base text-[var(--brand-ink)]" aria-live="polite">
           Adding {name}…
         </p>
@@ -851,21 +883,13 @@ export function PeakDetailCard({
             <strong>{name}</strong> is on your map.
           </p>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Questions will start appearing in your Daily Five — or dive in right now.
+            Questions will start appearing in your Daily Five.
           </p>
           <div className="mt-3 flex gap-2">
-            <Link
-              href={quizHref(name)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
-            >
-              Quiz me now <ArrowUpRight className="size-4" aria-hidden />
-            </Link>
             <button
               type="button"
               onClick={() => setPhase({ step: 'idle' })}
-              className={actionButton}
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              className="btn-primary"
             >
               Done
             </button>
@@ -880,16 +904,14 @@ export function PeakDetailCard({
             <button
               type="button"
               onClick={() => void confirmAdd(phase.id, name)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              className="btn-primary"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => setPhase({ step: 'idle' })}
-              className={actionButton}
-              style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+              className="btn-ghost"
             >
               Back
             </button>
@@ -926,16 +948,14 @@ export function PeakDetailCard({
           <button
             type="button"
             onClick={() => void confirmAdd(node.id, node.name)}
-            className={actionButton}
-            style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+            className="btn-primary gap-1.5"
           >
             <Plus className="size-4" aria-hidden /> Add it
           </button>
           <button
             type="button"
             onClick={onClose}
-            className={actionButton}
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+            className="btn-ghost"
           >
             Not now
           </button>
@@ -978,16 +998,7 @@ export function PeakDetailCard({
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <div className="flex items-start justify-between gap-2">
             <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
-            {parentAddable && parent ? (
-              <button
-                type="button"
-                onClick={() => setPhase({ step: 'confirm', id: parent.id, name: parent.name })}
-                className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-              >
-                <Plus className="size-3.5" aria-hidden /> Add
-              </button>
-            ) : null}
+            {parentAddable && parent ? inlineAddButton(parent.id, parent.name) : null}
           </div>
           <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
             {leaf.path.map((ancestor, i) => (
@@ -1068,14 +1079,7 @@ export function PeakDetailCard({
                   <span className="truncate font-serif text-sm text-[var(--brand-ink)]">
                     {ghost.name}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setPhase({ step: 'confirm', id: ghost.id, name: ghost.name })}
-                    className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
-                  >
-                    <Plus className="size-3.5" aria-hidden /> Add
-                  </button>
+                  {inlineAddButton(ghost.id, ghost.name)}
                 </li>
               ))}
             </ul>
@@ -1155,7 +1159,18 @@ export function PeakDetailCard({
                     )}
                   </span>
                   <span className="min-w-0">
-                    <span className="block font-serif text-[15px] leading-tight">{title}</span>
+                    {/* Rotation mark rides right of the label (D-FREQUENCY-MARK-01);
+                        on the selected navy row it flips to card color to stay
+                        visible. */}
+                    <span className="flex items-center gap-2 font-serif text-[15px] leading-tight">
+                      {title}
+                      <FrequencyMark
+                        frequency={value}
+                        color={selectedFreq ? 'var(--brand-card)' : fieldColor(node.field)}
+                        size={12}
+                        decorative
+                      />
+                    </span>
                     <span
                       className={selectedFreq ? 'block text-xs opacity-80' : 'block text-xs'}
                       style={selectedFreq ? undefined : { color: 'var(--text-muted)' }}
@@ -1178,6 +1193,67 @@ export function PeakDetailCard({
               Couldn’t update it. Try again.
             </p>
           ) : null}
+          {/* Remove from map — a quiet link under Never; the click swaps in a
+              can't-be-undone warning before anything happens. */}
+          {onRemove ? (
+            removeConfirm ? (
+              <div
+                className="mt-3 rounded-lg border p-3"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--game-wrong-strong) 40%, var(--border))',
+                  background: 'color-mix(in srgb, var(--game-wrong-strong) 6%, var(--brand-card))',
+                }}
+              >
+                <p className="text-sm text-[var(--brand-ink)]">
+                  This can’t be undone. <strong>{node.name}</strong> comes off your map and out of
+                  your rotation.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={removeBusy}
+                    onClick={() => {
+                      void (async () => {
+                        setRemoveBusy(true);
+                        setRemoveError(false);
+                        const ok = await onRemove(node.name);
+                        setRemoveBusy(false);
+                        if (!ok) setRemoveError(true);
+                      })();
+                    }}
+                    className="btn-danger"
+                  >
+                    {removeBusy ? 'Removing…' : 'Remove it'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={removeBusy}
+                    onClick={() => {
+                      setRemoveConfirm(false);
+                      setRemoveError(false);
+                    }}
+                    className="btn-ghost"
+                  >
+                    Keep it
+                  </button>
+                </div>
+                {removeError ? (
+                  <p className="mt-2 text-xs" aria-live="polite" style={{ color: 'var(--game-wrong-strong)' }}>
+                    Couldn’t remove it. Try again.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRemoveConfirm(true)}
+                className="mt-3 text-xs underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Remove from your map
+              </button>
+            )
+          ) : null}
         </div>
       ) : null}
 
@@ -1199,16 +1275,14 @@ export function PeakDetailCard({
                   type="button"
                   disabled={adoptBusy}
                   onClick={() => void confirmAdopt()}
-                  className={actionButton}
-                  style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-navy)', color: 'var(--brand-card)' }}
+                  className="btn-primary gap-1.5"
                 >
                   <Plus className="size-4" aria-hidden /> {adoptBusy ? 'Adding…' : 'Add it'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAdoptConfirm(false)}
-                  className={actionButton}
-                  style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
+                  className="btn-ghost"
                 >
                   Not now
                 </button>
@@ -1218,8 +1292,7 @@ export function PeakDetailCard({
             <button
               type="button"
               onClick={() => setAdoptConfirm(true)}
-              className={actionButton}
-              style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+              className="btn-ghost gap-1.5"
             >
               <Plus className="size-4" aria-hidden /> Add to my map
             </button>

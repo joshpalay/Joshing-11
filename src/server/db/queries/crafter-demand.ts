@@ -87,6 +87,20 @@ const FUTILITY_MIN_VERIFIED = 4;
 // machine can't even generate here" (mirrors the refill cooldown's own signal).
 const STRUGGLING_TIMEOUTS = 2;
 
+// Machine-futility counts only SUBSTANTIVE verifier verdicts. Self-containment
+// ("names-the-source") demotions are excluded from BOTH the demoted numerator and
+// the verified denominator: they're a uniform formatting rule, not subject
+// difficulty — already prevented at generation (Rule 2b) and one-click salvageable
+// (prepend the title). A one-time healing sweep dumping same-day demotions into a
+// handful of subcategories (73 of 98 all-time demotions, 2026-07-12) otherwise
+// masquerades as "the machine struggles here" and routes factually-fine domains
+// (Breaking Bad, Avatar, Phineas & Ferb) to "curate by hand". Excluding them from
+// the denominator too keeps a domain's REAL error rate undiluted (4 factual misses
+// among 4 substantive verdicts reads 100%, not 33% padded by formatting demotions).
+// Used by BOTH getExpensiveDomains (weekly email) and getCrafterWorklist
+// (dashboard), so the two never drift.
+const SUBSTANTIVE_VERDICT_ONLY = sql`(${generatedQuestions.verificationReason} is null or ${generatedQuestions.verificationReason} not ilike 'self-containment%')`;
+
 /**
  * Sort key for machine futility, pure and exported for tests: demotion rate
  * (when the sample supports one) plus a flat bump when generation itself is
@@ -152,7 +166,8 @@ export async function getExpensiveDomains(): Promise<ExpensiveDomain[]> {
         demoted: sql<number>`count(*) filter (where ${generatedQuestions.verificationVerdict} = 'demoted')::int`,
       })
       .from(generatedQuestions)
-      .where(isNotNull(generatedQuestions.verificationVerdict))
+      // Substantive verdicts only (see SUBSTANTIVE_VERDICT_ONLY).
+      .where(and(isNotNull(generatedQuestions.verificationVerdict), SUBSTANTIVE_VERDICT_ONLY))
       .groupBy(generatedQuestions.canonicalSubcategory),
     db
       .select({
@@ -398,6 +413,8 @@ export async function getCrafterWorklist(
       return [] as ClusterLabel[];
     }),
     // Futility, quality half: per-domain verifier outcomes on machine questions.
+    // Substantive verdicts only (see SUBSTANTIVE_VERDICT_ONLY) — a formatting
+    // sweep must not read as "the machine struggles here" on the dashboard.
     db
       .select({
         domain: generatedQuestions.canonicalSubcategory,
@@ -409,6 +426,7 @@ export async function getCrafterWorklist(
         and(
           inArray(generatedQuestions.canonicalSubcategory, domains),
           isNotNull(generatedQuestions.verificationVerdict),
+          SUBSTANTIVE_VERDICT_ONLY,
         ),
       )
       .groupBy(generatedQuestions.canonicalSubcategory),

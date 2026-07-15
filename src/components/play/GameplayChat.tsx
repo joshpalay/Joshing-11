@@ -20,6 +20,8 @@ import {
 } from '@/lib/reactions';
 import { isLlmAttribution, type InsideJokeKind } from '@/lib/questions-types';
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
+import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
+import { type ReportReasonTarget } from '@/components/report/ReportReasonSheet';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -80,6 +82,13 @@ export type ChatMessage =
        * transient — never persisted, cleared if the dismiss fails.
        */
       dismissing?: boolean;
+      /**
+       * Content-report target for the card's ⋯ menu ("This is incorrect" /
+       * "This is inappropriate" → the shared ReportReasonSheet). Set by the
+       * catch-up thread; surfaces that omit it render no menu (the Daily Five
+       * live thread today).
+       */
+      reportTarget?: ReportReasonTarget | null;
     }
   | { id: string; kind: 'dismiss_notice'; questionText: string; onUndo: () => Promise<void> }
   | { id: string; kind: 'user'; text: string }
@@ -126,6 +135,8 @@ export type ChatMessage =
       pointsAwarded?: number | null;
       pointsLabel?: string | null;
       recheckAction?: RecheckAction | null;
+      /** Content-report target for the result card's ⋯ menu (see question variant). */
+      reportTarget?: ReportReasonTarget | null;
     }
   | {
       id: string;
@@ -389,6 +400,8 @@ function QuestionRow({
   dismissDisabled = false,
   onMutePresence,
   muteDisabled = false,
+  reportTarget = null,
+  onReportedInappropriate,
 }: {
   subhead?: string | null;
   numberMarker?: { value: number; bonus: boolean } | null;
@@ -408,6 +421,11 @@ function QuestionRow({
   // slot's domain so the category stops surfacing, and closes this question.
   onMutePresence?: () => void;
   muteDisabled?: boolean;
+  reportTarget?: ReportReasonTarget | null;
+  // Reporting the ACTIVE question as inappropriate also removes it from the
+  // round (the card vanishing is the feedback, matching the recap surfaces).
+  // Wired to the same dismiss path as the "Dismiss" link, so undo still works.
+  onReportedInappropriate?: () => void;
 }) {
   const [visible, setVisible] = useState(!isNew);
   // A bonus slot is one drawn from a followed friend's knowledge (D-4 §B). It
@@ -554,14 +572,23 @@ function QuestionRow({
               (daily/page.tsx) bare muted text floated on the pattern was illegible
               (see the questionActionLinkStyle note). On the cream fill it reads
               cleanly, sitting as one quiet line above the prompt. */}
-          {subhead || creatorName ? (
+          {subhead || creatorName || reportTarget ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '10px',
+                marginBottom: '14px',
+              }}
+            >
             <div
               style={{
                 display: 'flex',
                 flexWrap: 'wrap',
                 alignItems: 'baseline',
                 gap: '6px',
-                marginBottom: '14px',
+                minWidth: 0,
               }}
             >
               {subhead ? (
@@ -619,6 +646,18 @@ function QuestionRow({
                   )}
                 </span>
               ) : null}
+            </div>
+            {reportTarget ? (
+              <span style={reportMenuFontResetStyle}>
+                <AnsweredRowActions
+                  target={reportTarget}
+                  surface="catchup_thread"
+                  onReportSubmitted={(category) => {
+                    if (category === 'inappropriate') onReportedInappropriate?.();
+                  }}
+                />
+              </span>
+            ) : null}
             </div>
           ) : null}
           <p style={{ margin: 0 }}>{questionText}</p>
@@ -705,6 +744,23 @@ function QuestionRow({
 // own opaque chip — bare muted text is illegible against the multicolor tiles
 // (no single text color clears it). The chip keeps them inside the "everything
 // is an opaque card on top of the pattern" rule the surface relies on.
+// The ⋯ report menu sits inside the question card, whose container sets the big
+// serif display styles (1.4875rem / 700). Reset to the interface voice so the
+// menu button + its sheet read as chrome, not question text. flexShrink keeps
+// the button from being squeezed by a long attribution line; the negative
+// margins tuck it toward the card corner so it doesn't inflate the header row.
+const reportMenuFontResetStyle: CSSProperties = {
+  fontFamily: 'var(--font-sans)',
+  fontSize: '1rem',
+  fontWeight: 400,
+  letterSpacing: 'normal',
+  lineHeight: 1.4,
+  textTransform: 'none',
+  flexShrink: 0,
+  display: 'block',
+  margin: '-8px -10px 0 0',
+};
+
 const questionActionLinkStyle: CSSProperties = {
   alignSelf: 'flex-start',
   background: 'var(--surface)',
@@ -1036,6 +1092,7 @@ function ResultRow({
   canonicalSubcategory,
   openedTerritoryDomain,
   openedTerritoryAdopted = true,
+  reportTarget = null,
   domId,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
@@ -1058,6 +1115,7 @@ function ResultRow({
   recheckAction?: RecheckAction | null;
   openedTerritoryDomain?: string | null;
   openedTerritoryAdopted?: boolean;
+  reportTarget?: ReportReasonTarget | null;
   /** DOM id for the reveal root so the page can scroll a freshly-revealed result into view (MISC-4). */
   domId?: string;
 }) {
@@ -1139,6 +1197,15 @@ function ResultRow({
         fill={tone.fill}
         style={{ fontSize: '0.81rem', lineHeight: 1.36 }}
       >
+        {/* Floated (not absolute) so the verdict headline and answer wrap around
+            the button instead of running underneath it. Reports target the same
+            question row as the question card's menu — "flag the answer" and
+            "flag the question" both land a ContentReport on this question. */}
+        {reportTarget ? (
+          <div style={{ ...reportMenuFontResetStyle, float: 'right', margin: '-4px -6px 6px 8px' }}>
+            <AnsweredRowActions target={reportTarget} surface="catchup_thread" />
+          </div>
+        ) : null}
         {expired ? (
           <span style={{ color: 'var(--text-muted)' }}>This one wasn&apos;t recorded in time.</span>
         ) : correct ? (
@@ -1579,6 +1646,10 @@ export function GameplayChatThread({
                     : undefined
                 }
                 muteDisabled={muteDisabled}
+                reportTarget={m.reportTarget}
+                onReportedInappropriate={
+                  onDismiss && m.id === activeQuestionId ? onDismiss : undefined
+                }
               />
             );
           case 'user':
@@ -1610,6 +1681,7 @@ export function GameplayChatThread({
                 recheckAction={m.recheckAction}
                 openedTerritoryDomain={m.openedTerritoryDomain}
                 openedTerritoryAdopted={m.openedTerritoryAdopted}
+                reportTarget={m.reportTarget}
               />
             );
           case 'session_complete':

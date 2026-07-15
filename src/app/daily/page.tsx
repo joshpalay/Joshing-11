@@ -322,7 +322,9 @@ export default function DailyPage() {
 
           const createBody = await createResponse.json().catch(() => null);
           if (createResponse.status === 409) {
-            router.replace('/daily/setup');
+            // No territories to build from — the knowledge page (which absorbed
+            // the retired Configure page) owns the first-territory moment.
+            router.replace('/knowledge');
             return;
           }
           // Only the transient generation_failed (503) is worth retrying; a
@@ -966,12 +968,12 @@ export default function DailyPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 60,
+            zIndex: 'var(--z-modal)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '1rem',
-            background: 'rgba(0,0,0,0.45)',
+            background: 'var(--scrim)',
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) dismissFirstRunIntro();

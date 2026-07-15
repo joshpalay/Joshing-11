@@ -47,12 +47,12 @@ export function getDomainCircleSize(
 }
 
 // The portrait's large, dramatic per-tier diameters. Intentionally non-continuous
-// (a familiar domain tops out at 48px; a solid domain starts at 156px) — the
+// (a familiar domain tops out at 40px; a solid domain starts at 156px) — the
 // portrait is a hero showcase where the size jump between casual and serious
 // domains is the visual story, and it free-wraps so big circles never overflow.
 const PORTRAIT_TIER_RANGES: Record<CircleSizingTier, { min: number; max: number }> = {
   establishing: { min: 18, max: 28 },
-  familiar: { min: 32, max: 48 },
+  familiar: { min: 28, max: 40 },
   solid: { min: 156, max: 216 },
   mastery: { min: 304, max: 384 },
 };

@@ -162,6 +162,8 @@ export default async function AdminKnowledgePage() {
       estimatedQuestions: entry.estimatedQuestions,
       ratio: entry.ratio,
       capped: entry.generationCapped,
+      corpusEstimatedQuestions: entry.corpusEstimatedQuestions,
+      fandomHost: entry.fandomHost,
     };
   }
 

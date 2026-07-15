@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getSession } from '@/server/auth/session';
 import { isAdminUser } from '@/server/auth/admin';
 import {
+  adminBulkReattributeToHouse,
   adminEditQuestion,
   adminRestoreQuestion,
   adminSoftDeleteQuestion,
@@ -17,7 +18,9 @@ export const dynamic = 'force-dynamic';
 // delete is a SOFT delete (deletedAt) and restore is its inverse — never a hard
 // DELETE. Every mutation re-checks isAdminUser on the server (the client is never
 // trusted). Field set is the ratified minimal set (Decision B); no audit log
-// (Decision A1); no bulk actions (Decision C).
+// (Decision A1). Decision C (no bulk actions) was revised 2026-07-11 for exactly
+// one bulk act — person → house re-attribution — after admin bulk uploads landed
+// attributed to the uploading admin personally; everything else stays per-row.
 
 // visibility is limited to the admin-settable values ('blocked' is a safety
 // terminal state set by the vet path, not hand-editable here).
@@ -32,6 +35,10 @@ const editSchema = z.object({
   insideJoke: z.string().trim().max(2000).nullable().optional(),
   category: z.enum(CATEGORIES).optional(),
   visibility: z.enum(['public', 'friends', 'private']).optional(),
+  // The domain / knowledge label shown on the card (e.g. re-tagging a
+  // Sesame-Street question mis-filed under "New Testament"). Server-side the
+  // helper rejects generic bucket labels and normalizes to a KnowledgeNode.
+  canonicalSubcategory: z.string().trim().min(1).max(120).optional(),
   // Re-attribution to the house author (creator_id NULL + source house_authored).
   // Only 'house' is settable here — reassigning to a specific person would need a
   // person picker this tool doesn't have.
@@ -42,6 +49,13 @@ const bodySchema = z.discriminatedUnion('action', [
   editSchema,
   z.object({ action: z.literal('delete'), id: z.string().trim().min(1) }),
   z.object({ action: z.literal('restore'), id: z.string().trim().min(1) }),
+  // Bulk person → house re-attribution. Capped at one admin page of rows per
+  // request (MAX_PAGE_SIZE in admin-questions.ts) — the client selects from the
+  // rendered table, so a larger sweep is several requests, each deliberate.
+  z.object({
+    action: z.literal('reattribute_house'),
+    ids: z.array(z.string().trim().min(1)).min(1).max(200),
+  }),
 ]);
 
 export async function POST(request: NextRequest) {
@@ -69,6 +83,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   }
 
+  if (data.action === 'reattribute_house') {
+    // Skipped rows (already house/LLM, or deleted) are reported, not errors.
+    const result = await adminBulkReattributeToHouse(data.ids);
+    return NextResponse.json(result);
+  }
+
   // edit — require at least one field to change.
   const { id, ...fields } = data;
   const patch = {
@@ -79,6 +99,7 @@ export async function POST(request: NextRequest) {
     insideJoke: fields.insideJoke,
     category: fields.category,
     visibility: fields.visibility,
+    canonicalSubcategory: fields.canonicalSubcategory,
     attribution: fields.attribution,
   };
   if (Object.values(patch).every((v) => v === undefined)) {
@@ -86,6 +107,7 @@ export async function POST(request: NextRequest) {
   }
   const result = await adminEditQuestion(id, patch);
   if (!result.ok) {
+    // not_found ⇒ 404; a rejected domain or empty patch ⇒ 400.
     return NextResponse.json({ error: result.reason }, { status: result.reason === 'not_found' ? 404 : 400 });
   }
   return NextResponse.json(result);

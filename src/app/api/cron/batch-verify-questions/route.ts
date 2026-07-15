@@ -10,6 +10,11 @@ import {
   type PrefilterOptions,
 } from '@/server/quality/verification-prefilter';
 import {
+  isSalvageOnDemoteEnabled,
+  runSalvageSweep,
+  type SalvageSweepSummary,
+} from '@/server/quality/salvage-sweep';
+import {
   harvestVerifyBatches,
   isBatchVerifyAsyncEnabled,
   submitVerifyBatch,
@@ -103,6 +108,32 @@ function selectPending(limit: number, now: Date): Promise<[PendingRow[], Pending
       ))
       .limit(limit),
   ]) as Promise<[PendingRow[], PendingRow[]]>;
+}
+
+// D-QUALITY-SALVAGE-01: after the sweep stamps demotions, chase them with the
+// salvage pipeline so the review queue already carries one-click "Approve fix"
+// proposals when a human opens it. Capped per run to stay inside maxDuration —
+// the sweep skips already-proposed rows, so anything left over (cap hit, error,
+// or a platform kill mid-salvage) self-heals on the next cron pass. Best-effort
+// by contract: a salvage fault never fails the verify sweep.
+const SALVAGE_MAX_PER_RUN = Math.max(1, Number(process.env.SALVAGE_ON_DEMOTE_MAX_PER_RUN ?? 8));
+
+type SalvageReport =
+  | { enabled: false }
+  | ({ enabled: true } & SalvageSweepSummary)
+  | { enabled: true; error: string };
+
+async function chaseDemotionsWithSalvage(): Promise<SalvageReport> {
+  if (!isSalvageOnDemoteEnabled()) return { enabled: false };
+  try {
+    const summary = await runSalvageSweep({ persist: true, limit: SALVAGE_MAX_PER_RUN });
+    return { enabled: true, ...summary };
+  } catch (error) {
+    console.warn('[cron/batch-verify-questions] salvage sweep failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { enabled: true, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 async function stampQuestion(rowId: string, verdict: VerificationVerdict, now: Date, reason?: string) {
@@ -200,7 +231,12 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
     const routed: BatchRowInput[] = [];
     const routeOrSkip = async (row: PendingRow, store: 'q' | 'g', tally: Tally) => {
       const decision = prefilterForVerification(
-        { questionText: row.questionText, answer: row.answer, explanation: row.explanation },
+        {
+          questionText: row.questionText,
+          answer: row.answer,
+          explanation: row.explanation,
+          canonicalSubcategory: row.canonicalSubcategory,
+        },
         options,
       );
       if (!decision.needsVerification) {
@@ -239,6 +275,10 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
     }
   }
 
+  // Fresh demotions landed at harvest time above; propose their fixes now so
+  // the review queue is one-click by the time the human gets there.
+  const salvage = await chaseDemotionsWithSalvage();
+
   return NextResponse.json({
     mode: 'async',
     harvest: {
@@ -252,6 +292,7 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
       stampFailures: harvested.stampFailures,
     },
     submit: { ...submitTallies, batch: submitted },
+    salvage,
   });
 }
 
@@ -273,6 +314,7 @@ async function runSyncSweep(now: Date, options: PrefilterOptions) {
       questionText: row.questionText,
       answer: row.answer,
       explanation: row.explanation,
+      canonicalSubcategory: row.canonicalSubcategory,
     }, options);
     if (!decision.needsVerification) return { verdict: 'skipped' };
 
@@ -329,5 +371,8 @@ async function runSyncSweep(now: Date, options: PrefilterOptions) {
     }
   });
 
-  return NextResponse.json({ question: questionTally, generated: generatedTally });
+  // Chase this run's demotions with salvage proposals (see chaseDemotionsWithSalvage).
+  const salvage = await chaseDemotionsWithSalvage();
+
+  return NextResponse.json({ question: questionTally, generated: generatedTally, salvage });
 }

@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, isNull, lt, ne, notExists, notInArray, or, sql } from 'drizzle-orm';
 
-import { db, feedDismissedDomains, feedItems, masteryEvents, questions, users } from '@/server/db';
+import { db, feedItems, masteryEvents, questions, users } from '@/server/db';
 import { mutualFollowApproved } from '@/server/db/queries/follow-visibility';
 import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, notBlocked, visibleFeedSourcePredicate } from '@/server/feed/visibility';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
@@ -106,67 +106,12 @@ async function collapseThumbsUpItems(items: FeedItem[]): Promise<FeedItem[]> {
   return items.filter((item) => !hiddenIds.has(item.id)).map((item) => collapsedById.get(item.id) ?? item);
 }
 
-export async function getDismissedDomains(userId: string): Promise<string[]> {
-  try {
-    const rows = await db
-      .select({ canonicalSubcategory: feedDismissedDomains.canonicalSubcategory })
-      .from(feedDismissedDomains)
-      .where(and(
-        eq(feedDismissedDomains.userId, userId),
-        isNull(feedDismissedDomains.reinstatedAt),
-      ));
-    return rows.map((r) => r.canonicalSubcategory);
-  } catch (error) {
-    if (pgErrorCode(error) === '42P01') return []; // FeedDismissedDomain table not yet migrated
-    throw error;
-  }
-}
-
-export async function dismissDomain(userId: string, canonicalSubcategory: string): Promise<void> {
-  // Check if already dismissed
-  const [existing] = await db
-    .select({ id: feedDismissedDomains.id })
-    .from(feedDismissedDomains)
-    .where(and(
-      eq(feedDismissedDomains.userId, userId),
-      eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
-      isNull(feedDismissedDomains.reinstatedAt),
-    ))
-    .limit(1);
-
-  if (existing) return;
-
-  await db.insert(feedDismissedDomains).values({ userId, canonicalSubcategory });
-
-  // Soft-delete all active feed items in this domain for this user
-  const domainItems = await db
-    .select({ feedItemId: feedItems.id })
-    .from(feedItems)
-    .innerJoin(questions, eq(feedItems.questionId, questions.id))
-    .where(and(
-      eq(feedItems.recipientUserId, userId),
-      inArray(feedItems.state, ACTION_REQUIRED_FEED_STATES),
-      eq(questions.canonicalSubcategory, canonicalSubcategory),
-    ));
-
-  if (domainItems.length > 0) {
-    await db
-      .update(feedItems)
-      .set({ state: 'dismissed' })
-      .where(inArray(feedItems.id, domainItems.map((r) => r.feedItemId)));
-  }
-}
-
-export async function reinstateDomain(userId: string, canonicalSubcategory: string): Promise<void> {
-  await db
-    .update(feedDismissedDomains)
-    .set({ reinstatedAt: new Date() })
-    .where(and(
-      eq(feedDismissedDomains.userId, userId),
-      eq(feedDismissedDomains.canonicalSubcategory, canonicalSubcategory),
-      isNull(feedDismissedDomains.reinstatedAt),
-    ));
-}
+// Feed-mute ("hide category from feed") was retired — the mute action, its
+// management box, and the dismiss-domain API routes are gone. The
+// FeedDismissedDomain table and its friend-side write skips
+// (create-feed-items-for-answer, questions share, friend-coverage) remain as
+// dormant plumbing; the home-feed read no longer filters by it (see
+// getFeedForUser), so existing dismissed rows no longer hide anything here.
 
 export type FeedCursor = {
   sourceEventAt: Date;
@@ -382,7 +327,9 @@ async function fetchVisibleFeedItems(
 }
 
 export async function getFeedForUser(userId: string, options: FeedForUserOptions = {}): Promise<PaginatedFeedResult> {
-  const dismissedDomains = await getDismissedDomains(userId);
+  // Feed-mute retired: the home feed no longer filters by dismissed domains.
+  // The predicate still accepts a list (empty here) so the shape is unchanged.
+  const dismissedDomains: string[] = [];
   const limit = normalizeFeedLimit(options.limit);
   const filter = options.filter ?? 'all';
   const isFirstPage = !options.cursor;

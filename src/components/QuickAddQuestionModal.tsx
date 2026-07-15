@@ -108,8 +108,8 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.4)',
-          zIndex: 100,
+          background: 'var(--scrim)',
+          zIndex: 'var(--z-modal)',
         }}
       />
 
@@ -123,7 +123,7 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          zIndex: 101,
+          zIndex: 'var(--z-modal)',
           width: 'min(620px, calc(100vw - 32px))',
           background: 'var(--bg-card, var(--bg))',
           border: '1px solid var(--border)',

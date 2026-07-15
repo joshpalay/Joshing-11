@@ -132,11 +132,11 @@ export function SharePortraitModal({
 const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.6)',
+  backgroundColor: 'var(--scrim-heavy)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  zIndex: 1000,
+  zIndex: 'var(--z-modal)',
   padding: '16px',
   overflowY: 'auto',
 };

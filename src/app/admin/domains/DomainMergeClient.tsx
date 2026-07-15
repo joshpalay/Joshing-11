@@ -251,7 +251,7 @@ export function DomainMergeClient({ pairs }: { pairs: FragmentationPair[] }) {
 
       {/* Persist-with-undo toast — one at a time, fixed in reach. */}
       {pending ? (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+        <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
             className="flex w-full max-w-lg items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-[var(--shadow-overlay)]"
             style={{

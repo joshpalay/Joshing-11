@@ -1052,7 +1052,6 @@ function FeedListContent({
   const [feedbackSheetId, setFeedbackSheetId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [hideToast, setHideToast] = useState<{ category: string } | null>(null)
   const [freqToast, setFreqToast] = useState<{ domain: string } | null>(null)
   // "From Friends" starts capped to its most recent few milestone cards; each
   // "View more" reveals another batch. View-state only — never persisted.
@@ -1364,46 +1363,11 @@ function FeedListContent({
     setItems((current) => current.filter((item) => item.id !== itemId))
   }, [])
 
-  const hideCategory = useCallback(async (item: FeedApiItem) => {
-    if (!item.domain_pill) return
-    const category = item.domain_pill
-    setBusyId(item.id)
-    setError(null)
-    try {
-      const response = await fetch('/api/feed/dismiss-domain', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ domain: category }),
-      })
-      if (!response.ok) {
-        const body = await response.json().catch(() => null)
-        throw new Error(body?.message ?? 'Could not hide that category.')
-      }
-      setItems((current) =>
-        current.filter((currentItem) => currentItem.domain_pill !== category)
-      )
-      setHideToast({ category })
-      window.setTimeout(() => {
-        setHideToast((current) =>
-          current?.category === category ? null : current
-        )
-      }, 4500)
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not hide that category.'
-      )
-    } finally {
-      setBusyId(null)
-    }
-  }, [])
-
   // Gentle down-weight (owner direction): nudge this domain to "Blue Moon" in the
-  // Daily Five so it shows up rarely, instead of a hard hide. Unlike hideCategory
-  // this leaves the feed card in place — it changes future Daily Five frequency,
-  // not feed membership. The API merges server-side and rebuilds untouched queues.
+  // Daily Five so it shows up rarely. This leaves the feed card in place — it
+  // changes future Daily Five frequency, not feed membership. The API merges
+  // server-side and rebuilds untouched queues. (The old hard category-mute was
+  // retired; quieting a domain now happens on the knowledge page.)
   const seeLessOften = useCallback(async (item: FeedApiItem) => {
     const domain = item.domain_pill
     if (!domain) return
@@ -1956,7 +1920,6 @@ function FeedListContent({
       return (
         <DismissedFeedBar
           key={item.id}
-          category={visibleFeedCategory(item.domain_pill)}
           answer={
             dismissedAnswer?.status === 'loaded'
               ? dismissedAnswer.answer
@@ -1965,7 +1928,6 @@ function FeedListContent({
           answerLoading={!dismissedAnswer || dismissedAnswer.status === 'loading'}
           answerError={dismissedAnswer?.status === 'error'}
           onUndo={() => undoDismiss(item.id)}
-          onMute={() => void hideCategory(item)}
           disabled={isBusy}
         />
       )
@@ -2145,22 +2107,6 @@ function FeedListContent({
         <FeedSurfaceTabs active={feedFilter} meta={feedMeta} onSelect={handleSelectTab} />
       ) : null}
 
-      {hideToast ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="text-muted-foreground mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2 text-sm italic"
-        >
-          <span>Hidden questions about {hideToast.category}.</span>
-          <Link
-            href="/knowledge#focused-feed"
-            className="text-foreground text-xs font-medium not-italic underline-offset-4 hover:underline"
-          >
-            Manage on your knowledge page →
-          </Link>
-        </div>
-      ) : null}
-
       {freqToast ? (
         <div
           role="status"
@@ -2172,10 +2118,10 @@ function FeedListContent({
             {visibleFeedCategory(freqToast.domain) ?? freqToast.domain} less often.
           </span>
           <Link
-            href="/daily/setup"
+            href="/knowledge"
             className="text-foreground text-xs font-medium not-italic underline-offset-4 hover:underline"
           >
-            Adjust in Game settings →
+            Adjust your rotation →
           </Link>
         </div>
       ) : null}

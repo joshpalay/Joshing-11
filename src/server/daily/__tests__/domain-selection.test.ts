@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { domainKey } from '@/lib/knowledge/domain-key';
 import {
+  domainFrequencyWeight,
   domainWeeklyCap,
   dropCappedDomains,
   selectCustomDomainsForRound,
@@ -142,6 +143,52 @@ describe('selectCustomDomainsForRound', () => {
     const out = selectCustomDomainsForRound(['A', 'B'], f, recentCounts, 2, seeded(3));
     expect(new Set(out)).toEqual(new Set(['A', 'B']));
   });
+
+  it('never picks a rested domain, even when it leaked into the selection', () => {
+    // Stray-row case (prod 2026-07-12): a domain tagged 'resting' still present
+    // in selectedDomains must never win a draw — no starvation fallback.
+    const f = { Rested: 'resting', Open: 'blue_moon' };
+    for (let i = 0; i < 100; i += 1) {
+      const out = selectCustomDomainsForRound(['Rested', 'Open'], f, new Map(), 2, seeded(i + 1));
+      expect(out).toEqual(['Open']);
+    }
+  });
+
+  it('returns [] when every selected domain is rested (caller owns the fallback)', () => {
+    const f = { A: 'resting', B: 'resting' };
+    expect(selectCustomDomainsForRound(['A', 'B'], f, new Map(), 2, seeded(1))).toEqual([]);
+  });
+
+  it('keeps an often domain ahead of a fresh sometimes domain after a few serves (tier-scaled damping)', () => {
+    // Regression for the flat 1/(1+recent) damping: Often with 3 recent
+    // questions used to weigh 1.0 vs a fresh Sometimes at 2.0 and lose ~2:1.
+    // Tier-scaled damping keeps it at 16/7 ≈ 2.3 vs 2.0 — a slight favorite.
+    const f = { Often: 'often', FreshSometimes: 'sometimes' };
+    const recentCounts = recent({ Often: 3 });
+    let oftenFirst = 0;
+    const TRIALS = 3000;
+    for (let i = 0; i < TRIALS; i += 1) {
+      const [chosen] = selectCustomDomainsForRound(
+        ['Often', 'FreshSometimes'], f, recentCounts, 1, seeded(i + 1),
+      );
+      if (chosen === 'Often') oftenFirst += 1;
+    }
+    // Expected share 16/7 / (16/7 + 2) ≈ 53%; assert it at least holds even.
+    expect(oftenFirst / TRIALS).toBeGreaterThan(0.5);
+  });
+});
+
+describe('domainFrequencyWeight', () => {
+  it('maps tags to weights, including a REAL zero for resting (not the default)', () => {
+    expect(domainFrequencyWeight('often')).toBe(4);
+    expect(domainFrequencyWeight('sometimes')).toBe(2);
+    expect(domainFrequencyWeight('blue_moon')).toBe(1);
+    // Regression: the old `||` fallback swallowed the 0 and rested domains
+    // competed at 'sometimes' weight.
+    expect(domainFrequencyWeight('resting')).toBe(0);
+    expect(domainFrequencyWeight(undefined)).toBe(2);
+    expect(domainFrequencyWeight('garbage')).toBe(2);
+  });
 });
 
 describe('domainWeeklyCap', () => {
@@ -149,6 +196,7 @@ describe('domainWeeklyCap', () => {
     expect(domainWeeklyCap('often')).toBe(7);
     expect(domainWeeklyCap('sometimes')).toBe(3);
     expect(domainWeeklyCap('blue_moon')).toBe(1);
+    expect(domainWeeklyCap('resting')).toBe(0);
     expect(domainWeeklyCap(undefined)).toBe(5);
     expect(domainWeeklyCap('garbage')).toBe(5);
   });

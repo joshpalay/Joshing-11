@@ -7,6 +7,7 @@ import {
   carryForwardQueueWithSlots,
   clearStaleShortTodayQueue,
   countDailyQueues,
+  getExcludedKnowledgeDomains,
   getKnowledgeBase,
   getPriorInWindowDailyQueue,
   getTodaysDailyQueue,
@@ -369,9 +370,10 @@ async function buildDailyQueueForUser(
   // still have unplayed questions — don't regenerate from scratch" (flag-gated).
   if (await topUpAndCarryForwardPartialQueue(userId)) return;
 
-  const [knowledgeBase, preferences] = await Promise.all([
+  const [knowledgeBase, preferences, excludedDomains] = await Promise.all([
     getKnowledgeBase(userId),
     getDailyPreferences(userId),
+    getExcludedKnowledgeDomains(userId),
   ]);
 
   // First Daily Five seeding (PRD prompt 5). We've passed the existing-queue and
@@ -412,24 +414,39 @@ async function buildDailyQueueForUser(
   // any vetted public question regardless of the viewer's declared or
   // demonstrated interests.
   //
-  // In random mode, also drop domains the player parked in "Resting" on the
-  // Game settings page. "Resting" means "won't be asked for now" (see the
-  // territory setup zones), and the LLM generator already honors it in both
-  // modes — but the authored/house pickers only filtered by this allow-set, so
-  // a rested category could still leak into the Daily Five via a vetted friend
-  // or house question. Custom mode needs no extra handling here: buildSavePayload
-  // excludes rested domains from selectedDomains upstream, so they're already out.
+  // In BOTH modes, drop domains the player parked in "Resting" on the Game
+  // settings page. "Resting" means "won't be asked for now" (see the territory
+  // setup zones), and the LLM generator already honors it in both modes — but
+  // the authored/house pickers only filter by this allow-set, so a rested
+  // category could still leak into the Daily Five via a vetted friend or house
+  // question. Custom mode normally has no rested entries in selectedDomains
+  // (buildSavePayload excludes them), but the single-domain frequency endpoint
+  // didn't always sync the list, so prod rows written through it carry rested
+  // strays — filter here rather than trust the invariant. The starvation guard
+  // keeps the unfiltered selection if EVERY selected domain is rested,
+  // mirroring the generator's all-rested fallback.
   const restingDomains = new Set(
     Object.entries(preferences.domainPreferenceFrequency ?? {})
       .filter(([, frequency]) => frequency === 'resting')
       .map(([domain]) => domain.toLowerCase()),
   );
+  const notResting = (domain: string) => !restingDomains.has(domain.toLowerCase());
+  // D-DOMAIN-REST-01: also drop domains the player Rested (a domain-exclusion
+  // with a live expiry) or permanently Muted from the game summary. Random mode
+  // already excludes these via getKnowledgeBase, but custom mode is constrained
+  // to the explicit selectedDomains list, which never sees exclusions — so a
+  // Rested/Muted category would otherwise still leak into a custom-mode Daily
+  // Five through the authored/house pickers (the exact gap the resting filter
+  // above closes for the frequency tier). Rest/Mute write subcategory scope, so
+  // match on the subcategory set; expired Rests are already gone from this set.
+  const notExcluded = (domain: string) =>
+    !excludedDomains.subcategories.has(domain.toLowerCase());
+  const notRestingOrExcluded = (domain: string) => notResting(domain) && notExcluded(domain);
+  const selectedActive = preferences.selectedDomains.filter(notRestingOrExcluded);
   const allowedSubcategories: ReadonlySet<string> = new Set(
     preferences.domainMode === 'custom'
-      ? preferences.selectedDomains
-      : knowledgeBase
-          .map((domain) => domain.domain)
-          .filter((domain) => !restingDomains.has(domain.toLowerCase())),
+      ? (selectedActive.length > 0 ? selectedActive : preferences.selectedDomains)
+      : knowledgeBase.map((domain) => domain.domain).filter(notResting),
   );
 
   // Intra-day diversity cap (D: "5-question botany run" / "3-Hamlet day"). One
@@ -950,50 +967,87 @@ async function buildDailyQueueForUser(
     position += 1;
   }
 
-  // Daily Five +2 (D-4 §B, the territory ∪ activity reframe). Append up to
-  // DAILY_BONUS_SLOT_MAX bonus slots, each a FRESHLY GENERATED accessible
-  // question in a domain drawn from the durable territory + recent activity of
-  // the people the viewer follows, ranked Both > territory-only > activity-only.
-  // Purely additive: NOT counted toward DAILY_QUEUE_SIZE / the achieved backstop,
-  // never triggers the N<5 generation top-up, and never pads with the viewer's
-  // own domains. If no friend domains qualify (or generation misses) we append
-  // fewer slots (graceful shrink), yielding a 5–7 slot queue. The +2 serves only
-  // fresh questions — never a friend's literal answered question (those live
-  // behind the Lately milestone click-through, D-4 §A).
-  // Resting domains are excluded from the +2 pool too, so "This is {Name}'s bag
-  // but not mine" (which parks the domain in Resting) stops it surfacing as a
-  // bonus, not just in the core five.
+  // Daily Five +2 (D-4 §B, the territory ∪ activity reframe) — AND the short-core
+  // serving backstop (Layer 1, supply-exhaustion fix). Draw a ranked pool of
+  // domains from the durable territory + recent activity of the people the viewer
+  // follows (Both > territory-only > activity-only), generate a fresh accessible
+  // question per domain, then split them two ways:
+  //   1. CORE BACKFILL: if the core came up short of DAILY_QUEUE_SIZE (the viewer's
+  //      OWN palette was tapped out — every top-up round + reserve above is already
+  //      spent by here), promote the first `coreShortfall` friend questions into
+  //      the five as PLAIN CORE slots (buildBotSlot, no presence attribution → they
+  //      genuinely count toward the set per isBonusSlot). This is what stops a dry
+  //      own-palette from serving a 3- or 4-question "Daily Five": a friend-world
+  //      question fills the gap instead. Accessible tier is acceptable here — a
+  //      served five beats a short one.
+  //   2. +2 BONUS: any remaining friend domains (up to DAILY_BONUS_SLOT_MAX) append
+  //      as additive presence-attributed bonus slots exactly as before ("from
+  //      {Name}'s world"), never counted toward the five.
+  // We therefore request coreShortfall + DAILY_BONUS_SLOT_MAX domains so the bonus
+  // isn't cannibalized by the backfill. When the core is already full coreShortfall
+  // is 0 and this is byte-for-byte the old +2 behavior. Friend-sourced only (never
+  // pads with the viewer's own domains); resting domains are excluded from BOTH the
+  // core backfill and the bonus, so "This is {Name}'s bag but not mine" holds. The
+  // pool serves only fresh questions — never a friend's literal answered question
+  // (those live behind the Lately milestone click-through, D-4 §A).
   //
   // Generated BEFORE the single persist so the whole queue (core + bonus) lands
-  // atomically. Wrapped so a bonus-generation failure degrades to a core-only
-  // queue instead of losing the entire build.
+  // atomically. Wrapped so a generation failure degrades to a core-only queue
+  // (possibly still short) instead of losing the entire build.
   try {
-    const bonusDomains = await getFriendDomainsForBonus(
+    // At this point `slots` holds only core slots (bonus is appended below), so its
+    // length IS the core count. A dry own-palette leaves this under DAILY_QUEUE_SIZE.
+    const coreShortfall = Math.max(0, DAILY_QUEUE_SIZE - slots.length);
+    const friendDomains = await getFriendDomainsForBonus(
       userId,
-      DAILY_BONUS_SLOT_MAX,
+      coreShortfall + DAILY_BONUS_SLOT_MAX,
       restingDomains,
     );
-    // Gate the bonus LLM call on the remaining function budget. The +2 is purely
-    // additive, so when little time is left (e.g. a slow core build near the
-    // ceiling) skipping it lets the core queue still persist instead of risking a
-    // mid-bonus kill that would lose the whole build.
-    if (bonusDomains.length > 0 && hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)) {
+    // Gate the friend-domain LLM call on the remaining function budget. When little
+    // time is left (e.g. a slow core build near the ceiling) skipping it lets the
+    // core queue still persist instead of risking a mid-generation kill that would
+    // lose the whole build. The core backfill is best-effort for the same reason a
+    // short queue is tolerated down to the floor: a served four beats a lost build.
+    if (friendDomains.length > 0 && hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)) {
       const presenceByDomain = new Map(
-        bonusDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
+        friendDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
       );
-      const generatedBonus = await generateBonusQuestionsForDomains(
+      const generatedFriend = await generateBonusQuestionsForDomains(
         userId,
-        bonusDomains.map((candidate) => candidate.domain),
+        friendDomains.map((candidate) => candidate.domain),
       );
-      for (const { domain, question } of generatedBonus) {
-        const candidate = presenceByDomain.get(domain.toLowerCase());
-        slots.push(buildPresenceSlot(question, toBonusPresence(candidate), position));
-        generatedQuestionIds.push(question.id);
-        position += 1;
+      let promotedToCore = 0;
+      let bonusAppended = 0;
+      for (const { domain, question } of generatedFriend) {
+        if (slots.length < DAILY_QUEUE_SIZE) {
+          // Still short on core → promote into the five as a plain core slot. No
+          // presence attribution: it reads as a normal fifth question, not a "+2".
+          slots.push(buildBotSlot(question, position));
+          generatedQuestionIds.push(question.id);
+          position += 1;
+          promotedToCore += 1;
+        } else if (bonusAppended < DAILY_BONUS_SLOT_MAX) {
+          const candidate = presenceByDomain.get(domain.toLowerCase());
+          slots.push(buildPresenceSlot(question, toBonusPresence(candidate), position));
+          generatedQuestionIds.push(question.id);
+          position += 1;
+          bonusAppended += 1;
+        } else {
+          break;
+        }
+      }
+      if (promotedToCore > 0) {
+        console.info('[daily/queue-orchestrator] backfilled short core from friend domains', {
+          userId,
+          coreShortfall,
+          promotedToCore,
+          bonusAppended,
+          coreAfter: slots.length - bonusAppended,
+        });
       }
     }
   } catch (error) {
-    console.warn('[daily/queue-orchestrator] +2 bonus generation failed; serving core only', {
+    console.warn('[daily/queue-orchestrator] +2 bonus / core-backfill generation failed; serving core only', {
       userId,
       error: error instanceof Error ? error.message : String(error),
     });

@@ -24,7 +24,8 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - `npm run check:fonts` — font ratchet (off-system font-family count must stay ≤ the ceiling in `scripts/check-font-ratchet.mjs`; runs in CI)
 - `npm run check:colors` — color ratchet (off-system hex/rgb/hsl count must stay ≤ the ceiling in `scripts/check-color-ratchet.mjs`; runs in CI)
 - `npm run check:spacing` — spacing ratchet (arbitrary `p-[…]`/`m-[…]`/`gap-[…]`/`space-[…]` count must stay ≤ the ceiling in `scripts/check-spacing-ratchet.mjs`; runs in CI. Sizing `h-/w-` is out of scope — see the script header)
-- `npm run check:radius` — radius ratchet (literal arbitrary `rounded-[Npx]`/`[Nrem]` count must stay ≤ the ceiling in `scripts/check-radius-ratchet.mjs`; runs in CI. `rounded-[var(--radius-*)]` consumers are on-system and not counted)
+- `npm run check:radius` — radius ratchet (literal arbitrary `rounded-[Npx]`/`[Nrem]` count must stay ≤ the ceiling in `scripts/check-radius-ratchet.mjs`; runs in CI. Radius-token consumers — the `var(--radius-*)` arbitrary form — are on-system and not counted. Never spell that form as one contiguous rounded-[…] literal in docs/comments: Tailwind v4 scans the whole repo, and a `*` inside a var() arbitrary compiles into invalid CSS that breaks every page in `next dev`)
+- `npm run check:zindex` — z-index ratchet (raw `z-[N]` arbitraries + inline `zIndex ≥ 30` must stay ≤ the ceiling — currently 0 — in `scripts/check-zindex-ratchet.mjs`; runs in CI. Overlay layers go through the `--z-*` scale in `globals.css`: nav 40 < sheet 50 < modal 60 < toast 70 < takeover 80)
 - `npm run format` — Prettier write
 - `npm run db:migrate` — Drizzle migrations
 - `npm run smoke:daily-catchup` — daily catchup smoke test

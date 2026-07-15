@@ -1,0 +1,21 @@
+-- 0124: rest_until on USER_DOMAIN_EXCLUSIONS (D-DOMAIN-REST-01).
+--
+-- "Rest a topic" — the game-summary action that pulls a domain out of
+-- circulation for ~21 days and then lets it come back on its own. Modeled as a
+-- domain-exclusion with an expiry, so it reuses the existing suppression path
+-- rather than a parallel mechanism:
+--   • rest_until IS NULL   → permanent exclusion (the old "Mute" semantics).
+--   • rest_until > now()   → resting; still suppressed.
+--   • rest_until <= now()  → expired; the read path stops matching the row, so
+--                            the domain returns with NO cron — expiry is
+--                            evaluated at queue-build time
+--                            (getExcludedKnowledgeDomains).
+--
+-- Additive + nullable → existing rows (permanent mutes) keep NULL and are
+-- unaffected. Mirrored by a defensive guard in src/instrumentation.ts
+-- (precedent: the migration 0036 scope-column guard on this same table).
+--
+-- Rollback:
+--   ALTER TABLE "USER_DOMAIN_EXCLUSIONS" DROP COLUMN IF EXISTS "rest_until";
+ALTER TABLE "USER_DOMAIN_EXCLUSIONS"
+  ADD COLUMN IF NOT EXISTS "rest_until" timestamp with time zone;

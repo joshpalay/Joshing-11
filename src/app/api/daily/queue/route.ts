@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { countDailyQueues, getTodaysDailyQueue } from '@/server/db/queries/daily';
+import { countDailyQueues, getTodaysDailyQueue, refreshQueueSlotQuestionTexts } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
@@ -35,7 +35,7 @@ function partitionGenericSlots(slots: QueueSlot[]): { kept: QueueSlot[]; dropped
   return { kept, dropped };
 }
 
-function serializeQueue(
+async function serializeQueue(
   queue: NonNullable<Awaited<ReturnType<typeof getTodaysDailyQueue>>>,
   difficultyMode: string,
   userId: string,
@@ -73,7 +73,10 @@ function serializeQueue(
   return {
     queue_id: queue.id,
     queue_date: queue.queueDate,
-    slots: kept,
+    // Serve live question text (slot.question_text is an assignment-time
+    // snapshot; grading resolves the live row, so an admin edit made after
+    // assignment must reach the display too).
+    slots: await refreshQueueSlotQuestionTexts(kept),
     difficulty_mode: difficultyMode,
     is_first_daily: isFirstDaily,
   };
@@ -132,7 +135,7 @@ export async function GET() {
     return withTiming(NextResponse.json({ queue: null, slots: [], building: true }));
   }
 
-  return withTiming(NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues)));
+  return withTiming(NextResponse.json(await serializeQueue(queue, prefs.difficulty, userId, totalQueues)));
 }
 
 export async function POST() {
@@ -173,7 +176,8 @@ export async function POST() {
     return NextResponse.json({ error: 'queue_not_created' }, { status: 500 });
   }
 
+  const serialized = await serializeQueue(queue, prefs.difficulty, userId, totalQueues);
   timing.measure('total', startedAt);
   logServerTiming('daily/queue:POST', timing, { outcome: 'built' });
-  return NextResponse.json(serializeQueue(queue, prefs.difficulty, userId, totalQueues));
+  return NextResponse.json(serialized);
 }

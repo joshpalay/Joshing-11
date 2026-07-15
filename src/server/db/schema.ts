@@ -1085,6 +1085,11 @@ export const userDomainExclusions = pgTable(
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     scope: domainExclusionScopeEnum('scope').notNull().default('subcategory'),
     excludedAt: timestamp('excluded_at', { withTimezone: true }).notNull().defaultNow(),
+    // D-DOMAIN-REST-01: a temporary "Rest" pulls a domain out of circulation
+    // until this instant, then it returns on its own (expiry is evaluated at
+    // read time in getExcludedKnowledgeDomains — no cron). NULL = a permanent
+    // exclusion (the "Mute"/"Never appear" semantics), which is the default.
+    restUntil: timestamp('rest_until', { withTimezone: true }),
   },
   (table) => [
     unique('USER_DOMAIN_EXCLUSIONS_user_id_scope_canonical_subcategory_key').on(

@@ -57,8 +57,36 @@ export async function POST(request: NextRequest) {
   }
   if (frequency) nextFrequencyByDomain[matched] = frequency;
 
+  // Keep selectedDomains in lockstep for custom-mode players. The territory-
+  // setup save derives selectedDomains = every tagged, non-rested domain; this
+  // endpoint must preserve that invariant or a domain rested here keeps
+  // competing for daily slots via the stale list (observed in prod 2026-07-12:
+  // two rested domains held ~6 core slots in a week). Resting removes the
+  // domain from the list; tagging it with any active frequency — or undoing a
+  // rest back to the default — restores it, provided it's a real KB domain.
+  let nextSelectedDomains: string[] | undefined;
+  if (preferences.domainMode === 'custom') {
+    const inSelection = preferences.selectedDomains.some(
+      (existing) => existing.toLowerCase() === domainKey,
+    );
+    if (frequency === 'resting' && inSelection) {
+      nextSelectedDomains = preferences.selectedDomains.filter(
+        (existing) => existing.toLowerCase() !== domainKey,
+      );
+    } else if (frequency !== 'resting' && !inSelection) {
+      const isKnownDomain = knowledgeBase.some(
+        (entry) => entry.domain.toLowerCase() === domainKey,
+      );
+      const shouldRestore = frequency !== null || previousFrequency === 'resting';
+      if (isKnownDomain && shouldRestore) {
+        nextSelectedDomains = [...preferences.selectedDomains, matched];
+      }
+    }
+  }
+
   const updated = await updateDailyPreferences(session.userId, {
     domainPreferenceFrequency: nextFrequencyByDomain,
+    ...(nextSelectedDomains ? { selectedDomains: nextSelectedDomains } : {}),
   });
 
   // Frequency is a question-defining input, so drop untouched pre-built queues;

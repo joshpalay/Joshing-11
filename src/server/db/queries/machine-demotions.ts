@@ -6,7 +6,7 @@ import {
   resolveActiveIncorrectReportsForGenerated,
   resolveActiveIncorrectReportsForQuestion,
 } from '@/server/db/queries/content-reports';
-import { getReadyProposalsForQuestions, type SalvageProposalRow } from '@/server/db/queries/salvage-proposals';
+import { getLatestProposalsForQuestions, type SalvageProposalRow } from '@/server/db/queries/salvage-proposals';
 import { type QuestionSource, resolveAuthorDisplay } from '@/lib/questions-types';
 
 // B-CRAFTER-LIFECYCLE-01 Phase 1 — the MACHINE stream of the admin review queue.
@@ -48,6 +48,11 @@ export type MachineDemotionReviewItem = {
   // D-QUALITY-SALVAGE-01: a machine-proposed, pre-re-verified minimal fix awaiting
   // one-click approval. Present only when a 'ready' proposal exists for this row.
   proposal: SalvageProposalRow | null;
+  // The machine looked and found NO safe minimal fix (answer/premise at fault, or
+  // the proposed edit failed re-verification) — this card genuinely needs human
+  // judgment. Null alongside a null proposal ⇒ the salvage sweep hasn't reached
+  // this row yet. Mutually exclusive with `proposal`.
+  triage: { reason: string | null } | null;
 };
 
 // Demoted canonical questions awaiting a human call, oldest demotion first
@@ -85,22 +90,26 @@ export async function getMachineDemotionsForReview(): Promise<MachineDemotionRev
     )
     .orderBy(asc(questions.verifiedAt));
 
-  const proposals = await getReadyProposalsForQuestions(rows.map((r) => r.questionId));
+  const proposals = await getLatestProposalsForQuestions(rows.map((r) => r.questionId));
 
-  return rows.map((row) => ({
-    questionId: row.questionId,
-    questionText: row.questionText,
-    correctAnswer: row.correctAnswer,
-    explanation: row.explanation,
-    verificationReason: row.verificationReason,
-    verifiedAt: row.verifiedAt,
-    canonicalSubcategory: row.canonicalSubcategory,
-    broadCategory: row.broadCategory,
-    source: row.source,
-    creatorId: row.creatorId,
-    proposal: proposals.get(row.questionId) ?? null,
-    ...resolveAuthorDisplay(row.creatorId, row.source, row.authorName),
-  }));
+  return rows.map((row) => {
+    const latest = proposals.get(row.questionId) ?? null;
+    return {
+      questionId: row.questionId,
+      questionText: row.questionText,
+      correctAnswer: row.correctAnswer,
+      explanation: row.explanation,
+      verificationReason: row.verificationReason,
+      verifiedAt: row.verifiedAt,
+      canonicalSubcategory: row.canonicalSubcategory,
+      broadCategory: row.broadCategory,
+      source: row.source,
+      creatorId: row.creatorId,
+      proposal: latest?.status === 'ready' ? latest : null,
+      triage: latest?.status === 'unsalvageable' ? { reason: latest.reverifyReason } : null,
+      ...resolveAuthorDisplay(row.creatorId, row.source, row.authorName),
+    };
+  });
 }
 
 export type DemotionActionResult =

@@ -180,6 +180,65 @@ describe('prefilterForVerification — tightened explanation heuristic (2026-07-
   });
 });
 
+describe('prefilterForVerification — ambiguous_source (self-containment) routing', () => {
+  it('routes a fiction question that never names its own source', () => {
+    // The reported Phineas and Ferb case: the served card shows only the question
+    // text + broad category, never "Phineas and Ferb", so this is unanswerable.
+    const d = prefilterForVerification({
+      questionText:
+        "At the start of most episodes, Candace notices the boys' project and immediately reaches for her phone. Whom does she call to try to get them busted?",
+      answer: 'their mother',
+      canonicalSubcategory: 'Phineas and Ferb',
+    });
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('ambiguous_source');
+  });
+
+  it('does NOT route when the stem names its source', () => {
+    const d = prefilterForVerification({
+      questionText: "In Phineas and Ferb, what is the name of the boys' pet platypus?",
+      answer: 'Perry',
+      canonicalSubcategory: 'Phineas and Ferb',
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('ambiguous_source');
+    else expect(d.verdict).toBe('skipped');
+  });
+
+  it('matches the source via an alias the subcategory string also contains', () => {
+    // Stem says "Ulysses"; subcategory is "James Joyce's Ulysses" — the shared
+    // token means the source IS named, so no ambiguous_source route.
+    const d = prefilterForVerification({
+      questionText: 'In Ulysses, what newspaper does Leopold Bloom work for as an ad canvasser?',
+      answer: 'the Freemans Journal',
+      canonicalSubcategory: "James Joyce's Ulysses",
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('ambiguous_source');
+  });
+
+  it('does NOT route a self-contained concept question with no foreign proper noun', () => {
+    const d = prefilterForVerification({
+      questionText:
+        'What is the term for a carbon atom bonded to four different substituents that makes a molecule chiral?',
+      answer: 'stereocenter',
+      canonicalSubcategory: 'Organic Chemistry',
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('ambiguous_source');
+  });
+
+  it('is inert without a subcategory (existing callers unaffected)', () => {
+    const input = {
+      questionText:
+        "At the start of most episodes, Candace notices the boys' project and immediately reaches for her phone. Whom does she call to try to get them busted?",
+      answer: 'their mother',
+    };
+    const without = prefilterForVerification(input);
+    const withSub = prefilterForVerification({ ...input, canonicalSubcategory: 'Phineas and Ferb' });
+    if (without.needsVerification) expect(without.dimensions).not.toContain('ambiguous_source');
+    expect(withSub.needsVerification).toBe(true);
+    if (withSub.needsVerification) expect(withSub.dimensions).toContain('ambiguous_source');
+  });
+});
+
 describe('prefilterForVerification — purity / determinism', () => {
   it('returns the same decision on repeated calls (no hidden state)', () => {
     const input = { questionText: 'What is the capital of France?', answer: 'Paris' };

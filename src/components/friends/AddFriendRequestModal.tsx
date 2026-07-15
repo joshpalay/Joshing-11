@@ -130,8 +130,8 @@ export function AddFriendRequestModal({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.4)',
-          zIndex: 100,
+          background: 'var(--scrim)',
+          zIndex: 'var(--z-modal)',
         }}
       />
       <div
@@ -143,7 +143,7 @@ export function AddFriendRequestModal({
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          zIndex: 101,
+          zIndex: 'var(--z-modal)',
           width: 'min(520px, calc(100vw - 32px))',
           maxHeight: 'calc(100dvh - 64px)',
           overflowY: 'auto',

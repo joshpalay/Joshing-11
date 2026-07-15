@@ -69,7 +69,39 @@ const RETRIEVAL_TIMEOUT_MS = Math.max(
 
 const PASSAGE_MAX_CHARS = 1200;
 
-const RETRIEVAL_SYSTEM_PROMPT = `You retrieve ONE compact reference passage of established facts about a trivia domain, for grounding question generation. Use the web_search tool (it is restricted to Wikipedia and Fandom).
+// Which source the retriever should lead with for a domain. Default is
+// Wikipedia-first (the historic behavior + good for real-world topics). A deep
+// fan domain — sized off its Fandom category tree — must lead with FANDOM
+// in-universe canon instead, or it gets a shallow "game-as-product" Wikipedia
+// blurb (release date, studio, sales) that yields almost no fan-salient
+// questions. See resolveReferenceSourcePreference.
+export type ReferenceSourcePreference = 'wikipedia' | 'fandom';
+
+// Per-domain routing input, mirroring DomainDepthEstimate's resolution provenance.
+export type ReferenceRoutingHint = {
+  basis: string | null;
+  fandomHost: string | null;
+  wikipediaTitle: string | null;
+};
+
+/**
+ * Pure: pick the lead source for a domain from how it was SIZED. A domain sized
+ * off Fandom (basis `fandom:*`) or with a resolved dedicated Fandom wiki host is
+ * a deep fan domain whose questions live in in-universe canon — lead with Fandom.
+ * Everything else (Wikipedia-sectioned real-world topics, or unsized domains with
+ * no hint) keeps the Wikipedia-first default. Exported for unit tests.
+ */
+export function resolveReferenceSourcePreference(
+  hint: ReferenceRoutingHint | undefined,
+): ReferenceSourcePreference {
+  if (!hint) return 'wikipedia';
+  if (hint.fandomHost && hint.fandomHost.trim()) return 'fandom';
+  if (hint.basis && hint.basis.trim().toLowerCase().startsWith('fandom')) return 'fandom';
+  return 'wikipedia';
+}
+
+// The Wikipedia-first prompt (default / real-world topics).
+const RETRIEVAL_SYSTEM_PROMPT_WIKIPEDIA = `You retrieve ONE compact reference passage of established facts about a trivia domain, for grounding question generation. Use the web_search tool (it is restricted to Wikipedia and Fandom).
 
 Source tiering — NOT equal votes:
 1. Prefer Wikipedia. It is the primary anchor.
@@ -81,6 +113,50 @@ Write the passage yourself as plain factual sentences (max ${PASSAGE_MAX_CHARS} 
 Return ONE JSON object only, no prose outside it:
 { "found": true | false, "source": "wikipedia" | "fandom", "source_url": "<page url>", "passage": "<the passage>" }
 - found=false (omit the other fields) when neither source has real coverage.`;
+
+// The Fandom-first prompt (deep fan domains sized off a Fandom corpus). Leads
+// with in-universe canon and deliberately maximizes the DENSITY and VARIETY of
+// concrete facts in the single passage — the same 1,200 chars should surface as
+// many distinct, question-able facts as possible across characters, locations,
+// items/mechanics, events/story, and lore, because for these domains a shallow
+// overview is exactly what produces zero usable questions. Wikipedia is demoted
+// to at most high-level framing.
+const RETRIEVAL_SYSTEM_PROMPT_FANDOM = `You retrieve ONE dense reference passage of established IN-UNIVERSE facts about a deep fan domain (a game, show, book series, or franchise), for grounding trivia question generation. Use the web_search tool (it is restricted to Wikipedia and Fandom).
+
+Source tiering — NOT equal votes:
+1. Prefer FANDOM. This domain's questions live in its in-universe canon — characters, locations, items, abilities/mechanics, quests/events, factions, and lore. Read ONLY canon / factual sections. NEVER use Trivia, Behind the Scenes, Speculation, production/development, sales/reception, or fan-theory material.
+2. Use Wikipedia only for high-level framing if Fandom is thin — never as the primary anchor for a deep fan domain.
+3. If neither source has real in-universe coverage, say so — do not improvise from memory.
+
+Pack the passage with as MANY distinct, concrete, specific facts as fit (max ${PASSAGE_MAX_CHARS} characters), spread ACROSS facets — characters and who they are, named locations, specific items/abilities and what they do, specific quests/events and outcomes, factions, and named lore. Prefer the specific over the general: proper nouns, exact relationships, exact effects. No opinions, no production/meta facts (release date, studio, voice cast, sales), no plot-summary padding.
+
+Return ONE JSON object only, no prose outside it:
+{ "found": true | false, "source": "wikipedia" | "fandom", "source_url": "<page url>", "passage": "<the passage>" }
+- found=false (omit the other fields) when neither source has real in-universe coverage.`;
+
+function retrievalSystemPrompt(pref: ReferenceSourcePreference): string {
+  return pref === 'fandom' ? RETRIEVAL_SYSTEM_PROMPT_FANDOM : RETRIEVAL_SYSTEM_PROMPT_WIKIPEDIA;
+}
+
+/**
+ * Pure: the per-domain user message, scoped by any resolved source pages so the
+ * search lands on the right wiki instead of guessing. Exported for unit tests.
+ */
+export function buildRetrievalUserMessage(
+  domain: string,
+  hint: ReferenceRoutingHint | undefined,
+  pref: ReferenceSourcePreference,
+): string {
+  const lines = [`Domain: ${domain}`];
+  if (pref === 'fandom' && hint?.fandomHost?.trim()) {
+    lines.push(`This domain's canon lives on the Fandom wiki at ${hint.fandomHost.trim()} — search there first.`);
+  }
+  if (pref === 'wikipedia' && hint?.wikipediaTitle?.trim()) {
+    lines.push(`The primary Wikipedia article is titled "${hint.wikipediaTitle.trim()}".`);
+  }
+  lines.push('Retrieve the reference passage. JSON only.');
+  return lines.join('\n');
+}
 
 export type DomainReference = { source: 'wikipedia' | 'fandom'; passage: string };
 export type DomainReferences = ReadonlyMap<string, DomainReference>;
@@ -126,6 +202,11 @@ export function questionLeaksPassageText(questionText: string, passage: string):
  */
 export async function getReferencePassagesForDomains(
   domains: string[],
+  // Per-domain routing hints (keyed by the EXACT domain string in `domains`).
+  // Absent → Wikipedia-first default, byte-for-byte the prior behavior. A hint
+  // sized off Fandom routes retrieval to the in-universe-canon prompt so a deep
+  // fan domain grounds from the well that sized it (Layer 3).
+  hintByDomain?: ReadonlyMap<string, ReferenceRoutingHint>,
 ): Promise<Map<string, DomainReference>> {
   const result = new Map<string, DomainReference>();
   if (domains.length === 0) return result;
@@ -159,17 +240,19 @@ export async function getReferencePassagesForDomains(
 
   for (const domain of toFetch) {
     try {
+      const hint = hintByDomain?.get(domain);
+      const pref = resolveReferenceSourcePreference(hint);
       const response = await loggedMessagesCreate(
         client,
         'domain-reference',
         {
           model: REFERENCE_MODEL,
           max_tokens: 1500,
-          system: RETRIEVAL_SYSTEM_PROMPT,
+          system: retrievalSystemPrompt(pref),
           messages: [
             {
               role: 'user',
-              content: `Domain: ${domain}\nRetrieve the reference passage. JSON only.`,
+              content: buildRetrievalUserMessage(domain, hint, pref),
             },
           ],
           tools: [

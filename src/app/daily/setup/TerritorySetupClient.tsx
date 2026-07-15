@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import Link from 'next/link';
@@ -16,6 +15,7 @@ import { FrequencyMark } from '@/components/knowledge/FrequencyMark';
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
 import {
@@ -636,7 +636,7 @@ export function TerritorySetupClient({
 
       {dragState && draggingDomain ? (
         <div
-          className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2"
+          className="pointer-events-none fixed z-[var(--z-modal)] -translate-x-1/2 -translate-y-1/2"
           style={{ left: dragState.x, top: dragState.y }}
         >
           <DragPreview domain={draggingDomain} />
@@ -644,7 +644,7 @@ export function TerritorySetupClient({
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-[80] -translate-x-1/2">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2">
           <div
             role="status"
             aria-live="polite"
@@ -669,7 +669,7 @@ export function TerritorySetupClient({
 
       {pendingRemoval ? (
         <div
-          className="fixed inset-0 z-[70] grid place-items-center bg-[rgba(26,18,8,0.32)] px-6"
+          className="fixed inset-0 z-[var(--z-modal)] grid place-items-center bg-[var(--scrim)] px-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="throw-out-title"
@@ -1005,41 +1005,5 @@ function QuickMoveTargets({
         <Trash2 className="size-5" aria-hidden="true" />
       </button>
     </div>
-  );
-}
-
-function GhostTerritoryCircle({
-  territory,
-  disabled,
-  onAdd,
-}: {
-  territory: NearbyTerritory;
-  disabled: boolean;
-  onAdd: () => void;
-}) {
-  const color = getPortraitDomainColor(territory.broadCategory ?? 'General Knowledge');
-  const style = {
-    '--territory-border': `color-mix(in srgb, ${color.primary} 40%, transparent)`,
-    '--territory-text': color.text,
-  } as CSSProperties;
-
-  return (
-    <button
-      type="button"
-      className="flex w-full flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center opacity-70 transition hover:opacity-100 disabled:opacity-40"
-      style={style}
-      disabled={disabled}
-      onClick={onAdd}
-    >
-      <div className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--territory-border)] bg-white/35 text-[var(--territory-text)]">
-        <Plus className="size-5" aria-hidden="true" />
-      </div>
-      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--territory-text)]">
-        {territory.domain}
-      </span>
-      <span className="text-[10px] tracking-[0.14em] text-[var(--text-muted-warm)] uppercase">
-        Add
-      </span>
-    </button>
   );
 }

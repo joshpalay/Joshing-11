@@ -7,8 +7,10 @@ const { categorizeInterestDomainMock } = vi.hoisted(() => ({
 
 // Mutable fixture for the "currently active declared interests" the select
 // returns — each test sets it to drive the cap / idempotency branches.
+// exclusionDeletes counts the "revive an excluded domain" cleanup writes.
 const state = vi.hoisted(() => ({
   activeRows: [] as Array<{ domain: string; broadCategory: string | null }>,
+  exclusionDeletes: 0,
 }));
 
 // Keep the real isCatchAllBroadCategory logic; only stub the LLM call.
@@ -32,9 +34,19 @@ const txChain = () => {
   return c;
 };
 
+const deleteChain = () => {
+  const c: Record<string, unknown> = {};
+  c.where = () => {
+    state.exclusionDeletes += 1;
+    return Promise.resolve();
+  };
+  return c;
+};
+
 vi.mock('@/server/db', () => ({
   db: {
     select: () => selectChain(),
+    delete: () => deleteChain(),
     transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({ insert: () => txChain() }),
   },
   declaredInterests: {
@@ -46,6 +58,11 @@ vi.mock('@/server/db', () => ({
   playerMastery: {
     userId: 'playerMastery.userId',
     canonicalSubcategory: 'playerMastery.canonicalSubcategory',
+  },
+  userDomainExclusions: {
+    userId: 'userDomainExclusions.userId',
+    scope: 'userDomainExclusions.scope',
+    canonicalSubcategory: 'userDomainExclusions.canonicalSubcategory',
   },
   users: { id: 'users.id' },
   friendInvitations: {},
@@ -59,12 +76,16 @@ describe('addDeclaredInterest', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.activeRows = [];
+    state.exclusionDeletes = 0;
   });
 
   it('adds a new interest when under the cap', async () => {
     const result = await addDeclaredInterest('user-1', { label: 'Jazz', broadCategory: 'Music' });
     expect(result).toEqual({ created: true, domain: 'Jazz', broadCategory: 'Music' });
     expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
+    // Adding revives a previously "removed from map" domain: the matching
+    // subcategory exclusion is cleared alongside the insert.
+    expect(state.exclusionDeletes).toBe(1);
   });
 
   it('re-categorizes an uncategorized new interest', async () => {
@@ -84,6 +105,9 @@ describe('addDeclaredInterest', () => {
     const result = await addDeclaredInterest('user-1', { label: 'jazz' });
     expect(result).toEqual({ created: false, domain: 'Jazz', broadCategory: 'Music' });
     expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
+    // Even the no-op re-add clears a lingering exclusion, so "add it back"
+    // always revives a removed domain.
+    expect(state.exclusionDeletes).toBe(1);
   });
 
   it('rejects with DeclaredInterestLimitError when already at the cap', async () => {

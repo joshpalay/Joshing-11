@@ -19,7 +19,13 @@ import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
-import { TERRITORY_FREQUENCY_LABEL, type DomainPreferenceFrequency } from '@/lib/daily/territory-model';
+import {
+  TERRITORY_FREQUENCY_LABEL,
+  getNearbyTerritories,
+  type DomainPreferenceFrequency,
+  type NearbyTerritory,
+} from '@/lib/daily/territory-model';
+import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import type { MasteryTier } from '@/types/db';
 
@@ -114,7 +120,6 @@ function toPortraitEntry(domain: DomainMastery): PortraitEntry {
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
     authoredAnsweredCount: domain.questionsAnswered,
-    isHidden: Boolean(domain.isHidden),
   };
 }
 
@@ -248,14 +253,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
   const [interestError, setInterestError] = useState<string | null>(null);
   const [tidying, setTidying] = useState(false);
   const [tidyNotice, setTidyNotice] = useState<string | null>(null);
-  const [dismissedDomains, setDismissedDomains] = useState<string[]>([]);
-  const [reinstating, setReinstating] = useState<string | null>(null);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
   const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [hiddenOverrides, setHiddenOverrides] = useState<Record<string, boolean>>({});
-  const [hidePending, setHidePending] = useState<string | null>(null);
-  const [hideError, setHideError] = useState<string | null>(null);
 
   // Detail pop-up controller (shared with the peaks view): owns the optimistic
   // tree + rotation map and the frequency/adopt writes. `selectedLeaf` is the
@@ -283,18 +282,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
 
   useEffect(() => {
     let active = true;
-    const loadDismissedDomains = async () => {
-      try {
-        const response = await fetch('/api/feed/dismissed-domains', { cache: 'no-store', credentials: 'include' });
-        const body = await response.json().catch(() => null) as { domains?: string[] } | null;
-        if (active && response.ok && body?.domains) setDismissedDomains(body.domains);
-      } catch {
-        if (active) setDismissedDomains([]);
-      }
-    };
-
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial page hydration is fetched client-side for this route.
-    Promise.all([loadKnowledge(), loadDismissedDomains()])
+    loadKnowledge()
       .catch((caught) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Could not load your Knowledge Map.');
       })
@@ -341,28 +330,104 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     [data],
   );
 
-  const isDomainHidden = useMemo(() => {
-    return (domain: DomainMastery) => {
-      const override = hiddenOverrides[domain.displayName];
-      if (typeof override === 'boolean') return override;
-      return Boolean(domain.isHidden);
-    };
-  }, [hiddenOverrides]);
-
-  const annotatedDomains = useMemo(
-    () => sortedDomains.map((domain) => ({ ...domain, isHidden: isDomainHidden(domain) })),
-    [sortedDomains, isDomainHidden],
-  );
+  // Non-hidden domains feed the portrait and every public-facing surface (the
+  // share card, the "your mind" line, the point/territory signature). A domain
+  // set to private drops out here; that visibility is now managed per-domain on
+  // its detail page, not by an edit mode on this portrait.
   const visibleDomains = useMemo(
-    () => annotatedDomains.filter((domain) => !domain.isHidden),
-    [annotatedDomains],
+    () => sortedDomains.filter((domain) => !domain.isHidden),
+    [sortedDomains],
   );
-  const hiddenCount = annotatedDomains.length - visibleDomains.length;
 
   // Rotation word shown under every circle's name — resolves through the same
   // frequency map that seeds the detail pop-up, so face and sheet always agree.
   const frequencyLabelFor = (canonicalSubcategory: string): string =>
     TERRITORY_FREQUENCY_LABEL[resolveFrequency(canonicalSubcategory)];
+
+  // "Remove from your map" (detail pop-up, confirmed): writes a subcategory
+  // exclusion — the same removal the retired Configure page performed — then
+  // drops the circle optimistically and refreshes from the server, which now
+  // filters excluded domains out of the knowledge read.
+  const removeFromMap = async (canonicalSubcategory: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/users/domain-exclusions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ canonical_subcategory: canonicalSubcategory, scope: 'subcategory' }),
+      });
+      if (!response.ok) return false;
+    } catch {
+      return false;
+    }
+    const removedKey = freqKey(canonicalSubcategory);
+    setSelectedLeaf(null);
+    setData((previous) =>
+      previous
+        ? {
+            ...previous,
+            pageData: {
+              ...previous.pageData,
+              allDomains: previous.pageData.allDomains.filter(
+                (domain) => freqKey(domain.displayName) !== removedKey,
+              ),
+            },
+          }
+        : previous,
+    );
+    void loadKnowledge().catch(() => undefined);
+    return true;
+  };
+
+  // "Add a Territory" — ported from the retired Configure page. Suggestions
+  // come from the deterministic nearby-territory rules over the domains
+  // already held; the offset rotates the visible window per visit (set in a
+  // deferred frame, client-only, so SSR markup never disagrees).
+  const [suggestionOffset, setSuggestionOffset] = useState(0);
+  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() =>
+      setSuggestionOffset(Math.floor(Math.random() * 1000)),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  const nearbySuggestions = useMemo(
+    () => getNearbyTerritories(sortedDomains.map((domain) => domain.displayName)),
+    [sortedDomains],
+  );
+  const visibleNearby = useMemo(() => {
+    const SHOWN = 3;
+    if (nearbySuggestions.length <= SHOWN) return nearbySuggestions;
+    const start = suggestionOffset % nearbySuggestions.length;
+    return [...nearbySuggestions.slice(start), ...nearbySuggestions.slice(0, start)].slice(0, SHOWN);
+  }, [nearbySuggestions, suggestionOffset]);
+
+  const addSuggestion = async (territory: NearbyTerritory) => {
+    if (addingSuggestion) return;
+    setAddingSuggestion(territory.domain);
+    setSuggestError(null);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          label: territory.domain,
+          ...(territory.broadCategory ? { broadCategory: territory.broadCategory } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message ?? 'Could not add that territory.');
+      }
+      await loadKnowledge();
+    } catch (caught) {
+      setSuggestError(caught instanceof Error ? caught.message : 'Could not add that territory.');
+    } finally {
+      setAddingSuggestion(null);
+    }
+  };
 
   // A tapped circle (outside edit mode) opens the peaks detail pop-up. Prefer the
   // real tree leaf; fall back to a synthesized bare leaf for a domain the tree
@@ -374,13 +439,13 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
       setSelectedLeaf(fromTree);
       return;
     }
-    const domain = annotatedDomains.find((entry) => freqKey(entry.displayName) === key);
+    const domain = sortedDomains.find((entry) => freqKey(entry.displayName) === key);
     setSelectedLeaf(domain ? synthesizeLeaf(domain) : null);
   };
 
   const portraitEntries = useMemo(
-    () => (editMode ? annotatedDomains : visibleDomains).map(toPortraitEntry),
-    [annotatedDomains, visibleDomains, editMode],
+    () => visibleDomains.map(toPortraitEntry),
+    [visibleDomains],
   );
   // One entry per declared interest — no fixed slot count and no cap. The manage
   // modal renders these plus a trailing "add interest" affordance, so the list
@@ -406,7 +471,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
   };
   const yourMind = data ? displayMind(visibleDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
-  const hasAnything = annotatedDomains.length > 0;
+  const hasAnything = sortedDomains.length > 0;
 
   // Share payload for the Knowledge Portrait card, shared by the off-screen
   // capture card, the direct-share handler, and the modal fallback.
@@ -439,34 +504,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     // before the background capture finishes, fall back to the preview modal
     // (which captures on its own mount) rather than failing silently.
     if (!sharePortraitNow()) setShareModalOpen(true);
-  };
-
-  const toggleDomainHidden = async (canonicalSubcategory: string, nextHidden: boolean) => {
-    setHideError(null);
-    setHidePending(canonicalSubcategory);
-    setHiddenOverrides((current) => ({ ...current, [canonicalSubcategory]: nextHidden }));
-    try {
-      const response = await fetch(`/api/knowledge/${encodeURIComponent(canonicalSubcategory)}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ visibility: nextHidden ? 'private' : 'public' }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { message?: string } | null;
-        throw new Error(body?.message ?? 'Could not save that change.');
-      }
-    } catch (caught) {
-      setHiddenOverrides((current) => {
-        const next = { ...current };
-        delete next[canonicalSubcategory];
-        return next;
-      });
-      setHideError(caught instanceof Error ? caught.message : 'Could not save that change.');
-      window.setTimeout(() => setHideError(null), 3200);
-    } finally {
-      setHidePending((current) => (current === canonicalSubcategory ? null : current));
-    }
   };
 
   // openInterestModal is always triggered from within manage-interests, so closing returns there.
@@ -643,23 +680,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     window.setTimeout(() => setActiveModal(null), SUCCESS_HOLD_MS);
   };
 
-  const reinstateDomain = async (domain: string) => {
-    setReinstating(domain);
-    try {
-      const response = await fetch('/api/feed/dismiss-domain', {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ domain }),
-      });
-      if (response.ok) {
-        setDismissedDomains((current) => current.filter((d) => d !== domain));
-      }
-    } finally {
-      setReinstating(null);
-    }
-  };
-
   const confirmTidy = async () => {
     setTidying(true);
     try {
@@ -735,53 +755,78 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
 
       {hasAnything && (
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div>
-              <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
-              <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
-                {editMode ? 'TAP A CIRCLE TO HIDE OR SHOW IT' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditMode((current) => !current)}
-              className="shrink-0 min-h-8 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer"
-              aria-pressed={editMode}
-            >
-              {editMode ? 'Done' : 'Edit'}
-            </button>
+          <div className="mb-2">
+            <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
+            <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
+              SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;
+            </p>
           </div>
-
-          {editMode ? (
-            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)] leading-[1.5]">
-              Tap a circle to hide it from friends. Hidden circles stay visible to you here while editing.
-            </p>
-          ) : hiddenCount > 0 ? (
-            <p className="m-0 mb-2 text-[0.78rem] text-[var(--text-muted-warm)]">
-              {hiddenCount} hidden from friends —{' '}
-              <button
-                type="button"
-                className="underline bg-transparent border-none p-0 text-[var(--text-muted-warm)] cursor-pointer"
-                onClick={() => setEditMode(true)}
-              >
-                Edit to show
-              </button>
-            </p>
-          ) : null}
 
           <div id="portrait-circles-section">
             <PortraitCircles
               entries={portraitEntries}
-              editMode={editMode}
-              onToggleHidden={(canonical, nextHidden) => void toggleDomainHidden(canonical, nextHidden)}
-              pendingDomain={hidePending}
               frequencyLabelFor={frequencyLabelFor}
               onSelectDomain={openDomainDetail}
             />
-            {hideError ? (
-              <p className="mt-3 text-[0.78rem] text-[var(--cat-literature-text)] border border-[var(--cat-literature)]/40 p-2">{hideError}</p>
+          </div>
+
+          {/* Add a Territory — ported from the retired Configure page: nearby
+              suggestions from the shape of the map plus the create-your-own
+              flow (the existing declared-interests modal). */}
+          <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
+            <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
+            <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
+              {visibleNearby.length > 0
+                ? 'Suggestions based on the shape of your map — or create your own.'
+                : 'Create your own, and more suggestions will appear as your map grows.'}
+            </p>
+            <button
+              type="button"
+              className="btn-ghost gap-1.5"
+              onClick={() => setActiveModal({ type: 'manage-interests' })}
+            >
+              <Plus className="size-4" aria-hidden /> Create your own
+            </button>
+            {visibleNearby.length > 0 ? (
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {visibleNearby.map((territory) => (
+                  <GhostTerritoryCircle
+                    key={territory.domain}
+                    territory={territory}
+                    disabled={addingSuggestion !== null}
+                    onAdd={() => void addSuggestion(territory)}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {suggestError ? (
+              <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
             ) : null}
           </div>
+        </section>
+      )}
+
+      {/* First-territory moment — the retired Configure page's empty state,
+          now living where the map does. */}
+      {!hasAnything && (
+        <section
+          className="bg-[var(--brand-card)] border border-dashed border-[var(--border-warm)] p-6 text-center"
+          aria-label="Add your first territory"
+        >
+          <h2 className="m-0 font-[var(--font-serif)] text-2xl font-semibold text-[var(--ink)]">
+            Your map is ready for its first territory.
+          </h2>
+          <p className="mx-auto mt-2 max-w-sm text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+            Add something you&rsquo;d be delighted to be asked about, and Joshing will start shaping
+            around it.
+          </p>
+          <button
+            type="button"
+            className="btn-primary mx-auto mt-4 gap-1.5"
+            onClick={() => setActiveModal({ type: 'manage-interests' })}
+          >
+            <Plus className="size-5" aria-hidden /> Create your own
+          </button>
         </section>
       )}
 
@@ -800,29 +845,6 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
           </div>
         </section>
       ) : null}
-
-      {dismissedDomains.length > 0 && (
-        <section id="focused-feed" className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4 scroll-mt-4" aria-label="Hidden areas">
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">HIDDEN AREAS</p>
-          <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">DOMAINS YOU&rsquo;VE HIDDEN FROM YOUR FEED — UN-HIDE ANY TIME</p>
-          <div className="mt-3 flex flex-col gap-2">
-            {dismissedDomains.map((domain) => (
-              <div key={domain} className="flex items-center justify-between gap-2">
-                <span className="text-sm">{domain}</span>
-                <button
-                  type="button"
-                  className="border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]"
-                  onClick={() => void reinstateDomain(domain)}
-                  disabled={reinstating === domain}
-                  aria-label={`Un-hide ${domain} in your feed`}
-                >
-                  {reinstating === domain ? 'Un-hiding…' : 'Un-hide'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-3.5 px-1">
         <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
@@ -863,8 +885,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
       ) : null}
 
       {activeModal?.type === 'interests' ? (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+        <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-[var(--scrim)] p-4">
+          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
@@ -957,8 +979,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
       ) : null}
 
       {activeModal?.type === 'tidy' ? (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+        <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-[var(--scrim)] p-4">
+          <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Tidy up your map?</h2>
@@ -978,19 +1000,19 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
         </div>
       ) : null}
 
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]">{tidyNotice}</div> : null}
+      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] text-[0.88rem]">{tidyNotice}</div> : null}
       {questionToast ? (
         <div
           style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[60] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.16)] text-[0.88rem]"
+          className="fixed left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] text-[0.88rem]"
         >
           {questionToast}
         </div>
       ) : null}
 
       {activeModal?.type === 'manage-interests' ? (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+        <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-[var(--scrim)] p-4">
+          <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <div>
                 <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Manage interests</h2>
@@ -1019,7 +1041,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
                 </div>
               ))}
               <div className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
-                <button type="button" className="min-h-[104px] border border-dashed border-[#c8c0b0] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full h-full" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                <button type="button" className="min-h-[104px] border border-dashed border-[var(--warm-border-soft)] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full h-full" onClick={() => openInterestModal(declaredSlots.length, null)}>
                   <Plus className="size-4" />
                   Add interest
                 </button>
@@ -1033,8 +1055,8 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
       ) : null}
 
       {activeModal?.type === 'write-question' ? (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] px-5 pt-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+        <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-[var(--scrim)] p-4">
+          <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] px-5 pt-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
@@ -1056,7 +1078,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
           opened by tapping a circle. Backdrop tap closes; the card owns its X. */}
       {selectedLeaf ? (
         <div
-          className="fixed inset-0 z-[55] flex items-end justify-center bg-black/30 p-4 sm:items-center"
+          className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-[var(--scrim)] p-4 sm:items-center"
           onClick={() => setSelectedLeaf(null)}
         >
           <div className="w-[min(480px,100%)]" onClick={(event) => event.stopPropagation()}>
@@ -1074,6 +1096,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
               }}
               onAdd={adoptNode}
               onSetFrequency={setFrequency}
+              onRemove={removeFromMap}
             />
           </div>
         </div>

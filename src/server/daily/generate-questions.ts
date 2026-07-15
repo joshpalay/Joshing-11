@@ -52,6 +52,7 @@ import {
   coCalibrateRaisedEstimates,
   getCappedDomainKeys,
   getFandomHostedDomains,
+  getReferenceRoutingHints,
   recordSupplyYieldObservation,
 } from '@/server/db/queries/domain-depth-estimate';
 import { nearCompleteRatio } from '@/server/daily/supply-state';
@@ -183,6 +184,13 @@ STRIP-THE-DOMAIN TEST (Rule 2 — hard floor, ALL tiers including accessible):
 Before emitting, mentally remove the work's title from the question. If what remains could appear in any generic trivia app, the question is too generic — revise it. The angle, not just the subject, must be specific to the work.
 - PASSES: "In American Psycho, what color is Paul Allen's business card?" — strip the title and the angle is still specific to the work.
 - FAILS: "In Gilmore Girls, what is the name of Rory's first boyfriend?" — strip the title and it is generic teen-romance trivia.
+
+NAME THE SOURCE (Rule 2b — self-containment, hard floor, ALL tiers):
+The player is shown ONLY your question_text and a BROAD category label (e.g. "Film & Television") — NEVER the specific domain / canonical_subcategory you are generating for. So a question that leans on a specific work, franchise, series, character, or fictional world MUST name that source inside the question_text itself. A reader who has never heard of the domain must still know WHICH work you are asking about. Do not write for a reader who already knows the domain is set — you are the only one who sees it.
+- FAILS (source never named): "At the start of most episodes, Candace notices the boys' project and reaches for her phone. Whom does she call to try to get them busted?" — nothing tells the player this is Phineas and Ferb, so it is unanswerable out of context.
+- PASSES (source named): "In Phineas and Ferb, whom does Candace repeatedly call to try to get her brothers busted?"
+- This is distinct from Rule 2: naming the title is REQUIRED here (self-containment), while Rule 2 forbids the title being the ONLY thing that makes the question specific. A good question names the work AND has a work-specific angle.
+- EXEMPTION: real-world domains whose subject is unambiguous on its own — a country, a science, a historical period, a named public figure — do not need a "source" prefix when the question already identifies what it is about. The rule targets fiction and franchise questions that silently assume the reader knows the property.
 
 ONE CLEAN ANSWER (Rule 3 — ALL tiers):
 The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "he understands the language of birds"), re-aim the question so the answer is crisp (e.g. ask what specific ability the potion grants → "birdsong"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
@@ -2217,6 +2225,23 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       (domain) => domain,
     );
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
+    // 'resting' means "won't be asked" in custom mode too. The territory-setup
+    // save keeps rested domains out of selectedDomains, but the single-domain
+    // frequency endpoint didn't always sync the list, so prod rows can carry
+    // rested strays (observed 2026-07-12: two rested domains took ~6 core
+    // slots in a week). Filter here so the weighted path, the legacy path, AND
+    // the short-sample fallback below all honor the tag. If every selected
+    // domain is rested, keep the unfiltered list rather than starve the queue
+    // (mirrors random mode's all-rested fallback).
+    const restingSelected = new Set(
+      Object.entries(frequencyByDomain)
+        .filter(([, frequency]) => frequency === 'resting')
+        .map(([domain]) => domain.toLowerCase()),
+    );
+    const nonResting = selectable.filter(
+      (domain) => !restingSelected.has(domain.toLowerCase()),
+    );
+    const active = nonResting.length > 0 ? nonResting : selectable;
     if (isCustomDomainWeightingEnabled()) {
       // Change 1+2: deterministic, frequency-weighted, recency-aware sample of
       // just the day's domains. Handing generation a SHORT palette (≈ count) is
@@ -2225,17 +2250,17 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       // days. Falls back to the full set inside the helper if the weekly cap
       // would otherwise empty the palette.
       const sampled = selectCustomDomainsForRound(
-        selectable,
+        active,
         frequencyByDomain,
         recentDomainCounts,
         count,
       );
-      domainsForRound = sampled.length > 0 ? sampled : (selectable.length > 0 ? selectable : allDomains);
+      domainsForRound = sampled.length > 0 ? sampled : (active.length > 0 ? active : allDomains);
     } else {
       // Legacy path (CUSTOM_DOMAIN_WEIGHTING=0): order the WHOLE list least-recent
       // first, then by frequency rank, and hand it all to generation. Kept as an
       // instant, no-redeploy rollback for the weighted pick above.
-      const ordered = orderCustomDomainsByLeastRecent(selectable, recentDomainCounts);
+      const ordered = orderCustomDomainsByLeastRecent(active, recentDomainCounts);
       const frequencyRank = (domain: string) => {
         const frequency = frequencyByDomain[domain];
         if (frequency === 'often') return 0;
@@ -2248,9 +2273,9 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   } else {
     // Random mode: pick one domain per category for cross-category variety,
     // with a soft per-domain frequency cap applied via recentDomainCounts.
-    // 'resting' domains are honored here too (custom mode filters them out of
-    // selectedDomains upstream) so "Resting" means "won't be asked" in both
-    // modes; fall back to the full base if everything has been rested.
+    // 'resting' domains are honored here too (custom mode filters them in its
+    // branch above) so "Resting" means "won't be asked" in both modes; fall
+    // back to the full base if everything has been rested.
     const frequencyByDomain = preferences.domainPreferenceFrequency ?? {};
     const resting = new Set(
       Object.entries(frequencyByDomain)
@@ -2502,7 +2527,19 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       // (Spy School 0 vs 18), so canonical domains skip the retrieval entirely.
       const fandomDomains = await getFandomHostedDomains(domainsForLlm).catch(() => []);
       if (fandomDomains.length > 0) {
-        domainReferences = await getReferencePassagesForDomains(fandomDomains).catch((error) => {
+        // Layer 3 (source routing): these domains are all Fandom-hosted, so ground
+        // them from the SAME well that sized them — the in-universe-canon Fandom
+        // prompt, NOT the Wikipedia-first default that hands a deep fan domain a
+        // shallow game-as-product blurb (the Zelda: TotK 1,200-est / 0-yield case).
+        // The routing hints carry the resolved fandom_host so the search lands on
+        // the right wiki. Fail-open: no hints just means default (Wikipedia) routing.
+        const routingHints = await getReferenceRoutingHints(
+          fandomDomains.map((domain) => domainKey(domain)),
+        ).catch(() => new Map());
+        const hintByDomain = new Map(
+          fandomDomains.map((domain) => [domain, routingHints.get(domainKey(domain))]),
+        );
+        domainReferences = await getReferencePassagesForDomains(fandomDomains, hintByDomain).catch((error) => {
           console.warn('[daily/generate-questions] reference retrieval failed; proceeding unanchored', {
             userId,
             error: error instanceof Error ? error.message : String(error),

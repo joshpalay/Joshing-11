@@ -1,10 +1,6 @@
 type DismissedFeedBarProps = {
-  /** Visible category label for the mute affordance; omit/null to hide it. */
-  category: string | null
   /** Restores the full card — no side effects, nothing learned. */
   onUndo: () => void
-  /** The only mute path from here — wired to the existing category-mute handler. */
-  onMute: () => void
   disabled?: boolean
   /** The canonical answer to surface on the card back. null = none to show. */
   answer?: string | null
@@ -17,14 +13,11 @@ type DismissedFeedBarProps = {
 /**
  * The dismissed card rendered as the "back of the card": a solid muted surface
  * (no dashed border) that surfaces the question's answer, fetched on-demand when
- * the card is dismissed. Dismiss is view-state only; the deliberate
- * "Not into {category}?" second tap is the single place — alongside the "…"
- * menu — that fires the existing category mute.
+ * the card is dismissed. Dismiss is view-state only (Undo restores it) — the
+ * category-mute affordance was removed when feed-mute was retired.
  */
 export function DismissedFeedBar({
-  category,
   onUndo,
-  onMute,
   disabled,
   answer,
   answerLoading,
@@ -47,16 +40,6 @@ export function DismissedFeedBar({
           >
             Undo
           </button>
-          {category ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={onMute}
-              className="text-muted-foreground text-xs font-medium underline-offset-4 hover:underline disabled:opacity-50"
-            >
-              Not into {category}?
-            </button>
-          ) : null}
         </div>
       </div>
       <div className="mt-2">

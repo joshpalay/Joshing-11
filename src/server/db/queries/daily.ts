@@ -145,12 +145,25 @@ function normalizeDomain(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-type ScopedExclusions = {
+export type ScopedExclusions = {
   subcategories: Set<string>;
   broadCategories: Set<string>;
 };
 
-async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclusions> {
+// Exported for the queue orchestrator: custom-mode selection is constrained to
+// the player's explicit selectedDomains list, which getKnowledgeBase never
+// touches, so exclusions (permanent Mutes and active Rests) must be re-applied
+// there directly. Returns only ACTIVE exclusions (expired Rests already dropped).
+export async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclusions> {
+  // D-DOMAIN-REST-01: a row only excludes while it is ACTIVE — permanent mutes
+  // (rest_until IS NULL) always, and Rest rows only until their expiry. An
+  // expired Rest simply stops matching here, so the domain returns to
+  // circulation on the next queue build with no cron. Evaluated in SQL against
+  // now() so it's consistent with the DB clock.
+  const activeExclusion = and(
+    eq(userDomainExclusions.userId, userId),
+    or(isNull(userDomainExclusions.restUntil), sql`${userDomainExclusions.restUntil} > now()`),
+  );
   let rows: { domain: string; scope: 'subcategory' | 'broad_category' | 'category' }[];
   try {
     rows = await db
@@ -159,12 +172,14 @@ async function getExcludedKnowledgeDomains(userId: string): Promise<ScopedExclus
         scope: userDomainExclusions.scope,
       })
       .from(userDomainExclusions)
-      .where(eq(userDomainExclusions.userId, userId));
+      .where(activeExclusion);
   } catch (error) {
     if (pgErrorCode(error) === '42P01') return { subcategories: new Set(), broadCategories: new Set() };
-    // 42703 = scope column missing on a database where the additive migration
-    // hasn't landed yet. Fall back to a scope='subcategory' read so the feature
-    // degrades to its pre-migration behavior instead of failing.
+    // 42703 = the scope OR rest_until column is missing on a database where the
+    // additive migration (0036 / 0124) hasn't landed yet. Fall back to a
+    // scope='subcategory', treat-all-as-permanent read so the feature degrades
+    // to its pre-migration behavior instead of failing. No Rest rows can exist
+    // before 0124, so treating every row as active is correct in that window.
     if (pgErrorCode(error) === '42703') {
       const legacy = await db
         .select({ domain: userDomainExclusions.canonicalSubcategory })
@@ -355,6 +370,50 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
     .limit(1);
 
   return queue ?? null;
+}
+
+/**
+ * Overwrite each slot's denormalized `question_text` with the live text from
+ * its source row (GeneratedQuestion or canonical Question). Slots snapshot the
+ * text at assignment time, so an admin edit made after assignment never reaches
+ * the player otherwise — but grading always resolves the live row, so serving
+ * the snapshot risks grading against an answer the displayed question no longer
+ * asks for. Read-time only (nothing is persisted); a slot whose source row is
+ * gone keeps its snapshot, which is also why history surfaces (archive,
+ * summary, content reports) deliberately stay snapshot-first.
+ */
+export async function refreshQueueSlotQuestionTexts(slots: QueueSlot[]): Promise<QueueSlot[]> {
+  const generatedIds = [...new Set(slots.map((slot) => slot.generated_question_id).filter((id): id is string => Boolean(id)))];
+  const canonicalIds = [...new Set(slots.filter((slot) => !slot.generated_question_id).map((slot) => slot.question_id).filter((id): id is string => Boolean(id)))];
+  if (generatedIds.length === 0 && canonicalIds.length === 0) return slots;
+
+  const [generatedRows, canonicalRows] = await Promise.all([
+    generatedIds.length > 0
+      ? db
+          .select({ id: generatedQuestions.id, questionText: generatedQuestions.questionText })
+          .from(generatedQuestions)
+          .where(inArray(generatedQuestions.id, generatedIds))
+      : Promise.resolve<{ id: string; questionText: string }[]>([]),
+    canonicalIds.length > 0
+      ? db
+          .select({ id: canonicalQuestions.id, questionText: canonicalQuestions.questionText })
+          .from(canonicalQuestions)
+          .where(inArray(canonicalQuestions.id, canonicalIds))
+      : Promise.resolve<{ id: string; questionText: string }[]>([]),
+  ]);
+  const liveTextById = new Map(
+    [...generatedRows, ...canonicalRows]
+      .filter((row) => row.questionText)
+      .map((row) => [row.id, row.questionText]),
+  );
+
+  return slots.map((slot) => {
+    const sourceId = slot.generated_question_id ?? slot.question_id;
+    const liveText = sourceId ? liveTextById.get(sourceId) : undefined;
+    return liveText && liveText !== slot.question_text
+      ? { ...slot, question_text: liveText }
+      : slot;
+  });
 }
 
 /**
@@ -741,7 +800,12 @@ async function getDailyCatchupItems(
           expiresAt,
           expiresSoon: expiresWithin24Hours(expiresAt),
           questionId: question.id,
-          questionText: slot.question_text || question.questionText,
+          // Live text first: catch-up items are still answerable, and the
+          // answer/explainer beside them are read live — a post-assignment
+          // admin edit must reach the text too, or the player is graded
+          // against an answer the displayed question no longer asks for.
+          // The slot snapshot is only a fallback for a vanished row.
+          questionText: question.questionText || slot.question_text,
           correctAnswer: question.answer,
           alternateAnswers: [] as string[],
           explanation: question.explainer,
@@ -785,7 +849,8 @@ async function getDailyCatchupItems(
         expiresAt,
         expiresSoon: expiresWithin24Hours(expiresAt),
         questionId: question.id,
-        questionText: slot.question_text || question.questionText,
+        // Live-first for the same reason as the generated branch above.
+        questionText: question.questionText || slot.question_text,
         correctAnswer: question.answerText,
         alternateAnswers: question.acceptedAlternatives ?? [],
         explanation,

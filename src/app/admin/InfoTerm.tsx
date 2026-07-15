@@ -63,7 +63,7 @@ export function InfoTerm({
       {open ? (
         <span
           role="note"
-          className="absolute left-0 top-full z-[70] mt-1 block w-max max-w-[min(18rem,80vw)] rounded-md border px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal shadow-[var(--shadow-overlay)]"
+          className="absolute left-0 top-full z-[var(--z-modal)] mt-1 block w-max max-w-[min(18rem,80vw)] rounded-md border px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal shadow-[var(--shadow-overlay)]"
           style={{
             background: 'var(--brand-card)',
             borderColor: 'var(--border)',
