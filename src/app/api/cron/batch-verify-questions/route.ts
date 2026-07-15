@@ -26,6 +26,11 @@ import {
   verifyQuestion,
   type VerificationVerdict,
 } from '@/server/quality/verify-question';
+import {
+  isSalvageGeneratedOnDemoteEnabled,
+  salvageOrSuppressGeneratedDemote,
+  type GeneratedDemoteRow,
+} from '@/server/quality/salvage-generated';
 
 export const dynamic = 'force-dynamic';
 // Each row may make a Sonnet call plus an occasional web search; mirror the
@@ -67,10 +72,48 @@ type PendingRow = {
   broadCategory: string | null;
 };
 
-type Tally = { scanned: number; skipped: number; ok: number; demoted: number; unverifiable: number; failed: number };
+type Tally = {
+  scanned: number;
+  skipped: number;
+  ok: number;
+  demoted: number;
+  unverifiable: number;
+  failed: number;
+  // Generated-only: a demotion that was auto-repaired (re-verified minimal fix
+  // applied) and kept serving, instead of suppressed. See salvage-generated.ts.
+  salvaged: number;
+};
 
 function emptyTally(scanned: number): Tally {
-  return { scanned, skipped: 0, ok: 0, demoted: 0, unverifiable: 0, failed: 0 };
+  return { scanned, skipped: 0, ok: 0, demoted: 0, unverifiable: 0, failed: 0, salvaged: 0 };
+}
+
+// Salvage-aware application of a GENERATED demotion: try to auto-repair (keep
+// serving) before falling back to suppression. Returns the tally bucket touched.
+// Any fault inside resolves to 'demoted' (suppress) — never a silent serve-through.
+async function applyGeneratedDemote(
+  row: GeneratedDemoteRow,
+  reason: string,
+  now: Date,
+): Promise<'salvaged' | 'demoted'> {
+  const res = await salvageOrSuppressGeneratedDemote(row, reason, now);
+  return res.action === 'salvaged' ? 'salvaged' : 'demoted';
+}
+
+function fetchGeneratedRow(rowId: string): Promise<GeneratedDemoteRow | null> {
+  return db
+    .select({
+      id: generatedQuestions.id,
+      questionText: generatedQuestions.questionText,
+      answer: generatedQuestions.answer,
+      explanation: generatedQuestions.explainer,
+      canonicalSubcategory: generatedQuestions.canonicalSubcategory,
+      broadCategory: generatedQuestions.broadCategory,
+    })
+    .from(generatedQuestions)
+    .where(eq(generatedQuestions.id, rowId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 }
 
 function selectPending(limit: number, now: Date): Promise<[PendingRow[], PendingRow[]]> {
@@ -204,6 +247,15 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
       if (v.store === 'q') {
         await stampQuestion(v.rowId, v.outcome, now, v.reason);
         harvested.question[v.outcome] += 1;
+      } else if (v.outcome === 'demoted' && isSalvageGeneratedOnDemoteEnabled()) {
+        const row = await fetchGeneratedRow(v.rowId);
+        if (row) {
+          const bucket = await applyGeneratedDemote(row, v.reason ?? 'demoted (reason not captured)', now);
+          harvested.generated[bucket] += 1;
+        } else {
+          // Row vanished between submit and harvest — nothing to stamp.
+          harvested.stampFailures += 1;
+        }
       } else {
         await stampGenerated(v.rowId, v.outcome, now, v.reason);
         harvested.generated[v.outcome] += 1;
@@ -358,6 +410,17 @@ async function runSyncSweep(now: Date, options: PrefilterOptions) {
       const resolved = await resolveVerdict(row);
       if (resolved === 'failed') {
         generatedTally.failed += 1;
+        return;
+      }
+      // Salvage-aware: a demoted generated row gets one auto-repair attempt
+      // (keep serving) before suppression. Other verdicts stamp as usual.
+      if (resolved.verdict === 'demoted' && isSalvageGeneratedOnDemoteEnabled()) {
+        const bucket = await applyGeneratedDemote(
+          row,
+          resolved.reason ?? 'demoted (reason not captured)',
+          now,
+        );
+        generatedTally[bucket] += 1;
         return;
       }
       await stampGenerated(row.id, resolved.verdict, now, resolved.reason);
