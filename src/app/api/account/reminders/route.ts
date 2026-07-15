@@ -16,13 +16,19 @@ const bodySchema = z
     emailOptIn: z.enum(['opted_in', 'opted_out']).optional(),
     pendingEmail: z.string().trim().email().optional(),
     dismissed: z.literal(true).optional(),
+    // D-REMINDER-INTERSTITIAL-01: the one-time interstitial marks itself seen on
+    // both outcomes. May arrive alone (skip) or alongside pendingEmail/emailOptIn
+    // (sign-up) in a single PATCH. Stamps the interstitial column only, never the
+    // inline card's dismissed column (Decision D).
+    interstitialSeen: z.literal(true).optional(),
   })
   .refine(
     (b) =>
       b.smsOptIn !== undefined ||
       b.emailOptIn !== undefined ||
       b.pendingEmail !== undefined ||
-      b.dismissed === true,
+      b.dismissed === true ||
+      b.interstitialSeen === true,
     'must specify at least one change',
   );
 
