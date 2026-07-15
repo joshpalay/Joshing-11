@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Flag, Heart, MoreHorizontal, Share2, X } from 'lucide-react'
 import LoadingScreen from '@/components/LoadingScreen'
 import {
@@ -28,6 +29,7 @@ import type {
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
 import { RoundReminderCard } from './RoundReminderCard'
+import { ReminderInterstitial } from './ReminderInterstitial'
 import { InvitationTakeoverGate } from './InvitationTakeoverGate'
 import { ExpandDomainOfferCard } from './ExpandDomainOfferCard'
 import { FirstSessionPanel } from './FirstSessionPanel'
@@ -50,9 +52,18 @@ const titleStyle: CSSProperties = {
 }
 
 export default function DailySummaryPage() {
+  const router = useRouter()
   const [summary, setSummary] = useState<DailySummaryView | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // D-REMINDER-INTERSTITIAL-01 (E1): the one-time full-screen reminder ask fires
+  // when the player leaves this summary via a `/` path — the ✕, the "Session
+  // recap" header link, and "Back home". `/for-you` and `/knowledge` exits pass
+  // through unasked (the accepted leak). The ref makes it fire at most once per
+  // page view regardless of which `/` affordance is pressed; the server's
+  // reminder_interstitial_seen_at makes it fire at most once per account.
+  const [interstitialOpen, setInterstitialOpen] = useState(false)
+  const interstitialFiredRef = useRef(false)
   // B-FirstRecap-1: the one-time first-session panel shown inline at the top of
   // this summary on the user's first completed Daily Five. Null unless eligible
   // + not yet seen.
@@ -141,6 +152,24 @@ export default function DailySummaryPage() {
     return tomorrow.toLocaleDateString(undefined, { weekday: 'long' })
   }, [])
 
+  // Intercept the three `/` exits: if the reminder interstitial is eligible and
+  // has not yet fired this view, cancel the navigation and open it instead.
+  // Otherwise the Link navigates to `/` as normal. Skip/sign-up inside the
+  // interstitial proceed to `/` (Decision F1), honoring the exit that was pressed.
+  const handleExitHome = useCallback(
+    (event: React.MouseEvent) => {
+      if (
+        summary?.reminderInterstitialState === 'show' &&
+        !interstitialFiredRef.current
+      ) {
+        event.preventDefault()
+        interstitialFiredRef.current = true
+        setInterstitialOpen(true)
+      }
+    },
+    [summary],
+  )
+
   if (loading) {
     return <LoadingScreen fullScreen label="Loading summary" />
   }
@@ -178,6 +207,7 @@ export default function DailySummaryPage() {
       <div className="relative mx-auto max-w-3xl">
         <Link
           href="/"
+          onClick={handleExitHome}
           aria-label="Close session recap"
           className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring absolute top-0 right-0 z-10 inline-flex size-10 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
         >
@@ -191,6 +221,7 @@ export default function DailySummaryPage() {
         <header className={cn('pb-2', firstSessionRecap && 'mt-8')}>
           <Link
             href="/"
+            onClick={handleExitHome}
             className="text-muted-foreground inline-flex min-h-9 items-center text-sm font-medium underline-offset-4 transition hover:text-foreground hover:underline"
           >
             Session recap
@@ -296,7 +327,7 @@ export default function DailySummaryPage() {
             {tomorrowWeekday}’s five arrive at noon.
           </p>
           <div className="mt-3 flex flex-col items-center gap-2">
-            <Link className="btn-primary w-full" href="/">
+            <Link className="btn-primary w-full" href="/" onClick={handleExitHome}>
               Back home
             </Link>
             {pendingFriendQuestions > 0 ? (
@@ -317,6 +348,16 @@ export default function DailySummaryPage() {
           </div>
         </section>
       </div>
+
+      {/* D-REMINDER-INTERSTITIAL-01 (E1): the one-time reminder ask, mounted over
+          the summary when a `/` exit was intercepted. Both outcomes stamp the
+          seen column and proceed to `/`. */}
+      {interstitialOpen ? (
+        <ReminderInterstitial
+          hasVerifiedEmail={summary.hasVerifiedEmail}
+          onProceed={() => router.push('/')}
+        />
+      ) : null}
     </main>
   )
 }

@@ -62,6 +62,19 @@ export type DailySummaryView = {
   pendingFriendQuestions: number;
   isFirstCompletedRound: boolean;
   reminderPromptState: 'show' | 'hidden';
+  /**
+   * D-REMINDER-INTERSTITIAL-01: whether the one-time full-screen reminder
+   * interstitial should fire when the player exits this summary via a `/` path
+   * (✕, "Session recap", "Back home"). 'show' when reminder_interstitial_seen_at
+   * IS NULL and the player has not already engaged reminders. Independent of
+   * isFirstCompletedRound — E1 collapsed the first-session special case.
+   */
+  reminderInterstitialState: 'show' | 'hidden';
+  /**
+   * Whether the player already has a verified email — lets the interstitial's
+   * "Email me" opt them in with one tap instead of collecting an address.
+   */
+  hasVerifiedEmail: boolean;
   /** Contextual "Refine Your Game" offers derived from this daily (empty → reassurance state). */
   refine: RefineSectionView;
   /**
@@ -354,8 +367,12 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
 
   const { recentFriendBridge, pendingFriendQuestions } =
     await getFriendSummarySignals(userId);
-  const { isFirstCompletedRound, reminderPromptState } =
-    await computeReminderPromptState(userId, dateString, totalAnswered);
+  const {
+    isFirstCompletedRound,
+    reminderPromptState,
+    reminderInterstitialState,
+    hasVerifiedEmail,
+  } = await computeReminderPromptState(userId, dateString, totalAnswered);
   const refine: RefineSectionView = queue
     ? await buildRefineSection(userId, queue.id, slots)
     : { queueId: null, items: [] };
@@ -401,6 +418,8 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     pendingFriendQuestions,
     isFirstCompletedRound,
     reminderPromptState,
+    reminderInterstitialState,
+    hasVerifiedEmail,
     refine,
     expansionOffer,
   };
@@ -568,11 +587,68 @@ async function computeReminderPromptState(
   userId: string,
   todayString: string,
   todayAnswered: number,
-): Promise<{ isFirstCompletedRound: boolean; reminderPromptState: 'show' | 'hidden' }> {
-  // Today must have at least one answered slot to count as "completed".
+): Promise<{
+  isFirstCompletedRound: boolean;
+  reminderPromptState: 'show' | 'hidden';
+  reminderInterstitialState: 'show' | 'hidden';
+  hasVerifiedEmail: boolean;
+}> {
+  const hidden = {
+    isFirstCompletedRound: false,
+    reminderPromptState: 'hidden' as const,
+    reminderInterstitialState: 'hidden' as const,
+    hasVerifiedEmail: false,
+  };
+
+  // Today must have at least one answered slot to count as "completed" — the
+  // reminder surfaces only arrive on a summary the player actually finished.
   if (todayAnswered <= 0) {
-    return { isFirstCompletedRound: false, reminderPromptState: 'hidden' };
+    return hidden;
   }
+
+  // One read serves both reminder surfaces. The inline RoundReminderCard and the
+  // D-REMINDER-INTERSTITIAL-01 interstitial are separately gated: the card is
+  // first-completed-round only; the interstitial fires once ever (seen column
+  // null), independent of first-round, and its skip must never write the card's
+  // dismissed column (Decision D).
+  const [user] = await db
+    .select({
+      smsOptIn: users.smsOptIn,
+      emailOptIn: users.emailOptIn,
+      emailVerified: users.emailVerified,
+      email: users.email,
+      pendingEmail: users.pendingEmail,
+      reminderPromptDismissedAt: users.reminderPromptDismissedAt,
+      reminderInterstitialSeenAt: users.reminderInterstitialSeenAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) {
+    return hidden;
+  }
+
+  const hasVerifiedEmail = user.emailVerified && Boolean(user.email);
+
+  // Inline RoundReminderCard gate — unchanged: opted in (either channel) or
+  // dismissed retires it.
+  const cardNotEngaged =
+    user.smsOptIn === 'not_asked' &&
+    user.emailOptIn === 'not_asked' &&
+    user.reminderPromptDismissedAt === null;
+
+  // Interstitial: once ever (seen column null) for a player who has not engaged
+  // reminders at all. Also skips anyone with a signup already pending
+  // verification — firing a loud full-screen ask at someone mid-signup is noise.
+  // Deliberately NOT gated on first-completed-round: E1 collapsed the
+  // first-session special case, so it can fire on the very first summary too.
+  const reminderInterstitialState =
+    user.reminderInterstitialSeenAt === null &&
+    cardNotEngaged &&
+    user.pendingEmail === null
+      ? 'show'
+      : 'hidden';
 
   // Did the user complete any earlier daily queue? A queue counts as completed
   // when any of its slots has answered=true. We only need to know whether such
@@ -591,32 +667,14 @@ async function computeReminderPromptState(
     .limit(1);
 
   const isFirstCompletedRound = !prior;
-  if (!isFirstCompletedRound) {
-    return { isFirstCompletedRound: false, reminderPromptState: 'hidden' };
-  }
-
-  const [user] = await db
-    .select({
-      smsOptIn: users.smsOptIn,
-      emailOptIn: users.emailOptIn,
-      reminderPromptDismissedAt: users.reminderPromptDismissedAt,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (!user) {
-    return { isFirstCompletedRound: true, reminderPromptState: 'hidden' };
-  }
-
-  const show =
-    user.smsOptIn === 'not_asked' &&
-    user.emailOptIn === 'not_asked' &&
-    user.reminderPromptDismissedAt === null;
+  const reminderPromptState =
+    isFirstCompletedRound && cardNotEngaged ? 'show' : 'hidden';
 
   return {
-    isFirstCompletedRound: true,
-    reminderPromptState: show ? 'show' : 'hidden',
+    isFirstCompletedRound,
+    reminderPromptState,
+    reminderInterstitialState,
+    hasVerifiedEmail,
   };
 }
 

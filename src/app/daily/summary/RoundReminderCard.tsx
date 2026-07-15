@@ -56,7 +56,7 @@ export function RoundReminderCard({
       <section className="card mt-5 px-5 py-4">
         <h2 style={titleStyle}>Reminders</h2>
         <p className="text-foreground mt-2 text-sm leading-6">
-          Got it — we&apos;ll verify {state.email} and email you once reminders launch.
+          Got it — we&apos;ll verify {state.email} and email you when each day&apos;s five open.
         </p>
         <p className="text-muted-foreground mt-2 text-xs">
           <Link href="/users/me#notifications" className="underline underline-offset-2">
@@ -137,7 +137,7 @@ export function RoundReminderCard({
         <p className="mt-2 text-xs text-rose-700">{state.error}</p>
       ) : null}
       <p className="text-muted-foreground mt-3 text-xs leading-5">
-        We&apos;ll send a confirmation email once email reminders launch.
+        We&apos;ll send one note to confirm it&apos;s you, then a reminder the moment each day&apos;s five open.
       </p>
     </section>
   )

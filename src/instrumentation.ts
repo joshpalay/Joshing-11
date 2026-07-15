@@ -868,6 +868,24 @@ export async function register() {
       // creates it before this migration runs.
     }
 
+    // Migration 0125 (D-REMINDER-INTERSTITIAL-01) adds a nullable
+    // reminder_interstitial_seen_at column to User: the one-time full-screen
+    // reminder interstitial stamps it (on both sign-up and skip) so it fires at
+    // most once. The daily-summary query and PATCH /api/account/reminders read
+    // and write it, so a preview/production database that records the migration
+    // without the column present would fail there before migrate() can repair
+    // it. Additive + nullable — same repair rationale as the 0124 rest_until and
+    // 0037 reminder_prompt_dismissed_at guards.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "reminder_interstitial_seen_at" timestamptz
+      `);
+    } catch {
+      // User table may not exist yet on a fresh database — migrate() creates
+      // it before this migration runs.
+    }
+
     // Migration 0037 adds the EmailOptIn enum and four columns on User for the
     // round-open reminder opt-in (email_opt_in, email_verified, pending_email,
     // reminder_prompt_dismissed_at). If a preview/production database has this

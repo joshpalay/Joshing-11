@@ -55,6 +55,53 @@ describe('findAnswerLeaks', () => {
     expect([...result.toDrop].sort()).toEqual([0, 1]);
   });
 
+  it('drops an answer whose acronym short form is shown in the question (UX-design leak)', () => {
+    // Reported 2026-07-15: the answer spells out an acronym the stem already
+    // shows in short form. "User Experience (UX) design" collapses to "UX
+    // design", which is verbatim in the stem — the whole-answer substring test
+    // missed it because the stem never contains the expansion "User Experience".
+    const result = findAnswerLeaks([
+      q(
+        "In UX design, what term refers to the overall process of researching, designing, and improving the quality of a user's interaction with a product or service?",
+        'User Experience (UX) design',
+      ),
+    ]);
+    expect([...result.toDrop]).toEqual([0]);
+    expect(result.reasons[0]).toContain('User Experience (UX) design');
+  });
+
+  it('keeps an acronym-expansion answer whose short form is NOT in the question', () => {
+    // Same answer shape, but the stem never shows "UX design", so nothing leaks.
+    const result = findAnswerLeaks([
+      q(
+        'What field studies how people perceive, feel about, and interact with products they use?',
+        'User Experience (UX) design',
+      ),
+    ]);
+    expect(result.toDrop.size).toBe(0);
+  });
+
+  it('keeps a "what does the acronym stand for" question whose stem must show the acronym', () => {
+    // The acronym-collapse must NOT fire on bare-acronym expansions: a define-
+    // the-acronym question necessarily shows the acronym, and its answer is the
+    // expansion. Dropping these would delete a whole legitimate question type.
+    const result = findAnswerLeaks([
+      q('What does GPU stand for in computer hardware?', 'Graphics Processing Unit (GPU)'),
+      q('In finance, what does the acronym ROI represent?', 'Return on Investment (ROI)'),
+    ]);
+    expect(result.toDrop.size).toBe(0);
+  });
+
+  it('keeps an initials-identification question even when the stem contains the initials', () => {
+    // "Franklin D. Roosevelt (FDR)" collapses to the bare acronym "FDR". Even
+    // though the stem says "FDR", that is the SUBJECT being identified, not a
+    // leak — the answer is the full name. Must be kept.
+    const result = findAnswerLeaks([
+      q('Which U.S. president is commonly referred to by the initials FDR?', 'Franklin D. Roosevelt (FDR)'),
+    ]);
+    expect(result.toDrop.size).toBe(0);
+  });
+
   it('keeps a clean question whose answer is absent from the setup', () => {
     const result = findAnswerLeaks([
       q('What cognitive bias makes recent information feel more important?', 'Recency bias'),
