@@ -11,7 +11,7 @@ export function Hero({ isComplete }: { isComplete: boolean }) {
           style={{ backgroundColor: 'var(--cream-accent, currentColor)' }}
         />
         <p
-          className="text-muted-foreground text-[13px] italic"
+          className="text-muted-foreground text-quiet italic"
           style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
         >
           What else is around?
@@ -32,7 +32,7 @@ export function Hero({ isComplete }: { isComplete: boolean }) {
         className="h-px w-12"
         style={{ backgroundColor: 'var(--cream-accent, currentColor)' }}
       />
-      <p className="text-muted-foreground text-[13px]">
+      <p className="text-muted-foreground text-quiet">
         Five questions from your world. Play, then see what&rsquo;s around.
       </p>
     </header>

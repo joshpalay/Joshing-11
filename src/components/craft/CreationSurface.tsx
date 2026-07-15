@@ -611,7 +611,7 @@ function OwnQuestionCard({
         ) : null}
       </div>
       {error ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mt-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
@@ -961,7 +961,7 @@ function CandidateCard({
         <span className="text-muted-foreground text-xs">edit inline · check · keep</span>
       </div>
       {state.error && status === 'open' ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mt-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {state.error}
         </p>
       ) : null}

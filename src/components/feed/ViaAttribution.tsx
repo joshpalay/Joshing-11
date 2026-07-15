@@ -41,7 +41,7 @@ export function ViaAttribution({ answerers }: { answerers: ViaAnswerer[] }) {
   const hasMore = answerers.length > 1
 
   return (
-    <p className="text-[13px] leading-snug text-[var(--brand-ink-700)]">
+    <p className="text-quiet leading-snug text-[var(--brand-ink-700)]">
       <span className="opacity-70">Via </span>
       {expanded ? (
         // Full recency-ordered set, names never hidden.

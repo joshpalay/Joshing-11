@@ -140,7 +140,7 @@ export function InvitedClient({
             <span className="block text-sm font-semibold" style={{ color: 'var(--brand-navy)' }}>
               Add one yourself
             </span>
-            <span className="text-muted-foreground mt-0.5 block text-[13px] leading-relaxed">
+            <span className="text-muted-foreground mt-0.5 block text-quiet leading-relaxed">
               You clearly know this world. Write a question only a real fan would get — it gets
               fact-checked, then others who love this play it, usually within a day. (You
               won&apos;t see your own.)
@@ -168,7 +168,7 @@ export function InvitedClient({
               <span className="block text-sm font-semibold text-[var(--brand-ink)]">
                 Go broader
               </span>
-              <span className="text-muted-foreground mt-0.5 block text-[13px] leading-relaxed">
+              <span className="text-muted-foreground mt-0.5 block text-quiet leading-relaxed">
                 Climb out to the wider world this sits in — pick an area and it joins your daily
                 rotation.
               </span>
@@ -221,7 +221,7 @@ export function InvitedClient({
             <span className="block text-sm font-semibold text-[var(--brand-ink)]">
               Wait for more
             </span>
-            <span className="text-muted-foreground mt-0.5 block text-[13px] leading-relaxed">
+            <span className="text-muted-foreground mt-0.5 block text-quiet leading-relaxed">
               {/* Honest about the mechanism: new questions surface in the daily
                   — no notification machinery is promised that doesn't exist. */}
               New {invitation.domain} questions will show up in your daily when someone adds them.
@@ -232,7 +232,7 @@ export function InvitedClient({
 
       {note ? (
         <p
-          className="text-muted-foreground mt-4 rounded-md px-3 py-2.5 text-[13px] leading-relaxed"
+          className="text-muted-foreground mt-4 rounded-md px-3 py-2.5 text-quiet leading-relaxed"
           style={{ background: 'var(--surface-2)' }}
         >
           {note}

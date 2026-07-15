@@ -29,7 +29,7 @@ const CUSTOMIZE_DAILY_LINK_CLASS = [
   'transition-[background-color,border-color,transform]',
   'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-card)]',
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
-  'active:translate-y-px sm:px-3.5 sm:text-[13px]',
+  'active:translate-y-px sm:px-3.5 sm:text-quiet',
 ].join(' ');
 
 export function RefineYourGame({ refine }: { refine: RefineSectionView }) {

@@ -413,7 +413,7 @@ export default function WelcomeTourScreen({
               className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
+                <p className="text-quiet font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
                   Today&apos;s Five
                 </p>
                 <span
@@ -441,7 +441,7 @@ export default function WelcomeTourScreen({
 
             {/* Friends section — `friends` (For You + From Friends merged) */}
             <section data-tour="friends" className="mt-5">
-              <p className="mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+              <p className="mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
                 For you
               </p>
               {/* For You — mirrors SparkleEnvelope (the real directed-send card):
@@ -472,7 +472,7 @@ export default function WelcomeTourScreen({
                   <span className="btn-primary">Answer</span>
                 </div>
               </article>
-              <p className="mt-4 mb-2 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
+              <p className="mt-4 mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
                 From Friends
               </p>
               <div className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
@@ -500,7 +500,7 @@ export default function WelcomeTourScreen({
                   aced all five in Tennis Fundamentals this week — play the same set.
                 </p>
                 <div className="mt-3 flex items-center justify-end">
-                  <span className="text-[13px] font-semibold text-[var(--brand-ink-700)]">Play →</span>
+                  <span className="text-quiet font-semibold text-[var(--brand-ink-700)]">Play →</span>
                 </div>
               </div>
             </section>
@@ -509,7 +509,7 @@ export default function WelcomeTourScreen({
                 feed: a milestone row, then the sage "Overlap" common-ground band
                 (EditorialFeature, interlude-sage). */}
             <section data-tour="activity" className="mt-6">
-              <p className="mb-3 pl-0.5 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
+              <p className="mb-3 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
                 Recent activity
               </p>
               <div className="flex items-start gap-2.5 pl-0.5">
@@ -541,7 +541,7 @@ export default function WelcomeTourScreen({
                         style={{ background: d.color }}
                         aria-hidden="true"
                       />
-                      <span className="max-w-[120px] font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
+                      <span className="max-w-[120px] font-serif text-quiet leading-snug text-[var(--brand-ink-400)]">
                         {d.label}
                       </span>
                     </span>
@@ -550,10 +550,10 @@ export default function WelcomeTourScreen({
                 <p className="mt-4 font-serif text-[15px] font-semibold text-[var(--brand-ink)]">
                   {inviter}
                 </p>
-                <p className="mt-5 font-sans text-[13px] tracking-[0.12em] text-[var(--brand-ink-400)] uppercase">
+                <p className="mt-5 font-sans text-quiet tracking-[0.12em] text-[var(--brand-ink-400)] uppercase">
                   Shared ground with 1 friend
                 </p>
-                <span className="mt-3 inline-flex min-h-11 items-center font-sans text-[13px] font-medium tracking-[0.12em] text-[var(--ink)] uppercase underline underline-offset-4">
+                <span className="mt-3 inline-flex min-h-11 items-center font-sans text-quiet font-medium tracking-[0.12em] text-[var(--ink)] uppercase underline underline-offset-4">
                   Explore your overlap →
                 </span>
               </div>

@@ -135,7 +135,7 @@ export function NewTerritoryUndo({
               onClick={() => void handleSelect(frequency)}
               disabled={busy}
               aria-pressed={isSelected}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors disabled:opacity-60"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-quiet transition-colors disabled:opacity-60"
               style={{
                 fontWeight: isSelected ? 700 : 500,
                 color: isSelected ? GOLD_INK : 'var(--text-muted)',

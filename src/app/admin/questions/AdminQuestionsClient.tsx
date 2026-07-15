@@ -111,7 +111,7 @@ function FlagBadges({ row }: { row: AdminQuestionRow }) {
   );
 }
 
-const CELL = 'px-2 py-1.5 align-top text-[13px]';
+const CELL = 'px-2 py-1.5 align-top text-quiet';
 const HEAD = 'px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.04em]';
 const CONTROL = 'rounded-md border px-2 py-1.5 text-sm';
 
@@ -163,7 +163,7 @@ function Field({ label, value }: { label: string; value: string | number | boole
       <span className="text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
         {label}
       </span>
-      <span className="whitespace-pre-wrap break-words text-[13px]" style={{ color: 'var(--brand-ink)' }}>
+      <span className="whitespace-pre-wrap break-words text-quiet" style={{ color: 'var(--brand-ink)' }}>
         {scalar(value)}
       </span>
     </div>
@@ -177,11 +177,11 @@ function ListField({ label, values }: { label: string; values: string[] }) {
         {label}
       </span>
       {values.length === 0 ? (
-        <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-quiet" style={{ color: 'var(--text-muted)' }}>
           —
         </span>
       ) : (
-        <ul className="list-disc pl-4 text-[13px]" style={{ color: 'var(--brand-ink)' }}>
+        <ul className="list-disc pl-4 text-quiet" style={{ color: 'var(--brand-ink)' }}>
           {values.map((v, i) => (
             <li key={i} className="break-words">
               {v}
@@ -326,7 +326,7 @@ function EditForm({
     }
   }
 
-  const inputClass = 'w-full rounded-md border px-2 py-1.5 text-[13px]';
+  const inputClass = 'w-full rounded-md border px-2 py-1.5 text-quiet';
   const inputStyle = { borderColor: 'var(--border)', background: 'var(--brand-field)', color: 'var(--brand-ink)' };
   const labelClass = 'mb-1 block text-[11px] uppercase tracking-[0.04em]';
   const labelStyle = { color: 'var(--text-muted)' };
@@ -426,14 +426,14 @@ function EditForm({
       </div>
 
       {error ? (
-        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mb-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
 
       {confirming ? (
         <div
-          className="mb-3 rounded-md border px-3 py-2 text-[13px] leading-relaxed"
+          className="mb-3 rounded-md border px-3 py-2 text-quiet leading-relaxed"
           style={{ borderColor: 'var(--warning)', background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
         >
           <p className="font-semibold">Before this saves:</p>
@@ -555,7 +555,7 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {detail.deletedAt ? (
             <>
-              <span className="text-[13px]" style={{ color: 'var(--danger)' }}>
+              <span className="text-quiet" style={{ color: 'var(--danger)' }}>
                 Deleted {detail.deletedAt.slice(0, 10)}
               </span>
               <button
@@ -582,7 +582,7 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
               ) : null}
               {confirmingDelete ? (
                 <>
-                  <span className="text-[13px]" style={{ color: 'var(--brand-ink-700)' }}>
+                  <span className="text-quiet" style={{ color: 'var(--brand-ink-700)' }}>
                     Soft-delete? Hidden from players; stays under “Show deleted” and restorable.
                   </span>
                   <button
@@ -619,7 +619,7 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
           )}
         </div>
         {actionError ? (
-          <p className="mb-3 text-[13px]" style={{ color: 'var(--danger)' }}>
+          <p className="mb-3 text-quiet" style={{ color: 'var(--danger)' }}>
             {actionError}
           </p>
         ) : null}
