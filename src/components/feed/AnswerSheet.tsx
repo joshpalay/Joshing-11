@@ -56,7 +56,7 @@ export function AnswerSheet({
     <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center">
       <button
         type="button"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-[var(--scrim)]"
         onClick={onClose}
         aria-label="Dismiss"
       />

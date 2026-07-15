@@ -10,7 +10,7 @@ import type { StreamItem } from '@/lib/activity-stream'
 export function RecentActivitySection({ items }: { items: StreamItem[] }) {
   return (
     <section className="px-3">
-      <p className="mb-2 text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      <p className="mb-2 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         What&rsquo;s happening
       </p>
       {items.length === 0 ? (

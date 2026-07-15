@@ -509,7 +509,7 @@ export default function OnboardingFlow({
           {currentStep === 'setup' ? (
             <div className="flex flex-1 flex-col justify-center gap-8">
               <div className="space-y-3">
-                <p className="font-wordmark text-[13px] font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
+                <p className="font-wordmark text-quiet font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
                   Joshing
                 </p>
                 <StepHeader
@@ -636,7 +636,7 @@ export default function OnboardingFlow({
                   explainer frames the screen as remove-or-add when topics were
                   pre-seeded, or add-to-start when the invitee arrived with none. */}
               <div className="space-y-3">
-                <p className="font-wordmark text-[13px] font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
+                <p className="font-wordmark text-quiet font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
                   Joshing
                 </p>
                 <h1 className="font-serif text-4xl leading-tight font-semibold text-balance sm:text-5xl">

@@ -44,16 +44,16 @@ export function DismissedFeedBar({
       </div>
       <div className="mt-2">
         {answerLoading ? (
-          <span className="text-muted-foreground text-[13px] italic">
+          <span className="text-muted-foreground text-quiet italic">
             Revealing answer…
           </span>
         ) : answerError ? (
-          <span className="text-muted-foreground text-[13px] italic">
+          <span className="text-muted-foreground text-quiet italic">
             Answer unavailable
           </span>
         ) : answer ? (
           <p
-            className="text-[13px] italic"
+            className="text-quiet italic"
             style={{
               fontFamily: 'var(--font-serif)',
               color: 'var(--ink)',

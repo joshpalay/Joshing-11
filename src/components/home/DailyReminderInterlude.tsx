@@ -85,7 +85,7 @@ export function DailyReminderInterlude({
       </h2>
 
       {state.kind === 'saved' ? (
-        <p className="mt-3 text-[13px] leading-5 text-[var(--cream)]/90">
+        <p className="mt-3 text-quiet leading-5 text-[var(--cream)]/90">
           {state.message}{' '}
           <Link
             href="/users/me#notifications"
@@ -134,7 +134,7 @@ export function DailyReminderInterlude({
           <button
             type="submit"
             disabled={state.saving}
-            className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius-card)] bg-[var(--cream)] px-4 py-2 font-sans text-[13px] font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--cream)] focus-visible:outline-none disabled:opacity-45"
+            className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius-card)] bg-[var(--cream)] px-4 py-2 font-sans text-quiet font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--cream)] focus-visible:outline-none disabled:opacity-45"
           >
             {state.saving ? 'Saving…' : 'Email me'}
           </button>
@@ -148,7 +148,7 @@ export function DailyReminderInterlude({
               ? optInWithVerifiedEmail()
               : setState({ kind: 'expanded', value: '', error: null, saving: false })
           }
-          className="mt-3 inline-flex min-h-11 items-center font-sans text-[13px] font-medium tracking-[0.12em] text-[var(--cream)] uppercase underline underline-offset-4 transition hover:opacity-80 disabled:opacity-45"
+          className="mt-3 inline-flex min-h-11 items-center font-sans text-quiet font-medium tracking-[0.12em] text-[var(--cream)] uppercase underline underline-offset-4 transition hover:opacity-80 disabled:opacity-45"
         >
           {state.kind === 'opting-in' ? 'Saving…' : 'Turn on daily reminders →'}
         </button>

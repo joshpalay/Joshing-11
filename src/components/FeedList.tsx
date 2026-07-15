@@ -247,22 +247,22 @@ function RevealedAnswerLine({
 }) {
   if (state.status === 'loading') {
     return (
-      <span className="text-muted-foreground text-[13px] italic">Revealing answer…</span>
+      <span className="text-muted-foreground text-quiet italic">Revealing answer…</span>
     )
   }
   if (state.status === 'error') {
     return (
-      <span className="text-muted-foreground text-[13px] italic">Answer unavailable</span>
+      <span className="text-muted-foreground text-quiet italic">Answer unavailable</span>
     )
   }
   if (!state.answer) {
     return (
-      <span className="text-muted-foreground text-[13px] italic">No answer available</span>
+      <span className="text-muted-foreground text-quiet italic">No answer available</span>
     )
   }
   return (
     <p
-      className="text-[13px] italic"
+      className="text-quiet italic"
       style={{ fontFamily: 'var(--font-serif)', color: 'var(--ink)', opacity: 0.7 }}
     >
       Answer: {state.answer}
@@ -648,7 +648,7 @@ function OverflowRow({
   return (
     <Link
       href={href}
-      className={`flex min-h-11 items-center pt-1 text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] ${
+      className={`flex min-h-11 items-center pt-1 text-quiet font-medium tracking-[0.04em] text-[var(--brand-link)] ${
         unifiedHome ? 'pl-0.5' : ''
       }`}
     >
@@ -911,7 +911,7 @@ function FeedSectionHeading({
   // bare h2 normally, or the wrapper div when a subtitle pairs with it.
   const padClasses = subdued ? 'pt-1' : 'pt-4 first:pt-0'
   const typeClasses = prominent
-    ? 'text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)]'
+    ? 'text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)]'
     : subdued
       ? 'text-muted-foreground/50 text-[10px] font-medium tracking-[0.14em]'
       : 'text-muted-foreground/70 text-[11px] font-medium tracking-[0.12em]'
@@ -2173,7 +2173,7 @@ function FeedListContent({
           // aligned serif headline, the centered speech-bubble art, and a
           // right-aligned orange "add friends" link.
           <section className="py-4">
-            <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+            <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
               Questions from friends
             </p>
             <h2 className="mt-1 font-serif text-lg font-medium text-[var(--brand-ink)]">
@@ -2319,7 +2319,7 @@ function FeedListContent({
                       onClick={() =>
                         setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
                       }
-                      className={`flex min-h-11 items-center text-[13px] font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
+                      className={`flex min-h-11 items-center text-quiet font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
                         unifiedHome ? 'pl-0.5' : ''
                       }`}
                     >

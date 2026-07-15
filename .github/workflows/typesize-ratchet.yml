@@ -1,0 +1,22 @@
+# Type-size ratchet: fail the PR if arbitrary font-size usage (Tailwind
+# text-[Npx]/[Nrem] arbitraries) in src/ rises above the recorded ceiling.
+# The ceiling and the exemption list live in scripts/check-typesize-ratchet.mjs.
+# Independent of the other ratchets by design. The named scale — including
+# text-quiet, the ratified 13px register (STYLE-GUIDE-TYPE §3) — is on-system
+# and not counted. Inline fontSize styles are out of scope (see script header).
+name: Type-size ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  typesize-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-typesize-ratchet.mjs

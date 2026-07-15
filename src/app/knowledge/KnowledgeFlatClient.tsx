@@ -756,7 +756,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
       {hasAnything && (
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
           <div className="mb-2">
-            <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
+            <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
             <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
               SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;
             </p>
@@ -832,7 +832,7 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
 
       {emptyQuestionDomain ? (
         <section className="bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--brand-card))] border border-[color-mix(in_srgb,var(--accent-gold)_55%,var(--brand-border))] px-4 py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
+          <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
           <h2 className="mt-1.5 text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-2.5 mt-5">

@@ -50,6 +50,11 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    /* The quiet register (STYLE-GUIDE-TYPE §3): the app's ratified secondary
+       type size, one step under the 14px `text-sm` link register. Surfaces the
+       `text-quiet` utility. Font-size only — no paired line-height, so it is
+       a drop-in replacement for the text-[13px] arbitraries it retired. */
+    --text-quiet: 13px;
 }
 
 :root {

@@ -208,7 +208,7 @@ export function ReportReasonSheet({
                 <p
                   role="status"
                   aria-live="polite"
-                  className="mt-3 text-[13px]"
+                  className="mt-3 text-quiet"
                   style={{ color: 'var(--game-wrong-strong)' } as CSSProperties}
                 >
                   That didn&apos;t go through. Give it another go in a moment.

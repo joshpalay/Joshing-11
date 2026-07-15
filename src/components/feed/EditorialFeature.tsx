@@ -138,7 +138,7 @@ export function EditorialFeature({
       {supporting ? (
         <p
           className={cn(
-            isInterlude ? 'mt-5 text-[13px]' : 'mt-6 text-[13px]',
+            isInterlude ? 'mt-5 text-quiet' : 'mt-6 text-quiet',
             // On the home interludes the supporting line is "system voice":
             // Josefin caps + letterspacing, inverted to cream on the dark ground.
             isInterlude
@@ -162,7 +162,7 @@ export function EditorialFeature({
             'inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
             isInterlude ? 'mt-4' : 'mt-5',
             // Interlude CTAs carry the same Josefin caps system voice.
-            isInterlude && 'font-sans text-[13px] tracking-[0.12em] uppercase',
+            isInterlude && 'font-sans text-quiet tracking-[0.12em] uppercase',
             TONE_ACCENT[tone],
           )}
         >

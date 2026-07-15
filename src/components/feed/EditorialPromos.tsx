@@ -144,7 +144,7 @@ export function CommonGroundFeature({
                           ariaLabel={`${d.label}: shared with ${f.friendFirstName}, still untested`}
                         />
                       </span>
-                      <span className="max-w-[150px] font-serif text-[13px] leading-snug text-[var(--brand-ink-400)]">
+                      <span className="max-w-[150px] font-serif text-quiet leading-snug text-[var(--brand-ink-400)]">
                         {d.label}
                       </span>
                     </span>
