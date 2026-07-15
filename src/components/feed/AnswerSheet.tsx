@@ -53,14 +53,14 @@ export function AnswerSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-end justify-center">
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
         aria-label="Dismiss"
       />
-      <div className="relative w-full max-w-lg rounded-t-3xl bg-[var(--brand-card)] shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-t-3xl bg-[var(--brand-card)] shadow-[var(--shadow-overlay)]">
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           {visibleCategory ? (
             <p className="text-[0.68rem] font-semibold tracking-[0.18em] text-[var(--brand-ink-400)] uppercase">

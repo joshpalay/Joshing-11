@@ -1,0 +1,22 @@
+# Z-index ratchet: fail the PR if raw stacking-layer literals (Tailwind
+# z-[N] arbitraries, inline zIndex >= 30) in src/ rise above the recorded
+# ceiling. The ceiling and the exemption list live in
+# scripts/check-zindex-ratchet.mjs. Independent of the color/font/spacing/
+# radius ratchets by design. Consumers of the z-scale tokens (the
+# z-[var(--z-*)] arbitrary form) are on-system and not counted.
+name: Z-index ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  zindex-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-zindex-ratchet.mjs

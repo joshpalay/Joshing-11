@@ -249,7 +249,7 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
           </p>
           {inviteError ? <p className="mt-2 text-sm text-destructive">{inviteError}</p> : null}
           {inviteToast ? (
-            <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+            <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
               {inviteToast}
             </div>
           ) : null}

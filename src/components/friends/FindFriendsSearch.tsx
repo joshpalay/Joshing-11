@@ -213,7 +213,7 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
             <span
               aria-hidden
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-              style={{ background: swatch ?? '#888' }}
+              style={{ background: swatch ?? 'var(--brand-ink-400)' }}
             >
               {initials}
             </span>

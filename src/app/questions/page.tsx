@@ -592,9 +592,9 @@ function QuestionsPageContent() {
       )}
 
       {drawer.mode !== 'closed' ? (
-        <div className="fixed inset-0 z-[60] flex items-end bg-black/35 md:items-stretch md:justify-end" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end bg-[var(--scrim)] md:items-stretch md:justify-end" role="dialog" aria-modal="true">
           <button className="absolute inset-0 cursor-default" type="button" aria-label="Close" onClick={closeDrawer} />
-          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-xl md:h-full md:max-h-none md:w-[440px] md:rounded-none">
+          <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-[var(--shadow-overlay)] md:h-full md:max-h-none md:w-[440px] md:rounded-none">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
@@ -619,7 +619,7 @@ function QuestionsPageContent() {
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
           {toast}
         </div>
       ) : null}

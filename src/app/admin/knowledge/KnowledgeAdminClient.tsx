@@ -735,7 +735,7 @@ function KnowledgeTreeEditor({
           the old home AND adds the new one. Fixed to the bottom so it's in
           reach no matter where in a long tree the drop happened. */}
       {pendingDrop ? (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+        <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
             className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
@@ -781,7 +781,7 @@ function KnowledgeTreeEditor({
       {confirmMerge ? (
         // Deliberately NOT the same quiet card as the move/flip/pick bars — a
         // merge is the one irreversible act here, and it must look like one.
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+        <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
             className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--destructive-surface, var(--brand-card))', borderColor: 'var(--danger)', color: 'var(--brand-ink)' }}
@@ -820,7 +820,7 @@ function KnowledgeTreeEditor({
       ) : null}
       {/* The flip offer — a child dropped/placed onto its OWN parent. */}
       {pendingFlip ? (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+        <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
             className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
@@ -863,7 +863,7 @@ function KnowledgeTreeEditor({
           reach however deep in a long tree you've scrolled (the old top banner
           left you stranded in "Place here" land). */}
       {picking ? (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3">
+        <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
             className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}

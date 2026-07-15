@@ -56,7 +56,7 @@ export default function MasteryMoment({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 50,
+        zIndex: 'var(--z-takeover)',
         border: 'none',
         padding: '24px',
         cursor: 'pointer',

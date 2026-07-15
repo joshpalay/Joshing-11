@@ -207,7 +207,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
       {/* ── Full-screen review mode ─────────────────────────────────────── */}
       {playing ? (
         <div
-          className="fixed inset-0 z-[70] flex flex-col bg-background"
+          className="fixed inset-0 z-[var(--z-takeover)] flex flex-col bg-background"
           role="dialog"
           aria-modal="true"
           aria-label="Revisit review"

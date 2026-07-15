@@ -33,7 +33,7 @@ function readUserInvite(
 
 function TitleCard() {
   return (
-    <section className="w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5">
+    <section className="w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5">
       <h1 className="font-wordmark text-5xl leading-[52px] font-bold tracking-[4.8px] text-[var(--brand-ink-950)]">
         JOSHING
       </h1>
@@ -106,7 +106,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <TitleCard />
         <Suspense
           fallback={
-            <div className="h-72 w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] shadow-[0_4px_4px_0_rgba(0,0,0,0.25),0_4px_12px_0_rgba(40,32,30,0.04)] ring-1 ring-black/5" />
+            <div className="h-72 w-full max-w-sm rounded-2xl bg-[var(--brand-cream-card)] shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5" />
           }
         >
           <LoginPanel invitePrefill={invitePrefill} inviteContext={inviteContext} />

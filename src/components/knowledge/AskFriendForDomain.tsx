@@ -202,7 +202,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end bg-black/35 p-0 sm:items-center sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-end bg-[var(--scrim)] p-0 sm:items-center sm:justify-center sm:p-4"
       role="dialog"
       aria-modal="true"
     >

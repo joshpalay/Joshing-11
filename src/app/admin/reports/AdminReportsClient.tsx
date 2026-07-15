@@ -264,7 +264,7 @@ export function AdminReportsClient({
 
       {staged || toastError ? (
         <div
-          className="fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4"
+          className="fixed inset-x-0 bottom-24 z-[var(--z-toast)] flex justify-center px-4"
           role="status"
           aria-live="polite"
         >
@@ -382,8 +382,8 @@ function Modal({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center sm:items-center sm:p-4"
+      style={{ background: 'var(--scrim)' }}
     >
       <div
         className="max-h-[92dvh] w-full overflow-y-auto rounded-t-xl border sm:max-w-lg sm:rounded-xl"

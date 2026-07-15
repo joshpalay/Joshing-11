@@ -968,12 +968,12 @@ export default function DailyPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 60,
+            zIndex: 'var(--z-modal)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '1rem',
-            background: 'rgba(0,0,0,0.45)',
+            background: 'var(--scrim)',
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) dismissFirstRunIntro();

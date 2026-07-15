@@ -158,7 +158,7 @@ export function AnswerFeedbackSheet({
   const points = typeof pointsAwarded === 'number' ? pointsAwarded : 0
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-end justify-center">
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
@@ -168,8 +168,8 @@ export function AnswerFeedbackSheet({
       <div
         className={
           showNewTerritory
-            ? 'relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-2xl ring-2'
-            : 'relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-2xl'
+            ? 'relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--brand-card)] shadow-[var(--shadow-overlay)] ring-2'
+            : 'relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-[var(--shadow-overlay)]'
         }
         style={showNewTerritory ? { '--tw-ring-color': 'color-mix(in srgb, var(--accent-gold) 55%, transparent)' } as CSSProperties : undefined}
       >
@@ -409,8 +409,8 @@ export function AnswerFeedbackSheet({
 
       {report && isMenuOpen ? (
         <div
-          className="fixed inset-0 z-[58] flex items-end justify-center px-3 pt-16 pb-3 sm:items-start sm:pt-24"
-          style={{ background: 'rgba(0,0,0,0.2)' }}
+          className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center px-3 pt-16 pb-3 sm:items-start sm:pt-24"
+          style={{ background: 'var(--scrim-soft)' }}
         >
           <button
             type="button"
@@ -418,7 +418,7 @@ export function AnswerFeedbackSheet({
             aria-label="Close menu"
             onClick={() => setIsMenuOpen(false)}
           />
-          <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl">
+          <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-[var(--shadow-overlay)] sm:w-72 sm:rounded-2xl">
             <div className="flex items-center justify-between px-3 py-2 sm:hidden">
               <p className="text-foreground text-sm font-medium">More actions</p>
               <button
