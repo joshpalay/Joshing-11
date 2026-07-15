@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Share2, X } from 'lucide-react';
 
 import { ShareCard } from '@/components/ShareCard';
+import { Eyebrow, Reveal, Shell, roomTheme, type RoomTheme } from '@/components/ceremony/room';
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
@@ -62,15 +63,10 @@ const SANS = 'var(--font-sans)';
 const MONO = 'var(--font-mono)';
 
 // ── Per-room theme (token-backed) ───────────────────────────────────────────
-type RoomTheme = { bg: string; fg: string; accent: string; sub: string };
-function roomTheme(name: string): RoomTheme {
-  return {
-    bg: `var(--ceremony-${name}-bg)`,
-    fg: `var(--ceremony-${name}-fg)`,
-    accent: `var(--ceremony-${name}-accent)`,
-    sub: `var(--ceremony-${name}-sub)`,
-  };
-}
+// roomTheme / RoomTheme / Reveal / Eyebrow / Shell now live in
+// @/components/ceremony/room so the reminder interstitial can share the room
+// shell (D-REMINDER-INTERSTITIAL-01). Imported above; ceremony-specific room
+// sequencing (Pips, Hint, useTicker, …) stays here.
 const TH = {
   open: roomTheme('open'),
   mastered: roomTheme('mastered'),
@@ -121,81 +117,6 @@ function useTicker(active: boolean, reduced: boolean, ms = 950): number {
   if (!active) return 0;
   if (reduced) return 99;
   return t;
-}
-
-function Reveal({
-  show,
-  delay = 0,
-  reduced,
-  children,
-  style,
-}: {
-  show: boolean;
-  delay?: number;
-  reduced: boolean;
-  children: ReactNode;
-  style?: CSSProperties;
-}) {
-  return (
-    <div
-      style={{
-        opacity: show ? 1 : 0,
-        transform: show ? 'translateY(0)' : 'translateY(16px)',
-        transition: reduced
-          ? 'none'
-          : `opacity .65s ease ${delay}s, transform .65s cubic-bezier(.2,.7,.2,1) ${delay}s`,
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Eyebrow({ children, color }: { children: ReactNode; color: string }) {
-  return (
-    <div
-      style={{
-        fontFamily: MONO,
-        fontSize: 11,
-        letterSpacing: 4,
-        textTransform: 'uppercase',
-        color,
-        marginBottom: 20,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Shell({ th, children }: { th: RoomTheme; children: ReactNode }) {
-  // A room centers its content when it fits, but a tall beat (long question
-  // text, a long domain list) can exceed the viewport. `justify-content: center`
-  // would clip the overflow off both edges with no way to read it, so instead we
-  // let the room scroll and center via auto margins on the child — auto margins
-  // collapse to 0 when content overflows, keeping the top reachable rather than
-  // clipped. Extra top/bottom padding clears the pips and the "tap to continue"
-  // hint. Vertical drags scroll; a tap still advances (handled on <main>).
-  return (
-    <div
-      className="ceremony-room-in"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: th.bg,
-        display: 'flex',
-        flexDirection: 'column',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        padding: '72px 30px calc(72px + env(safe-area-inset-bottom))',
-      }}
-    >
-      <div className="w-full max-w-md" style={{ margin: 'auto' }}>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 function joinList(values: string[]): string {

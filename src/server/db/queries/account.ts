@@ -196,6 +196,10 @@ export type ReminderState = {
   pendingEmail: string | null;
   phoneNumber: string;
   reminderPromptDismissedAt: string | null;
+  // D-REMINDER-INTERSTITIAL-01: when the one-time full-screen interstitial was
+  // shown (both sign-up and skip stamp it). Null → never shown → still eligible.
+  // Deliberately separate from reminderPromptDismissedAt (Decision D).
+  reminderInterstitialSeenAt: string | null;
 };
 
 export async function getReminderState(userId: string): Promise<ReminderState | null> {
@@ -208,6 +212,7 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
       pendingEmail: users.pendingEmail,
       phoneNumber: users.phoneNumber,
       reminderPromptDismissedAt: users.reminderPromptDismissedAt,
+      reminderInterstitialSeenAt: users.reminderInterstitialSeenAt,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -223,6 +228,7 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
     pendingEmail: row.pendingEmail,
     phoneNumber: row.phoneNumber,
     reminderPromptDismissedAt: row.reminderPromptDismissedAt?.toISOString() ?? null,
+    reminderInterstitialSeenAt: row.reminderInterstitialSeenAt?.toISOString() ?? null,
   };
 }
 
@@ -231,6 +237,11 @@ export type ReminderPreferenceUpdate = {
   emailOptIn?: 'opted_in' | 'opted_out';
   pendingEmail?: string;
   dismissed?: true;
+  // D-REMINDER-INTERSTITIAL-01 Decision D: records that the one-time interstitial
+  // was shown. Stamps reminder_interstitial_seen_at ONLY — it must NOT write
+  // reminder_prompt_dismissed_at, so skipping the interstitial ("not now") never
+  // retires the standing inline RoundReminderCard ("never" is its "No thanks").
+  interstitialSeen?: true;
 };
 
 export type ReminderPreferenceResult =
@@ -264,6 +275,10 @@ export async function updateReminderPreferences(
   if (patch.emailOptIn !== undefined) set.emailOptIn = patch.emailOptIn;
   if (patch.pendingEmail !== undefined) set.pendingEmail = patch.pendingEmail;
   if (patch.dismissed === true) set.reminderPromptDismissedAt = new Date();
+  // Decision D: interstitialSeen stamps ONLY the interstitial column. Never
+  // reminderPromptDismissedAt — that stays reserved for the inline card's
+  // explicit "No thanks".
+  if (patch.interstitialSeen === true) set.reminderInterstitialSeenAt = new Date();
 
   await db.update(users).set(set).where(eq(users.id, userId));
 

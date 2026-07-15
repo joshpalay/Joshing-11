@@ -7,11 +7,9 @@ import TodaysFiveCard, {
 } from '@/components/TodaysFiveCard'
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
-import { DailyReminderInterlude } from '@/components/home/DailyReminderInterlude'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
-import { getReminderState } from '@/server/db/queries/account'
 import { getHomeFriendRequests } from '@/server/db/queries/friends'
 import { getPreSeededInterestsForUser } from '@/server/db/queries/users'
 import { buildHomeEdition } from '@/server/home/build-edition'
@@ -82,14 +80,10 @@ export default async function Home({
         <TodaysFiveCard />
       )}
 
-      {/* Daily-reminder prompt — a short full-bleed band directly under the
-          daily-five card. Signed-in only, and self-suppressing once the viewer
-          has opted in or dismissed it (see DailyReminderSection). */}
-      {session ? (
-        <Suspense fallback={null}>
-          <DailyReminderSection userId={session.userId} />
-        </Suspense>
-      ) : null}
+      {/* The home teal-band reminder prompt was retired by
+          D-REMINDER-INTERSTITIAL-01 (Decision C): the standing offer is now the
+          inline RoundReminderCard on the daily summary, plus the one-time
+          full-screen interstitial. */}
 
       {/* Pending follow requests — a quiet "Wants to connect" section at the head
           of the social content (below the daily-five + reminder block, above the
@@ -189,24 +183,6 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
         <MissedQuestionsCard count={missedCount} expiringCount={expiringCount} />
       ) : null}
     </>
-  )
-}
-
-async function DailyReminderSection({ userId }: { userId: string }) {
-  const state = await getReminderState(userId)
-  // Hide once the viewer has opted in, has a signup already pending verification,
-  // or has dismissed the prompt. Dismissal is permanent (reminderPromptDismissedAt
-  // is set on dismiss and never cleared here), so the band does not return.
-  if (
-    !state ||
-    state.emailOptIn === 'opted_in' ||
-    state.pendingEmail ||
-    state.reminderPromptDismissedAt
-  ) {
-    return null
-  }
-  return (
-    <DailyReminderInterlude hasVerifiedEmail={state.emailVerified && Boolean(state.email)} />
   )
 }
 
