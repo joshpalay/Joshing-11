@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import {
   BarChart3,
+  Bell,
   Code2,
   Compass,
   FileText,
@@ -287,6 +288,13 @@ export function AccountActions({
           title: 'Expansion offer card',
           subtitle: 'Preview the post-daily-Five “branch out” card',
           href: '/daily/summary/expand-preview',
+        },
+        {
+          kind: 'link',
+          icon: <Bell className="size-5" />,
+          title: 'Reminder interstitial',
+          subtitle: 'Preview the one-time email-reminder takeover on summary exit',
+          href: '/daily/summary/reminder-interstitial-preview',
         },
         {
           kind: 'link',

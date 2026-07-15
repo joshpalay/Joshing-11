@@ -45,6 +45,7 @@ type State =
 export function ReminderInterstitial({
   hasVerifiedEmail,
   onProceed,
+  preview = false,
 }: {
   // When the player already has a verified email, "Email me" opts them in with
   // one tap; otherwise it expands an inline email field.
@@ -52,10 +53,20 @@ export function ReminderInterstitial({
   // Called once the seen-stamp has been attempted (best-effort), to deliver the
   // player to the `/` exit they originally pressed. Never blocks on the network.
   onProceed: () => void
+  // Preview mode (admin/dev route): render the room and drive every state, but
+  // never touch the account — no seen-stamp, no opt-in, no pending email. The
+  // buttons still advance the local state so the flow can be reviewed.
+  preview?: boolean
 }) {
   const reduced = usePrefersReducedMotion()
   const th = roomTheme('open')
   const [state, setState] = useState<State>({ kind: 'ask' })
+
+  // In preview mode every write is a no-op that reports success, so the state
+  // machine advances exactly as it would live without mutating anything.
+  const save = preview
+    ? async () => true
+    : patchReminders
 
   // Staggered reveal on mount (CSS transition-delay via Reveal). Under reduced
   // motion, Reveal shows its children immediately with no transition.
@@ -67,13 +78,13 @@ export function ReminderInterstitial({
 
   async function skip() {
     setState({ kind: 'working' })
-    await patchReminders({ interstitialSeen: true })
+    await save({ interstitialSeen: true })
     onProceed()
   }
 
   async function optInWithVerifiedEmail() {
     setState({ kind: 'working' })
-    const ok = await patchReminders({ emailOptIn: 'opted_in', interstitialSeen: true })
+    const ok = await save({ emailOptIn: 'opted_in', interstitialSeen: true })
     if (ok) {
       setState({
         kind: 'done',
@@ -157,7 +168,7 @@ export function ReminderInterstitial({
                       return
                     }
                     setState({ ...state, saving: true, error: null })
-                    const ok = await patchReminders({
+                    const ok = await save({
                       pendingEmail: trimmed,
                       interstitialSeen: true,
                     })
