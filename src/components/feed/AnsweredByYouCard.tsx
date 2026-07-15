@@ -204,7 +204,7 @@ function AnsweredResult({
           <div
             role="status"
             aria-live="polite"
-            className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
+            className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2 text-quiet font-medium"
             style={{
               backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
               borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',
@@ -297,7 +297,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
 
         {item.personalMessage ? (
           <p
-            className="mt-2 text-[13px] italic leading-snug"
+            className="mt-2 text-quiet italic leading-snug"
             style={{
               fontFamily: 'var(--font-serif)',
               color: 'var(--ink)',

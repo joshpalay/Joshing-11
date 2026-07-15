@@ -226,7 +226,7 @@ export default function FriendRequestsSection({ initial }: FriendRequestsSection
     <section aria-labelledby="home-friend-requests-heading" className="space-y-3">
       <h2
         id="home-friend-requests-heading"
-        className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase"
+        className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase"
       >
         Wants to connect
       </h2>

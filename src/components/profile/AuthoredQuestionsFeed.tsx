@@ -131,14 +131,14 @@ function ProfileQuestionRow({
       {answered ? (
         <div className="mt-2">
           <p
-            className="text-[13px] font-medium"
+            className="text-quiet font-medium"
             style={{ color: 'var(--ink)', opacity: 0.7 }}
           >
             {isCorrect ? 'You answered ✓' : 'Reviewed privately'}
           </p>
           {result && !result.isCorrect && result.correctAnswer ? (
             <p
-              className="mt-1 text-[13px]"
+              className="mt-1 text-quiet"
               style={{ color: 'var(--ink)', opacity: 0.65 }}
             >
               Answer: {result.correctAnswer}
@@ -146,7 +146,7 @@ function ProfileQuestionRow({
           ) : null}
           {result?.explanation ? (
             <p
-              className="mt-1 text-[13px] italic leading-snug"
+              className="mt-1 text-quiet italic leading-snug"
               style={{ color: 'var(--ink)', opacity: 0.65 }}
             >
               {result.explanation}

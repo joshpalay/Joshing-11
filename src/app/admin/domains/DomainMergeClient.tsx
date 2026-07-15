@@ -664,7 +664,7 @@ function LabelPeek({ label }: { label: string }) {
 
   return (
     <div
-      className="mt-1 rounded-md border p-2 text-[13px]"
+      className="mt-1 rounded-md border p-2 text-quiet"
       style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
     >
       <p className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>

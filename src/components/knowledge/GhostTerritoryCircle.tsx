@@ -39,7 +39,7 @@ export function GhostTerritoryCircle({
       >
         <Plus className="size-5" aria-hidden="true" />
       </div>
-      <span className="max-w-full px-1 font-serif text-[13px] leading-tight break-words text-[var(--territory-text)]">
+      <span className="max-w-full px-1 font-serif text-quiet leading-tight break-words text-[var(--territory-text)]">
         {territory.domain}
       </span>
       <span className="text-[10px] tracking-[0.14em] text-[var(--text-muted-warm)] uppercase">

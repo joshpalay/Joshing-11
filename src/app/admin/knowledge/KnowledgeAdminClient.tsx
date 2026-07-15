@@ -737,7 +737,7 @@ function KnowledgeTreeEditor({
       {pendingDrop ? (
         <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
-            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-quiet shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
             aria-live="polite"
           >
@@ -783,7 +783,7 @@ function KnowledgeTreeEditor({
         // merge is the one irreversible act here, and it must look like one.
         <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
-            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-quiet shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--destructive-surface, var(--brand-card))', borderColor: 'var(--danger)', color: 'var(--brand-ink)' }}
             aria-live="polite"
           >
@@ -822,7 +822,7 @@ function KnowledgeTreeEditor({
       {pendingFlip ? (
         <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
-            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-quiet shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
             aria-live="polite"
           >
@@ -865,7 +865,7 @@ function KnowledgeTreeEditor({
       {picking ? (
         <div className="fixed inset-x-0 bottom-0 z-[var(--z-toast)] flex justify-center p-3">
           <div
-            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-[13px] shadow-[var(--shadow-overlay)]"
+            className="flex w-full max-w-lg flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-quiet shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--brand-navy)', color: 'var(--brand-ink-700)' }}
             aria-live="polite"
           >
@@ -906,7 +906,7 @@ function KnowledgeTreeEditor({
         </p>
       )}
       {error ? (
-        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mb-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
@@ -1050,7 +1050,7 @@ function UnfiledAreas({
         level; drag it into place). Biggest first.
       </p>
       {error ? (
-        <p className="mb-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mb-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
@@ -1829,7 +1829,7 @@ function TreeRow({
             flash that instance. The row you're on is marked, not linked. */}
         {placesOpen && parentCount > 1 ? (
           <div
-            className="mt-1 w-full rounded-md border p-2 text-[13px]"
+            className="mt-1 w-full rounded-md border p-2 text-quiet"
             style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
           >
             <p className="text-muted-foreground mb-1 text-xs">
@@ -1974,7 +1974,7 @@ function QuestionsPeek({
 
   return (
     <div
-      className="mt-1 w-full rounded-md border p-2 text-[13px]"
+      className="mt-1 w-full rounded-md border p-2 text-quiet"
       style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
     >
       {error ? (
@@ -2086,7 +2086,7 @@ function ParentSuggestions({
 
   return (
     <div
-      className="mt-1 w-full rounded-md border p-2 text-[13px]"
+      className="mt-1 w-full rounded-md border p-2 text-quiet"
       style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
     >
       <p className="text-muted-foreground mb-1.5 text-xs">
@@ -2218,7 +2218,7 @@ function StructureSuggester({
           <h2 className="font-serif text-lg font-semibold text-[var(--brand-ink)]">
             {graphIsEmpty ? 'Start here' : 'Suggest more structure'}
           </h2>
-          <p className="text-muted-foreground mt-0.5 text-[13px] leading-relaxed">
+          <p className="text-muted-foreground mt-0.5 text-quiet leading-relaxed">
             {graphIsEmpty
               ? 'The machine drafts a structure from the territories players actually hold; you review each group — tune the bar, untick what doesn’t belong, accept or dismiss. Nothing is saved until you accept.'
               : 'Draft groupings for territories not yet in the graph. You verify every group before anything is saved.'}
@@ -2240,13 +2240,13 @@ function StructureSuggester({
         </p>
       ) : null}
       {error ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mt-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
       {groups !== null && !loading ? (
         groups.length === 0 ? (
-          <p className="text-muted-foreground mt-2 text-[13px]">
+          <p className="text-muted-foreground mt-2 text-quiet">
             Nothing left to group{meta && meta.alreadyStructured > 0 ? ` — ${meta.alreadyStructured} labels are already structured` : ''}.
           </p>
         ) : (
@@ -2338,7 +2338,7 @@ function SuggestionList({
         ) : null}
       </div>
       {bulkError ? (
-        <p className="text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="text-quiet" style={{ color: 'var(--danger)' }}>
           {bulkError}
         </p>
       ) : null}
@@ -2455,7 +2455,7 @@ function SuggestedGroupCard({
           </label>
           <ul className="space-y-1">
             {group.children.map((child) => (
-          <li key={child.label} className="flex items-center gap-2 text-[13px]">
+          <li key={child.label} className="flex items-center gap-2 text-quiet">
             <label className="flex cursor-pointer items-center gap-2">
               <input
                 type="checkbox"
@@ -2475,7 +2475,7 @@ function SuggestedGroupCard({
             leaves, and substantive edges.
           </p>
           {error ? (
-            <p className="mt-1.5 text-[13px]" style={{ color: 'var(--danger)' }}>
+            <p className="mt-1.5 text-quiet" style={{ color: 'var(--danger)' }}>
               {error}
             </p>
           ) : null}
@@ -2517,7 +2517,7 @@ function OrphanCheck({
     <section className="mt-4 rounded-md border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
       <h2 className="mb-1 font-serif text-base font-semibold text-[var(--brand-ink)]">Orphans</h2>
       {orphanLeaves.length > 0 ? (
-        <p className="text-muted-foreground text-[13px] leading-relaxed">
+        <p className="text-muted-foreground text-quiet leading-relaxed">
           <span style={{ color: 'var(--warning)' }}>
             {orphanLeaves.length} leaf{orphanLeaves.length === 1 ? '' : 'ves'} with no substantive
             parent
@@ -2526,7 +2526,7 @@ function OrphanCheck({
         </p>
       ) : null}
       {emptyParents.length > 0 ? (
-        <p className="text-muted-foreground mt-1 text-[13px] leading-relaxed">
+        <p className="text-muted-foreground mt-1 text-quiet leading-relaxed">
           <span style={{ color: 'var(--warning)' }}>
             {emptyParents.length} parent{emptyParents.length === 1 ? '' : 's'} with an empty roster
           </span>{' '}
@@ -2608,7 +2608,7 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
           before the commit, with the actual names in it. */}
       {childKey && parentKey && childKey !== parentKey ? (
         <p
-          className="mt-2 rounded-md px-3 py-2 text-[13px] leading-relaxed"
+          className="mt-2 rounded-md px-3 py-2 text-quiet leading-relaxed"
           style={{ background: 'var(--surface-2)', color: 'var(--brand-ink-700)' }}
         >
           Adding <strong>{nodes.find((n) => n.domainKey === childKey)?.label ?? childKey}</strong> to{' '}
@@ -2618,7 +2618,7 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="mt-2 text-quiet" style={{ color: 'var(--danger)' }}>
           {notice}
         </p>
       ) : null}

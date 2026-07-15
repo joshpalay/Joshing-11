@@ -25,7 +25,7 @@ export function OverflowSubpageHeader({
       >
         <ArrowLeft className="size-5" strokeWidth={1.9} />
       </Link>
-      <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         {eyebrow}
       </p>
       <h1 className="mt-1 font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)]">
