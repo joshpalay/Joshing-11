@@ -70,6 +70,12 @@ export type SupplyReadout = {
    * generator failure (author/ground it), not a too-granular leaf (merge it up). */
   corpusEstimatedQuestions: number | null;
   fandomHost: string | null;
+  /** Refill-observation signals (0118): whether the finite-set generation loop has
+   * ever actually worked this domain — `hasEverYielded` = it once produced a
+   * surviving fact, `consecutiveDryRounds` > 0 = it was offered and came back dry.
+   * A RICH leaf with neither is UN-MINED, not exhausted (see the worklist filter). */
+  hasEverYielded: boolean;
+  consecutiveDryRounds: number;
 };
 
 // Same plain-speech vocabulary as the Supply view's STATE_LABEL — the two
@@ -421,13 +427,38 @@ function KnowledgeTreeEditor({
       if (threshold == null) return true; // no target set — deciding one is the work
       return (pointsByKey[k] ?? 0) < threshold; // still short of masterable
     };
+    // A RICH leaf (fandom-backed / deep corpus) that the finite-set refill has
+    // NEVER actually worked — never yielded a surviving fact AND never come back
+    // dry — is UN-MINED, not exhausted. Its high dup rate is a shallow-sample
+    // artifact: a fandom-backed topic estimated in the hundreds does not run dry
+    // in ~15 tries, and most of those "failures" are self-containment formatting
+    // demotions, not the topic running out. The fix is mechanical — set a target
+    // and let refill mine the wiki — not a human shrink/merge/hand-author call, so
+    // it does not belong in the decision queue. Gated on "never observed by refill"
+    // rather than a gen-count so a rich topic the machine HAS hammered and still
+    // can't yield (real generator failure) stays flagged as a genuine decision.
+    const unminedRichLeaf = (k: string) => {
+      const supply = supplyByKey[k];
+      return (
+        supply != null &&
+        isRichTopic(supply) &&
+        !supply.hasEverYielded &&
+        supply.consecutiveDryRounds === 0
+      );
+    };
     return Object.keys(exhaustedByKey)
-      .filter((k) => exhaustedByKey[k]?.self && nodeByKey.has(k) && needsDecision(k))
+      .filter(
+        (k) =>
+          exhaustedByKey[k]?.self &&
+          nodeByKey.has(k) &&
+          needsDecision(k) &&
+          !unminedRichLeaf(k),
+      )
       .sort(
         (a, b) =>
           parentLabelOf(a).localeCompare(parentLabelOf(b)) || labelOf(a).localeCompare(labelOf(b)),
       );
-  }, [exhaustedByKey, nodeByKey, parentsByChild, pointsByKey]);
+  }, [exhaustedByKey, nodeByKey, parentsByChild, pointsByKey, supplyByKey]);
 
   // "Show all the places and I can go to any of them" — jump to a specific
   // instance of a multi-parent node: expand every ancestor path of the target
@@ -1241,7 +1272,9 @@ function ExhaustedWorklist({
             stand alone, or <strong>hand-author / ground</strong> more if it&apos;s a rich
             topic the machine just failed. The <em>best guess</em> on each row is a
             heuristic, not a verdict — all three levers stay open. Leaves already holding
-            enough to master are hidden — nothing to decide there.
+            enough to master are hidden — nothing to decide there. Rich topics the
+            refill has never actually mined are hidden too — they need a generation
+            run, not a decision.
           </p>
           <ul className="space-y-1 px-2 pb-2">
           {leaves.map((key) => {

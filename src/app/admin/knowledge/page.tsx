@@ -164,6 +164,8 @@ export default async function AdminKnowledgePage() {
       capped: entry.generationCapped,
       corpusEstimatedQuestions: entry.corpusEstimatedQuestions,
       fandomHost: entry.fandomHost,
+      hasEverYielded: entry.lastYieldAt != null,
+      consecutiveDryRounds: entry.consecutiveDryRounds,
     };
   }
 
