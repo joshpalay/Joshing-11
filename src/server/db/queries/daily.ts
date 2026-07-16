@@ -711,18 +711,43 @@ async function getDailyCatchupItems(
   userId: string,
   assignmentDateStr: string,
 ): Promise<CatchupQuestion[]> {
-  const queues = await db
-    .select()
-    .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lte(dailyQueues.queueDate, assignmentDateStr),
-    ))
-    .orderBy(asc(dailyQueues.queueDate));
+  const [queues, preferences] = await Promise.all([
+    db
+      .select()
+      .from(dailyQueues)
+      .where(and(
+        eq(dailyQueues.userId, userId),
+        lte(dailyQueues.queueDate, assignmentDateStr),
+      ))
+      .orderBy(asc(dailyQueues.queueDate)),
+    getDailyPreferences(userId),
+  ]);
+
+  // Resting is the strongest "not now / not mine" signal a player can set on a
+  // domain. The "This is {Name}'s bag but not mine" opt-out on a +2 bonus rests
+  // the whole domain (via the domain-frequency route), and every other daily-
+  // selection surface — rotation, authored picks, house picks — already excludes
+  // rested domains (see resting-domains.test.ts). Catch-up was the one daily
+  // surface still replaying them, so a rested domain's missed questions kept
+  // nagging in "Catch up" — the exact "someone else's bag shouldn't come back as
+  // a missed question for me" complaint. Drop rested domains here too, keyed on
+  // the same normalized domain the preference is stored under.
+  const restingKeys = new Set(
+    Object.entries(preferences.domainPreferenceFrequency)
+      .filter(([, frequency]) => frequency === 'resting')
+      .map(([domain]) => normalizeDomain(domain).toLowerCase())
+      .filter(Boolean),
+  );
+  const isRestingDomain = (domain: string | null | undefined): boolean =>
+    typeof domain === 'string' && restingKeys.has(normalizeDomain(domain).toLowerCase());
 
   const candidateSlots = queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
-      .filter((slot) => isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) && isCatchUpSlotEligible(slot))
+      .filter((slot) =>
+        isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) &&
+        isCatchUpSlotEligible(slot) &&
+        !isRestingDomain(slot.domain),
+      )
       .map((slot) => ({ queue, slot }))
   );
 
