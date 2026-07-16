@@ -13,8 +13,8 @@ type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
 type OrderMode = 'category' | 'recency';
 type Tab = 'authored' | 'answered';
 // Capability 8 (B-4 Stage A): the CreateChooser passes a three-way intent that
-// pre-selects the composer's destinations. 'followers' maps to D-1 Stage 4's
-// 'friends' visibility (followers-only) — not a hardcoded 'public'.
+// pre-selects the composer's destinations. 'followers' is a legacy intent name
+// (friend = mutual follow now); it pre-checks "share with all friends".
 type CreateIntent = 'bank' | 'followers' | 'specific';
 type DrawerState =
   | { mode: 'closed' }
@@ -42,7 +42,10 @@ function createFormProps(intent: CreateIntent | null): {
 } {
   switch (intent) {
     case 'followers':
-      return { initialValues: { shareToFeed: true, visibility: 'friends' } };
+      // Followers are gone as a concept (friend = mutual follow); the picker
+      // no longer offers 'friends' visibility, so this intent now means
+      // "share with all friends" on the default (public) visibility.
+      return { initialValues: { shareToFeed: true } };
     case 'specific':
       return { initialSpecificMode: true };
     case 'bank':
