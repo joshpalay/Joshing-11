@@ -209,6 +209,40 @@ export type ApproveResult =
 // checked the reworked question (the route requires the reviewer to have seen a
 // verdict). Works on BOTH stores. Any active incorrect reports on the target
 // are resolved as admin_edited.
+type ApprovedContent = { questionText: string; answerText: string; explanation?: string | null };
+
+// Push approved content from a Question twin onto its served GeneratedQuestion
+// (B-TWIN-DRIFT-01). Content-only: the stem/answer/explainer that serving reads
+// live. The GeneratedQuestion's verification stamp is intentionally untouched —
+// the batch-verify sweep re-fact-checks it on its own cadence.
+async function mirrorContentToGenerated(generatedQuestionId: string, input: ApprovedContent): Promise<void> {
+  await db
+    .update(generatedQuestions)
+    .set({
+      questionText: input.questionText,
+      answer: input.answerText,
+      // explainer is non-null in the generated store; only overwrite when the
+      // edit supplies one (matches the approve-generated branch's convention).
+      ...(input.explanation ? { explainer: input.explanation } : {}),
+    })
+    .where(eq(generatedQuestions.id, generatedQuestionId));
+}
+
+// Inverse mirror: push approved content from a GeneratedQuestion onto every live
+// Question twin linked to it, keeping the admin/grading copy in lockstep. Bumps
+// updatedAt (the twin's own edit marker); leaves the verification stamp to the sweep.
+async function mirrorContentToTwins(generatedQuestionId: string, input: ApprovedContent, now: Date): Promise<void> {
+  await db
+    .update(questions)
+    .set({
+      questionText: input.questionText,
+      answerText: input.answerText,
+      ...(input.explanation !== undefined ? { factualExplanation: input.explanation ?? null } : {}),
+      updatedAt: now,
+    })
+    .where(and(eq(questions.generatedQuestionId, generatedQuestionId), isNull(questions.deletedAt)));
+}
+
 export async function approveEditedQuestion(
   target: ReviewTarget,
   input: { questionText: string; answerText: string; explanation?: string | null },
@@ -231,8 +265,16 @@ export async function approveEditedQuestion(
         updatedAt: now,
       })
       .where(and(eq(questions.id, target.id), isNull(questions.deletedAt)))
-      .returning({ id: questions.id });
+      .returning({ id: questions.id, generatedQuestionId: questions.generatedQuestionId });
     if (updated.length === 0) return { ok: false, reason: 'not_found' };
+    // Mirror the edit onto the linked GeneratedQuestion twin. Daily/bonus/catch-up
+    // serving reads the stem/answer/explainer LIVE from the GeneratedQuestion
+    // (daily.ts:833), so an edit that stops at the Question row never reaches the
+    // copy players are served (B-TWIN-DRIFT-01). Mirror content only — the twin's
+    // own verification stamp is left to the batch-verify sweep.
+    if (updated[0]?.generatedQuestionId) {
+      await mirrorContentToGenerated(updated[0].generatedQuestionId, input);
+    }
     const resolvedReports = await resolveActiveIncorrectReportsForQuestion(target.id, 'admin_edited');
     return { ok: true, resolvedReports };
   }
@@ -253,6 +295,10 @@ export async function approveEditedQuestion(
     .where(eq(generatedQuestions.id, target.id))
     .returning({ id: generatedQuestions.id });
   if (updated.length === 0) return { ok: false, reason: 'not_found' };
+  // Mirror onto any live Question twins linked to this GeneratedQuestion, so the
+  // admin surface + grading path stay in lockstep with the served copy (see the
+  // twin-branch note above). Content only; each twin's stamp is the sweep's job.
+  await mirrorContentToTwins(target.id, input, now);
   const resolvedReports = await resolveActiveIncorrectReportsForGenerated(target.id);
   return { ok: true, resolvedReports };
 }
