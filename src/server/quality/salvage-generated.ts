@@ -24,9 +24,9 @@
  * SALVAGE_GENERATED_ON_DEMOTE_ENABLED=false to revert to hard-suppress without a
  * deploy.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
-import { db, generatedQuestions } from '@/server/db';
+import { db, generatedQuestions, questions } from '@/server/db';
 import { proposeSalvage, type SalvageProposal } from '@/server/quality/salvage-question';
 import { verdictToGeneratedPatch, verifyQuestion } from '@/server/quality/verify-question';
 
@@ -129,6 +129,34 @@ export async function salvageOrSuppressGeneratedDemote(
         verificationReason: `salvaged: ${proposal.note}`.slice(0, 500),
       })
       .where(eq(generatedQuestions.id, row.id));
+
+    // Propagate the fix to the canonical Question twin (B-TWIN-DRIFT-01). Salvage
+    // corrects the generated row IN PLACE, but the twin was minted as a verbatim
+    // copy (persist-generated-question.ts) and is never re-synced here — so the
+    // admin/grading copy keeps serving the ORIGINAL wrong fact the salvage just
+    // removed. STALE-COPY GUARD: only overwrite a twin whose question_text still
+    // equals the pre-salvage generated stem — i.e. an untouched verbatim copy. A
+    // twin that has diverged was independently edited (possibly human_validated);
+    // we must NOT clobber that, so it's left for human reconciliation. The stamp
+    // is cleared so the batch-verify sweep re-checks the twin against the corrected
+    // text (mirrors editQuestionContent's "content changed -> re-verify").
+    await db
+      .update(questions)
+      .set({
+        ...(decision.proposedStem ? { questionText: decision.proposedStem } : {}),
+        ...(decision.proposedExplanation ? { factualExplanation: decision.proposedExplanation } : {}),
+        verificationVerdict: null,
+        verifiedAt: null,
+        verificationReason: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(questions.generatedQuestionId, row.id),
+          eq(questions.questionText, row.questionText),
+          isNull(questions.deletedAt),
+        ),
+      );
   }
   return { action: 'salvaged', note: `${proposal.kind}: ${proposal.note}` };
 }
