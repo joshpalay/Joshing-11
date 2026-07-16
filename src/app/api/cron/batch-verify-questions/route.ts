@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db, generatedQuestions, questions } from '@/server/db';
@@ -116,7 +116,7 @@ function fetchGeneratedRow(rowId: string): Promise<GeneratedDemoteRow | null> {
     .then((rows) => rows[0] ?? null);
 }
 
-function selectPending(limit: number, now: Date): Promise<[PendingRow[], PendingRow[]]> {
+function selectPending(limit: number): Promise<[PendingRow[], PendingRow[]]> {
   return Promise.all([
     db
       .select({
@@ -147,7 +147,11 @@ function selectPending(limit: number, now: Date): Promise<[PendingRow[], Pending
       .where(and(
         isNull(generatedQuestions.verifiedAt),
         eq(generatedQuestions.isDuplicate, false),
-        gt(generatedQuestions.expiresAt, now),
+        // NO expires_at gate: the pool is DURABLE (D8) — pickBankSource serves
+        // rows with no age/expiry filter, so a past-expiry row still reaches
+        // players and must still be verifiable. Gating on expires_at > now here
+        // stranded ~65 serving-but-expired rows permanently outside the sweep
+        // (2026-07-15). Verification eligibility must mirror serving eligibility.
       ))
       .limit(limit),
   ]) as Promise<[PendingRow[], PendingRow[]]>;
@@ -276,7 +280,7 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
   let submitted: { providerBatchId: string; requestCount: number } | null = null;
   const submitTallies = { question: emptyTally(0), generated: emptyTally(0) };
   if (harvest.runsStillProcessing === 0) {
-    const [pendingQuestions, pendingGenerated] = await selectPending(ASYNC_BATCH_SIZE, now);
+    const [pendingQuestions, pendingGenerated] = await selectPending(ASYNC_BATCH_SIZE);
     submitTallies.question.scanned = pendingQuestions.length;
     submitTallies.generated.scanned = pendingGenerated.length;
 
@@ -351,7 +355,7 @@ async function runAsyncSweep(now: Date, options: PrefilterOptions) {
 // ─── Sync mode (the original inline path) ────────────────────────────────────
 
 async function runSyncSweep(now: Date, options: PrefilterOptions) {
-  const [pendingQuestions, pendingGenerated] = await selectPending(BATCH_SIZE, now);
+  const [pendingQuestions, pendingGenerated] = await selectPending(BATCH_SIZE);
 
   const questionTally = emptyTally(pendingQuestions.length);
   const generatedTally = emptyTally(pendingGenerated.length);
