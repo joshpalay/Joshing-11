@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { Gamepad2, Pencil, Send, Users } from 'lucide-react';
 
 // Capability 8: creating a question is a three-way choice surfaced up front —
-// bank it only, send to your followers, or send to specific people. Sending
+// bank it only, send to your friends, or send to specific people. Sending
 // always banks it too; these intents pre-select the matching destinations in
-// the composer (the form still lets you adjust before saving). The
-// 'send-to-followers' intent maps to the D-1 Stage 4 'friends' visibility
-// (followers-only), not a hardcoded 'public'.
+// the composer (the form still lets you adjust before saving). 'followers' is
+// a legacy intent name (friend = mutual follow now); it pre-checks the
+// composer's "share with all friends" destination.
 type CreateIntent = 'bank' | 'followers' | 'specific';
 
 const QUESTION_OPTIONS: ReadonlyArray<{
@@ -27,8 +27,8 @@ const QUESTION_OPTIONS: ReadonlyArray<{
   {
     intent: 'followers',
     icon: Users,
-    title: 'Send to followers',
-    description: 'Share it with everyone who follows you (also banked).',
+    title: 'Send to friends',
+    description: 'Share it with all your friends (also banked).',
   },
   {
     intent: 'specific',
