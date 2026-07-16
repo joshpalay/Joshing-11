@@ -113,6 +113,50 @@ describe.skipIf(!evalsEnabled)('verifyQuestion — web-grounded (live)', () => {
     EVAL_TIMEOUT_MS,
   );
 
+  // Reported 2026-07-15 (Josh): the verifier stamped this 'ok' because it
+  // confirmed the PREMISE (the book is ABOUT a White House mission) and read that
+  // as confirming the PROPORTION the question actually asks ("bulk of the action"
+  // — in fact only the first 3-4 chapters). The proportion clause added to
+  // false_premise must now settle it as unverifiable (sources describe the hook,
+  // not scene distribution) or demoted — anything but a false 'ok'.
+  it(
+    'does not falsely OK the Spy School "bulk of the action" proportion overstatement',
+    async () => {
+      const result = await mod.verifyQuestion({
+        questionText:
+          "In Spy School Secret Service, Ben's mission takes him to a location that is both the most famous address in America and a genuinely dangerous operational environment. Where does the bulk of the action in that book take place?",
+        answer: 'The White House',
+        explanation:
+          'Spy School Secret Service places Ben inside the White House as part of a mission involving the Secret Service detail.',
+        canonicalSubcategory: 'Spy School Books 1-6',
+        broadCategory: 'Literature',
+        dimensions: ['false_premise'],
+      });
+      expect(result?.outcome).not.toBe('ok');
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  // Reported 2026-07-15 (Josh): the clue misattributes the AGENT — Yunobo's Vow
+  // launches YUNOBO as the flaming boulder, not Link. The answer ("Yunobo's Vow")
+  // is correct, so only the false_premise agent-attribution check can catch it.
+  it(
+    'catches the Tears of the Kingdom agent-misattribution (Yunobo, not Link, becomes the sphere)',
+    async () => {
+      const result = await mod.verifyQuestion({
+        questionText:
+          "In Tears of the Kingdom, the sages who aid Link each bestow a power tied to their element. The Goron sage's ability lets Link roll into enemies as a flaming sphere. What is this sage power called?",
+        answer: "Yunobo's Vow / Vow of Yunobo",
+        explanation: null,
+        canonicalSubcategory: 'The Legend of Zelda Tears of the Kingdom',
+        broadCategory: 'Gaming',
+        dimensions: ['false_premise'],
+      });
+      expect(result?.outcome).not.toBe('ok');
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
   it(
     'leaves a clean mainstream question alone',
     async () => {
