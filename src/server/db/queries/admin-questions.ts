@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 
-import { db, questions, users } from '@/server/db';
+import { db, generatedQuestions, questions, users } from '@/server/db';
 import { resolveAuthorDisplay, parseQuestionSource } from '@/lib/questions-types';
 import { resolveFinestNode } from '@/server/knowledge/graph';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
@@ -207,7 +207,7 @@ export async function adminEditQuestion(
 
   // Only edit rows that still exist (deleted rows are restored first, not edited).
   const [existing] = await db
-    .select({ publicStatus: questions.publicStatus })
+    .select({ publicStatus: questions.publicStatus, generatedQuestionId: questions.generatedQuestionId })
     .from(questions)
     .where(and(eq(questions.id, id), isNull(questions.deletedAt)))
     .limit(1);
@@ -225,6 +225,27 @@ export async function adminEditQuestion(
   values.updatedAt = new Date();
 
   await db.update(questions).set(values).where(eq(questions.id, id));
+
+  // Mirror grading-adjacent content onto the linked GeneratedQuestion twin.
+  // Daily/bonus/catch-up serving reads the stem/answer/explainer LIVE from the
+  // GeneratedQuestion (daily.ts:833), so an admin edit that stops at the Question
+  // row never reaches the copy players are served (B-TWIN-DRIFT-01). Only the
+  // three served fields are mirrored, and only when they actually changed; the
+  // GeneratedQuestion's verification stamp is left to the batch-verify sweep.
+  if (contentChanged && existing.generatedQuestionId) {
+    const genValues: Partial<typeof generatedQuestions.$inferInsert> = {};
+    if (input.questionText !== undefined) genValues.questionText = input.questionText;
+    if (input.answerText !== undefined) genValues.answer = input.answerText;
+    // explainer is non-null in the generated store; only overwrite when a
+    // non-empty one is supplied (a cleared explainer is not mirrored across).
+    if (input.factualExplanation) genValues.explainer = input.factualExplanation;
+    if (Object.keys(genValues).length > 0) {
+      await db
+        .update(generatedQuestions)
+        .set(genValues)
+        .where(eq(generatedQuestions.id, existing.generatedQuestionId));
+    }
+  }
   return { ok: true };
 }
 
