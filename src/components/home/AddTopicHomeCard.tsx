@@ -3,18 +3,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 
-import { AddTopicField } from '@/components/interests/AddTopicField';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
 
-// Homepage "Add a topic" module (Josh, 2026-07-17): a lightweight entry point
-// to seed a Daily Five topic without leaving Home. Mirrors the /daily/setup add
-// block — the create-your-own field plus related-but-specific suggestion
-// circles — but the suggestions are fetched client-side after mount (like
-// TodaysFiveCard's status fetch) so they never touch the home critical path.
-// Card + eyebrow styling matches the other home feature modules. (The full
-// manage surface is reachable from the Today's Five "Customize" pill.)
+// Homepage "Add a topic" module (Josh, 2026-07-17): suggestion circles only —
+// a lightweight, low-clutter way to seed a Daily Five topic from Home by tapping
+// a related-but-specific suggestion. The create-your-own text field lives on the
+// full manage surface (/daily/setup, reachable from the Today's Five Customize
+// pill) to keep Home uncluttered. Suggestions are fetched client-side after
+// mount (like TodaysFiveCard's status fetch) so they never touch the home
+// critical path; the card hides itself until there's something to show.
 export function AddTopicHomeCard() {
   const [added, setAdded] = useState<string | null>(null);
   const [pool, setPool] = useState<NearbyTerritory[]>([]);
@@ -48,7 +47,7 @@ export function AddTopicHomeCard() {
         }
         setPool(list);
       } catch {
-        // Suggestions are a nicety — the create-your-own field still works.
+        // Suggestions are a nicety; failing quietly just hides the module.
       }
     })();
     return () => {
@@ -67,24 +66,20 @@ export function AddTopicHomeCard() {
     [pool, dismissed, addedKeys],
   );
 
-  const postInterest = async (label: string, broadCategory?: string | null) => {
-    const response = await fetch('/api/declared-interests', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ label, ...(broadCategory ? { broadCategory } : {}) }),
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { message?: string } | null;
-      throw new Error(body?.message ?? 'Could not add that topic.');
-    }
-  };
-
   const addSuggestion = async (territory: NearbyTerritory) => {
     if (addingKey) return;
     setAddingKey(domainKey(territory.domain));
     try {
-      await postInterest(territory.domain, territory.broadCategory);
+      const response = await fetch('/api/declared-interests', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          label: territory.domain,
+          ...(territory.broadCategory ? { broadCategory: territory.broadCategory } : {}),
+        }),
+      });
+      if (!response.ok) throw new Error('add failed');
       setAddedKeys((prev) => new Set(prev).add(domainKey(territory.domain)));
       setAdded(territory.domain);
     } catch {
@@ -94,8 +89,12 @@ export function AddTopicHomeCard() {
     }
   };
 
+  // Nothing to show until suggestions arrive (or a confirmation is up) — keeps
+  // Home from carrying an empty card.
+  if (visible.length === 0 && !added) return null;
+
   return (
-    <section className="card px-5 py-4" aria-label="Add a topic">
+    <section className="card px-5 py-4" aria-label="Suggested topics">
       <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
         Add a topic
       </p>
@@ -103,22 +102,10 @@ export function AddTopicHomeCard() {
         className="mt-1 mb-3 text-sm leading-6 text-[var(--text-muted-warm)]"
         style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
       >
-        {visible.length > 0
-          ? 'Pick a suggestion below, or add something you’d love to be asked about.'
-          : 'Something you’d love to be asked about? Add it and it’ll seed your Daily Five.'}
+        A few you might like, based on your interests — tap one to seed your Daily Five.
       </p>
-      <AddTopicField
-        convergeBeforeAdd
-        // Standard field radius (matches the /daily/setup Add a topic input),
-        // not the pill default.
-        inputClassName="min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] focus-visible:outline-none disabled:opacity-60"
-        onAdd={async (topic) => {
-          await postInterest(topic.label, topic.broadCategory ?? null);
-          setAdded(topic.label);
-        }}
-      />
       {visible.length > 0 ? (
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {visible.map((territory) => (
             <GhostTerritoryCircle
               key={territory.domain}
