@@ -387,29 +387,65 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     return true;
   };
 
-  // "Add a Territory" — ported from the retired Configure page. Suggestions
-  // come from the deterministic nearby-territory rules over the domains
-  // already held; the offset rotates the visible window per visit (set in a
-  // deferred frame, client-only, so SSR markup never disagrees).
+  // "Add a topic" suggestions — related but specific, and fresh each visit.
+  // The pool is the knowledge tree's unheld "ghost" siblings (leaf-level
+  // adjacent topics — e.g. Bach → Baroque Music, never a broad bucket like
+  // "Music"), supplemented by the hard-coded adjacency rules. A per-visit
+  // random offset (set in a deferred, client-only frame so SSR markup never
+  // disagrees) seeds a shuffle so the block isn't the same three every time.
   const [suggestionOffset, setSuggestionOffset] = useState(0);
   const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() =>
-      setSuggestionOffset(Math.floor(Math.random() * 1000)),
+      setSuggestionOffset(Math.floor(Math.random() * 1_000_000)),
     );
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  const nearbySuggestions = useMemo(
-    () => getNearbyTerritories(sortedDomains.map((domain) => domain.displayName)),
-    [sortedDomains],
-  );
+  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
+    const owned = new Set<string>();
+    for (const domain of sortedDomains) owned.add(domainKey(domain.displayName));
+    for (const label of data?.pageData.declaredInterests ?? []) owned.add(domainKey(label));
+    const pool = new Map<string, NearbyTerritory>();
+    // Tree ghost leaves — specific adjacent topics the player doesn't hold yet.
+    // broadCategory is taken from the depth-1 ancestor (the broad-category node)
+    // so the ghost circle keeps its category tint.
+    const walk = (node: KnowledgeTreeNode, depth: number, category: string | null) => {
+      const cat = depth === 1 ? node.name : category;
+      const children = node.children ?? [];
+      if (node.ghost && children.length === 0) {
+        const key = domainKey(node.name);
+        if (!pool.has(key) && !owned.has(key)) {
+          pool.set(key, { domain: node.name, broadCategory: cat, reason: 'Related to your map' });
+        }
+      }
+      for (const child of children) walk(child, depth + 1, cat);
+    };
+    walk(detailTree, 0, null);
+    // Supplement with the hard-coded adjacency rules.
+    for (const territory of getNearbyTerritories(sortedDomains.map((domain) => domain.displayName))) {
+      const key = domainKey(territory.domain);
+      if (!pool.has(key) && !owned.has(key)) pool.set(key, territory);
+    }
+    return [...pool.values()];
+  }, [detailTree, sortedDomains, data]);
   const visibleNearby = useMemo(() => {
     const SHOWN = 3;
-    if (nearbySuggestions.length <= SHOWN) return nearbySuggestions;
-    const start = suggestionOffset % nearbySuggestions.length;
-    return [...nearbySuggestions.slice(start), ...nearbySuggestions.slice(0, start)].slice(0, SHOWN);
-  }, [nearbySuggestions, suggestionOffset]);
+    if (suggestionPool.length <= SHOWN) return suggestionPool;
+    // Seeded Fisher–Yates (small LCG) keyed on the per-visit offset: stable
+    // within a render, re-rolled each visit.
+    const shuffled = [...suggestionPool];
+    let seed = (suggestionOffset % 2_147_483_646) + 1;
+    const next = () => {
+      seed = (seed * 48_271) % 2_147_483_647;
+      return seed / 2_147_483_647;
+    };
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(next() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, SHOWN);
+  }, [suggestionPool, suggestionOffset]);
 
   const addSuggestion = async (territory: NearbyTerritory) => {
     if (addingSuggestion) return;
