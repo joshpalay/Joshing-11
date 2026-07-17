@@ -498,13 +498,15 @@ export function TerritorySetupClient({
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-[0.2em] text-[var(--text-muted-warm)] uppercase">
-              TODAY’S FIVE
+              YOUR TOPICS
             </p>
             <h1 className="mt-3 font-serif text-5xl leading-[0.95] font-semibold text-[var(--ink)]">
               Shape your next round
             </h1>
             <p className="mt-4 max-w-lg text-base leading-7 text-[var(--text-muted-warm)]">
-              Move territories around to decide what Joshing should ask you about next.
+              Add topics you’d love to be asked about — pick a suggestion or create your own. Then
+              tap any territory to bring up its options: change how often it comes up, or throw it
+              out.
             </p>
           </div>
           <Link

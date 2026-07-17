@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Combine, Plus, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
@@ -780,13 +781,9 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
                 ? 'Suggestions based on the shape of your map — or create your own.'
                 : 'Create your own, and more suggestions will appear as your map grows.'}
             </p>
-            <button
-              type="button"
-              className="btn-ghost gap-1.5"
-              onClick={() => setActiveModal({ type: 'manage-interests' })}
-            >
+            <Link href="/daily/setup" className="btn-ghost gap-1.5">
               <Plus className="size-4" aria-hidden /> Create your own
-            </button>
+            </Link>
             {visibleNearby.length > 0 ? (
               <div className="mt-4 grid grid-cols-3 gap-3">
                 {visibleNearby.map((territory) => (
@@ -820,13 +817,9 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
             Add something you&rsquo;d be delighted to be asked about, and Joshing will start shaping
             around it.
           </p>
-          <button
-            type="button"
-            className="btn-primary mx-auto mt-4 gap-1.5"
-            onClick={() => setActiveModal({ type: 'manage-interests' })}
-          >
+          <Link href="/daily/setup" className="btn-primary mx-auto mt-4 gap-1.5">
             <Plus className="size-5" aria-hidden /> Create your own
-          </button>
+          </Link>
         </section>
       )}
 
