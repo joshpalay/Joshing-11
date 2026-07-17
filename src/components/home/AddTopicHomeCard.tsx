@@ -23,7 +23,7 @@ export function AddTopicHomeCard() {
   return (
     <section className="card px-5 py-4" aria-label="Add a topic">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[13px] font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+        <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
           Add a topic
         </p>
         <Link

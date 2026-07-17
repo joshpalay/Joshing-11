@@ -396,6 +396,18 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   const [suggestionOffset, setSuggestionOffset] = useState(0);
   const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  // Suggestions the player waved away ("Not for me") — filtered out so the next
+  // pool item slides into the freed slot.
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<ReadonlySet<string>>(new Set());
+  const dismissSuggestion = (domain: string) =>
+    setDismissedSuggestions((prev) => new Set(prev).add(domainKey(domain)));
+  // Brief "Added …" confirmation shown under the add block after a topic lands.
+  const [addedTopic, setAddedTopic] = useState<string | null>(null);
+  useEffect(() => {
+    if (!addedTopic) return;
+    const timer = window.setTimeout(() => setAddedTopic(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [addedTopic]);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() =>
       setSuggestionOffset(Math.floor(Math.random() * 1_000_000)),
@@ -429,11 +441,10 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     }
     return [...pool.values()];
   }, [detailTree, sortedDomains, data]);
-  const visibleNearby = useMemo(() => {
-    const SHOWN = 3;
-    if (suggestionPool.length <= SHOWN) return suggestionPool;
-    // Seeded Fisher–Yates (small LCG) keyed on the per-visit offset: stable
-    // within a render, re-rolled each visit.
+  // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
+  // Kept separate from the visible slice so dismissing one entry doesn't
+  // reshuffle the rest — the next pool item just slides up into the freed slot.
+  const shuffledPool = useMemo(() => {
     const shuffled = [...suggestionPool];
     let seed = (suggestionOffset % 2_147_483_646) + 1;
     const next = () => {
@@ -444,8 +455,15 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       const j = Math.floor(next() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    return shuffled.slice(0, SHOWN);
+    return shuffled;
   }, [suggestionPool, suggestionOffset]);
+  const visibleNearby = useMemo(
+    () =>
+      shuffledPool
+        .filter((territory) => !dismissedSuggestions.has(domainKey(territory.domain)))
+        .slice(0, 3),
+    [shuffledPool, dismissedSuggestions],
+  );
 
   const addSuggestion = async (territory: NearbyTerritory) => {
     if (addingSuggestion) return;
@@ -465,6 +483,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         const body = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(body?.message ?? 'Could not add that territory.');
       }
+      setAddedTopic(territory.domain);
       await loadKnowledge();
     } catch (caught) {
       setSuggestError(caught instanceof Error ? caught.message : 'Could not add that territory.');
@@ -487,6 +506,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       const body = (await response.json().catch(() => null)) as { message?: string } | null;
       throw new Error(body?.message ?? 'Could not add that topic.');
     }
+    setAddedTopic(label);
     await loadKnowledge();
   };
 
@@ -837,9 +857,15 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                   territory={territory}
                   disabled={addingSuggestion !== null}
                   onAdd={() => void addSuggestion(territory)}
+                  onDismiss={() => dismissSuggestion(territory.domain)}
                 />
               ))}
             </div>
+          ) : null}
+          {addedTopic ? (
+            <p className="mt-3 text-quiet text-[var(--ink)]" role="status" aria-live="polite">
+              Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+            </p>
           ) : null}
           {suggestError ? (
             <p className="mt-2 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
@@ -916,9 +942,15 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                       territory={territory}
                       disabled={addingSuggestion !== null}
                       onAdd={() => void addSuggestion(territory)}
+                      onDismiss={() => dismissSuggestion(territory.domain)}
                     />
                   ))}
                 </div>
+              ) : null}
+              {addedTopic ? (
+                <p className="mt-3 text-quiet text-[var(--ink)]" role="status" aria-live="polite">
+                  Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                </p>
               ) : null}
               {suggestError ? (
                 <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
