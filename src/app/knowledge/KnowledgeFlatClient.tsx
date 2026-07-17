@@ -777,9 +777,24 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
 
   return (
     <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
-      <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
-        {isManage ? 'Manage your topics' : 'Knowledge'}
-      </h1>
+      {isManage ? (
+        <div className="flex items-start justify-between gap-4 px-1">
+          <h1 className="m-0 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+            Manage your topics
+          </h1>
+          <Link
+            href="/"
+            aria-label="Done — changes save automatically"
+            className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] transition hover:bg-[var(--cream-warm)]"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </Link>
+        </div>
+      ) : (
+        <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+          Knowledge
+        </h1>
+      )}
 
       {isManage && (
         <p className="px-1 text-[0.9rem] leading-[1.5] text-[var(--text-muted-warm)]">
@@ -958,6 +973,15 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           Tidy up my map
         </button>
       </section>
+
+      {/* Manage page has no bottom nav (hidden on /daily/*), so a clear exit
+          lives at the end of the page as well as the corner X. Changes save
+          as you go, so this just returns Home. */}
+      {isManage && (
+        <Link href="/" className="btn-primary mt-1 w-full">
+          Done
+        </Link>
+      )}
 
       {/* Off-screen portrait card, snapshotted in the background so the card's
           Share button can fire the native share sheet without a preview step.
