@@ -31,8 +31,14 @@ export function GhostTerritoryCircle({
   onAdd: () => void;
 }) {
   const color = getPortraitDomainColor(territory.broadCategory ?? 'General Knowledge');
+  // The "not added" state now borrows the same visual weight as "added"
+  // (solid territory-text caption, near-full opacity) rather than a separate,
+  // washed-out treatment — only the border stays dashed vs. solid, since
+  // that's the one distinction that actually needs to read at a glance.
+  // Bumped from a 40% color mix to 65% so the dashed border itself doesn't
+  // disappear against the card.
   const style = {
-    '--territory-border': `color-mix(in srgb, ${color.primary} 40%, transparent)`,
+    '--territory-border': `color-mix(in srgb, ${color.primary} 65%, transparent)`,
     '--territory-text': color.text,
   } as CSSProperties;
   const busy = disabled && !added;
@@ -43,7 +49,7 @@ export function GhostTerritoryCircle({
       aria-label={added ? `${territory.domain} — added` : `Add ${territory.domain}`}
       aria-pressed={added}
       className={`flex w-full flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center transition ${
-        added ? 'opacity-100' : busy ? 'opacity-40' : 'opacity-70 hover:opacity-100'
+        busy ? 'opacity-40' : 'opacity-100'
       }`}
       style={style}
       disabled={disabled || added}
@@ -60,9 +66,7 @@ export function GhostTerritoryCircle({
       <span className="max-w-full px-1 font-serif text-quiet leading-tight break-words text-[var(--territory-text)]">
         {territory.domain}
       </span>
-      <span className={`${CAPTION_CLASS} ${added ? 'text-[var(--territory-text)]' : 'text-[var(--text-muted-warm)]'}`}>
-        {added ? 'Added' : 'Add'}
-      </span>
+      <span className={`${CAPTION_CLASS} text-[var(--territory-text)]`}>{added ? 'Added' : 'Add'}</span>
     </button>
   );
 }

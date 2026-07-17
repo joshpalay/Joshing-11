@@ -338,6 +338,27 @@ export async function addDeclaredInterest(
   return { created: true, domain: interest.label, broadCategory: interest.broadCategory ?? null };
 }
 
+// Undo for the incremental add path (addDeclaredInterest): deactivate one
+// domain by the same case-insensitive match addDeclaredInterest itself uses,
+// rather than a full-replace PATCH — so undoing a just-added topic can never
+// clobber some other interest declared concurrently (another tab, a second
+// carousel add). Idempotent: undoing an already-inactive/unknown domain is a
+// harmless no-op (returns false).
+export async function removeDeclaredInterest(userId: string, domain: string): Promise<boolean> {
+  const result = await db
+    .update(declaredInterests)
+    .set({ isActive: false })
+    .where(
+      and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.isActive, true),
+        sql`lower(${declaredInterests.domain}) = ${domain.trim().toLowerCase()}`,
+      ),
+    )
+    .returning({ domain: declaredInterests.domain });
+  return result.length > 0;
+}
+
 export async function markOnboardingComplete(userId: string) {
   await db
     .update(users)

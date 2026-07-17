@@ -397,13 +397,44 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   // interested" gesture — there's no per-circle dismiss.
   const [suggestionOffset, setSuggestionOffset] = useState(0);
   const [suggestError, setSuggestError] = useState<string | null>(null);
-  // Brief "Added …" confirmation shown under the add block after a topic lands.
+  // Brief "Added …" confirmation shown under the add block after a topic
+  // lands, with an Undo. addedKeys is the circles' source of truth for the
+  // checked "Added" state (TopicSuggestionCarousel doesn't track it itself,
+  // so Undo can flip a circle back here). Cleared per-domain by undoAddedTopic;
+  // otherwise only grows for the session, since an add that's still standing
+  // should keep reading as added even after a later add replaces the banner.
   const [addedTopic, setAddedTopic] = useState<string | null>(null);
+  const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
+  const [undoing, setUndoing] = useState(false);
   useEffect(() => {
     if (!addedTopic) return;
     const timer = window.setTimeout(() => setAddedTopic(null), 4500);
     return () => window.clearTimeout(timer);
   }, [addedTopic]);
+  const undoAddedTopic = async () => {
+    if (!addedTopic || undoing) return;
+    setUndoing(true);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ domain: addedTopic }),
+      });
+      if (!response.ok) throw new Error('undo failed');
+      setAddedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(domainKey(addedTopic));
+        return next;
+      });
+      setAddedTopic(null);
+      await loadKnowledge();
+    } catch {
+      setSuggestError('Could not undo that add. Remove it from Your topics instead.');
+    } finally {
+      setUndoing(false);
+    }
+  };
   useEffect(() => {
     const frame = window.requestAnimationFrame(() =>
       setSuggestionOffset(Math.floor(Math.random() * 1_000_000)),
@@ -452,6 +483,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         throw new Error(body?.message ?? 'Could not add that territory.');
       }
       setAddedTopic(territory.domain);
+      setAddedKeys((prev) => new Set(prev).add(domainKey(territory.domain)));
       await loadKnowledge();
       return true;
     } catch (caught) {
@@ -475,6 +507,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       throw new Error(body?.message ?? 'Could not add that topic.');
     }
     setAddedTopic(label);
+    setAddedKeys((prev) => new Set(prev).add(domainKey(label)));
     await loadKnowledge();
   };
 
@@ -822,7 +855,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           />
           {shuffledPool.length > 0 ? (
             <div className="mt-4">
-              <TopicSuggestionCarousel suggestions={shuffledPool} onAdd={addSuggestion} />
+              <TopicSuggestionCarousel suggestions={shuffledPool} addedKeys={addedKeys} onAdd={addSuggestion} />
             </div>
           ) : null}
           {addedTopic ? (
@@ -832,9 +865,19 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               aria-live="polite"
             >
               <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
-              <p className="m-0 text-quiet text-[var(--ink)]">
-                Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
-              </p>
+              <div className="flex-1">
+                <p className="m-0 text-quiet text-[var(--ink)]">
+                  Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                </p>
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                  onClick={() => void undoAddedTopic()}
+                  disabled={undoing}
+                >
+                  {undoing ? 'Undoing…' : 'Undo'}
+                </button>
+              </div>
             </div>
           ) : null}
           {suggestError ? (
@@ -906,7 +949,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               </Link>
               {shuffledPool.length > 0 ? (
                 <div className="mt-4">
-                  <TopicSuggestionCarousel suggestions={shuffledPool} onAdd={addSuggestion} />
+                  <TopicSuggestionCarousel suggestions={shuffledPool} addedKeys={addedKeys} onAdd={addSuggestion} />
                 </div>
               ) : null}
               {addedTopic ? (
@@ -916,9 +959,19 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                   aria-live="polite"
                 >
                   <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
-                  <p className="m-0 text-quiet text-[var(--ink)]">
-                    Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
-                  </p>
+                  <div className="flex-1">
+                    <p className="m-0 text-quiet text-[var(--ink)]">
+                      Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                      onClick={() => void undoAddedTopic()}
+                      disabled={undoing}
+                    >
+                      {undoing ? 'Undoing…' : 'Undo'}
+                    </button>
+                  </div>
                 </div>
               ) : null}
               {suggestError ? (

@@ -26,14 +26,22 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
  * dismiss control. Adding a topic flips its circle in place to a checkmark +
  * "Added" state (GhostTerritoryCircle's `added`) rather than removing it, so
  * a page never reflows mid-swipe.
+ *
+ * `addedKeys` is caller-owned (not internal state): the parent also needs it
+ * to flip a circle back when the player taps "Undo" on the confirmation
+ * banner, so the single source of truth for "is this domain added" lives
+ * wherever the undo/remove call does.
  */
 export function TopicSuggestionCarousel({
   suggestions,
+  addedKeys,
   onAdd,
   trailingSlide,
 }: {
   suggestions: NearbyTerritory[];
-  /** Persist the add; resolve true on success so the circle can flip to added. */
+  /** Domain keys (domainKey-normalized) already added — rendered as the checked "Added" state. */
+  addedKeys: ReadonlySet<string>;
+  /** Persist the add; resolve true on success so the caller can add the key to `addedKeys`. */
   onAdd: (territory: NearbyTerritory) => Promise<boolean>;
   /**
    * An extra page appended after the suggestion pages — e.g. an "Add your
@@ -43,7 +51,8 @@ export function TopicSuggestionCarousel({
    */
   trailingSlide?: ReactNode;
 }) {
-  const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
+  // Purely transient UI state — which circle is mid-request. Not part of the
+  // caller's `addedKeys` truth.
   const [addingKey, setAddingKey] = useState<string | null>(null);
 
   const pages = useMemo(
@@ -56,8 +65,7 @@ export function TopicSuggestionCarousel({
     const key = domainKey(territory.domain);
     setAddingKey(key);
     try {
-      const ok = await onAdd(territory);
-      if (ok) setAddedKeys((prev) => new Set(prev).add(key));
+      await onAdd(territory);
     } finally {
       setAddingKey(null);
     }
