@@ -771,6 +771,9 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           <AddTopicField
             existingLabels={sortedDomains.map((domain) => domain.displayName)}
             convergeBeforeAdd
+            // Standard field radius (--radius-xs, the login/field corner) rather
+            // than the pill default, per Josh's request for this surface.
+            inputClassName="min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] focus-visible:outline-none disabled:opacity-60"
             onAdd={async (topic) => {
               await adoptTopic(topic.label, topic.broadCategory ?? null);
             }}
