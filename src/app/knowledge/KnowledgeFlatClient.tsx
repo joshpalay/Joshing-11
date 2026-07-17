@@ -22,10 +22,10 @@ import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import {
   TERRITORY_FREQUENCY_LABEL,
-  getNearbyTerritories,
   type DomainPreferenceFrequency,
   type NearbyTerritory,
 } from '@/lib/daily/territory-model';
+import { buildSuggestionPool } from '@/lib/knowledge/suggestion-pool';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
@@ -414,33 +414,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     );
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
-    const owned = new Set<string>();
-    for (const domain of sortedDomains) owned.add(domainKey(domain.displayName));
-    for (const label of data?.pageData.declaredInterests ?? []) owned.add(domainKey(label));
-    const pool = new Map<string, NearbyTerritory>();
-    // Tree ghost leaves — specific adjacent topics the player doesn't hold yet.
-    // broadCategory is taken from the depth-1 ancestor (the broad-category node)
-    // so the ghost circle keeps its category tint.
-    const walk = (node: KnowledgeTreeNode, depth: number, category: string | null) => {
-      const cat = depth === 1 ? node.name : category;
-      const children = node.children ?? [];
-      if (node.ghost && children.length === 0) {
-        const key = domainKey(node.name);
-        if (!pool.has(key) && !owned.has(key)) {
-          pool.set(key, { domain: node.name, broadCategory: cat, reason: 'Related to your map' });
-        }
-      }
-      for (const child of children) walk(child, depth + 1, cat);
-    };
-    walk(detailTree, 0, null);
-    // Supplement with the hard-coded adjacency rules.
-    for (const territory of getNearbyTerritories(sortedDomains.map((domain) => domain.displayName))) {
-      const key = domainKey(territory.domain);
-      if (!pool.has(key) && !owned.has(key)) pool.set(key, territory);
-    }
-    return [...pool.values()];
-  }, [detailTree, sortedDomains, data]);
+  // Shared builder (also used by the home suggestions endpoint) so both add
+  // surfaces draw the identical related-but-specific pool.
+  const suggestionPool = useMemo<NearbyTerritory[]>(
+    () =>
+      buildSuggestionPool(detailTree, [
+        ...sortedDomains.map((domain) => domain.displayName),
+        ...(data?.pageData.declaredInterests ?? []),
+      ]),
+    [detailTree, sortedDomains, data],
+  );
   // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
   // Kept separate from the visible slice so dismissing one entry doesn't
   // reshuffle the rest — the next pool item just slides up into the freed slot.
