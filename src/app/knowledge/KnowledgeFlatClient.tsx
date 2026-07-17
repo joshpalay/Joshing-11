@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Trash2, X } from 'lucide-react';
+import { Check, Combine, Plus, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -22,10 +22,10 @@ import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import {
   TERRITORY_FREQUENCY_LABEL,
-  getNearbyTerritories,
   type DomainPreferenceFrequency,
   type NearbyTerritory,
 } from '@/lib/daily/territory-model';
+import { buildSuggestionPool } from '@/lib/knowledge/suggestion-pool';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
@@ -414,33 +414,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     );
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
-    const owned = new Set<string>();
-    for (const domain of sortedDomains) owned.add(domainKey(domain.displayName));
-    for (const label of data?.pageData.declaredInterests ?? []) owned.add(domainKey(label));
-    const pool = new Map<string, NearbyTerritory>();
-    // Tree ghost leaves — specific adjacent topics the player doesn't hold yet.
-    // broadCategory is taken from the depth-1 ancestor (the broad-category node)
-    // so the ghost circle keeps its category tint.
-    const walk = (node: KnowledgeTreeNode, depth: number, category: string | null) => {
-      const cat = depth === 1 ? node.name : category;
-      const children = node.children ?? [];
-      if (node.ghost && children.length === 0) {
-        const key = domainKey(node.name);
-        if (!pool.has(key) && !owned.has(key)) {
-          pool.set(key, { domain: node.name, broadCategory: cat, reason: 'Related to your map' });
-        }
-      }
-      for (const child of children) walk(child, depth + 1, cat);
-    };
-    walk(detailTree, 0, null);
-    // Supplement with the hard-coded adjacency rules.
-    for (const territory of getNearbyTerritories(sortedDomains.map((domain) => domain.displayName))) {
-      const key = domainKey(territory.domain);
-      if (!pool.has(key) && !owned.has(key)) pool.set(key, territory);
-    }
-    return [...pool.values()];
-  }, [detailTree, sortedDomains, data]);
+  // Shared builder (also used by the home suggestions endpoint) so both add
+  // surfaces draw the identical related-but-specific pool.
+  const suggestionPool = useMemo<NearbyTerritory[]>(
+    () =>
+      buildSuggestionPool(detailTree, [
+        ...sortedDomains.map((domain) => domain.displayName),
+        ...(data?.pageData.declaredInterests ?? []),
+      ]),
+    [detailTree, sortedDomains, data],
+  );
   // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
   // Kept separate from the visible slice so dismissing one entry doesn't
   // reshuffle the rest — the next pool item just slides up into the freed slot.
@@ -855,7 +838,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 <GhostTerritoryCircle
                   key={territory.domain}
                   territory={territory}
-                  disabled={addingSuggestion !== null}
+                  disabled={addingSuggestion === territory.domain}
                   onAdd={() => void addSuggestion(territory)}
                   onDismiss={() => dismissSuggestion(territory.domain)}
                 />
@@ -863,9 +846,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
             </div>
           ) : null}
           {addedTopic ? (
-            <p className="mt-3 text-quiet text-[var(--ink)]" role="status" aria-live="polite">
-              Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
-            </p>
+            <div
+              className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+              role="status"
+              aria-live="polite"
+            >
+              <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
+              <p className="m-0 text-quiet text-[var(--ink)]">
+                Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+              </p>
+            </div>
           ) : null}
           {suggestError ? (
             <p className="mt-2 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
@@ -940,7 +930,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                     <GhostTerritoryCircle
                       key={territory.domain}
                       territory={territory}
-                      disabled={addingSuggestion !== null}
+                      disabled={addingSuggestion === territory.domain}
                       onAdd={() => void addSuggestion(territory)}
                       onDismiss={() => dismissSuggestion(territory.domain)}
                     />
@@ -948,9 +938,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 </div>
               ) : null}
               {addedTopic ? (
-                <p className="mt-3 text-quiet text-[var(--ink)]" role="status" aria-live="polite">
-                  Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
-                </p>
+                <div
+                  className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
+                  <p className="m-0 text-quiet text-[var(--ink)]">
+                    Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                  </p>
+                </div>
               ) : null}
               {suggestError ? (
                 <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
