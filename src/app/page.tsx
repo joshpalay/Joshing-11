@@ -8,6 +8,7 @@ import TodaysFiveCard, {
 import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
+import { AddTopicHomeCard } from '@/components/home/AddTopicHomeCard'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
 import { getHomeFriendRequests } from '@/server/db/queries/friends'
@@ -135,6 +136,11 @@ export default async function Home({
             <CeremonyPinSection userId={session.userId} />
           </Suspense>
         ) : null}
+
+        {/* Add a topic — a lightweight seed-a-Daily-Five entry point, placed
+            just above the activity feed (Recent activity lives in the feed).
+            Signed-in only; the full manage surface is /daily/setup. */}
+        {session ? <AddTopicHomeCard /> : null}
 
         <section id="feed" data-tour="foryou">
           {session ? (
