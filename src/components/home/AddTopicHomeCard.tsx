@@ -1,25 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Check, Plus } from 'lucide-react';
 
-import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
-import { domainKey } from '@/lib/knowledge/domain-key';
+import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
 
 // Homepage "Add a topic" module (Josh, 2026-07-17): suggestion circles only —
 // a lightweight, low-clutter way to seed a Daily Five topic from Home by tapping
-// a related-but-specific suggestion. The create-your-own text field lives on the
-// full manage surface (/daily/setup, reachable from the Today's Five Customize
-// pill) to keep Home uncluttered. Suggestions are fetched client-side after
-// mount (like TodaysFiveCard's status fetch) so they never touch the home
-// critical path; the card hides itself until there's something to show.
+// a related-but-specific suggestion, paged through TopicSuggestionCarousel (swipe
+// for more — no per-circle dismiss). The create-your-own text field lives on the
+// full manage surface (/daily/setup, reachable from the "+ Add your own" link
+// below or the Today's Five Customize pill) to keep Home uncluttered.
+// Suggestions are fetched client-side after mount (like TodaysFiveCard's status
+// fetch) so they never touch the home critical path; the card hides itself
+// until there's something to show.
 export function AddTopicHomeCard() {
   const [added, setAdded] = useState<string | null>(null);
   const [pool, setPool] = useState<NearbyTerritory[]>([]);
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
-  const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
-  const [addingKey, setAddingKey] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   // Auto-dismiss the confirmation so the card returns to its resting state.
   useEffect(() => {
@@ -48,6 +48,8 @@ export function AddTopicHomeCard() {
         setPool(list);
       } catch {
         // Suggestions are a nicety; failing quietly just hides the module.
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     })();
     return () => {
@@ -55,20 +57,7 @@ export function AddTopicHomeCard() {
     };
   }, []);
 
-  const visible = useMemo(
-    () =>
-      pool
-        .filter((territory) => {
-          const key = domainKey(territory.domain);
-          return !dismissed.has(key) && !addedKeys.has(key);
-        })
-        .slice(0, 3),
-    [pool, dismissed, addedKeys],
-  );
-
-  const addSuggestion = async (territory: NearbyTerritory) => {
-    if (addingKey) return;
-    setAddingKey(domainKey(territory.domain));
+  const addSuggestion = async (territory: NearbyTerritory): Promise<boolean> => {
     try {
       const response = await fetch('/api/declared-interests', {
         method: 'POST',
@@ -80,18 +69,17 @@ export function AddTopicHomeCard() {
         }),
       });
       if (!response.ok) throw new Error('add failed');
-      setAddedKeys((prev) => new Set(prev).add(domainKey(territory.domain)));
       setAdded(territory.domain);
+      return true;
     } catch {
       // Leave the circle in place so the player can retry.
-    } finally {
-      setAddingKey(null);
+      return false;
     }
   };
 
-  // Nothing to show until suggestions arrive (or a confirmation is up) — keeps
-  // Home from carrying an empty card.
-  if (visible.length === 0 && !added) return null;
+  // Nothing to show until suggestions arrive — keeps Home from carrying an
+  // empty card while the fetch is in flight.
+  if (!loaded || (pool.length === 0 && !added)) return null;
 
   return (
     <section className="card px-5 py-4" aria-label="Suggested topics">
@@ -102,21 +90,10 @@ export function AddTopicHomeCard() {
         className="mt-1 mb-3 text-sm leading-6 text-[var(--text-muted-warm)]"
         style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
       >
-        A few you might like, based on your interests — tap one to seed your Daily Five.
+        A few you might like, based on your interests — swipe for more, or tap one to seed your
+        Daily Five.
       </p>
-      {visible.length > 0 ? (
-        <div className="grid grid-cols-3 gap-3">
-          {visible.map((territory) => (
-            <GhostTerritoryCircle
-              key={territory.domain}
-              territory={territory}
-              disabled={addingKey === domainKey(territory.domain)}
-              onAdd={() => void addSuggestion(territory)}
-              onDismiss={() => setDismissed((prev) => new Set(prev).add(domainKey(territory.domain)))}
-            />
-          ))}
-        </div>
-      ) : null}
+      {pool.length > 0 ? <TopicSuggestionCarousel suggestions={pool} onAdd={addSuggestion} /> : null}
       {added ? (
         <div
           className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
@@ -129,6 +106,12 @@ export function AddTopicHomeCard() {
           </p>
         </div>
       ) : null}
+      <Link
+        href="/daily/setup"
+        className="mt-4 inline-flex items-center gap-1 text-quiet font-medium tracking-[0.08em] text-[var(--brand-link)] uppercase hover:opacity-70"
+      >
+        <Plus className="size-3.5" aria-hidden="true" /> Add your own
+      </Link>
     </section>
   );
 }

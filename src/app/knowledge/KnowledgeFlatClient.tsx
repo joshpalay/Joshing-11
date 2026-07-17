@@ -26,7 +26,7 @@ import {
   type NearbyTerritory,
 } from '@/lib/daily/territory-model';
 import { buildSuggestionPool } from '@/lib/knowledge/suggestion-pool';
-import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
+import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import type { MasteryTier } from '@/types/db';
@@ -392,15 +392,11 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   // adjacent topics — e.g. Bach → Baroque Music, never a broad bucket like
   // "Music"), supplemented by the hard-coded adjacency rules. A per-visit
   // random offset (set in a deferred, client-only frame so SSR markup never
-  // disagrees) seeds a shuffle so the block isn't the same three every time.
+  // disagrees) seeds a shuffle so the carousel isn't in the same order every
+  // time. Paging through them (TopicSuggestionCarousel) is the "not
+  // interested" gesture — there's no per-circle dismiss.
   const [suggestionOffset, setSuggestionOffset] = useState(0);
-  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
-  // Suggestions the player waved away ("Not for me") — filtered out so the next
-  // pool item slides into the freed slot.
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<ReadonlySet<string>>(new Set());
-  const dismissSuggestion = (domain: string) =>
-    setDismissedSuggestions((prev) => new Set(prev).add(domainKey(domain)));
   // Brief "Added …" confirmation shown under the add block after a topic lands.
   const [addedTopic, setAddedTopic] = useState<string | null>(null);
   useEffect(() => {
@@ -425,8 +421,6 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     [detailTree, sortedDomains, data],
   );
   // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
-  // Kept separate from the visible slice so dismissing one entry doesn't
-  // reshuffle the rest — the next pool item just slides up into the freed slot.
   const shuffledPool = useMemo(() => {
     const shuffled = [...suggestionPool];
     let seed = (suggestionOffset % 2_147_483_646) + 1;
@@ -440,17 +434,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     }
     return shuffled;
   }, [suggestionPool, suggestionOffset]);
-  const visibleNearby = useMemo(
-    () =>
-      shuffledPool
-        .filter((territory) => !dismissedSuggestions.has(domainKey(territory.domain)))
-        .slice(0, 3),
-    [shuffledPool, dismissedSuggestions],
-  );
 
-  const addSuggestion = async (territory: NearbyTerritory) => {
-    if (addingSuggestion) return;
-    setAddingSuggestion(territory.domain);
+  const addSuggestion = async (territory: NearbyTerritory): Promise<boolean> => {
     setSuggestError(null);
     try {
       const response = await fetch('/api/declared-interests', {
@@ -468,10 +453,10 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       }
       setAddedTopic(territory.domain);
       await loadKnowledge();
+      return true;
     } catch (caught) {
       setSuggestError(caught instanceof Error ? caught.message : 'Could not add that territory.');
-    } finally {
-      setAddingSuggestion(null);
+      return false;
     }
   };
 
@@ -821,8 +806,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Add topics">
           <h2 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a topic</h2>
           <p className="mt-1 mb-3 text-quiet leading-[1.5] text-[var(--text-muted-warm)]">
-            {visibleNearby.length > 0
-              ? 'Suggestions based on the shape of your map — or create your own.'
+            {shuffledPool.length > 0
+              ? 'Suggestions based on the shape of your map — swipe for more, or create your own.'
               : 'Create your own, and more suggestions will appear as your map grows.'}
           </p>
           <AddTopicField
@@ -835,17 +820,9 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               await adoptTopic(topic.label, topic.broadCategory ?? null);
             }}
           />
-          {visibleNearby.length > 0 ? (
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              {visibleNearby.map((territory) => (
-                <GhostTerritoryCircle
-                  key={territory.domain}
-                  territory={territory}
-                  disabled={addingSuggestion === territory.domain}
-                  onAdd={() => void addSuggestion(territory)}
-                  onDismiss={() => dismissSuggestion(territory.domain)}
-                />
-              ))}
+          {shuffledPool.length > 0 ? (
+            <div className="mt-4">
+              <TopicSuggestionCarousel suggestions={shuffledPool} onAdd={addSuggestion} />
             </div>
           ) : null}
           {addedTopic ? (
@@ -920,24 +897,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
             <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
               <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
               <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
-                {visibleNearby.length > 0
-                  ? 'Suggestions based on the shape of your map — or create your own.'
+                {shuffledPool.length > 0
+                  ? 'Suggestions based on the shape of your map — swipe for more, or create your own.'
                   : 'Create your own, and more suggestions will appear as your map grows.'}
               </p>
               <Link href="/daily/setup" className="btn-ghost gap-1.5">
                 <Plus className="size-4" aria-hidden /> Create your own
               </Link>
-              {visibleNearby.length > 0 ? (
-                <div className="mt-4 grid grid-cols-3 gap-3">
-                  {visibleNearby.map((territory) => (
-                    <GhostTerritoryCircle
-                      key={territory.domain}
-                      territory={territory}
-                      disabled={addingSuggestion === territory.domain}
-                      onAdd={() => void addSuggestion(territory)}
-                      onDismiss={() => dismissSuggestion(territory.domain)}
-                    />
-                  ))}
+              {shuffledPool.length > 0 ? (
+                <div className="mt-4">
+                  <TopicSuggestionCarousel suggestions={shuffledPool} onAdd={addSuggestion} />
                 </div>
               ) : null}
               {addedTopic ? (
