@@ -37,6 +37,12 @@ type PortraitCirclesProps = {
   frequencyLabelFor?: (canonicalSubcategory: string) => string | null
   /** Tap handler for a circle — opens the domain's detail pop-up. */
   onSelectDomain?: (canonicalSubcategory: string) => void
+  /**
+   * Initial sort tab. Defaults to 'domain'. 'frequency' only takes effect when
+   * `frequencyLabelFor` is provided (otherwise that tab isn't rendered), so it
+   * falls back to 'domain' when rotation data isn't threaded in.
+   */
+  defaultSortMode?: SortMode
 }
 
 const TIER_ORDER: PortraitTier[] = [
@@ -393,8 +399,13 @@ export function PortraitCircles({
   entries,
   frequencyLabelFor,
   onSelectDomain,
+  defaultSortMode = 'domain',
 }: PortraitCirclesProps) {
-  const [sortMode, setSortMode] = useState<SortMode>('domain')
+  // 'frequency' is only a valid tab when rotation data is threaded in; clamp to
+  // 'domain' otherwise so the initial mode always matches a rendered tab.
+  const [sortMode, setSortMode] = useState<SortMode>(
+    defaultSortMode === 'frequency' && !frequencyLabelFor ? 'domain' : defaultSortMode,
+  )
 
   const validEntries = useMemo(
     () =>
