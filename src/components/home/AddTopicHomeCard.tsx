@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { Check } from 'lucide-react';
 
 import { AddTopicField } from '@/components/interests/AddTopicField';
@@ -14,8 +13,8 @@ import type { NearbyTerritory } from '@/lib/daily/territory-model';
 // block — the create-your-own field plus related-but-specific suggestion
 // circles — but the suggestions are fetched client-side after mount (like
 // TodaysFiveCard's status fetch) so they never touch the home critical path.
-// "Manage topics →" links to the full surface. Card + eyebrow styling matches
-// the other home feature modules.
+// Card + eyebrow styling matches the other home feature modules. (The full
+// manage surface is reachable from the Today's Five "Customize" pill.)
 export function AddTopicHomeCard() {
   const [added, setAdded] = useState<string | null>(null);
   const [pool, setPool] = useState<NearbyTerritory[]>([]);
@@ -97,17 +96,9 @@ export function AddTopicHomeCard() {
 
   return (
     <section className="card px-5 py-4" aria-label="Add a topic">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
-          Add a topic
-        </p>
-        <Link
-          href="/daily/setup"
-          className="text-xs font-medium tracking-[0.08em] text-[var(--brand-link)] uppercase hover:opacity-70"
-        >
-          Manage topics →
-        </Link>
-      </div>
+      <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+        Add a topic
+      </p>
       <p
         className="mt-1 mb-3 text-sm leading-6 text-[var(--text-muted-warm)]"
         style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
