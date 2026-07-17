@@ -41,7 +41,7 @@ export function RefineYourGame({ refine }: { refine: RefineSectionView }) {
       <div className="flex items-center justify-between gap-3">
         <h2 style={titleStyle}>Refine Your Game</h2>
         <Link
-          href="/knowledge"
+          href="/daily/setup"
           className={CUSTOMIZE_DAILY_LINK_CLASS}
           aria-label="Customize your Daily Five"
         >

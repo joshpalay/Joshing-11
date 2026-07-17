@@ -836,6 +836,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               entries={portraitEntries}
               frequencyLabelFor={frequencyLabelFor}
               onSelectDomain={openDomainDetail}
+              defaultSortMode={isManage ? 'frequency' : 'domain'}
             />
           </div>
 
