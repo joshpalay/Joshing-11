@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { EditorialCarousel } from '@/components/feed/EditorialCarousel';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
@@ -30,10 +30,18 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 export function TopicSuggestionCarousel({
   suggestions,
   onAdd,
+  trailingSlide,
 }: {
   suggestions: NearbyTerritory[];
   /** Persist the add; resolve true on success so the circle can flip to added. */
   onAdd: (territory: NearbyTerritory) => Promise<boolean>;
+  /**
+   * An extra page appended after the suggestion pages — e.g. an "Add your
+   * own" CTA on a surface with no other create-your-own affordance visible.
+   * Rendered centered in the same three-column footprint as a suggestion
+   * page so the carousel doesn't jump in height on the last swipe.
+   */
+  trailingSlide?: ReactNode;
 }) {
   const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
   const [addingKey, setAddingKey] = useState<string | null>(null);
@@ -55,27 +63,31 @@ export function TopicSuggestionCarousel({
     }
   };
 
-  if (pages.length === 0) return null;
+  const slides: ReactNode[] = pages.map((page, pageIndex) => (
+    <div key={`page-${pageIndex}`} className="grid w-full grid-cols-3 gap-3">
+      {page.map((territory) => {
+        const key = domainKey(territory.domain);
+        return (
+          <GhostTerritoryCircle
+            key={territory.domain}
+            territory={territory}
+            added={addedKeys.has(key)}
+            disabled={addingKey === key}
+            onAdd={() => void handleAdd(territory)}
+          />
+        );
+      })}
+    </div>
+  ));
+  if (trailingSlide) {
+    slides.push(
+      <div key="trailing" className="grid w-full grid-cols-3 gap-3">
+        <div className="col-start-2">{trailingSlide}</div>
+      </div>,
+    );
+  }
 
-  return (
-    <EditorialCarousel
-      ariaLabel="Suggested topics"
-      slides={pages.map((page, pageIndex) => (
-        <div key={pageIndex} className="grid w-full grid-cols-3 gap-3">
-          {page.map((territory) => {
-            const key = domainKey(territory.domain);
-            return (
-              <GhostTerritoryCircle
-                key={territory.domain}
-                territory={territory}
-                added={addedKeys.has(key)}
-                disabled={addingKey === key}
-                onAdd={() => void handleAdd(territory)}
-              />
-            );
-          })}
-        </div>
-      ))}
-    />
-  );
+  if (slides.length === 0) return null;
+
+  return <EditorialCarousel ariaLabel="Suggested topics" slides={slides} />;
 }
