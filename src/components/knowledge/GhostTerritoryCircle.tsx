@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
@@ -58,12 +58,12 @@ export function GhostTerritoryCircle({
         <button
           type="button"
           aria-label={`Not interested in ${territory.domain} — show another`}
-          title="Show another suggestion"
-          className={`${CAPTION_CLASS} transition hover:text-[var(--ink)] disabled:opacity-40`}
+          title="Not for me — show another"
+          className="grid size-7 place-items-center rounded-full text-[var(--text-muted-warm)] transition hover:bg-[var(--cream-warm)] hover:text-[var(--ink)] disabled:opacity-40"
           disabled={disabled}
           onClick={onDismiss}
         >
-          Not for me
+          <X className="size-4" aria-hidden="true" />
         </button>
       ) : (
         <span className={CAPTION_CLASS}>Add</span>

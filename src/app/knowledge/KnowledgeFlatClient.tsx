@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Trash2, X } from 'lucide-react';
+import { Check, Combine, Plus, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -838,7 +838,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 <GhostTerritoryCircle
                   key={territory.domain}
                   territory={territory}
-                  disabled={addingSuggestion !== null}
+                  disabled={addingSuggestion === territory.domain}
                   onAdd={() => void addSuggestion(territory)}
                   onDismiss={() => dismissSuggestion(territory.domain)}
                 />
@@ -846,9 +846,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
             </div>
           ) : null}
           {addedTopic ? (
-            <p className="mt-3 text-quiet text-[var(--ink)]" role="status" aria-live="polite">
-              Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
-            </p>
+            <div
+              className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+              role="status"
+              aria-live="polite"
+            >
+              <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
+              <p className="m-0 text-quiet text-[var(--ink)]">
+                Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+              </p>
+            </div>
           ) : null}
           {suggestError ? (
             <p className="mt-2 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
@@ -923,7 +930,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                     <GhostTerritoryCircle
                       key={territory.domain}
                       territory={territory}
-                      disabled={addingSuggestion !== null}
+                      disabled={addingSuggestion === territory.domain}
                       onAdd={() => void addSuggestion(territory)}
                       onDismiss={() => dismissSuggestion(territory.domain)}
                     />
@@ -931,9 +938,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 </div>
               ) : null}
               {addedTopic ? (
-                <p className="mt-3 text-quiet text-[var(--ink)]" role="status" aria-live="polite">
-                  Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
-                </p>
+                <div
+                  className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
+                  <p className="m-0 text-quiet text-[var(--ink)]">
+                    Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                  </p>
+                </div>
               ) : null}
               {suggestError ? (
                 <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
