@@ -9,6 +9,7 @@ import {
   DeclaredInterestLimitError,
   type DeclaredInterestInput,
   MAX_ACTIVE_DECLARED_INTERESTS,
+  removeDeclaredInterest,
   saveDeclaredInterests,
 } from '@/server/db/queries/users';
 import { TooBroadInterestError } from '@/lib/knowledge/interest-specificity';
@@ -17,6 +18,10 @@ import { UnanswerableInterestError } from '@/server/llm/interests';
 const addInterestSchema = z.object({
   label: z.string().trim().min(1).max(80),
   broadCategory: z.string().trim().max(80).optional(),
+});
+
+const removeInterestSchema = z.object({
+  domain: z.string().trim().min(1).max(80),
 });
 
 type DeclaredInterestsBody = {
@@ -162,4 +167,25 @@ export async function PATCH(request: Request) {
     const message = error instanceof Error ? error.message : 'Unable to save interests.';
     return NextResponse.json({ error: 'save_failed', message }, { status: 400 });
   }
+}
+
+// Undo for a single incremental add (POST above) — the "Undo" link on the
+// just-added confirmation banner. Deactivates one domain by name rather than
+// replacing the whole list (PATCH), so it can't clobber an interest declared
+// elsewhere in the meantime. Idempotent: undoing twice, or a domain that was
+// never active, is a harmless no-op.
+export async function DELETE(request: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const parsed = removeInterestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'invalid_request', message: 'Send the domain to remove.' },
+      { status: 400 },
+    );
+  }
+
+  const removed = await removeDeclaredInterest(session.userId, parsed.data.domain);
+  return NextResponse.json({ removed });
 }
