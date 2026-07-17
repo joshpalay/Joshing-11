@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Repeat2, Trash2, X } from 'lucide-react';
+import { Combine, Plus, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -1023,16 +1023,16 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
               </button>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-2.5 mt-5">
-              {declaredSlots.map((slot, index) => (
+              {declaredSlots.map((slot) => (
                 <div key={slot.domain} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
                   <div className="min-w-0">
                     <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
                     <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
                   </div>
                   <div className="flex gap-1.5 mt-2">
-                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
-                      <Repeat2 className="size-3.5" />
-                      Swap
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                      <Plus className="size-3.5" />
+                      Add
                     </button>
                     <button type="button" className="min-h-[34px] w-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => void removeDeclaredInterest(slot.domain)} disabled={savingInterests || declaredSlots.length <= 1} aria-label={`Remove ${slot.displayName}`} title={declaredSlots.length <= 1 ? 'Keep at least one interest' : `Remove ${slot.displayName}`}>
                       <Trash2 className="size-3.5" />
