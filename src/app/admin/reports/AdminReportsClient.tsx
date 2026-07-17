@@ -462,7 +462,7 @@ function RerunProgress() {
     return () => window.clearInterval(timer);
   }, []);
   return (
-    <div className="rounded-md px-3 py-2 text-[13px]" style={{ background: 'var(--surface-2)' }}>
+    <div className="rounded-md px-3 py-2 text-quiet" style={{ background: 'var(--surface-2)' }}>
       <span className="animate-pulse text-[var(--brand-ink-700)]">{RERUN_PHRASES[i]}</span>
       <span className="mt-2 block h-3 w-2/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
       <span className="mt-1.5 block h-3 w-1/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
@@ -697,7 +697,7 @@ function EditPanel({
     <div className="mt-3 space-y-2">
       {concern ? (
         <p
-          className="rounded-md px-3 py-2 text-[13px] leading-relaxed"
+          className="rounded-md px-3 py-2 text-quiet leading-relaxed"
           style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
         >
           <span className="text-muted-foreground">Fixing — </span>
@@ -742,7 +742,7 @@ function EditPanel({
       {pending === 'rerun' ? (
         <RerunProgress />
       ) : rerun ? (
-        <div className="rounded-md px-3 py-2 text-[13px] leading-relaxed" style={verdictTone}>
+        <div className="rounded-md px-3 py-2 text-quiet leading-relaxed" style={verdictTone}>
           <span className="font-semibold">
             {rerun.verdict === 'ok'
               ? '✓ Verifier: looks correct'
@@ -825,7 +825,7 @@ function EditPanel({
         </button>
       </div>
       {error ? (
-        <p className="text-[13px]" style={{ color: 'var(--danger)' }}>
+        <p className="text-quiet" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}
@@ -1097,13 +1097,13 @@ function DemotionRow({
       <p className="mt-2 font-medium text-[var(--brand-ink)]">{item.questionText}</p>
       <p className="text-muted-foreground mt-0.5">Answer: {item.correctAnswer}</p>
       {item.explanation ? (
-        <div className="text-muted-foreground mt-0.5 text-[13px]">
+        <div className="text-muted-foreground mt-0.5 text-quiet">
           <ClampText text={item.explanation} />
         </div>
       ) : null}
 
       <p
-        className="mt-2 rounded-md px-3 py-2 text-[13px]"
+        className="mt-2 rounded-md px-3 py-2 text-quiet"
         style={{ background: 'var(--warning-surface)', color: 'var(--brand-ink-700)' }}
       >
         <span className="text-muted-foreground">The concern — </span>
@@ -1116,7 +1116,7 @@ function DemotionRow({
           verdict (no safe fix — genuinely needs a human), or still pending. */}
       {!proposal && item.triage && !editing ? (
         <div
-          className="mt-2 rounded-md border px-3 py-2 text-[13px]"
+          className="mt-2 rounded-md border px-3 py-2 text-quiet"
           style={{ borderColor: 'var(--border)' }}
         >
           <p className="font-semibold" style={{ color: 'var(--brand-ink-700)' }}>
@@ -1140,7 +1140,7 @@ function DemotionRow({
           human still re-runs + approves. Nothing auto-applies. */}
       {proposal && !editing ? (
         <div
-          className="mt-2 rounded-md border px-3 py-2 text-[13px]"
+          className="mt-2 rounded-md border px-3 py-2 text-quiet"
           style={{ borderColor: 'var(--success)', background: 'var(--success-surface, transparent)' }}
         >
           <p className="font-semibold text-[var(--success)]">
@@ -1334,7 +1334,7 @@ function BlockedRow({
         </div>
       ) : (
         <div className="mt-3 space-y-2">
-          <p className="text-[13px] text-[var(--brand-ink-700)]">
+          <p className="text-quiet text-[var(--brand-ink-700)]">
             Un-block this{' '}
             {item.target.table === 'question' ? 'question (restores to public)' : 'generated question'}?
           </p>

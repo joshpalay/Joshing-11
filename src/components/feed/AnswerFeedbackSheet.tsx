@@ -161,7 +161,7 @@ export function AnswerFeedbackSheet({
     <div className="fixed inset-0 z-[var(--z-sheet)] flex items-end justify-center">
       <button
         type="button"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-[var(--scrim)]"
         onClick={onClose}
         aria-label="Dismiss"
       />
@@ -271,7 +271,7 @@ export function AnswerFeedbackSheet({
             {!isCorrect ? (
               <div className="flex items-center justify-between gap-3">
                 <p
-                  className="text-[13px] italic"
+                  className="text-quiet italic"
                   style={{
                     fontFamily: 'var(--font-serif)',
                     color: 'var(--ink)',
@@ -336,7 +336,7 @@ export function AnswerFeedbackSheet({
               <div
                 role="status"
                 aria-live="polite"
-                className="flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium"
+                className="flex items-center gap-2 rounded-md border px-3 py-2 text-quiet font-medium"
                 style={{
                   backgroundColor: 'color-mix(in srgb, var(--game-correct) 12%, var(--cream))',
                   borderColor: 'color-mix(in srgb, var(--game-correct) 35%, var(--border-warm))',

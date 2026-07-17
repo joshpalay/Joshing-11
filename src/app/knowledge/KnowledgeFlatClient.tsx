@@ -1,8 +1,9 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Repeat2, Trash2, X } from 'lucide-react';
+import { Combine, Plus, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -26,6 +27,7 @@ import {
   type NearbyTerritory,
 } from '@/lib/daily/territory-model';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
+import { AddTopicField } from '@/components/interests/AddTopicField';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import type { MasteryTier } from '@/types/db';
 
@@ -146,6 +148,11 @@ function emptyDomain(domain: string): DomainMastery {
 // itself still loads from /api/knowledge client-side; these ride alongside so a
 // tapped circle can open the same PeakDetailCard the "peaks" view uses.
 type PeaksDetailData = {
+  // 'portrait' (default) is the read-only /knowledge view with the shareable
+  // modules. 'manage' is the dedicated /daily/setup topic-management page:
+  // same portrait format and tap-a-circle pop-up, but no shareable modules and
+  // the add-topics field lifted to the top.
+  variant?: 'portrait' | 'manage';
   tree: KnowledgeTreeNode;
   frequencyByDomain: DomainPreferenceFrequency;
   fullyExploredDomains: ReadonlySet<string>;
@@ -230,7 +237,8 @@ export function KnowledgeFlatClient(props: PeaksDetailData) {
   );
 }
 
-function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }: PeaksDetailData) {
+function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, fullyExploredDomains }: PeaksDetailData) {
+  const isManage = variant === 'manage';
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
@@ -379,29 +387,65 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     return true;
   };
 
-  // "Add a Territory" — ported from the retired Configure page. Suggestions
-  // come from the deterministic nearby-territory rules over the domains
-  // already held; the offset rotates the visible window per visit (set in a
-  // deferred frame, client-only, so SSR markup never disagrees).
+  // "Add a topic" suggestions — related but specific, and fresh each visit.
+  // The pool is the knowledge tree's unheld "ghost" siblings (leaf-level
+  // adjacent topics — e.g. Bach → Baroque Music, never a broad bucket like
+  // "Music"), supplemented by the hard-coded adjacency rules. A per-visit
+  // random offset (set in a deferred, client-only frame so SSR markup never
+  // disagrees) seeds a shuffle so the block isn't the same three every time.
   const [suggestionOffset, setSuggestionOffset] = useState(0);
   const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() =>
-      setSuggestionOffset(Math.floor(Math.random() * 1000)),
+      setSuggestionOffset(Math.floor(Math.random() * 1_000_000)),
     );
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  const nearbySuggestions = useMemo(
-    () => getNearbyTerritories(sortedDomains.map((domain) => domain.displayName)),
-    [sortedDomains],
-  );
+  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
+    const owned = new Set<string>();
+    for (const domain of sortedDomains) owned.add(domainKey(domain.displayName));
+    for (const label of data?.pageData.declaredInterests ?? []) owned.add(domainKey(label));
+    const pool = new Map<string, NearbyTerritory>();
+    // Tree ghost leaves — specific adjacent topics the player doesn't hold yet.
+    // broadCategory is taken from the depth-1 ancestor (the broad-category node)
+    // so the ghost circle keeps its category tint.
+    const walk = (node: KnowledgeTreeNode, depth: number, category: string | null) => {
+      const cat = depth === 1 ? node.name : category;
+      const children = node.children ?? [];
+      if (node.ghost && children.length === 0) {
+        const key = domainKey(node.name);
+        if (!pool.has(key) && !owned.has(key)) {
+          pool.set(key, { domain: node.name, broadCategory: cat, reason: 'Related to your map' });
+        }
+      }
+      for (const child of children) walk(child, depth + 1, cat);
+    };
+    walk(detailTree, 0, null);
+    // Supplement with the hard-coded adjacency rules.
+    for (const territory of getNearbyTerritories(sortedDomains.map((domain) => domain.displayName))) {
+      const key = domainKey(territory.domain);
+      if (!pool.has(key) && !owned.has(key)) pool.set(key, territory);
+    }
+    return [...pool.values()];
+  }, [detailTree, sortedDomains, data]);
   const visibleNearby = useMemo(() => {
     const SHOWN = 3;
-    if (nearbySuggestions.length <= SHOWN) return nearbySuggestions;
-    const start = suggestionOffset % nearbySuggestions.length;
-    return [...nearbySuggestions.slice(start), ...nearbySuggestions.slice(0, start)].slice(0, SHOWN);
-  }, [nearbySuggestions, suggestionOffset]);
+    if (suggestionPool.length <= SHOWN) return suggestionPool;
+    // Seeded Fisher–Yates (small LCG) keyed on the per-visit offset: stable
+    // within a render, re-rolled each visit.
+    const shuffled = [...suggestionPool];
+    let seed = (suggestionOffset % 2_147_483_646) + 1;
+    const next = () => {
+      seed = (seed * 48_271) % 2_147_483_647;
+      return seed / 2_147_483_647;
+    };
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(next() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, SHOWN);
+  }, [suggestionPool, suggestionOffset]);
 
   const addSuggestion = async (territory: NearbyTerritory) => {
     if (addingSuggestion) return;
@@ -427,6 +471,23 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
     } finally {
       setAddingSuggestion(null);
     }
+  };
+
+  // Inline "create your own" on the manage page. AddTopicField owns the
+  // canonicalize/converge step and throws on a known persistence failure, so
+  // this just writes the declared interest and reloads the map.
+  const adoptTopic = async (label: string, broadCategory?: string | null) => {
+    const response = await fetch('/api/declared-interests', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label, ...(broadCategory ? { broadCategory } : {}) }),
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(body?.message ?? 'Could not add that topic.');
+    }
+    await loadKnowledge();
   };
 
   // A tapped circle (outside edit mode) opens the peaks detail pop-up. Prefer the
@@ -716,9 +777,31 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
 
   return (
     <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
-      <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
-        Knowledge
-      </h1>
+      {isManage ? (
+        <div className="flex items-start justify-between gap-4 px-1">
+          <h1 className="m-0 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+            Manage your topics
+          </h1>
+          <Link
+            href="/"
+            aria-label="Done — changes save automatically"
+            className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] transition hover:bg-[var(--cream-warm)]"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </Link>
+        </div>
+      ) : (
+        <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+          Knowledge
+        </h1>
+      )}
+
+      {isManage && (
+        <p className="px-1 text-sm leading-[1.5] text-[var(--text-muted-warm)]">
+          Add topics you&rsquo;d love to be asked about. Tap any circle below to bring up its
+          options &mdash; change how often it comes up, add a related topic, or remove it.
+        </p>
+      )}
 
       {tierCrossed && highlightedDomainSlug && (
         <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-4 py-3 text-base">
@@ -726,7 +809,45 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
         </section>
       )}
 
-      {topCardDomains.length > 0 && (
+      {/* Manage variant: the add-topics field + suggestions lead the page,
+          replacing the shareable portrait/expanding modules. */}
+      {isManage && (
+        <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Add topics">
+          <h2 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a topic</h2>
+          <p className="mt-1 mb-3 text-quiet leading-[1.5] text-[var(--text-muted-warm)]">
+            {visibleNearby.length > 0
+              ? 'Suggestions based on the shape of your map — or create your own.'
+              : 'Create your own, and more suggestions will appear as your map grows.'}
+          </p>
+          <AddTopicField
+            existingLabels={sortedDomains.map((domain) => domain.displayName)}
+            convergeBeforeAdd
+            // Standard field radius (--radius-xs, the login/field corner) rather
+            // than the pill default, per Josh's request for this surface.
+            inputClassName="min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] focus-visible:outline-none disabled:opacity-60"
+            onAdd={async (topic) => {
+              await adoptTopic(topic.label, topic.broadCategory ?? null);
+            }}
+          />
+          {visibleNearby.length > 0 ? (
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {visibleNearby.map((territory) => (
+                <GhostTerritoryCircle
+                  key={territory.domain}
+                  territory={territory}
+                  disabled={addingSuggestion !== null}
+                  onAdd={() => void addSuggestion(territory)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {suggestError ? (
+            <p className="mt-2 text-xs" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
+          ) : null}
+        </section>
+      )}
+
+      {!isManage && topCardDomains.length > 0 && (
         <KnowledgeCard
           playerDisplayName={displayName}
           portraitStatement={yourMind}
@@ -751,14 +872,16 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
         />
       )}
 
-      <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
+      {!isManage && (
+        <RecentlyExpanding domains={expandingDomains} playerDisplayName={displayName} onNotice={showShareNotice} />
+      )}
 
       {hasAnything && (
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
           <div className="mb-2">
-            <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">YOUR KNOWLEDGE</p>
+            <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">{isManage ? 'YOUR TOPICS' : 'YOUR KNOWLEDGE'}</p>
             <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
-              SEE HOW YOUR KNOWLEDGE IS BUILDING -&gt;
+              {isManage ? 'TAP A TOPIC FOR OPTIONS ->' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
             </p>
           </div>
 
@@ -767,48 +890,49 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
               entries={portraitEntries}
               frequencyLabelFor={frequencyLabelFor}
               onSelectDomain={openDomainDetail}
+              defaultSortMode={isManage ? 'frequency' : 'domain'}
             />
           </div>
 
-          {/* Add a Territory — ported from the retired Configure page: nearby
-              suggestions from the shape of the map plus the create-your-own
-              flow (the existing declared-interests modal). */}
-          <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
-            <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
-            <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
-              {visibleNearby.length > 0
-                ? 'Suggestions based on the shape of your map — or create your own.'
-                : 'Create your own, and more suggestions will appear as your map grows.'}
-            </p>
-            <button
-              type="button"
-              className="btn-ghost gap-1.5"
-              onClick={() => setActiveModal({ type: 'manage-interests' })}
-            >
-              <Plus className="size-4" aria-hidden /> Create your own
-            </button>
-            {visibleNearby.length > 0 ? (
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                {visibleNearby.map((territory) => (
-                  <GhostTerritoryCircle
-                    key={territory.domain}
-                    territory={territory}
-                    disabled={addingSuggestion !== null}
-                    onAdd={() => void addSuggestion(territory)}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {suggestError ? (
-              <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
-            ) : null}
-          </div>
+          {/* Add a Territory — portrait variant only: a shortcut into the
+              dedicated manage page (/daily/setup), which owns the inline add.
+              The manage page lifts adding to the top instead. */}
+          {!isManage && (
+            <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
+              <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
+              <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
+                {visibleNearby.length > 0
+                  ? 'Suggestions based on the shape of your map — or create your own.'
+                  : 'Create your own, and more suggestions will appear as your map grows.'}
+              </p>
+              <Link href="/daily/setup" className="btn-ghost gap-1.5">
+                <Plus className="size-4" aria-hidden /> Create your own
+              </Link>
+              {visibleNearby.length > 0 ? (
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  {visibleNearby.map((territory) => (
+                    <GhostTerritoryCircle
+                      key={territory.domain}
+                      territory={territory}
+                      disabled={addingSuggestion !== null}
+                      onAdd={() => void addSuggestion(territory)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {suggestError ? (
+                <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
+              ) : null}
+            </div>
+          )}
         </section>
       )}
 
       {/* First-territory moment — the retired Configure page's empty state,
-          now living where the map does. */}
-      {!hasAnything && (
+          now living where the map does. Portrait only: on the manage page the
+          top add-topics section already covers the empty case (and this block's
+          CTA links to /daily/setup, which would be a self-link there). */}
+      {!isManage && !hasAnything && (
         <section
           className="bg-[var(--brand-card)] border border-dashed border-[var(--border-warm)] p-6 text-center"
           aria-label="Add your first territory"
@@ -820,19 +944,15 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
             Add something you&rsquo;d be delighted to be asked about, and Joshing will start shaping
             around it.
           </p>
-          <button
-            type="button"
-            className="btn-primary mx-auto mt-4 gap-1.5"
-            onClick={() => setActiveModal({ type: 'manage-interests' })}
-          >
+          <Link href="/daily/setup" className="btn-primary mx-auto mt-4 gap-1.5">
             <Plus className="size-5" aria-hidden /> Create your own
-          </button>
+          </Link>
         </section>
       )}
 
       {emptyQuestionDomain ? (
         <section className="bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--brand-card))] border border-[color-mix(in_srgb,var(--accent-gold)_55%,var(--brand-border))] px-4 py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
-          <p className="m-0 text-[13px] [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
+          <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
           <h2 className="mt-1.5 text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
           <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-2.5 mt-5">
@@ -854,9 +974,19 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
         </button>
       </section>
 
+      {/* Manage page has no bottom nav (hidden on /daily/*), so a clear exit
+          lives at the end of the page as well as the corner X. Changes save
+          as you go, so this just returns Home. */}
+      {isManage && (
+        <Link href="/" className="btn-primary mt-1 w-full">
+          Done
+        </Link>
+      )}
+
       {/* Off-screen portrait card, snapshotted in the background so the card's
-          Share button can fire the native share sheet without a preview step. */}
-      {topCardDomains.length > 0 ? (
+          Share button can fire the native share sheet without a preview step.
+          Portrait only — the manage page has no share affordance. */}
+      {!isManage && topCardDomains.length > 0 ? (
         <div aria-hidden="true" style={{ position: 'fixed', left: -10000, top: 0, pointerEvents: 'none' }}>
           <SharePortraitCard
             ref={portraitCardRef}
@@ -1023,16 +1153,16 @@ function KnowledgePageContent({ tree, frequencyByDomain, fullyExploredDomains }:
               </button>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-2.5 mt-5">
-              {declaredSlots.map((slot, index) => (
+              {declaredSlots.map((slot) => (
                 <div key={slot.domain} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
                   <div className="min-w-0">
                     <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
                     <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
                   </div>
                   <div className="flex gap-1.5 mt-2">
-                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(index, slot.domain)}>
-                      <Repeat2 className="size-3.5" />
-                      Swap
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                      <Plus className="size-3.5" />
+                      Add
                     </button>
                     <button type="button" className="min-h-[34px] w-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => void removeDeclaredInterest(slot.domain)} disabled={savingInterests || declaredSlots.length <= 1} aria-label={`Remove ${slot.displayName}`} title={declaredSlots.length <= 1 ? 'Keep at least one interest' : `Remove ${slot.displayName}`}>
                       <Trash2 className="size-3.5" />

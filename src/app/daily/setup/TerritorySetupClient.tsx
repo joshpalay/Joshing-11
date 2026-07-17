@@ -922,7 +922,7 @@ function TerritoryCircle({
         ) : null}
       </KnowledgeBubble>
       <span
-        className="max-w-full px-1 font-serif text-[13px] leading-tight break-words"
+        className="max-w-full px-1 font-serif text-quiet leading-tight break-words"
         style={{ color: color.text }}
       >
         {domain.domain}

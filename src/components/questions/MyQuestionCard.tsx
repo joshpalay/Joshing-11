@@ -76,14 +76,14 @@ export function MyQuestionCard({
 
         {answerersLine ? (
           <p
-            className="mt-2 text-[13px] leading-snug"
+            className="mt-2 text-quiet leading-snug"
             style={{ color: 'var(--ink)', opacity: 0.65 }}
           >
             {answerersLine}
           </p>
         ) : null}
         {hasMetrics ? (
-          <p className={`${answerersLine ? 'mt-1' : 'mt-2'} text-[13px] leading-snug`}>
+          <p className={`${answerersLine ? 'mt-1' : 'mt-2'} text-quiet leading-snug`}>
             <Stat value={`${question.timesAnswered}`} label="answers" />
             <StatSeparator />
             <Stat value={`${question.correctRate}%`} label="correct" />
@@ -93,12 +93,12 @@ export function MyQuestionCard({
         ) : null}
         {question.reportState ? <ReportStateNotice state={question.reportState} /> : null}
         {cardError ? (
-          <p className="mt-2 text-[13px] text-destructive">{cardError}</p>
+          <p className="mt-2 text-quiet text-destructive">{cardError}</p>
         ) : null}
         {confirming ? (
           <div className="mt-3 flex items-center gap-2">
             <span
-              className="mr-auto text-[13px] font-medium"
+              className="mr-auto text-quiet font-medium"
               style={{ color: 'var(--ink)' }}
             >
               Delete this question?
@@ -149,7 +149,7 @@ function ReportStateNotice({ state }: { state: NonNullable<QuestionView['reportS
   if (state.kind === 'removed') {
     return (
       <div
-        className="mt-2 rounded-md border px-2.5 py-2 text-[13px] leading-snug"
+        className="mt-2 rounded-md border px-2.5 py-2 text-quiet leading-snug"
         style={{ borderColor: 'var(--border)', color: 'var(--ink)', opacity: 0.8 }}
       >
         <p className="font-medium">This question was removed.</p>
@@ -169,7 +169,7 @@ function ReportStateNotice({ state }: { state: NonNullable<QuestionView['reportS
 
   return (
     <div
-      className="mt-2 rounded-md border px-2.5 py-2 text-[13px] leading-snug"
+      className="mt-2 rounded-md border px-2.5 py-2 text-quiet leading-snug"
       style={{
         borderColor: 'var(--border)',
         background: 'color-mix(in srgb, var(--ink) 3%, transparent)',

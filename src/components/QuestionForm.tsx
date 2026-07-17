@@ -406,8 +406,10 @@ export function scopeSignpost(visibility: 'public' | 'friends' | 'private'): str
   switch (visibility) {
     case 'public':
       return 'Others can play this. Your friends will see it’s from you.';
+    // Legacy value: the picker no longer offers it (followers are gone —
+    // friend = mutual), but existing rows / callers may still carry it.
     case 'friends':
-      return 'Kept to friends only — only people who follow you will see it.';
+      return 'Kept to friends only — only your friends will see it.';
     case 'private':
       return 'Only you can see this — it won’t be shared.';
   }
@@ -986,7 +988,6 @@ export function QuestionForm({
                 <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="Question visibility">
                   {([
                     { value: 'public', label: 'Public' },
-                    { value: 'friends', label: 'Followers' },
                     { value: 'private', label: 'Private' },
                   ] as const).map((option) => (
                     <button

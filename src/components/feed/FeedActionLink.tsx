@@ -32,7 +32,7 @@ export function FeedActionLink({ className, type, size = 'lg', ...props }: FeedA
         'inline-flex min-h-11 items-center text-[var(--brand-link)] underline underline-offset-4 transition',
         size === 'lg'
           ? 'text-sm font-medium'
-          : 'text-[13px] font-medium tracking-[0.04em]',
+          : 'text-quiet font-medium tracking-[0.04em]',
         'hover:opacity-70 active:opacity-90',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-card)]',
         'disabled:pointer-events-none disabled:opacity-60',

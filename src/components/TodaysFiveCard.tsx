@@ -50,7 +50,7 @@ const CUSTOMIZE_DAILY_LINK_CLASS = [
   'transition-[background-color,border-color,transform]',
   'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-card)]',
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
-  'active:translate-y-px sm:px-3.5 sm:text-[13px]',
+  'active:translate-y-px sm:px-3.5 sm:text-quiet',
 ].join(' ')
 
 const FALLBACK_STATUS: DailyStatus = {
@@ -271,7 +271,7 @@ export default function TodaysFiveCard({
       className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[13px] font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
+        <p className="text-quiet font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
         </p>
         {/* Customize pill — the entry point for tuning the Daily Five. A quiet
@@ -281,12 +281,12 @@ export default function TodaysFiveCard({
             on a near-card cream fill + softened hairline border, no shadow so it
             reads as part of the header rather than a floating chip). The row is
             items-center so the pill sits on the "Today's Five" eyebrow baseline.
-            Destination is /knowledge — the Configure page retired into the
-            knowledge portrait's rotation module. The 44px min height keeps
-            the tap target accessible; `shrink-0` protects it from being squeezed
-            by the eyebrow on narrow widths. */}
+            Destination is /daily/setup — the dedicated manage-your-topics page
+            (adds at top, tap a circle for frequency/remove/related). The 44px
+            min height keeps the tap target accessible; `shrink-0` protects it
+            from being squeezed by the eyebrow on narrow widths. */}
         <Link
-          href="/knowledge"
+          href="/daily/setup"
           data-tour="customize"
           className={CUSTOMIZE_DAILY_LINK_CLASS}
           aria-label="Customize your Daily Five"
@@ -356,7 +356,7 @@ export default function TodaysFiveCard({
       {/* Forward beat — the always-present time anchor, sitting between the
           result dots and the one forward action in both completed branches. */}
       {isComplete ? (
-        <p className="mt-3 text-[13px] leading-5 text-[var(--brand-ink-700)]">
+        <p className="mt-3 text-quiet leading-5 text-[var(--brand-ink-700)]">
           {forwardBeat}
         </p>
       ) : null}

@@ -32,10 +32,14 @@ export function getExistingDevToolHrefs(): string[] | null {
       }
     }
 
-    // The one dev tool that lives outside /dev (the expansion-offer card
-    // preview is nested under the real daily-summary route).
+    // Dev tools that live outside /dev, nested under the real daily-summary
+    // route: the expansion-offer card preview and the reminder-interstitial
+    // preview (D-REMINDER-INTERSTITIAL-01).
     if (hasPage(path.join(appDir, 'daily', 'summary', 'expand-preview'))) {
       hrefs.push('/daily/summary/expand-preview');
+    }
+    if (hasPage(path.join(appDir, 'daily', 'summary', 'reminder-interstitial-preview'))) {
+      hrefs.push('/daily/summary/reminder-interstitial-preview');
     }
 
     // Admin-only tools surfaced in the dev-tools section (each /admin/<name>
