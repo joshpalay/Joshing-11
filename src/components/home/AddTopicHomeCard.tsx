@@ -7,15 +7,40 @@ import { Check, Plus } from 'lucide-react';
 import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
 
+// The final carousel page, in place of a separate "+ Add your own" link
+// below the card: a tile matching GhostTerritoryCircle's footprint (same
+// size-16 circle, dashed border, quiet caption) but neutral-toned and a real
+// link, since it navigates to the full manage surface rather than adding.
+function AddYourOwnTile() {
+  return (
+    <Link
+      href="/daily/setup"
+      aria-label="Add your own topic"
+      className="flex w-full flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center opacity-70 transition hover:opacity-100"
+    >
+      <div
+        className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--border-warm)] text-[var(--ink)]"
+        style={{ background: 'color-mix(in srgb, var(--brand-card) 55%, transparent)' }}
+      >
+        <Plus className="size-5" aria-hidden="true" />
+      </div>
+      <span className="max-w-full px-1 font-serif text-quiet leading-tight text-[var(--ink)]">
+        Add your own
+      </span>
+    </Link>
+  );
+}
+
 // Homepage "Add a topic" module (Josh, 2026-07-17): suggestion circles only —
 // a lightweight, low-clutter way to seed a Daily Five topic from Home by tapping
 // a related-but-specific suggestion, paged through TopicSuggestionCarousel (swipe
-// for more — no per-circle dismiss). The create-your-own text field lives on the
-// full manage surface (/daily/setup, reachable from the "+ Add your own" link
-// below or the Today's Five Customize pill) to keep Home uncluttered.
-// Suggestions are fetched client-side after mount (like TodaysFiveCard's status
-// fetch) so they never touch the home critical path; the card hides itself
-// until there's something to show.
+// for more — no per-circle dismiss). The carousel's last page is always the
+// "Add your own" tile above, linking to the full manage surface (/daily/setup)
+// where the create-your-own text field lives — kept off Home to stay
+// uncluttered, and off this card's footer since it's now reachable by
+// swiping to the end. Suggestions are fetched client-side after mount (like
+// TodaysFiveCard's status fetch) so they never touch the home critical path;
+// the card hides itself until there's something to show.
 export function AddTopicHomeCard() {
   const [added, setAdded] = useState<string | null>(null);
   const [pool, setPool] = useState<NearbyTerritory[]>([]);
@@ -93,7 +118,13 @@ export function AddTopicHomeCard() {
         A few you might like, based on your interests — swipe for more, or tap one to seed your
         Daily Five.
       </p>
-      {pool.length > 0 ? <TopicSuggestionCarousel suggestions={pool} onAdd={addSuggestion} /> : null}
+      {pool.length > 0 ? (
+        <TopicSuggestionCarousel
+          suggestions={pool}
+          onAdd={addSuggestion}
+          trailingSlide={<AddYourOwnTile />}
+        />
+      ) : null}
       {added ? (
         <div
           className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
@@ -106,12 +137,6 @@ export function AddTopicHomeCard() {
           </p>
         </div>
       ) : null}
-      <Link
-        href="/daily/setup"
-        className="mt-4 inline-flex items-center gap-1 text-quiet font-medium tracking-[0.08em] text-[var(--brand-link)] uppercase hover:opacity-70"
-      >
-        <Plus className="size-3.5" aria-hidden="true" /> Add your own
-      </Link>
     </section>
   );
 }
