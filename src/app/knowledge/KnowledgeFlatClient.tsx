@@ -779,9 +779,12 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   }
 
   return (
-    <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+    <main className={`w-[min(672px,94vw)] mx-auto ${isManage ? 'pt-0' : 'pt-5'} pb-10 grid gap-3.5`}>
       {isManage ? (
-        <div className="flex items-start justify-between gap-4 px-1">
+        // Sticky so the title + exit follow you down a long page — there's no
+        // bottom nav on /daily/*, so this X is the only way out. The page-cream
+        // background lets content scroll cleanly under it.
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 bg-[var(--brand-cream-page)] px-1 pt-5 pb-3">
           <h1 className="m-0 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
             Manage your topics
           </h1>
