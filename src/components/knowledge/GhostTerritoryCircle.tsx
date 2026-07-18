@@ -6,8 +6,9 @@ import { Check, Plus } from 'lucide-react';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
 
-// The small caption under the circle — "Add" or "Added". One definition so
-// the tiny type size lives in a single literal.
+// The small "Added" caption shown once a circle is settled — the plus icon
+// and dashed circle already read as "tap to add" on their own, so there's no
+// caption for the resting state.
 const CAPTION_CLASS = 'text-[10px] tracking-[0.14em] uppercase';
 
 // A suggested ("nearby") territory the player hasn't adopted yet: a dashed
@@ -66,7 +67,7 @@ export function GhostTerritoryCircle({
       <span className="max-w-full px-1 font-serif text-quiet leading-tight break-words text-[var(--territory-text)]">
         {territory.domain}
       </span>
-      <span className={`${CAPTION_CLASS} text-[var(--territory-text)]`}>{added ? 'Added' : 'Add'}</span>
+      {added ? <span className={`${CAPTION_CLASS} text-[var(--territory-text)]`}>Added</span> : null}
     </button>
   );
 }

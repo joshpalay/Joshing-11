@@ -33,15 +33,16 @@ function AddYourOwnTile() {
 }
 
 // Homepage "Add a topic" module (Josh, 2026-07-17): suggestion circles only —
-// a lightweight, low-clutter way to seed a Daily Five topic from Home by tapping
-// a related-but-specific suggestion, paged through TopicSuggestionCarousel (swipe
-// for more — no per-circle dismiss). The carousel's last page is always the
-// "Add your own" tile above, linking to the full manage surface (/daily/setup)
-// where the create-your-own text field lives — kept off Home to stay
-// uncluttered, and off this card's footer since it's now reachable by
-// swiping to the end. Suggestions are fetched client-side after mount (like
-// TodaysFiveCard's status fetch) so they never touch the home critical path;
-// the card hides itself until there's something to show.
+// a lightweight, low-clutter way to add a topic to your interests from Home
+// by tapping a related-but-specific suggestion, paged through
+// TopicSuggestionCarousel (swipe for more — no per-circle dismiss). The
+// carousel's last page is always the "Add your own" tile above, linking to
+// the full manage surface (/daily/setup) where the create-your-own text
+// field lives — kept off Home to stay uncluttered, and off this card's
+// footer since it's now reachable by swiping to the end. Suggestions are
+// fetched client-side after mount (like TodaysFiveCard's status fetch) so
+// they never touch the home critical path; the card hides itself until
+// there's something to show.
 export function AddTopicHomeCard() {
   const [added, setAdded] = useState<string | null>(null);
   const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
@@ -145,8 +146,8 @@ export function AddTopicHomeCard() {
         className="mt-1 mb-3 text-sm leading-6 text-[var(--text-muted-warm)]"
         style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
       >
-        A few you might like, based on your interests — swipe for more, or tap one to seed your
-        Daily Five.
+        A few you might like, based on your interests — swipe for more, or tap one to add it to
+        your topics.
       </p>
       {pool.length > 0 ? (
         <TopicSuggestionCarousel
