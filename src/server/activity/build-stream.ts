@@ -13,6 +13,7 @@
 import { filterUtilityActivities } from '@/app/activities/filter-utility-activities';
 import {
   activityToStreamItem,
+  bundleAnswerToStreamItem,
   convergenceToStreamItem,
   friendActivityToStreamItem,
   momentToStreamItem,
@@ -24,6 +25,7 @@ import { MILESTONE_CARD_QUESTION_CAP } from '@/lib/lately-milestones';
 import { getActivitiesForUser } from '@/server/db/queries/activity';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
 import {
+  getBundleAnswerMoments,
   getFriendActivity,
   getLatelyConvergences,
   getLatelyMoments,
@@ -56,6 +58,10 @@ export async function buildActivityStream(
   // overlapping rather than adding to it.
   const itemsPromise = getActivitiesForUser(userId, windowDays);
   const momentsPromise = getLatelyMoments(userId, windowDays);
+  // The complement of moments: creator-less (LLM) questions the viewer answered
+  // out of a friend's From Friends bundle — without this the answer leaves no
+  // trace anywhere on Home once the bundle is exhausted.
+  const bundleAnswersPromise = getBundleAnswerMoments(userId, windowDays);
   const [friendCards, convergences] = await Promise.all([
     getFriendActivity(userId, windowDays),
     getLatelyConvergences(userId, windowDays),
@@ -76,9 +82,10 @@ export async function buildActivityStream(
       ...convergences.flatMap((c) => c.questionIds),
     ]),
   ];
-  const [items, moments, textById, priorById, hiddenIds, dismissedIds] = await Promise.all([
+  const [items, moments, bundleAnswers, textById, priorById, hiddenIds, dismissedIds] = await Promise.all([
     itemsPromise,
     momentsPromise,
+    bundleAnswersPromise,
     getMilestoneQuestionText(allQuestionIds),
     getViewerPriorAnswerResults(userId, allQuestionIds),
     // B-Report-3: durable self-hide — a question the viewer reported as
@@ -128,6 +135,7 @@ export async function buildActivityStream(
     })
     .map(activityToStreamItem);
   const momentItems = moments.map(momentToStreamItem);
+  const bundleAnswerItems = bundleAnswers.map(bundleAnswerToStreamItem);
   const friendActivityItems = friendCards
     .map((card, i) => {
       const questions: StreamQuestion[] = cappedIdsByCard[i].ids
@@ -192,6 +200,7 @@ export async function buildActivityStream(
 
   return sortByProminence([
     ...momentItems,
+    ...bundleAnswerItems,
     ...friendActivityItems,
     ...convergenceItems,
     ...utilityItems,
