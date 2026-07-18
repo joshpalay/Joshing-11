@@ -62,7 +62,14 @@ export function GhostTerritoryCircle({
         }`}
         style={{ background: 'color-mix(in srgb, var(--brand-card) 55%, transparent)' }}
       >
-        {added ? <Check className="size-5" aria-hidden="true" /> : <Plus className="size-5" aria-hidden="true" />}
+        {added ? (
+          <Check className="size-7" aria-hidden="true" />
+        ) : (
+          // Forest green (--game-correct) — the same "Play Missed Questions"
+          // accent, not the category tint, so the tap target itself pops
+          // rather than blending into the dashed outline.
+          <Plus className="size-7 text-[var(--game-correct)]" aria-hidden="true" />
+        )}
       </div>
       <span className="max-w-full px-1 font-serif text-quiet leading-tight break-words text-[var(--territory-text)]">
         {territory.domain}
