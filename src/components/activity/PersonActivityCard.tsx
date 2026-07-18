@@ -92,12 +92,17 @@ export function PersonActivityCard({
   const saved = rows.filter((r) => r.relationship === 'saved');
   const reacted = rows.filter((r) => r.relationship === 'reacted');
   const convergence = rows.find((r) => r.relationship === 'convergence') ?? null;
+  // Bundle answers (LLM questions from the friend's From Friends bundle). Kept
+  // apart from you_got so the roll-up never reads "got {Name}" for a question
+  // the friend didn't write.
+  const playedAlong = rows.filter((r) => r.relationship === 'played_along');
   // Anything without a relationship kind (mastery, opened a domain, follows…)
   // keeps its own quiet one-liner as a fallback.
   const others = rows.filter((r) => !r.relationship);
 
   const youGotTopics = topicsOf(youGot);
   const gotYouTopics = topicsOf(gotYou);
+  const playedAlongTopics = topicsOf(playedAlong);
   const seed = rows[0]?.id ?? 'person';
 
   return (
@@ -148,6 +153,12 @@ export function PersonActivityCard({
           </SubLine>
         ) : null}
         {reacted.length ? <SubLine>{name} reacted to your question</SubLine> : null}
+        {playedAlong.length ? (
+          <SubLine>
+            played along with {name}
+            {playedAlongTopics.length ? ` — ${playedAlongTopics.join(', ')}` : ''}
+          </SubLine>
+        ) : null}
         {convergence ? <SubLine>{convergencePredicate(convergence)}</SubLine> : null}
         {others.map((row) => (
           <SubLine key={row.id}>

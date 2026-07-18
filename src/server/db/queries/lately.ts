@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, like, ne, notExists, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import {
@@ -26,8 +26,8 @@ import {
 } from '@/server/daily/verification-gating';
 import { db, feedItems, follows, masteryEvents, milestoneDismissed, questions, users } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { approvedFollowExists } from '@/server/db/queries/follow-visibility';
-import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, SOCIAL_FEED_SOURCE_TYPE, notBlockedForViewer } from '@/server/feed/visibility';
+import { approvedFollowExists, mutualFollowApproved } from '@/server/db/queries/follow-visibility';
+import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, SOCIAL_FEED_SOURCE_TYPE, notBlocked, notBlockedForViewer } from '@/server/feed/visibility';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
 
@@ -159,6 +159,108 @@ export async function getLatelyMoments(
       // Footnote brand label. v2 spec example uses ASTERISK; not worth
       // per-surface disambiguation until the user asks for it.
       gameTitle: 'asterisk',
+      answeredAt: row.answeredAt,
+    });
+  }
+  return moments;
+}
+
+// A bundle answer: the viewer answered a question they met through a friend's
+// From Friends bundle (via /api/lately/milestone/answer). The friend PLAYED the
+// question — their correct `friend_answered` feed row is what put it in the
+// bundle — but nobody-the-viewer-knows WROTE it: these are the creator-less LLM
+// questions `getLatelyMoments` excludes by construction. Without this read the
+// answer leaves no activity trace at all (the exhausted bundle also disappears
+// from From Friends), so "the last thing I did" is invisible on Home.
+// Human-authored bundle questions are deliberately NOT read here — they already
+// surface as you_got_them moments, and reading them again would double the row.
+export type BundleAnswerMoment = {
+  momentId: string;
+  friendId: string;
+  friendName: string;
+  friendFirstName: string;
+  questionId: string;
+  questionText: string;
+  category: string;
+  answeredAt: Date;
+};
+
+export async function getBundleAnswerMoments(
+  userId: string,
+  windowDays = MOMENTS_WINDOW_DAYS,
+): Promise<BundleAnswerMoment[]> {
+  const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      momentId: masteryEvents.id,
+      friendId: feedItems.sourceUserId,
+      friendDisplayName: users.displayName,
+      questionId: questions.id,
+      questionText: questions.questionText,
+      canonicalSubcategory: questions.canonicalSubcategory,
+      category: questions.category,
+      answeredAt: masteryEvents.createdAt,
+      playedAt: feedItems.sourceEventAt,
+    })
+    .from(masteryEvents)
+    .innerJoin(questions, eq(questions.id, masteryEvents.questionId))
+    // The friend whose bundle carried this question: the same correct
+    // `friend_answered` row getFriendActivity builds the bundle from. Two
+    // friends can both have played it — the JS pass below keeps the most
+    // recent play per mastery event.
+    .innerJoin(
+      feedItems,
+      and(
+        eq(feedItems.questionId, masteryEvents.questionId),
+        eq(feedItems.recipientUserId, userId),
+        eq(feedItems.sourceType, SOCIAL_FEED_SOURCE_TYPE),
+        eq(feedItems.sourceResult, 'correct'),
+      ),
+    )
+    .innerJoin(users, eq(users.id, feedItems.sourceUserId))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        // The milestone answer route's deterministic answer id is the marker
+        // that this event came from a bundle answer: write-mastery-event
+        // composes `${sourceType}:${sourceId}:…` and that route passes
+        // sourceType 'feed' with sourceId `milestone:{questionId}`.
+        like(masteryEvents.answerId, 'feed:milestone:%'),
+        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+        gte(masteryEvents.createdAt, windowStart),
+        // Creator-less (LLM) questions only — human-authored bundle answers
+        // already read as you_got_them moments in getLatelyMoments; this query
+        // is the complement, never an overlap.
+        isNull(questions.creatorId),
+        // Safety hard-block (no owner exception possible on a creator-less
+        // question, so the plain form suffices).
+        notBlocked(),
+        // Bundle membership is friends-only (mutual), same gate as the bundle
+        // reads in getFriendActivity/getLatelyMilestones.
+        mutualFollowApproved(userId, feedItems.sourceUserId, 'bundle_answer'),
+      ),
+    )
+    .orderBy(desc(masteryEvents.createdAt), desc(feedItems.sourceEventAt))
+    .limit(200);
+
+  const seen = new Set<string>();
+  const moments: BundleAnswerMoment[] = [];
+  for (const row of rows) {
+    if (!row.answeredAt || !row.friendId) continue;
+    // Rows arrive newest-play-first within each event; keep the first (most
+    // recent) friend per mastery event.
+    if (seen.has(row.momentId)) continue;
+    seen.add(row.momentId);
+    const friendName = row.friendDisplayName?.trim() || 'A friend';
+    moments.push({
+      momentId: row.momentId,
+      friendId: row.friendId,
+      friendName,
+      friendFirstName: firstName(row.friendDisplayName, friendName),
+      questionId: row.questionId,
+      questionText: row.questionText,
+      category: prettifyCategory(row.canonicalSubcategory, row.category),
       answeredAt: row.answeredAt,
     });
   }

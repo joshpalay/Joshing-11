@@ -90,8 +90,9 @@ Dimensions:
 
 Method — web search is a FALLBACK, not the default:
 1. First resolve from well-established knowledge. (The ambiguous_source dimension is a judgment about the question text itself — never search for it.)
-2. ONLY if you cannot CONFIDENTLY confirm or refute a load-bearing FACTUAL claim from knowledge, use the web_search tool to check it. Do not search for things you already know.
-3. If you still cannot settle a load-bearing claim after searching, treat it as unverifiable.
+2. Before reaching for web_search, ask: if I had to state this claim from memory with money riding on it, would I be confident? Mainstream, widely-covered facts — a famous character's canonical trait, a well-known plot event, a major historical date — you already know. Do NOT search to double-check those; searching to reassure yourself about something you already know correctly is the exact failure mode this rule exists to prevent.
+3. Reserve web_search for claims you genuinely cannot recall, cannot distinguish between two specific plausible alternatives, or that concern niche/obscure canon (a minor character, a specific episode or issue number, a small situational detail) where being confidently wrong is a real risk. One search per genuinely unsettled claim is normal; searching every claim in the question is not.
+4. If you still cannot settle a load-bearing claim after searching, treat it as unverifiable.
 
 Return ONE verdict for the whole question, as a single JSON object AFTER any searching:
 { "verdict": "ok" | "demoted" | "unverifiable", "reason": "<short: name the specific error, or 'verified', or what could not be settled>" }

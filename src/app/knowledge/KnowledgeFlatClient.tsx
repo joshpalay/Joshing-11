@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Combine, Plus, Trash2, X } from 'lucide-react';
+import { Check, Combine, Plus, Trash2, X } from 'lucide-react';
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -22,11 +22,11 @@ import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import {
   TERRITORY_FREQUENCY_LABEL,
-  getNearbyTerritories,
   type DomainPreferenceFrequency,
   type NearbyTerritory,
 } from '@/lib/daily/territory-model';
-import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
+import { buildSuggestionPool } from '@/lib/knowledge/suggestion-pool';
+import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import type { MasteryTier } from '@/types/db';
@@ -392,48 +392,102 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   // adjacent topics — e.g. Bach → Baroque Music, never a broad bucket like
   // "Music"), supplemented by the hard-coded adjacency rules. A per-visit
   // random offset (set in a deferred, client-only frame so SSR markup never
-  // disagrees) seeds a shuffle so the block isn't the same three every time.
+  // disagrees) seeds a shuffle so the carousel isn't in the same order every
+  // time. Paging through them (TopicSuggestionCarousel) is the "not
+  // interested" gesture — there's no per-circle dismiss.
   const [suggestionOffset, setSuggestionOffset] = useState(0);
-  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  // Brief "Added …" confirmation shown under the add block after a topic
+  // lands, with an Undo. addedKeys is the circles' source of truth for the
+  // checked "Added" state (TopicSuggestionCarousel doesn't track it itself,
+  // so Undo can flip a circle back here). Cleared per-domain by undoAddedTopic;
+  // otherwise only grows for the session, since an add that's still standing
+  // should keep reading as added even after a later add replaces the banner.
+  const [addedTopic, setAddedTopic] = useState<string | null>(null);
+  const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
+  const [undoing, setUndoing] = useState(false);
+  useEffect(() => {
+    if (!addedTopic) return;
+    const timer = window.setTimeout(() => setAddedTopic(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [addedTopic]);
+  const undoAddedTopic = async () => {
+    if (!addedTopic || undoing) return;
+    setUndoing(true);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ domain: addedTopic }),
+      });
+      if (!response.ok) throw new Error('undo failed');
+      setAddedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(domainKey(addedTopic));
+        return next;
+      });
+      setAddedTopic(null);
+      await loadKnowledge();
+    } catch {
+      setSuggestError('Could not undo that add. Remove it from Your topics instead.');
+    } finally {
+      setUndoing(false);
+    }
+  };
   useEffect(() => {
     const frame = window.requestAnimationFrame(() =>
       setSuggestionOffset(Math.floor(Math.random() * 1_000_000)),
     );
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
-    const owned = new Set<string>();
-    for (const domain of sortedDomains) owned.add(domainKey(domain.displayName));
-    for (const label of data?.pageData.declaredInterests ?? []) owned.add(domainKey(label));
-    const pool = new Map<string, NearbyTerritory>();
-    // Tree ghost leaves — specific adjacent topics the player doesn't hold yet.
-    // broadCategory is taken from the depth-1 ancestor (the broad-category node)
-    // so the ghost circle keeps its category tint.
-    const walk = (node: KnowledgeTreeNode, depth: number, category: string | null) => {
-      const cat = depth === 1 ? node.name : category;
-      const children = node.children ?? [];
-      if (node.ghost && children.length === 0) {
-        const key = domainKey(node.name);
-        if (!pool.has(key) && !owned.has(key)) {
-          pool.set(key, { domain: node.name, broadCategory: cat, reason: 'Related to your map' });
-        }
+  // Shared builder (also used by the home suggestions endpoint) so both add
+  // surfaces draw the identical related-but-specific pool. Instant/local —
+  // no fetch — but bounded to the knowledge tree's direct unheld siblings
+  // plus a handful of hard-coded adjacency rules, which for a modest map is
+  // often a small, quickly-exhausted set.
+  const treeSuggestionPool = useMemo<NearbyTerritory[]>(
+    () =>
+      buildSuggestionPool(detailTree, [
+        ...sortedDomains.map((domain) => domain.displayName),
+        ...(data?.pageData.declaredInterests ?? []),
+      ]),
+    [detailTree, sortedDomains, data],
+  );
+  // Supplements the tree pool with the real question catalog under the
+  // player's own broad categories (/api/interests/suggestions — same
+  // endpoint the home card uses) so suggestions aren't capped to the
+  // hand-authored graph. Fetched once; the tree pool renders immediately and
+  // this widens it once it arrives, rather than blocking on it.
+  const [catalogSuggestions, setCatalogSuggestions] = useState<NearbyTerritory[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/interests/suggestions', { credentials: 'include' });
+        if (!response.ok) return;
+        const body = (await response.json().catch(() => null)) as
+          | { suggestions?: NearbyTerritory[] }
+          | null;
+        if (!cancelled && Array.isArray(body?.suggestions)) setCatalogSuggestions(body.suggestions);
+      } catch {
+        // The tree pool alone is still a usable fallback.
       }
-      for (const child of children) walk(child, depth + 1, cat);
+    })();
+    return () => {
+      cancelled = true;
     };
-    walk(detailTree, 0, null);
-    // Supplement with the hard-coded adjacency rules.
-    for (const territory of getNearbyTerritories(sortedDomains.map((domain) => domain.displayName))) {
+  }, []);
+  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
+    const merged = new Map(treeSuggestionPool.map((territory) => [domainKey(territory.domain), territory]));
+    for (const territory of catalogSuggestions) {
       const key = domainKey(territory.domain);
-      if (!pool.has(key) && !owned.has(key)) pool.set(key, territory);
+      if (!merged.has(key)) merged.set(key, territory);
     }
-    return [...pool.values()];
-  }, [detailTree, sortedDomains, data]);
-  const visibleNearby = useMemo(() => {
-    const SHOWN = 3;
-    if (suggestionPool.length <= SHOWN) return suggestionPool;
-    // Seeded Fisher–Yates (small LCG) keyed on the per-visit offset: stable
-    // within a render, re-rolled each visit.
+    return [...merged.values()];
+  }, [treeSuggestionPool, catalogSuggestions]);
+  // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
+  const shuffledPool = useMemo(() => {
     const shuffled = [...suggestionPool];
     let seed = (suggestionOffset % 2_147_483_646) + 1;
     const next = () => {
@@ -444,12 +498,10 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       const j = Math.floor(next() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    return shuffled.slice(0, SHOWN);
+    return shuffled;
   }, [suggestionPool, suggestionOffset]);
 
-  const addSuggestion = async (territory: NearbyTerritory) => {
-    if (addingSuggestion) return;
-    setAddingSuggestion(territory.domain);
+  const addSuggestion = async (territory: NearbyTerritory): Promise<boolean> => {
     setSuggestError(null);
     try {
       const response = await fetch('/api/declared-interests', {
@@ -465,11 +517,13 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         const body = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(body?.message ?? 'Could not add that territory.');
       }
+      setAddedTopic(territory.domain);
+      setAddedKeys((prev) => new Set(prev).add(domainKey(territory.domain)));
       await loadKnowledge();
+      return true;
     } catch (caught) {
       setSuggestError(caught instanceof Error ? caught.message : 'Could not add that territory.');
-    } finally {
-      setAddingSuggestion(null);
+      return false;
     }
   };
 
@@ -487,6 +541,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       const body = (await response.json().catch(() => null)) as { message?: string } | null;
       throw new Error(body?.message ?? 'Could not add that topic.');
     }
+    setAddedTopic(label);
+    setAddedKeys((prev) => new Set(prev).add(domainKey(label)));
     await loadKnowledge();
   };
 
@@ -776,9 +832,12 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   }
 
   return (
-    <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
+    <main className={`w-[min(672px,94vw)] mx-auto ${isManage ? 'pt-0' : 'pt-5'} pb-10 grid gap-3.5`}>
       {isManage ? (
-        <div className="flex items-start justify-between gap-4 px-1">
+        // Sticky so the title + exit follow you down a long page — there's no
+        // bottom nav on /daily/*, so this X is the only way out. The page-cream
+        // background lets content scroll cleanly under it.
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 bg-[var(--brand-cream-page)] px-1 pt-5 pb-3">
           <h1 className="m-0 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
             Manage your topics
           </h1>
@@ -815,8 +874,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Add topics">
           <h2 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a topic</h2>
           <p className="mt-1 mb-3 text-quiet leading-[1.5] text-[var(--text-muted-warm)]">
-            {visibleNearby.length > 0
-              ? 'Suggestions based on the shape of your map — or create your own.'
+            {shuffledPool.length > 0
+              ? 'Suggestions based on the shape of your map — swipe for more, or create your own.'
               : 'Create your own, and more suggestions will appear as your map grows.'}
           </p>
           <AddTopicField
@@ -829,16 +888,31 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               await adoptTopic(topic.label, topic.broadCategory ?? null);
             }}
           />
-          {visibleNearby.length > 0 ? (
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              {visibleNearby.map((territory) => (
-                <GhostTerritoryCircle
-                  key={territory.domain}
-                  territory={territory}
-                  disabled={addingSuggestion !== null}
-                  onAdd={() => void addSuggestion(territory)}
-                />
-              ))}
+          {shuffledPool.length > 0 ? (
+            <div className="mt-4">
+              <TopicSuggestionCarousel suggestions={shuffledPool} addedKeys={addedKeys} onAdd={addSuggestion} />
+            </div>
+          ) : null}
+          {addedTopic ? (
+            <div
+              className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+              role="status"
+              aria-live="polite"
+            >
+              <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
+              <div className="flex-1">
+                <p className="m-0 text-quiet text-[var(--ink)]">
+                  Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                </p>
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                  onClick={() => void undoAddedTopic()}
+                  disabled={undoing}
+                >
+                  {undoing ? 'Undoing…' : 'Undo'}
+                </button>
+              </div>
             </div>
           ) : null}
           {suggestError ? (
@@ -901,23 +975,38 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
             <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
               <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
               <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
-                {visibleNearby.length > 0
-                  ? 'Suggestions based on the shape of your map — or create your own.'
+                {shuffledPool.length > 0
+                  ? 'Suggestions based on the shape of your map — swipe for more, or create your own.'
                   : 'Create your own, and more suggestions will appear as your map grows.'}
               </p>
               <Link href="/daily/setup" className="btn-ghost gap-1.5">
                 <Plus className="size-4" aria-hidden /> Create your own
               </Link>
-              {visibleNearby.length > 0 ? (
-                <div className="mt-4 grid grid-cols-3 gap-3">
-                  {visibleNearby.map((territory) => (
-                    <GhostTerritoryCircle
-                      key={territory.domain}
-                      territory={territory}
-                      disabled={addingSuggestion !== null}
-                      onAdd={() => void addSuggestion(territory)}
-                    />
-                  ))}
+              {shuffledPool.length > 0 ? (
+                <div className="mt-4">
+                  <TopicSuggestionCarousel suggestions={shuffledPool} addedKeys={addedKeys} onAdd={addSuggestion} />
+                </div>
+              ) : null}
+              {addedTopic ? (
+                <div
+                  className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
+                  <div className="flex-1">
+                    <p className="m-0 text-quiet text-[var(--ink)]">
+                      Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                      onClick={() => void undoAddedTopic()}
+                      disabled={undoing}
+                    >
+                      {undoing ? 'Undoing…' : 'Undo'}
+                    </button>
+                  </div>
                 </div>
               ) : null}
               {suggestError ? (
