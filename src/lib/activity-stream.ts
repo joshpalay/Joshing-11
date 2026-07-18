@@ -21,7 +21,7 @@
 import { HOME_TOP3_ELIGIBLE_TYPES } from '@/lib/activity-types';
 import type { ActivityItemView } from '@/server/db/queries/activity';
 import type { MasteryTier } from '@/types/db';
-import type { LatelyMoment } from '@/server/db/queries/lately';
+import type { BundleAnswerMoment, LatelyMoment } from '@/server/db/queries/lately';
 import { LATELY_TIER, latelyTierForMomentDir, djb2 } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { FriendActivityCard } from '@/lib/friend-activity';
@@ -249,13 +249,17 @@ export type StreamItem = {
   friendId?: string | null;
   // How this row reads inside a per-person relationship cluster, so the cluster
   // can roll events up by direction without re-parsing copy (D-FEED-TIER v2 §3):
-  //   you_got     — you answered THEIR question right ("got {Name} — topics")
-  //   got_you     — they answered YOUR question ("{Name} got yours — topics")
-  //   convergence — you both knew the same shared questions (folded, one line)
-  //   saved       — they saved your question
-  //   reacted     — they reacted to your question
+  //   you_got      — you answered THEIR question right ("got {Name} — topics")
+  //   got_you      — they answered YOUR question ("{Name} got yours — topics")
+  //   convergence  — you both knew the same shared questions (folded, one line)
+  //   saved        — they saved your question
+  //   reacted      — they reacted to your question
+  //   played_along — you answered a creator-less (LLM) question from their
+  //                  From Friends bundle. Distinct from you_got on purpose: the
+  //                  friend PLAYED the question, they didn't write it, so the
+  //                  rolled-up copy must never read as "got {Name}".
   // Undefined = not a per-person relationship event (renders as a plain line).
-  relationship?: 'you_got' | 'got_you' | 'convergence' | 'saved' | 'reacted';
+  relationship?: 'you_got' | 'got_you' | 'convergence' | 'saved' | 'reacted' | 'played_along';
   // The topic/category this event is about, for the cluster's rolled-up lists.
   topic?: string | null;
   // Whether this item is eligible for the homepage's curated head.
@@ -802,6 +806,64 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
         text: moment.questionText,
         domain: moment.category,
         priorResult: 'correct',
+      },
+    },
+  };
+}
+
+// --- Bundle answers ----------------------------------------------------------
+
+// Pool — bundle answers: YOU answered a creator-less (LLM) question from a
+// friend's From Friends bundle. The friend played the question, they didn't
+// write it, so every line stays in the shared-territory register and never
+// claims authorship ("{friend}'s question" is reserved for questions a person
+// actually wrote). Hash-selected per event id like the other pools.
+const BUNDLE_ANSWER_LINES = [
+  'You followed {friend} into {topic}',
+  'You played along with {friend} on {topic}',
+  'You kept {friend} company in {topic}',
+] as const;
+const BUNDLE_ANSWER_NO_TOPIC = 'You played a question from {friend}';
+
+// A bundle answer, as a quiet you-did-this one-liner. Same prominence tier as a
+// you_got_them moment (the viewer's own action — texture, not headline). The
+// question is creator-less by query construction, so the expanded reveal
+// carries the honest LLM attribution (authorName: null — see StreamQuestion)
+// instead of implying the friend wrote it; the forward action is send-onward,
+// exactly like a moment reveal (already answered, so answering isn't offered).
+export function bundleAnswerToStreamItem(moment: BundleAnswerMoment): StreamItem {
+  const topic = moment.category;
+  const friend = { name: moment.friendName, userId: moment.friendId };
+  const line = renderTemplate(
+    pickLine(BUNDLE_ANSWER_LINES, BUNDLE_ANSWER_NO_TOPIC, moment.momentId, topic),
+    friend,
+    topic,
+  );
+  return {
+    // Prefixed so the id can never collide with the same mastery event read as
+    // a moment (disjoint by creatorId today, but cheap insurance).
+    id: `bundle-answer-${moment.momentId}`,
+    sortAt: moment.answeredAt,
+    tier: LATELY_TIER.OTHER,
+    homeEligible: false,
+    friendId: moment.friendId,
+    relationship: 'played_along',
+    topic,
+    line,
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'diamond',
+    expand: {
+      kind: 'your_question',
+      question: {
+        questionId: moment.questionId,
+        text: moment.questionText,
+        domain: moment.category,
+        priorResult: 'correct',
+        // Creator-less by query construction → the LLM attribution marker
+        // (null ≠ undefined here; see StreamQuestion.authorName).
+        authorName: null,
       },
     },
   };

@@ -19,6 +19,7 @@ vi.mock('@/app/activities/filter-utility-activities', () => ({
 vi.mock('@/lib/activity-stream', () => ({
   activityToStreamItem: (x: { id: string }) => x,
   momentToStreamItem: (x: unknown) => x,
+  bundleAnswerToStreamItem: (x: unknown) => x,
   convergenceToStreamItem: (_c: unknown, questions: unknown) => ({ kind: 'convergence', questions }),
   friendActivityToStreamItem: (card: { id: string }, questions: unknown) => ({ kind: 'milestone', id: card.id, questions }),
 }));
@@ -33,6 +34,7 @@ vi.mock('@/server/db/queries/content-reports', () => ({
 }));
 vi.mock('@/server/db/queries/lately', () => ({
   getLatelyMoments: vi.fn(async () => []),
+  getBundleAnswerMoments: vi.fn(async () => []),
   getLatelyConvergences: vi.fn(async () => []),
   getFriendActivity: vi.fn(async () => []),
   getMilestoneQuestionText: vi.fn(async () => new Map()),
