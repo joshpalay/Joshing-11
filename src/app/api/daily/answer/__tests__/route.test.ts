@@ -157,7 +157,10 @@ vi.mock('@/server/answers/canonical-answer', () => ({
   normalizeCanonicalAnswerLabel: (s: string) => s,
 }))
 
-vi.mock('@/lib/llm', () => ({
+// Keep the real module (constants like ANTHROPIC_MODEL are read at import
+// time by the route's dependency graph) and stub only the LLM call itself.
+vi.mock('@/lib/llm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/llm')>()),
   suggestAnswer: suggestAnswerMock,
 }))
 

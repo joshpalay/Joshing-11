@@ -29,7 +29,10 @@ export function FeedActionLink({ className, type, size = 'lg', ...props }: FeedA
     <button
       type={type ?? 'button'}
       className={cn(
-        'inline-flex min-h-11 items-center text-[var(--brand-link)] underline underline-offset-4 transition',
+        // The `color:` hint is load-bearing: without it tailwind-merge can't
+        // tell the arbitrary var() value is a color, classifies it against the
+        // size utility below, and drops it in 'sm' mode (text-quiet won).
+        'inline-flex min-h-11 items-center text-[color:var(--brand-link)] underline underline-offset-4 transition',
         size === 'lg'
           ? 'text-sm font-medium'
           : 'text-quiet font-medium tracking-[0.04em]',

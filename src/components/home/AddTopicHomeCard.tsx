@@ -44,7 +44,10 @@ function AddYourOwnTile() {
 // they never touch the home critical path; the card hides itself until
 // there's something to show.
 export function AddTopicHomeCard() {
-  const [added, setAdded] = useState<string | null>(null);
+  // `created` comes from the POST response: an idempotent re-add of an
+  // already-active topic returns created:false, and Undo must not render
+  // there — it would deactivate the pre-existing interest.
+  const [added, setAdded] = useState<{ domain: string; created: boolean } | null>(null);
   const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
   const [undoing, setUndoing] = useState(false);
   const [pool, setPool] = useState<NearbyTerritory[]>([]);
@@ -98,8 +101,13 @@ export function AddTopicHomeCard() {
         }),
       });
       if (!response.ok) throw new Error('add failed');
-      setAdded(territory.domain);
-      setAddedKeys((prev) => new Set(prev).add(domainKey(territory.domain)));
+      const body = (await response.json().catch(() => null)) as
+        | { domain?: string; created?: boolean }
+        | null;
+      // Prefer the canonical domain the server persisted over our local label.
+      const domain = typeof body?.domain === 'string' && body.domain ? body.domain : territory.domain;
+      setAdded({ domain, created: body?.created === true });
+      setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
       return true;
     } catch {
       // Leave the circle in place so the player can retry.
@@ -110,19 +118,19 @@ export function AddTopicHomeCard() {
   // Undo the most recent add — deactivates that one domain (not a full
   // replace), so it can't clobber an interest declared elsewhere meanwhile.
   const undoAdded = async () => {
-    if (!added || undoing) return;
+    if (!added?.created || undoing) return;
     setUndoing(true);
     try {
       const response = await fetch('/api/declared-interests', {
         method: 'DELETE',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ domain: added }),
+        body: JSON.stringify({ domain: added.domain }),
       });
       if (!response.ok) throw new Error('undo failed');
       setAddedKeys((prev) => {
         const next = new Set(prev);
-        next.delete(domainKey(added));
+        next.delete(domainKey(added.domain));
         return next;
       });
       setAdded(null);
@@ -166,16 +174,22 @@ export function AddTopicHomeCard() {
           <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
           <div className="flex-1">
             <p className="m-0 text-quiet text-[var(--ink)]">
-              Added &ldquo;{added}&rdquo; — it&rsquo;ll show up in an upcoming round.
+              {added.created ? (
+                <>Added &ldquo;{added.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+              ) : (
+                <>&ldquo;{added.domain}&rdquo; is already in your topics.</>
+              )}
             </p>
-            <button
-              type="button"
-              className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
-              onClick={() => void undoAdded()}
-              disabled={undoing}
-            >
-              {undoing ? 'Undoing…' : 'Undo'}
-            </button>
+            {added.created ? (
+              <button
+                type="button"
+                className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                onClick={() => void undoAdded()}
+                disabled={undoing}
+              >
+                {undoing ? 'Undoing…' : 'Undo'}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

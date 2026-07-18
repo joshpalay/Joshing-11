@@ -2,8 +2,10 @@
 # z-[N] arbitraries, inline zIndex >= 30) in src/ rise above the recorded
 # ceiling. The ceiling and the exemption list live in
 # scripts/check-zindex-ratchet.mjs. Independent of the color/font/spacing/
-# radius ratchets by design. Consumers of the z-scale tokens (the
-# z-[var(--z-*)] arbitrary form) are on-system and not counted.
+# radius ratchets by design. Consumers of the z-scale tokens (the z arbitrary
+# form with a var(--z-*) value; spelled apart here because Tailwind v4 scans
+# comments and a * inside a var() arbitrary compiles into invalid CSS) are
+# on-system and not counted.
 name: Z-index ratchet
 
 on:
