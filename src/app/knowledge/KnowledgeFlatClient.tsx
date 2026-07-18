@@ -442,8 +442,11 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     return () => window.cancelAnimationFrame(frame);
   }, []);
   // Shared builder (also used by the home suggestions endpoint) so both add
-  // surfaces draw the identical related-but-specific pool.
-  const suggestionPool = useMemo<NearbyTerritory[]>(
+  // surfaces draw the identical related-but-specific pool. Instant/local —
+  // no fetch — but bounded to the knowledge tree's direct unheld siblings
+  // plus a handful of hard-coded adjacency rules, which for a modest map is
+  // often a small, quickly-exhausted set.
+  const treeSuggestionPool = useMemo<NearbyTerritory[]>(
     () =>
       buildSuggestionPool(detailTree, [
         ...sortedDomains.map((domain) => domain.displayName),
@@ -451,6 +454,38 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       ]),
     [detailTree, sortedDomains, data],
   );
+  // Supplements the tree pool with the real question catalog under the
+  // player's own broad categories (/api/interests/suggestions — same
+  // endpoint the home card uses) so suggestions aren't capped to the
+  // hand-authored graph. Fetched once; the tree pool renders immediately and
+  // this widens it once it arrives, rather than blocking on it.
+  const [catalogSuggestions, setCatalogSuggestions] = useState<NearbyTerritory[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/interests/suggestions', { credentials: 'include' });
+        if (!response.ok) return;
+        const body = (await response.json().catch(() => null)) as
+          | { suggestions?: NearbyTerritory[] }
+          | null;
+        if (!cancelled && Array.isArray(body?.suggestions)) setCatalogSuggestions(body.suggestions);
+      } catch {
+        // The tree pool alone is still a usable fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const suggestionPool = useMemo<NearbyTerritory[]>(() => {
+    const merged = new Map(treeSuggestionPool.map((territory) => [domainKey(territory.domain), territory]));
+    for (const territory of catalogSuggestions) {
+      const key = domainKey(territory.domain);
+      if (!merged.has(key)) merged.set(key, territory);
+    }
+    return [...merged.values()];
+  }, [treeSuggestionPool, catalogSuggestions]);
   // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
   const shuffledPool = useMemo(() => {
     const shuffled = [...suggestionPool];
