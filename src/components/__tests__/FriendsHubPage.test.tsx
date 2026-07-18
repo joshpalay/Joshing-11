@@ -20,13 +20,15 @@ const forbiddenRelationshipCopy =
   /Following|Followers|Who can follow you|Make public|Follow requests|Mutual|Follows you/i;
 
 describe('Friends page QA surface', () => {
-  it('centers the page on inviting someone without leaderboard/ranking mechanics', () => {
+  it('centers the page on adding a friend without leaderboard/ranking mechanics', () => {
     const html = renderToStaticMarkup(<FriendsHubPage />);
 
     expect(html).toContain('Friends');
-    expect(html).toContain('Who shares your world?');
-    expect(html).toContain('Invite Someone');
-    expect(html).not.toContain('Add friend');
+    // The single lookup-field entry point ("Add a friend" / "Add someone")
+    // replaced the standalone "Invite Someone" block — see the comment in
+    // FriendsHubPage.tsx; inviting is reachable from the field's no-match state.
+    expect(html).toContain('Add a friend');
+    expect(html).toContain('Add someone');
     expect(html).not.toMatch(forbiddenGamificationCopy);
     expect(html).not.toMatch(forbiddenRelationshipCopy);
   });

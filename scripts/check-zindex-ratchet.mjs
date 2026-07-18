@@ -12,7 +12,9 @@
 // var(--z-*) consumers never match — they're the point. Standard Tailwind
 // utilities (z-10..z-50) are not counted: they're on Tailwind's own scale and
 // the overlay surfaces have all been swept onto the tokens; new overlay work
-// should use z-[var(--z-*)].
+// should use the z arbitrary form with a var(--z-*) value. (Spelled apart
+// here because Tailwind v4 scans comments and a * inside a var() arbitrary
+// compiles into invalid CSS.)
 //
 // To LOWER the ceiling after a cleanup: run the script, take the count, update
 // CEILING. To raise it: don't — use the --z-* scale instead.

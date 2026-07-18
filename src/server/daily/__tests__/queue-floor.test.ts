@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   clearStaleShortTodayQueue: vi.fn(),
   countDailyQueues: vi.fn(),
   getKnowledgeBase: vi.fn(),
+  getExcludedKnowledgeDomains: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
   persistDailyQueue: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   clearStaleShortTodayQueue: mocks.clearStaleShortTodayQueue,
   countDailyQueues: mocks.countDailyQueues,
   getKnowledgeBase: mocks.getKnowledgeBase,
+  getExcludedKnowledgeDomains: mocks.getExcludedKnowledgeDomains,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
@@ -74,6 +76,12 @@ vi.mock('@/server/questions/canonical-subcategory', () => ({
   isGenericSubcategory: mocks.isGenericSubcategory,
 }));
 
+// Unmocked, commitPendingRefineDecisions reaches the real @/server/db pool and
+// these tests fail with ECONNREFUSED instead of exercising the floor.
+vi.mock('@/server/refine/commit', () => ({
+  commitPendingRefineDecisions: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 
 const USER = 'user-1';
@@ -100,6 +108,12 @@ beforeEach(() => {
   // the queue is built purely from generated questions (the path that yields
   // the single-question regression when generation under-yields).
   mocks.getKnowledgeBase.mockResolvedValue([{ domain: 'Jazz' }]);
+  // No Rested/Muted domains — the resting allow-set is resting-domains.test.ts's
+  // concern, not this suite's.
+  mocks.getExcludedKnowledgeDomains.mockResolvedValue({
+    subcategories: new Set<string>(),
+    broadCategories: new Set<string>(),
+  });
   mocks.getDailyPreferences.mockResolvedValue({
     difficulty: 'adaptive',
     domainMode: 'random',

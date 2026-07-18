@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   clearStaleShortTodayQueue: vi.fn(),
   countDailyQueues: vi.fn(),
   getKnowledgeBase: vi.fn(),
+  getExcludedKnowledgeDomains: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
   persistDailyQueue: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   clearStaleShortTodayQueue: mocks.clearStaleShortTodayQueue,
   countDailyQueues: mocks.countDailyQueues,
   getKnowledgeBase: mocks.getKnowledgeBase,
+  getExcludedKnowledgeDomains: mocks.getExcludedKnowledgeDomains,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
@@ -71,6 +73,12 @@ vi.mock('@/server/daily/generate-questions', () => ({
 
 vi.mock('@/server/questions/canonical-subcategory', () => ({
   isGenericSubcategory: mocks.isGenericSubcategory,
+}));
+
+// Unmocked, commitPendingRefineDecisions reaches the real @/server/db pool and
+// these tests fail with ECONNREFUSED instead of exercising the cap.
+vi.mock('@/server/refine/commit', () => ({
+  commitPendingRefineDecisions: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
@@ -120,6 +128,13 @@ beforeEach(() => {
   mocks.carryForwardUntouchedDailyQueue.mockResolvedValue(false);
   mocks.clearStaleShortTodayQueue.mockResolvedValue(false);
   mocks.countDailyQueues.mockResolvedValue(3);
+
+  // No Rested/Muted domains — the resting allow-set is resting-domains.test.ts's
+  // concern, not this suite's.
+  mocks.getExcludedKnowledgeDomains.mockResolvedValue({
+    subcategories: new Set<string>(),
+    broadCategories: new Set<string>(),
+  });
 
   // A broad knowledge base (≥3 domains) so the effective cap stays at the base
   // DAILY_QUEUE_MAX_PER_SUBCATEGORY rather than scaling up for a thin KB.
