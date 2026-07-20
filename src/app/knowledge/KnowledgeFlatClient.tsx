@@ -914,7 +914,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               <div className="flex-1">
                 <p className="m-0 text-quiet text-[var(--ink)]">
                   {addedTopic.created ? (
-                    <>Added &ldquo;{addedTopic.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+                    <>Added &ldquo;{addedTopic.domain}&rdquo; — it may show up in an upcoming round.</>
                   ) : (
                     <>&ldquo;{addedTopic.domain}&rdquo; is already in your topics.</>
                   )}
@@ -1014,7 +1014,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                   <div className="flex-1">
                     <p className="m-0 text-quiet text-[var(--ink)]">
                       {addedTopic.created ? (
-                        <>Added &ldquo;{addedTopic.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+                        <>Added &ldquo;{addedTopic.domain}&rdquo; — it may show up in an upcoming round.</>
                       ) : (
                         <>&ldquo;{addedTopic.domain}&rdquo; is already in your topics.</>
                       )}
