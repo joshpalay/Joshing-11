@@ -140,7 +140,7 @@ export function ReminderInterstitial({
             <button
               type="button"
               onClick={onProceed}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-eyebrow transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2"
               style={{ backgroundColor: th.fg, color: th.bg }}
             >
               Home
@@ -205,7 +205,7 @@ export function ReminderInterstitial({
                     <button
                       type="submit"
                       disabled={state.saving}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-eyebrow transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
                       style={{ backgroundColor: th.fg, color: th.bg }}
                     >
                       {state.saving ? 'Saving…' : 'Email me'}
@@ -214,7 +214,7 @@ export function ReminderInterstitial({
                       type="button"
                       disabled={state.saving}
                       onClick={skip}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-eyebrow transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
                       style={{ borderColor: th.fg, color: th.fg }}
                     >
                       Not now
@@ -238,7 +238,7 @@ export function ReminderInterstitial({
                         ? optInWithVerifiedEmail()
                         : setState({ kind: 'collect', value: '', error: null, saving: false })
                     }
-                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-eyebrow transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
                     style={{ backgroundColor: th.fg, color: th.bg }}
                   >
                     Email me
@@ -247,7 +247,7 @@ export function ReminderInterstitial({
                     type="button"
                     disabled={busy}
                     onClick={skip}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-eyebrow transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
                     style={{ borderColor: th.fg, color: th.fg }}
                   >
                     Not now

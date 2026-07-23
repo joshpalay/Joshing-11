@@ -42,7 +42,7 @@ export function RecentlyExploringSection({
     <section className="mt-5" aria-label="Recently exploring">
       <div style={boxStyle}>
         <div>
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+          <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
             Recently exploring
           </p>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
@@ -120,7 +120,7 @@ const badgeStyle: CSSProperties = {
   display: 'grid',
   placeItems: 'center',
   fontSize: '0.86rem',
-  fontWeight: 700,
+  fontWeight: 600,
   lineHeight: 1,
 }
 
@@ -133,7 +133,7 @@ const domainNameStyle: CSSProperties = {
   color: 'var(--warm-ink)',
   fontFamily: 'var(--font-serif), Georgia, serif',
   fontSize: '0.92rem',
-  fontWeight: 700,
+  fontWeight: 600,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
 }

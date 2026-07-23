@@ -83,7 +83,7 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
           ) : null}
 
           <div
-            className="mt-5 flex flex-wrap items-center gap-4 border-t pt-3 text-[10px] font-semibold tracking-[0.16em] uppercase"
+            className="mt-5 flex flex-wrap items-center gap-4 border-t pt-3 type-eyebrow font-semibold tracking-eyebrow uppercase"
             style={{ borderColor: 'var(--warm-border)' }}
           >
             <span
@@ -131,7 +131,7 @@ function DomainGroup({
   return (
     <div className={`mt-5 ${ghosted ? 'opacity-60' : ''}`}>
       <p
-        className="text-[11px] font-semibold tracking-[0.12em] uppercase"
+        className="type-eyebrow font-semibold tracking-eyebrow uppercase"
         style={{ color: 'var(--brand-ink-700)' }}
       >
         {caption}

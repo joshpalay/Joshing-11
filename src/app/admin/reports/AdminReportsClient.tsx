@@ -342,7 +342,7 @@ function SectionHeading({
 }) {
   return (
     <h2
-      className="pt-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
+      className="pt-1 type-eyebrow font-semibold uppercase tracking-eyebrow"
       style={{ color: 'var(--text-muted)' }}
     >
       <InfoTerm term={term}>{label}</InfoTerm>
@@ -705,7 +705,7 @@ function EditPanel({
         </p>
       ) : null}
       <label className="block">
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Question</span>
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">Question</span>
         {/* A generous starting canvas ("the edit area needs to be much larger",
             2026-07-03) — auto-grow still takes over past six lines. */}
         <AutoGrowTextarea
@@ -716,7 +716,7 @@ function EditPanel({
         />
       </label>
       <label className="block">
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Answer</span>
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">Answer</span>
         <input
           type="text"
           value={answerText}
@@ -726,7 +726,7 @@ function EditPanel({
       </label>
       {showExplanation ? (
         <label className="block">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+          <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">
             Explanation (optional)
           </span>
           <AutoGrowTextarea
@@ -776,7 +776,7 @@ function EditPanel({
           ) : null}
         </div>
       ) : (
-        <p className="text-muted-foreground text-[0.7rem]">
+        <p className="text-muted-foreground type-metadata">
           Re-run the verifier to get a fresh answer and a fact-check — Approve unlocks once it
           passes.
         </p>
@@ -883,13 +883,13 @@ function ReportRow({
         {/* Player stream chip — reporter provenance. */}
         <InfoTerm
           term="player_report"
-          className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+          className="rounded-sm border px-2 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
         >
           Player report
         </InfoTerm>
         <span
-          className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+          className="rounded-sm border px-2 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
           style={
             report.category === 'inappropriate'
               ? { borderColor: 'var(--danger)', color: 'var(--danger)' }
@@ -899,7 +899,7 @@ function ReportRow({
           {report.category}
           {kindLabel ? ` · ${kindLabel}` : ''}
         </span>
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">
           <InfoTerm term={TARGET_TERM[report.target.table]}>
             {TARGET_LABEL[report.target.table]}
           </InfoTerm>{' '}
@@ -922,7 +922,7 @@ function ReportRow({
       ) : null}
 
       {/* Admin-only — reporter identity is exposed nowhere else. */}
-      <p className="text-muted-foreground mt-2 text-[0.7rem]">
+      <p className="text-muted-foreground mt-2 type-metadata">
         Reporter: {report.reporterName ?? report.reporterUserId}
       </p>
 
@@ -1077,18 +1077,18 @@ function DemotionRow({
       <div className="flex flex-wrap items-center gap-2">
         <InfoTerm
           term="verifier_demotion"
-          className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+          className="rounded-sm border px-2 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
           style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
         >
           Verifier
         </InfoTerm>
         <span
-          className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+          className="rounded-sm border px-2 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
           style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
         >
           {authorLabel}
         </span>
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">
           {item.canonicalSubcategory ?? item.broadCategory ?? 'uncategorized'}
           {item.verifiedAt ? ` · demoted ${new Date(item.verifiedAt).toLocaleString()}` : ''}
         </span>
@@ -1130,7 +1130,7 @@ function DemotionRow({
         </div>
       ) : null}
       {!proposal && !item.triage && !editing ? (
-        <p className="text-muted-foreground mt-2 text-[12px] italic">
+        <p className="text-muted-foreground mt-2 type-metadata italic">
           Machine fix pending — the salvage sweep proposes one automatically after the next verify
           run. Waiting is free; only step in now if this row is urgent.
         </p>
@@ -1294,12 +1294,12 @@ function BlockedRow({
     <article className="rounded-md border p-4 text-sm" style={{ borderColor: 'var(--border)' }}>
       <div className="flex flex-wrap items-center gap-2">
         <span
-          className="rounded-sm border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+          className="rounded-sm border px-2 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
           style={badgeStyle}
         >
           {badge.label}
         </span>
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">
           <InfoTerm term={TARGET_TERM[item.target.table]}>
             {TARGET_LABEL[item.target.table]}
           </InfoTerm>

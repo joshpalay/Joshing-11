@@ -77,7 +77,7 @@ function OverviewCard({
 function GroupHeading({ children }: { children: React.ReactNode }) {
   return (
     <h2
-      className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.08em] first:mt-0"
+      className="mb-2 mt-5 type-eyebrow font-semibold uppercase tracking-eyebrow first:mt-0"
       style={{ color: 'var(--text-muted)' }}
     >
       {children}

@@ -94,14 +94,14 @@ export function SparkleEnvelope({
               // Same small-caps eyebrow rhythm as the AnsweredByYouCard header.
               <p
                 className={cn(
-                  'mb-2 text-[11px] uppercase leading-none tracking-[0.08em]',
+                  'mb-2 type-eyebrow uppercase leading-none tracking-eyebrow',
                   eyebrowClassName,
                 )}
               >
                 {eyebrow}
               </p>
             ) : null}
-            <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
+            <p className="font-sans type-button leading-[23px] tracking-normal text-[var(--brand-ink)]">
               {signal}
             </p>
             {discoveryAttribution ? <div className="mt-1.5">{discoveryAttribution}</div> : null}
@@ -112,7 +112,7 @@ export function SparkleEnvelope({
         <div aria-hidden className="h-px w-[70px] bg-[var(--brand-rule)]" />
 
         <div className="flex w-full flex-col items-end gap-5">
-          <p className="w-full font-serif text-2xl font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]">
+          <p className="w-full font-serif text-2xl font-semibold leading-[32px] tracking-normal text-[var(--brand-ink)]">
             <span aria-hidden className="opacity-60">
               &ldquo;
             </span>

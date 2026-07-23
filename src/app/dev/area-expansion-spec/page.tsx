@@ -43,7 +43,7 @@ export default function AreaExpansionSpecPage() {
       <div className="mt-10 flex flex-col gap-10">
         {docs.map((doc) => (
           <section key={doc.file}>
-            <h2 className="mb-3 font-mono text-[0.62rem] font-semibold tracking-[0.06em] uppercase">
+            <h2 className="mb-3 font-mono type-eyebrow font-semibold tracking-eyebrow uppercase">
               {doc.label}
             </h2>
             {doc.body ? (

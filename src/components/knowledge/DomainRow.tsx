@@ -173,7 +173,7 @@ const declaredBadgeStyle: CSSProperties = {
   padding: '0.16rem 0.42rem',
   color: 'var(--warm-ink)',
   fontSize: '0.62rem',
-  fontWeight: 700,
+  fontWeight: 600,
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
 };

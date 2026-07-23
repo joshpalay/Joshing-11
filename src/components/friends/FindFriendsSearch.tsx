@@ -169,7 +169,7 @@ export function FindFriendsSearch({ variant = 'find', onInvite }: Props = {}) {
     >
       {isAdd ? (
         <>
-          <p className="text-muted-foreground text-xs font-medium tracking-[0.14em] uppercase">
+          <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
             Add someone
           </p>
           <h2 className="text-foreground mt-3 font-serif text-2xl leading-tight font-semibold">

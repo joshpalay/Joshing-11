@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 // feed, questions, friends, and play surfaces — each re-picking its own radius,
 // padding, font size, and casing (see D-DESIGN-DEBT-STRUCTURAL-AUDIT-01-FINDINGS
 // §2: radius rounded-full vs rounded-sm, padding px-2/px-2.5/px-3/px-3.5, sizes
-// text-[9px]→text-sm, mixed casing). This consolidates the GEOMETRY and
+// type-eyebrow→text-sm, mixed casing). This consolidates the GEOMETRY and
 // TYPOGRAPHY down to two intentional sizes.
 //
 // Scope is deliberately structural. Surface COLOR stays a caller concern and is
@@ -32,7 +32,7 @@ type ChipVariant = 'neutral' | 'outline';
 
 const SIZE_CLASSES: Record<ChipSize, string> = {
   // The padding + type ramp distilled from the audited render sites.
-  sm: 'px-2 py-0.5 text-[10px]',
+  sm: 'px-2 py-0.5 type-eyebrow',
   md: 'px-2.5 py-1 text-xs',
 };
 
@@ -75,7 +75,7 @@ export function Chip({
         'inline-flex items-center gap-1 whitespace-nowrap rounded-full font-medium leading-none',
         SIZE_CLASSES[size],
         VARIANT_CLASSES[variant],
-        uppercase && 'uppercase tracking-[0.08em]',
+        uppercase && 'uppercase tracking-eyebrow',
         className,
       )}
       style={style}

@@ -48,7 +48,7 @@ type FeedCardProps = {
 // display/card/update — category line in Cormorant SemiBold (Figma 16/24/0.64px/black).
 function CategoryLine({ category }: { category: string }) {
   return (
-    <p className="font-serif text-base font-semibold leading-[24px] tracking-[0.04em] text-[var(--brand-ink)]">
+    <p className="font-serif text-base font-semibold leading-[24px] tracking-normal text-[var(--brand-ink)]">
       {category}
     </p>
   )
@@ -59,7 +59,7 @@ function QuestionText({ question, dim }: { question: string; dim?: boolean }) {
   return (
     <p
       className={cn(
-        'mt-3 font-serif font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]',
+        'mt-3 font-serif font-semibold leading-[32px] tracking-normal text-[var(--brand-ink)]',
         dim ? 'text-base opacity-65' : 'text-2xl',
       )}
     >
@@ -107,7 +107,7 @@ export function FeedCard({
                 headerContent
               ) : (
                 <>
-                  <p className="text-[11px] leading-none tracking-[0.08em] text-[var(--brand-ink-400)] uppercase">
+                  <p className="type-eyebrow leading-none tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
                     New question
                   </p>
                   {visibleCategory ? <CategoryLine category={visibleCategory} /> : null}
@@ -140,7 +140,7 @@ export function FeedCard({
               headerContent
             ) : (
               <>
-                <p className="text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
+                <p className="type-button leading-[23px] tracking-normal text-[var(--brand-ink)]">
                   {item.authorHref ? (
                     <Link href={item.authorHref} className="font-medium" style={{ color: nameColor }}>
                       {authorName}

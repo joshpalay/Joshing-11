@@ -12,7 +12,7 @@ import { RefineItemCard } from './RefineItemCard';
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '0.8rem',
-  fontWeight: 700,
+  fontWeight: 600,
   color: 'var(--brand-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
@@ -25,7 +25,7 @@ const titleStyle: CSSProperties = {
 const CUSTOMIZE_DAILY_LINK_CLASS = [
   'inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full',
   'border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-3 py-2',
-  'text-[12px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)]',
+  'type-metadata font-semibold tracking-normal whitespace-nowrap text-[var(--brand-ink)]',
   'transition-[background-color,border-color,transform]',
   'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-card)]',
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',

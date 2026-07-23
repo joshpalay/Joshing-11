@@ -289,7 +289,7 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col px-0">
       <header className="sticky top-0 z-20 flex items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <h1
-          className="min-w-0 truncate font-serif text-[1.75rem] font-semibold leading-none"
+          className="min-w-0 truncate font-serif type-page-title font-semibold leading-none"
           style={{ color: 'var(--brand-ink)', letterSpacing: 0 }}
         >
           {game.game.title}

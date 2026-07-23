@@ -396,12 +396,12 @@ export default function WelcomeTourScreen({
         <div className="wts-stage" ref={stageRef}>
           <div className="wts-home" ref={homeRef}>
             <div className="mb-3 flex items-center justify-between">
-              <span className="font-serif text-[1.35rem] font-semibold text-[var(--brand-ink)]">
+              <span className="font-serif type-page-title font-semibold text-[var(--brand-ink)]">
                 Joshing
               </span>
               <span className="flex items-center gap-2 text-[var(--brand-ink-400)]">
                 <Bell className="size-[18px]" strokeWidth={1.9} />
-                <span className="grid size-6 place-items-center rounded-full bg-[var(--brand-border)] text-[10px] font-semibold text-[var(--brand-ink-700)]">
+                <span className="grid size-6 place-items-center rounded-full bg-[var(--brand-border)] type-eyebrow font-semibold text-[var(--brand-ink-700)]">
                   JP
                 </span>
               </span>
@@ -413,18 +413,18 @@ export default function WelcomeTourScreen({
               className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-quiet font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
+                <p className="text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-700)] uppercase">
                   Today&apos;s Five
                 </p>
                 <span
                   data-tour="customize"
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-3 py-1.5 text-[12px] font-bold text-[var(--brand-ink)]"
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-3 py-1.5 type-metadata font-semibold text-[var(--brand-ink)]"
                 >
                   <SlidersHorizontal className="size-4" strokeWidth={2.4} aria-hidden="true" />
                   Customize
                 </span>
               </div>
-              <h2 className="mt-1 mb-2 font-serif text-[28px] leading-[34px] font-medium text-[var(--brand-ink)]">
+              <h2 className="mt-1 mb-2 font-serif type-page-title leading-[34px] font-medium text-[var(--brand-ink)]">
                 Ready when you are!
               </h2>
               <div className="mt-2 flex items-center gap-2" aria-hidden="true">
@@ -441,7 +441,7 @@ export default function WelcomeTourScreen({
 
             {/* Friends section — `friends` (For You + From Friends merged) */}
             <section data-tour="friends" className="mt-5">
-              <p className="mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+              <p className="mb-2 pl-0.5 text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
                 For you
               </p>
               {/* For You — mirrors SparkleEnvelope (the real directed-send card):
@@ -449,7 +449,7 @@ export default function WelcomeTourScreen({
                   faded quotes, Dismiss / Answer. */}
               <article className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-3.5">
                 <div className="flex w-full items-start justify-between gap-3">
-                  <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
+                  <p className="font-sans type-button leading-[23px] tracking-normal text-[var(--brand-ink)]">
                     <span className="font-semibold">{inviter}</span> sent you a question they wrote
                   </p>
                   <MoreHorizontal
@@ -458,7 +458,7 @@ export default function WelcomeTourScreen({
                   />
                 </div>
                 <div aria-hidden="true" className="mx-auto my-4 h-px w-[70px] bg-[var(--brand-rule)]" />
-                <p className="font-serif text-2xl font-semibold leading-[32px] tracking-[0.05em] text-[var(--brand-ink)]">
+                <p className="font-serif text-2xl font-semibold leading-[32px] tracking-normal text-[var(--brand-ink)]">
                   <span aria-hidden="true" className="opacity-60">
                     &ldquo;
                   </span>
@@ -472,12 +472,12 @@ export default function WelcomeTourScreen({
                   <span className="btn-primary">Answer</span>
                 </div>
               </article>
-              <p className="mt-4 mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
+              <p className="mt-4 mb-2 pl-0.5 text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink)] uppercase">
                 From Friends
               </p>
               <div className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-serif text-[1.1rem] font-semibold text-[var(--brand-ink)]">
+                  <p className="font-serif type-card-title font-semibold text-[var(--brand-ink)]">
                     {inviter}
                   </p>
                   {/* The friend's streak — five aced questions, one Joshing
@@ -509,7 +509,7 @@ export default function WelcomeTourScreen({
                 feed: a milestone row, then the sage "Overlap" common-ground band
                 (EditorialFeature, interlude-sage). */}
             <section data-tour="activity" className="mt-6">
-              <p className="mb-3 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
+              <p className="mb-3 pl-0.5 text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink)] uppercase">
                 Recent activity
               </p>
               <div className="flex items-start gap-2.5 pl-0.5">
@@ -527,7 +527,7 @@ export default function WelcomeTourScreen({
               {/* Common ground — the full-bleed sage editorial band. -mx-3 cancels
                   the mock home's 12px gutter so it reaches the column edges. */}
               <div className="-mx-3 mt-5 bg-[var(--interlude-sage)] px-5 pt-8 pb-8">
-                <h3 className="max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)]">
+                <h3 className="max-w-[20ch] font-serif type-page-title leading-[1.15] font-medium text-[var(--brand-ink)]">
                   You and {inviter} keep meeting in the same places.
                 </h3>
                 <div className="mt-7 flex items-start gap-8">
@@ -547,13 +547,13 @@ export default function WelcomeTourScreen({
                     </span>
                   ))}
                 </div>
-                <p className="mt-4 font-serif text-[15px] font-semibold text-[var(--brand-ink)]">
+                <p className="mt-4 font-serif type-button font-semibold text-[var(--brand-ink)]">
                   {inviter}
                 </p>
-                <p className="mt-5 font-sans text-quiet tracking-[0.12em] text-[var(--brand-ink-400)] uppercase">
+                <p className="mt-5 font-sans text-quiet tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
                   Shared ground with 1 friend
                 </p>
-                <span className="mt-3 inline-flex min-h-11 items-center font-sans text-quiet font-medium tracking-[0.12em] text-[var(--ink)] uppercase underline underline-offset-4">
+                <span className="mt-3 inline-flex min-h-11 items-center font-sans text-quiet font-medium tracking-eyebrow text-[var(--ink)] uppercase underline underline-offset-4">
                   Explore your overlap →
                 </span>
               </div>

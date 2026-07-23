@@ -82,7 +82,7 @@ export default function DevFirstTimePlayerPage() {
         <div className="mt-8 space-y-8">
           {BEAT3_VARIANTS.map((variant) => (
             <section key={variant.beat3.kind}>
-              <p className="mb-2 text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+              <p className="mb-2 type-eyebrow font-semibold tracking-eyebrow text-muted-foreground uppercase">
                 Beat 3 · {variant.label}
                 {variant.note ? <span className="text-amber-700"> · {variant.note}</span> : null}
               </p>

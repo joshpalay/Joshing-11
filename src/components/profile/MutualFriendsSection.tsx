@@ -22,7 +22,7 @@ export function MutualFriendsSection({
     if (visibility === 'friend') return null
     return (
       <section className="mt-5" aria-label="Mutual friends">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+        <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
           Mutual friends
         </p>
         <p className="text-muted-foreground mt-2 text-sm">
@@ -39,7 +39,7 @@ export function MutualFriendsSection({
 
   return (
     <section className="mt-5" aria-label="Mutual friends">
-      <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+      <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
         Mutual friends
       </p>
       <h2 className="mt-1 font-serif text-xl font-semibold">{heading}</h2>

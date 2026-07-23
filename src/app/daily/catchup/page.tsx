@@ -62,7 +62,7 @@ export default function DailyCatchupPage() {
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-medium tracking-[0.12em] text-[var(--text-muted)] uppercase">
+            <p className="text-xs font-medium tracking-eyebrow text-[var(--text-muted)] uppercase">
               Catch up
             </p>
             <h1 className="font-serif text-lg font-semibold text-[var(--text)]">
@@ -73,7 +73,7 @@ export default function DailyCatchupPage() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!loading && hasItems && !showSummary ? (
-              <p className="text-right text-[0.65rem] font-medium tracking-[0.1em] text-[var(--text-muted)] uppercase">
+              <p className="text-right type-eyebrow font-medium tracking-eyebrow text-[var(--text-muted)] uppercase">
                 {remainingLabel}
               </p>
             ) : null}
@@ -196,10 +196,10 @@ function RoundCloseCard({
       fill="var(--surface-2)"
       style={{ maxWidth: 'var(--play-thread-card-width)' }}
     >
-      <p className="text-[1.22rem] leading-relaxed text-[var(--text)]">
+      <p className="type-card-title leading-relaxed text-[var(--text)]">
         {total > 0 ? `That’s the round — ${correct} of ${total}.` : 'That’s the round.'}
       </p>
-      <p className="mt-1 text-[1.05rem] leading-relaxed text-[var(--text-muted)]">
+      <p className="mt-1 type-section-heading leading-relaxed text-[var(--text-muted)]">
         {hasMore
           ? `${remainingCount} missed ${remainingCount === 1 ? 'question' : 'questions'} still waiting.`
           : 'You’re all caught up.'}
@@ -248,15 +248,15 @@ function RoundSummary({
   return (
     <div className="mx-auto max-w-3xl text-[var(--brand-ink)]">
       <header className="pb-2">
-        <p className="text-[0.62rem] font-medium tracking-[0.12em] text-[var(--game-correct)] uppercase">
+        <p className="type-eyebrow font-medium tracking-eyebrow text-[var(--game-correct)] uppercase">
           Round complete
         </p>
         <div className="mt-3 flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-serif text-[2.25rem] leading-[0.95] tracking-[-0.03em] text-[var(--brand-ink)]">
+            <h2 className="font-serif type-display-title leading-[0.95] tracking-display text-[var(--brand-ink)]">
               How you did
             </h2>
-            <p className="mt-3 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
+            <p className="mt-3 max-w-xl type-body leading-7 text-[var(--brand-ink-700)]">
               {hasMore
                 ? `You worked through ${total}. ${remainingCount} still waiting to be cleared.`
                 : 'You cleared the questions you had missed.'}
@@ -281,7 +281,7 @@ function RoundSummary({
       </div>
 
       <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
-        <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
+        <p className="type-section-heading leading-7 text-[var(--brand-ink-700)]">
           {hasMore
             ? `${remainingCount} still waiting whenever you’re ready.`
             : 'You’re all caught up.'}
@@ -392,7 +392,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
       <div className="flex items-start justify-between gap-3 pl-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
-            className="rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
+            className="rounded-full border px-2.5 py-1 type-eyebrow font-semibold tracking-normal"
             style={{
               borderColor: isCorrect
                 ? 'color-mix(in srgb, var(--game-correct) 28%, var(--brand-border))'
@@ -433,19 +433,19 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
         ) : null}
       </div>
 
-      <p className="mt-4 pl-1 text-[1.12rem] leading-7 font-medium tracking-[-0.01em] text-[var(--brand-ink)]">
+      <p className="mt-4 pl-1 type-card-title leading-7 font-medium tracking-page text-[var(--brand-ink)]">
         {record.questionText}
       </p>
 
       <div className="mt-5 grid gap-3 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] p-3 sm:grid-cols-2">
         <div>
-          <p className="text-muted-foreground text-[0.68rem] font-semibold tracking-[0.08em] uppercase">
+          <p className="text-muted-foreground type-eyebrow font-semibold tracking-eyebrow uppercase">
             You said
           </p>
           <p className="mt-1 text-sm leading-6 text-[var(--brand-ink)]">{yourAnswer}</p>
         </div>
         <div className="border-t border-[var(--brand-border)] pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-3">
-          <p className="text-muted-foreground text-[0.68rem] font-semibold tracking-[0.08em] uppercase">
+          <p className="text-muted-foreground type-eyebrow font-semibold tracking-eyebrow uppercase">
             Answer
           </p>
           <p

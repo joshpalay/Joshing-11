@@ -259,7 +259,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
           an empty section should not carry a heading (it read as a stranded
           eyebrow above the "From Friends" band). */}
       {edition.direct.served.length > 0 ? (
-        <p className="mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+        <p className="mb-2 pl-0.5 text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
           For you
         </p>
       ) : null}

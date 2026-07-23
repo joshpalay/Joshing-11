@@ -53,7 +53,7 @@ export default async function RecoveredQuestionsPage({
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6 pb-20">
       <header>
-        <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+        <p className="font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground">
           <Link href="/" className="underline underline-offset-2">HOME</Link>
           {' / '}
           <Link href="/users/me" className="underline underline-offset-2">PROFILE</Link>
@@ -70,7 +70,7 @@ export default async function RecoveredQuestionsPage({
 
       <nav
         aria-label="How far back to revisit"
-        className="mt-5 flex flex-wrap gap-x-4 gap-y-2 font-mono text-[0.62rem] uppercase tracking-[0.06em]"
+        className="mt-5 flex flex-wrap gap-x-4 gap-y-2 font-mono type-eyebrow uppercase tracking-eyebrow"
       >
         {RANGES.map((option) =>
           option.key === range.key ? (

@@ -74,7 +74,7 @@ export function LoadingPreview({ initialKey }: { initialKey?: string }) {
           <button
             type="button"
             onClick={() => setMode("interleaved")}
-            className={`rounded px-2 py-1 font-sans text-[11px] ${
+            className={`rounded px-2 py-1 font-sans type-eyebrow ${
               mode === "interleaved" ? "bg-white text-black" : "bg-white/15 text-white hover:bg-white/30"
             }`}
           >
@@ -88,7 +88,7 @@ export function LoadingPreview({ initialKey }: { initialKey?: string }) {
                 setMode("single");
                 setIndex(i);
               }}
-              className={`rounded px-2 py-1 font-sans text-[11px] ${
+              className={`rounded px-2 py-1 font-sans type-eyebrow ${
                 mode === "single" && i === index
                   ? "bg-white text-black"
                   : "bg-white/15 text-white hover:bg-white/30"

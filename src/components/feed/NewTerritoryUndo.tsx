@@ -98,7 +98,7 @@ export function NewTerritoryUndo({
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: '0.6rem',
-          fontWeight: 700,
+          fontWeight: 600,
           letterSpacing: '0.16em',
           textTransform: 'uppercase',
           color: GOLD_INK,

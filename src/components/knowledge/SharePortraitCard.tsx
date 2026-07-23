@@ -245,7 +245,7 @@ const cardStyle: CSSProperties = {
 const wordmarkStyle: CSSProperties = {
   margin: 0,
   fontFamily: FF_WORDMARK,
-  fontWeight: 700,
+  fontWeight: 600,
   fontSize: 15,
   color: INK,
   letterSpacing: '0.01em',
@@ -271,7 +271,7 @@ const titleStyle: CSSProperties = {
   color: INK,
   fontFamily: FF_SANS,
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
 };

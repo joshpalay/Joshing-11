@@ -49,7 +49,7 @@ export function MyQuestionCard({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
-              className="truncate text-[10px] uppercase tracking-[0.1em] leading-tight"
+              className="truncate type-eyebrow uppercase tracking-eyebrow leading-tight"
               style={{
                 // Category label is metadata — System voice (mono) with the
                 // caps + tracking label signature, per STYLE-GUIDE-TYPE §2/§5.
@@ -62,7 +62,7 @@ export function MyQuestionCard({
             </span>
           ) : null}
           <span
-            className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+            className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 type-eyebrow font-medium uppercase tracking-wide"
             style={{ color: 'var(--ink)', opacity: 0.7 }}
             aria-label={`LLM-rated difficulty: ${difficultyLabel}`}
           >
@@ -70,7 +70,7 @@ export function MyQuestionCard({
           </span>
         </div>
 
-        <p className="mt-2 break-words font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
+        <p className="mt-2 break-words font-serif type-card-title font-semibold leading-[28px] tracking-normal text-[var(--brand-ink)]">
           {question.text}
         </p>
 

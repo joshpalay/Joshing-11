@@ -683,7 +683,7 @@ export default function FriendsList() {
         <section aria-labelledby="follow-requests" className="space-y-3">
           <h2
             id="follow-requests"
-            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+            className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase"
           >
             Follow Requests
           </h2>
@@ -705,7 +705,7 @@ export default function FriendsList() {
         <section aria-labelledby="requests-sent" className="space-y-3">
           <h2
             id="requests-sent"
-            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+            className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase"
           >
             Requests Sent{' '}
             <span className="text-foreground tabular-nums">({outboundRequests.length})</span>
@@ -727,7 +727,7 @@ export default function FriendsList() {
         <section aria-labelledby="waiting-for-response" className="space-y-3">
           <h2
             id="waiting-for-response"
-            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+            className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase"
           >
             Waiting for Response
           </h2>
@@ -751,7 +751,7 @@ export default function FriendsList() {
         <section aria-labelledby="friends-section" className="space-y-3">
           <h2
             id="friends-section"
-            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
+            className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase"
           >
             Friends
           </h2>

@@ -11,7 +11,7 @@ export type CeremonyPinStatus = {
 // (no movement, no pulse), gated to motion-safe. When a reflection is ready the
 // whole row is the tap target.
 const MARKER_CLASS =
-  'flex items-center justify-center gap-2 py-3 text-center text-xs font-medium tracking-[0.08em] text-[var(--accent-gold)] uppercase motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700'
+  'flex items-center justify-center gap-2 py-3 text-center text-xs font-medium tracking-eyebrow text-[var(--accent-gold)] uppercase motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700'
 
 /**
  * Top-of-home ceremony slot. Lifted out of FeedList so Home can render it

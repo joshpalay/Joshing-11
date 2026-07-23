@@ -139,7 +139,7 @@ export function AddTopicHomeCard() {
 
   return (
     <section className="card px-5 py-4" aria-label="Suggested topics">
-      <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      <p className="text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
         Add a topic
       </p>
       <p
@@ -170,7 +170,7 @@ export function AddTopicHomeCard() {
             </p>
             <button
               type="button"
-              className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+              className="mt-1 text-xs font-semibold tracking-eyebrow text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
               onClick={() => void undoAdded()}
               disabled={undoing}
             >

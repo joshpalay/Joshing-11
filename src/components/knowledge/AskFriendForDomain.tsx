@@ -215,7 +215,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
       <section className="bg-background relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border p-5 shadow-xl sm:max-w-xl sm:rounded-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
+            <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
               Ask someone
             </p>
             <h2 className="mt-2 font-serif text-3xl font-semibold">
@@ -239,7 +239,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
         {showingHandoff ? (
           <div className="mt-6 space-y-4">
             <div className="bg-card rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
+              <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
                 For {handoffName}
               </p>
               <p className="text-muted-foreground mt-2 text-sm leading-6">
@@ -366,7 +366,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   {interests.map((interest, index) => (
                     <label
                       key={index}
-                      className="text-muted-foreground block text-xs font-medium tracking-[0.08em] uppercase"
+                      className="text-muted-foreground block text-xs font-medium tracking-eyebrow uppercase"
                     >
                       {index === 0
                         ? 'First idea'

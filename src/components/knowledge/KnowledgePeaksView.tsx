@@ -307,7 +307,7 @@ export function KnowledgePeaksView({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto pb-40">
-        <p className="pb-3 pt-1 text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        <p className="pb-3 pt-1 text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
           What you’re smart at
         </p>
 
@@ -369,7 +369,7 @@ export function KnowledgePeaksView({
           <div className="pt-2" aria-label="Everything you know, by area">
             {groups.map((group) => (
               <section key={group.title} className="pb-1">
-                <h3 className="flex items-center gap-2 pb-1 pt-3 text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                <h3 className="flex items-center gap-2 pb-1 pt-3 text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
                   <span
                     aria-hidden
                     className="size-2.5 rounded-full"
@@ -463,7 +463,7 @@ function ControlsBar({
     on
       ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-card)', background: 'var(--brand-navy)' }
       : { borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' };
-  const groupLabel = 'text-[0.7rem] uppercase tracking-[0.08em] text-[var(--text-muted)]';
+  const groupLabel = 'type-metadata uppercase tracking-eyebrow text-[var(--text-muted)]';
 
   return (
     <div className="mb-4 grid gap-2.5">
@@ -644,7 +644,7 @@ function KnowledgeCircleCell({
   const caption = (
     <>
       <span
-        className={`font-serif text-[12.5px] leading-tight ${
+        className={`font-serif type-button-sm leading-tight ${
           ghost ? 'text-[var(--text-muted)]' : 'text-[var(--brand-ink)]'
         }`}
       >
@@ -652,13 +652,13 @@ function KnowledgeCircleCell({
       </span>
       {ghost ? null : fullyExplored ? (
         <span
-          className="text-[10px] font-medium uppercase tracking-[0.06em]"
+          className="type-eyebrow font-medium uppercase tracking-eyebrow"
           style={{ color: GOLD_INK }}
         >
           ✦ Fully explored
         </span>
       ) : showFrequency ? (
-        <span className="inline-flex items-center gap-1 text-[10px] tracking-[0.02em] text-[var(--brand-ink-400)]">
+        <span className="inline-flex items-center gap-1 type-eyebrow tracking-normal text-[var(--brand-ink-400)]">
           {TERRITORY_FREQUENCY_LABEL[frequency]}
           <FrequencyMark frequency={frequency} color={fieldColor(node.field)} size={11} decorative />
         </span>
@@ -997,7 +997,7 @@ export function PeakDetailCard({
       {leaf.path.length > 0 ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
           <div className="flex items-start justify-between gap-2">
-            <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+            <p className="text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">Part of</p>
             {parentAddable && parent ? inlineAddButton(parent.id, parent.name) : null}
           </div>
           <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
@@ -1022,7 +1022,7 @@ export function PeakDetailCard({
       {/* Within this — the child areas you already hold inside this one. */}
       {heldChildren.length > 0 ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
-          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+          <p className="text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
             Within this — what you hold
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1049,7 +1049,7 @@ export function PeakDetailCard({
       {/* Related — jump to owned neighbours, or add the ghosts next to it. */}
       {showRelated ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
-          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+          <p className="text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
             Related
           </p>
           {jumpSiblings.length > 0 ? (
@@ -1104,7 +1104,7 @@ export function PeakDetailCard({
               🏆
             </span>
             <span className="min-w-0">
-              <span className="block font-serif text-[15px]" style={{ color: GOLD_INK }}>
+              <span className="block font-serif type-button" style={{ color: GOLD_INK }}>
                 Fully explored
               </span>
               <span className="block text-xs text-[var(--text-muted)]">
@@ -1115,7 +1115,7 @@ export function PeakDetailCard({
         </div>
       ) : variant === 'own' ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
-          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+          <p className="text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
             How often it shows up
           </p>
           <div
@@ -1162,7 +1162,7 @@ export function PeakDetailCard({
                     {/* Rotation mark rides right of the label (D-FREQUENCY-MARK-01);
                         on the selected navy row it flips to card color to stay
                         visible. */}
-                    <span className="flex items-center gap-2 font-serif text-[15px] leading-tight">
+                    <span className="flex items-center gap-2 font-serif type-button leading-tight">
                       {title}
                       <FrequencyMark
                         frequency={value}

@@ -108,7 +108,7 @@ export function GeometricProgress({
         />
         <span className="flex items-center gap-1.5">{bonusDots}</span>
       </div>
-      <span className="text-[0.6rem] font-medium text-[var(--text-muted)]">
+      <span className="type-eyebrow font-medium text-[var(--text-muted)]">
         +{bonusCount} friend bonus
       </span>
     </div>

@@ -10,7 +10,7 @@ import type { StreamItem } from '@/lib/activity-stream'
 export function RecentActivitySection({ items }: { items: StreamItem[] }) {
   return (
     <section className="px-3">
-      <p className="mb-2 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+      <p className="mb-2 text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
         What&rsquo;s happening
       </p>
       {items.length === 0 ? (
@@ -26,7 +26,7 @@ export function RecentActivitySection({ items }: { items: StreamItem[] }) {
           <div className="mt-4 flex justify-end">
             <Link
               href="/activities"
-              className="text-xs font-medium tracking-[0.08em] text-[var(--brand-link)] uppercase hover:opacity-70"
+              className="text-xs font-medium tracking-eyebrow text-[var(--brand-link)] uppercase hover:opacity-70"
             >
               See all activity →
             </Link>

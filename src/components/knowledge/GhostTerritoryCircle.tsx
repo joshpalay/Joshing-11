@@ -9,7 +9,7 @@ import type { NearbyTerritory } from '@/lib/daily/territory-model';
 // The small "Added" caption shown once a circle is settled — the plus icon
 // and dashed circle already read as "tap to add" on their own, so there's no
 // caption for the resting state.
-const CAPTION_CLASS = 'text-[10px] tracking-[0.14em] uppercase';
+const CAPTION_CLASS = 'type-eyebrow tracking-eyebrow uppercase';
 
 // A suggested ("nearby") territory the player hasn't adopted yet: a dashed
 // category-tinted circle with an Add affordance. Originally the Configure

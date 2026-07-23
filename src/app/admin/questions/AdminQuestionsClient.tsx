@@ -59,7 +59,7 @@ function Badge({ label, tone }: { label: string; tone?: 'muted' | 'danger' | 'na
           : { color: 'var(--text-muted)', borderColor: 'var(--border)' };
   return (
     <span
-      className="inline-block whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-medium"
+      className="inline-block whitespace-nowrap rounded border px-1.5 py-0.5 type-eyebrow font-medium"
       style={style}
     >
       {label}
@@ -112,7 +112,7 @@ function FlagBadges({ row }: { row: AdminQuestionRow }) {
 }
 
 const CELL = 'px-2 py-1.5 align-top text-quiet';
-const HEAD = 'px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.04em]';
+const HEAD = 'px-2 py-1.5 text-left type-eyebrow font-semibold uppercase tracking-normal';
 const CONTROL = 'rounded-md border px-2 py-1.5 text-sm';
 
 // A sortable column header. A <button> so it is keyboard-operable; aria-sort
@@ -137,7 +137,7 @@ function SortHeader({
       <button
         type="button"
         onClick={() => onToggle(columnKey)}
-        className="inline-flex items-center gap-1 uppercase tracking-[0.04em] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex items-center gap-1 uppercase tracking-normal hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         style={{ color: active ? 'var(--brand-navy)' : 'inherit' }}
       >
         {label}
@@ -160,7 +160,7 @@ function scalar(value: string | number | boolean | null): string {
 function Field({ label, value }: { label: string; value: string | number | boolean | null }) {
   return (
     <div className="grid grid-cols-[minmax(120px,180px)_1fr] gap-2 py-1">
-      <span className="text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+      <span className="type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
         {label}
       </span>
       <span className="whitespace-pre-wrap break-words text-quiet" style={{ color: 'var(--brand-ink)' }}>
@@ -173,7 +173,7 @@ function Field({ label, value }: { label: string; value: string | number | boole
 function ListField({ label, values }: { label: string; values: string[] }) {
   return (
     <div className="grid grid-cols-[minmax(120px,180px)_1fr] gap-2 py-1">
-      <span className="text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+      <span className="type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
         {label}
       </span>
       {values.length === 0 ? (
@@ -196,7 +196,7 @@ function ListField({ label, values }: { label: string; values: string[] }) {
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mb-4">
-      <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--brand-navy)' }}>
+      <h3 className="mb-1 type-eyebrow font-semibold uppercase tracking-eyebrow" style={{ color: 'var(--brand-navy)' }}>
         {title}
       </h3>
       <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
@@ -328,7 +328,7 @@ function EditForm({
 
   const inputClass = 'w-full rounded-md border px-2 py-1.5 text-quiet';
   const inputStyle = { borderColor: 'var(--border)', background: 'var(--brand-field)', color: 'var(--brand-ink)' };
-  const labelClass = 'mb-1 block text-[11px] uppercase tracking-[0.04em]';
+  const labelClass = 'mb-1 block type-eyebrow uppercase tracking-normal';
   const labelStyle = { color: 'var(--text-muted)' };
 
   return (
@@ -362,7 +362,7 @@ function EditForm({
           Inside joke
         </label>
         <textarea rows={2} className={inputClass} style={inputStyle} value={insideJoke} onChange={(e) => setInsideJoke(e.target.value)} />
-        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        <p className="mt-1 type-eyebrow" style={{ color: 'var(--text-muted)' }}>
           The &ldquo;between us&rdquo; aside. Leave blank to clear it.
         </p>
       </div>
@@ -381,7 +381,7 @@ function EditForm({
           <option value="house">House (Joshing)</option>
         </select>
         {!detail.authorIsPerson ? (
-          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <p className="mt-1 type-eyebrow" style={{ color: 'var(--text-muted)' }}>
             Already house/non-person — reassigning to a specific person isn&apos;t supported here.
           </p>
         ) : null}
@@ -391,7 +391,7 @@ function EditForm({
           Domain (subcategory)
         </label>
         <input className={inputClass} style={inputStyle} value={domain} onChange={(e) => setDomain(e.target.value)} />
-        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        <p className="mt-1 type-eyebrow" style={{ color: 'var(--text-muted)' }}>
           The label shown above the question (e.g. “Sesame Street”). Fixes a mis-tagged domain.
           Category above is the top-level bucket; this is the specific one.
         </p>
@@ -537,7 +537,7 @@ function DetailSheet({ detail, onClose }: { detail: AdminQuestionDetail; onClose
             <h2 className="font-serif text-lg font-semibold" style={{ color: 'var(--brand-ink)' }}>
               Question detail
             </h2>
-            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            <p className="type-eyebrow" style={{ color: 'var(--text-muted)' }}>
               {detail.id}
             </p>
           </div>
@@ -880,7 +880,7 @@ export function AdminQuestionsClient({
           navigate({ q: search.trim() || null, author: author.trim() || null });
         }}
       >
-        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        <label className="flex flex-col gap-1 type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
           Search
           <input
             type="search"
@@ -892,7 +892,7 @@ export function AdminQuestionsClient({
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        <label className="flex flex-col gap-1 type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
           Author
           <input
             type="search"
@@ -904,7 +904,7 @@ export function AdminQuestionsClient({
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        <label className="flex flex-col gap-1 type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
           Category
           <select
             value={searchParams.get('category') ?? ''}
@@ -921,7 +921,7 @@ export function AdminQuestionsClient({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        <label className="flex flex-col gap-1 type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
           <InfoTerm term="trust_tier">Trust tier</InfoTerm>
           <select
             value={searchParams.get('trustTier') ?? ''}
@@ -938,7 +938,7 @@ export function AdminQuestionsClient({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        <label className="flex flex-col gap-1 type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
           <InfoTerm term="visibility">Visibility</InfoTerm>
           <select
             value={searchParams.get('visibility') ?? ''}
@@ -955,7 +955,7 @@ export function AdminQuestionsClient({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.04em]" style={{ color: 'var(--text-muted)' }}>
+        <label className="flex flex-col gap-1 type-eyebrow uppercase tracking-normal" style={{ color: 'var(--text-muted)' }}>
           <InfoTerm term="verdict">Verdict</InfoTerm>
           <select
             value={searchParams.get('verdict') ?? ''}
@@ -1148,7 +1148,7 @@ export function AdminQuestionsClient({
                     <button
                       type="button"
                       onClick={() => openDetail(row.id)}
-                      className="rounded border px-2 py-0.5 text-[11px] font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="rounded border px-2 py-0.5 type-eyebrow font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       style={{ borderColor: 'var(--border)', color: 'var(--brand-navy)' }}
                     >
                       Inspect
@@ -1163,7 +1163,7 @@ export function AdminQuestionsClient({
                   <td className={`${CELL} whitespace-nowrap`}>
                     {row.category}
                     {row.broadCategory ? (
-                      <span className="block text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      <span className="block type-eyebrow" style={{ color: 'var(--text-muted)' }}>
                         {row.broadCategory}
                       </span>
                     ) : null}

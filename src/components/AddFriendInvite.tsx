@@ -408,7 +408,7 @@ export default function AddFriendInvite({
       {step === 'identity' ? (
         <form className="space-y-5" onSubmit={goToInterests}>
           <div>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
               Invite Someone
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
@@ -486,7 +486,7 @@ export default function AddFriendInvite({
       {step === 'interests' ? (
         <form className="space-y-5" onSubmit={reviewAndCreate}>
           <div>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
               For {trimmedName}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
@@ -538,7 +538,7 @@ export default function AddFriendInvite({
       {step === 'review' ? (
         <div className="space-y-5">
           <div>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
               For {trimmedName}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">
@@ -625,7 +625,7 @@ export default function AddFriendInvite({
       {step === 'handoff' && result ? (
         <div className="space-y-5">
           <div>
-            <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+            <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
               {friendshipCopy ? friendshipCopy.eyebrow : 'Invite ready'}
             </p>
             <h2 className="text-foreground mt-2 font-serif text-2xl font-semibold">

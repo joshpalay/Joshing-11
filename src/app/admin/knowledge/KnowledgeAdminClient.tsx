@@ -1647,7 +1647,7 @@ function TreeRow({
               {!isParentish && (depthByKey[nodeKey] ?? 0) < THIN_LEAF_THRESHOLD && parentCount === 0 ? (
                 <InfoTerm
                   term="thin_leaf"
-                  className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                  className="shrink-0 rounded-sm px-1.5 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
                   style={{ color: 'var(--warning)', background: 'var(--warning-surface)' }}
                 >
                   thin
@@ -2140,7 +2140,7 @@ function ParentSuggestions({
             <li key={p.parentDomainKey} className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="min-w-0 truncate font-medium text-[var(--brand-ink)]">{p.label}</span>
               <span
-                className="shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+                className="shrink-0 rounded-sm px-1.5 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
                 style={
                   p.source === 'wikidata'
                     ? { color: 'var(--brand-navy)', background: 'var(--surface-2)' }
@@ -2606,7 +2606,7 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
       <h2 className="mb-2 font-serif text-lg font-semibold text-[var(--brand-ink)]">Draw an edge</h2>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex min-w-40 flex-1 flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Child</span>
+          <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">Child</span>
           <select value={childKey} onChange={(e) => setChildKey(e.target.value)} className={fieldClass}>
             <option value="">Pick a child…</option>
             {nodes.map((n) => (
@@ -2617,7 +2617,7 @@ function EdgeComposer({ nodes, onDone }: { nodes: KnowledgeNodeRow[]; onDone: ()
           </select>
         </label>
         <label className="flex min-w-40 flex-1 flex-col gap-1">
-          <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">Parent</span>
+          <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">Parent</span>
           <select value={parentKey} onChange={(e) => setParentKey(e.target.value)} className={fieldClass}>
             <option value="">Pick a parent…</option>
             {(parents.length > 0 ? parents : nodes).map((n) => (

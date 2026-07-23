@@ -52,7 +52,7 @@ export function FirstSessionPanel({
 
   return (
     <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
-      <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+      <p className="type-eyebrow font-semibold tracking-eyebrow text-muted-foreground uppercase">
         First five complete
       </p>
       <h2 className="mt-2 font-serif text-2xl leading-tight text-[var(--brand-ink)]">

@@ -176,7 +176,7 @@ export function AnswerFeedbackSheet({
         <div className="flex items-center justify-between px-5 pt-4 pb-1">
           {showNewTerritory ? (
             <p
-              className="inline-flex items-center gap-1.5 text-[0.68rem] font-semibold tracking-[0.18em] uppercase"
+              className="inline-flex items-center gap-1.5 type-eyebrow font-semibold tracking-eyebrow uppercase"
               style={{ color: GOLD_INK }}
             >
               <Sparkles className="size-3.5" aria-hidden />
@@ -185,7 +185,7 @@ export function AnswerFeedbackSheet({
               </span>
             </p>
           ) : visibleCategory ? (
-            <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-[var(--brand-ink-400)]">
+            <p className="type-eyebrow font-semibold tracking-eyebrow uppercase text-[var(--brand-ink-400)]">
               {visibleCategory.toUpperCase()}
             </p>
           ) : (
@@ -259,7 +259,7 @@ export function AnswerFeedbackSheet({
               <Chip
                 size="sm"
                 uppercase
-                className="px-2 py-0.5 text-[0.62rem] font-semibold tracking-[0.14em]"
+                className="px-2 py-0.5 type-eyebrow font-semibold tracking-eyebrow"
                 style={{
                   color: GOLD_INK,
                   backgroundColor: 'color-mix(in srgb, var(--accent-gold) 16%, var(--brand-card))',
@@ -308,7 +308,7 @@ export function AnswerFeedbackSheet({
           {explanation ? (
             // Match the daily-5 game's reveal: a single-sentence explainer under
             // the answer, not the full paragraph (which ran too long here).
-            <p className="font-serif text-[15px] leading-7 text-[var(--brand-ink-700)]">
+            <p className="font-serif type-button leading-7 text-[var(--brand-ink-700)]">
               {firstSentence(explanation)}
             </p>
           ) : null}
@@ -343,14 +343,14 @@ export function AnswerFeedbackSheet({
                   color: 'var(--game-correct)',
                 }}
               >
-                <span aria-hidden className="text-[15px] leading-none">✓</span>
+                <span aria-hidden className="type-button leading-none">✓</span>
                 <span>{recheckMessage}</span>
               </div>
             ) : (
               <p
                 role="status"
                 aria-live="polite"
-                className="text-[11px]"
+                className="type-eyebrow"
                 style={{
                   color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
                   opacity: recheckState === 'error' ? 1 : 0.6,

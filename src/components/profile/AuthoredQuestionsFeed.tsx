@@ -100,7 +100,7 @@ function ProfileQuestionRow({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {visibleCategory ? (
             <span
-              className="truncate text-[10px] leading-tight uppercase tracking-[0.1em]"
+              className="truncate type-eyebrow leading-tight uppercase tracking-eyebrow"
               style={{
                 // Category label is metadata — System voice (mono), per
                 // STYLE-GUIDE-TYPE §2/§5, matching MyQuestionCard.
@@ -114,7 +114,7 @@ function ProfileQuestionRow({
           ) : null}
           {difficultyLabel ? (
             <span
-              className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+              className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 type-eyebrow font-medium uppercase tracking-wide"
               style={{ color: 'var(--ink)', opacity: 0.7 }}
               aria-label={`Difficulty: ${difficultyLabel}`}
             >
@@ -124,7 +124,7 @@ function ProfileQuestionRow({
         </div>
       ) : null}
 
-      <p className="mt-2 font-serif text-[20px] font-semibold leading-[28px] tracking-[0.04em] text-[var(--brand-ink)]">
+      <p className="mt-2 font-serif type-card-title font-semibold leading-[28px] tracking-normal text-[var(--brand-ink)]">
         {item.questionText}
       </p>
 

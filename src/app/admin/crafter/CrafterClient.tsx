@@ -258,7 +258,7 @@ function DomainRow({ row, onCraft }: { row: CrafterWorklistRow; onCraft: () => v
             <span className="font-medium text-[var(--brand-ink)]">{row.domain}</span>
             {row.declaredByCrafter ? (
               <span
-                className="rounded-sm border px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+                className="rounded-sm border px-1.5 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
                 style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
                 title="One of your declared loves"
               >
@@ -269,14 +269,14 @@ function DomainRow({ row, onCraft }: { row: CrafterWorklistRow; onCraft: () => v
                 for the machine" line — human curation beats auto-fill here. */}
             {row.expensiveToMachine ? (
               <span
-                className="rounded-sm border px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.08em]"
+                className="rounded-sm border px-1.5 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
                 style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
                 title={`Expensive for the machine — curate this (${row.expensiveReason ?? 'costly to generate'})`}
               >
                 expensive · curate
               </span>
             ) : null}
-            <span className="text-[0.65rem] uppercase tracking-[0.06em]" style={{ color: heatColor(row.heat) }}>
+            <span className="type-eyebrow uppercase tracking-eyebrow" style={{ color: heatColor(row.heat) }}>
               {HEAT_LABEL[row.heat]}
             </span>
           </div>

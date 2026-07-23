@@ -162,7 +162,7 @@ const titleStyle: CSSProperties = {
   color: 'var(--brand-ink)',
   fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
   fontSize: '0.8rem',
-  fontWeight: 700,
+  fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
 }
@@ -170,7 +170,7 @@ const titleStyle: CSSProperties = {
 const wordmarkStyle: CSSProperties = {
   margin: 0,
   fontFamily: 'var(--font-wordmark), system-ui, sans-serif',
-  fontWeight: 700,
+  fontWeight: 600,
   fontSize: '0.92rem',
   color: 'var(--brand-ink)',
   letterSpacing: '0.01em',

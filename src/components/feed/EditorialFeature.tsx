@@ -124,7 +124,7 @@ export function EditorialFeature({
     >
       <h2
         className={cn(
-          'max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium md:text-[32px]',
+          'max-w-[20ch] font-serif type-page-title leading-[1.15] font-medium md:type-display-title',
           // Cormorant 500 headline; on the dark interlude ground it inverts to
           // cream, otherwise navy ink.
           isDark ? 'text-[var(--cream)]' : 'text-[var(--brand-ink)]',
@@ -143,7 +143,7 @@ export function EditorialFeature({
             // Josefin caps + letterspacing, inverted to cream on the dark ground.
             isInterlude
               ? cn(
-                  'font-sans tracking-[0.12em] uppercase',
+                  'font-sans tracking-eyebrow uppercase',
                   isDark ? 'text-[var(--cream)]/70' : 'text-[var(--brand-ink-400)]',
                 )
               : 'text-[var(--brand-ink-400)]',
@@ -162,7 +162,7 @@ export function EditorialFeature({
             'inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4 transition hover:opacity-70 active:opacity-90',
             isInterlude ? 'mt-4' : 'mt-5',
             // Interlude CTAs carry the same Josefin caps system voice.
-            isInterlude && 'font-sans text-quiet tracking-[0.12em] uppercase',
+            isInterlude && 'font-sans text-quiet tracking-eyebrow uppercase',
             TONE_ACCENT[tone],
           )}
         >

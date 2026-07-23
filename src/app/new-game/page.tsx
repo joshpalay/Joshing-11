@@ -4,7 +4,7 @@ export default function NewGameDisabledPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center px-4 py-10 text-center">
       <section className="card p-6">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Joshing Games</p>
+        <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Joshing Games</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">Game creation is coming soon.</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           Add a Joshing Game is disabled in v11.1. Existing games are still playable, and question creation is available now.

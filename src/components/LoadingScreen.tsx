@@ -247,7 +247,7 @@ export default function LoadingScreen({
       />
 
       <div className="relative z-10 mx-6 w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5">
-        <p className="font-wordmark text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
+        <p className="font-wordmark text-5xl font-semibold leading-[52px] tracking-normal text-[var(--brand-ink-950)]">
           JOSHING
         </p>
         <div
@@ -274,7 +274,7 @@ export default function LoadingScreen({
             >
               {currentItem.kind === "moment" ? (
                 <>
-                  <p className="w-full font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
+                  <p className="w-full font-sans type-eyebrow font-medium tracking-eyebrow uppercase text-[var(--warm-ink)]/60">
                     {currentItem.moment.label}
                   </p>
                   <p className="mt-1.5 line-clamp-3 w-full break-words font-serif text-lg leading-snug text-[var(--brand-ink-950)]">

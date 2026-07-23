@@ -190,7 +190,7 @@ export function InlineEditableField({
       <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
         {variant === 'card' ? (
           <div className="mb-2 flex items-baseline justify-between gap-3">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
               {label}
             </p>
             <SaveStatusIndicator status={status} />
@@ -215,7 +215,7 @@ export function InlineEditableField({
     <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
       {variant === 'card' ? (
         <div className="mb-2 flex items-baseline justify-between gap-3">
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
             {label}
           </p>
           <SaveStatusIndicator status={status} />

@@ -195,7 +195,7 @@ export function PaletteToggle() {
         borderBottom: '1px solid rgba(255,255,255,0.12)',
       }}
     >
-      <span style={{ fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+      <span style={{ fontWeight: 600, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
         ⚠ CARD COLOR
       </span>
 

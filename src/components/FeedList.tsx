@@ -648,7 +648,7 @@ function OverflowRow({
   return (
     <Link
       href={href}
-      className={`flex min-h-11 items-center pt-1 text-quiet font-medium tracking-[0.04em] text-[var(--brand-link)] ${
+      className={`flex min-h-11 items-center pt-1 text-quiet font-medium tracking-normal text-[var(--brand-link)] ${
         unifiedHome ? 'pl-0.5' : ''
       }`}
     >
@@ -853,7 +853,7 @@ function FeedContributeFooter() {
                 (uppercase + letterspacing). */}
             <button
               type="submit"
-              className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-card)] bg-[var(--accent-gold)] px-4 py-2 font-sans text-sm font-semibold tracking-[0.12em] text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-card)] bg-[var(--accent-gold)] px-4 py-2 font-sans text-sm font-semibold tracking-eyebrow text-[var(--ink)] uppercase transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               Write a Question
             </button>
@@ -911,10 +911,10 @@ function FeedSectionHeading({
   // bare h2 normally, or the wrapper div when a subtitle pairs with it.
   const padClasses = subdued ? 'pt-1' : 'pt-4 first:pt-0'
   const typeClasses = prominent
-    ? 'text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)]'
+    ? 'text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-400)]'
     : subdued
-      ? 'text-muted-foreground/50 text-[10px] font-medium tracking-[0.14em]'
-      : 'text-muted-foreground/70 text-[11px] font-medium tracking-[0.12em]'
+      ? 'text-muted-foreground/50 type-eyebrow font-medium tracking-eyebrow'
+      : 'text-muted-foreground/70 type-eyebrow font-medium tracking-eyebrow'
 
   const heading = (
     <h2 className={`uppercase ${typeClasses} ${subtitle ? '' : padClasses} ${gutter}`}>
@@ -935,7 +935,7 @@ function FeedSectionHeading({
           you") so the two zones read as peers, rather than the serif italic it
           used to carry. */}
       <p
-        className={`text-muted-foreground/70 mt-1 text-[11px] font-medium tracking-[0.12em] uppercase ${gutter}`}
+        className={`text-muted-foreground/70 mt-1 type-eyebrow font-medium tracking-eyebrow uppercase ${gutter}`}
       >
         {subtitle}
       </p>
@@ -2156,7 +2156,7 @@ function FeedListContent({
             {showInviteFriendCta ? (
               <Link
                 href="/friends"
-                className="font-serif text-lg font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
+                className="font-serif text-lg font-semibold tracking-normal text-[var(--brand-orange)] underline underline-offset-4"
               >
                 add friends →
               </Link>
@@ -2173,7 +2173,7 @@ function FeedListContent({
           // aligned serif headline, the centered speech-bubble art, and a
           // right-aligned orange "add friends" link.
           <section className="py-4">
-            <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+            <p className="text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
               Questions from friends
             </p>
             <h2 className="mt-1 font-serif text-lg font-medium text-[var(--brand-ink)]">
@@ -2186,7 +2186,7 @@ function FeedListContent({
               <div className="flex justify-end">
                 <Link
                   href="/friends"
-                  className="font-serif text-lg font-semibold tracking-[0.05em] text-[var(--brand-orange)] underline underline-offset-4"
+                  className="font-serif text-lg font-semibold tracking-normal text-[var(--brand-orange)] underline underline-offset-4"
                 >
                   add friends →
                 </Link>
@@ -2319,7 +2319,7 @@ function FeedListContent({
                       onClick={() =>
                         setFromFriendsVisibleCount((count) => count + FROM_FRIENDS_STEP)
                       }
-                      className={`flex min-h-11 items-center text-quiet font-medium tracking-[0.04em] text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
+                      className={`flex min-h-11 items-center text-quiet font-medium tracking-normal text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70 ${
                         unifiedHome ? 'pl-0.5' : ''
                       }`}
                     >

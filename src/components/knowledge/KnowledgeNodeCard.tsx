@@ -254,7 +254,7 @@ export function KnowledgeNodeCard({
 
       {showFillOut ? (
         <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+          <p className="text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
             Fill this out
           </p>
           <ul className="mt-2 grid gap-1.5">

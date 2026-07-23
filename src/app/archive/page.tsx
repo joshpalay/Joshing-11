@@ -209,7 +209,7 @@ export default function ArchivePage() {
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-6 pb-20">
       <header>
-        <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+        <p className="font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground">
           <Link href="/" className="underline underline-offset-2">HOME</Link>
           {' / '}
           <Link href="/users/me" className="underline underline-offset-2">PROFILE</Link>
@@ -223,7 +223,7 @@ export default function ArchivePage() {
 
       <section className="sticky top-0 z-20 mt-5 border-b bg-background/95 py-3 backdrop-blur">
         <div className="grid gap-2 sm:grid-cols-3">
-          <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
             Source
             <select
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
@@ -235,7 +235,7 @@ export default function ArchivePage() {
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
             Domain
             <select
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
@@ -248,7 +248,7 @@ export default function ArchivePage() {
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
             Result
             <select
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
@@ -356,10 +356,10 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
   return (
     <article className="card p-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+        <p className="font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground">
           {item.sourceLabel}
         </p>
-        <span className={cn('rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]', resultClass(item))}>
+        <span className={cn('rounded-sm border px-2 py-1 type-eyebrow font-semibold uppercase tracking-eyebrow', resultClass(item))}>
           {resultLabel(item)}
         </span>
       </div>

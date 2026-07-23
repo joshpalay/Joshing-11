@@ -44,7 +44,7 @@ function KnowledgeGainIndicator({ item }: { item: AnsweredByYouFeedItem }) {
       />
       {tierLine ? (
         <span
-          className="font-mono text-[9px] uppercase tracking-[0.1em]"
+          className="font-mono type-eyebrow uppercase tracking-eyebrow"
           style={{ color: dc.primary }}
         >
           {tierLine}
@@ -69,7 +69,7 @@ function AvatarDisc({
   return (
     <div
       aria-hidden
-      className="grid shrink-0 place-items-center rounded-full text-[10px] font-semibold"
+      className="grid shrink-0 place-items-center rounded-full type-eyebrow font-semibold"
       style={{
         width: size,
         height: size,
@@ -211,14 +211,14 @@ function AnsweredResult({
               color: 'var(--game-correct)',
             }}
           >
-            <span aria-hidden className="text-[15px] leading-none">✓</span>
+            <span aria-hidden className="type-button leading-none">✓</span>
             <span>{recheckMessage}</span>
           </div>
         ) : (
           <p
             role="status"
             aria-live="polite"
-            className="text-[11px]"
+            className="type-eyebrow"
             style={{
               color: recheckState === 'error' ? 'var(--game-wrong-strong)' : 'var(--ink)',
               opacity: recheckState === 'error' ? 1 : 0.6,
@@ -252,7 +252,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
 
           <div className="min-w-0 flex-1">
             <p
-              className="text-[11px] uppercase leading-none tracking-[0.08em]"
+              className="type-eyebrow uppercase leading-none tracking-eyebrow"
               style={{ color: 'var(--ink)', opacity: 0.7 }}
             >
               You answered
@@ -274,7 +274,7 @@ export function AnsweredByYouCard({ item, recheckAction, onRetry, overflow }: An
           <div className="flex shrink-0 items-center gap-2">
             {item.timestamp ? (
               <span
-                className="text-[11px] leading-none"
+                className="type-eyebrow leading-none"
                 style={{ color: 'var(--ink)', opacity: 0.6 }}
               >
                 {item.timestamp}

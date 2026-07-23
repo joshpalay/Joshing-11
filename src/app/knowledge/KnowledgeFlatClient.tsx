@@ -823,7 +823,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     return (
       <main className="w-[min(672px,94vw)] mx-auto pt-5 pb-10 grid gap-3.5">
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4">
-          <p className="m-0 text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">Knowledge</p>
+          <p className="m-0 type-metadata uppercase tracking-eyebrow text-[var(--text-muted)]">Knowledge</p>
           <h1 className="mt-1.5 text-[clamp(1.1rem,2.5vw,1.55rem)] leading-[1.35] text-[var(--warm-ink)] font-[var(--font-neutral)] font-semibold">Could not load your map</h1>
           <p className="m-0 text-[var(--text-muted-warm)]">{error ?? 'Something went sideways.'}</p>
         </section>
@@ -838,7 +838,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         // bottom nav on /daily/*, so this X is the only way out. The page-cream
         // background lets content scroll cleanly under it.
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 bg-[var(--brand-cream-page)] px-1 pt-5 pb-3">
-          <h1 className="m-0 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+          <h1 className="m-0 font-serif type-display-title font-medium leading-tight text-[var(--brand-ink)]">
             Manage your topics
           </h1>
           <Link
@@ -850,7 +850,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           </Link>
         </div>
       ) : (
-        <h1 className="m-0 px-1 font-serif text-[2rem] font-medium leading-tight text-[var(--brand-ink)]">
+        <h1 className="m-0 px-1 font-serif type-display-title font-medium leading-tight text-[var(--brand-ink)]">
           Knowledge
         </h1>
       )}
@@ -906,7 +906,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 </p>
                 <button
                   type="button"
-                  className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                  className="mt-1 text-xs font-semibold tracking-eyebrow text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
                   onClick={() => void undoAddedTopic()}
                   disabled={undoing}
                 >
@@ -953,8 +953,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       {hasAnything && (
         <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
           <div className="mb-2">
-            <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">{isManage ? 'YOUR TOPICS' : 'YOUR KNOWLEDGE'}</p>
-            <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
+            <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-eyebrow">{isManage ? 'YOUR TOPICS' : 'YOUR KNOWLEDGE'}</p>
+            <p className="mt-0.5 type-eyebrow [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-eyebrow font-[var(--font-neutral)]">
               {isManage ? 'TAP A TOPIC FOR OPTIONS ->' : 'SEE HOW YOUR KNOWLEDGE IS BUILDING ->'}
             </p>
           </div>
@@ -974,7 +974,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           {!isManage && (
             <div className="mt-6 border-t border-[var(--border-warm)] pt-4">
               <h3 className="m-0 text-lg font-semibold text-[var(--ink)] font-[var(--font-serif)]">Add a territory</h3>
-              <p className="mt-1 mb-3 text-[0.82rem] leading-[1.5] text-[var(--text-muted-warm)]">
+              <p className="mt-1 mb-3 type-button leading-[1.5] text-[var(--text-muted-warm)]">
                 {shuffledPool.length > 0
                   ? 'Suggestions based on the shape of your map — swipe for more, or create your own.'
                   : 'Create your own, and more suggestions will appear as your map grows.'}
@@ -1000,7 +1000,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                     </p>
                     <button
                       type="button"
-                      className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                      className="mt-1 text-xs font-semibold tracking-eyebrow text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
                       onClick={() => void undoAddedTopic()}
                       disabled={undoing}
                     >
@@ -1010,7 +1010,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 </div>
               ) : null}
               {suggestError ? (
-                <p className="mt-2 text-[0.78rem]" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
+                <p className="mt-2 type-button-sm" style={{ color: 'var(--game-wrong-strong)' }}>{suggestError}</p>
               ) : null}
             </div>
           )}
@@ -1029,7 +1029,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           <h2 className="m-0 font-[var(--font-serif)] text-2xl font-semibold text-[var(--ink)]">
             Your map is ready for its first territory.
           </h2>
-          <p className="mx-auto mt-2 max-w-sm text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">
+          <p className="mx-auto mt-2 max-w-sm type-button leading-[1.6] text-[var(--text-muted-warm)]">
             Add something you&rsquo;d be delighted to be asked about, and Joshing will start shaping
             around it.
           </p>
@@ -1041,14 +1041,14 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
 
       {emptyQuestionDomain ? (
         <section className="bg-[color-mix(in_srgb,var(--accent-gold)_8%,var(--brand-card))] border border-[color-mix(in_srgb,var(--accent-gold)_55%,var(--brand-border))] px-4 py-5" aria-label={`No ${emptyQuestionDomain} questions yet`}>
-          <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">No matching public questions</p>
+          <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-eyebrow">No matching public questions</p>
           <h2 className="mt-1.5 text-xl leading-[1.35] text-[var(--ink)] font-[var(--font-serif)] font-semibold">We don&apos;t have {emptyQuestionDomain} questions yet. Want to ask someone who might?</h2>
-          <p className="mt-3 text-[0.88rem] leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
+          <p className="mt-3 type-button leading-[1.6] text-[var(--text-muted-warm)]">Josh is going deep on {emptyQuestionDomain} — and thinks someone in your world might be the one to stump them.</p>
           <div className="flex flex-wrap gap-2.5 mt-5">
-            <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
+            <button type="button" className="min-h-10 border border-[var(--ink)] bg-[var(--ink)] text-[var(--cream-warm)] px-4 cursor-pointer type-button font-[inherit]" onClick={() => setAskFriendDomain(emptyQuestionDomain)}>
               Ask a friend
             </button>
-            <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 cursor-pointer text-[0.82rem] font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
+            <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 cursor-pointer type-button font-[inherit]" onClick={() => setActiveModal({ type: 'write-question' })}>
               Write one myself
             </button>
           </div>
@@ -1057,7 +1057,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
 
       <section className="flex items-center justify-between gap-4 border-t border-[var(--border-warm)] pt-3.5 px-1">
         <p className="m-0 text-[var(--text-muted-warm)]">Map maintenance</p>
-        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 text-[0.7rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
+        <button type="button" className="min-h-9 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] inline-flex items-center justify-center gap-2 px-3 type-metadata uppercase tracking-eyebrow cursor-pointer" onClick={() => setActiveModal({ type: 'tidy' })} disabled={tidying}>
           <Combine className="size-3.5" />
           Tidy up my map
         </button>
@@ -1108,9 +1108,9 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
+                <h2 className="m-0 text-[var(--ink)] type-page-title font-[var(--font-serif)]">{activeModal.currentDomain ? `Swap ${activeModal.currentDomain}` : 'Add to your declared interests'}</h2>
                 {activeModal.currentDomain ? (
-                  <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
+                  <p className="mt-2 text-[var(--text-muted-warm)] type-button leading-[1.5]">Your progress in {activeModal.currentDomain} is preserved. It moves to your demonstrated knowledge.</p>
                 ) : null}
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={closeInterestModal} aria-label="Close">
@@ -1120,9 +1120,9 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
 
             <div className="grid gap-5 mt-5">
               <div>
-                <h3 className="m-0 text-[var(--ink)] text-[0.9rem]">Pick from your knowledge base</h3>
+                <h3 className="m-0 text-[var(--ink)] type-button">Pick from your knowledge base</h3>
                 {demonstratedChoices.length === 0 ? (
-                  <p className="mt-2 border border-[var(--border-light)] p-3 text-[var(--text-muted-warm)] text-[0.88rem]">No demonstrated domains are available to add right now.</p>
+                  <p className="mt-2 border border-[var(--border-light)] p-3 text-[var(--text-muted-warm)] type-button">No demonstrated domains are available to add right now.</p>
                 ) : (
                   <div className="mt-2 max-h-[176px] overflow-y-auto border border-[var(--border-light)]">
                     {demonstratedChoices.map((domain) => (
@@ -1141,7 +1141,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               </div>
 
               <div>
-                <h3 className="m-0 text-[var(--ink)] text-[0.9rem]">Write a new interest</h3>
+                <h3 className="m-0 text-[var(--ink)] type-button">Write a new interest</h3>
                 <div className="flex gap-2 mt-2">
                   <input
                     value={customInterest}
@@ -1155,13 +1155,13 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 </div>
                 {interestChoices ? (
                   <div className="mt-3">
-                    <p className="m-0 text-[var(--text-muted-warm)] text-[0.82rem]">That&rsquo;s a whole category — pick what you&rsquo;re into:</p>
+                    <p className="m-0 text-[var(--text-muted-warm)] type-button">That&rsquo;s a whole category — pick what you&rsquo;re into:</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {interestChoices.map((choice) => (
                         <button
                           key={choice.label}
                           type="button"
-                          className="border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
+                          className="border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 py-1.5 type-button cursor-pointer hover:bg-[var(--cream-warm)]"
                           onClick={() => {
                             setSelectedInterest({ label: choice.label, broadCategory: choice.broadCategory ?? undefined });
                             setInterestChoices(null);
@@ -1176,8 +1176,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 {selectedInterest ? (
                   <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
-                    {selectedInterest.description ? <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
-                    <button type="button" className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
+                    {selectedInterest.description ? <p className="mt-2 text-[var(--text-muted-warm)] type-button leading-[1.5]">{selectedInterest.description}</p> : null}
+                    <button type="button" className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 type-button-sm uppercase tracking-eyebrow" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
                       Use my wording
                     </button>
                   </div>
@@ -1185,7 +1185,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               </div>
             </div>
 
-            {interestError ? <p className="mt-4 border border-[var(--cat-literature)]/40 text-[var(--cat-literature-text)] p-3 text-[0.88rem]">{interestError}</p> : null}
+            {interestError ? <p className="mt-4 border border-[var(--cat-literature)]/40 text-[var(--cat-literature-text)] p-3 type-button">{interestError}</p> : null}
 
             <div className="flex justify-end gap-2 mt-5">
               <button type="button" className="min-h-10 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] px-4 cursor-pointer" onClick={closeInterestModal} disabled={savingInterests}>Cancel</button>
@@ -1202,8 +1202,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           <div className="w-[min(430px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Tidy up your map?</h2>
-                <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
+                <h2 className="m-0 text-[var(--ink)] type-page-title font-[var(--font-serif)]">Tidy up your map?</h2>
+                <p className="mt-2 text-[var(--text-muted-warm)] type-button leading-[1.5]">We&apos;ll look for domains in your map that could be combined. This is automatic and based on what you&apos;ve answered.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close" disabled={tidying}>
                 <X className="size-4" />
@@ -1219,11 +1219,11 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         </div>
       ) : null}
 
-      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] text-[0.88rem]">{tidyNotice}</div> : null}
+      {tidyNotice ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] type-button">{tidyNotice}</div> : null}
       {questionToast ? (
         <div
           style={{ bottom: tidyNotice ? 64 : 20 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] text-[0.88rem]"
+          className="fixed left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] type-button"
         >
           {questionToast}
         </div>
@@ -1234,8 +1234,8 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           <div className="w-[min(540px,100%)] max-h-[90vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] p-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
               <div>
-                <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Manage interests</h2>
-                <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
+                <h2 className="m-0 text-[var(--ink)] type-page-title font-[var(--font-serif)]">Manage interests</h2>
+                <p className="mt-2 text-[var(--text-muted-warm)] type-button leading-[1.5]">Your declared interests seed your Daily Five questions. Add as many as you like.</p>
               </div>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
@@ -1245,11 +1245,11 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               {declaredSlots.map((slot) => (
                 <div key={slot.domain} className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
                   <div className="min-w-0">
-                    <h3 className="m-0 text-[0.9rem] leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
-                    <p className="mt-1 text-[var(--text-muted-warm)] text-[0.72rem]">{slot.broadCategory ?? asTier(slot.tier)}</p>
+                    <h3 className="m-0 type-button leading-[1.25] text-[var(--ink)]">{slot.displayName}</h3>
+                    <p className="mt-1 text-[var(--text-muted-warm)] type-metadata">{slot.broadCategory ?? asTier(slot.tier)}</p>
                   </div>
                   <div className="flex gap-1.5 mt-2">
-                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 text-[0.68rem] uppercase tracking-[0.08em] cursor-pointer" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                    <button type="button" className="flex-1 min-h-[34px] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--text-muted-warm)] inline-flex items-center justify-center gap-1.5 type-eyebrow uppercase tracking-eyebrow cursor-pointer" onClick={() => openInterestModal(declaredSlots.length, null)}>
                       <Plus className="size-3.5" />
                       Add
                     </button>
@@ -1260,7 +1260,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                 </div>
               ))}
               <div className="min-h-[132px] border border-[var(--border-light)] rounded-lg p-3 flex flex-col justify-between bg-[var(--cream)]">
-                <button type="button" className="min-h-[104px] border border-dashed border-[var(--warm-border-soft)] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 text-[0.82rem] cursor-pointer w-full h-full" onClick={() => openInterestModal(declaredSlots.length, null)}>
+                <button type="button" className="min-h-[104px] border border-dashed border-[var(--warm-border-soft)] bg-transparent text-[var(--text-muted-warm)] flex flex-col items-center justify-center gap-2 type-button cursor-pointer w-full h-full" onClick={() => openInterestModal(declaredSlots.length, null)}>
                   <Plus className="size-4" />
                   Add interest
                 </button>
@@ -1277,7 +1277,7 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
         <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-[var(--scrim)] p-4">
           <div className="w-[min(540px,100%)] max-h-[92vh] overflow-y-auto bg-[var(--brand-card)] border border-[var(--border-warm)] px-5 pt-5 shadow-[var(--shadow-overlay)]">
             <div className="flex justify-between gap-4">
-              <h2 className="m-0 text-[var(--ink)] text-[1.45rem] font-[var(--font-serif)]">Write a question</h2>
+              <h2 className="m-0 text-[var(--ink)] type-page-title font-[var(--font-serif)]">Write a question</h2>
               <button type="button" className="w-[34px] h-[34px] border-none bg-transparent text-[var(--text-muted-warm)] grid place-items-center cursor-pointer" onClick={() => setActiveModal(null)} aria-label="Close">
                 <X className="size-4" />
               </button>

@@ -39,7 +39,7 @@ function AccountIcon({
   return (
     <span
       className={[
-        'grid size-5 place-items-center rounded-full text-[10px] font-semibold',
+        'grid size-5 place-items-center rounded-full type-eyebrow font-semibold',
         active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground',
       ].join(' ')}
       aria-hidden="true"
@@ -188,7 +188,7 @@ export function Nav({
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
-            className="font-wordmark text-[22px] font-semibold uppercase leading-none tracking-[0.05em] text-foreground"
+            className="font-wordmark type-page-title font-semibold uppercase leading-none tracking-normal text-foreground"
           >
             Joshing
           </Link>
@@ -205,7 +205,7 @@ export function Nav({
               <Bell className="size-5" strokeWidth={1.9} />
               {showBadge ? (
                 <span
-                  className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                  className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono type-eyebrow font-semibold leading-[14px] text-[var(--brand-card)]"
                   style={{ backgroundColor: 'var(--destructive)' }}
                   aria-hidden="true"
                 >
@@ -304,7 +304,7 @@ export function Nav({
                       find — never both, so the tab corner stays uncluttered. */}
                   {showFriendRequests ? (
                     <span
-                      className="absolute -right-2 -top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                      className="absolute -right-2 -top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono type-eyebrow font-semibold leading-[14px] text-[var(--brand-card)]"
                       style={{ backgroundColor: 'var(--destructive)' }}
                       aria-hidden="true"
                     >
@@ -319,7 +319,7 @@ export function Nav({
                 </span>
                 <span
                   className={[
-                    'font-mono text-[10px] uppercase tracking-[0.06em]',
+                    'font-mono type-eyebrow uppercase tracking-eyebrow',
                     active ? 'font-semibold' : 'font-medium',
                   ].join(' ')}
                 >

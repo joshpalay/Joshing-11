@@ -46,7 +46,7 @@ type TodaysFiveCardProps = {
 const CUSTOMIZE_DAILY_LINK_CLASS = [
   'inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full',
   'border border-[color-mix(in_srgb,var(--brand-border)_60%,transparent)] bg-[var(--brand-cream-page)] px-3 py-2',
-  'text-[12px] font-bold tracking-[0.01em] whitespace-nowrap text-[var(--brand-ink)]',
+  'type-metadata font-semibold tracking-normal whitespace-nowrap text-[var(--brand-ink)]',
   'transition-[background-color,border-color,transform]',
   'hover:border-[color-mix(in_srgb,var(--brand-ink)_24%,var(--brand-border))] hover:bg-[var(--brand-card)]',
   'focus-visible:ring-2 focus-visible:ring-[var(--brand-ink)] focus-visible:ring-offset-2 focus-visible:outline-none',
@@ -271,7 +271,7 @@ export default function TodaysFiveCard({
       className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-quiet font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
+        <p className="text-quiet font-semibold tracking-eyebrow text-[var(--brand-ink-700)] uppercase">
           Today&apos;s Five
         </p>
         {/* Customize pill — the entry point for tuning the Daily Five. A quiet
@@ -303,8 +303,8 @@ export default function TodaysFiveCard({
       <h2
         className={
           isComplete
-            ? 'mt-1 mb-2 font-serif text-[22px] leading-[28px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
-            : 'mt-1 mb-2 font-serif text-[32px] leading-[40px] font-medium tracking-[-0.1px] text-[var(--brand-ink)]'
+            ? 'mt-1 mb-2 font-serif type-page-title leading-[28px] font-medium tracking-page text-[var(--brand-ink)]'
+            : 'mt-1 mb-2 font-serif type-display-title leading-[40px] font-medium tracking-page text-[var(--brand-ink)]'
         }
       >
         {headline}
@@ -336,7 +336,7 @@ export default function TodaysFiveCard({
                 label={`Bonus ${index + 1} of ${effectiveStatus.bonusOutcomes.length}, from friends: ${outcomeLabel(outcome)}`}
               />
             ))}
-            <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
+            <span className="ml-1 type-metadata font-medium text-[var(--brand-ink-400)]">
               +{effectiveStatus.bonusOutcomes.length} friend bonus
             </span>
           </>
@@ -372,7 +372,7 @@ export default function TodaysFiveCard({
           <div className="mt-3 space-y-2.5">
             <Link
               href="/daily/catchup"
-              className="flex min-h-12 w-full items-center justify-center rounded-[var(--radius-xs)] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-bold tracking-[0.04em] text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
+              className="flex min-h-12 w-full items-center justify-center rounded-[var(--radius-xs)] border border-[color-mix(in_srgb,var(--domain-science)_55%,transparent)] bg-[color-mix(in_srgb,var(--domain-science)_22%,transparent)] text-base font-semibold tracking-normal text-[var(--game-correct)] transition-colors hover:bg-[color-mix(in_srgb,var(--domain-science)_32%,transparent)]"
             >
               {`Play (${missedCount}) Missed Question${missedCount === 1 ? '' : 's'}`}
             </Link>

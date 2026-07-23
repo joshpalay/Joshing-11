@@ -18,7 +18,7 @@ export type DiscoveryPerson = {
 
 function DiscoveryLine({ label, person }: { label: string; person: DiscoveryPerson }) {
   return (
-    <p className="text-[12px] leading-snug text-[var(--brand-ink-700)]">
+    <p className="type-metadata leading-snug text-[var(--brand-ink-700)]">
       <span className="opacity-70">{label} </span>
       <Link
         href={person.href}

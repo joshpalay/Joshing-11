@@ -36,7 +36,7 @@ export function SettingsRow(props: LinkProps | ButtonProps): ReactNode {
       : 'bg-muted text-foreground/70';
 
   const trailing = props.unavailable ? (
-    <span className="flex-none rounded-full bg-muted px-2 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+    <span className="flex-none rounded-full bg-muted px-2 py-0.5 font-mono type-eyebrow font-semibold uppercase tracking-eyebrow text-muted-foreground">
       Unavailable
     </span>
   ) : (

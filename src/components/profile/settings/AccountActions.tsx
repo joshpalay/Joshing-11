@@ -394,14 +394,14 @@ export function AccountActions({
           <div className="flex flex-col gap-5">
             {devToolGroups.map((group) => (
               <div key={group.eyebrow}>
-                <p className="text-muted-foreground mb-2 px-1 font-mono text-[0.62rem] font-semibold tracking-[0.06em] uppercase">
+                <p className="text-muted-foreground mb-2 px-1 font-mono type-eyebrow font-semibold tracking-eyebrow uppercase">
                   {group.eyebrow}
                 </p>
                 <SettingsGroup>{group.tools.map(renderTool)}</SettingsGroup>
               </div>
             ))}
             <div>
-              <p className="text-muted-foreground mb-2 px-1 font-mono text-[0.62rem] font-semibold tracking-[0.06em] uppercase">
+              <p className="text-muted-foreground mb-2 px-1 font-mono type-eyebrow font-semibold tracking-eyebrow uppercase">
                 First-run reset
               </p>
               <ResetWelcomeTourButton />

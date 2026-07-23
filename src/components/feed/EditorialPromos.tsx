@@ -152,7 +152,7 @@ export function CommonGroundFeature({
                 </div>
                 <Link
                   href={f.friendHref}
-                  className="max-w-[150px] font-serif text-[15px] leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
+                  className="max-w-[150px] font-serif type-button leading-snug font-semibold text-[var(--brand-ink)] no-underline hover:underline"
                 >
                   {f.friendFirstName}
                 </Link>
@@ -169,7 +169,7 @@ export function CommonGroundFeature({
               <span className="flex h-[76px] items-center">
                 <InviteOverlapDiscs />
               </span>
-              <span className="max-w-[150px] font-serif text-[14px] leading-snug text-[var(--brand-ink-700)]">
+              <span className="max-w-[150px] font-serif type-button leading-snug text-[var(--brand-ink-700)]">
                 Invite someone
               </span>
             </Link>,
@@ -210,7 +210,7 @@ export function GrowYourCircleFeature({
                 <div key={p.id} className="flex items-center gap-3">
                   <Link
                     href={`/users/${p.id}`}
-                    className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold no-underline"
+                    className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold no-underline"
                     style={{ background: bg, color: isDarkColor(bg) ? '#fff' : 'var(--ink)' }}
                   >
                     {initialsFor(p.displayName)}
@@ -268,13 +268,13 @@ export function RecentlyExpandingFeature({
               <div key={d.label} className="flex items-center gap-3">
                 <span
                   aria-hidden="true"
-                  className="grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold text-[var(--brand-ink)]"
+                  className="grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold text-[var(--brand-ink)]"
                   style={{ border: `1px solid ${accent.border}`, background: accent.fill }}
                 >
                   {d.initial}
                 </span>
                 <div className="min-w-0">
-                  <p className="font-serif text-sm leading-tight font-bold text-[var(--brand-ink)]">
+                  <p className="font-serif text-sm leading-tight font-semibold text-[var(--brand-ink)]">
                     {d.label}
                   </p>
                   {d.caption ? (

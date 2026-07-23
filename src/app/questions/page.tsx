@@ -600,7 +600,7 @@ function QuestionsPageContent() {
           <aside className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-background px-5 pt-5 shadow-[var(--shadow-overlay)] md:h-full md:max-h-none md:w-[440px] md:rounded-none">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
+                <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
                 <h2 className="font-serif text-2xl font-semibold">{drawer.mode === 'edit' ? 'Edit question' : 'Write a question'}</h2>
               </div>
               <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={closeDrawer} title="Close">

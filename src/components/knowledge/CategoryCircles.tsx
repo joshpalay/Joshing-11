@@ -261,7 +261,7 @@ function GameCircleRow({
             fontSize: 17,
             fontFamily: 'var(--font-mono)',
             color: 'var(--text)',
-            fontWeight: 700,
+            fontWeight: 600,
             lineHeight: 1,
           }}
         >

@@ -213,7 +213,7 @@ const headerStyle: CSSProperties = {
 const wordmarkStyle: CSSProperties = {
   margin: 0,
   fontFamily: 'var(--font-wordmark), system-ui, sans-serif',
-  fontWeight: 700,
+  fontWeight: 600,
   fontSize: '0.92rem',
   color: 'var(--brand-ink)',
   letterSpacing: '0.01em',
@@ -225,7 +225,7 @@ const titleStyle: CSSProperties = {
   color: 'var(--brand-ink)',
   fontFamily: 'var(--font-sans-body), system-ui, sans-serif',
   fontSize: '0.8rem',
-  fontWeight: 700,
+  fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
 };
@@ -272,7 +272,7 @@ const badgeStyle: CSSProperties = {
   display: 'grid',
   placeItems: 'center',
   fontSize: '0.86rem',
-  fontWeight: 700,
+  fontWeight: 600,
   lineHeight: 1,
 };
 
@@ -285,7 +285,7 @@ const domainNameStyle: CSSProperties = {
   color: 'var(--warm-ink)',
   fontFamily: 'var(--font-serif), Georgia, serif',
   fontSize: '0.92rem',
-  fontWeight: 700,
+  fontWeight: 600,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
 };

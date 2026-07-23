@@ -286,7 +286,7 @@ function graphBadge(hasNode: boolean) {
   return hasNode ? (
     <InfoTerm
       term="in_graph"
-      className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+      className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
       style={{ borderColor: 'var(--success)', color: 'var(--success)' }}
     >
       in tree
@@ -294,7 +294,7 @@ function graphBadge(hasNode: boolean) {
   ) : (
     <InfoTerm
       term="label_only"
-      className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+      className="ml-1 shrink-0 rounded-sm border px-1 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
       style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
     >
       label only
@@ -453,7 +453,7 @@ function MergeRow({
 
             <div>
               <p
-                className="mb-1.5 text-xs font-semibold uppercase tracking-[0.08em]"
+                className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow"
                 style={{ color: 'var(--brand-ink-700)' }}
               >
                 Same scope — merge into one domain
@@ -484,7 +484,7 @@ function MergeRow({
 
             <div>
               <p
-                className="mb-1.5 text-xs font-semibold uppercase tracking-[0.08em]"
+                className="mb-1.5 text-xs font-semibold uppercase tracking-eyebrow"
                 style={{ color: 'var(--brand-ink-700)' }}
               >
                 Different scope — nest one under the other
@@ -566,7 +566,7 @@ function MergeRow({
 function StarKeep() {
   return (
     <span
-      className="ml-1.5 shrink-0 whitespace-nowrap rounded-sm border px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.06em]"
+      className="ml-1.5 shrink-0 whitespace-nowrap rounded-sm border px-1 py-0.5 type-eyebrow font-semibold uppercase tracking-eyebrow"
       style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
       title="Recommended survivor — it holds more questions, so folding the other side in moves the fewest rows"
     >

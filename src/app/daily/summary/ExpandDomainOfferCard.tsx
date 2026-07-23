@@ -7,7 +7,7 @@ import type { ExpansionOffer } from '@/server/db/queries/daily-summary'
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '0.8rem',
-  fontWeight: 700,
+  fontWeight: 600,
   color: 'var(--brand-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
@@ -16,7 +16,7 @@ const titleStyle: CSSProperties = {
 const groupStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '0.7rem',
-  fontWeight: 700,
+  fontWeight: 600,
   color: 'var(--brand-ink-700)',
   textTransform: 'uppercase',
   letterSpacing: '0.08em',

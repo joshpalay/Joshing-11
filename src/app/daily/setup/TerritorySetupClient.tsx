@@ -497,7 +497,7 @@ export function TerritorySetupClient({
       <div className="mx-auto max-w-3xl">
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold tracking-[0.2em] text-[var(--text-muted-warm)] uppercase">
+            <p className="text-xs font-semibold tracking-eyebrow text-[var(--text-muted-warm)] uppercase">
               TODAY’S FIVE
             </p>
             <h1 className="mt-3 font-serif text-5xl leading-[0.95] font-semibold text-[var(--ink)]">
@@ -654,7 +654,7 @@ export function TerritorySetupClient({
             {toast.undoDomain ? (
               <button
                 type="button"
-                className="rounded-full bg-[var(--cream)]/15 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-[var(--cream)] uppercase transition hover:bg-[var(--cream)]/25"
+                className="rounded-full bg-[var(--cream)]/15 px-3 py-1 text-xs font-semibold tracking-eyebrow text-[var(--cream)] uppercase transition hover:bg-[var(--cream)]/25"
                 onClick={() => {
                   if (toast.undoDomain) removeDomain(toast.undoDomain);
                   setToast(null);
@@ -726,7 +726,7 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
               color: color.primary,
               fontFamily: 'var(--font-serif)',
               fontSize: 18,
-              fontWeight: 700,
+              fontWeight: 600,
               lineHeight: 1,
             }}
           >
@@ -735,7 +735,7 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
         ) : null}
       </KnowledgeBubble>
       <span
-        className="rounded-full bg-[var(--cream)]/95 px-2 py-0.5 font-serif text-[11px] leading-tight shadow-sm"
+        className="rounded-full bg-[var(--cream)]/95 px-2 py-0.5 font-serif type-eyebrow leading-tight shadow-sm"
         style={{ color: color.text }}
       >
         {domain.domain}
@@ -800,7 +800,7 @@ function TerritoryZone({
             <div key={category}>
               {categoryGroups.length > 1 ? (
                 <p
-                  className="mb-2 px-1 text-[0.7rem] font-semibold tracking-[0.14em] uppercase"
+                  className="mb-2 px-1 type-metadata font-semibold tracking-eyebrow uppercase"
                   style={{ color: getPortraitDomainColor(category).text }}
                 >
                   {categorySectionLabel(category)}
@@ -913,7 +913,7 @@ function TerritoryCircle({
               fontSize: countFontSize,
               color: color.primary,
               fontFamily: 'var(--font-serif)',
-              fontWeight: 700,
+              fontWeight: 600,
               lineHeight: 1,
             }}
           >
@@ -977,7 +977,7 @@ function QuickMoveTargets({
           key={target.value}
           ref={(element) => setQuickTargetRef(target.value, element)}
           type="button"
-          className={`grid size-14 place-items-center rounded-full border px-0.5 text-center text-[0.62rem] leading-[0.72rem] font-semibold break-words hyphens-auto shadow-sm transition ${
+          className={`grid size-14 place-items-center rounded-full border px-0.5 text-center type-eyebrow leading-[0.72rem] font-semibold break-words hyphens-auto shadow-sm transition ${
             hoveredTarget === target.value
               ? 'scale-110 border-[var(--ink)] bg-[var(--ink)] text-[var(--cream)] shadow-[0_10px_24px_rgba(26,18,8,0.24)]'
               : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--ink)]'

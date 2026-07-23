@@ -200,7 +200,7 @@ const verdictLabelStyle: CSSProperties = {
   gap: '6px',
   fontFamily: 'var(--font-mono)',
   fontSize: '0.7rem',
-  fontWeight: 700,
+  fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
 };
@@ -561,7 +561,7 @@ function QuestionRow({
             padding: '20px 22px',
             fontFamily: 'var(--font-serif)',
             fontSize: '1.4875rem',
-            fontWeight: 700,
+            fontWeight: 600,
             letterSpacing: 0,
             color: 'var(--brand-ink)',
             lineHeight: 1.3,
@@ -788,7 +788,7 @@ function UserRow({ text }: { text: string }) {
           // Figma answer bubble — Cormorant serif, not the sans body font.
           fontFamily: 'var(--font-serif)',
           fontSize: '1.495rem',
-          fontWeight: 700,
+          fontWeight: 600,
           letterSpacing: '-0.01em',
           lineHeight: 1.32,
           color: 'var(--primary-foreground)',

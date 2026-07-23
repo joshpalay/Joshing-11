@@ -63,7 +63,7 @@ export function AnswerSheet({
       <div className="relative w-full max-w-lg rounded-t-3xl bg-[var(--brand-card)] shadow-[var(--shadow-overlay)]">
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           {visibleCategory ? (
-            <p className="text-[0.68rem] font-semibold tracking-[0.18em] text-[var(--brand-ink-400)] uppercase">
+            <p className="type-eyebrow font-semibold tracking-eyebrow text-[var(--brand-ink-400)] uppercase">
               {visibleCategory.toUpperCase()}
             </p>
           ) : (

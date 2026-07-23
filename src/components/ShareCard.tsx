@@ -160,7 +160,7 @@ const topStyle: CSSProperties = {
 
 const kickerStyle: CSSProperties = {
   fontSize: 11,
-  fontWeight: 700,
+  fontWeight: 600,
   letterSpacing: '0.14em',
   margin: 0,
 };
@@ -196,7 +196,7 @@ const centerStyle: CSSProperties = {
 const pointsStyle: CSSProperties = {
   fontFamily: SERIF,
   fontSize: 108,
-  fontWeight: 700,
+  fontWeight: 600,
   lineHeight: 0.9,
   margin: 0,
 };

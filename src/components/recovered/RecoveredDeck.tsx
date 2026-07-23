@@ -164,14 +164,14 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
       {/* ── Dismissed shelf ─────────────────────────────────────────────── */}
       {dismissed.length > 0 ? (
         <details className="group mt-10">
-          <summary className="cursor-pointer select-none list-none font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground underline-offset-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer select-none list-none font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground underline-offset-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
             <span className="underline">Dismissed ({dismissed.length})</span>
           </summary>
 
           <section className="mt-3 space-y-3">
             {dismissed.map((question) => (
               <article key={question.id} className="card p-4 opacity-60">
-                <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+                <p className="font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground">
                   {question.category}
                 </p>
 
@@ -216,7 +216,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
             className="flex items-center justify-between border-b px-4 py-2"
             style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}
           >
-            <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+            <p className="font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground">
               {current ? `${index + 1} of ${deck.length}` : 'Revisit'}
             </p>
             <div className="flex items-center gap-1">
@@ -248,7 +248,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
           <div className="flex-1 overflow-y-auto px-5 py-8">
             {current ? (
               <div className="mx-auto max-w-2xl">
-                <p className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted-foreground">
+                <p className="font-mono type-eyebrow uppercase tracking-eyebrow text-muted-foreground">
                   {current.category}
                 </p>
                 <p className="mt-3 font-serif text-2xl font-medium leading-snug text-foreground">

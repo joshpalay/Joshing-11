@@ -118,7 +118,7 @@ export function BulkUploadClient({
           <li>Unknown categories fall back to General Knowledge. Max 1000 rows per upload.</li>
         </ul>
         <pre
-          className="mt-3 overflow-x-auto rounded-md border p-3 text-[0.7rem] text-[var(--brand-ink-700)]"
+          className="mt-3 overflow-x-auto rounded-md border p-3 type-metadata text-[var(--brand-ink-700)]"
           style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
         >
           {SAMPLE_CSV}
@@ -179,7 +179,7 @@ export function BulkUploadClient({
           rows={8}
           placeholder={SAMPLE_CSV}
           disabled={file !== null}
-          className="w-full rounded-md border p-3 font-mono text-[0.75rem] disabled:opacity-50"
+          className="w-full rounded-md border p-3 font-mono type-metadata disabled:opacity-50"
           style={{ borderColor: 'var(--border)', background: 'var(--brand-field)' }}
         />
         {file !== null ? (

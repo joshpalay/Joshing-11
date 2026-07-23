@@ -89,7 +89,7 @@ export default function MasteryMoment({
           style={{
             fontFamily: 'var(--font-serif)',
             fontSize: 'clamp(2rem, 7vw, 3rem)',
-            fontWeight: 700,
+            fontWeight: 600,
             color: 'var(--brand-ink)',
             marginBottom: '16px',
           }}

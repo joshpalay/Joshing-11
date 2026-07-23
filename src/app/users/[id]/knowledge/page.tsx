@@ -105,7 +105,7 @@ export default async function FriendKnowledgePage({
       </div>
 
       <header className="mb-5">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
+        <p className="text-muted-foreground text-xs font-medium tracking-eyebrow uppercase">
           Knowledge map
         </p>
         <h1 className="mt-1 font-serif text-3xl font-semibold">

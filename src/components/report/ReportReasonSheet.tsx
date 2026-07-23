@@ -112,7 +112,7 @@ export function ReportReasonSheet({
       />
       <div className="relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--brand-card)] shadow-[var(--shadow-overlay)]">
         <div className="flex items-center justify-between px-5 pt-4 pb-1">
-          <p className="text-[0.68rem] font-semibold tracking-[0.18em] uppercase text-[var(--brand-ink-400)]">
+          <p className="type-eyebrow font-semibold tracking-eyebrow uppercase text-[var(--brand-ink-400)]">
             {category === 'incorrect' ? 'A second look' : 'Between us'}
           </p>
           <button
@@ -174,7 +174,7 @@ export function ReportReasonSheet({
               )}
 
               <label className="block">
-                <span className="text-[0.62rem] font-semibold tracking-[0.14em] uppercase text-muted-foreground">
+                <span className="type-eyebrow font-semibold tracking-eyebrow uppercase text-muted-foreground">
                   In your words
                 </span>
                 <textarea
@@ -186,20 +186,20 @@ export function ReportReasonSheet({
                       ? 'What did we get wrong?'
                       : 'What feels off about this?'
                   }
-                  className="mt-1 w-full resize-none rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif text-[15px] leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)] focus-visible:outline-none"
+                  className="mt-1 w-full resize-none rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif type-button leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)] focus-visible:outline-none"
                 />
               </label>
 
               {category === 'incorrect' ? (
                 <label className="mt-3 block">
-                  <span className="text-[0.62rem] font-semibold tracking-[0.14em] uppercase text-muted-foreground">
+                  <span className="type-eyebrow font-semibold tracking-eyebrow uppercase text-muted-foreground">
                     The answer should be (optional)
                   </span>
                   <input
                     value={suggestedAnswer}
                     onChange={(e) => setSuggestedAnswer(e.target.value)}
                     placeholder="If you know it"
-                    className="mt-1 w-full rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif text-[15px] leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)] focus-visible:outline-none"
+                    className="mt-1 w-full rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif type-button leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)] focus-visible:outline-none"
                   />
                 </label>
               ) : null}

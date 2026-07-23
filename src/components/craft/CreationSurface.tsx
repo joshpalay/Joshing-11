@@ -476,7 +476,7 @@ function OwnQuestionCard({
   return (
     <article className="mb-3 rounded-md border p-4 text-sm" style={{ borderColor: 'var(--brand-navy)' }}>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">
           your own question · still machine fact-checked before serving
         </span>
         <button
@@ -487,7 +487,7 @@ function OwnQuestionCard({
           close
         </button>
       </div>
-      <label className="mb-1 block text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground">Question</label>
+      <label className="mb-1 block type-metadata uppercase tracking-eyebrow text-muted-foreground">Question</label>
       <AutoGrowTextarea
         value={questionText}
         onChange={(e) => setQuestionText(e.target.value)}
@@ -497,7 +497,7 @@ function OwnQuestionCard({
         aria-label="Your question"
       />
 
-      <label className="mb-1 mt-3 block text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground">Correct answer</label>
+      <label className="mb-1 mt-3 block type-metadata uppercase tracking-eyebrow text-muted-foreground">Correct answer</label>
       <input
         type="text"
         value={answer}
@@ -514,7 +514,7 @@ function OwnQuestionCard({
       ) : suggestedAnswer ? (
         !hasAnswer ? (
           <div className="mt-2 rounded-md border p-3 text-xs" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-muted-foreground uppercase tracking-[0.06em]">Joshing&apos;s answer</p>
+            <p className="text-muted-foreground uppercase tracking-eyebrow">Joshing&apos;s answer</p>
             <p className="mt-1 font-medium text-[var(--brand-ink)]">{suggestedAnswer}</p>
             <button
               type="button"
@@ -574,7 +574,7 @@ function OwnQuestionCard({
         </div>
       ) : null}
 
-      <label className="mb-1 mt-3 block text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground">Explainer (optional)</label>
+      <label className="mb-1 mt-3 block type-metadata uppercase tracking-eyebrow text-muted-foreground">Explainer (optional)</label>
       <AutoGrowTextarea
         value={explainer}
         onChange={(e) => setExplainer(e.target.value)}
@@ -831,13 +831,13 @@ function CandidateCard({
   return (
     <article className="rounded-md border p-4 text-sm" style={{ borderColor: 'var(--border)' }}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground text-[0.7rem] uppercase tracking-[0.06em]">
+        <span className="text-muted-foreground type-metadata uppercase tracking-eyebrow">
           machine draft · {candidate.difficultyEstimate}
         </span>
         {candidate.flags.map((flag, i) => (
           <span
             key={i}
-            className="rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
+            className="rounded-full px-2 py-0.5 type-eyebrow font-medium"
             style={
               flag.kind === 'factual_suspect'
                 ? { color: 'var(--danger)', background: 'var(--destructive-surface)' }

@@ -25,7 +25,7 @@ const CARD_CLASS =
 const INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
 const SUBMIT_CLASS =
-  'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+  'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-semibold tracking-normal text-white transition hover:opacity-90 disabled:opacity-60';
 // Quiet secondary action (e.g. "this number is not correct" / "go back"): a
 // muted, sentence-case text link. Deliberately understated so it doesn't
 // compete with the primary button or flood the card with orange caps.
@@ -183,7 +183,7 @@ function LoadingLabel({ verb }: { verb: string }) {
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
     <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-      <p className="text-[15px] leading-6 text-black/75">
+      <p className="type-button leading-6 text-black/75">
         {inviterFirstName(invite.inviterName)} invited you to Joshing, a new trivia game. We just
         need to verify your phone number and then you can start playing.
       </p>
@@ -619,11 +619,11 @@ export default function LoginPanel({
             // (D-AUTH-INVITE-PHONE-FIRST §2.2 / §2.4).
             <>
               <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-                <p className="text-[15px] leading-6 text-black/75">
+                <p className="type-button leading-6 text-black/75">
                   {inviterFirstName(invitePrefill.inviterName)} invited you to Joshing, a new trivia
                   game. We just need to send a text to confirm it’s you:
                 </p>
-                <p className="text-[20px] leading-7 font-semibold tracking-wide text-[var(--brand-navy)]">
+                <p className="type-card-title leading-7 font-semibold tracking-wide text-[var(--brand-navy)]">
                   {formatUsPhoneInput(invitePrefill.inviteePhone)}
                 </p>
               </div>
@@ -659,7 +659,7 @@ export default function LoginPanel({
             // fresh invite from the inviter — carried by wording, not an error
             // banner (D-AUTH-INVITE-PHONE-FIRST §2.6 / §2.7).
             <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-              <p className="text-[15px] leading-6 text-black/75">
+              <p className="type-button leading-6 text-black/75">
                 This invite was sent to{' '}
                 <span className="font-medium whitespace-nowrap text-black">
                   {formatUsPhoneInput(invitePrefill.inviteePhone)}
@@ -680,7 +680,7 @@ export default function LoginPanel({
             // Editable entry: cold-visit / per-user-link paths only.
             <>
               <label
-                className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
+                className="block text-center type-section-heading leading-[26px] font-medium tracking-normal text-black"
                 htmlFor="phone"
               >
                 What is your phone number?
@@ -729,7 +729,7 @@ export default function LoginPanel({
             </g>
           </svg>
           <label
-            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
+            className="block text-center type-section-heading leading-[26px] font-medium tracking-normal text-black"
             htmlFor="code"
           >
             Enter your code for{' '}
@@ -756,7 +756,7 @@ export default function LoginPanel({
 
             <div className="flex items-center gap-3" aria-hidden="true">
               <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
-              <span className="text-[17px] font-medium text-black">or</span>
+              <span className="type-section-heading font-medium text-black">or</span>
               <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
             </div>
 
@@ -775,13 +775,13 @@ export default function LoginPanel({
         </form>
       ) : (
         <form className="space-y-3.5" onSubmit={completeProfile}>
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-semibold text-white">
             @
           </div>
-          <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+          <p className="block text-center type-section-heading leading-[26px] font-medium tracking-normal text-black">
             Finish your profile
           </p>
-          <p className="text-center text-[15px] leading-6 text-black/70">
+          <p className="text-center type-button leading-6 text-black/70">
             Pick the name friends will see and the call sign they can use to find you.
           </p>
           <div className="space-y-2">

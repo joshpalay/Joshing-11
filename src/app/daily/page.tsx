@@ -877,7 +877,7 @@ export default function DailyPage() {
       >
         <div className="flex items-center gap-3">
           <div>
-            <p className="text-xs tracking-[0.1em] text-[var(--text-muted)] uppercase">
+            <p className="text-xs tracking-eyebrow text-[var(--text-muted)] uppercase">
               Daily Five
             </p>
             <h1 className="font-serif text-xl font-semibold text-[var(--text)]">

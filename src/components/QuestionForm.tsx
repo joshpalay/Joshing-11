@@ -761,14 +761,14 @@ export function QuestionForm({
   return (
     <div className="space-y-5">
       {orientationVisible ? (
-        <div className="rounded-md border border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 text-[0.88rem] leading-[1.55] text-[var(--ink)]">
+        <div className="rounded-md border border-[var(--border-warm)] bg-[var(--cream-warm)] px-4 py-3 type-button leading-[1.55] text-[var(--ink)]">
           <p className="m-0">
             Heads up: writing a question opens it as a new domain in your Knowledge base. When a friend answers it correctly, it counts toward your mastery there too. You can also send it directly to specific friends — toggle that on the destinations panel below.
           </p>
           <button
             type="button"
             onClick={() => setOrientationVisible(false)}
-            className="mt-2 text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
+            className="mt-2 type-button-sm uppercase tracking-eyebrow text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
           >
             Got it
           </button>
@@ -780,7 +780,7 @@ export function QuestionForm({
       ) : null}
 
       <div>
-        <label htmlFor="question-text" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Question</label>
+        <label htmlFor="question-text" className="mb-1 block text-xs uppercase tracking-eyebrow text-muted-foreground">Question</label>
         <textarea
           ref={questionRef}
           id="question-text"
@@ -843,7 +843,7 @@ export function QuestionForm({
           ) : null}
 
           <div>
-            <label htmlFor="correct-answer" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Correct answer</label>
+            <label htmlFor="correct-answer" className="mb-1 block text-xs uppercase tracking-eyebrow text-muted-foreground">Correct answer</label>
             <input
               id="correct-answer"
               value={state.userAnswer}
@@ -866,7 +866,7 @@ export function QuestionForm({
             !hasAnswer ? (
               // Field cleared (or a rare no-adopt state) — offer Joshing's answer.
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Joshing&apos;s answer</p>
+                <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Joshing&apos;s answer</p>
                 <p className="mt-1 font-medium">{state.llmSuggestedAnswer}</p>
                 <p className="mt-1 text-xs text-muted-foreground">Type the answer you have in mind above, or use Joshing&apos;s.</p>
                 <button
@@ -953,7 +953,7 @@ export function QuestionForm({
           ) : null}
 
           <div>
-            <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
+            <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-eyebrow text-muted-foreground">Alternate answers</label>
             <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Accepted variations, separated by commas" />
             <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/{MAX_ALTERNATE_ANSWERS} alternates</p>
           </div>
@@ -965,14 +965,14 @@ export function QuestionForm({
               Joshing's answer, so it would misdescribe a different one). */}
           {state.explanation.trim() && answersMatch(state.userAnswer, state.llmSuggestedAnswer) ? (
             <div>
-              <p className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Explanation</p>
+              <p className="mb-1 block text-xs uppercase tracking-eyebrow text-muted-foreground">Explanation</p>
               <div className="w-full whitespace-pre-wrap rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2">{state.explanation}</div>
               <p className="mt-1 text-xs text-muted-foreground">Written by Joshing.</p>
             </div>
           ) : null}
 
           <div>
-            <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Between us text</label>
+            <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-eyebrow text-muted-foreground">Between us text</label>
             <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="A note just for your friends" />
             <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <span>Only friends see this.</span>
@@ -982,9 +982,9 @@ export function QuestionForm({
 
           {showDestinations ? (
             <div className="rounded-md border bg-muted/40 p-4">
-              <p className="mb-3 text-xs uppercase tracking-[0.1em] text-muted-foreground">Destinations</p>
+              <p className="mb-3 text-xs uppercase tracking-eyebrow text-muted-foreground">Destinations</p>
               <div className="mb-3">
-                <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted-foreground">Who can see this</p>
+                <p className="mb-2 text-xs uppercase tracking-eyebrow text-muted-foreground">Who can see this</p>
                 <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="Question visibility">
                   {([
                     { value: 'public', label: 'Public' },
@@ -1044,7 +1044,7 @@ export function QuestionForm({
                     <>
                       {state.friendSearch.trim() === '' && recents.length > 0 ? (
                         <div>
-                          <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted-foreground">Recents</p>
+                          <p className="mb-2 text-xs uppercase tracking-eyebrow text-muted-foreground">Recents</p>
                           <div className="flex flex-wrap gap-2">
                             {recents.map((friend) => {
                               const selected = state.sendToFriendIds.includes(friend.id);
@@ -1092,7 +1092,7 @@ export function QuestionForm({
                                 className="flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/60"
                               >
                                 <span className={['inline-flex size-4 items-center justify-center rounded-sm border', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'].join(' ')}>
-                                  {selected ? <span aria-hidden className="text-[10px] leading-none">✓</span> : null}
+                                  {selected ? <span aria-hidden className="type-eyebrow leading-none">✓</span> : null}
                                 </span>
                                 <span>{friend.displayName}</span>
                               </button>

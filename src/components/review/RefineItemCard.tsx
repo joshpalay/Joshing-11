@@ -97,7 +97,7 @@ function RefineDecisionCard({ item, queueId }: { item: RefineItem; queueId: stri
             type="button"
             onClick={undo}
             disabled={busy}
-            className="text-muted-foreground min-h-11 self-start px-2 text-xs font-medium tracking-[0.08em] uppercase underline underline-offset-4 transition disabled:opacity-60 sm:self-auto"
+            className="text-muted-foreground min-h-11 self-start px-2 text-xs font-medium tracking-eyebrow uppercase underline underline-offset-4 transition disabled:opacity-60 sm:self-auto"
           >
             Undo
           </button>

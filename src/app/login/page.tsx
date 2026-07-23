@@ -34,14 +34,14 @@ function readUserInvite(
 function TitleCard() {
   return (
     <section className="w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5">
-      <h1 className="font-wordmark text-5xl leading-[52px] font-bold tracking-[4.8px] text-[var(--brand-ink-950)]">
+      <h1 className="font-wordmark text-5xl leading-[52px] font-semibold tracking-normal text-[var(--brand-ink-950)]">
         JOSHING
       </h1>
       <div
         className="mx-auto mt-4 h-0.5 w-[60px] rounded-full bg-[var(--accent-gold)]"
         aria-hidden="true"
       />
-      <p className="mt-4 text-center font-sans text-lg leading-6 font-normal tracking-[3.6px] text-[var(--warm-ink)] uppercase">
+      <p className="mt-4 text-center font-sans text-lg leading-6 font-normal tracking-normal text-[var(--warm-ink)] uppercase">
         Trivia you wish you were asked
       </p>
     </section>

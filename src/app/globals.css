@@ -1,130 +1,150 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
-    /* Brand wordmark ("Joshing") stays Montserrat even though body sans is now
-       Josefin. Surfaces the `font-wordmark` utility; mirrored in :root below so
-       inline-style consumers can read var(--font-wordmark) too. */
-    --font-wordmark: var(--font-montserrat, ui-sans-serif, system-ui, -apple-system, sans-serif);
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-xs: calc(var(--radius) * 0.4);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
-    /* The quiet register (STYLE-GUIDE-TYPE §3): the app's ratified secondary
+  --font-heading: var(--font-sans);
+  --font-serif: var(--font-sans);
+  --font-wordmark: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-xs: calc(var(--radius) * 0.4);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  /* The quiet register (STYLE-GUIDE-TYPE §3): the app's ratified secondary
        type size, one step under the 14px `text-sm` link register. Surfaces the
        `text-quiet` utility. Font-size only — no paired line-height, so it is
        a drop-in replacement for the text-[13px] arbitraries it retired. */
-    --text-quiet: 13px;
+  --text-quiet: 13px;
 }
 
 :root {
-    --font-sans: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  /* One family for every voice. Historical aliases intentionally resolve to
+       this same stack while feature components migrate to semantic roles. */
+  --font-sans: var(
+    --font-inter,
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
+  --font-sans-body: var(--font-sans);
+  --font-neutral: var(--font-sans);
+  --font-mono: var(--font-sans);
+  --font-display: var(--font-sans);
+  --font-wordmark: var(--font-sans);
 
-    /* Re-declared here (not only in @theme inline) so inline `style` consumers —
-       e.g. the knowledge-card wordmarks — can resolve var(--font-wordmark). The
-       "Joshing" wordmark stays Montserrat; everything else uses Josefin Sans. */
-    --font-wordmark: var(--font-montserrat, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  /* Semantic typography primitives. Do not consume these directly in feature
+       code; use the role utilities below or src/design/typography.ts. */
+  --type-display-size: 32px;
+  --type-page-size: 24px;
+  --type-section-size: 17px;
+  --type-card-size: 18px;
+  --type-body-size: 16px;
+  --type-supporting-size: 14px;
+  --type-metadata-size: 12px;
+  --type-eyebrow-size: 11px;
+  --type-control-size: 15px;
+  --type-small-control-size: 13px;
 
-    /* ── Joshing brand foundation ───────────────────────────────────────────
+  /* ── Joshing brand foundation ───────────────────────────────────────────
        Sourced from the Figma design system (JOSHING DESIGN SYSTEM): navy ink
        on warm off-white, with an orange accent and the triangle palette. These
        named tokens are the single source of truth; the shadcn semantic tokens
        below are repointed at them so the brand applies app-wide. The triangle
        values intentionally mirror the LoadingScreen PALETTE for consistency. */
-    --brand-ink:         #0a1f3d;  /* ink/900 — primary text / headings        */
-    --brand-ink-950:     #091729;  /* ink/950 — JOSHING wordmark (Figma fill)  */
-    --brand-ink-700:     #3a4a5f;  /* ink/700 — secondary text                 */
-    --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
-    --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
-    --brand-link:        #4a5d75;  /* Link — inline links                      */
-    /* Unified fill behind primary buttons — both .btn-primary and the login submit
+  --brand-ink: #0a1f3d; /* ink/900 — primary text / headings        */
+  --brand-ink-950: #091729; /* ink/950 — JOSHING wordmark (Figma fill)  */
+  --brand-ink-700: #3a4a5f; /* ink/700 — secondary text                 */
+  --brand-ink-400: #8a8a8a; /* ink/400 — muted / timestamps             */
+  --brand-navy: #1f3a5a; /* navy/500 — wordmark, primary buttons     */
+  --brand-link: #4a5d75; /* Link — inline links                      */
+  /* Unified fill behind primary buttons — both .btn-primary and the login submit
        read this one token, so page and login CTAs always match. */
-    --btn-primary-bg:    var(--brand-navy);
-    --brand-orange:      #d15e36;  /* triangle/orange — accent links           */
-    --brand-cream:       #f8e6c7;  /* triangle/cream                           */
-    --brand-cream-page:  #fcf8f2;  /* Color/Game/Background — app page surface  */
-    --brand-card:        #fdfcfb;  /* cream/50 — content card surface          */
-    --brand-cream-card:  #fbf5e9;  /* warm cream card (login screens only)     */
-    --brand-field:       #ffffff;  /* pure white — text-entry field surface, pops against cream (matches login fields) */
-    --brand-border:      #e9e2d2;  /* warm hairline border                     */
-    --brand-rule:        rgba(60, 50, 40, 0.14); /* border/rule — divider      */
-    --domain-language:   #7a9eaa;
-    --domain-science:    #8aa68a;
-    /* Triangle palette — DECORATIVE by decision (STYLE-GUIDE-COLOR §3 note +
+  --btn-primary-bg: var(--brand-navy);
+  --brand-orange: #d15e36; /* triangle/orange — accent links           */
+  --brand-cream: #f8e6c7; /* triangle/cream                           */
+  --brand-cream-page: #fcf8f2; /* Color/Game/Background — app page surface  */
+  --brand-card: #fdfcfb; /* cream/50 — content card surface          */
+  --brand-cream-card: #fbf5e9; /* warm cream card (login screens only)     */
+  --brand-field: #ffffff; /* pure white — text-entry field surface, pops against cream (matches login fields) */
+  --brand-border: #e9e2d2; /* warm hairline border                     */
+  --brand-rule: rgba(60, 50, 40, 0.14); /* border/rule — divider      */
+  --domain-language: #7a9eaa;
+  --domain-science: #8aa68a;
+  /* Triangle palette — DECORATIVE by decision (STYLE-GUIDE-COLOR §3 note +
        §5 fix-list step 5, option b): triangle fill hue is a deterministic hash
        over these six muted fills and carries NO category meaning. The one bit a
        triangle encodes is solid/hollow = unplayed/played — safe from grading
        confusion once WRONG leaves the orange family (§1). Revisit to option (a)
        (hue = --cat-* category) only as a deliberate product change. */
-    --tri-orange:        #d15e36;
-    --tri-cream:         #f8e6c7;
-    --tri-darkteal:      #6d837f;
-    --tri-lightteal:     #adb19e;
-    --tri-darkyellow:    #deae5c;
-    --tri-lighttan:      #edd2a3;
-    --tri-amber:         #d9a82e;
-    /* Accent gold (STYLE-GUIDE-COLOR §4) — THE editorial highlight. One value,
+  --tri-orange: #d15e36;
+  --tri-cream: #f8e6c7;
+  --tri-darkteal: #6d837f;
+  --tri-lightteal: #adb19e;
+  --tri-darkyellow: #deae5c;
+  --tri-lighttan: #edd2a3;
+  --tri-amber: #d9a82e;
+  /* Accent gold (STYLE-GUIDE-COLOR §4) — THE editorial highlight. One value,
        scarcity-bound: gold marks the single most notable moment in view (the
        ceremony countdown wins ties). Shares the amber value, but this token is
        the accent JOB — triangle fills keep --tri-amber (decorative palette
        job), and --warning stays separate (system caution, not the accent). */
-    --accent-gold:       #d9a82e;
-    /* AA-darkened gold for small text on cream (eyebrows, "BETWEEN US!",
+  --accent-gold: #d9a82e;
+  /* AA-darkened gold for small text on cream (eyebrows, "BETWEEN US!",
        "NEW TERRITORY") — was the GOLD_INK formula copy-pasted in three files. */
-    --accent-gold-ink:   color-mix(in srgb, var(--accent-gold) 50%, var(--brand-ink));
-    /* Gameplay surface — sourced from the Figma "Game" frame variables.
+  --accent-gold-ink: color-mix(in srgb, var(--accent-gold) 50%, var(--brand-ink));
+  /* Gameplay surface — sourced from the Figma "Game" frame variables.
        game/card/question fill, plus the forest-green/terracotta result accents
        (Correct, text/wrong, Color/game/wrong/in-question). These intentionally
        differ from the vivid --success/destructive used elsewhere. */
-    --game-card-question: #faf4e9;  /* game/card/question — question bubble fill */
-    /* Resting fill for the elevated ("playable") feed cards in the unified home
+  --game-card-question: #faf4e9; /* game/card/question — question bubble fill */
+  /* Resting fill for the elevated ("playable") feed cards in the unified home
        feed (the "For You" zone). Defaults to the warm game-card cream; broken
        out as its own token so the dev CARD COLOR cycler (PaletteToggle) can
        repaint the For You cards alongside the --brand-card surfaces. */
-    --feed-card-elevated: var(--game-card-question);
-    --game-correct:       #366045;  /* Correct — forest green result accent      */
-    --game-correct-soft:  #5d6f5b;  /* text/right — muted correct label          */
-    /* WRONG leaves the terracotta family for a true red (de-collides from the
+  --feed-card-elevated: var(--game-card-question);
+  --game-correct: #366045; /* Correct — forest green result accent      */
+  --game-correct-soft: #5d6f5b; /* text/right — muted correct label          */
+  /* WRONG leaves the terracotta family for a true red (de-collides from the
        brand/link orange #d15e36, the "still to play" triangle, and the
        Literature category mark). Two registers, mirroring how they're consumed:
        • --game-wrong is the WASH/FILL base (result-card backgrounds at 8–12%
@@ -132,9 +152,9 @@
        • --game-wrong-strong is the SIGNAL (rail + label text) — the clear,
          saturated red that says "wrong" at a glance.
        (Promoted from the former data-palette="proposed" block; see STYLE-GUIDE-COLOR §1.) */
-    --game-wrong:         #a93b3b;  /* text/wrong — muted brick red               */
-    --game-wrong-strong:  #c1121f;  /* game/wrong/in-question — clear true red    */
-    /* ── Category scale (STYLE-GUIDE-COLOR §3) ──────────────────────────────
+  --game-wrong: #a93b3b; /* text/wrong — muted brick red               */
+  --game-wrong-strong: #c1121f; /* game/wrong/in-question — clear true red    */
+  /* ── Category scale (STYLE-GUIDE-COLOR §3) ──────────────────────────────
        One color per top-level domain; leaf categories inherit the parent hue.
        Values = the knowledge map's DOMAIN_COLORS (the only true per-category
        map in live code), now tokenized so consumers route through one scale
@@ -143,40 +163,40 @@
        (domainBubbleGradient). The other category systems (feed hash palette,
        expanding accents, ceremony gradients) are still hardcoded — collapsing
        them onto this scale is color fix-list step 3, in progress. */
-    --cat-literature:       #7d2c3f;  /* bordeaux — moved off the grading red    */
-    --cat-literature-text:  #571f2c;
-    --cat-music:            #1a6b8a;
-    --cat-music-text:       #0e4060;
-    --cat-film-tv:          #6b3fa0;
-    --cat-film-tv-text:     #3d1f6b;
-    --cat-architecture:     #b07d2e;
-    --cat-architecture-text:#7a5010;
-    --cat-food:             #2e8b57;
-    --cat-food-text:        #0e5c30;
-    --cat-technology:       #3a6b8a;
-    --cat-technology-text:  #1a3f5c;
-    --cat-sports:           #c06b1a;
-    --cat-sports-text:      #8b3e0e;
-    --cat-history:          #5a6b7a;
-    --cat-history-text:     #2a3f50;
-    --cat-science:          #5a7a2e;
-    --cat-science-text:     #2a4a0e;
-    --cat-philosophy:       #7a5a8a;
-    --cat-philosophy-text:  #4a2a5c;
-    --cat-pop-culture:      #8a2a4a;
-    --cat-pop-culture-text: #5c0e2a;
-    --cat-language:         #2e6e7e;  /* teal — moved off the CORRECT green       */
-    --cat-language-text:    #173f4a;
-    --freq-blue-moon:       #65a8bb;  /* Blue Moon crescent — the rotation exception */
-    /* Shared width for every left-aligned card in the play thread (question,
+  --cat-literature: #7d2c3f; /* bordeaux — moved off the grading red    */
+  --cat-literature-text: #571f2c;
+  --cat-music: #1a6b8a;
+  --cat-music-text: #0e4060;
+  --cat-film-tv: #6b3fa0;
+  --cat-film-tv-text: #3d1f6b;
+  --cat-architecture: #b07d2e;
+  --cat-architecture-text: #7a5010;
+  --cat-food: #2e8b57;
+  --cat-food-text: #0e5c30;
+  --cat-technology: #3a6b8a;
+  --cat-technology-text: #1a3f5c;
+  --cat-sports: #c06b1a;
+  --cat-sports-text: #8b3e0e;
+  --cat-history: #5a6b7a;
+  --cat-history-text: #2a3f50;
+  --cat-science: #5a7a2e;
+  --cat-science-text: #2a4a0e;
+  --cat-philosophy: #7a5a8a;
+  --cat-philosophy-text: #4a2a5c;
+  --cat-pop-culture: #8a2a4a;
+  --cat-pop-culture-text: #5c0e2a;
+  --cat-language: #2e6e7e; /* teal — moved off the CORRECT green       */
+  --cat-language-text: #173f4a;
+  --freq-blue-moon: #65a8bb; /* Blue Moon crescent — the rotation exception */
+  /* Shared width for every left-aligned card in the play thread (question,
        bonus, result, reflection, session-close) so the column reads as one
        coherent conversation with a consistent left + right edge. A percentage of
        the already max-width-capped content column: fills narrow screens with
        equal margins, and shares one max-width on wide screens. The only
        intentional exceptions are centered system lines, the right-aligned
        answer bubble, and global/header chrome. */
-    --play-thread-card-width: 88%;
-    /* ──────────────────────────────────────────────────────────────────────
+  --play-thread-card-width: 88%;
+  /* ──────────────────────────────────────────────────────────────────────
        Conventions:
        • Cream tones — `--brand-cream-page` (#fcf8f2) is the app background;
          `--brand-card` (#fdfcfb, near-white) is the default CONTENT card;
@@ -191,125 +211,125 @@
          actions — never answer grading.
        ──────────────────────────────────────────────────────────────────── */
 
-    --background: var(--brand-cream-page);
-    --foreground: var(--brand-ink);
-    --card: var(--brand-card);
-    --card-foreground: var(--brand-ink);
-    --popover: var(--brand-card);
-    --popover-foreground: var(--brand-ink);
-    --primary: var(--brand-navy);
-    --primary-foreground: #fbf4e3;
-    --secondary: #f1ebdd;
-    --secondary-foreground: var(--brand-ink);
-    --muted: #f1ebdd;
-    --muted-foreground: var(--brand-ink-400);
-    --accent: #f1ebdd;
-    --accent-foreground: var(--brand-ink);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: var(--brand-border);
-    --input: var(--brand-border);
-    --ring: var(--brand-navy);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-    --bg: var(--background);
-    --surface: var(--card);
-    --surface-2: var(--muted);
-    --card-bg: var(--card);
-    --text: var(--foreground);
-    --text-muted: var(--muted-foreground);
-    --accent-contrast: var(--primary-foreground);
-    --user-bubble: oklch(0.62 0.18 250);
-    --user-bubble-foreground: oklch(0.99 0 0);
-    --success: #178245;
-    --danger: var(--destructive);
-    /* (--wrong, an alias of --destructive, was retired: a grading-named token
+  --background: var(--brand-cream-page);
+  --foreground: var(--brand-ink);
+  --card: var(--brand-card);
+  --card-foreground: var(--brand-ink);
+  --popover: var(--brand-card);
+  --popover-foreground: var(--brand-ink);
+  --primary: var(--brand-navy);
+  --primary-foreground: #fbf4e3;
+  --secondary: #f1ebdd;
+  --secondary-foreground: var(--brand-ink);
+  --muted: #f1ebdd;
+  --muted-foreground: var(--brand-ink-400);
+  --accent: #f1ebdd;
+  --accent-foreground: var(--brand-ink);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: var(--brand-border);
+  --input: var(--brand-border);
+  --ring: var(--brand-navy);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --bg: var(--background);
+  --surface: var(--card);
+  --surface-2: var(--muted);
+  --card-bg: var(--card);
+  --text: var(--foreground);
+  --text-muted: var(--muted-foreground);
+  --accent-contrast: var(--primary-foreground);
+  --user-bubble: oklch(0.62 0.18 250);
+  --user-bubble-foreground: oklch(0.99 0 0);
+  --success: #178245;
+  --danger: var(--destructive);
+  /* (--wrong, an alias of --destructive, was retired: a grading-named token
        pointing at the system-error red was exactly the §1 confusion. Grading is
        --game-wrong/--game-wrong-strong; errors are --danger.) */
-    /* Status surfaces — banner/chip fills + hairlines for the success / warning /
+  /* Status surfaces — banner/chip fills + hairlines for the success / warning /
        error roles. Formalizes the raw amber-50/300/700/900 + emerald/red/rose
        50–200 utilities the 2026-05-30 audit flagged (DESIGN-SYSTEM.md §1.7).
        Warning is a new hue (no prior accent), so its three values are explicit;
        success/error tints derive from their existing accent via color-mix — the
        same proportions already used inline in GameplayChat, so the
        tints track the accent if it ever moves. */
-    --warning:             #b45309;  /* amber/700 — caution text / accent      */
-    --warning-surface:     #fdf6e6;  /* pale caution banner fill               */
-    --warning-border:      #e6c15a;  /* caution hairline                       */
-    --success-surface:     color-mix(in srgb, var(--success) 10%, var(--card));
-    --success-border:      color-mix(in srgb, var(--success) 30%, var(--border));
-    --destructive-surface: color-mix(in srgb, var(--destructive) 8%, var(--card));
-    --destructive-border:  color-mix(in srgb, var(--destructive) 28%, var(--border));
-    /* Editorial feature washes — full-bleed "featured moment" bands in the feed
+  --warning: #b45309; /* amber/700 — caution text / accent      */
+  --warning-surface: #fdf6e6; /* pale caution banner fill               */
+  --warning-border: #e6c15a; /* caution hairline                       */
+  --success-surface: color-mix(in srgb, var(--success) 10%, var(--card));
+  --success-border: color-mix(in srgb, var(--success) 30%, var(--border));
+  --destructive-surface: color-mix(in srgb, var(--destructive) 8%, var(--card));
+  --destructive-border: color-mix(in srgb, var(--destructive) 28%, var(--border));
+  /* Editorial feature washes — full-bleed "featured moment" bands in the feed
        (Shared Ground / Grow Your Circle / Your World Is Expanding). Subtle tints
        derived from the page cream so they read as a calm change in surface, not a
        card or banner. The per-tone eyebrow accent reuses an existing brand token
        (orange / success-green / link-slate). */
-    --editorial-parchment: color-mix(in srgb, var(--brand-border) 22%, var(--brand-cream-page));
-    --editorial-sage:      color-mix(in srgb, var(--success) 8%, var(--brand-cream-page));
-    --editorial-slate:     color-mix(in srgb, var(--brand-link) 8%, var(--brand-cream-page));
-    /* Interlude sage — the light ground for the home "Overlap" editorial
+  --editorial-parchment: color-mix(in srgb, var(--brand-border) 22%, var(--brand-cream-page));
+  --editorial-sage: color-mix(in srgb, var(--success) 8%, var(--brand-cream-page));
+  --editorial-slate: color-mix(in srgb, var(--brand-link) 8%, var(--brand-cream-page));
+  /* Interlude sage — the light ground for the home "Overlap" editorial
        interlude (B-HOME-INTERLUDE-TYPE-01). A deliberate, interlude-scoped
        palette addition: a flat muted sage (formerly only inside the retired
        triangle PNG), distinct from the cream-derived --editorial-sage wash.
        Navy --ink type reads on top. Recorded in DECISIONS.md. */
-    --interlude-sage:      #ced2bf;
-    /* Interlude terracotta — the dark warm ground for the home "Find friends"
+  --interlude-sage: #ced2bf;
+  /* Interlude terracotta — the dark warm ground for the home "Find friends"
        interlude (B-HOME-INTERLUDE-TYPE-01). Derived from the brand terracotta
        (--brand-orange) deepened with navy so cream type clears AA on top.
        Recorded in DECISIONS.md. */
-    --interlude-terracotta: color-mix(in srgb, var(--brand-orange) 82%, var(--brand-ink));
-    /* Interlude teal — the short full-bleed ground for the home daily-reminder
+  --interlude-terracotta: color-mix(in srgb, var(--brand-orange) 82%, var(--brand-ink));
+  /* Interlude teal — the short full-bleed ground for the home daily-reminder
        prompt (B-HOME-INTERLUDE-TYPE-01). Points at the decorative triangle teal
        (--tri-darkteal) so the band borrows the triangle palette directly; cream
        type sits on top. Recorded in DECISIONS.md. */
-    --interlude-teal:      var(--tri-darkteal);
-    /* Legacy editorial aliases — re-pointed at the brand tokens so older
+  --interlude-teal: var(--tri-darkteal);
+  /* Legacy editorial aliases — re-pointed at the brand tokens so older
        surfaces (AnsweredByYouCard, FriendAddedCard/SparkleEnvelope, the
        Knowledge page, catch-up) render with navy ink instead of warm
        near-black. Keep the names; only the values changed. */
-    --ink:             var(--brand-ink);        /* navy #0a1f3d (was warm near-black) */
-    --cream:           var(--brand-card);        /* #fdfcfb content surface */
-    --cream-warm:      var(--brand-cream-card);  /* #fbf5e9 warm card */
-    --cream-accent:    var(--brand-cream);       /* #f8e6c7 highlight/accent */
-    --border-warm:     var(--brand-border);      /* #e9e2d2 warm border */
-    --border-light:    #eee7d8;                  /* lighter inner border */
-    --text-muted-warm: var(--brand-ink-400);     /* #8a8a8a muted text */
-    /* Warm-brown ink ramp — the Knowledge/Portrait surface intentionally uses a
+  --ink: var(--brand-ink); /* navy #0a1f3d (was warm near-black) */
+  --cream: var(--brand-card); /* #fdfcfb content surface */
+  --cream-warm: var(--brand-cream-card); /* #fbf5e9 warm card */
+  --cream-accent: var(--brand-cream); /* #f8e6c7 highlight/accent */
+  --border-warm: var(--brand-border); /* #e9e2d2 warm border */
+  --border-light: #eee7d8; /* lighter inner border */
+  --text-muted-warm: var(--brand-ink-400); /* #8a8a8a muted text */
+  /* Warm-brown ink ramp — the Knowledge/Portrait surface intentionally uses a
        warmer ink than the navy --brand-ink. These were raw hex (#1a1208/#8a8070/
        #696257/#e8e2d6/…) scattered inline across the knowledge components; the
        2026-05-30 audit flagged the drift. Tokenized here, kept warm (product
        decision) rather than re-pointed at the navy ramp. Near-duplicate blacks
        (#111111, #0e0e0e) collapse onto --warm-ink. */
-    --warm-ink:         #1a1208;  /* primary ink — brown-black            */
-    --warm-ink-700:     #696257;  /* secondary text                       */
-    --warm-ink-500:     #7d7568;  /* muted-strong                         */
-    --warm-ink-400:     #8a8070;  /* muted / timestamps                   */
-    --warm-border:      #e8e2d6;  /* warm hairline border                 */
-    --warm-border-soft: #ddd6c7;  /* lighter warm border                  */
-    --warm-paper:       #faf8f2;  /* warm off-white surface (share chrome)*/
-    --warm-cream:       #f5f0e8;  /* warm cream panel                     */
-    /* Recently-exploring row-badge accents (B-VISUAL-HEX-TOKENIZE-01). The
+  --warm-ink: #1a1208; /* primary ink — brown-black            */
+  --warm-ink-700: #696257; /* secondary text                       */
+  --warm-ink-500: #7d7568; /* muted-strong                         */
+  --warm-ink-400: #8a8070; /* muted / timestamps                   */
+  --warm-border: #e8e2d6; /* warm hairline border                 */
+  --warm-border-soft: #ddd6c7; /* lighter warm border                  */
+  --warm-paper: #faf8f2; /* warm off-white surface (share chrome)*/
+  --warm-cream: #f5f0e8; /* warm cream panel                     */
+  /* Recently-exploring row-badge accents (B-VISUAL-HEX-TOKENIZE-01). The
        friend-profile "Recently exploring" section paints each row's initial
        badge from this rotating trio. These are POSITION-keyed decorative
        accents (not the --cat-* category hues) with no prior token; named here
        so the values live in globals instead of inline hex. Values unchanged —
        this only names the existing literals. */
-    --exploring-accent-red:  #c9564d;
-    --exploring-accent-gold: #a98a4c;
-    --exploring-accent-blue: #65a8bb;
-    /* ── Weekly ceremony — full-bleed editorial "rooms" (D-CEREMONY-WEEKLY-…) ──
+  --exploring-accent-red: #c9564d;
+  --exploring-accent-gold: #a98a4c;
+  --exploring-accent-blue: #65a8bb;
+  /* ── Weekly ceremony — full-bleed editorial "rooms" (D-CEREMONY-WEEKLY-…) ──
        Each ceremony beat renders as its own saturated, full-bleed ground with
        reversed (cream/light) type. Ink-on-cream is BROKEN here on purpose — that
        single-surface rule was the source of the old presentation's anemia. These
@@ -323,145 +343,145 @@
        hex array + a literal gradient — the color-ratchet's named top offender);
        tokenizing here is the single source of truth. Fallback rooms reuse the
        mastered / gave groups. */
-    --ceremony-paper:            #f5f0e8;  /* shared light surface (closer)        */
-    --ceremony-open-bg:          var(--brand-ink);     /* navy #0a1f3d            */
-    --ceremony-open-fg:          var(--ceremony-paper);
-    --ceremony-open-accent:      #c08a2e;   /* ochre                              */
-    --ceremony-open-sub:         rgba(245, 240, 232, 0.72);
-    --ceremony-mastered-bg:      #b5432a;   /* terracotta                         */
-    --ceremony-mastered-fg:      #fff4e8;
-    --ceremony-mastered-accent:  #ffd9a0;
-    --ceremony-mastered-sub:     rgba(255, 244, 232, 0.78);
-    --ceremony-discovered-bg:     #1f4a37;  /* forest                             */
-    --ceremony-discovered-fg:     #eaf5ee;
-    --ceremony-discovered-accent: #a8e0bb;
-    --ceremony-discovered-sub:    rgba(234, 245, 238, 0.78);
-    --ceremony-learned-bg:        #5a2e2a;  /* deep umber — beat6 "worked through" */
-    --ceremony-learned-fg:        #f7ece8;
-    --ceremony-learned-accent:    #e8b59c;
-    --ceremony-learned-sub:       rgba(247, 236, 232, 0.78);
-    --ceremony-shaped-bg:         #3a1d4d;  /* plum                               */
-    --ceremony-shaped-fg:         #f3ecf7;
-    --ceremony-shaped-accent:     #e0b8f0;
-    --ceremony-shaped-sub:        rgba(243, 236, 247, 0.78);
-    --ceremony-alignment-bg:      #10324a;  /* deep teal-navy                     */
-    --ceremony-alignment-fg:      #e8f2f8;
-    --ceremony-alignment-accent:  #8fd0ec;
-    --ceremony-alignment-sub:     rgba(232, 242, 248, 0.78);
-    --ceremony-gave-bg:           #c08a2e;  /* ochre (ink-on-color)               */
-    --ceremony-gave-fg:           #1f1404;
-    --ceremony-gave-accent:       var(--brand-ink);
-    --ceremony-gave-sub:          rgba(31, 20, 4, 0.7);
-    --ceremony-close-bg:          var(--ceremony-paper);
-    --ceremony-close-fg:          var(--brand-ink);
-    --ceremony-close-accent:      #b5432a;
-    --ceremony-close-sub:         rgba(10, 31, 61, 0.62);
-    --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
-    /* System voice (STYLE-GUIDE-TYPE §2). The typewriter face (Courier New) was
+  --ceremony-paper: #f5f0e8; /* shared light surface (closer)        */
+  --ceremony-open-bg: var(--brand-ink); /* navy #0a1f3d            */
+  --ceremony-open-fg: var(--ceremony-paper);
+  --ceremony-open-accent: #c08a2e; /* ochre                              */
+  --ceremony-open-sub: rgba(245, 240, 232, 0.72);
+  --ceremony-mastered-bg: #b5432a; /* terracotta                         */
+  --ceremony-mastered-fg: #fff4e8;
+  --ceremony-mastered-accent: #ffd9a0;
+  --ceremony-mastered-sub: rgba(255, 244, 232, 0.78);
+  --ceremony-discovered-bg: #1f4a37; /* forest                             */
+  --ceremony-discovered-fg: #eaf5ee;
+  --ceremony-discovered-accent: #a8e0bb;
+  --ceremony-discovered-sub: rgba(234, 245, 238, 0.78);
+  --ceremony-learned-bg: #5a2e2a; /* deep umber — beat6 "worked through" */
+  --ceremony-learned-fg: #f7ece8;
+  --ceremony-learned-accent: #e8b59c;
+  --ceremony-learned-sub: rgba(247, 236, 232, 0.78);
+  --ceremony-shaped-bg: #3a1d4d; /* plum                               */
+  --ceremony-shaped-fg: #f3ecf7;
+  --ceremony-shaped-accent: #e0b8f0;
+  --ceremony-shaped-sub: rgba(243, 236, 247, 0.78);
+  --ceremony-alignment-bg: #10324a; /* deep teal-navy                     */
+  --ceremony-alignment-fg: #e8f2f8;
+  --ceremony-alignment-accent: #8fd0ec;
+  --ceremony-alignment-sub: rgba(232, 242, 248, 0.78);
+  --ceremony-gave-bg: #c08a2e; /* ochre (ink-on-color)               */
+  --ceremony-gave-fg: #1f1404;
+  --ceremony-gave-accent: var(--brand-ink);
+  --ceremony-gave-sub: rgba(31, 20, 4, 0.7);
+  --ceremony-close-bg: var(--ceremony-paper);
+  --ceremony-close-fg: var(--brand-ink);
+  --ceremony-close-accent: #b5432a;
+  --ceremony-close-sub: rgba(10, 31, 61, 0.62);
+  --font-neutral: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  /* System voice (STYLE-GUIDE-TYPE §2). The typewriter face (Courier New) was
        retired app-wide — the System voice now shares the sans (Montserrat) and is
        distinguished from the Interface voice by its caps + letterspacing label
        signature, not by a separate font file. This token is kept (rather than
        renamed) so the ~40 `var(--font-mono)` / `FM` consumers route here from one
        place; it intentionally resolves to the sans stack. */
-    --font-mono: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
-    /* Editorial serif — Cormorant Garamond (the brand serif). Mirrors the
+  --font-mono: var(--font-sans-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  /* Editorial serif — Cormorant Garamond (the brand serif). Mirrors the
        @theme --font-serif above so inline `var(--font-serif)` styles resolve.
        This is the app's ONLY editorial serif: the former second serif (Playfair
        Display via --font-display) was retired app-wide by
        B-TYPE-SERIF-CONSOLIDATION-01 — every italic register (Hero, Lately, the
        overlap map, the ceremony kicker) now uses Cormorant's loaded italic. */
-    --font-serif: var(--font-cormorant, Georgia, "Times New Roman", serif);
-    --radius-xs: 0.25rem;
-    --radius-sm: 0.375rem;
-    --radius-md: 0.5rem;
-    --radius-lg: 0.625rem;
-    /* Canonical CARD radius (D-DESIGN-DEBT-STRUCTURAL-01, Phase 1). One corner for
+  --font-serif: var(--font-cormorant, Georgia, 'Times New Roman', serif);
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  /* Canonical CARD radius (D-DESIGN-DEBT-STRUCTURAL-01, Phase 1). One corner for
        every content card so the feed shell, section cards (friends/profile/
        settings), and card skeletons stop drifting across rounded-lg/2xl/3xl/[2rem]
        (audit §1b/§5). Aliased to --radius-xs (4px) — the value the feed already
        consolidated onto in FeedCardShell (C7). GEOMETRY ONLY; no color. The three
        elevation tiers it pairs with already exist below: --shadow-card (rest),
        --shadow-card-strong (raised), --shadow-overlay (modals). */
-    --radius-card: var(--radius-xs);
-    --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
-    /* Elevation registers (CONS-7, Option B — two intentional registers).
+  --radius-card: var(--radius-xs);
+  --shadow-paper-rest: 0 1px 2px rgb(0 0 0 / 0.05);
+  /* Elevation registers (CONS-7, Option B — two intentional registers).
        card / card-strong = the soft rest/raised lift for cards;
        overlay = the single heavy blur for modals, dialogs, and overlays.
        The flat "press"/stamp register is tokenized below as --shadow-stamp/-sm
        (the former #3a3a3a drift item, B-VISUAL-TOKEN-BUDGET-01, is resolved). */
-    --shadow-card: 0 4px 12px rgba(40, 32, 30, 0.04);
-    --shadow-card-strong: 0 4px 12px rgba(40, 32, 30, 0.1);
-    --shadow-overlay: 0 12px 28px rgba(26, 18, 8, 0.16);
-    /* Offset "stamp" register — the neobrutalist hard shadow used by the
+  --shadow-card: 0 4px 12px rgba(40, 32, 30, 0.04);
+  --shadow-card-strong: 0 4px 12px rgba(40, 32, 30, 0.1);
+  --shadow-overlay: 0 12px 28px rgba(26, 18, 8, 0.16);
+  /* Offset "stamp" register — the neobrutalist hard shadow used by the
        share/map surfaces (OverlapMap, ShareCard, knowledge overview). One
        offset, ink-colored; -sm is the compact press variant. */
-    --shadow-stamp: 4px 4px 0 var(--brand-ink);
-    --shadow-stamp-sm: 2px 2px 0 var(--brand-ink);
-    /* Scrim registers — the backdrop behind sheets/modals/overlays. Ink-based
+  --shadow-stamp: 4px 4px 0 var(--brand-ink);
+  --shadow-stamp-sm: 2px 2px 0 var(--brand-ink);
+  /* Scrim registers — the backdrop behind sheets/modals/overlays. Ink-based
        so overlays read as the brand navy, not neutral black. soft = anchored
        menus/popovers; (default) = sheets + modals; heavy = immersive share/
        photo backdrops. Bespoke intensities (e.g. the ceremony reveal) derive
        inline via the same color-mix(var(--brand-ink)) recipe. */
-    --scrim-soft: color-mix(in srgb, var(--brand-ink) 20%, transparent);
-    --scrim: color-mix(in srgb, var(--brand-ink) 40%, transparent);
-    --scrim-heavy: color-mix(in srgb, var(--brand-ink) 60%, transparent);
-    /* Z-scale — the ONLY sanctioned layers above page content. Use
+  --scrim-soft: color-mix(in srgb, var(--brand-ink) 20%, transparent);
+  --scrim: color-mix(in srgb, var(--brand-ink) 40%, transparent);
+  --scrim-heavy: color-mix(in srgb, var(--brand-ink) 60%, transparent);
+  /* Z-scale — the ONLY sanctioned layers above page content. Use
        z-[var(--z-*)] (or inline zIndex: 'var(--z-*)'); never a raw number.
        nav(40) chrome < sheet(50) drawers/bottom-sheets/anchored menus <
        modal(60) dialogs (may open above a sheet) < toast(70) notices (never
        hidden) < takeover(80) full-screen moments (tour, mastery, loading). */
-    --z-nav: 40;
-    --z-sheet: 50;
-    --z-modal: 60;
-    --z-toast: 70;
-    --z-takeover: 80;
+  --z-nav: 40;
+  --z-sheet: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-takeover: 80;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --user-bubble: oklch(0.58 0.18 250);
-    --user-bubble-foreground: oklch(0.99 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
-    /* Editorial feature washes — tinted off the dark card so the bands stay
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --user-bubble: oklch(0.58 0.18 250);
+  --user-bubble-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  /* Editorial feature washes — tinted off the dark card so the bands stay
        legible as a featured surface in dark mode. */
-    --editorial-parchment: color-mix(in srgb, var(--brand-border) 10%, var(--card));
-    --editorial-sage:      color-mix(in srgb, var(--success) 12%, var(--card));
-    --editorial-slate:     color-mix(in srgb, var(--brand-link) 14%, var(--card));
+  --editorial-parchment: color-mix(in srgb, var(--brand-border) 10%, var(--card));
+  --editorial-sage: color-mix(in srgb, var(--success) 12%, var(--card));
+  --editorial-slate: color-mix(in srgb, var(--brand-link) 14%, var(--card));
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
     @apply bg-background text-foreground;
     /* Defensive guard: never let a stray over-wide element (e.g. a dev tool bar)
@@ -469,16 +489,123 @@
        the whole app out to fit. `clip` (not `hidden`) avoids establishing a
        scroll container, so position:sticky/fixed chrome is unaffected. */
     overflow-x: clip;
-    }
+  }
   html {
     @apply font-sans;
-    }
+  }
 }
 
-
 @layer components {
+  /* Semantic type roles. These are the only product typography recipes; the
+     matching TypeScript registry lives in src/design/typography.ts. */
+  .type-display-title {
+    font-size: var(--type-display-size);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .type-page-title {
+    font-size: var(--type-page-size);
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .type-section-heading {
+    font-size: var(--type-section-size);
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .type-card-title {
+    font-size: var(--type-card-size);
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: normal;
+  }
+  .type-body {
+    font-size: var(--type-body-size);
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: normal;
+  }
+  .type-supporting {
+    font-size: var(--type-supporting-size);
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: normal;
+  }
+  .type-metadata {
+    font-size: var(--type-metadata-size);
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: normal;
+  }
+  .type-eyebrow {
+    font-size: var(--type-eyebrow-size);
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .type-button {
+    font-size: var(--type-control-size);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-button-sm {
+    font-size: var(--type-small-control-size);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-tab {
+    font-size: var(--type-supporting-size);
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-tab-selected {
+    font-size: var(--type-supporting-size);
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-chip {
+    font-size: var(--type-metadata-size);
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-nav-top {
+    font-size: var(--type-supporting-size);
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-nav-bottom {
+    font-size: var(--type-eyebrow-size);
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .type-nav-bottom-selected {
+    font-size: var(--type-eyebrow-size);
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
   .card {
-    @apply rounded-[var(--radius-card)] border bg-card text-card-foreground shadow-[var(--shadow-card)];
+    @apply bg-card text-card-foreground rounded-[var(--radius-card)] border shadow-[var(--shadow-card)];
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
@@ -490,19 +617,31 @@
      The shadcn ui/button was removed in favor of these — see the 2026-05-30
      design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--btn-primary-bg)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply focus-visible:ring-ring inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--btn-primary-bg)] px-4 py-2 text-white transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45;
+    font-size: var(--type-control-size);
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   .btn-ghost {
-    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply bg-background text-foreground hover:bg-muted focus-visible:ring-ring inline-flex min-h-11 items-center justify-center rounded-[4px] border px-4 py-2 transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45;
+    font-size: var(--type-control-size);
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   .btn-danger {
-    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply bg-destructive focus-visible:ring-ring inline-flex min-h-11 items-center justify-center rounded-[4px] px-4 py-2 text-white transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45;
+    font-size: var(--type-control-size);
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   .btn-icon {
-    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply text-foreground hover:bg-muted focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45;
   }
 }
 
@@ -510,16 +649,32 @@
    colour swap (below) lands on those troughs so the change is hidden behind
    the fade — a soft cross-fade instead of a hard cut. */
 @keyframes triangle-fade {
-  0%   { opacity: var(--tri-opacity-low, 0.2); }
-  25%  { opacity: var(--tri-opacity-high, 1); }
-  50%  { opacity: var(--tri-opacity-low, 0.2); }
-  75%  { opacity: var(--tri-opacity-high, 1); }
-  100% { opacity: var(--tri-opacity-low, 0.2); }
+  0% {
+    opacity: var(--tri-opacity-low, 0.2);
+  }
+  25% {
+    opacity: var(--tri-opacity-high, 1);
+  }
+  50% {
+    opacity: var(--tri-opacity-low, 0.2);
+  }
+  75% {
+    opacity: var(--tri-opacity-high, 1);
+  }
+  100% {
+    opacity: var(--tri-opacity-low, 0.2);
+  }
 }
 
 @keyframes triangle-color-swap {
-  0%, 50%      { fill: var(--tri-color-a, currentColor); }
-  50.01%, 100% { fill: var(--tri-color-b, currentColor); }
+  0%,
+  50% {
+    fill: var(--tri-color-a, currentColor);
+  }
+  50.01%,
+  100% {
+    fill: var(--tri-color-b, currentColor);
+  }
 }
 
 /* Paper-grain texture for the loading field, from /images/loading-grain.png
@@ -528,7 +683,7 @@
    Variant4 print art. Tiled to keep the speckle fine; tune intensity via
    --loading-grain-opacity. */
 .triangle-loader-grain {
-  background-image: url("/images/loading-grain.png");
+  background-image: url('/images/loading-grain.png');
   background-repeat: repeat;
   background-size: 512px 512px;
   mix-blend-mode: multiply;
@@ -536,18 +691,38 @@
 }
 
 @keyframes loading-dot {
-  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
-  40%           { opacity: 1;    transform: translateY(-2px); }
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 /* Rotating loader copy — each phrase fades up, holds, then fades away just as
    the next one mounts. Duration is mirrored by MESSAGE_CYCLE_MS in
    LoadingScreen.tsx; keep the two in sync. */
 @keyframes loading-message {
-  0%   { opacity: 0; transform: translate(-50%, 4px); }
-  14%  { opacity: 1; transform: translate(-50%, 0); }
-  86%  { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -4px); }
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  86% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
 }
 
 .loading-message {
@@ -594,8 +769,14 @@
    indicator, so the verdict lands as an intentional reveal rather than a
    jump-cut. Kept short to never delay the perceived result. */
 @keyframes result-reveal {
-  0%   { opacity: 0; transform: translateY(6px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .result-reveal {
   animation: result-reveal 280ms ease-out both;
@@ -603,8 +784,14 @@
 
 /* B-Feed-Swipe-1 — collapse a dismissed feed card before the inline bar shows. */
 @keyframes feed-card-collapse {
-  from { opacity: 1; max-height: 600px; }
-  to   { opacity: 0; max-height: 0; }
+  from {
+    opacity: 1;
+    max-height: 600px;
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+  }
 }
 
 .feed-card-collapsing {
@@ -617,8 +804,12 @@
    sweep built from existing surface tokens (no new color, no triangle motif, no
    color-state meaning). Replaces the per-route animate-pulse grey boxes. */
 @keyframes skeleton-shimmer {
-  from { background-position: 150% 0; }
-  to   { background-position: -150% 0; }
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
 }
 .skeleton {
   background-color: var(--muted);
@@ -688,9 +879,18 @@ select:-webkit-autofill {
 }
 
 @keyframes territory-settle {
-    0% { transform: translate3d(0, 8px, 0) scale(0.96); opacity: 0; }
-    45% { transform: translate3d(0, -3px, 0) scale(1.02); opacity: 1; }
-    100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  0% {
+    transform: translate3d(0, 8px, 0) scale(0.96);
+    opacity: 0;
+  }
+  45% {
+    transform: translate3d(0, -3px, 0) scale(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
 }
 
 /* Weekly ceremony rooms (D-CEREMONY-WEEKLY-…). `ceremony-room-in` cross-fades a
@@ -699,15 +899,24 @@ select:-webkit-autofill {
    the page (opacity/transform transitions), so only these two live here. Both
    are disabled under prefers-reduced-motion below. */
 @keyframes ceremony-room-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .ceremony-room-in {
   animation: ceremony-room-in 0.45s ease;
 }
 @keyframes ceremony-hint-pulse {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 0.15; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.15;
+  }
 }
 .ceremony-hint-pulse {
   animation: ceremony-hint-pulse 2s infinite;
@@ -722,10 +931,10 @@ select:-webkit-autofill {
    control (data-shadow, below). The dev bar's own chrome (.palette-bar) is
    excluded so the controls stay legible.
    Remove this block with the PaletteToggle bar before shipping. */
-html[data-flat="1"] *:not(.palette-bar, .palette-bar *),
-html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::before,
-html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::after {
-    border-radius: 0 !important;
+html[data-flat='1'] *:not(.palette-bar, .palette-bar *),
+html[data-flat='1'] *:not(.palette-bar, .palette-bar *)::before,
+html[data-flat='1'] *:not(.palette-bar, .palette-bar *)::after {
+  border-radius: 0 !important;
 }
 
 /* TESTING ONLY — drop-shadow register (driven by the dev design bar's "Shadow"
@@ -739,20 +948,54 @@ html[data-flat="1"] *:not(.palette-bar, .palette-bar *)::after {
        app-wide (matching how flat mode used to), so NOTHING casts a shadow,
        including inline styles and shadow-* utilities.
    Remove this block with the PaletteToggle bar before shipping. */
-html[data-shadow="subtle"] {
-    --shadow-paper-rest: 0 1px 1px rgb(0 0 0 / 0.03);
-    --shadow-card: 0 1px 2px rgba(40, 32, 30, 0.03);
-    --shadow-card-strong: 0 1px 3px rgba(40, 32, 30, 0.05);
-    --shadow-overlay: 0 3px 8px rgba(26, 18, 8, 0.08);
+html[data-shadow='subtle'] {
+  --shadow-paper-rest: 0 1px 1px rgb(0 0 0 / 0.03);
+  --shadow-card: 0 1px 2px rgba(40, 32, 30, 0.03);
+  --shadow-card-strong: 0 1px 3px rgba(40, 32, 30, 0.05);
+  --shadow-overlay: 0 3px 8px rgba(26, 18, 8, 0.08);
 }
-html[data-shadow="none"] {
-    --shadow-paper-rest: none;
-    --shadow-card: none;
-    --shadow-card-strong: none;
-    --shadow-overlay: none;
+html[data-shadow='none'] {
+  --shadow-paper-rest: none;
+  --shadow-card: none;
+  --shadow-card-strong: none;
+  --shadow-overlay: none;
 }
-html[data-shadow="none"] *:not(.palette-bar, .palette-bar *),
-html[data-shadow="none"] *:not(.palette-bar, .palette-bar *)::before,
-html[data-shadow="none"] *:not(.palette-bar, .palette-bar *)::after {
-    box-shadow: none !important;
+html[data-shadow='none'] *:not(.palette-bar, .palette-bar *),
+html[data-shadow='none'] *:not(.palette-bar, .palette-bar *)::before,
+html[data-shadow='none'] *:not(.palette-bar, .palette-bar *)::after {
+  box-shadow: none !important;
+}
+
+/* Control normalization is intentionally last so legacy feature utilities
+   cannot reintroduce uppercase, tracking, or weight drift. Icon-only controls
+   inherit the same family but have no visible text to resize. */
+:where(button, [role='button'], input[type='button'], input[type='submit'], input[type='reset']) {
+  font-family: var(--font-sans) !important;
+  font-size: var(--type-control-size) !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+:where([data-slot='badge'], [data-slot='chip'], [data-slot='pill']) {
+  font-family: var(--font-sans) !important;
+  font-size: var(--type-metadata-size) !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+:where([role='tab']) {
+  font-family: var(--font-sans) !important;
+  font-size: var(--type-supporting-size) !important;
+  font-weight: 500 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+:where([role='tab'][aria-selected='true']) {
+  font-weight: 600 !important;
+}
+:where(input, textarea, select) {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-size);
+  font-weight: 400;
+  letter-spacing: normal;
 }

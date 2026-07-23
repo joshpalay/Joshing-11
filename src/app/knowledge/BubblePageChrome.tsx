@@ -70,7 +70,7 @@ export function BubblePageChrome({
       <button
         type="button"
         onClick={() => setAddOpen(true)}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[0.7rem] uppercase tracking-[0.08em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 type-metadata uppercase tracking-eyebrow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' }}
       >
         <Plus className="size-3.5" aria-hidden />
@@ -80,7 +80,7 @@ export function BubblePageChrome({
         type="button"
         onClick={() => void tidy()}
         disabled={tidying}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[0.7rem] uppercase tracking-[0.08em] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 type-metadata uppercase tracking-eyebrow disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' }}
       >
         <Combine className="size-3.5" aria-hidden />
@@ -90,7 +90,7 @@ export function BubblePageChrome({
         <button
           type="button"
           onClick={() => setShareOpen(true)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[0.7rem] uppercase tracking-[0.08em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 type-metadata uppercase tracking-eyebrow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)', background: 'var(--brand-card)' }}
         >
           <Share2 className="size-3.5" aria-hidden />

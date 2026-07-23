@@ -45,7 +45,7 @@ type FeedbackSignal = 'thumbs_up'
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '0.8rem',
-  fontWeight: 700,
+  fontWeight: 600,
   color: 'var(--brand-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
@@ -228,10 +228,10 @@ export default function DailySummaryPage() {
           </Link>
           <div className="mt-4 flex items-start justify-between gap-4">
             <div>
-              <h1 className="font-serif text-[2.75rem] leading-[0.95] tracking-[-0.03em] text-[var(--brand-ink)] sm:text-5xl">
+              <h1 className="font-serif type-display-title leading-[0.95] tracking-display text-[var(--brand-ink)] sm:text-5xl">
                 Today&rsquo;s Five
               </h1>
-              <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
+              <p className="mt-4 max-w-xl type-body leading-7 text-[var(--brand-ink-700)]">
                 You found common ground in {headerDomain} and opened a few new
                 edges of the map.
               </p>
@@ -527,7 +527,7 @@ function ResultDots({ questions }: { questions: QuestionRecap[] }) {
           ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
         />
       ))}
-      <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
+      <span className="ml-1 type-metadata font-medium text-[var(--brand-ink-400)]">
         +{bonus.length} friend bonus
       </span>
     </div>
@@ -741,7 +741,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className="rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
+              className="rounded-full border px-2.5 py-1 type-eyebrow font-semibold tracking-normal"
               style={{
                 borderColor: question.isCorrect
                   ? 'color-mix(in srgb, var(--game-correct) 28%, var(--brand-border))'
@@ -756,7 +756,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             </span>
             {reportedIncorrect ? (
               <span
-                className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.05em]"
+                className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 type-eyebrow font-semibold tracking-normal"
                 style={{
                   borderColor: 'color-mix(in srgb, var(--game-wrong) 30%, var(--brand-border))',
                   backgroundColor: 'color-mix(in srgb, var(--game-wrong) 8%, var(--brand-card))',
@@ -779,7 +779,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
               {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
             </p>
             {question.bonusPresence ? (
-              <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
+              <p className="mt-1 type-metadata leading-5 text-muted-foreground">
                 {bonusKnowledgeLine(question.bonusPresence)}
               </p>
             ) : null}
@@ -798,13 +798,13 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
         </button>
       </div>
 
-      <p className="mt-4 pl-1 text-[1.12rem] leading-7 font-medium tracking-[-0.01em] text-[var(--brand-ink)]">
+      <p className="mt-4 pl-1 type-card-title leading-7 font-medium tracking-page text-[var(--brand-ink)]">
         {question.questionText}
       </p>
 
       <div className="mt-5 grid gap-3 rounded-md border border-[var(--brand-border)] bg-[var(--brand-cream-page)] p-3 sm:grid-cols-2">
         <div>
-          <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+          <p className="type-eyebrow font-semibold tracking-eyebrow text-muted-foreground uppercase">
             You said
           </p>
           <p className="mt-1 text-sm leading-6 text-[var(--brand-ink)]">
@@ -814,7 +814,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           </p>
         </div>
         <div className="border-t border-[var(--brand-border)] pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-3">
-          <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+          <p className="type-eyebrow font-semibold tracking-eyebrow text-muted-foreground uppercase">
             Answer
           </p>
           <p
@@ -871,7 +871,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           <button
             type="button"
             onClick={handleUndoAction}
-            className="ml-auto font-medium tracking-[0.08em] uppercase underline underline-offset-4"
+            className="ml-auto font-medium tracking-eyebrow uppercase underline underline-offset-4"
           >
             Undo
           </button>

@@ -151,7 +151,7 @@ export default function DomainDetailPage() {
   if (error || !detail) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center px-4 text-center">
-        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Knowledge</p>
+        <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Knowledge</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">Domain not found</h1>
         <p className="mt-3 text-sm text-muted-foreground">{error ?? 'This domain is not in your knowledge map yet.'}</p>
         <Link href="/knowledge" className="btn-primary mt-6">Back to Knowledge</Link>
@@ -165,7 +165,7 @@ export default function DomainDetailPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-4xl px-4 py-6 pb-24">
       <header className="mb-7">
-        <nav className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        <nav className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
           <Link href="/" className="hover:text-foreground">Home</Link>
           <span className="px-2">/</span>
           <Link href="/knowledge" className="hover:text-foreground">Knowledge</Link>
@@ -175,7 +175,7 @@ export default function DomainDetailPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <h1 className="font-serif text-5xl font-semibold leading-tight">{detail.displayName}</h1>
           {detail.isDeclaredInterest ? (
-            <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.1em]">
+            <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-eyebrow">
               Declared Interest
             </span>
           ) : null}
@@ -183,7 +183,7 @@ export default function DomainDetailPage() {
       </header>
 
       <section className="mb-5 rounded-lg border bg-card p-5 text-card-foreground">
-        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Current tier</p>
+        <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Current tier</p>
         <h2 className="mt-2 font-serif text-4xl font-semibold">{KNOWLEDGE_TIER_LABEL[tier]}</h2>
         <div className="mt-5">
           <TierProgressBar
@@ -308,7 +308,7 @@ export default function DomainDetailPage() {
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border bg-card p-4">
-      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">{label}</p>
       <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>
   );

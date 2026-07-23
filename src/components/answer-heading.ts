@@ -11,6 +11,6 @@ import type { CSSProperties } from 'react'
 export const answerHeadingStyle: CSSProperties = {
   fontFamily: 'var(--font-serif)',
   fontSize: '1.65rem',
-  fontWeight: 700,
+  fontWeight: 600,
   lineHeight: 1.24,
 }

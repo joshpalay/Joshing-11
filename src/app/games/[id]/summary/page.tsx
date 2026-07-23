@@ -37,7 +37,7 @@ const monoStyle: CSSProperties = {
 const titleStyle: CSSProperties = {
   fontFamily: 'var(--font-neutral), system-ui, sans-serif',
   fontSize: '0.8rem',
-  fontWeight: 700,
+  fontWeight: 600,
   color: 'var(--brand-ink)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
@@ -242,7 +242,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
           {view.game.title}
           {' / SUMMARY'}
         </p>
-        <h1 className="mt-2 font-serif text-[2rem] leading-tight text-[var(--brand-ink)]">
+        <h1 className="mt-2 font-serif type-display-title leading-tight text-[var(--brand-ink)]">
           How you did
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{formatGameDate(view.game.createdAt)}</p>
@@ -258,7 +258,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
         }}
       >
         <p style={{ ...monoStyle, color: 'var(--text-muted)' }}>Total</p>
-        <p className="mt-2 font-mono text-5xl font-bold leading-none text-[var(--brand-ink)]">+{Math.round(totalPoints)}</p>
+        <p className="mt-2 font-mono text-5xl font-semibold leading-none text-[var(--brand-ink)]">+{Math.round(totalPoints)}</p>
         <p style={{ ...monoStyle, marginTop: '12px', color: 'var(--text-muted)' }}>
           {viewerCorrect}/{questionCount} correct{viewerSkipped > 0 ? ` · ${viewerSkipped} skipped` : ''}
         </p>
@@ -308,7 +308,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         const level = resolvedDifficulty(gameQuestion.question);
                         return level ? (
                           <span
-                            className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                            className="rounded-sm border px-2 py-1 type-eyebrow font-semibold uppercase tracking-eyebrow"
                             style={difficultyPillStyle(level)}
                           >
                             {difficultyCopyFromEstimate(level) ?? 'Unrated'}
@@ -316,7 +316,7 @@ export default async function JoshingGameSummaryPage({ params }: PageProps) {
                         ) : null;
                       })()}
                       <span
-                        className="rounded-sm border px-2 py-1 text-[0.65rem] font-semibold tracking-[0.08em]"
+                        className="rounded-sm border px-2 py-1 type-eyebrow font-semibold tracking-eyebrow"
                         style={
                           correct
                             ? {

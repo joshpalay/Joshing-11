@@ -33,7 +33,7 @@ export function KnowledgeViewSwitcher({ current }: { current: KnowledgeView }) {
             href={`${pathname}?view=${view}`}
             aria-current={active ? 'page' : undefined}
             scroll={false}
-            className="rounded-full px-3.5 py-1.5 text-[11px] uppercase tracking-[0.08em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="rounded-full px-3.5 py-1.5 type-eyebrow uppercase tracking-eyebrow transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             style={
               active
                 ? { background: 'var(--brand-navy)', color: 'var(--brand-card)' }

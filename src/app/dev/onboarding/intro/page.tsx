@@ -38,7 +38,7 @@ export default async function DevOnboardingIntroPage({
           <ChevronLeft className="size-4" />
           Dev tools
         </Link>
-        <span className="text-[12px] font-bold tracking-[0.1em] uppercase">
+        <span className="type-metadata font-semibold tracking-eyebrow uppercase">
           {walk ? 'Full walkthrough · writes stubbed' : 'Read-only replay · writes stubbed'}
         </span>
       </div>

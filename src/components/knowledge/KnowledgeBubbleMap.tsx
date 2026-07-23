@@ -300,7 +300,7 @@ export function KnowledgeBubbleMap({
         <button
           type="button"
           onClick={() => setListMode((v) => !v)}
-          className="rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.08em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="rounded-full border px-3 py-1.5 type-eyebrow uppercase tracking-eyebrow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
         >
           {listMode ? 'Bubble view' : 'List view'}
@@ -326,7 +326,7 @@ export function KnowledgeBubbleMap({
                 }}
               />
               <span className="font-serif text-[var(--brand-ink)]">{leaf.data.name}</span>
-              <span className="text-[10px] text-[var(--text-muted)]">
+              <span className="type-eyebrow text-[var(--text-muted)]">
                 {leaf.data.mastered ? 'Mastery · ' : ''}
                 {leaf.value} pts
               </span>
@@ -507,7 +507,7 @@ export function KnowledgeBubbleMap({
           {listSections.map((section) => (
             <section key={section.id} className="pb-1">
               {section.title ? (
-                <h3 className="flex items-baseline justify-between gap-2 pb-1 pt-3 text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                <h3 className="flex items-baseline justify-between gap-2 pb-1 pt-3 text-xs uppercase tracking-eyebrow text-[var(--text-muted)]">
                   <span>{section.title}</span>
                   {section.progress ? (
                     <span className="normal-case tracking-normal">
@@ -563,7 +563,7 @@ export function KnowledgeBubbleMap({
         </div>
       )}
 
-      <p className="min-h-5 pt-1.5 text-center font-serif text-[11px] italic text-[var(--text-muted)]" aria-live="polite">
+      <p className="min-h-5 pt-1.5 text-center font-serif type-eyebrow italic text-[var(--text-muted)]" aria-live="polite">
         {!listMode ? hint : ''}
       </p>
     </div>
