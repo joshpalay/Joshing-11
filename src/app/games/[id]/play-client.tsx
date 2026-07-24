@@ -365,7 +365,9 @@ export function JoshingGamePlayClient({ game, viewerId }: { game: JoshingGameVie
               placeholder="Your answer..."
               aria-label="Your answer"
               autoComplete="off"
-              autoCapitalize="sentences"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
               enterKeyHint="send"
               className="min-h-11 flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-base outline-none focus:border-[var(--brand-navy)]"
             />
