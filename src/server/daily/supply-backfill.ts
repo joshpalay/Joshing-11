@@ -269,12 +269,16 @@ async function generate(
   count: number,
   avoidTexts: { domain: string; text: string }[],
   avoidFks: { domain: string; factKey: string }[],
+  subAngles: string[],
   references?: Map<string, DomainReference>,
 ): Promise<LlmQuestion[]> {
+  const subAnglesByDomain = subAngles.length > 0 ? new Map([[label, subAngles]]) : undefined;
   const userPrompt = buildUserPrompt(
     [label], count,
     avoidTexts as never, avoidFks as never,
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined,
+    subAnglesByDomain,
+    undefined, undefined, undefined, undefined,
     references,
   );
   const client = getAnthropicClient();
@@ -289,24 +293,48 @@ async function generate(
   return parseQuestions(extractTextContent(res.content));
 }
 
+const SUB_ANGLE_AVOID_LIMIT = 30;
+
 async function loadAvoid(domainKeyVal: string): Promise<{
   texts: { domain: string; text: string }[];
   fks: { domain: string; factKey: string }[];
   factKeys: Set<string>;
+  subAngles: string[];
 }> {
   const rows = (
     await pool.query(
-      'SELECT question_text, fact_key FROM "GeneratedQuestion" WHERE domain_key = $1 AND is_duplicate = false',
+      'SELECT question_text, fact_key, sub_angles FROM "GeneratedQuestion" WHERE domain_key = $1 AND is_duplicate = false',
       [domainKeyVal],
     )
-  ).rows as { question_text: string; fact_key: string | null }[];
+  ).rows as { question_text: string; fact_key: string | null; sub_angles: string[] | null }[];
   const factKeys = new Set<string>();
   const fks: { domain: string; factKey: string }[] = [];
+  // Dedup + cap sub_angles across every row already banked for this domain —
+  // this is the SAME "already covered, pick a new facet" signal the per-user
+  // path derives from getRecentSubAnglesByDomain, which backfill previously
+  // never fed into its own prompt (2026-07-26: measured against the live bank
+  // as the reason 4 near-duplicate "what building/factory" facts about the
+  // Triangle Shirtwaist fire each got a fresh fact_key and slipped past the
+  // raw text/fact_key avoid lists below — every one of them had independently
+  // tagged "Triangle Shirtwaist fire" as a sub_angle that nothing ever read
+  // back).
+  const seenAngles = new Set<string>();
+  const subAngles: string[] = [];
   for (const r of rows) {
     const nk = normalizeFactKey(r.fact_key);
     if (nk) { factKeys.add(nk); fks.push({ domain: domainKeyVal, factKey: nk }); }
+    for (const angle of r.sub_angles ?? []) {
+      if (typeof angle !== 'string') continue;
+      const trimmed = angle.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seenAngles.has(key)) continue;
+      seenAngles.add(key);
+      subAngles.push(trimmed);
+      if (subAngles.length >= SUB_ANGLE_AVOID_LIMIT) break;
+    }
   }
-  return { texts: rows.map((r) => ({ domain: domainKeyVal, text: r.question_text })), fks, factKeys };
+  return { texts: rows.map((r) => ({ domain: domainKeyVal, text: r.question_text })), fks, factKeys, subAngles };
 }
 
 async function buildDomain(
@@ -326,7 +354,7 @@ async function buildDomain(
     refs = await getReferencePassagesForDomains([p.label], hintByDomain).catch(() => undefined);
   }
 
-  const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, refs);
+  const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, avoid.subAngles, refs);
   if (generated.length === 0) return { generated: 0, persisted: 0, survivors: 0, persistedKeys: [] };
 
   const [ql, fa] = await Promise.all([findQualityFailures(generated), findFactualFailures(generated)]);
