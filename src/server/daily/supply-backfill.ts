@@ -25,6 +25,7 @@ import {
   parseQuestions,
   findQualityFailures,
   findFactualFailures,
+  findAnswerLeaks,
   type LlmQuestion,
 } from '@/server/daily/generate-questions';
 import { getReferencePassagesForDomains, type DomainReference } from '@/server/daily/domain-reference';
@@ -329,10 +330,18 @@ async function buildDomain(
   if (generated.length === 0) return { generated: 0, persisted: 0, survivors: 0, persistedKeys: [] };
 
   const [ql, fa] = await Promise.all([findQualityFailures(generated), findFactualFailures(generated)]);
+  // Deterministic fail-closed backstop for the answer-leak case the Haiku
+  // quality gate can miss (e.g. a title that itself names the answer, as in
+  // "Rocko's Modern Life" → "Rocko"). generate-questions.ts's per-user path and
+  // the retrieval-grounded refill (screenGroundedBatch) both already run this;
+  // backfill-seeded bank rows are served indefinitely via verify-once-reuse-many
+  // (pickBankPicksForDomains), so a miss here persists until someone notices it
+  // live in a queue.
+  const al = findAnswerLeaks(generated);
   const seen = new Set(avoid.factKeys);
   const survivors: LlmQuestion[] = [];
   generated.forEach((q, i) => {
-    if (ql.toDrop.has(i) || fa.toDrop.has(i)) return;
+    if (ql.toDrop.has(i) || fa.toDrop.has(i) || al.toDrop.has(i)) return;
     const fk = normalizeFactKey(q.fact_key);
     if (fk && seen.has(fk)) return; // novelty vs bank + earlier in this batch
     if (fk) seen.add(fk);
