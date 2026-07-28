@@ -6,9 +6,16 @@ import { draftCandidatesForDomain, flagDraftCandidates } from '@/server/crafter/
 import { keepCandidate } from '@/server/crafter/keep-candidate';
 import { hasActiveInvitation } from '@/server/db/queries/author-invitations';
 import { recordDraftDecision } from '@/server/db/queries/crafter-decisions';
+import { getDailyLlmUsageCount, incrementDailyLlmUsage } from '@/server/llm/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
+
+// Drafting is a full generation-model call per request; cap by candidates
+// requested (not requests) since `count` varies 1-6 per call — ~5 rounds of
+// 4 candidates a day is generous for a real crafting session.
+const DRAFT_DAILY_LIMIT = 20;
+const DRAFT_ACTION = 'craft-draft';
 
 // B-CRAFTER-LIFECYCLE-01 Phase 3 — the PLAYER creation surface's API. Same two
 // verbs as the admin route (/api/admin/craft), same shared rails
@@ -90,6 +97,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (data.action === 'draft') {
+    const usageCount = await getDailyLlmUsageCount(session.userId, DRAFT_ACTION);
+    if (usageCount + data.count > DRAFT_DAILY_LIMIT) {
+      return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
+    }
+
     const result = await draftCandidatesForDomain({
       domain: data.domain,
       tier: data.tier,
@@ -98,6 +110,7 @@ export async function POST(request: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.reason }, { status: 503 });
     }
+    await incrementDailyLlmUsage(session.userId, DRAFT_ACTION, DRAFT_DAILY_LIMIT, data.count);
     return NextResponse.json({ candidates: result.candidates });
   }
 
