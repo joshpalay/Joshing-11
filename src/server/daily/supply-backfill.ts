@@ -41,6 +41,7 @@ import { dryRoundsThreshold, nearCompleteRatio } from '@/server/daily/supply-sta
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { estimateCostUsd } from '@/server/llm/pricing';
+import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 
 export interface BackfillOptions {
   /** true → compute + return the plan, make ZERO generation calls, persist nothing. */
@@ -381,37 +382,56 @@ async function buildDomain(
   }
 
   // Persist as unverified machine rows (mirrors the non-corroborated per-user
-  // path). The batch-verify + embedding-dedup sweeps promote/dedupe them later.
+  // path). Verification is promoted later by the batch-verify sweep, but
+  // embedding is NOT — there is no separate embedding sweep, so it must happen
+  // here, synchronously, the same way generate-questions.ts's per-user path
+  // does. Without it these rows are permanently invisible to the semantic
+  // answered-history dedup gate (only the weaker exact-fact_key match can catch
+  // them), and bank-pick — the path that serves them — has no semantic check of
+  // its own. That gap is what let a reworded Roosevelt/Milwaukee repeat reach a
+  // user whose original answer was 11 days and a differently-worded fact_key
+  // away (2026-08-02 incident).
   const trustTier = resolveMachineTrustTier({ askToAnswerVerified: false, corroborated: false });
   let persisted = 0;
   const persistedKeys: string[] = [];
+  const embedCandidates: { id: string; origin: 'machine'; questionText: string; factKey: string | null }[] = [];
   for (const q of survivors) {
     try {
       const taggedDomain = await resolveFinestNode(q.canonical_subcategory);
-      await db.insert(generatedQuestions).values({
-        userId: systemUserId,
-        canonicalSubcategory: taggedDomain,
-        domainKey: domainKey(taggedDomain),
-        broadCategory: q.broad_category,
-        questionText: q.question_text,
-        answer: q.answer,
-        explainer: q.explainer,
-        difficultyEstimate: q.difficulty_estimate,
-        basePoints: resolveDailyBasePoints(q.difficulty_estimate),
-        factKey: normalizeFactKey(q.fact_key),
-        subjectEntity: q.subject_entity,
-        subAngles: q.sub_angles,
-        trustTier,
-        generatedByProvider: 'anthropic',
-        expiresAt: DURABLE_EXPIRY,
-        usedInQueue: false,
-      });
+      const factKey = normalizeFactKey(q.fact_key);
+      const [row] = await db
+        .insert(generatedQuestions)
+        .values({
+          userId: systemUserId,
+          canonicalSubcategory: taggedDomain,
+          domainKey: domainKey(taggedDomain),
+          broadCategory: q.broad_category,
+          questionText: q.question_text,
+          answer: q.answer,
+          explainer: q.explainer,
+          difficultyEstimate: q.difficulty_estimate,
+          basePoints: resolveDailyBasePoints(q.difficulty_estimate),
+          factKey,
+          subjectEntity: q.subject_entity,
+          subAngles: q.sub_angles,
+          trustTier,
+          generatedByProvider: 'anthropic',
+          expiresAt: DURABLE_EXPIRY,
+          usedInQueue: false,
+        })
+        .returning();
       persisted += 1;
       persistedKeys.push(domainKey(taggedDomain));
+      embedCandidates.push({ id: row.id, origin: 'machine', questionText: row.questionText, factKey });
     } catch (err) {
       console.warn('[supply-backfill] persist failed', { domain: p.label, error: err instanceof Error ? err.message : String(err) });
     }
   }
+  // Same batched call the per-user path uses (B-DEDUP-EMBED-RELIABILITY): one
+  // Voyage request for the whole domain's survivors, not one per row. Best-
+  // effort internally — a disabled/failed embed leaves rows un-embedded but
+  // never blocks the backfill.
+  await embedAndResolveDuplicatesBatch(embedCandidates);
   return { generated: generated.length, persisted, survivors: survivors.length, persistedKeys };
 }
 
