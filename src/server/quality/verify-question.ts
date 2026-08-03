@@ -142,14 +142,25 @@ function buildUserMessage(input: VerifyInput): string {
  */
 export function buildVerifyRequestParams(input: VerifyInput): Anthropic.MessageCreateParamsNonStreaming {
   const allowedDomains = verifyAllowedDomains();
-  const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] = isWebSearchEnabled()
-    ? [{
-        type: 'web_search_20250305',
-        name: 'web_search',
-        max_uses: WEB_SEARCH_MAX_USES,
-        ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
-      }]
-    : undefined;
+  // ambiguous_source is a judgment about the question TEXT — the system prompt
+  // already says it "needs NO web search" and to "never search for it". When
+  // it is the ONLY routed dimension there is nothing to fact-check, so don't
+  // attach the tool at all rather than relying on the model to decline it.
+  //
+  // This is a cost lever, not a quality one: a searching call costs ~24x a
+  // knowledge-only one (measured 2026-08-03 — search results are re-processed
+  // across tool turns, ~21.6k extra cache tokens per call), and a search here
+  // buys nothing the dimension can use. Factual dimensions are unaffected.
+  const needsFactCheck = input.dimensions.some((d) => d !== 'ambiguous_source');
+  const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] =
+    isWebSearchEnabled() && needsFactCheck
+      ? [{
+          type: 'web_search_20250305',
+          name: 'web_search',
+          max_uses: WEB_SEARCH_MAX_USES,
+          ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
+        }]
+      : undefined;
   return {
     model: ANTHROPIC_MODEL,
     max_tokens: 1024,

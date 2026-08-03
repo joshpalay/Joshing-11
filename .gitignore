@@ -34,3 +34,6 @@ dev-stderr.txt
 audits/
 supabase/
 _scratch/
+
+# MCP config (contains Supabase access token)
+.mcp.json
