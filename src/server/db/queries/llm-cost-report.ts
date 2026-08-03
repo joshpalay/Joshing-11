@@ -500,10 +500,17 @@ export function renderCostLatencyReportMarkdown(r: CostLatencyReport): string {
   lines.push('');
   if (r.costPerQuestionUsd != null) {
     lines.push(
-      `- Cost per question generated: **${usd(r.costPerQuestionUsd)}** (${r.questionsGenerated.toLocaleString('en-US')} generated)`,
+      `- Cost to *write* a question: **${usd(r.costPerQuestionUsd)}** (${r.questionsGenerated.toLocaleString('en-US')} generated)`,
+    );
+    // Honesty guard: this is the 'generate' bucket alone. Gating and the
+    // post-hoc verification sweep are the majority of spend and are NOT in
+    // this number, so reading it as all-in cost-per-question understates the
+    // true figure by roughly an order of magnitude.
+    lines.push(
+      '  - Generation only — excludes quality gating and fact-checking, which are most of the spend. Not the all-in cost of a question.',
     );
   } else {
-    lines.push('- Cost per question generated: no questions generated this week.');
+    lines.push('- Cost to write a question: no questions generated this week.');
   }
   if (r.costPerAnswerGradedUsd != null) {
     lines.push(
@@ -520,7 +527,7 @@ export function renderCostLatencyReportMarkdown(r: CostLatencyReport): string {
   if (r.slowestPlayerFacing) {
     const s = r.slowestPlayerFacing;
     lines.push(
-      `Players wait longest on **${s.label.toLowerCase()}**: ~${ms(s.avgMs)} average, ~${ms(s.p95Ms)} at worst.`,
+      `Of the surfaces a player waits on live, the worst tail is **${s.label.toLowerCase()}**: ~${ms(s.p95Ms)} at p95 (~${ms(s.avgMs)} average).`,
     );
   } else {
     lines.push('No timed player-facing calls this week.');
@@ -528,10 +535,15 @@ export function renderCostLatencyReportMarkdown(r: CostLatencyReport): string {
   lines.push('');
   const timed = r.latency.filter((l) => l.calls > 0);
   if (timed.length > 0) {
-    lines.push('| Surface | Avg | Worst (p95) |');
-    lines.push('| --- | --- | --- |');
+    // The "Waits" column is the whole point of this table: most of these
+    // surfaces are background crons, so an unlabelled 12.5s generation row
+    // reads as "players wait 12.5s" when nobody is waiting on it at all.
+    lines.push('| Surface | Player waits? | Avg | Worst (p95) |');
+    lines.push('| --- | --- | --- | --- |');
     for (const l of timed) {
-      lines.push(`| ${l.label} | ${ms(l.avgMs)} | ${ms(l.p95Ms)} |`);
+      lines.push(
+        `| ${l.label} | ${l.playerFacing ? 'yes' : 'no — background'} | ${ms(l.avgMs)} | ${ms(l.p95Ms)} |`,
+      );
     }
     lines.push('');
   }

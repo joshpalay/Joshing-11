@@ -188,14 +188,25 @@ export function buildCostReportEmailTemplate(params: {
 
   // Latency rows (only timed surfaces).
   const timed = r.latency.filter((l) => l.calls > 0);
+  // The "Waits" column is the whole point of this table: most of these
+  // surfaces are background crons, so an unlabelled 12.5s generation row reads
+  // as "players wait 12.5s" when nobody is waiting on it at all.
   const latencyRows = timed
-    .map((l) => `<tr>${td(escapeHtml(l.label), 'left')}${td(ms(l.avgMs), 'right')}${td(ms(l.p95Ms), 'right')}</tr>`)
+    .map(
+      (l) =>
+        `<tr>${td(escapeHtml(l.label), 'left')}${td(
+          l.playerFacing ? 'yes' : 'no — background',
+          'left',
+        )}${td(ms(l.avgMs), 'right')}${td(ms(l.p95Ms), 'right')}</tr>`,
+    )
     .join('');
 
   const slowest = r.slowestPlayerFacing
-    ? `Players wait longest on <strong>${escapeHtml(r.slowestPlayerFacing.label.toLowerCase())}</strong>: ~${ms(
+    ? `Of the surfaces a player waits on live, the worst tail is <strong>${escapeHtml(
+        r.slowestPlayerFacing.label.toLowerCase(),
+      )}</strong>: ~${ms(r.slowestPlayerFacing.p95Ms)} at p95 (~${ms(
         r.slowestPlayerFacing.avgMs,
-      )} average, ~${ms(r.slowestPlayerFacing.p95Ms)} at worst.`
+      )} average).`
     : 'No timed player-facing calls this week.';
 
   const perQuestion =
@@ -239,7 +250,8 @@ export function buildCostReportEmailTemplate(params: {
               </td></tr>
 
               ${eyebrow('Cost per unit')}
-              <tr><td style="font-family:${SERIF};font-size:15px;color:${INK};padding:2px 0;">Per question generated — ${perQuestion}</td></tr>
+              <tr><td style="font-family:${SERIF};font-size:15px;color:${INK};padding:2px 0;">Cost to write a question — ${perQuestion}</td></tr>
+              <tr><td style="font-family:${SANS};font-size:12px;line-height:1.5;color:${INK_FAINT};padding:0 0 6px 0;">Generation only — excludes quality gating and fact-checking, which are most of the spend. Not the all-in cost of a question.</td></tr>
               <tr><td style="font-family:${SERIF};font-size:15px;color:${INK};padding:2px 0;">Per answer graded — ${perGrade}</td></tr>
 
               ${eyebrow('How long players wait')}
@@ -248,7 +260,7 @@ export function buildCostReportEmailTemplate(params: {
                 timed.length > 0
                   ? `<tr><td>
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                  <tr>${th('Surface', 'left')}${th('Avg', 'right')}${th('Worst (p95)', 'right')}</tr>
+                  <tr>${th('Surface', 'left')}${th('Player waits?', 'left')}${th('Avg', 'right')}${th('Worst (p95)', 'right')}</tr>
                   ${latencyRows}
                 </table>
               </td></tr>`
