@@ -39,6 +39,8 @@ vi.mock('@/server/db/queries/lately', () => ({
     new Map(ids.map((id) => [id, { questionId: id, text: `text ${id}`, domain: 'history' }])),
   ),
   getViewerPriorAnswerResults: getViewerPriorAnswerResultsMock,
+  // Settled-card answer read-back; irrelevant to these cases, so a bare empty map.
+  getCorrectAnswersForSettledQuestions: async () => new Map<string, string>(),
   getViewerDismissedMilestoneIds: vi.fn(async () => new Set()),
 }));
 

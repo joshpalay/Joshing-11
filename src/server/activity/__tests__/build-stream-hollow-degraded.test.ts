@@ -37,6 +37,8 @@ vi.mock('@/server/db/queries/lately', () => ({
   getFriendActivity: vi.fn(async () => []),
   getMilestoneQuestionText: vi.fn(async () => new Map()),
   getViewerPriorAnswerResults: vi.fn(async () => new Map()),
+  // Settled-card answer read-back; irrelevant to these cases, so a bare empty map.
+  getCorrectAnswersForSettledQuestions: vi.fn(async () => new Map()),
   getViewerDismissedMilestoneIds: vi.fn(async () => new Set()),
 }));
 

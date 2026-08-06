@@ -713,6 +713,39 @@ export async function getMilestoneQuestionText(
   return out;
 }
 
+/**
+ * Canonical answers for the given questions, for read-back on cards the viewer
+ * has ALREADY settled.
+ *
+ * ⚠️ CALLER MUST PASS ONLY SETTLED QUESTION IDS. This returns the answer to
+ * anything you ask about — it does not and cannot know which questions the
+ * viewer still has a swing at. A From Friends bundle mixes settled and
+ * still-answerable questions in one payload, so handing it the whole bundle
+ * would ship the answers to questions the viewer is about to play. build-stream
+ * narrows to `priorResult !== null` before calling; keep any new caller doing
+ * the same.
+ *
+ * Read-only. Distinct from the /api/lately/milestone/answer route, which also
+ * returns an answer but PERSISTS a give-up miss (no points, no catch-up swing)
+ * — correct for a live "View Answer" peek, catastrophic for a card the viewer
+ * already answered correctly.
+ */
+export async function getCorrectAnswersForSettledQuestions(
+  settledIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (settledIds.length === 0) return out;
+  const rows = await db
+    .select({ id: questions.id, answerText: questions.answerText })
+    .from(questions)
+    .where(inArray(questions.id, settledIds));
+  for (const row of rows) {
+    const answer = row.answerText?.trim();
+    if (answer) out.set(row.id, answer);
+  }
+  return out;
+}
+
 // The viewer's own prior result on each of the given questions, if any. Drives
 // the milestone expansion's progress on first render AND the cross-session lock:
 // a single attempt (right OR wrong) settles the question, so it must report
