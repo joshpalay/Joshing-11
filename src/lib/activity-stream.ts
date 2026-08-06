@@ -52,6 +52,13 @@ export type StreamQuestion = {
   // the feed — and drives the ANSWERED history's "Correct" / "Not this time"
   // copy plus the bundle progress mark.
   priorResult: 'correct' | 'incorrect' | null;
+  // The canonical answer, for read-back UNDER the question on a settled card.
+  // Set ONLY when the viewer has already settled this question (priorResult is
+  // non-null) — build-stream narrows before looking it up, because a From
+  // Friends bundle carries settled and still-answerable questions together and
+  // populating this for the latter would hand over answers the viewer is about
+  // to play for. Absent on every answerable card, by construction.
+  correctAnswer?: string | null;
   // The viewer has DISMISSED this milestone question (dismiss-as-answered). Like
   // `priorResult`, it CONSUMES the question — it counts toward the bundle's
   // played progress and a bundle whose questions are all answered-or-dismissed

@@ -451,14 +451,6 @@ function StreakQuestionCard({
               </FeedActionLink>
             }
           />
-        ) : revealed ? (
-          // A "View Answer" peek settles in the SAME leading slot as the graded
-          // verdict (request 2026-07-12): right, wrong, or gave-up, the result
-          // always sits above the question so a column of settled cards scans
-          // uniformly.
-          <div style={{ marginBottom: 10 }}>
-            <RevealedAnswer state={revealed} />
-          </div>
         ) : null}
 
         <p
@@ -468,13 +460,29 @@ function StreakQuestionCard({
             lineHeight: 1.28,
             fontWeight: 500,
             color: INK,
-            // Spent cards close on the question (verdict already led above), so
-            // drop the trailing margin that separated it from the bottom row.
-            margin: spent ? 0 : '0 0 14px',
+            // The question no longer closes a spent card — the answer read-back
+            // follows it (2026-08-06) — so it keeps a trailing margin only when
+            // an actions row follows. The answer blocks own their top spacing.
+            margin: spent || revealed ? 0 : '0 0 14px',
           }}
         >
           &ldquo;{question.text}&rdquo;
         </p>
+
+        {/* Answer AFTER the question, both for the settled read-back and for the
+            live "View Answer" peek — reversing the 2026-07-12 layout in which
+            the answer preceded the question it answered. */}
+        {spent ? (
+          <SettledAnswers
+            resolution={resolution}
+            correctAnswer={question.correctAnswer}
+            isCorrect={resolution ? resolution.isCorrect : question.priorResult !== 'incorrect'}
+          />
+        ) : revealed ? (
+          <div style={{ marginTop: 12 }}>
+            <RevealedAnswer state={revealed} />
+          </div>
+        ) : null}
 
         {spent ? null : (
           <>
@@ -587,8 +595,68 @@ function SpentResult({
         color: isCorrect ? 'var(--game-correct)' : 'var(--game-wrong)',
       }}
     >
-      {isCorrect ? '✓ Correct' : 'Not this time'}
-      {resolution ? ` · ${resolution.submitted}` : ''}
+      {isCorrect ? 'Answered correctly' : 'Not this time'}
     </div>
+  );
+}
+
+// The settled card's answer read-back, sitting UNDER the question (2026-08-06
+// request, reversing the 2026-07-12 "verdict always leads" layout): the verdict
+// keeps its slot above and states only the outcome, while the answers read in
+// question-then-answer order below it.
+//
+// Both lines are independently optional and the asymmetry is a DATA fact, not a
+// style choice: `submitted` exists only for a question answered in THIS session
+// (it lives in the in-memory StreakResolution), because MASTERY_EVENTS has no
+// submitted-answer column — a card restored from priorResult can never show
+// what the viewer typed, and no query can recover it. `correctAnswer` arrives
+// on the stream payload for settled questions only. So a same-session card
+// shows both lines and a prior-session card shows just the answer.
+function SettledAnswers({
+  resolution,
+  correctAnswer,
+  isCorrect,
+}: {
+  resolution: StreakResolution | null;
+  correctAnswer: string | null | undefined;
+  isCorrect: boolean;
+}) {
+  // Don't restate the answer twice on a correct card — the submitted string IS
+  // the answer there, so the "You said" line alone carries it.
+  const showCorrect = Boolean(correctAnswer) && !(isCorrect && resolution);
+  if (!resolution && !showCorrect) return null;
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {resolution ? (
+        <AnswerLine
+          label="You said"
+          value={resolution.submitted}
+          color={isCorrect ? 'var(--game-correct)' : 'var(--game-wrong)'}
+        />
+      ) : null}
+      {showCorrect ? <AnswerLine label="Answer" value={correctAnswer!} color={INK2} /> : null}
+    </div>
+  );
+}
+
+function AnswerLine({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <p style={{ margin: 0 }}>
+      <span
+        style={{
+          display: 'block',
+          fontFamily: FM,
+          fontSize: 10,
+          letterSpacing: '0.11em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          color: INK3,
+          marginBottom: 3,
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ fontFamily: FS, fontSize: 17, lineHeight: 1.3, color }}>{value}</span>
+    </p>
   );
 }

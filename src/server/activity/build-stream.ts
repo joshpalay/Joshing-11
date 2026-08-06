@@ -31,6 +31,7 @@ import {
   getLatelyMoments,
   getMilestoneQuestionText,
   getViewerDismissedMilestoneIds,
+  getCorrectAnswersForSettledQuestions,
   getViewerPriorAnswerResults,
 } from '@/server/db/queries/lately';
 
@@ -98,6 +99,15 @@ export async function buildActivityStream(
     getViewerDismissedMilestoneIds(userId, allQuestionIds),
   ]);
 
+  // Canonical answers for read-back on settled cards only. The narrowing here is
+  // the guard, not an optimisation: `allQuestionIds` mixes questions the viewer
+  // has played with ones they still have a swing at (a partially-played bundle
+  // carries both), so looking up the whole set would attach answers to cards
+  // that are still answerable. Keyed off priorById — the same per-viewer settle
+  // signal that locks the question — so the two can never disagree.
+  const settledQuestionIds = allQuestionIds.filter((id) => priorById.has(id));
+  const correctAnswerById = await getCorrectAnswersForSettledQuestions(settledQuestionIds);
+
   const utilityItems = filterUtilityActivities(items, moments)
     // Drop dead-end degraded rows. An "{actor} answered your question" card whose
     // actor is unknown (the friend/stranger deleted their account, so actorUserId
@@ -146,19 +156,28 @@ export async function buildActivityStream(
         // the viewer already played — each carries its viewer-relative prior
         // result, so the played ones render as spent (hollow) triangles in the
         // expansion while the unplayed ones stay answerable.
-        .map((q) => ({
-          questionId: q.questionId,
-          text: q.text,
-          domain: q.domain,
-          priorResult: priorById.get(q.questionId) ?? null,
-          dismissed: dismissedIds.has(q.questionId),
-          authorName: q.authorName,
-          authorIsHouse: q.authorIsHouse,
-          // D-4 via-attribution: the relay source the friend got this question
-          // from ("via Josh"). Friend-and-question-specific, so it's read off the
-          // card (not the global textById map, which is keyed by questionId alone).
-          via: card.viaByQuestionId?.[q.questionId] ?? null,
-        }));
+        .map((q) => {
+          const prior = priorById.get(q.questionId) ?? null;
+          return {
+            questionId: q.questionId,
+            text: q.text,
+            domain: q.domain,
+            priorResult: prior,
+            // Gated on `prior` HERE, not merely on the narrowed lookup above.
+            // The narrowing decides what we ask the database for; this decides
+            // what leaves the server. Keeping both means a future change that
+            // widens the query — or a caller that passes the whole id set —
+            // still cannot put an answer on a card the viewer can still play.
+            correctAnswer: prior === null ? null : (correctAnswerById.get(q.questionId) ?? null),
+            dismissed: dismissedIds.has(q.questionId),
+            authorName: q.authorName,
+            authorIsHouse: q.authorIsHouse,
+            // D-4 via-attribution: the relay source the friend got this question
+            // from ("via Josh"). Friend-and-question-specific, so it's read off
+            // the card (not the global textById map, keyed by questionId alone).
+            via: card.viaByQuestionId?.[q.questionId] ?? null,
+          };
+        });
       // D-HOME-DASHBOARD-MODEL-01 point 3 — a From Friends bundle is a dashboard
       // item, not an archive entry. Once the viewer has played EVERY answerable
       // question in it (remaining === 0) it is exhausted and disappears; this also
