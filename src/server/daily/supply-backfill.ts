@@ -64,6 +64,19 @@ export interface BackfillOptions {
    * player hits the wall — once scale justifies the volume.
    */
   onlyDry?: boolean;
+  /**
+   * Per-run spend ceiling in USD, applied to the plan's own cost estimate.
+   * Domains are taken neediest-first while the running total stays within it;
+   * the rest wait for a later night. This is the "fills slower, costs less per
+   * day" dial (Josh, 2026-08-07) — the cron runs nightly, so a per-run cap IS a
+   * daily cap. Undefined/<=0 disables it and only `limit` applies.
+   *
+   * The FIRST actionable domain is always built even if it alone exceeds the
+   * budget: otherwise a single domain whose batch costs more than the ceiling
+   * would be skipped every night forever, and the backfill would silently make
+   * no progress while reporting itself healthy.
+   */
+  budgetUsd?: number | null;
 }
 
 const DEFAULTS = {
@@ -108,6 +121,12 @@ export type BackfillReport = {
   estCostUsd: number;
   plans: BackfillPlan[];
   built: { label: string; generated: number; persisted: number }[];
+  /** Spend ceiling in force for this run (null = uncapped). */
+  budgetUsd: number | null;
+  /** Estimated cost of the domains this run actually selected. */
+  selectedCostUsd: number;
+  /** Actionable domains deferred to a later night by the budget (not by `limit`). */
+  deferredForBudget: number;
 };
 
 type DomainRow = {
@@ -209,6 +228,31 @@ function estimateBatchCost(batch: number, ground: boolean): number {
     ? estimateCostUsd(ANTHROPIC_MODEL, { inputTokens: 20000, outputTokens: 550, webSearchRequests: 1, ...ZERO_CACHE }).usd ?? 0
     : 0;
   return gen + quality + factual + retrieval;
+}
+
+/**
+ * Take domains neediest-first while the running cost estimate stays within
+ * `budgetUsd`. Pure and exported for tests.
+ *
+ * Two deliberate choices:
+ *  - the first domain is ALWAYS taken, even if it alone busts the budget, so a
+ *    single expensive domain can never stall the backfill indefinitely;
+ *  - it does NOT skip past an unaffordable domain to fit a cheaper one behind
+ *    it. Plans are sorted by need, and cherry-picking cheap domains would
+ *    quietly invert that priority — a costly, genuinely-dry domain would keep
+ *    losing to trivial ones every night. Stop at the first thing that does not
+ *    fit and let it lead the next run.
+ */
+export function selectWithinBudget(plans: BackfillPlan[], budgetUsd: number | null): BackfillPlan[] {
+  if (budgetUsd === null || budgetUsd <= 0) return plans;
+  const out: BackfillPlan[] = [];
+  let spent = 0;
+  for (const p of plans) {
+    if (out.length > 0 && spent + p.estCostUsd > budgetUsd) break;
+    out.push(p);
+    spent += p.estCostUsd;
+  }
+  return out;
 }
 
 export function buildPlan(
@@ -454,6 +498,8 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
   for (const key of demonstrated) demand.set(key, Math.max(demand.get(key) ?? 0, 1));
   const plans = buildPlan(domains, demand, cfg);
   const actionable = plans.filter((p) => p.batch > 0);
+  const budgetUsd = opts.budgetUsd && opts.budgetUsd > 0 ? opts.budgetUsd : null;
+  const selected = selectWithinBudget(actionable.slice(0, opts.limit), budgetUsd);
 
   const report: BackfillReport = {
     dryRun: opts.dryRun,
@@ -464,10 +510,13 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
     estCostUsd: Number(actionable.reduce((s, p) => s + p.estCostUsd, 0).toFixed(4)),
     plans,
     built: [],
+    budgetUsd,
+    selectedCostUsd: Number(selected.reduce((s, p) => s + p.estCostUsd, 0).toFixed(4)),
+    deferredForBudget: Math.min(actionable.length, opts.limit) - selected.length,
   };
   if (opts.dryRun) return report;
 
-  for (const p of actionable.slice(0, opts.limit)) {
+  for (const p of selected) {
     const r = await buildDomain(p, opts.systemUserId ?? null);
     report.built.push({ label: p.label, generated: r.generated, persisted: r.persisted });
 

@@ -16,6 +16,51 @@ import { generatedQuestions, questions } from '@/server/db/schema';
 // trust-tier gating is B4's job. Existing callers (pickBankSource,
 // pickEligibleAuthoredQuestions, pickHouseQuestions) are untouched.
 
+/**
+ * Fact keys already SERVABLE in the shared bank for these domains, so a
+ * generation round can avoid re-minting stock that already exists.
+ *
+ * Why this is separate from the per-viewer avoid list (getRecentFactKeys): that
+ * one answers "what has THIS user seen", which is the right question for
+ * serving and the wrong one for spend. A fact banked during another user's round
+ * is invisible to it, so the model re-derived facts the bank already held —
+ * measured 2026-08-07: 717 of 2,553 rows redundant by fact_key, 492 of them
+ * still servable, 92% of the duplicate groups byte-identical and NONE spanning
+ * difficulty tiers. Per-user serving dedup meant nobody ever saw a repeat; we
+ * simply paid for stock that could never reach anyone the original wouldn't.
+ *
+ * SERVABLE rows only (`is_duplicate = false`). Suppressed rows are excluded on
+ * purpose: 328 fact_keys have a suppressed first copy, and treating those as
+ * "covered" would stop the bank from ever replacing a question it just demoted.
+ *
+ * Capped per domain so a deep domain cannot crowd the prompt; newest first,
+ * matching the recency posture of the rest of the avoid list.
+ */
+export async function getServableBankFactKeys(
+  domainKeys: string[],
+  perDomainLimit = 60,
+): Promise<{ domainKey: string; factKey: string }[]> {
+  const keys = [...new Set(domainKeys.filter(Boolean))];
+  if (keys.length === 0) return [];
+  type Row = { domain_key: string; fact_key: string };
+  const result = await db.execute(sql`
+    SELECT domain_key, fact_key FROM (
+      SELECT g.domain_key,
+             g.fact_key,
+             ROW_NUMBER() OVER (PARTITION BY g.domain_key ORDER BY g.created_at DESC) AS rn
+        FROM ${generatedQuestions} g
+       WHERE g.domain_key = ANY(${keys})
+         AND g.is_duplicate = false
+         AND g.fact_key IS NOT NULL
+    ) ranked
+    WHERE rn <= ${perDomainLimit}
+  `);
+  // db.execute's shape varies by driver build; this is the repo's house idiom
+  // (see domain-fragmentation.ts:130).
+  const rows = (result as unknown as { rows?: Row[] }).rows ?? (result as unknown as Row[]);
+  return rows.map((r) => ({ domainKey: r.domain_key, factKey: r.fact_key }));
+}
+
 export type PoolOrigin = 'machine' | 'human';
 export type TrustTier = 'unverified' | 'machine_verified' | 'human_validated' | 'author_confirmed';
 export type PoolScope = 'private' | 'friends_only' | 'public';

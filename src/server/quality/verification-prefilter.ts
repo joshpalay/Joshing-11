@@ -5,7 +5,11 @@
  * web search), so this decides — with NO network and NO model call — whether a
  * question needs verification at all and, if so, which of the two dimensions
  * (Decision B) apply:
- *   - false_premise: the question's SETUP asserts a fact that could be untrue.
+ *   - false_premise: the question's SETUP asserts a fact that could be untrue —
+ *                    or its INTERROGATIVE presupposes one (asking "what kind of X
+ *                    did they plan" when the source only ever raises X and never
+ *                    settles it). Both are handled by the same dimension; see the
+ *                    false_premise prose in verify-question.ts.
  *   - extra_fact:    the answer or its explanation carries an unasked / adjacent
  *                    claim, even when the answer itself is right.
  *
@@ -88,17 +92,48 @@ function signalKinds(text: string): Set<string> {
   return kinds;
 }
 
+// Abbreviations whose trailing period is NOT a sentence end. Without this,
+// "Dr. Smith wrote which novel?" would split into two "sentences".
+const ABBREVIATION_END_RE = /\b(mr|mrs|ms|dr|st|jr|sr|prof|vs|no|fig|est|approx|etc)\.$/i;
+
+// A stem carrying a complete SENTENCE before its ask is setup by definition —
+// however short either half is. Added 2026-08-07 after the reported Macbeth
+// presupposition stem ("…the three witches open the play by agreeing to meet
+// again after a battle. In what kind of weather do they plan to reconvene?")
+// slipped past every other test below: no dash, only two comma-clauses, and 27
+// words — ONE under the length floor. It scored as a bare ask and skipped
+// verification outright, so the verifier never got to judge it. Sentence count
+// is the structural signal the other three were approximating by proxy.
+function hasSentenceLevelSetup(stem: string): boolean {
+  const parts = stem.split(/(?<=[.!?])\s+(?=["'“‘(]?[A-Z])/);
+  let sentences = 0;
+  for (const part of parts) {
+    const trimmed = part.trim();
+    // An abbreviation-final chunk is the head of the FOLLOWING sentence, not a
+    // sentence of its own — skip it so the pair counts once.
+    if (!trimmed || ABBREVIATION_END_RE.test(trimmed)) continue;
+    sentences += 1;
+  }
+  return sentences >= 2;
+}
+
 // A SETUP clause = the stem says something beyond the bare interrogative: a
-// dash-delimited aside, three-plus comma/semicolon clauses, or simply a long stem.
-// Bare asks ("What is the capital of France?", "Who was the first president?") have
-// none of these, so an isolated signal word in a bare ask does not route to verify.
+// dash-delimited aside, three-plus comma/semicolon clauses, a preceding complete
+// sentence, or simply a long stem. Bare asks ("What is the capital of France?",
+// "Who was the first president?") have none of these, so an isolated signal word
+// in a bare ask does not route to verify.
 function hasSetupClause(stem: string): boolean {
   const wordCount = stem.trim().split(/\s+/).filter(Boolean).length;
   const clauses = stem
     .split(/[—–]| - |,|;|:/)
     .map((c) => c.trim())
     .filter(Boolean);
-  return /[—–]| - /.test(stem) || clauses.length >= 3 || wordCount >= 28;
+  return (
+    /[—–]| - /.test(stem) ||
+    clauses.length >= 3 ||
+    wordCount >= 28 ||
+    hasSentenceLevelSetup(stem)
+  );
 }
 
 const OPINION_RE =
