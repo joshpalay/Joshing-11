@@ -38,6 +38,11 @@ async function main() {
     daysRunway: num('--days-runway', Number(process.env.SUPPLY_BACKFILL_DAYS_RUNWAY ?? 14)),
     bufferFloor: num('--buffer-floor', Number(process.env.SUPPLY_BACKFILL_BUFFER_FLOOR ?? 10)),
     batchCap: num('--batch-cap', Number(process.env.SUPPLY_BACKFILL_BATCH_CAP ?? 20)),
+    // Parity with the nightly cron's pacing cap. Default 0 here (uncapped): the
+    // CLI is the deliberate, supervised path where you have already chosen
+    // --limit, so it should not silently under-build. Pass --budget 0.50 to
+    // rehearse exactly what the cron will do tonight.
+    budgetUsd: num('--budget', 0),
   });
 
   console.info('=== Supply backfill plan ===');

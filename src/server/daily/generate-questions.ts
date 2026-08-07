@@ -78,6 +78,7 @@ import { getExpansionParents } from '@/server/knowledge/open-domain';
 import { getOrBuildDomainRungs } from '@/server/knowledge/nearness-tree';
 import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
+import { getServableBankFactKeys } from '@/server/db/queries/pool';
 import { getBankLabelIndex, reconcileBankDomain } from '@/server/questions/reconcile-bank-domain';
 import { resolveFinestNode } from '@/server/knowledge/graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
@@ -107,6 +108,13 @@ import { enrichAcceptableVariants, mergeVariants } from './enrich-variants';
 const RECENT_QUESTION_TEXT_LIMIT = 80;
 // Cap the recent fact-key block at this many entries inside the prompt.
 const RECENT_FACT_KEY_LIMIT = 200;
+// How much of RECENT_FACT_KEY_LIMIT is reserved for SHARED-BANK fact keys rather
+// than the viewer's own history (2026-08-07). Carved OUT of the existing budget,
+// never added to it, so the prompt's token cost is unchanged — this only trades
+// some of the viewer's deepest history (which the uncapped answered-fact check in
+// the persist path and the full-set dedup gate both still enforce) for visibility
+// into what the shared bank already holds, which nothing else in this path had.
+const BANK_FACT_KEY_PROMPT_RESERVE = 60;
 // How many of the viewer's most-recent AUTHORED questions to seed into the +2
 // bonus Sonnet avoid list. Bounded so a prolific author doesn't flush the
 // recent-GENERATED dedup signal out of the RECENT_QUESTION_TEXT_LIMIT /
@@ -170,6 +178,14 @@ RULE: assert in the setup ONLY what the question actually needs the player to le
 - BAD (false, unnecessary superlative): "Dumbledore makes last-minute point awards that overturn Slytherin's lead. Which student receives fifty points — the largest single award in that sequence — for standing up to his friends?" → the "fifty points / largest single award" claim is both decorative and false (it was ten points, and the largest award went to someone else); the question works without it.
 - GOOD (same answer, no asserted side-fact): "At the end-of-year feast in Harry's first year, which student does Dumbledore award points to 'for standing up to his friends'?" → "Neville Longbottom"
 THE SAME FLOOR APPLIES TO THE EXPLAINER, NOT JUST THE SETUP: the explainer is fact-checked exactly like the question, and one wrong decorative aside in it — a date, a count, an adjacent work, an attribution the answer never needed — demotes the WHOLE question even when the ask and answer are perfect. Every factual claim you put in the explainer must be load-bearing to understanding the answer AND independently checkable. If you are not certain of an incidental detail (the exact year, "the first", who directed the adaptation, what else the author wrote), leave it OUT — a short explainer that only restates why the answer is right is safer than a rich one that smuggles in a wrong "1973". Prefer under-claiming to a decorative aside.
+
+ASK ONLY WHAT THE SOURCE SETTLES (presupposition floor — ALL tiers):
+The rule above governs what your setup ASSERTS. This one governs what your question PRESUPPOSES. A question can assert nothing false and still be broken, because the interrogative smuggles in a claim of its own: "which X did Y choose" presupposes that Y chose one; "what kind of X do they plan" presupposes a settled plan. If the source RAISES the matter and never RESOLVES it — a question a character asks that no one answers, a debate left open, a possibility floated and dropped, a detail the work pointedly withholds — then there is no answer to key, and the item is broken however the grader is set. Be most suspicious of the source's OWN questions: an interrogative line in the text is a tempting hook precisely because it is famous and memorable, but its content is a set of POSSIBILITIES, not a fact.
+TEST: for every "which X", "what kind of X", "how many X", "the X that…" in your stem, ask — does the work SETTLE this, or does it merely RAISE it? Key only on what is settled.
+- BAD (presupposes a decision the source never makes): "In Shakespeare's Macbeth, the three witches open the play by agreeing to meet again after a battle. In what kind of weather do they plan to reconvene?" → the play's second line — "In thunder, lightning, or in rain?" — is the First Witch's QUESTION; the weather is never decided, so nothing can be keyed correct. Every clause of that setup is nonetheless TRUE, which is why the side-facts rule above does not catch it.
+- GOOD (asks what the same scene DOES settle): "The three witches open Shakespeare's Macbeth by planning where to meet once the battle is done. Whom do they intend to find there?" → "Macbeth"
+- GOOD (asks about the open question AS an open question): "Shakespeare's Macbeth opens with one witch asking when the three will meet again — and naming three possibilities in the same breath. What are they?" → "Thunder, lightning, or rain"
+Note how the BAD example also breaks Rule 3b below by bundling a second ask ("— and with whom?"): a stem that presupposes an unsettled fact often reaches for a second, settled one to feel answerable. Both faults have the same fix — ask the one settled thing.
 
 FAN-SALIENCE RULE (Rule 1 — tier-dependent):
 Do NOT default to the most nameable entity in a work — the character roster, the title, the principal location. Those are wiki-salient (easy to look up, dull to be asked). Chase fan-salient facts instead: the thing a devoted fan of THIS specific work would be delighted to be recognized for knowing — the rewatch-catch, the running joke, the exact wording of a famous line, the specific beat or object fans hold onto. Apply by difficulty tier:
@@ -879,13 +895,16 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
 // check whether the *stated answer is actually correct for the question*, nor
 // whether the question's *setup is factually true* — they catch repeats, leaks,
 // and vagueness, and the quality gate's FALSE_PREMISE check is tuned to a "high
-// bar / not subtle" posture that misses buried errors. Two hallucinations sail
+// bar / not subtle" posture that misses buried errors. Three hallucinations sail
 // through without this gate: (1) a good question paired with the wrong answer
 // (e.g. asking who wrote "Rubyfruit Jungle" but answering with a politician),
-// and (2) a correct answer paired with a FALSE PREMISE in the setup (e.g.
+// (2) a correct answer paired with a FALSE PREMISE in the setup (e.g.
 // "Bach wrote six works for solo strings — three for violin and three for
 // cello" — he wrote six of each; the keyed answer is right but the count is a
-// lie). This gate checks BOTH the answer and the premise. User-authored
+// lie), and (3) an UNANSWERABLE PRESUPPOSITION — every asserted clause true,
+// but the ask itself demands a fact the source leaves open (the Macbeth witches
+// "plan" a weather they only ever pose as a question; reported by Josh
+// 2026-08-07). This gate checks the answer, the premise, and the ask. User-authored
 // questions get the equivalent via vetQuestion() on the /api/questions path;
 // bot-generated daily questions had no equivalent until this gate. Like the
 // others it is batch-based, runs in parallel, and fails open.
@@ -897,11 +916,12 @@ For each question decide:
   - the question's clearly-correct answer is a different thing/person than the stated answer, OR
   - the question and answer come from mismatched subjects (e.g. a literature question answered with an unrelated political figure), OR
   - the question's SETUP asserts a false fact — a wrong count, date, attribution, authorship, or relationship — EVEN WHEN the stated answer is correct. E.g. "Bach composed six works for unaccompanied strings — three for solo violin and three for solo cello — what collective title is given to the cello set?" answered "Cello Suites": the answer is correct, but the premise is false (Bach wrote six of each, not three), so this is WRONG.
+  - the QUESTION PRESUPPOSES something its source never settles — it asks which/what-kind/how-many about a matter the work RAISES but leaves OPEN (a question a character asks that goes unanswered, a possibility floated and dropped), so no keyed answer can be correct. E.g. "In Shakespeare's Macbeth, the witches open the play by agreeing to meet again after a battle. In what kind of weather do they plan to reconvene?" answered "thunder, lightning, or rain": those three are the options inside the First Witch's OPENING QUESTION, never a decision — the scene settles when, where, and whom, but the weather is left hanging. Flag this even though every clause of the setup is TRUE; the falsehood is in the ask, not the assertion.
   - the EXPLAINER (e=) asserts a false incidental fact — a wrong date, count, attribution, or adjacent-work claim — EVEN WHEN the question, answer, and setup are all correct. The explainer is fact-checked downstream exactly like the question, so a decorative wrong aside there (e.g. calling a 1979 anthology "the 1973 anthology") demotes the whole item. Judge only clear factual errors, not phrasing.
-- OK — the stated answer is correct (or a reasonable equivalent/alternate form) AND neither the setup nor the explainer contains a false factual claim.
+- OK — the stated answer is correct (or a reasonable equivalent/alternate form), neither the setup nor the explainer contains a false factual claim, AND the question presupposes nothing its source leaves unsettled.
 - UNVERIFIABLE — you genuinely cannot verify the fact (extremely niche, recent, or personal). Treat these as OK; do NOT flag them.
 
-Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar applies — when in doubt, leave it. Do not flag for style, difficulty, phrasing, or ambiguity; only for a factually incorrect stated answer or a factually false premise.
+Flag (drop) ONLY questions you judge WRONG with high confidence. A high bar applies — when in doubt, leave it. Do not flag for style, difficulty, phrasing, or ambiguity; only for a factually incorrect stated answer, a factually false premise, or an ask the source never settles.
 
 Return JSON only:
 { "drop_indices": [list of zero-based indices that are WRONG], "reasons": { "<index>": "<short reason naming the correct answer or correcting the false premise>" } }
@@ -1494,6 +1514,41 @@ async function callLlmOnce(
   return parseQuestions(text);
 }
 
+/**
+ * Interleave the viewer's own fact-key history with the SHARED-BANK keys so both
+ * survive buildUserPrompt's `.slice(0, RECENT_FACT_KEY_LIMIT)`. Pure; exported
+ * for tests.
+ *
+ * Appending bank keys would have been a no-op for exactly the users who matter:
+ * the prompt renders only the first `promptLimit` entries, so any player with a
+ * full history would have had every bank key sliced away. Reserving part of the
+ * SAME budget keeps the rendered block at `promptLimit` entries — the change
+ * costs zero prompt tokens and only reallocates them.
+ *
+ * Viewer keys keep the majority because they are the harder constraint (a fact
+ * the player answered must never reappear; banked stock is merely wasteful), and
+ * any viewer keys pushed past the prompt cap are still appended so callers
+ * building an avoid SET from the result lose nothing.
+ */
+export function mergeFactKeyAvoid(
+  viewerKeys: AvoidFactKeyEntry[],
+  bankKeys: AvoidFactKeyEntry[],
+  promptLimit: number = RECENT_FACT_KEY_LIMIT,
+  bankReserve: number = BANK_FACT_KEY_PROMPT_RESERVE,
+): AvoidFactKeyEntry[] {
+  const reserve = Math.max(0, Math.min(bankReserve, promptLimit));
+  const viewerBudget = Math.max(0, promptLimit - reserve);
+  const seen = new Set(viewerKeys.map((e) => e.factKey));
+  // A fact already in the viewer's history needs no second slot — it is the
+  // stronger constraint and is rendered anyway.
+  const bankOnly = bankKeys.filter((e) => !seen.has(e.factKey));
+  return [
+    ...viewerKeys.slice(0, viewerBudget),
+    ...bankOnly.slice(0, reserve),
+    ...viewerKeys.slice(viewerBudget),
+  ];
+}
+
 export async function generateDailyQuestions(
   domains: string[],
   count: number,
@@ -1541,7 +1596,46 @@ export async function generateDailyQuestions(
     text,
   }));
   const avoidList: AvoidQuestionEntry[] = [...extraEntries, ...previousQuestionTexts];
-  const factKeyAvoidSet = new Set(previousFactKeys.map((entry) => entry.factKey));
+
+  // Bank-wide fact novelty (2026-08-07). previousFactKeys is per-VIEWER — what
+  // THIS user has seen or answered — which is the right question for serving and
+  // the wrong one for spend: a fact banked during ANOTHER user's round is
+  // invisible to it, so the model kept re-deriving facts the shared bank already
+  // held. Measured: 717 of 2,553 rows redundant by fact_key, 492 still servable,
+  // 92% byte-identical, none spanning difficulty tiers. Per-user serving dedup
+  // meant no player ever saw a repeat — we just paid for unreachable stock.
+  //
+  // This must reach the PROMPT, not just the persist guard: by the time a row is
+  // dropped at persist we have already paid for the tokens that produced it. The
+  // saving comes from the model picking a different fact in the first place —
+  // which is what supply-backfill.ts:299 (loadAvoid) has always done and this
+  // per-user path never did. Fail-open: a DB miss just leaves the per-user set
+  // in charge, exactly as before.
+  const labelByDomainKey = new Map(domains.map((label) => [domainKey(label), label]));
+  const bankFactKeys: AvoidFactKeyEntry[] = await getServableBankFactKeys([...labelByDomainKey.keys()])
+    .then((rows) =>
+      rows.map((r) => ({ domain: labelByDomainKey.get(r.domainKey) ?? r.domainKey, factKey: r.factKey })),
+    )
+    .catch((error) => {
+      console.warn('[daily/generate-questions] bank fact-key avoid unavailable (non-fatal)', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    });
+
+  // Ordering matters, and naively appending would have made this inert: the
+  // prompt renders only the FIRST RECENT_FACT_KEY_LIMIT (200) entries, so for any
+  // active player with 200+ recent facts the bank keys would be sliced off
+  // entirely — no effect precisely where the bank is deepest. Reserve a slice of
+  // that same budget instead, so the block stays exactly 200 entries: the change
+  // adds ZERO prompt tokens and is purely a reallocation of them. Viewer history
+  // keeps the majority (it is the harder constraint — a fact the player
+  // personally answered must never reappear, whereas banked stock is only
+  // wasteful). Overflow viewer keys are appended past the prompt cap so they
+  // still reach factKeyAvoidSet, leaving the persist-time guard as strong as it
+  // was before.
+  const factKeyAvoid = mergeFactKeyAvoid(previousFactKeys, bankFactKeys);
+  const factKeyAvoidSet = new Set(factKeyAvoid.map((entry) => entry.factKey));
 
   // One Sonnet call per chunk, run concurrently. callLlmOnce caps output at
   // 2000 tokens; keeping each request <= GENERATION_CHUNK_SIZE keeps the reply
@@ -1555,7 +1649,7 @@ export async function generateDailyQuestions(
         chunkDomains,
         chunkCount,
         avoidList,
-        previousFactKeys,
+        factKeyAvoid,
         domainSkips,
         difficultyPreference,
         domainDifficultyOverrides,
@@ -1576,7 +1670,7 @@ export async function generateDailyQuestions(
         chunkDomains,
         chunkCount,
         avoidList,
-        previousFactKeys,
+        factKeyAvoid,
         domainSkips,
         difficultyPreference,
         domainDifficultyOverrides,
@@ -1958,6 +2052,11 @@ export async function generateDailyQuestions(
     // Belt-and-suspenders: even with the avoid list, the LLM occasionally
     // returns a fact_key that matches a recent one (or duplicates another
     // question in the same batch). Drop those rather than persist them.
+    // factKeyAvoidSet now also carries the SERVABLE bank keys for this round's
+    // domains (see the bank-novelty block above), so this backstops the shared
+    // bank too — but note it only keeps the redundant ROW out; the tokens were
+    // already spent. The prompt-side avoid is what actually saves the money, and
+    // over-provisioning + the chunk retry absorb a drop here as they always have.
     const factKey = question.fact_key;
     if (factKey) {
       if (factKeyAvoidSet.has(factKey) || seenFactKeysThisBatch.has(factKey)) {

@@ -49,6 +49,35 @@ describe('prefilterForVerification — FALSE PREMISE routing', () => {
     if (d.needsVerification) expect(d.dimensions).toContain('false_premise');
   });
 
+  it('routes a two-sentence premise stem that clears no other setup test', () => {
+    // The reported Macbeth stem, minus its trailing "— and with whom?" clause.
+    // The PROD row carried that em-dash and so did route (the verifier then
+    // wrongly stamped it ok — that half is fixed in verify-question.ts). This
+    // dash-free variant is the separate latent gap it exposed: no dash, two
+    // comma-clauses, 27 words — ONE under the length floor — so a stem with a
+    // full declarative setup sentence scored as a bare ask and skipped
+    // verification outright. Sentence-level setup is what earns the routing now,
+    // paired with the "three witches" count signal.
+    const d = decide(
+      "In Shakespeare's 'Macbeth,' the three witches open the play by agreeing to meet again after a battle. In what kind of weather do they plan to reconvene?",
+      'Thunder, lightning, or rain',
+    );
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('false_premise');
+  });
+
+  it('still skips a bare ask whose only signal sits in a single sentence', () => {
+    // The sentence-level setup test must not swallow the skip set: one sentence,
+    // one signal ("first") = still a bare ask, still free.
+    const d = decide('Who was the first president of the United States?', 'George Washington');
+    expect(d.needsVerification).toBe(false);
+  });
+
+  it('does not read an abbreviation period as a second sentence', () => {
+    const d = decide('Dr. Seuss wrote which book about a mischievous feline?', 'The Cat in the Hat');
+    expect(d.needsVerification).toBe(false);
+  });
+
   it('routes the niche-fiction recurrence premise (the reported Spy School case)', () => {
     const d = decide(
       "In the Spy School series, one of the recurring antagonists is a student who repeatedly proves to be a thorn in Ben's side — not because he's a skilled spy, but because he's a bully and a schemer within the academy itself. What is this student's name?",

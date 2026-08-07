@@ -157,6 +157,48 @@ describe.skipIf(!evalsEnabled)('verifyQuestion — web-grounded (live)', () => {
     EVAL_TIMEOUT_MS,
   );
 
+  // Reported 2026-08-07 (Josh): every asserted clause here is TRUE — the witches
+  // do open the play, there is a battle, they do agree to meet again — so the
+  // setup-assertion posture that catches Bach/Spy School has nothing to bite on.
+  // The break is the INTERROGATIVE's presupposition: "In thunder, lightning, or
+  // in rain?" is the First Witch's opening QUESTION, and Act 1 Sc 1 settles when,
+  // where and whom while leaving the weather unresolved. Must demote, not 'ok' —
+  // and specifically NOT 'unverifiable': the source is perfectly clear, and what
+  // it is clear about is that no such plan exists.
+  it(
+    'demotes a question presupposing a decision the source never makes (Macbeth weather)',
+    async () => {
+      const result = await mod.verifyQuestion({
+        questionText:
+          "In Shakespeare's 'Macbeth,' the three witches open the play by agreeing to meet again after a battle. In what kind of weather do they plan to reconvene?",
+        answer: 'Thunder, lightning, or rain',
+        explanation: null,
+        canonicalSubcategory: 'Macbeth',
+        broadCategory: 'Literature',
+        dimensions: ['false_premise'],
+      });
+      expect(result?.outcome).toBe('demoted');
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'leaves the same Macbeth scene alone when asked on what it actually settles',
+    async () => {
+      const result = await mod.verifyQuestion({
+        questionText:
+          "The three witches open Shakespeare's 'Macbeth' by planning where to meet once the battle is done. Whom do they intend to find there?",
+        answer: 'Macbeth',
+        explanation: null,
+        canonicalSubcategory: 'Macbeth',
+        broadCategory: 'Literature',
+        dimensions: ['false_premise'],
+      });
+      expect(result?.outcome).toBe('ok');
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
   it(
     'leaves a clean mainstream question alone',
     async () => {
