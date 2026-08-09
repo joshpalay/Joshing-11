@@ -77,10 +77,21 @@ export async function notifyAuthorOfReturnRecovery(params: {
     }
     if (!name) name = 'Someone';
     const baseUrl = params.baseUrl ?? process.env.NEXT_PUBLIC_BASE_URL ?? '';
-    // PLACEHOLDER COPY — replaced wholesale in Phase 4 from the approved pass.
-    const message = `${name} came back to your question and got it. ${baseUrl}/activities`.trim();
+    // §6/§7-A1 — the author's side of the payoff.
+    //
+    // "Came back to" is doing deliberate work: the author DOES need to know this
+    // is the wrong→right moment (that is the entire signal §7-A1 wants carried
+    // back), but they learn it as a return rather than as their friend's failure.
+    // No "missed", "wrong", "finally", or "again" — and the sentence that lands
+    // last is about what the answerer now knows, not what they once didn't.
+    const message =
+      `${name} came back to one of your questions and got it. ` +
+      `Something you know is now something they know too. ${baseUrl}/activities`;
+    // One SMS segment. Mirrors buildDailyReminderMessage's guard rather than
+    // trusting the copy to stay short through future edits.
+    const body = message.length > 160 ? `${message.slice(0, 157)}…` : message;
 
-    await sendSms(author.phone, message, 'missed_return_recovered', authorUserId);
+    await sendSms(author.phone, body, 'missed_return_recovered', authorUserId);
   } catch (error) {
     console.warn('[missed-return] author push failed', {
       authorUserId,

@@ -41,6 +41,21 @@ type TodaysFiveCardProps = {
    * is suppressed by the home page when this is >0 in the completed state.
    */
   initialMissedCount?: number
+  /**
+   * D-MISSED-RETURN-01 §7-E — the viewer has questions eligible to come back.
+   *
+   * A BOOLEAN, not a count, and deliberately separate from `initialMissedCount`.
+   * §7-E1 ratified "widen the missed count to cover both scopes", but doing that
+   * literally breaks two things: the count reaches the hundreds on real accounts
+   * (177 for one live user), and "Play (n) Missed Questions" links to
+   * /daily/catchup, which cannot serve a wrong-scope return — those arrive one
+   * at a time inside the Daily Five (R2), so the button would promise a
+   * destination that does not exist. Magnitude is also meaningless to the
+   * player: with a 7-day floor and a 3-return cap they will never see most of
+   * them. So Home acknowledges that misses aren't lost WITHOUT a number and
+   * WITHOUT a link. See the PR for the flag raised on this.
+   */
+  hasReturningQuestions?: boolean
 }
 
 const CUSTOMIZE_DAILY_LINK_CLASS = [
@@ -136,6 +151,7 @@ function OutcomeDot({ outcome, label }: { outcome: SlotOutcome; label: string })
 export default function TodaysFiveCard({
   initialStatus = null,
   initialMissedCount = 0,
+  hasReturningQuestions = false,
 }: TodaysFiveCardProps = {}) {
   const [status, setStatus] = useState<DailyStatus | null>(initialStatus)
   // Client-only reset-time label; null during SSR to keep hydration stable.
@@ -382,6 +398,13 @@ export default function TodaysFiveCard({
             >
               See today&apos;s recap
             </Link>
+            {hasReturningQuestions ? (
+              // No count, no link — see the prop's doc comment. This states that
+              // misses aren't lost; it does not offer a pile to go clear.
+              <p className="m-0 text-quiet leading-[1.5] text-[var(--brand-ink-400)]">
+                Some you didn&rsquo;t land will find their way back to you.
+              </p>
+            ) : null}
           </div>
         ) : (
           // Branch B — nothing left to catch up on (daily five AND any catch-up

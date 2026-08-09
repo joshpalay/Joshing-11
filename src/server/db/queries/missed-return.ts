@@ -48,7 +48,7 @@ import {
 /** Rows come back pre-shaped for both consumers: the queue builder and Customize. */
 export async function getEligibleReturnCandidates(
   userId: string,
-  { now = new Date() }: { now?: Date } = {},
+  { now = new Date(), limit }: { now?: Date; limit?: number } = {},
 ): Promise<ReturnCandidate[]> {
   try {
     const cooldownCutoff = new Date(
@@ -141,6 +141,7 @@ export async function getEligibleReturnCandidates(
         AND (s."lastReturnedAt" IS NULL OR s."lastReturnedAt" <= ${cooldownCutoff})
         -- (3) lifetime cap, wrong scope only.
         AND (u.scope <> 'wrong' OR COALESCE(s."returnCount", 0) < ${MISSED_RETURN_LIFETIME_CAP})
+      ${limit ? sql`LIMIT ${limit}` : sql``}
     `);
 
     // db.execute returns a driver result ({ rows }) on node-postgres and a bare
@@ -172,6 +173,27 @@ export async function getEligibleReturnCandidates(
     if (pgErrorCode(error) === '42P01') return [];
     throw error;
   }
+}
+
+/**
+ * "Does this viewer have anything waiting to come back?" — the Home surface's
+ * question (§7-E), which needs presence, not the list.
+ *
+ * Runs the SAME eligibility query with LIMIT 1 rather than a second copy of the
+ * rule: duplicating seven conditions into a bespoke EXISTS query would guarantee
+ * the two drift apart.
+ *
+ * Measured on prod, the LIMIT is NOT much of a speed-up — the CTEs materialize
+ * before it applies, so it costs ~85-170ms either way (177-candidate account:
+ * 170ms full, and agreeing with the full query on every account tested). What it
+ * buys is bounded row transfer, and it runs inside Home's existing Promise.all,
+ * so it adds parallel time rather than serial. If Home's budget (§12.6, < 1.5s)
+ * ever gets tight, this is a real line item — cache it or fold it into an
+ * existing query rather than assuming the LIMIT makes it free.
+ */
+export async function hasEligibleReturnCandidates(userId: string): Promise<boolean> {
+  const [first] = await getEligibleReturnCandidates(userId, { limit: 1 });
+  return Boolean(first);
 }
 
 /**
