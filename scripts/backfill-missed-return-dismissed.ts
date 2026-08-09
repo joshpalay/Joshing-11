@@ -35,7 +35,9 @@
  *   npx tsx scripts/backfill-missed-return-dismissed.ts
  *   npx tsx scripts/backfill-missed-return-dismissed.ts --apply
  */
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import 'dotenv/config';
+
+import { and, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { db, dailyQueues, feedItems, missedReturnDismissed, questions } from '../src/server/db';
 
@@ -57,7 +59,9 @@ async function collectDailyPairs(): Promise<Pair[]> {
       AND slot->>'question_id' IS NOT NULL
       AND slot->>'generated_question_id' IS NULL
   `);
-  return (rows as unknown as { userId: string; questionId: string }[]).map((r) => ({
+  type Row = { userId: string; questionId: string };
+  const list = (rows as unknown as { rows?: Row[] }).rows ?? (rows as unknown as Row[]);
+  return list.map((r) => ({
     userId: r.userId,
     questionId: r.questionId,
     source: 'daily' as const,
@@ -102,7 +106,7 @@ async function main() {
     const rows = await db
       .select({ id: questions.id })
       .from(questions)
-      .where(sql`${questions.id} = ANY(${chunk})`);
+      .where(inArray(questions.id, chunk));
     for (const r of rows) liveQuestionIds.add(r.id);
   }
 
