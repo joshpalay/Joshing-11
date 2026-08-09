@@ -522,6 +522,11 @@ export async function POST(request: NextRequest) {
       recordAnswerSideEffects({
       userId: session.userId,
       isCorrect,
+      // A return answered WRONG records nothing new (the player was already
+      // wrong on this question) but WOULD occupy the single catch-up slot that
+      // unique(source_type, question_id, answered_by_user_id) allows, blocking
+      // the correct answer on a later return. See skipMasteryEvent's note.
+      skipMasteryEvent: isReturnSlot(slot) && !isCorrect,
       logTag: 'daily/answer',
       logContext: { generatedQuestionId: question.generatedId },
       masteryEvent: {
@@ -529,7 +534,25 @@ export async function POST(request: NextRequest) {
         domain: question.canonicalSubcategory,
         answerState: masteryAnswerState,
         pointsAwarded,
-        sourceType: 'daily',
+        // D-MISSED-RETURN-01 — a RETURN slot writes the CATCH-UP source type,
+        // not the live one. This is a correctness fix, not a taxonomy nicety.
+        //
+        // MASTERY_EVENTS carries unique(source_type, question_id,
+        // answered_by_user_id) and inserts `on conflict do nothing`. The
+        // player's ORIGINAL wrong answer already occupies ('live_correct',
+        // question, player) — so a returning question answered correctly under
+        // 'daily' was silently deduped away: no recovery points, no
+        // `first_correct_after_wrong`, and therefore no Recovered-deck entry,
+        // which breaks §3.1's whole premise that the return loop's exit IS the
+        // Recovered deck's entrance. Verified live on 2026-08-09: a correct
+        // return wrote nothing at all.
+        //
+        // 'catchup' maps to 'catchup_correct', which is a free slot for that
+        // (question, player) and is already one of the two source types the
+        // Recovered pool reads. It is also the honest label: §5 scores a return
+        // at the recovery/catch-up weight precisely because it is not a live
+        // first sighting.
+        sourceType: isReturnSlot(slot) ? 'catchup' : 'daily',
         // B-DOMAIN-BONUS-ROTATION-01: a +2 bonus (friend-sourced) domain stays out
         // of the core rotation until adopted — see writeMasteryEvent.
         isBonus: isBonusSlot(slot),
