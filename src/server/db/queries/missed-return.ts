@@ -127,7 +127,10 @@ export async function getEligibleReturnCandidates(
         u."lastSeenAt"                     AS "lastSeenAt",
         COALESCE(s."returnCount", 0)       AS "returnCount"
       FROM unioned u
-      JOIN "Question" qq ON qq.id = u."questionId" AND qq."deletedAt" IS NULL
+      -- NOTE: Question is snake_case here ("deleted_at"), unlike the camelCase
+      -- MissedReturn* tables above. Getting this wrong raises 42703, which is
+      -- deliberately NOT swallowed below — see the catch.
+      JOIN "Question" qq ON qq.id = u."questionId" AND qq.deleted_at IS NULL
       LEFT JOIN "MissedReturnState" s
         ON s."userId" = ${userId} AND s."questionId" = u."questionId"
       WHERE u."questionId" NOT IN (SELECT "questionId" FROM ever_correct)
@@ -145,10 +148,19 @@ export async function getEligibleReturnCandidates(
       returnCount: Number(row.returnCount ?? 0),
     }));
   } catch (error) {
-    // A pre-migration database yields no candidates rather than failing the
-    // whole queue build (mirrors getSetAsideQuestionIds' 42P01 handling).
-    const code = pgErrorCode(error);
-    if (code === '42P01' || code === '42703') return [];
+    // A pre-migration database (missing MissedReturnState/MissedReturnDismissed)
+    // yields no candidates rather than failing the whole queue build — mirrors
+    // getSetAsideQuestionIds' 42P01 handling.
+    //
+    // 42703 (undefined_column) is deliberately NOT swallowed. A wrong column name
+    // in the SQL above is a CODING error, not a migration state, and swallowing
+    // it would make this function silently return [] forever — the feature would
+    // ship, the flag would flip, and no return slot would ever appear. That is
+    // exactly the "feature lands dark" failure §8.3 warns about, and it nearly
+    // happened here: Question is snake_case ("deleted_at") while the MissedReturn*
+    // tables are camelCase. The orchestrator's own try/catch still degrades the
+    // build gracefully, but it LOGS instead of failing quietly.
+    if (pgErrorCode(error) === '42P01') return [];
     throw error;
   }
 }
