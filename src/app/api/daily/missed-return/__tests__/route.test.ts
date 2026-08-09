@@ -71,14 +71,41 @@ describe('/api/daily/missed-return/dismiss — §7-C dismiss and immediate undo'
       req('/api/daily/missed-return/dismiss', 'POST', { questionId: 'q1', userId: 'someone-else' }) as never,
     );
     expect(res.status).toBe(200);
-    expect(dismissMissedReturnMock).toHaveBeenCalledWith('user-1', 'q1');
+    // Defaults to canonical so the catch-up dual-write callers keep working.
+    expect(dismissMissedReturnMock).toHaveBeenCalledWith('user-1', 'q1', 'canonical');
   });
 
   it('DELETE undoes the dismiss', async () => {
     const res = await DELETE(req('/api/daily/missed-return/dismiss', 'DELETE', { questionId: 'q1' }) as never);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ restored: true });
-    expect(reinstateMissedReturnMock).toHaveBeenCalledWith('user-1', 'q1');
+    expect(reinstateMissedReturnMock).toHaveBeenCalledWith('user-1', 'q1', 'canonical');
+  });
+
+  // LLM-generated questions are ~96% of the wrong answers inside the Daily Five,
+  // so the dismiss path has to route them to the right column or the Customize
+  // Remove silently does nothing for almost everything on the list.
+  it('routes a generated question to the generated column', async () => {
+    const res = await POST(
+      req('/api/daily/missed-return/dismiss', 'POST', { questionId: 'g1', kind: 'generated' }) as never,
+    );
+    expect(res.status).toBe(200);
+    expect(dismissMissedReturnMock).toHaveBeenCalledWith('user-1', 'g1', 'generated');
+  });
+
+  it('undoes a generated dismiss against the generated column', async () => {
+    await DELETE(
+      req('/api/daily/missed-return/dismiss', 'DELETE', { questionId: 'g1', kind: 'generated' }) as never,
+    );
+    expect(reinstateMissedReturnMock).toHaveBeenCalledWith('user-1', 'g1', 'generated');
+  });
+
+  it('rejects an unknown kind rather than defaulting it', async () => {
+    const res = await POST(
+      req('/api/daily/missed-return/dismiss', 'POST', { questionId: 'q1', kind: 'nonsense' }) as never,
+    );
+    expect(res.status).toBe(400);
+    expect(dismissMissedReturnMock).not.toHaveBeenCalled();
   });
 
   it('a dismiss writes ONLY the dismiss — never a mastery/points side effect (§5)', async () => {

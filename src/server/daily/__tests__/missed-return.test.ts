@@ -20,6 +20,7 @@ const day = (n: number) => new Date(Date.UTC(2026, 0, n));
 
 function candidate(over: Partial<ReturnCandidate> = {}): ReturnCandidate {
   return {
+    kind: 'canonical',
     questionId: 'q1',
     scope: 'wrong',
     lastSeenAt: day(1),

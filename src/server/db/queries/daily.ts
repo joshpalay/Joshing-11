@@ -1499,16 +1499,29 @@ export function buildAuthoredSlot(authored: AuthoredPick, position: number): Que
  */
 export function buildReturnSlot(
   question: ReturnSlotQuestion,
-  candidate: { scope: 'wrong' | 'expired'; lastSeenAt: Date; returnCount: number },
+  candidate: {
+    kind: 'canonical' | 'generated';
+    scope: 'wrong' | 'expired';
+    lastSeenAt: Date;
+    returnCount: number;
+  },
   position: number,
 ): QueueSlot {
+  // The Daily Five serves both kinds and so does the return slot. A generated
+  // question is source='bot' with generated_question_id (never question_id) —
+  // getting this backwards would point the answer route at the wrong table and,
+  // for the dismiss path, violate the FK.
+  const isCanonical = candidate.kind === 'canonical';
   return {
     slot_index: position,
-    source: 'friend',
-    question_id: question.id,
-    author_id: question.creatorId ?? undefined,
-    author_name: question.authorName ?? null,
-    author_note: question.creatorNote ?? null,
+    source: isCanonical ? 'friend' : 'bot',
+    question_id: isCanonical ? question.id : undefined,
+    generated_question_id: isCanonical ? undefined : question.id,
+    // LLM-origin questions have no human author; the client renders its own
+    // non-person attribution for those rather than implying someone wrote it.
+    author_id: isCanonical ? question.creatorId ?? undefined : undefined,
+    author_name: isCanonical ? question.authorName ?? null : null,
+    author_note: isCanonical ? question.creatorNote ?? null : null,
     return_scope: candidate.scope,
     return_last_seen_at: candidate.lastSeenAt.toISOString(),
     // 1-based: the return the player is about to see. Expired first appearances

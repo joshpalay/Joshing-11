@@ -1087,13 +1087,15 @@ async function buildDailyQueueForUser(
       const candidates = await getEligibleReturnCandidates(userId);
       const selected = selectReturnCandidates(candidates);
       if (selected.length > 0) {
-        const questionRows = await loadReturnQuestions(selected.map((c) => c.questionId));
-        const byId = new Map(questionRows.map((q) => [q.id, q]));
+        const questionRows = await loadReturnQuestions(selected);
+        // Keyed by kind AND id: canonical and generated ids are separate
+        // namespaces and must never be looked up interchangeably.
+        const byKey = new Map(questionRows.map((q) => [`${q.kind}:${q.id}`, q]));
         const authorNames = await resolveCreatorNames(
           questionRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id)),
         );
         for (const candidate of selected) {
-          const question = byId.get(candidate.questionId);
+          const question = byKey.get(`${candidate.kind}:${candidate.questionId}`);
           if (!question) continue;
           slots.push(
             buildReturnSlot(
@@ -1106,11 +1108,19 @@ async function buildDailyQueueForUser(
               position,
             ),
           );
+          // A returning GENERATED question still needs its id recorded on the
+          // queue, exactly like any other bot slot, so the persist path and the
+          // answer route resolve it the same way.
+          if (candidate.kind === 'generated') generatedQuestionIds.push(candidate.questionId);
           position += 1;
           // Serve-time, not render-time (§8.5): the state is written as the slot
           // is built, so the cap and the 7-day floor hold even if the player
           // never opens the queue.
-          await recordReturnServed(userId, candidate.questionId, candidate.scope);
+          await recordReturnServed(
+            userId,
+            { kind: candidate.kind, questionId: candidate.questionId },
+            candidate.scope,
+          );
         }
       }
     }

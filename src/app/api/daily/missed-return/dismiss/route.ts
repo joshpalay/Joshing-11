@@ -22,7 +22,14 @@ export const dynamic = 'force-dynamic';
  * A dismiss here is NEUTRAL (§5): it writes one row and touches no mastery or
  * points state, so it can never read as a wrong answer.
  */
-const bodySchema = z.object({ questionId: z.string().min(1) });
+// `kind` names which table the id belongs to. It defaults to 'canonical' so the
+// catch-up dual-write callers (which only ever hold canonical ids) keep working
+// unchanged, but the Customize list always sends it explicitly — the Daily Five
+// serves LLM-generated questions too, and those are most of what gets missed.
+const bodySchema = z.object({
+  questionId: z.string().min(1),
+  kind: z.enum(['canonical', 'generated']).default('canonical'),
+});
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -33,7 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'questionId is required' }, { status: 400 });
   }
 
-  await dismissMissedReturn(session.userId, parsed.data.questionId);
+  await dismissMissedReturn(session.userId, parsed.data.questionId, parsed.data.kind);
   return NextResponse.json({ dismissed: true });
 }
 
@@ -46,6 +53,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'questionId is required' }, { status: 400 });
   }
 
-  await reinstateMissedReturn(session.userId, parsed.data.questionId);
+  await reinstateMissedReturn(session.userId, parsed.data.questionId, parsed.data.kind);
   return NextResponse.json({ restored: true });
 }
