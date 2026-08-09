@@ -632,7 +632,7 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     await tx.execute(sql`delete from "GeneratedQuestion" where "user_id" = ${userId}`);
 
     await tx.execute(sql`delete from "PLAYER_MASTERY" where "user_id" = ${userId}`);
-    await tx.execute(sql`delete from "CritiqueUsageDaily" where "user_id" = ${userId}`);
+    await tx.execute(sql`delete from "LlmUsageDaily" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "USER_DOMAIN_DIFFICULTY" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "USER_DOMAIN_EXCLUSIONS" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "PROFILE_DOMAIN_VISIBILITY" where "user_id" = ${userId}`);

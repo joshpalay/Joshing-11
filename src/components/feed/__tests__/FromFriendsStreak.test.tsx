@@ -110,14 +110,14 @@ describe('FromFriendsStreak — headerless (streak page) mode', () => {
 });
 
 describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', () => {
-  it('keeps a correctly-answered question as a spent "✓ Correct" card with a Send-onward affordance', () => {
+  it('keeps a correctly-answered question as a spent "Answered correctly" card with a Send-onward affordance', () => {
     const html = renderToStaticMarkup(
       <FromFriendsStreak item={streakItem([q('done', { priorResult: 'correct' }), q('fresh')])} />,
     );
     // The answered-correct question stays visible as a settled card (it is no
     // longer answerable but it IS forwardable), only the fresh one is playable.
     expect(html).toContain('Question done');
-    expect(html).toContain('✓ Correct');
+    expect(html).toContain('Answered correctly');
     expect(html).toContain('Send onward');
     expect(html).toContain('Question fresh');
     expect(answerCardCount(html)).toBe(1);
@@ -147,7 +147,7 @@ describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', 
     expect(html).not.toBe('');
     expect(html).toContain('Question a');
     expect(html).toContain('Question b');
-    expect(html).toContain('✓ Correct');
+    expect(html).toContain('Answered correctly');
     expect(html).toContain('Send onward');
     // None are answerable any more.
     expect(answerCardCount(html)).toBe(0);
@@ -193,6 +193,71 @@ describe('FromFriendsStreak — View Answer peek', () => {
     // A card the viewer already answered is not answerable and offers no peek.
     expect(html).not.toContain('View Answer');
     expect(answerCardCount(html)).toBe(0);
+  });
+});
+
+describe('FromFriendsStreak — settled answer reads BELOW the question (2026-08-06)', () => {
+  // Reverses the 2026-07-12 "verdict always leads" layout. The verdict keeps the
+  // slot above the question and now carries the OUTCOME ONLY; the answer strings
+  // move underneath, so the card reads question-then-answer.
+  it('puts the answer after the question, not before it', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([q('done', { priorResult: 'incorrect', correctAnswer: 'Red' })])}
+      />,
+    );
+    expect(html).toContain('Question done');
+    expect(html).toContain('Red');
+    // Reading order is the whole point of the change: the question's index in
+    // the markup must precede the answer's.
+    expect(html.indexOf('Question done')).toBeLessThan(html.indexOf('Red'));
+  });
+
+  it('keeps the verdict line free of the answer', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([q('done', { priorResult: 'incorrect', correctAnswer: 'Red' })])}
+      />,
+    );
+    // The old copy interpolated the answer into the verdict ("Not this time · Blue").
+    expect(html).toContain('Not this time');
+    expect(html).not.toContain('Not this time ·');
+  });
+
+  it('labels the answer on a prior-session card', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([q('done', { priorResult: 'incorrect', correctAnswer: 'Red' })])}
+      />,
+    );
+    // No submitted string survives a prior session (MASTERY_EVENTS never stored
+    // one), so such a card shows the answer alone — never a blank "You said".
+    expect(html).toContain('Answer');
+    expect(html).not.toContain('You said');
+  });
+
+  it('shows no answer line when the payload carries none', () => {
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak item={streakItem([q('done', { priorResult: 'correct' })])} />,
+    );
+    // A settled card whose answer didn't come through still renders cleanly —
+    // verdict and question only, no empty label.
+    expect(html).toContain('Answered correctly');
+    expect(html).not.toContain('You said');
+    expect(html).not.toContain('>Answer<');
+  });
+
+  it('never renders an answer on a still-answerable card', () => {
+    // The leak guard, restated at the component boundary: build-stream only
+    // populates correctAnswer for settled questions, but if an answerable one
+    // ever arrived carrying it, the card must not print it.
+    const html = renderToStaticMarkup(
+      <FromFriendsStreak
+        item={streakItem([q('fresh', { priorResult: null, correctAnswer: 'LEAKED' })])}
+      />,
+    );
+    expect(html).not.toContain('LEAKED');
+    expect(answerCardCount(html)).toBe(1);
   });
 });
 

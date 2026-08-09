@@ -403,7 +403,10 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
   // so Undo can flip a circle back here). Cleared per-domain by undoAddedTopic;
   // otherwise only grows for the session, since an add that's still standing
   // should keep reading as added even after a later add replaces the banner.
-  const [addedTopic, setAddedTopic] = useState<string | null>(null);
+  // `created` comes from the POST response: an idempotent re-add of an
+  // already-active topic returns created:false, and Undo must not render
+  // there — it would deactivate the pre-existing interest.
+  const [addedTopic, setAddedTopic] = useState<{ domain: string; created: boolean } | null>(null);
   const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
   const [undoing, setUndoing] = useState(false);
   useEffect(() => {
@@ -412,19 +415,19 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
     return () => window.clearTimeout(timer);
   }, [addedTopic]);
   const undoAddedTopic = async () => {
-    if (!addedTopic || undoing) return;
+    if (!addedTopic?.created || undoing) return;
     setUndoing(true);
     try {
       const response = await fetch('/api/declared-interests', {
         method: 'DELETE',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ domain: addedTopic }),
+        body: JSON.stringify({ domain: addedTopic.domain }),
       });
       if (!response.ok) throw new Error('undo failed');
       setAddedKeys((prev) => {
         const next = new Set(prev);
-        next.delete(domainKey(addedTopic));
+        next.delete(domainKey(addedTopic.domain));
         return next;
       });
       setAddedTopic(null);
@@ -513,12 +516,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           ...(territory.broadCategory ? { broadCategory: territory.broadCategory } : {}),
         }),
       });
+      const body = (await response.json().catch(() => null)) as
+        | { domain?: string; created?: boolean; message?: string }
+        | null;
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(body?.message ?? 'Could not add that territory.');
       }
-      setAddedTopic(territory.domain);
-      setAddedKeys((prev) => new Set(prev).add(domainKey(territory.domain)));
+      // Prefer the canonical domain the server persisted over our local label.
+      const domain = typeof body?.domain === 'string' && body.domain ? body.domain : territory.domain;
+      setAddedTopic({ domain, created: body?.created === true });
+      setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
       await loadKnowledge();
       return true;
     } catch (caught) {
@@ -537,12 +544,16 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ label, ...(broadCategory ? { broadCategory } : {}) }),
     });
+    const body = (await response.json().catch(() => null)) as
+      | { domain?: string; created?: boolean; message?: string }
+      | null;
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { message?: string } | null;
       throw new Error(body?.message ?? 'Could not add that topic.');
     }
-    setAddedTopic(label);
-    setAddedKeys((prev) => new Set(prev).add(domainKey(label)));
+    // Prefer the canonical domain the server persisted over our local label.
+    const domain = typeof body?.domain === 'string' && body.domain ? body.domain : label;
+    setAddedTopic({ domain, created: body?.created === true });
+    setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
     await loadKnowledge();
   };
 
@@ -902,16 +913,22 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
               <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
               <div className="flex-1">
                 <p className="m-0 text-quiet text-[var(--ink)]">
-                  Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                  {addedTopic.created ? (
+                    <>Added &ldquo;{addedTopic.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+                  ) : (
+                    <>&ldquo;{addedTopic.domain}&rdquo; is already in your topics.</>
+                  )}
                 </p>
-                <button
-                  type="button"
-                  className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
-                  onClick={() => void undoAddedTopic()}
-                  disabled={undoing}
-                >
-                  {undoing ? 'Undoing…' : 'Undo'}
-                </button>
+                {addedTopic.created ? (
+                  <button
+                    type="button"
+                    className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                    onClick={() => void undoAddedTopic()}
+                    disabled={undoing}
+                  >
+                    {undoing ? 'Undoing…' : 'Undo'}
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -996,16 +1013,22 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
                   <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
                   <div className="flex-1">
                     <p className="m-0 text-quiet text-[var(--ink)]">
-                      Added &ldquo;{addedTopic}&rdquo; — it&rsquo;ll show up in an upcoming round.
+                      {addedTopic.created ? (
+                        <>Added &ldquo;{addedTopic.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+                      ) : (
+                        <>&ldquo;{addedTopic.domain}&rdquo; is already in your topics.</>
+                      )}
                     </p>
-                    <button
-                      type="button"
-                      className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
-                      onClick={() => void undoAddedTopic()}
-                      disabled={undoing}
-                    >
-                      {undoing ? 'Undoing…' : 'Undo'}
-                    </button>
+                    {addedTopic.created ? (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                        onClick={() => void undoAddedTopic()}
+                        disabled={undoing}
+                      >
+                        {undoing ? 'Undoing…' : 'Undo'}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

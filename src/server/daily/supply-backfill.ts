@@ -25,6 +25,7 @@ import {
   parseQuestions,
   findQualityFailures,
   findFactualFailures,
+  findAnswerLeaks,
   type LlmQuestion,
 } from '@/server/daily/generate-questions';
 import { getReferencePassagesForDomains, type DomainReference } from '@/server/daily/domain-reference';
@@ -40,6 +41,7 @@ import { dryRoundsThreshold, nearCompleteRatio } from '@/server/daily/supply-sta
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { estimateCostUsd } from '@/server/llm/pricing';
+import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 
 export interface BackfillOptions {
   /** true → compute + return the plan, make ZERO generation calls, persist nothing. */
@@ -62,6 +64,19 @@ export interface BackfillOptions {
    * player hits the wall — once scale justifies the volume.
    */
   onlyDry?: boolean;
+  /**
+   * Per-run spend ceiling in USD, applied to the plan's own cost estimate.
+   * Domains are taken neediest-first while the running total stays within it;
+   * the rest wait for a later night. This is the "fills slower, costs less per
+   * day" dial (Josh, 2026-08-07) — the cron runs nightly, so a per-run cap IS a
+   * daily cap. Undefined/<=0 disables it and only `limit` applies.
+   *
+   * The FIRST actionable domain is always built even if it alone exceeds the
+   * budget: otherwise a single domain whose batch costs more than the ceiling
+   * would be skipped every night forever, and the backfill would silently make
+   * no progress while reporting itself healthy.
+   */
+  budgetUsd?: number | null;
 }
 
 const DEFAULTS = {
@@ -106,6 +121,12 @@ export type BackfillReport = {
   estCostUsd: number;
   plans: BackfillPlan[];
   built: { label: string; generated: number; persisted: number }[];
+  /** Spend ceiling in force for this run (null = uncapped). */
+  budgetUsd: number | null;
+  /** Estimated cost of the domains this run actually selected. */
+  selectedCostUsd: number;
+  /** Actionable domains deferred to a later night by the budget (not by `limit`). */
+  deferredForBudget: number;
 };
 
 type DomainRow = {
@@ -209,6 +230,31 @@ function estimateBatchCost(batch: number, ground: boolean): number {
   return gen + quality + factual + retrieval;
 }
 
+/**
+ * Take domains neediest-first while the running cost estimate stays within
+ * `budgetUsd`. Pure and exported for tests.
+ *
+ * Two deliberate choices:
+ *  - the first domain is ALWAYS taken, even if it alone busts the budget, so a
+ *    single expensive domain can never stall the backfill indefinitely;
+ *  - it does NOT skip past an unaffordable domain to fit a cheaper one behind
+ *    it. Plans are sorted by need, and cherry-picking cheap domains would
+ *    quietly invert that priority — a costly, genuinely-dry domain would keep
+ *    losing to trivial ones every night. Stop at the first thing that does not
+ *    fit and let it lead the next run.
+ */
+export function selectWithinBudget(plans: BackfillPlan[], budgetUsd: number | null): BackfillPlan[] {
+  if (budgetUsd === null || budgetUsd <= 0) return plans;
+  const out: BackfillPlan[] = [];
+  let spent = 0;
+  for (const p of plans) {
+    if (out.length > 0 && spent + p.estCostUsd > budgetUsd) break;
+    out.push(p);
+    spent += p.estCostUsd;
+  }
+  return out;
+}
+
 export function buildPlan(
   domains: DomainRow[],
   demand: Map<string, number>,
@@ -268,12 +314,16 @@ async function generate(
   count: number,
   avoidTexts: { domain: string; text: string }[],
   avoidFks: { domain: string; factKey: string }[],
+  subAngles: string[],
   references?: Map<string, DomainReference>,
 ): Promise<LlmQuestion[]> {
+  const subAnglesByDomain = subAngles.length > 0 ? new Map([[label, subAngles]]) : undefined;
   const userPrompt = buildUserPrompt(
     [label], count,
     avoidTexts as never, avoidFks as never,
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined,
+    subAnglesByDomain,
+    undefined, undefined, undefined, undefined,
     references,
   );
   const client = getAnthropicClient();
@@ -288,24 +338,48 @@ async function generate(
   return parseQuestions(extractTextContent(res.content));
 }
 
+const SUB_ANGLE_AVOID_LIMIT = 30;
+
 async function loadAvoid(domainKeyVal: string): Promise<{
   texts: { domain: string; text: string }[];
   fks: { domain: string; factKey: string }[];
   factKeys: Set<string>;
+  subAngles: string[];
 }> {
   const rows = (
     await pool.query(
-      'SELECT question_text, fact_key FROM "GeneratedQuestion" WHERE domain_key = $1 AND is_duplicate = false',
+      'SELECT question_text, fact_key, sub_angles FROM "GeneratedQuestion" WHERE domain_key = $1 AND is_duplicate = false',
       [domainKeyVal],
     )
-  ).rows as { question_text: string; fact_key: string | null }[];
+  ).rows as { question_text: string; fact_key: string | null; sub_angles: string[] | null }[];
   const factKeys = new Set<string>();
   const fks: { domain: string; factKey: string }[] = [];
+  // Dedup + cap sub_angles across every row already banked for this domain —
+  // this is the SAME "already covered, pick a new facet" signal the per-user
+  // path derives from getRecentSubAnglesByDomain, which backfill previously
+  // never fed into its own prompt (2026-07-26: measured against the live bank
+  // as the reason 4 near-duplicate "what building/factory" facts about the
+  // Triangle Shirtwaist fire each got a fresh fact_key and slipped past the
+  // raw text/fact_key avoid lists below — every one of them had independently
+  // tagged "Triangle Shirtwaist fire" as a sub_angle that nothing ever read
+  // back).
+  const seenAngles = new Set<string>();
+  const subAngles: string[] = [];
   for (const r of rows) {
     const nk = normalizeFactKey(r.fact_key);
     if (nk) { factKeys.add(nk); fks.push({ domain: domainKeyVal, factKey: nk }); }
+    for (const angle of r.sub_angles ?? []) {
+      if (typeof angle !== 'string') continue;
+      const trimmed = angle.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seenAngles.has(key)) continue;
+      seenAngles.add(key);
+      subAngles.push(trimmed);
+      if (subAngles.length >= SUB_ANGLE_AVOID_LIMIT) break;
+    }
   }
-  return { texts: rows.map((r) => ({ domain: domainKeyVal, text: r.question_text })), fks, factKeys };
+  return { texts: rows.map((r) => ({ domain: domainKeyVal, text: r.question_text })), fks, factKeys, subAngles };
 }
 
 async function buildDomain(
@@ -325,14 +399,22 @@ async function buildDomain(
     refs = await getReferencePassagesForDomains([p.label], hintByDomain).catch(() => undefined);
   }
 
-  const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, refs);
+  const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, avoid.subAngles, refs);
   if (generated.length === 0) return { generated: 0, persisted: 0, survivors: 0, persistedKeys: [] };
 
   const [ql, fa] = await Promise.all([findQualityFailures(generated), findFactualFailures(generated)]);
+  // Deterministic fail-closed backstop for the answer-leak case the Haiku
+  // quality gate can miss (e.g. a title that itself names the answer, as in
+  // "Rocko's Modern Life" → "Rocko"). generate-questions.ts's per-user path and
+  // the retrieval-grounded refill (screenGroundedBatch) both already run this;
+  // backfill-seeded bank rows are served indefinitely via verify-once-reuse-many
+  // (pickBankPicksForDomains), so a miss here persists until someone notices it
+  // live in a queue.
+  const al = findAnswerLeaks(generated);
   const seen = new Set(avoid.factKeys);
   const survivors: LlmQuestion[] = [];
   generated.forEach((q, i) => {
-    if (ql.toDrop.has(i) || fa.toDrop.has(i)) return;
+    if (ql.toDrop.has(i) || fa.toDrop.has(i) || al.toDrop.has(i)) return;
     const fk = normalizeFactKey(q.fact_key);
     if (fk && seen.has(fk)) return; // novelty vs bank + earlier in this batch
     if (fk) seen.add(fk);
@@ -344,37 +426,56 @@ async function buildDomain(
   }
 
   // Persist as unverified machine rows (mirrors the non-corroborated per-user
-  // path). The batch-verify + embedding-dedup sweeps promote/dedupe them later.
+  // path). Verification is promoted later by the batch-verify sweep, but
+  // embedding is NOT — there is no separate embedding sweep, so it must happen
+  // here, synchronously, the same way generate-questions.ts's per-user path
+  // does. Without it these rows are permanently invisible to the semantic
+  // answered-history dedup gate (only the weaker exact-fact_key match can catch
+  // them), and bank-pick — the path that serves them — has no semantic check of
+  // its own. That gap is what let a reworded Roosevelt/Milwaukee repeat reach a
+  // user whose original answer was 11 days and a differently-worded fact_key
+  // away (2026-08-02 incident).
   const trustTier = resolveMachineTrustTier({ askToAnswerVerified: false, corroborated: false });
   let persisted = 0;
   const persistedKeys: string[] = [];
+  const embedCandidates: { id: string; origin: 'machine'; questionText: string; factKey: string | null }[] = [];
   for (const q of survivors) {
     try {
       const taggedDomain = await resolveFinestNode(q.canonical_subcategory);
-      await db.insert(generatedQuestions).values({
-        userId: systemUserId,
-        canonicalSubcategory: taggedDomain,
-        domainKey: domainKey(taggedDomain),
-        broadCategory: q.broad_category,
-        questionText: q.question_text,
-        answer: q.answer,
-        explainer: q.explainer,
-        difficultyEstimate: q.difficulty_estimate,
-        basePoints: resolveDailyBasePoints(q.difficulty_estimate),
-        factKey: normalizeFactKey(q.fact_key),
-        subjectEntity: q.subject_entity,
-        subAngles: q.sub_angles,
-        trustTier,
-        generatedByProvider: 'anthropic',
-        expiresAt: DURABLE_EXPIRY,
-        usedInQueue: false,
-      });
+      const factKey = normalizeFactKey(q.fact_key);
+      const [row] = await db
+        .insert(generatedQuestions)
+        .values({
+          userId: systemUserId,
+          canonicalSubcategory: taggedDomain,
+          domainKey: domainKey(taggedDomain),
+          broadCategory: q.broad_category,
+          questionText: q.question_text,
+          answer: q.answer,
+          explainer: q.explainer,
+          difficultyEstimate: q.difficulty_estimate,
+          basePoints: resolveDailyBasePoints(q.difficulty_estimate),
+          factKey,
+          subjectEntity: q.subject_entity,
+          subAngles: q.sub_angles,
+          trustTier,
+          generatedByProvider: 'anthropic',
+          expiresAt: DURABLE_EXPIRY,
+          usedInQueue: false,
+        })
+        .returning();
       persisted += 1;
       persistedKeys.push(domainKey(taggedDomain));
+      embedCandidates.push({ id: row.id, origin: 'machine', questionText: row.questionText, factKey });
     } catch (err) {
       console.warn('[supply-backfill] persist failed', { domain: p.label, error: err instanceof Error ? err.message : String(err) });
     }
   }
+  // Same batched call the per-user path uses (B-DEDUP-EMBED-RELIABILITY): one
+  // Voyage request for the whole domain's survivors, not one per row. Best-
+  // effort internally — a disabled/failed embed leaves rows un-embedded but
+  // never blocks the backfill.
+  await embedAndResolveDuplicatesBatch(embedCandidates);
   return { generated: generated.length, persisted, survivors: survivors.length, persistedKeys };
 }
 
@@ -397,6 +498,8 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
   for (const key of demonstrated) demand.set(key, Math.max(demand.get(key) ?? 0, 1));
   const plans = buildPlan(domains, demand, cfg);
   const actionable = plans.filter((p) => p.batch > 0);
+  const budgetUsd = opts.budgetUsd && opts.budgetUsd > 0 ? opts.budgetUsd : null;
+  const selected = selectWithinBudget(actionable.slice(0, opts.limit), budgetUsd);
 
   const report: BackfillReport = {
     dryRun: opts.dryRun,
@@ -407,10 +510,13 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
     estCostUsd: Number(actionable.reduce((s, p) => s + p.estCostUsd, 0).toFixed(4)),
     plans,
     built: [],
+    budgetUsd,
+    selectedCostUsd: Number(selected.reduce((s, p) => s + p.estCostUsd, 0).toFixed(4)),
+    deferredForBudget: Math.min(actionable.length, opts.limit) - selected.length,
   };
   if (opts.dryRun) return report;
 
-  for (const p of actionable.slice(0, opts.limit)) {
+  for (const p of selected) {
     const r = await buildDomain(p, opts.systemUserId ?? null);
     report.built.push({ label: p.label, generated: r.generated, persisted: r.persisted });
 

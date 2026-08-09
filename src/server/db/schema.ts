@@ -517,18 +517,25 @@ export const playerMastery = pgTable(
 );
 
 
-export const critiqueUsageDaily = pgTable(
-  'CritiqueUsageDaily',
+// Generic per-user-per-day usage counter for rate-limited, on-demand LLM
+// endpoints (answer suggestion, verify-answer, crafter drafting, critique,
+// question creation, ...). One row per (user, day, action); `action` is a
+// free-form key each call site owns (e.g. 'critique', 'suggest-answer').
+// Superseded the critique-only `CritiqueUsageDaily` table (see migration
+// 0126) once a second caller needed the same pattern.
+export const llmUsageDaily = pgTable(
+  'LlmUsageDaily',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     usageDate: date('usage_date').notNull(),
-    critiqueCount: integer('critique_count').notNull().default(0),
+    action: text('action').notNull(),
+    count: integer('count').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique('CritiqueUsageDaily_user_id_usage_date_key').on(table.userId, table.usageDate),
-    index('CritiqueUsageDaily_user_id_usage_date_idx').on(table.userId, table.usageDate),
+    unique('LlmUsageDaily_user_id_usage_date_action_key').on(table.userId, table.usageDate, table.action),
+    index('LlmUsageDaily_user_id_usage_date_action_idx').on(table.userId, table.usageDate, table.action),
   ],
 );
 

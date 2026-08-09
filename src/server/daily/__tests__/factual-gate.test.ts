@@ -91,10 +91,10 @@ const evalsEnabled = process.env.RUN_LLM_EVALS === '1' && getAnthropicClient() !
 
 const EVAL_TIMEOUT_MS = 30_000;
 
-function q(text: string, answer: string, domain: string): LlmQuestion {
+function q(text: string, answer: string, domain: string, broad = 'Music'): LlmQuestion {
   return {
     canonical_subcategory: domain,
-    broad_category: 'Music',
+    broad_category: broad,
     question_text: text,
     answer,
     explainer: 'Context for the answer.',
@@ -144,6 +144,64 @@ describe.skipIf(!evalsEnabled)('factual gate premise check (live)', () => {
     async () => {
       const result = await findFactualFailures([
         q("What is the title of Beethoven's Third Symphony?", 'Eroica', 'Beethoven Symphonies'),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+});
+
+// Reported 2026-08-07 (Josh). Distinct from the Bach class above: there the
+// setup asserts something false. Here EVERY asserted clause is true — the
+// witches do open the play, there is a battle, they do agree to meet again —
+// and the break is in the ASK. "In thunder, lightning, or in rain?" is the First
+// Witch's question, not a plan; Act 1 Sc 1 settles when ("ere the set of sun"),
+// where ("upon the heath") and whom ("there to meet with Macbeth"), and leaves
+// the weather hanging. No keyed answer can be correct, so the presupposition
+// clause added to the gate prompt must drop it.
+describe.skipIf(!evalsEnabled)('factual gate presupposition check (live)', () => {
+  it(
+    'flags a question that presupposes a decision the source never makes',
+    async () => {
+      const result = await findFactualFailures([
+        q(
+          "In Shakespeare's 'Macbeth,' the three witches open the play by agreeing to meet again after a battle. In what kind of weather do they plan to reconvene?",
+          'Thunder, lightning, or rain',
+          'Macbeth',
+          'Literature',
+        ),
+      ]);
+      expect([...result.toDrop]).toEqual([0]);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag the same scene asked on what it actually settles',
+    async () => {
+      const result = await findFactualFailures([
+        q(
+          "The three witches open Shakespeare's 'Macbeth' by planning where to meet once the battle is done. Whom do they intend to find there?",
+          'Macbeth',
+          'Macbeth',
+          'Literature',
+        ),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag the open question asked AS an open question',
+    async () => {
+      const result = await findFactualFailures([
+        q(
+          "Shakespeare's 'Macbeth' opens with one witch asking when the three will meet again — and naming three possibilities in the same breath. What are they?",
+          'Thunder, lightning, or rain',
+          'Macbeth',
+          'Literature',
+        ),
       ]);
       expect(result.toDrop.size).toBe(0);
     },

@@ -84,7 +84,7 @@ function verifyAllowedDomains(): string[] | null {
 const SYSTEM_PROMPT = `You are fact-checking ONE already-published trivia question to decide whether it should stay in circulation. You are given the question, the answer the game marks correct, optionally its explanation, and which dimension(s) to scrutinise.
 
 Dimensions:
-- false_premise: a factual claim in the question's SETUP is untrue — a wrong count, date, attribution, relationship, recurrence, or which book/film/episode — EVEN IF the stated answer is correct. A PROPORTION or QUANTIFIER claim in the setup is load-bearing too: "the bulk of", "most of", "the majority of", "primarily", "mostly", "throughout". Confirming that something is INVOLVED or CENTRAL TO THE PREMISE does NOT confirm the stated proportion — a book can be ABOUT a White House mission while most of its action happens elsewhere; a game power can BELONG TO a character without letting a DIFFERENT character do the thing described. If your source establishes only the premise (that X is involved/central) and not the specific proportion, frequency, or agent the setup asserts, that claim is UNSETTLED — return "unverifiable", never "ok".
+- false_premise: a factual claim in the question's SETUP is untrue — a wrong count, date, attribution, relationship, recurrence, or which book/film/episode — EVEN IF the stated answer is correct. A PROPORTION or QUANTIFIER claim in the setup is load-bearing too: "the bulk of", "most of", "the majority of", "primarily", "mostly", "throughout". Confirming that something is INVOLVED or CENTRAL TO THE PREMISE does NOT confirm the stated proportion — a book can be ABOUT a White House mission while most of its action happens elsewhere; a game power can BELONG TO a character without letting a DIFFERENT character do the thing described. If your source establishes only the premise (that X is involved/central) and not the specific proportion, frequency, or agent the setup asserts, that claim is UNSETTLED — return "unverifiable", never "ok". A PRESUPPOSITION carried by the question's INTERROGATIVE counts as a setup claim too: "which X did Y choose", "what kind of X do they plan", "how many X did they settle on" each assert that a settled X exists. If the source RAISES that matter without RESOLVING it — a character's own unanswered question, an open debate, a possibility floated and dropped, a detail the work withholds — then no keyed answer can be correct and this is a false premise: return "demoted", EVEN WHEN every stated clause is true. E.g. "In Macbeth, in what kind of weather do the witches plan to reconvene?" — "thunder, lightning, or rain" are the options inside the First Witch's opening QUESTION, never a decision; the scene settles when, where, and whom, but not the weather. Distinguish this from a fact you merely cannot look up (that is "unverifiable"): here the source is clear, and what it is clear about is that the matter was never settled.
 - extra_fact: the answer or the explanation carries an unasked / adjacent claim that is wrong, even when the headline answer is right.
 - ambiguous_source: the question is NOT self-contained — it leans on a specific work, franchise, series, character, or fictional world WITHOUT naming that source in the question text, so it cannot be answered out of context. This is NOT a fact-check; it needs NO web search. You are given <subject> (the domain this question belongs to) as ground truth, but the PLAYER never sees it — they see ONLY the question text and a broad category label (e.g. "Film & Television"). Judge whether a reader who sees only that could tell WHICH work is being asked about. DEMOTE only when the question genuinely cannot be situated without knowing the hidden <subject> (e.g. "At the start of most episodes, Candace notices the boys' project — whom does she call to get them busted?" never says it is Phineas and Ferb). Do NOT demote when the source is named in the stem, OR when the content is self-evident to a reasonably informed player even without a title (a real-world subject, a famous historical event, a universally known character). When in doubt, treat it as self-contained and do not demote.
 
@@ -142,14 +142,25 @@ function buildUserMessage(input: VerifyInput): string {
  */
 export function buildVerifyRequestParams(input: VerifyInput): Anthropic.MessageCreateParamsNonStreaming {
   const allowedDomains = verifyAllowedDomains();
-  const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] = isWebSearchEnabled()
-    ? [{
-        type: 'web_search_20250305',
-        name: 'web_search',
-        max_uses: WEB_SEARCH_MAX_USES,
-        ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
-      }]
-    : undefined;
+  // ambiguous_source is a judgment about the question TEXT — the system prompt
+  // already says it "needs NO web search" and to "never search for it". When
+  // it is the ONLY routed dimension there is nothing to fact-check, so don't
+  // attach the tool at all rather than relying on the model to decline it.
+  //
+  // This is a cost lever, not a quality one: a searching call costs ~24x a
+  // knowledge-only one (measured 2026-08-03 — search results are re-processed
+  // across tool turns, ~21.6k extra cache tokens per call), and a search here
+  // buys nothing the dimension can use. Factual dimensions are unaffected.
+  const needsFactCheck = input.dimensions.some((d) => d !== 'ambiguous_source');
+  const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] =
+    isWebSearchEnabled() && needsFactCheck
+      ? [{
+          type: 'web_search_20250305',
+          name: 'web_search',
+          max_uses: WEB_SEARCH_MAX_USES,
+          ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
+        }]
+      : undefined;
   return {
     model: ANTHROPIC_MODEL,
     max_tokens: 1024,

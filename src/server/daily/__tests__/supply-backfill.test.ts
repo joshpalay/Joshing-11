@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPlan } from '@/server/daily/supply-backfill';
+import { buildPlan, selectWithinBudget } from '@/server/daily/supply-backfill';
 
 // buildPlan is the pure, demand-weighted planning core of the supply backfill.
 // These exercise the Layer 4 correctness fix: the buffer is gated on WORST-CASE
@@ -131,5 +131,42 @@ describe('buildPlan — proven-demand (dry) gate (default on)', () => {
     );
     expect(plan.skipReason).toBeNull();
     expect(plan.batch).toBeGreaterThan(0);
+  });
+});
+
+// Nightly spend pacing (2026-08-07, Josh): the backfill should fill the bank
+// over more nights at a chosen daily cost rather than in one burst when the
+// flag flips. selectWithinBudget is the pure selection half of that.
+describe('selectWithinBudget — nightly spend pacing', () => {
+  const plan = (label: string, estCostUsd: number) =>
+    ({ label, estCostUsd } as unknown as Parameters<typeof selectWithinBudget>[0][number]);
+
+  it('takes domains neediest-first while the running total fits', () => {
+    const out = selectWithinBudget(
+      [plan('a', 0.2), plan('b', 0.2), plan('c', 0.2)],
+      0.5,
+    );
+    expect(out.map((p) => p.label)).toEqual(['a', 'b']);
+  });
+
+  it('always takes the first domain even when it alone busts the budget', () => {
+    // Otherwise an expensive domain is skipped every night forever and the
+    // backfill reports itself healthy while making zero progress.
+    const out = selectWithinBudget([plan('huge', 5), plan('cheap', 0.01)], 0.5);
+    expect(out.map((p) => p.label)).toEqual(['huge']);
+  });
+
+  it('stops at the first domain that does not fit rather than cherry-picking cheaper ones behind it', () => {
+    // Plans arrive sorted by NEED. Skipping past 'b' to fit 'c' would quietly
+    // invert that priority and starve costly-but-genuinely-dry domains.
+    const out = selectWithinBudget([plan('a', 0.3), plan('b', 0.4), plan('c', 0.01)], 0.5);
+    expect(out.map((p) => p.label)).toEqual(['a']);
+  });
+
+  it('is a pass-through when the budget is null, zero, or negative', () => {
+    const plans = [plan('a', 9), plan('b', 9)];
+    for (const budget of [null, 0, -1]) {
+      expect(selectWithinBudget(plans, budget).length).toBe(2);
+    }
   });
 });

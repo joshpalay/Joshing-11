@@ -29,8 +29,15 @@ import { textContainsAnswer } from '@/server/questions/self-answering';
 import { assessQuestionDifficulty, fallbackQuestionDifficulty } from '@/server/questions/llm-difficulty';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { isReconcileAuthoredDomainsEnabled, reconcileAuthoredDomain } from '@/server/questions/reconcile-authored-domain';
+import { getDailyLlmUsageCount, incrementDailyLlmUsage } from '@/server/llm/rate-limit';
 
 export const dynamic = 'force-dynamic';
+
+// Every creation attempt spends 3 LLM calls (categorize, vet, difficulty).
+// Reserved up front, before those calls run, so a scripted create-loop can't
+// outrun the counter across the several early-return branches below.
+const CREATE_DAILY_LIMIT = 25;
+const CREATE_ACTION = 'create-question';
 
 function shouldIncludeShareRecipientDiagnostics() {
   return process.env.NODE_ENV !== 'production' || process.env.SHARE_TO_FEED_DEBUG_RECIPIENT_IDS === 'true';
@@ -89,6 +96,12 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ error: 'validation', fields: errors }, { status: 400 });
   }
+
+  const usageCount = await getDailyLlmUsageCount(session.userId, CREATE_ACTION);
+  if (usageCount >= CREATE_DAILY_LIMIT) {
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
+  }
+  await incrementDailyLlmUsage(session.userId, CREATE_ACTION, CREATE_DAILY_LIMIT);
 
   const { sendToFriendIds, shareToFeed, ...rawQuestionFields } = value;
 
