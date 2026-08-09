@@ -2319,6 +2319,36 @@ export async function register() {
     } catch {
       // DailyPreference may not exist yet on a fresh database.
     }
+    // Migration 0130 widens the return system to LLM-generated questions, which
+    // are ~96% of the wrong answers inside the Daily Five. The eligibility query
+    // selects "generatedQuestionId" on every queue build once the flag is on and
+    // would 42703 if the migration recorded without the columns present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "MissedReturnDismissed"
+        ADD COLUMN IF NOT EXISTS "generatedQuestionId" text
+        REFERENCES "GeneratedQuestion"("id") ON DELETE CASCADE
+      `);
+      await db.execute(sql`
+        ALTER TABLE "MissedReturnState"
+        ADD COLUMN IF NOT EXISTS "generatedQuestionId" text
+        REFERENCES "GeneratedQuestion"("id") ON DELETE CASCADE
+      `);
+      await db.execute(sql`ALTER TABLE "MissedReturnDismissed" ALTER COLUMN "questionId" DROP NOT NULL`);
+      await db.execute(sql`ALTER TABLE "MissedReturnState" ALTER COLUMN "questionId" DROP NOT NULL`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_dismissed_generated_active_unique"
+        ON "MissedReturnDismissed" ("userId", "generatedQuestionId")
+        WHERE "reinstatedAt" IS NULL AND "generatedQuestionId" IS NOT NULL
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_state_user_generated_unique"
+        ON "MissedReturnState" ("userId", "generatedQuestionId")
+        WHERE "generatedQuestionId" IS NOT NULL
+      `);
+    } catch {
+      // Tables arrive with 0127/0128 in normal migration order.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

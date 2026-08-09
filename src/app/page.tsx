@@ -20,6 +20,8 @@ import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/da
 import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
+import { hasEligibleReturnCandidates } from '@/server/db/queries/missed-return'
+import { isMissedReturnEnabled } from '@/server/daily/missed-return'
 import WelcomeTourScreen from '@/components/welcome/WelcomeTourScreen'
 
 const FEED_PAGE_SIZE = 20
@@ -166,8 +168,21 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
   // Home is the #1 §12.6 surface (< 1.5s) but is a streamed RSC, so it can't
   // set a Server-Timing header — log the server data-fetch span instead
   // (B-PERF-04) so the home hot path is queryable alongside the API routes.
-  const [queue, catchupItems] = await timeServerWork('home/todays-five', 'todays_five', () =>
-    Promise.all([getTodaysDailyQueue(userId), getCatchupQuestions(userId)]),
+  const [queue, catchupItems, hasReturningQuestions] = await timeServerWork(
+    'home/todays-five',
+    'todays_five',
+    () =>
+      Promise.all([
+        getTodaysDailyQueue(userId),
+        getCatchupQuestions(userId),
+        // D-MISSED-RETURN-01 §7-E — presence, not magnitude (see the prop's doc
+        // comment on TodaysFiveCard). Gated on the flag so Home is untouched
+        // while the feature is dark, and `.catch` so this can never be the
+        // reason the #1 perf-budget surface fails to render.
+        isMissedReturnEnabled()
+          ? hasEligibleReturnCandidates(userId).catch(() => false)
+          : Promise.resolve(false),
+      ]),
   )
 
   const status = buildDailyStatusSnapshot(queue)
@@ -184,6 +199,7 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
       <TodaysFiveCard
         initialStatus={status}
         initialMissedCount={missedCount}
+        hasReturningQuestions={hasReturningQuestions}
       />
       {showStandaloneCatchup ? (
         <MissedQuestionsCard count={missedCount} expiringCount={expiringCount} />

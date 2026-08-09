@@ -23,7 +23,13 @@ import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
-import { getBonusCount, getCoreSlots, getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
+import {
+  getBonusCount,
+  getCoreSlots,
+  getSlotPresence,
+  isAdditiveSlot,
+  isBonusSlot,
+} from '@/server/daily/bonus';
 import {
   buildSessionCloseLines,
   type SessionSlotSummary,
@@ -46,7 +52,44 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
   if (isBonusSlot(slot) && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
+  // D-MISSED-RETURN-01 R9 — a returning question is visibly marked as one and
+  // never disguised as new. The D-doc's own example for this is a date ("from
+  // March 4"), which is badge-shaped, so it rides the existing chip rather than
+  // restyling the attribution banner.
+  //
+  // WRONG SCOPE ONLY. The expired scope has never been seen by the player, so it
+  // gets no return framing at all and reads as a normal question arriving late
+  // (§2). Do not "fix" that asymmetry — it is the whole point of the split.
+  const returnedFrom = returnBadgeLabel(slot);
+  if (returnedFrom) badges.push({ label: returnedFrom, tone: 'muted' });
   return badges;
+}
+
+/**
+ * The correct-on-return acknowledgment (§6). Null unless a WRONG-scope return
+ * just landed correct — an ordinary correct keeps its ordinary reveal, and an
+ * expired-scope correct is a first correct like any other.
+ *
+ * Names the author when there is one, because the point is not that the player
+ * improved: it is that something one person knew is now something two people
+ * know. That is the sequel to the existing wrong-answer line, "This one belongs
+ * to {Creator}'s world — now it's in yours too."
+ */
+function returnRecoveryNote(slot: QueueSlot, isCorrect: boolean): string | null {
+  if (!isCorrect || slot.return_scope !== 'wrong') return null;
+  const author = slot.author_name?.trim();
+  return author ? `It stuck. ${author} would be glad.` : 'It stuck.';
+}
+
+/**
+ * The honest return label (R9). Null for anything that isn't a wrong-scope
+ * return, which is what keeps the expired scope unmarked.
+ */
+function returnBadgeLabel(slot: QueueSlot): string | null {
+  if (slot.return_scope !== 'wrong' || !slot.return_last_seen_at) return null;
+  const seen = new Date(slot.return_last_seen_at);
+  if (Number.isNaN(seen.getTime())) return null;
+  return `from ${seen.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`;
 }
 
 type QueueResponse = {
@@ -541,7 +584,10 @@ export default function DailyPage() {
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
           // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
           // is 0-based; bonus is additive and renders ✦, never a numeral).
-          numberMarker: { value: slot.slot_index + 1, bonus: isBonusSlot(slot) },
+          // `bonus` here means "additive — render ✦, never a numeral", which is
+          // true of a return slot for the same reason it's true of a +2: it
+          // appends past the five and is never in the denominator (R3).
+          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -614,7 +660,10 @@ export default function DailyPage() {
           isNew: true,
           // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
           // is 0-based; bonus is additive and renders ✦, never a numeral).
-          numberMarker: { value: slot.slot_index + 1, bonus: isBonusSlot(slot) },
+          // `bonus` here means "additive — render ✦, never a numeral", which is
+          // true of a return slot for the same reason it's true of a +2: it
+          // appends past the five and is never in the denominator (R3).
+          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
           badges: questionBadges(slot),
         });
         if (submitting && answer.trim()) {
@@ -733,7 +782,13 @@ export default function DailyPage() {
                         awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
                         reveal_canonical_answer: body.correctAnswer ?? body.answer,
                         reveal_explainer: body.explanation ?? body.explainer,
-                        reveal_breadcrumb: null,
+                        // D-MISSED-RETURN-01 §6 — the payoff moment. A correct
+                        // answer on a returning question deserves its own
+                        // acknowledgment, distinct from an ordinary correct:
+                        // it is the whole reason the feature exists. Register is
+                        // "it stuck", never "you finally got it" — the second
+                        // reading turns a connection event into a grade.
+                        reveal_breadcrumb: returnRecoveryNote(currentSlot, isCorrect),
                         reveal_quip: opts.gaveUp ? null : (body.consolation ?? null),
                         reveal_inside_joke: body.insideJoke ?? null,
                         reveal_inside_joke_kind: body.insideJokeKind ?? null,

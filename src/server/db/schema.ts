@@ -1665,15 +1665,26 @@ export const missedReturnDismissed = pgTable(
   {
     id: id(),
     userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    // Exactly ONE of these is set (DB CHECK, migration 0130), mirroring
+    // CatchupQueueItem.reportTarget and DailyQueue.slots — the two other places
+    // that carry "a question" that may live in either table.
+    questionId: text('questionId').references(() => questions.id, { onDelete: 'cascade' }),
+    generatedQuestionId: text('generatedQuestionId').references(() => generatedQuestions.id, {
+      onDelete: 'cascade',
+    }),
     dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
     reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
   },
   (table) => [
     index('MissedReturnDismissed_userId_idx').on(table.userId),
+    // One ACTIVE row per (user, question) per kind. The IS NOT NULL guards
+    // matter: without them the other kind's NULL column would collide.
     uniqueIndex('missed_return_dismissed_active_unique')
       .on(table.userId, table.questionId)
-      .where(sql`${table.reinstatedAt} IS NULL`),
+      .where(sql`${table.reinstatedAt} IS NULL AND ${table.questionId} IS NOT NULL`),
+    uniqueIndex('missed_return_dismissed_generated_active_unique')
+      .on(table.userId, table.generatedQuestionId)
+      .where(sql`${table.reinstatedAt} IS NULL AND ${table.generatedQuestionId} IS NOT NULL`),
   ],
 );
 
@@ -1703,14 +1714,24 @@ export const missedReturnState = pgTable(
   {
     id: id(),
     userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    // Exactly ONE of these is set (DB CHECK, migration 0130) — see the note on
+    // MissedReturnDismissed above.
+    questionId: text('questionId').references(() => questions.id, { onDelete: 'cascade' }),
+    generatedQuestionId: text('generatedQuestionId').references(() => generatedQuestions.id, {
+      onDelete: 'cascade',
+    }),
     lastReturnedAt: timestamp('lastReturnedAt', { withTimezone: true }).notNull().defaultNow(),
     returnCount: integer('returnCount').notNull().default(0),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('MissedReturnState_userId_idx').on(table.userId),
-    uniqueIndex('missed_return_state_user_question_unique').on(table.userId, table.questionId),
+    uniqueIndex('missed_return_state_user_question_unique')
+      .on(table.userId, table.questionId)
+      .where(sql`${table.questionId} IS NOT NULL`),
+    uniqueIndex('missed_return_state_user_generated_unique')
+      .on(table.userId, table.generatedQuestionId)
+      .where(sql`${table.generatedQuestionId} IS NOT NULL`),
   ],
 );
 

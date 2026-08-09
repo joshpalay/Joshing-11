@@ -26,6 +26,8 @@ import { Switch } from '@/components/ui/Switch';
 const UNDO_WINDOW_MS = 6000;
 
 export type MissedReturnItem = {
+  /** Which table the id belongs to — the Daily Five serves both kinds. */
+  kind: 'canonical' | 'generated';
   questionId: string;
   scope: 'wrong' | 'expired';
   questionText: string;
@@ -99,7 +101,7 @@ export function MissedReturnSection({
         const res = await fetch('/api/daily/missed-return/dismiss', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ questionId: item.questionId }),
+          body: JSON.stringify({ questionId: item.questionId, kind: item.kind }),
         });
         if (!res.ok) throw new Error('failed');
       } catch {
@@ -122,7 +124,7 @@ export function MissedReturnSection({
       const res = await fetch('/api/daily/missed-return/dismiss', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId: item.questionId }),
+        body: JSON.stringify({ questionId: item.questionId, kind: item.kind }),
       });
       if (!res.ok) throw new Error('failed');
       setItems((current) =>
@@ -182,7 +184,7 @@ export function MissedReturnSection({
             <ul className="mt-4 grid list-none gap-2 p-0">
               {items.map((item) => (
                 <li
-                  key={item.questionId}
+                  key={`${item.kind}:${item.questionId}`}
                   className="flex items-start justify-between gap-3 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--brand-card)] px-3 py-2.5"
                 >
                   <div className="flex-1">

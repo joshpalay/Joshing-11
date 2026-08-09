@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db, missedReturnDismissed } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
+import type { ReturnQuestionKind } from '@/server/daily/missed-return';
 
 /**
  * D-MISSED-RETURN-01 §3.3 — the per-(user, question) dismiss for the
@@ -59,20 +60,25 @@ export async function isReturnDismissed(userId: string, questionId: string): Pro
 export async function getReturnDismissedQuestionIds(
   userId: string,
   questionIds?: readonly string[],
+  kind: ReturnQuestionKind = 'canonical',
 ): Promise<Set<string>> {
   if (questionIds && questionIds.length === 0) return new Set();
+  const column =
+    kind === 'canonical' ? missedReturnDismissed.questionId : missedReturnDismissed.generatedQuestionId;
   try {
     const rows = await db
-      .select({ questionId: missedReturnDismissed.questionId })
+      .select({ questionId: column })
       .from(missedReturnDismissed)
       .where(
         and(
           eq(missedReturnDismissed.userId, userId),
           isNull(missedReturnDismissed.reinstatedAt),
-          ...(questionIds ? [inArray(missedReturnDismissed.questionId, [...questionIds])] : []),
+          ...(questionIds ? [inArray(column, [...questionIds])] : []),
         ),
       );
-    return new Set(rows.map((r) => r.questionId));
+    // Both id columns are nullable now (one per kind), so the other kind's rows
+    // come back as nulls — drop them rather than seeding the set with null.
+    return new Set(rows.map((r) => r.questionId).filter((id): id is string => id !== null));
   } catch (error) {
     if (pgErrorCode(error) === '42P01') return new Set(); // table not yet migrated
     throw error;
@@ -89,7 +95,13 @@ export async function getReturnDismissedQuestionIds(
  * existing catch-up dismiss route, and it must never be able to fail a dismiss
  * the player already performed successfully at the slot level.
  */
-export async function dismissMissedReturn(userId: string, questionId: string): Promise<void> {
+export async function dismissMissedReturn(
+  userId: string,
+  questionId: string,
+  kind: ReturnQuestionKind = 'canonical',
+): Promise<void> {
+  const column =
+    kind === 'canonical' ? missedReturnDismissed.questionId : missedReturnDismissed.generatedQuestionId;
   try {
     const [existing] = await db
       .select({ id: missedReturnDismissed.id })
@@ -97,7 +109,7 @@ export async function dismissMissedReturn(userId: string, questionId: string): P
       .where(
         and(
           eq(missedReturnDismissed.userId, userId),
-          eq(missedReturnDismissed.questionId, questionId),
+          eq(column, questionId),
           isNull(missedReturnDismissed.reinstatedAt),
         ),
       )
@@ -105,7 +117,11 @@ export async function dismissMissedReturn(userId: string, questionId: string): P
 
     if (existing) return;
 
-    await db.insert(missedReturnDismissed).values({ userId, questionId });
+    await db.insert(missedReturnDismissed).values({
+      userId,
+      questionId: kind === 'canonical' ? questionId : null,
+      generatedQuestionId: kind === 'canonical' ? null : questionId,
+    });
   } catch (error) {
     const code = pgErrorCode(error);
     // 23505: a concurrent dismiss won the race — the state we wanted is the
@@ -124,7 +140,13 @@ export async function dismissMissedReturn(userId: string, questionId: string): P
  * mechanism, different window — per D-doc §7-C the return surface simply never
  * builds a browsable archive on top of it.
  */
-export async function reinstateMissedReturn(userId: string, questionId: string): Promise<void> {
+export async function reinstateMissedReturn(
+  userId: string,
+  questionId: string,
+  kind: ReturnQuestionKind = 'canonical',
+): Promise<void> {
+  const column =
+    kind === 'canonical' ? missedReturnDismissed.questionId : missedReturnDismissed.generatedQuestionId;
   try {
     await db
       .update(missedReturnDismissed)
@@ -132,7 +154,7 @@ export async function reinstateMissedReturn(userId: string, questionId: string):
       .where(
         and(
           eq(missedReturnDismissed.userId, userId),
-          eq(missedReturnDismissed.questionId, questionId),
+          eq(column, questionId),
           isNull(missedReturnDismissed.reinstatedAt),
         ),
       );

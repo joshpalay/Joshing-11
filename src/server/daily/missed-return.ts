@@ -54,7 +54,23 @@ export function isMissedReturnEnabled(): boolean {
  */
 export type ReturnScope = 'wrong' | 'expired';
 
+/**
+ * Which table the question lives in. The Daily Five serves both, and a returning
+ * question must too: LLM-generated questions are ~96% of the wrong answers
+ * inside the five (measured on prod), so a canonical-only return system would
+ * almost never bring back anything the player actually missed.
+ *
+ * 'canonical'  — Question row (friend-authored, curated, or house)
+ * 'generated'  — GeneratedQuestion row (LLM-origin daily question)
+ *
+ * Mirrors the discriminated shape already used by CatchupQueueItem.reportTarget
+ * and DailyQueue.slots, which face exactly the same ambiguity.
+ */
+export type ReturnQuestionKind = 'canonical' | 'generated';
+
 export type ReturnCandidate = {
+  kind: ReturnQuestionKind;
+  /** Id within the table named by `kind` — NOT interchangeable between them. */
   questionId: string;
   scope: ReturnScope;
   /** When the player last saw it — the wrong answer, or the queue date it expired on. */
@@ -78,6 +94,9 @@ export function rankReturnCandidates(candidates: readonly ReturnCandidate[]): Re
     if (byScope !== 0) return byScope;
     const byAge = a.lastSeenAt.getTime() - b.lastSeenAt.getTime(); // oldest first
     if (byAge !== 0) return byAge;
+    // Kind is part of the tiebreak so two ids that collide across the two tables
+    // still order deterministically.
+    if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
     return a.questionId.localeCompare(b.questionId);
   });
 }

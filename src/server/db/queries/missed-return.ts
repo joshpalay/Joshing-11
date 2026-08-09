@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   dailyPreferences,
   db,
+  generatedQuestions,
   missedReturnState,
   questions,
 } from '@/server/db';
@@ -14,6 +15,7 @@ import {
   MISSED_RETURN_LIFETIME_CAP,
   rankReturnCandidates,
   type ReturnCandidate,
+  type ReturnQuestionKind,
   type ReturnScope,
 } from '@/server/daily/missed-return';
 
@@ -48,7 +50,7 @@ import {
 /** Rows come back pre-shaped for both consumers: the queue builder and Customize. */
 export async function getEligibleReturnCandidates(
   userId: string,
-  { now = new Date() }: { now?: Date } = {},
+  { now = new Date(), limit }: { now?: Date; limit?: number } = {},
 ): Promise<ReturnCandidate[]> {
   try {
     const cooldownCutoff = new Date(
@@ -61,14 +63,82 @@ export async function getEligibleReturnCandidates(
     );
 
     const rows = await db.execute<{
+      kind: ReturnQuestionKind;
       questionId: string;
       scope: ReturnScope;
       lastSeenAt: Date;
       returnCount: number;
     }>(sql`
       WITH
+      -- ================= GENERATED (LLM-origin) QUESTIONS =================
+      -- These live in GeneratedQuestion, and MASTERY_EVENTS.question_id is NULL
+      -- for them (the writer only ever stores eventQuestionId, which is
+      -- canonical-only). Their entire answer history exists in DailyQueue.slots
+      -- — which is exactly why catch-up sees them. Measured on prod, they are
+      -- ~96% of the wrong answers inside the Daily Five, so omitting them makes
+      -- the whole feature return almost nothing anyone actually missed.
+      gen_slots AS (
+        SELECT
+          slot->>'generated_question_id'                  AS gid,
+          COALESCE(slot->>'answered', 'false') = 'true'   AS answered,
+          slot->>'answer_state'                           AS answer_state,
+          slot->>'catchup_answer_state'                   AS catchup_answer_state,
+          slot->>'dismissed_at'                           AS dismissed_at,
+          q.queue_date::timestamptz                       AS queue_date
+        FROM "DailyQueue" q, LATERAL jsonb_array_elements(q.slots) AS slot
+        WHERE q.user_id = ${userId}
+          AND slot->>'generated_question_id' IS NOT NULL
+      ),
+      -- R6 for generated questions: a correct answer on EITHER the live round or
+      -- a later catch-up attempt retires it permanently.
+      gen_ever_correct AS (
+        SELECT DISTINCT gid FROM gen_slots
+        WHERE answer_state = 'correct' OR catchup_answer_state = 'correct'
+      ),
+      gen_wrong AS (
+        SELECT gid, max(queue_date) AS last_seen
+        FROM gen_slots
+        WHERE answered AND answer_state = 'incorrect' AND dismissed_at IS NULL
+        GROUP BY gid
+      ),
+      gen_expired AS (
+        SELECT gid, max(queue_date) AS last_seen
+        FROM gen_slots
+        WHERE NOT answered AND dismissed_at IS NULL AND queue_date < ${expiredBefore}
+        GROUP BY gid
+      ),
+      gen_dismissed AS (
+        SELECT "generatedQuestionId" AS gid FROM "MissedReturnDismissed"
+        WHERE "userId" = ${userId} AND "reinstatedAt" IS NULL
+          AND "generatedQuestionId" IS NOT NULL
+      ),
+      gen_unioned AS (
+        SELECT gid, 'wrong'::text AS scope, last_seen FROM gen_wrong
+        UNION ALL
+        SELECT gid, 'expired'::text AS scope, last_seen FROM gen_expired
+        WHERE gid NOT IN (SELECT gid FROM gen_wrong)
+      ),
+      generated_candidates AS (
+        SELECT
+          'generated'::text            AS kind,
+          g.gid                        AS "questionId",
+          g.scope                      AS scope,
+          g.last_seen                  AS "lastSeenAt",
+          COALESCE(s."returnCount", 0) AS "returnCount"
+        FROM gen_unioned g
+        JOIN "GeneratedQuestion" gq ON gq.id = g.gid
+        LEFT JOIN "MissedReturnState" s
+          ON s."userId" = ${userId} AND s."generatedQuestionId" = g.gid
+        WHERE g.gid NOT IN (SELECT gid FROM gen_ever_correct)
+          AND g.gid NOT IN (SELECT gid FROM gen_dismissed)
+          AND (s."lastReturnedAt" IS NULL OR s."lastReturnedAt" <= ${cooldownCutoff})
+          AND (g.scope <> 'wrong' OR COALESCE(s."returnCount", 0) < ${MISSED_RETURN_LIFETIME_CAP})
+      ),
+      -- ================= CANONICAL (friend / curated) QUESTIONS =================
       -- (1a) WRONG scope: the player's most recent answer on the question was
-      -- incorrect. answered_by_user_id = user_id keeps this to answers THEY gave.
+      -- incorrect. Read from MASTERY_EVENTS rather than the slots, because a
+      -- canonical question can also be answered on the feed and milestone
+      -- surfaces, and a wrong answer there deserves to come back too.
       wrong AS (
         SELECT DISTINCT ON (me.question_id)
           me.question_id AS "questionId",
@@ -114,6 +184,7 @@ export async function getEligibleReturnCandidates(
       dismissed AS (
         SELECT "questionId" FROM "MissedReturnDismissed"
         WHERE "userId" = ${userId} AND "reinstatedAt" IS NULL
+          AND "questionId" IS NOT NULL
       ),
       -- Wrong takes precedence when a question qualifies under both: it HAS been
       -- seen, so it must carry the return framing and the 3-return cap.
@@ -122,35 +193,49 @@ export async function getEligibleReturnCandidates(
         UNION ALL
         SELECT "questionId", 'expired'::text AS scope, "lastSeenAt" FROM expired_scope
         WHERE "questionId" NOT IN (SELECT "questionId" FROM wrong_scope)
+      ),
+      canonical_candidates AS (
+        SELECT
+          'canonical'::text                  AS kind,
+          u."questionId"                     AS "questionId",
+          u.scope                            AS scope,
+          u."lastSeenAt"                     AS "lastSeenAt",
+          COALESCE(s."returnCount", 0)       AS "returnCount"
+        FROM unioned u
+        -- NOTE: Question is snake_case here ("deleted_at"), unlike the camelCase
+        -- MissedReturn* tables above. Getting this wrong raises 42703, which is
+        -- deliberately NOT swallowed below — see the catch.
+        JOIN "Question" qq ON qq.id = u."questionId" AND qq.deleted_at IS NULL
+        LEFT JOIN "MissedReturnState" s
+          ON s."userId" = ${userId} AND s."questionId" = u."questionId"
+        WHERE u."questionId" NOT IN (SELECT "questionId" FROM ever_correct)
+          AND u."questionId" NOT IN (SELECT "questionId" FROM dismissed)
+          -- (4) 7-day floor between sightings.
+          AND (s."lastReturnedAt" IS NULL OR s."lastReturnedAt" <= ${cooldownCutoff})
+          -- (3) lifetime cap, wrong scope only.
+          AND (u.scope <> 'wrong' OR COALESCE(s."returnCount", 0) < ${MISSED_RETURN_LIFETIME_CAP})
       )
-      SELECT
-        u."questionId"                     AS "questionId",
-        u.scope                            AS scope,
-        u."lastSeenAt"                     AS "lastSeenAt",
-        COALESCE(s."returnCount", 0)       AS "returnCount"
-      FROM unioned u
-      -- NOTE: Question is snake_case here ("deleted_at"), unlike the camelCase
-      -- MissedReturn* tables above. Getting this wrong raises 42703, which is
-      -- deliberately NOT swallowed below — see the catch.
-      JOIN "Question" qq ON qq.id = u."questionId" AND qq.deleted_at IS NULL
-      LEFT JOIN "MissedReturnState" s
-        ON s."userId" = ${userId} AND s."questionId" = u."questionId"
-      WHERE u."questionId" NOT IN (SELECT "questionId" FROM ever_correct)
-        AND u."questionId" NOT IN (SELECT "questionId" FROM dismissed)
-        -- (4) 7-day floor between sightings.
-        AND (s."lastReturnedAt" IS NULL OR s."lastReturnedAt" <= ${cooldownCutoff})
-        -- (3) lifetime cap, wrong scope only.
-        AND (u.scope <> 'wrong' OR COALESCE(s."returnCount", 0) < ${MISSED_RETURN_LIFETIME_CAP})
+      SELECT kind, "questionId", scope, "lastSeenAt", "returnCount" FROM canonical_candidates
+      UNION ALL
+      SELECT kind, "questionId", scope, "lastSeenAt", "returnCount" FROM generated_candidates
+      ${limit ? sql`LIMIT ${limit}` : sql``}
     `);
 
     // db.execute returns a driver result ({ rows }) on node-postgres and a bare
     // array on some paths — read both shapes, per the house pattern in
     // domain-fragmentation.ts. Assuming either one alone throws at runtime.
-    type Row = { questionId: string; scope: ReturnScope; lastSeenAt: string | Date; returnCount: number };
+    type Row = {
+      kind: ReturnQuestionKind;
+      questionId: string;
+      scope: ReturnScope;
+      lastSeenAt: string | Date;
+      returnCount: number;
+    };
     const list =
       (rows as unknown as { rows?: Row[] }).rows ?? (rows as unknown as Row[]);
 
     return list.map((row) => ({
+      kind: row.kind,
       questionId: row.questionId,
       scope: row.scope,
       lastSeenAt: new Date(row.lastSeenAt),
@@ -172,6 +257,27 @@ export async function getEligibleReturnCandidates(
     if (pgErrorCode(error) === '42P01') return [];
     throw error;
   }
+}
+
+/**
+ * "Does this viewer have anything waiting to come back?" — the Home surface's
+ * question (§7-E), which needs presence, not the list.
+ *
+ * Runs the SAME eligibility query with LIMIT 1 rather than a second copy of the
+ * rule: duplicating seven conditions into a bespoke EXISTS query would guarantee
+ * the two drift apart.
+ *
+ * Measured on prod, the LIMIT is NOT much of a speed-up — the CTEs materialize
+ * before it applies, so it costs ~85-170ms either way (177-candidate account:
+ * 170ms full, and agreeing with the full query on every account tested). What it
+ * buys is bounded row transfer, and it runs inside Home's existing Promise.all,
+ * so it adds parallel time rather than serial. If Home's budget (§12.6, < 1.5s)
+ * ever gets tight, this is a real line item — cache it or fold it into an
+ * existing query rather than assuming the LIMIT makes it free.
+ */
+export async function hasEligibleReturnCandidates(userId: string): Promise<boolean> {
+  const [first] = await getEligibleReturnCandidates(userId, { limit: 1 });
+  return Boolean(first);
 }
 
 /**
@@ -204,17 +310,32 @@ export async function isMissedReturnEnabledForUser(userId: string): Promise<bool
  */
 export async function recordReturnServed(
   userId: string,
-  questionId: string,
+  target: { kind: ReturnQuestionKind; questionId: string },
   scope: ReturnScope,
   { now = new Date() }: { now?: Date } = {},
 ): Promise<void> {
   const increment = scope === 'wrong' ? 1 : 0;
+  const isCanonical = target.kind === 'canonical';
   try {
     await db
       .insert(missedReturnState)
-      .values({ userId, questionId, lastReturnedAt: now, returnCount: increment })
+      .values({
+        userId,
+        questionId: isCanonical ? target.questionId : null,
+        generatedQuestionId: isCanonical ? null : target.questionId,
+        lastReturnedAt: now,
+        returnCount: increment,
+      })
+      // The two kinds have separate partial unique indexes (migration 0130), so
+      // the conflict target has to name the matching one — a single target
+      // covering both columns would never match either index.
       .onConflictDoUpdate({
-        target: [missedReturnState.userId, missedReturnState.questionId],
+        target: isCanonical
+          ? [missedReturnState.userId, missedReturnState.questionId]
+          : [missedReturnState.userId, missedReturnState.generatedQuestionId],
+        targetWhere: isCanonical
+          ? sql`${missedReturnState.questionId} IS NOT NULL`
+          : sql`${missedReturnState.generatedQuestionId} IS NOT NULL`,
         set: {
           lastReturnedAt: now,
           returnCount: sql`${missedReturnState.returnCount} + ${increment}`,
@@ -252,6 +373,7 @@ export async function setMissedReturnEnabled(userId: string, enabled: boolean): 
 }
 
 export type ReturnListItem = {
+  kind: ReturnQuestionKind;
   questionId: string;
   scope: ReturnScope;
   questionText: string;
@@ -274,17 +396,20 @@ export async function getReturnListForUser(userId: string): Promise<ReturnListIt
   if (candidates.length === 0) return [];
 
   const ranked = rankReturnCandidates(candidates);
-  const rows = await loadReturnQuestions(ranked.map((c) => c.questionId));
-  const byId = new Map(rows.map((r) => [r.id, r]));
+  const rows = await loadReturnQuestions(ranked);
+  // Keyed by kind AND id — the two tables' ids are different namespaces and must
+  // never be looked up interchangeably.
+  const byKey = new Map(rows.map((r) => [`${r.kind}:${r.id}`, r]));
   const authorNames = await resolveCreatorNames(
     rows.map((r) => r.creatorId).filter((id): id is string => Boolean(id)),
   );
 
   return ranked.flatMap((candidate) => {
-    const question = byId.get(candidate.questionId);
+    const question = byKey.get(`${candidate.kind}:${candidate.questionId}`);
     if (!question) return [];
     return [
       {
+        kind: candidate.kind,
         questionId: candidate.questionId,
         scope: candidate.scope,
         questionText: question.questionText,
@@ -297,25 +422,77 @@ export async function getReturnListForUser(userId: string): Promise<ReturnListIt
   });
 }
 
-/** Live question text/answer for the candidates the builder decided to serve. */
-export async function loadReturnQuestions(questionIds: readonly string[]) {
-  if (questionIds.length === 0) return [];
-  return db
-    .select({
-      id: questions.id,
-      questionText: questions.questionText,
-      answerText: questions.answerText,
-      creatorId: questions.creatorId,
-      canonicalSubcategory: questions.canonicalSubcategory,
-      broadCategory: questions.broadCategory,
-      category: questions.category,
-      questionType: questions.questionType,
-      difficultyEstimate: questions.difficultyEstimate,
-      creatorNote: questions.creatorNote,
-      source: questions.source,
-    })
-    .from(questions)
-    // inArray, not `= ANY(...)`: drizzle renders a JS array in a sql template as
-    // a tuple, which Postgres rejects with 42809 against ANY().
-    .where(and(inArray(questions.id, [...questionIds]), isNull(questions.deletedAt)));
+/**
+ * Live text for the candidates the builder decided to serve, from BOTH tables.
+ *
+ * Returns one shape regardless of kind so the slot builder and the Customize
+ * list don't each re-branch. Generated questions have no author (LLM origin) and
+ * no creator note, which is why those come back null for them rather than being
+ * faked — the UI must not imply a person wrote them.
+ */
+export type LoadedReturnQuestion = {
+  kind: ReturnQuestionKind;
+  id: string;
+  questionText: string;
+  creatorId: string | null;
+  creatorNote: string | null;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  category: string | null;
+  difficultyEstimate: string | null;
+};
+
+export async function loadReturnQuestions(
+  targets: readonly { kind: ReturnQuestionKind; questionId: string }[],
+): Promise<LoadedReturnQuestion[]> {
+  const canonicalIds = targets.filter((t) => t.kind === 'canonical').map((t) => t.questionId);
+  const generatedIds = targets.filter((t) => t.kind === 'generated').map((t) => t.questionId);
+
+  const [canonicalRows, generatedRows] = await Promise.all([
+    canonicalIds.length
+      ? db
+          .select({
+            id: questions.id,
+            questionText: questions.questionText,
+            creatorId: questions.creatorId,
+            creatorNote: questions.creatorNote,
+            canonicalSubcategory: questions.canonicalSubcategory,
+            broadCategory: questions.broadCategory,
+            category: questions.category,
+            difficultyEstimate: questions.difficultyEstimate,
+          })
+          .from(questions)
+          // inArray, not `= ANY(...)`: drizzle renders a JS array in a sql
+          // template as a tuple, which Postgres rejects with 42809 against ANY().
+          .where(and(inArray(questions.id, canonicalIds), isNull(questions.deletedAt)))
+      : Promise.resolve([]),
+    generatedIds.length
+      ? db
+          .select({
+            id: generatedQuestions.id,
+            questionText: generatedQuestions.questionText,
+            canonicalSubcategory: generatedQuestions.canonicalSubcategory,
+            broadCategory: generatedQuestions.broadCategory,
+            difficultyEstimate: generatedQuestions.difficultyEstimate,
+          })
+          .from(generatedQuestions)
+          .where(inArray(generatedQuestions.id, generatedIds))
+      : Promise.resolve([]),
+  ]);
+
+  return [
+    ...canonicalRows.map((row) => ({ kind: 'canonical' as const, ...row, category: row.category ?? null })),
+    ...generatedRows.map((row) => ({
+      kind: 'generated' as const,
+      id: row.id,
+      questionText: row.questionText,
+      // LLM origin: no human author, no creator note. Never invent either.
+      creatorId: null,
+      creatorNote: null,
+      canonicalSubcategory: row.canonicalSubcategory,
+      broadCategory: row.broadCategory,
+      category: null,
+      difficultyEstimate: row.difficultyEstimate,
+    })),
+  ];
 }
