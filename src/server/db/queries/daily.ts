@@ -686,7 +686,7 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
 // Resolve creator display names for a set of (possibly null/duplicate) creator
 // ids, returning a id→name map. Null/absent ids are skipped — their questions
 // are LLM-origin and the client labels them non-relationally.
-async function resolveCreatorNames(creatorIds: Array<string | null>): Promise<Map<string, string | null>> {
+export async function resolveCreatorNames(creatorIds: Array<string | null>): Promise<Map<string, string | null>> {
   const ids = [...new Set(creatorIds.filter((id): id is string => Boolean(id)))];
   if (ids.length === 0) return new Map();
   const nameRows = await db
@@ -1481,6 +1481,60 @@ export function buildAuthoredSlot(authored: AuthoredPick, position: number): Que
     difficulty_stepped_up: false,
   };
 }
+
+/**
+ * Build an APPENDED missed-question return slot (D-MISSED-RETURN-01 §2 R3).
+ *
+ * The question is an existing canonical Question the viewer previously got wrong
+ * or let expire, so this looks like an authored slot — same `source: 'friend'`,
+ * same `question_id` — plus the `return_*` markers that designate it a return and
+ * keep it out of the core five (see isReturnSlot / getCoreSlots).
+ *
+ * `return_last_seen_at` carries the honest provenance the return label needs
+ * (R9): a wrong-scope return is visibly a return, never disguised as new. The
+ * expired scope carries the field too (it is cheap and true) but its copy must
+ * NOT use return framing — it has never been seen, so it reads as a normal
+ * question arriving late (§2). That distinction is the renderer's job, on
+ * `return_scope`, and it is the highest-risk surface in this build (§6).
+ */
+export function buildReturnSlot(
+  question: ReturnSlotQuestion,
+  candidate: { scope: 'wrong' | 'expired'; lastSeenAt: Date; returnCount: number },
+  position: number,
+): QueueSlot {
+  return {
+    slot_index: position,
+    source: 'friend',
+    question_id: question.id,
+    author_id: question.creatorId ?? undefined,
+    author_name: question.authorName ?? null,
+    author_note: question.creatorNote ?? null,
+    return_scope: candidate.scope,
+    return_last_seen_at: candidate.lastSeenAt.toISOString(),
+    // 1-based: the return the player is about to see. Expired first appearances
+    // stay at 0 + 1 = 1 but never advance the stored count (§2).
+    return_count: candidate.returnCount + 1,
+    domain: question.canonicalSubcategory ?? question.broadCategory ?? question.category ?? 'general',
+    broad_category: question.broadCategory ?? null,
+    category: question.category || null,
+    question_text: question.questionText,
+    difficulty_estimate: asQueueSlotDifficulty(question.difficultyEstimate) ?? undefined,
+    answered: false,
+    difficulty_stepped_up: false,
+  };
+}
+
+export type ReturnSlotQuestion = {
+  id: string;
+  questionText: string;
+  creatorId: string | null;
+  authorName?: string | null;
+  creatorNote?: string | null;
+  canonicalSubcategory: string | null;
+  broadCategory: string | null;
+  category: string | null;
+  difficultyEstimate: string | null;
+};
 
 export async function createDailyQueueItemFromAuthored(
   userId: string,

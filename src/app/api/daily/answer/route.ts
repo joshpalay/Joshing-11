@@ -14,7 +14,8 @@ import { deriveAnswerOutcome, recordAnswerSideEffects } from '@/server/answers/a
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { isRoundComplete, type QueueSlot } from '@/server/daily/types';
 import { isDailyReplenishEnabled, replenishBankAfterPlay } from '@/server/daily/replenish-bank';
-import { isBonusSlot } from '@/server/daily/bonus';
+import { isBonusSlot, isReturnSlot } from '@/server/daily/bonus';
+import { notifyAuthorOfReturnRecovery } from '@/server/daily/missed-return-notify';
 import { asQueueSlots } from '@/server/daily/catchup';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import { resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
@@ -468,10 +469,24 @@ export async function POST(request: NextRequest) {
         // (D-RECOVERY-SCORING-UNIFY-01). question.difficulty reproduces
         // `basePoints` as the first-correct base; recovery earns
         // round(base × RECOVERY_STATE_WEIGHT). Live surface (catchUp omitted).
+        // D-MISSED-RETURN-01 §5 — a RETURN slot never earns live credit, in
+        // either scope. Without `catchUp`, an expired-scope return scores
+        // `first_correct` at LIVE_SURFACE_WEIGHT (100%) because the player has
+        // genuinely never answered it, which contradicts the §5 table's
+        // CATCHUP_SURFACE_WEIGHT (25%) and would make Daily Five scores
+        // incomparable across players (R4).
+        //
+        // Passing it for BOTH scopes is deliberate and safe: for the wrong scope
+        // the state is `first_correct_after_wrong`, and canonicalPointsForAnswer's
+        // MAX-not-compound rule (D-RECOVERY-SCORING-UNIFY-01 D1) already makes
+        // RECOVERY_STATE_WEIGHT win outright rather than stacking to 6.25%. So
+        // one honest rule — "a return is not a live first sighting" — yields
+        // exactly the two weights §5 asks for. The scorer itself is untouched.
         pointsFor: (answerState) =>
           canonicalPointsForAnswer({
             difficulty: question.difficulty,
             answerState,
+            catchUp: isReturnSlot(slot),
           }),
       }),
       selectInsideJokeForViewer(persistedInsideJoke, persistedCreatorId, session.userId),
@@ -541,6 +556,33 @@ export async function POST(request: NextRequest) {
       }),
     ]);
     marks.mastery = Date.now();
+
+    // D-MISSED-RETURN-01 §7-A1 — the author push. Fires only when a WRONG-scope
+    // return just landed correct: that is the wrong→right moment, and it is the
+    // payoff the whole feature exists to produce. The expired scope is excluded
+    // on purpose (the player had never seen it, so nothing "stuck").
+    //
+    // Deferred with after() so the author's notification never sits in front of
+    // the player's verdict, and fire-and-forget — notifyAuthorOfReturnRecovery
+    // swallows its own errors.
+    if (
+      isCorrect &&
+      isReturnSlot(slot) &&
+      slot.return_scope === 'wrong' &&
+      persistedCreatorId &&
+      canonicalQuestionId
+    ) {
+      const authorId = persistedCreatorId;
+      const questionIdForPush = canonicalQuestionId;
+      const answererId = session.userId;
+      after(() =>
+        notifyAuthorOfReturnRecovery({
+          authorUserId: authorId,
+          answererUserId: answererId,
+          questionId: questionIdForPush,
+        }),
+      );
+    }
 
     // Demand-pull bank replenish (D-SUPPLY-DEMAND-PULL-01): THIS answer just
     // completed the round (transition — the prior slot state was incomplete),

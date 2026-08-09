@@ -35,9 +35,38 @@ export function isBonusSlot(slot: QueueSlot): boolean {
   return typeof slot.presence_source_id === 'string' && slot.presence_source_id.trim() !== '';
 }
 
-/** Core (non-bonus) slots, input order preserved. The canonical "five". */
+/**
+ * True iff the slot carries a `return_scope` (the missed-question return marker,
+ * D-MISSED-RETURN-01 §2 R3). Same opt-in rule as bonus: the marker field's
+ * presence is the truth, never position.
+ */
+export function isReturnSlot(slot: QueueSlot): boolean {
+  return slot.return_scope === 'wrong' || slot.return_scope === 'expired';
+}
+
+/**
+ * True iff the slot is APPENDED rather than part of the five — a +2 bonus slot or
+ * a missed-question return slot.
+ */
+export function isAdditiveSlot(slot: QueueSlot): boolean {
+  return isBonusSlot(slot) || isReturnSlot(slot);
+}
+
+/**
+ * Core slots, input order preserved. The canonical "five".
+ *
+ * Excludes BOTH additive kinds. A return slot appends beyond the five exactly as
+ * the +2 does (D-MISSED-RETURN-01 R3: "a friend's fresh question never loses its
+ * seat to a repeat") — counting one here would quietly make the Daily Five a six
+ * and break the D-F3 canon that the spoken count is always 5.
+ */
 export function getCoreSlots(slots: QueueSlot[]): QueueSlot[] {
-  return slots.filter((slot) => !isBonusSlot(slot));
+  return slots.filter((slot) => !isAdditiveSlot(slot));
+}
+
+/** Return slots, input order preserved. */
+export function getReturnSlots(slots: QueueSlot[]): QueueSlot[] {
+  return slots.filter(isReturnSlot);
 }
 
 /** Bonus slots, input order preserved. */
