@@ -8,9 +8,11 @@ import {
 } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATCHUP_LOOKBACK_DAYS } from '@/server/daily/catchup';
+import { resolveCreatorNames } from '@/server/db/queries/daily';
 import {
   MISSED_RETURN_COOLDOWN_DAYS,
   MISSED_RETURN_LIFETIME_CAP,
+  rankReturnCandidates,
   type ReturnCandidate,
   type ReturnScope,
 } from '@/server/daily/missed-return';
@@ -222,6 +224,77 @@ export async function recordReturnServed(
     if (pgErrorCode(error) === '42P01') return; // table not yet migrated
     throw error;
   }
+}
+
+/**
+ * Set the Customize toggle (§7-B1). Upserts so a user who has never opened
+ * Customize (and therefore has no DailyPreference row) can still turn the
+ * feature off. Deliberately narrow — it touches ONLY this column, so it can
+ * never clobber topics, frequency, or difficulty the way a full
+ * updateDailyPreferences round-trip could.
+ *
+ * Materializing a row for a user who had none is safe, and was verified against
+ * production: the DB column defaults (difficulty 'adaptive', domain_mode
+ * 'random', empty selected_domains / domain_preference_frequency) are exactly
+ * what defaultDailyPreferences() synthesizes for a missing row, so
+ * getDailyPreferences returns the same values either way. Keep that true — if
+ * the two default sets ever diverge, this upsert silently changes behavior for
+ * anyone who touches the toggle.
+ */
+export async function setMissedReturnEnabled(userId: string, enabled: boolean): Promise<void> {
+  await db
+    .insert(dailyPreferences)
+    .values({ userId, missedReturnEnabled: enabled })
+    .onConflictDoUpdate({
+      target: dailyPreferences.userId,
+      set: { missedReturnEnabled: enabled, updatedAt: new Date() },
+    });
+}
+
+export type ReturnListItem = {
+  questionId: string;
+  scope: ReturnScope;
+  questionText: string;
+  category: string | null;
+  authorName: string | null;
+  lastSeenAt: Date;
+  returnCount: number;
+};
+
+/**
+ * The Customize list (§7-D): every question currently eligible to return, in the
+ * order they would actually be served, so what the player sees matches what the
+ * queue would pick. Both scopes, since one toggle governs both (§7-B1).
+ *
+ * Dismissed questions are absent, not dimmed — §7-C rules out an archive view,
+ * and this list is the lighter surface, not the RecoveredSetAside pattern.
+ */
+export async function getReturnListForUser(userId: string): Promise<ReturnListItem[]> {
+  const candidates = await getEligibleReturnCandidates(userId);
+  if (candidates.length === 0) return [];
+
+  const ranked = rankReturnCandidates(candidates);
+  const rows = await loadReturnQuestions(ranked.map((c) => c.questionId));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const authorNames = await resolveCreatorNames(
+    rows.map((r) => r.creatorId).filter((id): id is string => Boolean(id)),
+  );
+
+  return ranked.flatMap((candidate) => {
+    const question = byId.get(candidate.questionId);
+    if (!question) return [];
+    return [
+      {
+        questionId: candidate.questionId,
+        scope: candidate.scope,
+        questionText: question.questionText,
+        category: question.canonicalSubcategory ?? question.broadCategory ?? null,
+        authorName: question.creatorId ? authorNames.get(question.creatorId) ?? null : null,
+        lastSeenAt: candidate.lastSeenAt,
+        returnCount: candidate.returnCount,
+      },
+    ];
+  });
 }
 
 /** Live question text/answer for the candidates the builder decided to serve. */
