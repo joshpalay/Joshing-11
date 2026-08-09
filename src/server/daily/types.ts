@@ -53,6 +53,29 @@ export const queueSlotSchema = z.object({
    * just "{Name}".
    */
   presence_source_extra_count: z.number().int().optional(),
+  /**
+   * Missed-question return marker (D-MISSED-RETURN-01 §2 R3). Set only on an
+   * APPENDED return slot — a canonical question the viewer previously got wrong,
+   * or one that expired unanswered and aged out of catch-up. The presence of
+   * `return_scope` is what marks a slot as a return slot, following the same
+   * marker-field convention as `presence_source_*` above rather than adding a
+   * slot-kind enum. Like a bonus slot, a return slot is ADDITIVE and never
+   * counts toward the five — see isReturnSlot / getCoreSlots in ./bonus.
+   *
+   * The two scopes are deliberately different (§2): 'wrong' is a return and must
+   * be visibly marked as one (R9, provenance canon — never disguised as new),
+   * while 'expired' has never been seen and must carry NO return framing at all;
+   * it reads as a normal question that happens to be arriving late.
+   */
+  return_scope: z.enum(['wrong', 'expired']).optional(),
+  /**
+   * The date the viewer last saw this question — the wrong answer, or the queue
+   * date it expired on. Feeds the honest return label ("from March 4", R9). ISO
+   * date string.
+   */
+  return_last_seen_at: z.string().optional(),
+  /** Which return this is (1-based) for the 'wrong' scope. Telemetry + copy. */
+  return_count: z.number().int().optional(),
   domain: z.string(),
   /** Free-text broader topic for this slot (e.g. "Saturday morning cartoons"). Optional — populated for newly built slots. */
   broad_category: z.string().nullish(),

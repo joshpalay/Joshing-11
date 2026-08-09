@@ -2285,6 +2285,40 @@ export async function register() {
       // Fresh databases may not have User/Question yet — migrate() creates all
       // three in normal migration order.
     }
+    // Migration 0128 (D-MISSED-RETURN-01 §4) adds the per-(user, question) return
+    // state and the Customize toggle. The queue builder reads both on every build
+    // once the flag is on, and the eligibility query would 42P01/42703 if the
+    // migration recorded without them present.
+    // Self-contained; precedent: 0113's MilestoneDismissed guard above.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "MissedReturnState" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "questionId" text NOT NULL REFERENCES "Question"("id") ON DELETE CASCADE,
+          "lastReturnedAt" timestamp with time zone NOT NULL DEFAULT now(),
+          "returnCount" integer NOT NULL DEFAULT 0,
+          "createdAt" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "MissedReturnState" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "MissedReturnState_userId_idx" ON "MissedReturnState" ("userId")`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_state_user_question_unique"
+        ON "MissedReturnState" ("userId", "questionId")
+      `);
+    } catch {
+      // Fresh databases may not have User/Question yet — migrate() creates all
+      // three in normal migration order.
+    }
+    try {
+      await db.execute(sql`
+        ALTER TABLE "DailyPreference"
+        ADD COLUMN IF NOT EXISTS "missed_return_enabled" boolean NOT NULL DEFAULT true
+      `);
+    } catch {
+      // DailyPreference may not exist yet on a fresh database.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

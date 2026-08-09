@@ -173,6 +173,11 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'joshing_game_progress',
   'joshing_game_complete',
   'friend_answered_question',
+  // D-MISSED-RETURN-01 §7-A1 — the author push when a question they wrote comes
+  // back to a player who once missed it and this time lands correct. The
+  // wrong→right moment is the strongest positive signal the product makes and
+  // nothing carried it back to the author before.
+  'missed_return_recovered',
 ]);
 export const answerStateEnum = pgEnum('AnswerState', [
   'first_correct',
@@ -1027,6 +1032,16 @@ export const dailyPreferences = pgTable(
       .notNull()
       .default({}),
     difficultyPreference: text('difficulty_preference').notNull().default('normal'),
+    /**
+     * D-MISSED-RETURN-01 §7-B1/§7-F1 — the single on/off toggle governing BOTH
+     * return scopes (expired + wrong) together. Default TRUE: on for everyone,
+     * existing and new alike.
+     *
+     * Read it through `isMissedReturnEnabledForUser`, never directly: a user with
+     * no DailyPreference row at all must also read as ON, and a raw join would
+     * silently make "never opened Customize" mean "opted out".
+     */
+    missedReturnEnabled: boolean('missed_return_enabled').notNull().default(true),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -1659,6 +1674,43 @@ export const missedReturnDismissed = pgTable(
     uniqueIndex('missed_return_dismissed_active_unique')
       .on(table.userId, table.questionId)
       .where(sql`${table.reinstatedAt} IS NULL`),
+  ],
+);
+
+// Per-(user, question) return state for the missed-question return system
+// (D-MISSED-RETURN-01 §4). Exactly two facts, both of which the eligibility rule
+// needs and neither of which is derivable cheaply from anything else:
+//
+//   lastReturnedAt — enforces the 7-day floor between sightings (R5). A floor,
+//                    not a schedule: nothing promises a return on day 8.
+//   returnCount    — enforces the lifetime cap of 3 (R7). A question missed four
+//                    times isn't teaching anything, so it is let go.
+//
+// One row per (userId, questionId), created on first return and updated in place
+// — this is CURRENT STATE, not an event log (MASTERY_EVENTS already keeps the
+// event history, and deriving these two values from it would mean scanning the
+// whole log per candidate on every queue build).
+//
+// Deliberately NOT tracking retirement: R6's "stop on first correct" is already
+// queryable as "has a first_correct_after_wrong event", which is the same
+// predicate the shipped Recovered deck uses. No retiredAt column (§3.1).
+//
+// Per §2, the count is incremented for the WRONG scope only — an expired
+// question's first appearance has never been seen, so it is a first ask arriving
+// late, not a return.
+export const missedReturnState = pgTable(
+  'MissedReturnState',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    lastReturnedAt: timestamp('lastReturnedAt', { withTimezone: true }).notNull().defaultNow(),
+    returnCount: integer('returnCount').notNull().default(0),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('MissedReturnState_userId_idx').on(table.userId),
+    uniqueIndex('missed_return_state_user_question_unique').on(table.userId, table.questionId),
   ],
 );
 
