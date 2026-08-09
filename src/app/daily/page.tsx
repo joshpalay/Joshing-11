@@ -75,8 +75,16 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
  * know. That is the sequel to the existing wrong-answer line, "This one belongs
  * to {Creator}'s world — now it's in yours too."
  */
-function returnRecoveryNote(slot: QueueSlot, isCorrect: boolean): string | null {
-  if (!isCorrect || slot.return_scope !== 'wrong') return null;
+function returnRecoveryNote(slot: QueueSlot): string | null {
+  if (slot.return_scope !== 'wrong') return null;
+  // Derived from the PERSISTED slot rather than stashed at answer time, so it
+  // survives a reload. An earlier attempt wrote it into `reveal_breadcrumb`,
+  // which the reveal accepts as a prop but never renders (see the note above
+  // explainerSentence in GameplayChat) — so the payoff moment §6 calls the point
+  // of the whole feature silently never appeared. Verified on a live account.
+  const answeredCorrect =
+    slot.answer_state === 'correct' || slot.catchup_answer_state === 'correct';
+  if (!answeredCorrect) return null;
   const author = slot.author_name?.trim();
   return author ? `It stuck. ${author} would be glad.` : 'It stuck.';
 }
@@ -611,6 +619,10 @@ export default function DailyPage() {
           authorNote:
             slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
+          // D-MISSED-RETURN-01 §6 — the payoff moment, distinct from an
+          // ordinary correct. Register is "it stuck", never "you finally got
+          // it": the second reading turns a connection event into a grade.
+          returnRecoveryNote: returnRecoveryNote(slot),
           explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
           // D-3: house core slots surface the 'Joshing' name + Editorial badge
@@ -782,13 +794,7 @@ export default function DailyPage() {
                         awarded_points: body.pointsAwarded ?? body.awarded_points ?? 0,
                         reveal_canonical_answer: body.correctAnswer ?? body.answer,
                         reveal_explainer: body.explanation ?? body.explainer,
-                        // D-MISSED-RETURN-01 §6 — the payoff moment. A correct
-                        // answer on a returning question deserves its own
-                        // acknowledgment, distinct from an ordinary correct:
-                        // it is the whole reason the feature exists. Register is
-                        // "it stuck", never "you finally got it" — the second
-                        // reading turns a connection event into a grade.
-                        reveal_breadcrumb: returnRecoveryNote(currentSlot, isCorrect),
+                        reveal_breadcrumb: null,
                         reveal_quip: opts.gaveUp ? null : (body.consolation ?? null),
                         reveal_inside_joke: body.insideJoke ?? null,
                         reveal_inside_joke_kind: body.insideJokeKind ?? null,

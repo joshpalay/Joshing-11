@@ -111,6 +111,12 @@ export type ChatMessage =
       /** Provenance of the aside label: relational (a person authored it) vs editorial (LLM-origin). */
       insideJokeKind?: InsideJokeKind | null;
       breadcrumb: string | null;
+      /**
+       * D-MISSED-RETURN-01 §6 — replaces the ordinary "Locked in." verdict when
+       * a returning question the player once missed lands correct. Distinct on
+       * purpose: this is the payoff the whole feature exists to produce.
+       */
+      returnRecoveryNote?: string | null;
       /** 0–3 index for rotating copy phrases */
       copyVariant: number;
       /** Creator display name — used in wrong-answer copy variant 2 */
@@ -1078,6 +1084,7 @@ function TypingRow() {
 function ResultRow({
   result,
   correctAnswer,
+  returnRecoveryNote = null,
   consolation,
   insideJoke,
   authorNote,
@@ -1103,6 +1110,8 @@ function ResultRow({
   insideJoke?: string | null;
   insideJokeKind?: InsideJokeKind | null;
   breadcrumb: string | null;
+  /** See the row-union note: the correct-on-return verdict (§6). */
+  returnRecoveryNote?: string | null;
   authorNote?: string | null;
   explanation?: string | null;
   copyVariant: number;
@@ -1216,7 +1225,7 @@ function ResultRow({
                 lives in the End of Session Review. */}
             <p style={{ ...verdictLabelStyle, color: 'var(--game-correct)' }}>
               <span aria-hidden>✓</span>
-              Locked in.
+              {returnRecoveryNote ?? 'Locked in.'}
             </p>
             {correctAnswer ? (
               <p
@@ -1669,6 +1678,7 @@ export function GameplayChatThread({
                 insideJoke={m.insideJoke}
                 insideJokeKind={m.insideJokeKind}
                 breadcrumb={m.breadcrumb}
+                returnRecoveryNote={m.returnRecoveryNote}
                 authorNote={m.authorNote}
                 explanation={m.explanation}
                 copyVariant={m.copyVariant}
