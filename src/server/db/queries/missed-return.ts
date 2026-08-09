@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -141,7 +141,14 @@ export async function getEligibleReturnCandidates(
         AND (u.scope <> 'wrong' OR COALESCE(s."returnCount", 0) < ${MISSED_RETURN_LIFETIME_CAP})
     `);
 
-    return (rows as unknown as ReturnCandidate[]).map((row) => ({
+    // db.execute returns a driver result ({ rows }) on node-postgres and a bare
+    // array on some paths — read both shapes, per the house pattern in
+    // domain-fragmentation.ts. Assuming either one alone throws at runtime.
+    type Row = { questionId: string; scope: ReturnScope; lastSeenAt: string | Date; returnCount: number };
+    const list =
+      (rows as unknown as { rows?: Row[] }).rows ?? (rows as unknown as Row[]);
+
+    return list.map((row) => ({
       questionId: row.questionId,
       scope: row.scope,
       lastSeenAt: new Date(row.lastSeenAt),
@@ -235,5 +242,7 @@ export async function loadReturnQuestions(questionIds: readonly string[]) {
       source: questions.source,
     })
     .from(questions)
-    .where(and(sql`${questions.id} = ANY(${[...questionIds]})`, sql`${questions.deletedAt} IS NULL`));
+    // inArray, not `= ANY(...)`: drizzle renders a JS array in a sql template as
+    // a tuple, which Postgres rejects with 42809 against ANY().
+    .where(and(inArray(questions.id, [...questionIds]), isNull(questions.deletedAt)));
 }
