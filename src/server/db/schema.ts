@@ -1617,6 +1617,51 @@ export const milestoneDismissed = pgTable(
   ],
 );
 
+// Per-user "don't ask me this again" for the missed-question return system
+// (D-MISSED-RETURN-01 §3.3). A reversible soft-dismiss at the QUESTION level:
+// an active row (reinstatedAt IS NULL) makes the question permanently
+// ineligible to return to the Daily Five as a return slot.
+//
+// WHY THIS EXISTS SEPARATELY from the catch-up dismiss it dual-writes with:
+// catch-up's dismiss is SLOT-scoped — it stamps `dismissed_at` into that day's
+// DailyQueue.slots JSONB, or feedItems.catchupResolvedAt. A return is by
+// definition a NEW slot in a DIFFERENT queue, so a slot-level dismiss is
+// invisible to it and a waved-off question would resurface days later. This
+// table is the (userId, questionId) state that survives across queue instances.
+//
+// WHY IT IS NOT RecoveredSetAside: same shape, OPPOSITE meaning, and the rows
+// must never be conflated (D-MISSED-RETURN-01 §3.1). RecoveredSetAside means
+// "stop showing me this in the review deck" — a question I now KNOW. This means
+// "stop asking me this" — a question I do NOT know and don't want back.
+//
+// Like MilestoneDismissed, a dismiss here is deliberately NEUTRAL: it writes
+// ONLY this row and touches nothing in mastery/points, so it never reads as a
+// wrong answer (D-MISSED-RETURN-01 §5). Undo sets reinstatedAt = now();
+// dismissing again inserts a fresh active row. Mirrors RecoveredSetAside /
+// MilestoneDismissed exactly (the partial unique index keeps at most one active
+// row per (userId, questionId)).
+//
+// Note `questionId` FKs to Question — canonical questions only. LLM-origin
+// daily questions live in GeneratedQuestion and are out of this feature's scope
+// by construction (MASTERY_EVENTS.question_id is likewise null for them, so the
+// Recovered pool excludes them too).
+export const missedReturnDismissed = pgTable(
+  'MissedReturnDismissed',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
+    reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
+  },
+  (table) => [
+    index('MissedReturnDismissed_userId_idx').on(table.userId),
+    uniqueIndex('missed_return_dismissed_active_unique')
+      .on(table.userId, table.questionId)
+      .where(sql`${table.reinstatedAt} IS NULL`),
+  ],
+);
+
 export const friendInvitations = pgTable(
   'FriendInvitation',
   {
