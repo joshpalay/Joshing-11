@@ -2259,6 +2259,32 @@ export async function register() {
       // Fresh databases may not have User/Question yet — migrate() creates all
       // three in normal migration order.
     }
+    // Migration 0127 (D-MISSED-RETURN-01 §3.3) adds the per-(user, question)
+    // dismiss table for the missed-question return system. The catch-up
+    // dismiss/undismiss routes dual-write it on every call and would 42P01 if
+    // the migration recorded without the table present.
+    // Self-contained; precedent: 0113's MilestoneDismissed guard above.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "MissedReturnDismissed" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "questionId" text NOT NULL REFERENCES "Question"("id") ON DELETE CASCADE,
+          "dismissedAt" timestamp with time zone NOT NULL DEFAULT now(),
+          "reinstatedAt" timestamp with time zone
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "MissedReturnDismissed" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "MissedReturnDismissed_userId_idx" ON "MissedReturnDismissed" ("userId")`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_dismissed_active_unique"
+        ON "MissedReturnDismissed" ("userId", "questionId")
+        WHERE "reinstatedAt" IS NULL
+      `);
+    } catch {
+      // Fresh databases may not have User/Question yet — migrate() creates all
+      // three in normal migration order.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

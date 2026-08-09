@@ -10,6 +10,7 @@ import {
   replaceQueueSlot,
 } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
+import { reinstateMissedReturn } from '@/server/db/queries/missed-return-dismissed';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
 
 export const dynamic = 'force-dynamic';
@@ -53,6 +54,15 @@ export async function POST(request: NextRequest) {
       .set({ catchupResolvedAt: null })
       .where(eq(feedItems.id, feedItem.id));
 
+    // D-MISSED-RETURN-01 §3.3 — mirror of the dismiss route's dual-write. This
+    // reversal is NOT optional: without it, un-dismissing in catch-up would
+    // leave the (userId, questionId) row active and suppress the question from
+    // returning forever, which is the exact bug the dual-write exists to
+    // prevent, inverted. feedItems.questionId is always canonical.
+    if (feedItem.questionId) {
+      await reinstateMissedReturn(session.userId, feedItem.questionId);
+    }
+
     return Response.json({ restored: true });
   }
 
@@ -83,6 +93,13 @@ export async function POST(request: NextRequest) {
   );
 
   await db.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, target.queueId));
+
+  // Mirror of the dismiss route's dual-write — see the feed branch above.
+  // `question_id` is the canonical FK; a slot carrying `generated_question_id`
+  // instead is LLM-origin and has no canonical row to reinstate.
+  if (slot.question_id && !slot.generated_question_id) {
+    await reinstateMissedReturn(session.userId, slot.question_id);
+  }
 
   return Response.json({ restored: true });
 }
