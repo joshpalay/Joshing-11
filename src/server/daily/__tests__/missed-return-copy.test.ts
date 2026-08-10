@@ -52,7 +52,6 @@ const HOME_LINE = 'Some you didn’t land will find their way back to you.';
 const CUSTOMIZE_BLURB =
   'Every so often, one question you didn’t land turns up again in your five. ' +
   'Nothing stacks up — it’s one at a time, and once you get it, it’s done.';
-const CUSTOMIZE_EXPIRED_ROW = 'never got to this one';
 
 describe('return copy stays out of the remediation register (§1, §6)', () => {
   it('the return badge names a date, not a verdict (R9)', () => {
@@ -81,7 +80,6 @@ describe('return copy stays out of the remediation register (§1, §6)', () => {
 
   it('the Customize copy explains the shape without grading anyone', () => {
     assertClean('customize blurb', CUSTOMIZE_BLURB);
-    assertClean('customize expired row', CUSTOMIZE_EXPIRED_ROW);
     // R2/R6 promised in plain language: one at a time, and it ends.
     expect(CUSTOMIZE_BLURB).toContain('one at a time');
     expect(CUSTOMIZE_BLURB).toContain('once you get it');
@@ -91,8 +89,10 @@ describe('return copy stays out of the remediation register (§1, §6)', () => {
     expect(AUTHOR_PUSH.length).toBeLessThanOrEqual(160);
   });
 
-  it('the expired scope never uses return framing (§2)', () => {
-    // "never got to this one" is a first ask arriving late, not a return.
-    expect(CUSTOMIZE_EXPIRED_ROW).not.toMatch(/\bagain\b|\bback\b|\breturn/i);
+  it('Customize is a single control, not an inventory', () => {
+    // The eligible-questions list was removed 2026-08-10 (Josh): 135 rows on a
+    // real account buried the rest of the page. The blurb now carries the whole
+    // explanation, so it has to stand on its own with nothing beneath it.
+    expect(CUSTOMIZE_BLURB).toContain('turns up again in your five');
   });
 });

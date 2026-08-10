@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Check, Combine, Plus, Trash2, X } from 'lucide-react';
@@ -156,6 +156,11 @@ type PeaksDetailData = {
   tree: KnowledgeTreeNode;
   frequencyByDomain: DomainPreferenceFrequency;
   fullyExploredDomains: ReadonlySet<string>;
+  /**
+   * Manage-variant only: Daily Five settings rendered near the TOP of the page,
+   * above the topic tooling and the Done button. Ignored on the portrait variant.
+   */
+  manageExtra?: ReactNode;
 };
 
 type TreeIndex = { byId: Map<string, LeafInfo>; byFreqKey: Map<string, LeafInfo> };
@@ -237,7 +242,13 @@ export function KnowledgeFlatClient(props: PeaksDetailData) {
   );
 }
 
-function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, fullyExploredDomains }: PeaksDetailData) {
+function KnowledgePageContent({
+  variant = 'portrait',
+  tree,
+  frequencyByDomain,
+  fullyExploredDomains,
+  manageExtra,
+}: PeaksDetailData) {
   const isManage = variant === 'manage';
   const searchParams = useSearchParams();
   const highlightedDomainSlug = searchParams.get('domain');
@@ -872,6 +883,12 @@ function KnowledgePageContent({ variant = 'portrait', tree, frequencyByDomain, f
           options &mdash; change how often it comes up, add a related topic, or remove it.
         </p>
       )}
+
+      {/* Manage-only settings slot, rendered high on the page. Anything passed
+          here is a Daily Five SETTING rather than a topic, so it sits above the
+          topic tooling and — critically — above the Done button, which used to
+          be the page's terminal action with content stranded after it. */}
+      {isManage && manageExtra ? <div className="px-1">{manageExtra}</div> : null}
 
       {tierCrossed && highlightedDomainSlug && (
         <section className="bg-[var(--cream-accent)] text-[var(--ink)] px-4 py-3 text-base">

@@ -9,11 +9,9 @@ import {
 } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { CATCHUP_LOOKBACK_DAYS } from '@/server/daily/catchup';
-import { resolveCreatorNames } from '@/server/db/queries/daily';
 import {
   MISSED_RETURN_COOLDOWN_DAYS,
   MISSED_RETURN_LIFETIME_CAP,
-  rankReturnCandidates,
   type ReturnCandidate,
   type ReturnQuestionKind,
   type ReturnScope,
@@ -370,56 +368,6 @@ export async function setMissedReturnEnabled(userId: string, enabled: boolean): 
       target: dailyPreferences.userId,
       set: { missedReturnEnabled: enabled, updatedAt: new Date() },
     });
-}
-
-export type ReturnListItem = {
-  kind: ReturnQuestionKind;
-  questionId: string;
-  scope: ReturnScope;
-  questionText: string;
-  category: string | null;
-  authorName: string | null;
-  lastSeenAt: Date;
-  returnCount: number;
-};
-
-/**
- * The Customize list (§7-D): every question currently eligible to return, in the
- * order they would actually be served, so what the player sees matches what the
- * queue would pick. Both scopes, since one toggle governs both (§7-B1).
- *
- * Dismissed questions are absent, not dimmed — §7-C rules out an archive view,
- * and this list is the lighter surface, not the RecoveredSetAside pattern.
- */
-export async function getReturnListForUser(userId: string): Promise<ReturnListItem[]> {
-  const candidates = await getEligibleReturnCandidates(userId);
-  if (candidates.length === 0) return [];
-
-  const ranked = rankReturnCandidates(candidates);
-  const rows = await loadReturnQuestions(ranked);
-  // Keyed by kind AND id — the two tables' ids are different namespaces and must
-  // never be looked up interchangeably.
-  const byKey = new Map(rows.map((r) => [`${r.kind}:${r.id}`, r]));
-  const authorNames = await resolveCreatorNames(
-    rows.map((r) => r.creatorId).filter((id): id is string => Boolean(id)),
-  );
-
-  return ranked.flatMap((candidate) => {
-    const question = byKey.get(`${candidate.kind}:${candidate.questionId}`);
-    if (!question) return [];
-    return [
-      {
-        kind: candidate.kind,
-        questionId: candidate.questionId,
-        scope: candidate.scope,
-        questionText: question.questionText,
-        category: question.canonicalSubcategory ?? question.broadCategory ?? null,
-        authorName: question.creatorId ? authorNames.get(question.creatorId) ?? null : null,
-        lastSeenAt: candidate.lastSeenAt,
-        returnCount: candidate.returnCount,
-      },
-    ];
-  });
 }
 
 /**
