@@ -65,6 +65,17 @@ export type ChatMessage =
        */
       presenceSourceName?: string | null;
       presenceSourceExtraCount?: number;
+      /**
+       * D-MISSED-RETURN-01 R9 — ISO timestamp of when the player last saw this
+       * question, set ONLY for a wrong-scope return. Drives the "SECOND LOOK"
+       * banner, which is the honest mark that keeps a return from reading as new.
+       *
+       * WRONG SCOPE ONLY. An expired-scope return has never been seen, so the
+       * caller passes null and it renders as an ordinary question arriving late
+       * (§2). The gate lives in the caller (`daily/page.tsx`), next to the
+       * comment explaining why the asymmetry is deliberate.
+       */
+      returnLastSeenAt?: string | null;
       isNew?: boolean;
       subhead?: string | null;
       badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
@@ -254,6 +265,22 @@ function bonusSourceLabel(sourceName: string, extraCount: number): string {
   return extraCount > 0 ? `FROM ${source} + OTHERS’ KNOWLEDGE` : `FROM ${source}’S KNOWLEDGE`;
 }
 
+/**
+ * D-MISSED-RETURN-01 R9 — the date half of the return banner ("LAST SEEN
+ * AUGUST 3"). Purely descriptive by design: it states what the card is without
+ * asking anything or implying a verdict, because §1 is explicit that a return
+ * must never read as remediation.
+ *
+ * Returns null on an unparseable timestamp so a bad date degrades to no banner
+ * rather than to "LAST SEEN INVALID DATE".
+ */
+function returnSourceLabel(lastSeenAt: string): string | null {
+  const seen = new Date(lastSeenAt);
+  if (Number.isNaN(seen.getTime())) return null;
+  const date = seen.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+  return `LAST SEEN ${date.toUpperCase()}`;
+}
+
 function SystemRow({ text }: { text: string }) {
   return (
     <div className="flex justify-center py-0.5">
@@ -397,6 +424,7 @@ function QuestionRow({
   creatorIsHouse = false,
   presenceSourceName = null,
   presenceSourceExtraCount = 0,
+  returnLastSeenAt = null,
   isNew = false,
   numberMarker = null,
   dismissing = false,
@@ -418,6 +446,7 @@ function QuestionRow({
   creatorIsHouse?: boolean;
   presenceSourceName?: string | null;
   presenceSourceExtraCount?: number;
+  returnLastSeenAt?: string | null;
   isNew?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
@@ -437,6 +466,17 @@ function QuestionRow({
   // A bonus slot is one drawn from a followed friend's knowledge (D-4 §B). It
   // gets a distinct gold treatment so it reads as a gift, not just another card.
   const isBonus = Boolean(presenceSourceName);
+  // D-MISSED-RETURN-01 R9 — a returning question wears the same banner FORM as a
+  // bonus (so the two read as one system) in a deliberately quieter neutral key:
+  // no gold ✦, no warm card tint, no inset rail. Those stay unique to a friend's
+  // gift, which a return is not. Bonus wins if both are somehow set, so a card
+  // can never grow two stacked banners.
+  const returnLabel =
+    !isBonus && returnLastSeenAt ? returnSourceLabel(returnLastSeenAt) : null;
+  const isReturn = Boolean(returnLabel);
+  // Either banner welds to the top of the card, so the card must square off its
+  // top corners for exactly the same reason in both cases.
+  const hasBanner = isBonus || isReturn;
 
   useEffect(() => {
     if (!isNew) return;
@@ -549,6 +589,66 @@ function QuestionRow({
             </div>
           </div>
         ) : null}
+        {returnLabel ? (
+          <div
+            style={{
+              borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+              border: '1px solid var(--brand-rule)',
+              borderBottom: 'none',
+              // Neutral, not navy: present and unmissable, but visibly
+              // subordinate to both a core question and a friend's bonus. Built
+              // from existing tokens so the color ratchet (check:colors) stays
+              // clean. Deliberately NOT a grading color — red/green here would
+              // turn an honest label into "you got this wrong", which is the
+              // remediation framing §1 forbids.
+              background: 'color-mix(in srgb, var(--brand-ink-400) 14%, var(--game-card-question))',
+              color: 'var(--brand-ink-700)',
+              padding: '9px 13px 8px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '6px 10px',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.64rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.16em',
+                  lineHeight: 1.25,
+                }}
+              >
+                <span aria-hidden style={{ fontSize: '0.8rem', lineHeight: 1 }}>
+                  ↩
+                </span>
+                Second look
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.6rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  lineHeight: 1.25,
+                  color: 'var(--text-muted-warm)',
+                }}
+              >
+                {returnLabel}
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div
           style={{
             // Bonus questions get a navy banner plus warm card tint so the
@@ -559,7 +659,9 @@ function QuestionRow({
             border: isBonus
               ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
               : '1px solid var(--brand-rule)',
-            borderRadius: isBonus ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
+            // hasBanner, not isBonus: a return banner welds to the top edge the
+            // same way, so the card squares off under either one.
+            borderRadius: hasBanner ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
             // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
             boxShadow: isBonus
               ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
@@ -1640,6 +1742,7 @@ export function GameplayChatThread({
                 creatorIsHouse={m.creatorIsHouse}
                 presenceSourceName={m.presenceSourceName}
                 presenceSourceExtraCount={m.presenceSourceExtraCount}
+                returnLastSeenAt={m.returnLastSeenAt}
                 isNew={m.isNew}
                 subhead={m.subhead}
                 numberMarker={m.numberMarker}
