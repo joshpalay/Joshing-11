@@ -52,16 +52,12 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
   if (isBonusSlot(slot) && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
-  // D-MISSED-RETURN-01 R9 — a returning question is visibly marked as one and
-  // never disguised as new. The D-doc's own example for this is a date ("from
-  // March 4"), which is badge-shaped, so it rides the existing chip rather than
-  // restyling the attribution banner.
-  //
-  // WRONG SCOPE ONLY. The expired scope has never been seen by the player, so it
-  // gets no return framing at all and reads as a normal question arriving late
-  // (§2). Do not "fix" that asymmetry — it is the whole point of the split.
-  const returnedFrom = returnBadgeLabel(slot);
-  if (returnedFrom) badges.push({ label: returnedFrom, tone: 'muted' });
+  // NOTE: the R9 return mark is NOT a badge. It was a muted chip here until it
+  // proved too quiet to notice — measured on a live account, four returns were
+  // played across five days without the player registering any of them as
+  // returns. It is now the "SECOND LOOK" banner welded to the top of the card
+  // (see returnBannerLastSeen below and the banner in GameplayChat). Do not
+  // re-add a chip: the mark would then render twice.
   return badges;
 }
 
@@ -90,14 +86,17 @@ function returnRecoveryNote(slot: QueueSlot): string | null {
 }
 
 /**
- * The honest return label (R9). Null for anything that isn't a wrong-scope
- * return, which is what keeps the expired scope unmarked.
+ * The honest return mark (R9), as the "SECOND LOOK · LAST SEEN AUGUST 3" banner
+ * on the question card. Returns the raw ISO timestamp; GameplayChat owns the
+ * copy, exactly as it does for the bonus banner's "FROM {NAME}'S KNOWLEDGE".
+ *
+ * WRONG SCOPE ONLY. The expired scope has never been seen by the player, so it
+ * gets no return framing at all and reads as a normal question arriving late
+ * (§2). Do not "fix" that asymmetry — it is the whole point of the split.
  */
-function returnBadgeLabel(slot: QueueSlot): string | null {
-  if (slot.return_scope !== 'wrong' || !slot.return_last_seen_at) return null;
-  const seen = new Date(slot.return_last_seen_at);
-  if (Number.isNaN(seen.getTime())) return null;
-  return `from ${seen.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`;
+function returnBannerLastSeen(slot: QueueSlot): string | null {
+  if (slot.return_scope !== 'wrong') return null;
+  return slot.return_last_seen_at ?? null;
 }
 
 type QueueResponse = {
@@ -590,6 +589,7 @@ export default function DailyPage() {
           creatorName: null,
           presenceSourceName: getSlotPresence(slot)?.name ?? null,
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
+          returnLastSeenAt: returnBannerLastSeen(slot),
           // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
           // is 0-based; bonus is additive and renders ✦, never a numeral).
           // `bonus` here means "additive — render ✦, never a numeral", which is
@@ -669,6 +669,7 @@ export default function DailyPage() {
           creatorName: null,
           presenceSourceName: getSlotPresence(slot)?.name ?? null,
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
+          returnLastSeenAt: returnBannerLastSeen(slot),
           isNew: true,
           // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
           // is 0-based; bonus is additive and renders ✦, never a numeral).
