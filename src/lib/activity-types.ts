@@ -57,7 +57,15 @@ export type ActivityItemType =
   // this is a slow-burn delight with no volume cues; it surfaces only in the
   // full /activities list.
   | 'niche_match_answered_your_question' // author-side: a stranger correctly answered a question you authored
-  | 'niche_match_you_answered'; // answerer-side: you correctly answered a stranger's authored question
+  | 'niche_match_you_answered' // answerer-side: you correctly answered a stranger's authored question
+  // D-MISSED-RETURN-01 §7-A1. Author-side: a question you wrote came back to
+  // someone who once missed it, and this time they got it. Deliberately NOT
+  // friend_answered_your_question — that fires on any correct answer and carries
+  // no history. This one exists because the wrong→right moment is the strongest
+  // positive signal the product makes, and nothing carried it back before. Fires
+  // for the WRONG return scope only (an expired-scope return has never been seen,
+  // so there is no "it stuck" story to tell).
+  | 'missed_return_recovered';
 
 // Events surfaced in Home's top-3 RecentActivity and counted by the bell
 // badge. Light type filtering only — chronological within this set. Single

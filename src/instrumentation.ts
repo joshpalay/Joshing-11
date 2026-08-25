@@ -2259,6 +2259,108 @@ export async function register() {
       // Fresh databases may not have User/Question yet — migrate() creates all
       // three in normal migration order.
     }
+    // Migration 0127 (D-MISSED-RETURN-01 §3.3) adds the per-(user, question)
+    // dismiss table for the missed-question return system. The catch-up
+    // dismiss/undismiss routes dual-write it on every call and would 42P01 if
+    // the migration recorded without the table present.
+    // Self-contained; precedent: 0113's MilestoneDismissed guard above.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "MissedReturnDismissed" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "questionId" text NOT NULL REFERENCES "Question"("id") ON DELETE CASCADE,
+          "dismissedAt" timestamp with time zone NOT NULL DEFAULT now(),
+          "reinstatedAt" timestamp with time zone
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "MissedReturnDismissed" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "MissedReturnDismissed_userId_idx" ON "MissedReturnDismissed" ("userId")`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_dismissed_active_unique"
+        ON "MissedReturnDismissed" ("userId", "questionId")
+        WHERE "reinstatedAt" IS NULL
+      `);
+    } catch {
+      // Fresh databases may not have User/Question yet — migrate() creates all
+      // three in normal migration order.
+    }
+    // Migration 0128 (D-MISSED-RETURN-01 §4) adds the per-(user, question) return
+    // state and the Customize toggle. The queue builder reads both on every build
+    // once the flag is on, and the eligibility query would 42P01/42703 if the
+    // migration recorded without them present.
+    // Self-contained; precedent: 0113's MilestoneDismissed guard above.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "MissedReturnState" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "questionId" text NOT NULL REFERENCES "Question"("id") ON DELETE CASCADE,
+          "lastReturnedAt" timestamp with time zone NOT NULL DEFAULT now(),
+          "returnCount" integer NOT NULL DEFAULT 0,
+          "createdAt" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "MissedReturnState" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "MissedReturnState_userId_idx" ON "MissedReturnState" ("userId")`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_state_user_question_unique"
+        ON "MissedReturnState" ("userId", "questionId")
+      `);
+    } catch {
+      // Fresh databases may not have User/Question yet — migrate() creates all
+      // three in normal migration order.
+    }
+    try {
+      await db.execute(sql`
+        ALTER TABLE "DailyPreference"
+        ADD COLUMN IF NOT EXISTS "missed_return_enabled" boolean NOT NULL DEFAULT true
+      `);
+    } catch {
+      // DailyPreference may not exist yet on a fresh database.
+    }
+    // Migration 0130 widens the return system to LLM-generated questions, which
+    // are ~96% of the wrong answers inside the Daily Five. The eligibility query
+    // selects "generatedQuestionId" on every queue build once the flag is on and
+    // would 42703 if the migration recorded without the columns present.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "MissedReturnDismissed"
+        ADD COLUMN IF NOT EXISTS "generatedQuestionId" text
+        REFERENCES "GeneratedQuestion"("id") ON DELETE CASCADE
+      `);
+      await db.execute(sql`
+        ALTER TABLE "MissedReturnState"
+        ADD COLUMN IF NOT EXISTS "generatedQuestionId" text
+        REFERENCES "GeneratedQuestion"("id") ON DELETE CASCADE
+      `);
+      await db.execute(sql`ALTER TABLE "MissedReturnDismissed" ALTER COLUMN "questionId" DROP NOT NULL`);
+      await db.execute(sql`ALTER TABLE "MissedReturnState" ALTER COLUMN "questionId" DROP NOT NULL`);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_dismissed_generated_active_unique"
+        ON "MissedReturnDismissed" ("userId", "generatedQuestionId")
+        WHERE "reinstatedAt" IS NULL AND "generatedQuestionId" IS NOT NULL
+      `);
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "missed_return_state_user_generated_unique"
+        ON "MissedReturnState" ("userId", "generatedQuestionId")
+        WHERE "generatedQuestionId" IS NOT NULL
+      `);
+    } catch {
+      // Tables arrive with 0127/0128 in normal migration order.
+    }
+    // Migration 0131 adds the one-shot gate for the friend-bonus interstitial.
+    // The daily-queue read selects "bonus_offer_seen_at" on every round build, so
+    // a database that recorded 0131 without the column present would 42703 on the
+    // hot path. Same additive-column shape as the DailyPreference guard above.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+        ADD COLUMN IF NOT EXISTS "bonus_offer_seen_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database; migrate() creates it first.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

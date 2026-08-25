@@ -23,7 +23,13 @@ import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
-import { getBonusCount, getCoreSlots, getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
+import {
+  getBonusCount,
+  getCoreSlots,
+  getSlotPresence,
+  isAdditiveSlot,
+  isBonusSlot,
+} from '@/server/daily/bonus';
 import {
   buildSessionCloseLines,
   type SessionSlotSummary,
@@ -46,7 +52,51 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
   if (isBonusSlot(slot) && slot.difficulty_estimate === 'accessible') {
     badges.push({ label: 'Accessible', tone: 'muted' });
   }
+  // NOTE: the R9 return mark is NOT a badge. It was a muted chip here until it
+  // proved too quiet to notice — measured on a live account, four returns were
+  // played across five days without the player registering any of them as
+  // returns. It is now the "SECOND LOOK" banner welded to the top of the card
+  // (see returnBannerLastSeen below and the banner in GameplayChat). Do not
+  // re-add a chip: the mark would then render twice.
   return badges;
+}
+
+/**
+ * The correct-on-return acknowledgment (§6). Null unless a WRONG-scope return
+ * just landed correct — an ordinary correct keeps its ordinary reveal, and an
+ * expired-scope correct is a first correct like any other.
+ *
+ * Names the author when there is one, because the point is not that the player
+ * improved: it is that something one person knew is now something two people
+ * know. That is the sequel to the existing wrong-answer line, "This one belongs
+ * to {Creator}'s world — now it's in yours too."
+ */
+function returnRecoveryNote(slot: QueueSlot): string | null {
+  if (slot.return_scope !== 'wrong') return null;
+  // Derived from the PERSISTED slot rather than stashed at answer time, so it
+  // survives a reload. An earlier attempt wrote it into `reveal_breadcrumb`,
+  // which the reveal accepts as a prop but never renders (see the note above
+  // explainerSentence in GameplayChat) — so the payoff moment §6 calls the point
+  // of the whole feature silently never appeared. Verified on a live account.
+  const answeredCorrect =
+    slot.answer_state === 'correct' || slot.catchup_answer_state === 'correct';
+  if (!answeredCorrect) return null;
+  const author = slot.author_name?.trim();
+  return author ? `It stuck. ${author} would be glad.` : 'It stuck.';
+}
+
+/**
+ * The honest return mark (R9), as the "SECOND LOOK · LAST SEEN AUGUST 3" banner
+ * on the question card. Returns the raw ISO timestamp; GameplayChat owns the
+ * copy, exactly as it does for the bonus banner's "FROM {NAME}'S KNOWLEDGE".
+ *
+ * WRONG SCOPE ONLY. The expired scope has never been seen by the player, so it
+ * gets no return framing at all and reads as a normal question arriving late
+ * (§2). Do not "fix" that asymmetry — it is the whole point of the split.
+ */
+function returnBannerLastSeen(slot: QueueSlot): string | null {
+  if (slot.return_scope !== 'wrong') return null;
+  return slot.return_last_seen_at ?? null;
 }
 
 type QueueResponse = {
@@ -54,6 +104,10 @@ type QueueResponse = {
   queue_date: string;
   slots: QueueSlot[];
   is_first_daily?: boolean;
+  // B-BONUS-OFFER-01: server-resolved one-shot gate for the friend-bonus
+  // interstitial. Defaults to "already seen" when absent so a stale client that
+  // predates the field never shows it.
+  bonus_offer_seen?: boolean;
 };
 
 // One-time intro shown before a brand-new user's first question, explaining that
@@ -199,6 +253,12 @@ export default function DailyPage() {
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
+  // B-BONUS-OFFER-01: domains rested by the opt-out in THIS round, so the notice
+  // for those slots can offer an undo. Session-scoped on purpose — a bonus slot
+  // closed by "No thanks" rested nothing and must not offer to un-rest it. After
+  // a reload the affordance degrades to a plain "Skipped for today"; the rest
+  // itself is durable and still reversible from the Knowledge page.
+  const [restedDomains, setRestedDomains] = useState<string[]>([]);
   const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
   const answerInputRef = useRef<HTMLInputElement>(null);
   // Guards the one-shot end-of-round revalidation below (B-DAILY-PARTIAL-QUEUE-01).
@@ -525,6 +585,73 @@ export default function DailyPage() {
     [queue],
   );
 
+  // B-BONUS-OFFER-01: clear a rest written by the opt-out. `frequency: null`
+  // restores the domain to its default rotation (the same revert the reveal-card
+  // undo uses). Scoped to the durable preference on purpose — the closed slot is
+  // not reopened, and the notice copy says only what this actually restores.
+  const unrestDomain = useCallback(async (domain: string) => {
+    const response = await fetch('/api/daily/preferences/domain-frequency', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ domain, frequency: null }),
+    });
+    if (!response.ok) throw new Error('Could not restore that category.');
+  }, []);
+
+  // B-BONUS-OFFER-01: resolve the one-time interstitial. Stamped on BOTH
+  // resolutions, so it fires at most once per account either way.
+  const resolveBonusOffer = useCallback(
+    async (accepted: boolean) => {
+      if (!queue) return;
+      setQueue((existing) => (existing ? { ...existing, bonus_offer_seen: true } : existing));
+      void fetch('/api/daily/bonus-offer/seen', { method: 'POST', credentials: 'include' });
+      if (accepted) return;
+
+      // "No thanks" closes the round's bonus slots WITHOUT resting anything —
+      // that separation is the whole point of the interstitial. Declining today
+      // must not be the same gesture as opting out of a category forever.
+      const bonusSlots = queue.slots.filter(
+        (slot) => isBonusSlot(slot) && !slot.answered && !slot.skipped,
+      );
+      for (const slot of bonusSlots) {
+        try {
+          const response = await fetch('/api/daily/skip', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slot.slot_index }),
+          });
+          if (!response.ok) continue;
+          const body = (await response.json().catch(() => null)) as { slots?: QueueSlot[] } | null;
+          if (Array.isArray(body?.slots)) {
+            const nextSlots = body.slots;
+            setQueue((existing) => (existing ? { ...existing, slots: nextSlots } : existing));
+          }
+        } catch {
+          // Best-effort: a failed skip just leaves that bonus question open.
+        }
+      }
+    },
+    [queue],
+  );
+
+  // B-BONUS-OFFER-01. `bonus_offer_seen` is absent on responses from a server
+  // that predates the field — treat that as "seen" so a rollout can never
+  // re-surface the explainer to an established player.
+  const bonusOfferSeen = queue?.bonus_offer_seen ?? true;
+  const pendingBonusCount = useMemo(
+    () =>
+      (queue?.slots ?? []).filter((slot) => isBonusSlot(slot) && !slot.answered && !slot.skipped)
+        .length,
+    [queue?.slots],
+  );
+  // True while the interstitial is standing in for the current question: the
+  // answer bar must not render behind it (there is nothing to answer yet).
+  const bonusOfferPending = Boolean(
+    currentSlot && isBonusSlot(currentSlot) && !bonusOfferSeen && pendingBonusCount > 0,
+  );
+
   const messages = useMemo<ChatMessage[]>(() => {
     if (!queue) return [];
     const rows: ChatMessage[] = [];
@@ -539,9 +666,13 @@ export default function DailyPage() {
           creatorName: null,
           presenceSourceName: getSlotPresence(slot)?.name ?? null,
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
+          returnLastSeenAt: returnBannerLastSeen(slot),
           // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
           // is 0-based; bonus is additive and renders ✦, never a numeral).
-          numberMarker: { value: slot.slot_index + 1, bonus: isBonusSlot(slot) },
+          // `bonus` here means "additive — render ✦, never a numeral", which is
+          // true of a return slot for the same reason it's true of a +2: it
+          // appends past the five and is never in the denominator (R3).
+          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -565,6 +696,10 @@ export default function DailyPage() {
           authorNote:
             slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
           breadcrumb: slot.reveal_breadcrumb ?? null,
+          // D-MISSED-RETURN-01 §6 — the payoff moment, distinct from an
+          // ordinary correct. Register is "it stuck", never "you finally got
+          // it": the second reading turns a connection event into a grade.
+          returnRecoveryNote: returnRecoveryNote(slot),
           explanation: slot.reveal_explainer ?? null,
           copyVariant: slot.slot_index,
           // D-3: house core slots surface the 'Joshing' name + Editorial badge
@@ -593,16 +728,52 @@ export default function DailyPage() {
           (slot.broad_category && slot.broad_category.trim()) ||
           (slot.category ? categoryLabel(slot.category) : '') ||
           slot.domain;
+        if (isBonusSlot(slot)) {
+          // Only a REST gets the undo. A bonus slot closed by declining the
+          // interstitial ("No thanks") wrote no preference, so there is nothing
+          // to undo and it reads as an ordinary skip.
+          const restedDomain = slot.domain;
+          const isRested =
+            restedDomain != null &&
+            restedDomains.some((d) => d.toLowerCase() === restedDomain.toLowerCase());
+          rows.push(
+            isRested
+              ? {
+                  id: `s-${slot.slot_index}`,
+                  kind: 'rest_notice',
+                  text: `Resting ${restedLabel}. You won't see these in your five.`,
+                  onUndo: () => unrestDomain(restedDomain),
+                }
+              : {
+                  id: `s-${slot.slot_index}`,
+                  kind: 'system',
+                  text: 'Skipped for today.',
+                },
+          );
+          continue;
+        }
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
-          text: isBonusSlot(slot)
-            ? `Resting ${restedLabel}. You won't see these in your five.`
-            : "Skipped. We'll bring it back later.",
+          text: "Skipped. We'll bring it back later.",
         });
         continue;
       }
       if (currentSlot?.slot_index === slot.slot_index) {
+        // B-BONUS-OFFER-01: the one-time explainer. It stands IN PLACE OF the
+        // first bonus question rather than above it — the player chooses to see
+        // the bonus round before it starts, which is the affordance that was
+        // missing when new players reached for the opt-out to move forward.
+        if (isBonusSlot(slot) && !bonusOfferSeen) {
+          rows.push({
+            id: 'bonus-offer',
+            kind: 'bonus_offer',
+            available: pendingBonusCount,
+            onAccept: () => void resolveBonusOffer(true),
+            onDecline: () => void resolveBonusOffer(false),
+          });
+          break;
+        }
         rows.push({
           id: `q-${slot.slot_index}`,
           kind: 'question',
@@ -611,10 +782,14 @@ export default function DailyPage() {
           creatorName: null,
           presenceSourceName: getSlotPresence(slot)?.name ?? null,
           presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
+          returnLastSeenAt: returnBannerLastSeen(slot),
           isNew: true,
           // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: core slots show 1.–5. (slot_index
           // is 0-based; bonus is additive and renders ✦, never a numeral).
-          numberMarker: { value: slot.slot_index + 1, bonus: isBonusSlot(slot) },
+          // `bonus` here means "additive — render ✦, never a numeral", which is
+          // true of a return slot for the same reason it's true of a +2: it
+          // appends past the five and is never in the denominator (R3).
+          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
           badges: questionBadges(slot),
         });
         if (submitting && answer.trim()) {
@@ -653,6 +828,11 @@ export default function DailyPage() {
     answer,
     pendingGiveUp,
     openedTerritoryBySlot,
+    bonusOfferSeen,
+    pendingBonusCount,
+    resolveBonusOffer,
+    restedDomains,
+    unrestDomain,
   ]);
 
   const results = useMemo(() => {
@@ -685,8 +865,7 @@ export default function DailyPage() {
             // a stale slot_index against a different question (see the answer
             // route's identity guard). Bot slots carry generated_question_id,
             // friend/house slots carry question_id.
-            expected_question_id:
-              currentSlot.generated_question_id ?? currentSlot.question_id,
+            expected_question_id: currentSlot.generated_question_id ?? currentSlot.question_id,
             submitted_answer: opts.submittedAnswer,
             gave_up: opts.gaveUp,
           },
@@ -756,9 +935,7 @@ export default function DailyPage() {
           const failed = caught.body as FailedAnswerResponse | null;
           if (failed?.error === 'slot_changed' && Array.isArray(failed.slots)) {
             const reconciledSlots = failed.slots;
-            setQueue((existing) =>
-              existing ? { ...existing, slots: reconciledSlots } : existing,
-            );
+            setQueue((existing) => (existing ? { ...existing, slots: reconciledSlots } : existing));
             setAnswer('');
             setSubmitNotice(null);
             return;
@@ -833,6 +1010,8 @@ export default function DailyPage() {
         body: JSON.stringify({ domain, frequency: 'resting' }),
       });
       if (!restResponse.ok) throw new Error('Could not update that category.');
+      // Remember it so this slot's notice can offer an undo (B-BONUS-OFFER-01).
+      if (domain) setRestedDomains((existing) => [...existing, domain]);
 
       const skipResponse = await fetch('/api/daily/skip', {
         method: 'POST',
@@ -906,7 +1085,7 @@ export default function DailyPage() {
         className="flex-1 overflow-y-auto px-4 py-4"
         style={{
           paddingBottom:
-            currentSlot && !loading
+            currentSlot && !loading && !bonusOfferPending
               ? 'calc(120px + env(safe-area-inset-bottom))'
               : 'calc(24px + env(safe-area-inset-bottom))',
         }}
@@ -949,7 +1128,7 @@ export default function DailyPage() {
         )}
       </section>
 
-      {currentSlot && !loading ? (
+      {currentSlot && !loading && !bonusOfferPending ? (
         <AnswerInputBar
           value={answer}
           onChange={setAnswer}

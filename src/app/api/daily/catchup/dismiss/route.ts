@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getSession } from '@/server/auth/session';
 import { dailyQueues, db, feedItems } from '@/server/db';
 import { getCatchupQuestions } from '@/server/db/queries/daily';
+import { dismissMissedReturn } from '@/server/db/queries/missed-return-dismissed';
 import { asQueueSlots, findQueueSlotBySlotIndex, replaceQueueSlot } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
 import { catchUpErrorResponse } from '@/server/play/catch-up-submit-error';
@@ -39,6 +40,19 @@ export async function POST(request: NextRequest) {
     .find((item) => item.dailyQueueItemId === parsed.dailyQueueItemId);
   if (!catchupItem) return catchUpErrorResponse(404, 'assignment_not_found', 'Catch-up question not found');
 
+  // D-MISSED-RETURN-01 §3.3 — dual-write the dismiss at (userId, questionId) so
+  // it survives across queue instances. The slot-level writes below are
+  // SLOT-scoped and invisible to a future return slot, which is by definition a
+  // new slot in a different queue; without this row a waved-off question would
+  // resurface days later. The old writes are retained — other code reads them.
+  //
+  // Resolved from `reportTarget`, NOT the flat `catchupItem.questionId`: that
+  // field holds either a `questions.id` OR a `generatedQuestions.id` and cannot
+  // disambiguate the two FK targets. LLM-origin daily questions have no
+  // canonical row to key on and are out of this feature's scope (they are
+  // likewise absent from the Recovered pool).
+  const canonicalQuestionId = catchupItem.reportTarget.questionId;
+
   if (catchupItem.surface === 'feed') {
     if (!catchupItem.feedItemId) {
       return catchUpErrorResponse(500, 'invalid_state', 'Feed catch-up item missing feed reference');
@@ -59,6 +73,10 @@ export async function POST(request: NextRequest) {
       .update(feedItems)
       .set({ catchupResolvedAt: new Date() })
       .where(eq(feedItems.id, feedItem.id));
+
+    if (canonicalQuestionId) {
+      await dismissMissedReturn(session.userId, canonicalQuestionId);
+    }
 
     return Response.json({ dismissed: true });
   }
@@ -100,6 +118,10 @@ export async function POST(request: NextRequest) {
     .update(dailyQueues)
     .set({ slots: nextSlots })
     .where(eq(dailyQueues.id, catchupItem.queueId));
+
+  if (canonicalQuestionId) {
+    await dismissMissedReturn(session.userId, canonicalQuestionId);
+  }
 
   return Response.json({ dismissed: true });
 }

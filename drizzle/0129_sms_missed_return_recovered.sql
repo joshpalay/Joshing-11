@@ -1,0 +1,22 @@
+-- 0129: add 'missed_return_recovered' to the SmsMessageType enum
+-- (D-MISSED-RETURN-01 §7-A1).
+--
+-- The author push for the wrong→right moment: a question someone wrote comes
+-- back to a player who once missed it, and this time they get it. Nothing
+-- carried that signal back to the author before. Kept in its OWN migration
+-- (precedent: 0094's MasterySourceType addition) because ALTER TYPE ... ADD
+-- VALUE is a different class of change from the table work in 0128 and the new
+-- value cannot be used in the same transaction that adds it.
+--
+-- NOTE — pre-existing drift, NOT introduced here: five values already declared
+-- in schema.ts are absent from the production enum (ceremony_ready,
+-- joshing_game_received, joshing_game_progress, joshing_game_complete,
+-- friend_answered_question), so sends using them currently fail in prod. That is
+-- a separate bug with its own fix (standalone ALTER TYPE ADD VALUE per value)
+-- and is deliberately left alone here to keep this migration to its authorized
+-- scope. This migration adds only the one value this feature needs.
+--
+-- Rollback: enum values cannot be dropped in Postgres without recreating the
+-- type. This value is additive and unused until the return feature's flag is
+-- turned on, so the rollback is to leave it in place (a no-op) and stop writing it.
+ALTER TYPE "SmsMessageType" ADD VALUE IF NOT EXISTS 'missed_return_recovered';

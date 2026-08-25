@@ -69,6 +69,21 @@ export async function recordAnswerSideEffects(input: {
   /** Extra structured fields for the propagation-failure log line. */
   logContext?: Record<string, unknown>;
   masteryEvent: Omit<WriteMasteryEventParams, 'userId'>;
+  /**
+   * Skip ONLY the mastery-event write, keeping adaptive difficulty and
+   * propagation. Everything else in this pipeline still runs.
+   *
+   * Exists for D-MISSED-RETURN-01: MASTERY_EVENTS has
+   * unique(source_type, question_id, answered_by_user_id) and inserts `on
+   * conflict do nothing`, so the FIRST row for a (question, player) under a
+   * given source type wins forever. A return answered WRONG would take the
+   * catch-up slot with a row that records nothing new — the player was already
+   * wrong on this question — and would then block the correct answer on a LATER
+   * return (R7 allows three), losing the recovery credit and the Recovered-deck
+   * entry that actually matter. Return state itself lives in MissedReturnState,
+   * not here, so nothing is lost by not writing.
+   */
+  skipMasteryEvent?: boolean;
   /** Domain for adaptive-difficulty bookkeeping (fire-and-forget). */
   adaptiveDifficultyDomain: string;
   /**
@@ -94,7 +109,9 @@ export async function recordAnswerSideEffects(input: {
     // inviter first-five notify — is scheduled after the response below so it
     // doesn't sit on the user-blocking answer path. Uniform across every surface
     // that runs through this pipeline.
-    masteryDelta = await writeMasteryEvent({ userId: input.userId, ...input.masteryEvent, deferSideEffects: true });
+    if (!input.skipMasteryEvent) {
+      masteryDelta = await writeMasteryEvent({ userId: input.userId, ...input.masteryEvent, deferSideEffects: true });
+    }
   } catch (error) {
     console.warn(`[${input.logTag}] writeMasteryEvent failed`, error);
   }

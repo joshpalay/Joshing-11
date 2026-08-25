@@ -173,6 +173,11 @@ export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'joshing_game_progress',
   'joshing_game_complete',
   'friend_answered_question',
+  // D-MISSED-RETURN-01 §7-A1 — the author push when a question they wrote comes
+  // back to a player who once missed it and this time lands correct. The
+  // wrong→right moment is the strongest positive signal the product makes and
+  // nothing carried it back to the author before.
+  'missed_return_recovered',
 ]);
 export const answerStateEnum = pgEnum('AnswerState', [
   'first_correct',
@@ -241,6 +246,12 @@ export const users = pgTable(
     // the interstitial is "not now", not "never" — it must not retire the
     // standing inline RoundReminderCard, so it cannot share that column.
     reminderInterstitialSeenAt: timestamp('reminder_interstitial_seen_at', { withTimezone: true }),
+    // B-BONUS-OFFER-01: stamped the first time the friend-bonus interstitial is
+    // resolved — on BOTH "Keep going" and "No thanks" — so it fires at most once
+    // per account. The interstitial is a first-run explainer for what the +2
+    // additive slots are; after it has been seen, bonus slots simply flow inline
+    // as before. Mirrors reminderInterstitialSeenAt above (same one-shot shape).
+    bonusOfferSeenAt: timestamp('bonus_offer_seen_at', { withTimezone: true }),
     areaTopUpPromptDismissedAt: timestamp('area_top_up_prompt_dismissed_at', { withTimezone: true }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
@@ -1027,6 +1038,16 @@ export const dailyPreferences = pgTable(
       .notNull()
       .default({}),
     difficultyPreference: text('difficulty_preference').notNull().default('normal'),
+    /**
+     * D-MISSED-RETURN-01 §7-B1/§7-F1 — the single on/off toggle governing BOTH
+     * return scopes (expired + wrong) together. Default TRUE: on for everyone,
+     * existing and new alike.
+     *
+     * Read it through `isMissedReturnEnabledForUser`, never directly: a user with
+     * no DailyPreference row at all must also read as ON, and a raw join would
+     * silently make "never opened Customize" mean "opted out".
+     */
+    missedReturnEnabled: boolean('missed_return_enabled').notNull().default(true),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -1614,6 +1635,109 @@ export const milestoneDismissed = pgTable(
     uniqueIndex('milestone_dismissed_active_unique')
       .on(table.userId, table.questionId)
       .where(sql`${table.reinstatedAt} IS NULL`),
+  ],
+);
+
+// Per-user "don't ask me this again" for the missed-question return system
+// (D-MISSED-RETURN-01 §3.3). A reversible soft-dismiss at the QUESTION level:
+// an active row (reinstatedAt IS NULL) makes the question permanently
+// ineligible to return to the Daily Five as a return slot.
+//
+// WHY THIS EXISTS SEPARATELY from the catch-up dismiss it dual-writes with:
+// catch-up's dismiss is SLOT-scoped — it stamps `dismissed_at` into that day's
+// DailyQueue.slots JSONB, or feedItems.catchupResolvedAt. A return is by
+// definition a NEW slot in a DIFFERENT queue, so a slot-level dismiss is
+// invisible to it and a waved-off question would resurface days later. This
+// table is the (userId, questionId) state that survives across queue instances.
+//
+// WHY IT IS NOT RecoveredSetAside: same shape, OPPOSITE meaning, and the rows
+// must never be conflated (D-MISSED-RETURN-01 §3.1). RecoveredSetAside means
+// "stop showing me this in the review deck" — a question I now KNOW. This means
+// "stop asking me this" — a question I do NOT know and don't want back.
+//
+// Like MilestoneDismissed, a dismiss here is deliberately NEUTRAL: it writes
+// ONLY this row and touches nothing in mastery/points, so it never reads as a
+// wrong answer (D-MISSED-RETURN-01 §5). Undo sets reinstatedAt = now();
+// dismissing again inserts a fresh active row. Mirrors RecoveredSetAside /
+// MilestoneDismissed exactly (the partial unique index keeps at most one active
+// row per (userId, questionId)).
+//
+// Note `questionId` FKs to Question — canonical questions only. LLM-origin
+// daily questions live in GeneratedQuestion and are out of this feature's scope
+// by construction (MASTERY_EVENTS.question_id is likewise null for them, so the
+// Recovered pool excludes them too).
+export const missedReturnDismissed = pgTable(
+  'MissedReturnDismissed',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Exactly ONE of these is set (DB CHECK, migration 0130), mirroring
+    // CatchupQueueItem.reportTarget and DailyQueue.slots — the two other places
+    // that carry "a question" that may live in either table.
+    questionId: text('questionId').references(() => questions.id, { onDelete: 'cascade' }),
+    generatedQuestionId: text('generatedQuestionId').references(() => generatedQuestions.id, {
+      onDelete: 'cascade',
+    }),
+    dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
+    reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
+  },
+  (table) => [
+    index('MissedReturnDismissed_userId_idx').on(table.userId),
+    // One ACTIVE row per (user, question) per kind. The IS NOT NULL guards
+    // matter: without them the other kind's NULL column would collide.
+    uniqueIndex('missed_return_dismissed_active_unique')
+      .on(table.userId, table.questionId)
+      .where(sql`${table.reinstatedAt} IS NULL AND ${table.questionId} IS NOT NULL`),
+    uniqueIndex('missed_return_dismissed_generated_active_unique')
+      .on(table.userId, table.generatedQuestionId)
+      .where(sql`${table.reinstatedAt} IS NULL AND ${table.generatedQuestionId} IS NOT NULL`),
+  ],
+);
+
+// Per-(user, question) return state for the missed-question return system
+// (D-MISSED-RETURN-01 §4). Exactly two facts, both of which the eligibility rule
+// needs and neither of which is derivable cheaply from anything else:
+//
+//   lastReturnedAt — enforces the 7-day floor between sightings (R5). A floor,
+//                    not a schedule: nothing promises a return on day 8.
+//   returnCount    — enforces the lifetime cap of 3 (R7). A question missed four
+//                    times isn't teaching anything, so it is let go.
+//
+// One row per (userId, questionId), created on first return and updated in place
+// — this is CURRENT STATE, not an event log (MASTERY_EVENTS already keeps the
+// event history, and deriving these two values from it would mean scanning the
+// whole log per candidate on every queue build).
+//
+// Deliberately NOT tracking retirement: R6's "stop on first correct" is already
+// queryable as "has a first_correct_after_wrong event", which is the same
+// predicate the shipped Recovered deck uses. No retiredAt column (§3.1).
+//
+// Per §2, the count is incremented for the WRONG scope only — an expired
+// question's first appearance has never been seen, so it is a first ask arriving
+// late, not a return.
+export const missedReturnState = pgTable(
+  'MissedReturnState',
+  {
+    id: id(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Exactly ONE of these is set (DB CHECK, migration 0130) — see the note on
+    // MissedReturnDismissed above.
+    questionId: text('questionId').references(() => questions.id, { onDelete: 'cascade' }),
+    generatedQuestionId: text('generatedQuestionId').references(() => generatedQuestions.id, {
+      onDelete: 'cascade',
+    }),
+    lastReturnedAt: timestamp('lastReturnedAt', { withTimezone: true }).notNull().defaultNow(),
+    returnCount: integer('returnCount').notNull().default(0),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('MissedReturnState_userId_idx').on(table.userId),
+    uniqueIndex('missed_return_state_user_question_unique')
+      .on(table.userId, table.questionId)
+      .where(sql`${table.questionId} IS NOT NULL`),
+    uniqueIndex('missed_return_state_user_generated_unique')
+      .on(table.userId, table.generatedQuestionId)
+      .where(sql`${table.generatedQuestionId} IS NOT NULL`),
   ],
 );
 

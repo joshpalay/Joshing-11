@@ -3,6 +3,8 @@ import {
   buildBotSlot,
   buildHouseSlot,
   buildPresenceSlot,
+  buildReturnSlot,
+  resolveCreatorNames,
   carryForwardUntouchedDailyQueue,
   carryForwardQueueWithSlots,
   clearStaleShortTodayQueue,
@@ -19,6 +21,16 @@ import {
   type BonusPresence,
 } from '@/server/db/queries/daily';
 import { ANSWER_COOLDOWN_DAYS, makeAnswerCooldownGate } from '@/server/daily/answer-cooldown';
+import {
+  isMissedReturnEnabled,
+  selectReturnCandidates,
+} from '@/server/daily/missed-return';
+import {
+  getEligibleReturnCandidates,
+  isMissedReturnEnabledForUser,
+  loadReturnQuestions,
+  recordReturnServed,
+} from '@/server/db/queries/missed-return';
 import { SUBJECT_COOLDOWN_DAYS, makeSubjectCooldownGate } from '@/server/daily/subject-cooldown';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
@@ -1048,6 +1060,73 @@ async function buildDailyQueueForUser(
     }
   } catch (error) {
     console.warn('[daily/queue-orchestrator] +2 bonus / core-backfill generation failed; serving core only', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // D-MISSED-RETURN-01 §2 R3 — the missed-question RETURN slot, appended last.
+  //
+  // Appended, never one of the core five: a friend's fresh question must never
+  // lose its seat to a repeat. `buildReturnSlot` stamps `return_scope`, which is
+  // what keeps it out of getCoreSlots — same marker-field convention as the +2.
+  //
+  // *** DELIBERATE COOLDOWN EXEMPTION — DO NOT "FIX" THIS (§8.1) ***
+  // The answer-cooldown gate (ANSWER_COOLDOWN_DAYS = 28) and the serve-time
+  // repeat gates exist to stop a question the player already answered from
+  // reappearing. A returning question is INTENTIONALLY a repeat, so it is
+  // selected here — outside the gated core-pick loop — and never consulted
+  // against `answerCooldown`. This is narrow on purpose: it exempts only the one
+  // designated return slot, and is NOT a relaxation of the general gate. The
+  // slot's answer is likewise never `record()`ed into the gate, so a return can't
+  // suppress a legitimate core pick that happens to share its answer.
+  // The 28-day answer cooldown and the 7-day return cooldown are different axes
+  // and WILL disagree; for the return slot, the return cooldown governs.
+  try {
+    if (isMissedReturnEnabled() && (await isMissedReturnEnabledForUser(userId))) {
+      const candidates = await getEligibleReturnCandidates(userId);
+      const selected = selectReturnCandidates(candidates);
+      if (selected.length > 0) {
+        const questionRows = await loadReturnQuestions(selected);
+        // Keyed by kind AND id: canonical and generated ids are separate
+        // namespaces and must never be looked up interchangeably.
+        const byKey = new Map(questionRows.map((q) => [`${q.kind}:${q.id}`, q]));
+        const authorNames = await resolveCreatorNames(
+          questionRows.map((q) => q.creatorId).filter((id): id is string => Boolean(id)),
+        );
+        for (const candidate of selected) {
+          const question = byKey.get(`${candidate.kind}:${candidate.questionId}`);
+          if (!question) continue;
+          slots.push(
+            buildReturnSlot(
+              {
+                ...question,
+                authorName: question.creatorId ? authorNames.get(question.creatorId) ?? null : null,
+                difficultyEstimate: question.difficultyEstimate ?? null,
+              },
+              candidate,
+              position,
+            ),
+          );
+          // A returning GENERATED question still needs its id recorded on the
+          // queue, exactly like any other bot slot, so the persist path and the
+          // answer route resolve it the same way.
+          if (candidate.kind === 'generated') generatedQuestionIds.push(candidate.questionId);
+          position += 1;
+          // Serve-time, not render-time (§8.5): the state is written as the slot
+          // is built, so the cap and the 7-day floor hold even if the player
+          // never opens the queue.
+          await recordReturnServed(
+            userId,
+            { kind: candidate.kind, questionId: candidate.questionId },
+            candidate.scope,
+          );
+        }
+      }
+    }
+  } catch (error) {
+    // Never let the return slot cost a build — degrade to a queue without one.
+    console.warn('[daily/queue-orchestrator] missed-return slot selection failed; serving without it', {
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
