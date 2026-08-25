@@ -41,6 +41,11 @@ export type RecheckAction = {
 
 export type ChatMessage =
   | { id: string; kind: 'system'; text: string }
+  // B-BONUS-OFFER-01: the "Resting {category}" line, made reversible. The plain
+  // skip path already promises reversibility ("we'll bring it back later"); this
+  // one is permanent and said so only in passing, so the undo closes that gap.
+  // Undo clears the durable rest — it does not reopen the closed slot.
+  | { id: string; kind: 'rest_notice'; text: string; onUndo: () => Promise<void> }
   | {
       id: string;
       kind: 'question';
@@ -370,8 +375,8 @@ function DismissNoticeRow({
         }}
       >
         <span>
-          Removed {snippet ? <span style={{ opacity: 0.85 }}>“{snippet}”</span> : null} from
-          catch up
+          Removed {snippet ? <span style={{ opacity: 0.85 }}>“{snippet}”</span> : null} from catch
+          up
         </span>
         <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
         {state === 'undoing' ? (
@@ -394,6 +399,92 @@ function DismissNoticeRow({
           >
             Undo
           </button>
+        )}
+      </p>
+      {state === 'error' ? (
+        <p
+          style={{
+            ...monoStyle,
+            fontSize: '0.54rem',
+            color: 'var(--danger)',
+            textAlign: 'left',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '3px 9px',
+          }}
+        >
+          Could not undo. Try again.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// B-BONUS-OFFER-01 — "Resting {category}. You won't see these in your five. · Undo".
+// Same chip/undo shape as DismissNoticeRow above (see its note on why the chip is
+// opaque). Undo clears the durable frequency preference; it deliberately does NOT
+// reopen the closed slot, so the label says what it actually restores.
+function RestNoticeRow({ text, onUndo }: { text: string; onUndo: () => Promise<void> }) {
+  const [state, setState] = useState<'idle' | 'undoing' | 'done' | 'error'>('idle');
+
+  const handleUndo = async () => {
+    if (state === 'undoing' || state === 'done') return;
+    setState('undoing');
+    try {
+      await onUndo();
+      setState('done');
+    } catch {
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-0.5 py-0.5" style={{ paddingLeft: '6px' }}>
+      <p
+        style={{
+          ...monoStyle,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          flexWrap: 'wrap',
+          maxWidth: 'min(22rem, 90%)',
+          fontSize: '0.58rem',
+          lineHeight: 1.4,
+          color: 'var(--text-muted)',
+          textAlign: 'left',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '4px 10px',
+        }}
+      >
+        <span>{state === 'done' ? 'Back in rotation.' : text}</span>
+        {state === 'done' ? null : (
+          <>
+            <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
+            {state === 'undoing' ? (
+              <span style={{ opacity: 0.7 }}>Undoing…</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleUndo()}
+                style={{
+                  ...monoStyle,
+                  fontSize: '0.58rem',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '2px',
+                }}
+              >
+                Undo
+              </button>
+            )}
+          </>
         )}
       </p>
       {state === 'error' ? (
@@ -452,8 +543,12 @@ function QuestionRow({
   giveUpDisabled?: boolean;
   onDismiss?: () => void;
   dismissDisabled?: boolean;
-  // Bonus slots only (D-4 §B): "This is {Name}'s bag but not mine" — rests the
-  // slot's domain so the category stops surfacing, and closes this question.
+  // Bonus slots only (D-4 §B). Rests the slot's domain so the category stops
+  // surfacing, and closes this question. B-BONUS-OFFER-01 moved this OUT of the
+  // peer action row and into the ⋯ overflow: as a peer link it sat at the same
+  // weight as the way forward, and new players read it as "continue" (3 of the 7
+  // players who ever met a bonus slot on day one tapped it immediately). It is
+  // rare and durable, so it belongs behind the menu.
   onMutePresence?: () => void;
   muteDisabled?: boolean;
   reportTarget?: ReportReasonTarget | null;
@@ -462,6 +557,20 @@ function QuestionRow({
   // Wired to the same dismiss path as the "Dismiss" link, so undo still works.
   onReportedInappropriate?: () => void;
 }) {
+  // B-BONUS-OFFER-01: the demoted opt-out. Category-led copy — the old label
+  // ("This is {Name}'s bag but not mine") led with the inviting friend's name,
+  // which read as affiliation, and buried the negation at the very end.
+  const overflowItems =
+    onMutePresence && presenceSourceName
+      ? [
+          {
+            label: 'Stop showing me this category',
+            onSelect: onMutePresence,
+            disabled: muteDisabled,
+          },
+        ]
+      : undefined;
+
   const [visible, setVisible] = useState(!isNew);
   // A bonus slot is one drawn from a followed friend's knowledge (D-4 §B). It
   // gets a distinct gold treatment so it reads as a gift, not just another card.
@@ -471,8 +580,7 @@ function QuestionRow({
   // no gold ✦, no warm card tint, no inset rail. Those stay unique to a friend's
   // gift, which a return is not. Bonus wins if both are somehow set, so a card
   // can never grow two stacked banners.
-  const returnLabel =
-    !isBonus && returnLastSeenAt ? returnSourceLabel(returnLastSeenAt) : null;
+  const returnLabel = !isBonus && returnLastSeenAt ? returnSourceLabel(returnLastSeenAt) : null;
   const isReturn = Boolean(returnLabel);
   // Either banner welds to the top of the card, so the card must square off its
   // top corners for exactly the same reason in both cases.
@@ -513,334 +621,328 @@ function QuestionRow({
           ...(isNew ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' } : {}),
         }}
       >
-      {numberMarker ? (
-        // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: editorial number marker in the
-        // gutter above the card — left-aligned, ~6px inset, ~10px gap to the
-        // card (8px here + the column's 2px gap). Positional only; it persists
-        // unchanged after the question is answered (F2) and never reflects
-        // result state.
-        <div style={{ paddingLeft: '6px', marginBottom: '8px' }}>
-          <QuestionNumberMarker value={numberMarker.value} bonus={numberMarker.bonus} />
-        </div>
-      ) : null}
-      <div
-        style={{
-          alignSelf: 'flex-start',
-          maxWidth: THREAD_CARD_MAX_WIDTH,
-          width: '100%',
-        }}
-      >
-        {presenceSourceName ? (
-          <div
-            style={{
-              borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-              border: '1px solid var(--brand-navy)',
-              borderBottom: 'none',
-              background:
-                'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
-              boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
-              color: 'var(--primary-foreground)',
-              padding: '9px 13px 8px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px 10px',
-              }}
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.64rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.16em',
-                  lineHeight: 1.25,
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', lineHeight: 1 }}
-                >
-                  ✦
-                </span>
-                Bonus item
-              </span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.6rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  lineHeight: 1.25,
-                  color: 'color-mix(in srgb, var(--accent-gold) 35%, white)',
-                }}
-              >
-                {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
-              </span>
-            </div>
-          </div>
-        ) : null}
-        {returnLabel ? (
-          <div
-            style={{
-              borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-              border: '1px solid var(--brand-rule)',
-              borderBottom: 'none',
-              // Neutral, not navy: present and unmissable, but visibly
-              // subordinate to both a core question and a friend's bonus. Built
-              // from existing tokens so the color ratchet (check:colors) stays
-              // clean. Deliberately NOT a grading color — red/green here would
-              // turn an honest label into "you got this wrong", which is the
-              // remediation framing §1 forbids.
-              background: 'color-mix(in srgb, var(--brand-ink-400) 14%, var(--game-card-question))',
-              color: 'var(--brand-ink-700)',
-              padding: '9px 13px 8px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px 10px',
-              }}
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.64rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.16em',
-                  lineHeight: 1.25,
-                }}
-              >
-                <span aria-hidden style={{ fontSize: '0.8rem', lineHeight: 1 }}>
-                  ↩
-                </span>
-                Second look
-              </span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.6rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  lineHeight: 1.25,
-                  color: 'var(--text-muted-warm)',
-                }}
-              >
-                {returnLabel}
-              </span>
-            </div>
+        {numberMarker ? (
+          // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: editorial number marker in the
+          // gutter above the card — left-aligned, ~6px inset, ~10px gap to the
+          // card (8px here + the column's 2px gap). Positional only; it persists
+          // unchanged after the question is answered (F2) and never reflects
+          // result state.
+          <div style={{ paddingLeft: '6px', marginBottom: '8px' }}>
+            <QuestionNumberMarker value={numberMarker.value} bonus={numberMarker.bonus} />
           </div>
         ) : null}
         <div
           style={{
-            // Bonus questions get a navy banner plus warm card tint so the
-            // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
-            background: isBonus
-              ? 'color-mix(in srgb, var(--accent-gold) 10%, var(--game-card-question))'
-              : 'var(--game-card-question)',
-            border: isBonus
-              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
-              : '1px solid var(--brand-rule)',
-            // hasBanner, not isBonus: a return banner welds to the top edge the
-            // same way, so the card squares off under either one.
-            borderRadius: hasBanner ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
-            // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
-            boxShadow: isBonus
-              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
-              : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-            padding: '20px 22px',
-            fontFamily: 'var(--font-serif)',
-            fontSize: '1.4875rem',
-            fontWeight: 700,
-            letterSpacing: 0,
-            color: 'var(--brand-ink)',
-            lineHeight: 1.3,
+            alignSelf: 'flex-start',
+            maxWidth: THREAD_CARD_MAX_WIDTH,
+            width: '100%',
           }}
         >
-          {/* Attribution ("FROM YESTERDAY · Maid Acasa") lives INSIDE the cream
+          {presenceSourceName ? (
+            <div
+              style={{
+                borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+                border: '1px solid var(--brand-navy)',
+                borderBottom: 'none',
+                background:
+                  'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
+                boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
+                color: 'var(--primary-foreground)',
+                padding: '9px 13px 8px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '6px 10px',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.16em',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', lineHeight: 1 }}
+                  >
+                    ✦
+                  </span>
+                  Bonus item
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.6rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    lineHeight: 1.25,
+                    color: 'color-mix(in srgb, var(--accent-gold) 35%, white)',
+                  }}
+                >
+                  {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          {returnLabel ? (
+            <div
+              style={{
+                borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+                border: '1px solid var(--brand-rule)',
+                borderBottom: 'none',
+                // Neutral, not navy: present and unmissable, but visibly
+                // subordinate to both a core question and a friend's bonus. Built
+                // from existing tokens so the color ratchet (check:colors) stays
+                // clean. Deliberately NOT a grading color — red/green here would
+                // turn an honest label into "you got this wrong", which is the
+                // remediation framing §1 forbids.
+                background:
+                  'color-mix(in srgb, var(--brand-ink-400) 14%, var(--game-card-question))',
+                color: 'var(--brand-ink-700)',
+                padding: '9px 13px 8px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '6px 10px',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.16em',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  <span aria-hidden style={{ fontSize: '0.8rem', lineHeight: 1 }}>
+                    ↩
+                  </span>
+                  Second look
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.6rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    lineHeight: 1.25,
+                    color: 'var(--text-muted-warm)',
+                  }}
+                >
+                  {returnLabel}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          <div
+            style={{
+              // Bonus questions get a navy banner plus warm card tint so the
+              // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
+              background: isBonus
+                ? 'color-mix(in srgb, var(--accent-gold) 10%, var(--game-card-question))'
+                : 'var(--game-card-question)',
+              border: isBonus
+                ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
+                : '1px solid var(--brand-rule)',
+              // hasBanner, not isBonus: a return banner welds to the top edge the
+              // same way, so the card squares off under either one.
+              borderRadius: hasBanner
+                ? '0 0 var(--radius-md) var(--radius-md)'
+                : 'var(--radius-md)',
+              // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
+              boxShadow: isBonus
+                ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
+                : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
+              padding: '20px 22px',
+              fontFamily: 'var(--font-serif)',
+              fontSize: '1.4875rem',
+              fontWeight: 700,
+              letterSpacing: 0,
+              color: 'var(--brand-ink)',
+              lineHeight: 1.3,
+            }}
+          >
+            {/* Attribution ("FROM YESTERDAY · Maid Acasa") lives INSIDE the cream
               question card, not above it: on the full-strength triangle surface
               (daily/page.tsx) bare muted text floated on the pattern was illegible
               (see the questionActionLinkStyle note). On the cream fill it reads
               cleanly, sitting as one quiet line above the prompt. */}
-          {subhead || creatorName || reportTarget ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '10px',
-                marginBottom: '14px',
-              }}
-            >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'baseline',
-                gap: '6px',
-                minWidth: 0,
-              }}
-            >
-              {subhead ? (
-                <span
+            {subhead || creatorName || reportTarget || overflowItems?.length ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                  marginBottom: '14px',
+                }}
+              >
+                <div
                   style={{
-                    ...monoStyle,
-                    fontSize: '0.58rem',
-                    fontWeight: 400,
-                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'baseline',
+                    gap: '6px',
+                    minWidth: 0,
                   }}
                 >
-                  {subhead}
-                </span>
-              ) : null}
-              {subhead && creatorName ? (
-                <span
-                  aria-hidden
-                  style={{ fontSize: '0.58rem', color: 'var(--text-muted)', opacity: 0.6 }}
-                >
-                  ·
-                </span>
-              ) : null}
-              {creatorName ? (
-                <span
-                  style={{
-                    fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
-                    fontSize: '0.86rem',
-                    fontWeight: 400,
-                    letterSpacing: 0,
-                    color: 'var(--text)',
-                    opacity: 0.82,
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {/* The timeframe subhead already carries "FROM"; only prefix it
-                      here when the subhead is absent so the line never doubles up. */}
-                  {subhead ? null : (
+                  {subhead ? (
                     <span
                       style={{
                         ...monoStyle,
-                        fontSize: '0.55rem',
+                        fontSize: '0.58rem',
+                        fontWeight: 400,
                         color: 'var(--text-muted)',
-                        marginRight: '6px',
                       }}
                     >
-                      FROM
+                      {subhead}
                     </span>
-                  )}
-                  <span style={{ fontWeight: 600 }}>{creatorName}</span>
-                  {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
-                  {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
-                    <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
-                      gave you this
+                  ) : null}
+                  {subhead && creatorName ? (
+                    <span
+                      aria-hidden
+                      style={{ fontSize: '0.58rem', color: 'var(--text-muted)', opacity: 0.6 }}
+                    >
+                      ·
                     </span>
-                  )}
-                </span>
-              ) : null}
-            </div>
-            {reportTarget ? (
-              <span style={reportMenuFontResetStyle}>
-                <AnsweredRowActions
-                  target={reportTarget}
-                  surface="catchup_thread"
-                  onReportSubmitted={(category) => {
-                    if (category === 'inappropriate') onReportedInappropriate?.();
-                  }}
-                />
-              </span>
+                  ) : null}
+                  {creatorName ? (
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
+                        fontSize: '0.86rem',
+                        fontWeight: 400,
+                        letterSpacing: 0,
+                        color: 'var(--text)',
+                        opacity: 0.82,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {/* The timeframe subhead already carries "FROM"; only prefix it
+                      here when the subhead is absent so the line never doubles up. */}
+                      {subhead ? null : (
+                        <span
+                          style={{
+                            ...monoStyle,
+                            fontSize: '0.55rem',
+                            color: 'var(--text-muted)',
+                            marginRight: '6px',
+                          }}
+                        >
+                          FROM
+                        </span>
+                      )}
+                      <span style={{ fontWeight: 600 }}>{creatorName}</span>
+                      {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+                      {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
+                        <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+                          gave you this
+                        </span>
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+                {reportTarget || overflowItems?.length ? (
+                  <span style={reportMenuFontResetStyle}>
+                    <AnsweredRowActions
+                      target={reportTarget}
+                      extraItems={overflowItems}
+                      surface="catchup_thread"
+                      onReportSubmitted={(category) => {
+                        if (category === 'inappropriate') onReportedInappropriate?.();
+                      }}
+                    />
+                  </span>
+                ) : null}
+              </div>
             ) : null}
-            </div>
-          ) : null}
-          <p style={{ margin: 0 }}>{questionText}</p>
-          {badges.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
-              {badges.map((badge) => (
-                <span
-                  key={badge.label}
-                  style={{
-                    // Figma display/pill/sans — serif, 12px, title-case (not the
-                    // mono uppercase used elsewhere).
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '0.675rem',
-                    lineHeight: 1.1,
-                    letterSpacing: '0.01em',
-                    borderRadius: '999px',
-                    border: '1px solid var(--border)',
-                    background:
-                      badge.tone === 'warning'
-                        ? 'color-mix(in srgb, var(--accent-gold) 14%, var(--surface))'
-                        : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                    color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
-                    opacity: 0.9,
-                    padding: '3px 9px',
-                  }}
-                >
-                  {badge.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
+            <p style={{ margin: 0 }}>{questionText}</p>
+            {badges.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+                {badges.map((badge) => (
+                  <span
+                    key={badge.label}
+                    style={{
+                      // Figma display/pill/sans — serif, 12px, title-case (not the
+                      // mono uppercase used elsewhere).
+                      fontFamily: 'var(--font-serif)',
+                      fontSize: '0.675rem',
+                      lineHeight: 1.1,
+                      letterSpacing: '0.01em',
+                      borderRadius: '999px',
+                      border: '1px solid var(--border)',
+                      background:
+                        badge.tone === 'warning'
+                          ? 'color-mix(in srgb, var(--accent-gold) 14%, var(--surface))'
+                          : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                      color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                      opacity: 0.9,
+                      padding: '3px 9px',
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
-      {onGiveUp || onDismiss || onMutePresence ? (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '10px',
-            marginTop: '8px',
-            paddingLeft: '2px',
-          }}
-        >
-          {onGiveUp ? (
-            <button
-              type="button"
-              onClick={onGiveUp}
-              disabled={giveUpDisabled}
-              style={questionActionLinkStyle}
-            >
-              Show me the answer
-            </button>
-          ) : null}
-          {onMutePresence && presenceSourceName ? (
-            <button
-              type="button"
-              onClick={onMutePresence}
-              disabled={muteDisabled}
-              style={questionActionLinkStyle}
-            >
-              This is {firstNameFrom(presenceSourceName)}&rsquo;s bag but not mine
-            </button>
-          ) : null}
-          {onDismiss ? (
-            <button
-              type="button"
-              onClick={onDismiss}
-              disabled={dismissDisabled}
-              style={questionActionLinkStyle}
-            >
-              Dismiss
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+        {onGiveUp || onDismiss ? (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '10px',
+              marginTop: '8px',
+              paddingLeft: '2px',
+            }}
+          >
+            {onGiveUp ? (
+              <button
+                type="button"
+                onClick={onGiveUp}
+                disabled={giveUpDisabled}
+                style={questionActionLinkStyle}
+              >
+                Show me the answer
+              </button>
+            ) : null}
+            {onDismiss ? (
+              <button
+                type="button"
+                onClick={onDismiss}
+                disabled={dismissDisabled}
+                style={questionActionLinkStyle}
+              >
+                Dismiss
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1675,10 +1777,11 @@ function BonusOfferRow({
           lineHeight: 1.2,
         }}
       >
-        {available} more {available === 1 ? 'question' : 'questions'} in the pool.
+        {available} more {available === 1 ? 'question' : 'questions'} from friends&rsquo;
+        categories.
       </p>
       <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-        Untimed. Counts toward your score.
+        Untimed. They earn points, but they&rsquo;re not part of your five.
       </p>
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
         <button type="button" className="btn-primary" onClick={onAccept}>
@@ -1731,6 +1834,8 @@ export function GameplayChatThread({
         switch (m.kind) {
           case 'system':
             return <SystemRow key={m.id} text={m.text} />;
+          case 'rest_notice':
+            return <RestNoticeRow key={m.id} text={m.text} onUndo={m.onUndo} />;
           case 'dismiss_notice':
             return <DismissNoticeRow key={m.id} questionText={m.questionText} onUndo={m.onUndo} />;
           case 'question':

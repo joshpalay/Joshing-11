@@ -246,6 +246,12 @@ export const users = pgTable(
     // the interstitial is "not now", not "never" — it must not retire the
     // standing inline RoundReminderCard, so it cannot share that column.
     reminderInterstitialSeenAt: timestamp('reminder_interstitial_seen_at', { withTimezone: true }),
+    // B-BONUS-OFFER-01: stamped the first time the friend-bonus interstitial is
+    // resolved — on BOTH "Keep going" and "No thanks" — so it fires at most once
+    // per account. The interstitial is a first-run explainer for what the +2
+    // additive slots are; after it has been seen, bonus slots simply flow inline
+    // as before. Mirrors reminderInterstitialSeenAt above (same one-shot shape).
+    bonusOfferSeenAt: timestamp('bonus_offer_seen_at', { withTimezone: true }),
     areaTopUpPromptDismissedAt: timestamp('area_top_up_prompt_dismissed_at', { withTimezone: true }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
     knowledgeCardShareToken: text('knowledge_card_share_token'),

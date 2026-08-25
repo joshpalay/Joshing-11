@@ -15,13 +15,21 @@ export function AnsweredRowActions({
   target,
   surface = 'answered_list',
   onReportSubmitted,
+  extraItems,
 }: {
-  target: ReportReasonTarget;
+  // Null when the row has nothing reportable but still needs the ⋯ menu for
+  // `extraItems` (the live daily question, which passes no report target).
+  target?: ReportReasonTarget | null;
   surface?: 'round_recap' | 'lately_result' | 'answered_list' | 'catchup_thread' | 'recovered';
   // Optional: fires once on a successful report so a surface can react (e.g. the
   // round-recap hides a card reported as inappropriate, matching daily-summary).
   // The answered-list caller omits it and the menu just closes, as before.
   onReportSubmitted?: (category: 'incorrect' | 'inappropriate') => void;
+  // B-BONUS-OFFER-01: row-specific actions that belong in the overflow rather
+  // than the peer action row. Rendered above the report items, separated, so a
+  // destructive-but-rare choice (resting a category) can't be mistaken for the
+  // way forward — which is exactly how new players were misreading it.
+  extraItems?: Array<{ label: string; onSelect: () => void; disabled?: boolean }>;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [reportCategory, setReportCategory] = useState<'incorrect' | 'inappropriate' | null>(null);
@@ -43,6 +51,9 @@ export function AnsweredRowActions({
     };
   }, [isMenuOpen]);
 
+  // Nothing to offer — render no trigger at all rather than an empty menu.
+  if (!target && !extraItems?.length) return null;
+
   return (
     <div className="relative" ref={menuRef}>
       <button
@@ -51,7 +62,7 @@ export function AnsweredRowActions({
         aria-haspopup="menu"
         aria-expanded={isMenuOpen}
         onClick={() => setIsMenuOpen((current) => !current)}
-        className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-9 items-center justify-center rounded-md border transition"
       >
         <MoreHorizontal className="size-4" />
       </button>
@@ -80,33 +91,55 @@ export function AnsweredRowActions({
                 <X className="size-4" />
               </button>
             </div>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setIsMenuOpen(false);
-                setReportCategory('incorrect');
-              }}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
-            >
-              This is incorrect
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setIsMenuOpen(false);
-                setReportCategory('inappropriate');
-              }}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
-            >
-              This is inappropriate
-            </button>
+            {extraItems?.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  item.onSelect();
+                }}
+                className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
+              >
+                {item.label}
+              </button>
+            ))}
+            {extraItems?.length && target ? (
+              <div className="my-1 border-t" role="separator" />
+            ) : null}
+            {target ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setReportCategory('incorrect');
+                  }}
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+                >
+                  This is incorrect
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setReportCategory('inappropriate');
+                  }}
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition"
+                >
+                  This is inappropriate
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}
 
-      {reportCategory ? (
+      {reportCategory && target ? (
         <ReportReasonSheet
           category={reportCategory}
           target={target}

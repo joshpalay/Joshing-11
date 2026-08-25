@@ -1,0 +1,34 @@
+-- 0131: one-time gate for the friend-bonus interstitial (B-BONUS-OFFER-01).
+--
+-- WHY. The +2 friend-bonus slots append past the core five with no explanation
+-- and no "continue" affordance. Measured on prod 2026-08-24: of the 7 players who
+-- ever met a bonus slot on their first session, 3 tapped the destructive
+-- "This is {Name}'s bag but not mine" opt-out immediately — Neil (hazelvision) and
+-- Carolyn Loh on BOTH of their bonus slots, Todderick on one. Established players
+-- never do this on day one (Robyn first rested on ~day 30 of 40, Josh ~day 60 of
+-- 98), so it reads as a comprehension failure at first exposure, not a
+-- preference. Across all time, 18 of 221 bonus slots served (8.1%, 8 users) ended
+-- in a permanent domain rest.
+--
+-- The fix restores the already-built-but-never-wired bonus interstitial as a
+-- first-run explainer, which needs somewhere durable to record "this player has
+-- seen it". This column is that record.
+--
+-- SHAPE. Nullable timestamptz, stamped when the interstitial is RESOLVED — on
+-- both "Keep going" and "No thanks" — so it can fire at most once per account and
+-- never nags a returning player (product call, Josh 2026-08-25). NULL = not yet
+-- seen, which is the correct default for every existing row: they have not seen
+-- the interstitial, and the next bonus slot they meet should explain itself once.
+--
+-- Deliberately a User column and not a DailyPreference one: this is a one-shot
+-- "has been told" marker, not a preference the player can set. It mirrors
+-- reminder_interstitial_seen_at (D-REMINDER-INTERSTITIAL-01), which solves the
+-- identical "show this exactly once, on either resolution" problem.
+--
+-- Additive and nullable, so it is safe on a non-empty table and needs no backfill.
+--
+-- ROLLBACK. `ALTER TABLE "User" DROP COLUMN IF EXISTS "bonus_offer_seen_at";`
+-- Dropping it loses only the "already explained" marks, so some players would see
+-- the interstitial a second time. No other surface reads the column.
+
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bonus_offer_seen_at" timestamp with time zone;

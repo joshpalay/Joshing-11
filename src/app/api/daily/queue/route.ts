@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
-import { countDailyQueues, getTodaysDailyQueue, refreshQueueSlotQuestionTexts } from '@/server/db/queries/daily';
+import {
+  countDailyQueues,
+  getTodaysDailyQueue,
+  refreshQueueSlotQuestionTexts,
+} from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { hasSeenBonusOffer } from '@/server/daily/bonus-offer';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
@@ -49,8 +54,7 @@ async function serializeQueue(
   const { kept, dropped } = partitionGenericSlots(raw);
 
   // First-run intro gate: their only queue, fully untouched.
-  const isFirstDaily =
-    totalQueues <= 1 && raw.every((slot) => !slot.answered && !slot.skipped);
+  const isFirstDaily = totalQueues <= 1 && raw.every((slot) => !slot.answered && !slot.skipped);
 
   // A served queue shorter than DAILY_QUEUE_SIZE is the exact symptom a user
   // reports as "only 3 of my 5 showed up." Trace it at the moment of serving,
@@ -70,15 +74,23 @@ async function serializeQueue(
     });
   }
 
-  return {
-    queue_id: queue.id,
-    queue_date: queue.queueDate,
+  const [slots, bonusOfferSeen] = await Promise.all([
     // Serve live question text (slot.question_text is an assignment-time
     // snapshot; grading resolves the live row, so an admin edit made after
     // assignment must reach the display too).
-    slots: await refreshQueueSlotQuestionTexts(kept),
+    refreshQueueSlotQuestionTexts(kept),
+    // B-BONUS-OFFER-01: drives the one-time friend-bonus interstitial. Read here
+    // rather than on the client so a second device can't re-show it.
+    hasSeenBonusOffer(userId),
+  ]);
+
+  return {
+    queue_id: queue.id,
+    queue_date: queue.queueDate,
+    slots,
     difficulty_mode: difficultyMode,
     is_first_daily: isFirstDaily,
+    bonus_offer_seen: bonusOfferSeen,
   };
 }
 
@@ -135,7 +147,9 @@ export async function GET() {
     return withTiming(NextResponse.json({ queue: null, slots: [], building: true }));
   }
 
-  return withTiming(NextResponse.json(await serializeQueue(queue, prefs.difficulty, userId, totalQueues)));
+  return withTiming(
+    NextResponse.json(await serializeQueue(queue, prefs.difficulty, userId, totalQueues)),
+  );
 }
 
 export async function POST() {

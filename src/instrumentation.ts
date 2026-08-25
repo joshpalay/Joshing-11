@@ -2349,6 +2349,18 @@ export async function register() {
     } catch {
       // Tables arrive with 0127/0128 in normal migration order.
     }
+    // Migration 0131 adds the one-shot gate for the friend-bonus interstitial.
+    // The daily-queue read selects "bonus_offer_seen_at" on every round build, so
+    // a database that recorded 0131 without the column present would 42703 on the
+    // hot path. Same additive-column shape as the DailyPreference guard above.
+    try {
+      await db.execute(sql`
+        ALTER TABLE "User"
+        ADD COLUMN IF NOT EXISTS "bonus_offer_seen_at" timestamp with time zone
+      `);
+    } catch {
+      // User may not exist yet on a fresh database; migrate() creates it first.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
