@@ -158,24 +158,23 @@ grading.
 Do these in order. Steps 3–4 are the only ones that can break a running app; the sequence below
 keeps both apps on a valid key at all times.
 
-1. **Create two workspaces.** Console → Settings → Workspaces → Create.
-   Name them `joshing-prod` and `questionable-prod`. Record both `wrkspc_…` IDs.
-2. **Mint one API key per workspace.** Console → Settings → API keys → Create, selecting the
-   workspace as the key's scope. Do *not* delete the existing Default-workspace key yet.
-3. **Swap Joshing's key.** Set `ANTHROPIC_API_KEY` to the `joshing-prod` key in the Vercel
-   **production** environment, then redeploy. Verify with a real request — hit the app
-   cache-busted (`/login?cb=$(date +%s)`) and confirm a new `LlmUsageEvent` row lands.
-4. **Swap Questionable's key** the same way.
-5. **Revoke the old Default-workspace key** only after both apps are confirmed working. Until it
-   is revoked, anything still using it lands in the unsplittable `null` bucket.
-6. **Set spend limits.** Console → Settings → Limits.
-   - Organization: **$100/month**.
-   - `joshing-prod` workspace: **$50/month**.
-   - Leave `questionable-prod` unset (inherits the org limit) unless you want it capped tighter.
-7. **Set email notifications** at 50% and 80% of each limit. These are the actual early warning;
-   the hard limit is the backstop of last resort.
-8. **Create an Admin API key** (Console → Settings → Admin keys, `sk-ant-admin01-…`) if you want
-   the reconciliation in step 9 scripted rather than read off the Cost page.
+**Status as of 2026-08-27: steps 1–7 DONE (Josh, in Console). Step 8 OUTSTANDING** — it blocks
+nothing today, but it's a hard prerequisite for the 2026-09-16 reconciliation (a scheduled cloud
+agent will prompt for it then; see that section below). Do it anytime before then.
+
+1. ✅ **Create two workspaces.** Console → Settings → Workspaces → Create.
+   Named `joshing-prod` and `questionable-prod`.
+2. ✅ **Mint one API key per workspace.** Console → Settings → API keys → Create, selecting the
+   workspace as the key's scope.
+3. ✅ **Swap Joshing's key.** `ANTHROPIC_API_KEY` set to the `joshing-prod` key in Vercel
+   production, redeployed. Confirmed working: `LlmUsageEvent` rows keep landing post-swap with no
+   gap (checked 2026-08-27, most recent call 19:27 UTC that day).
+4. ✅ **Swap Questionable's key** the same way.
+5. ✅ **Revoke the old Default-workspace key.**
+6. ✅ **Set spend limits.** Organization $100/month; `joshing-prod` workspace $50/month.
+7. ✅ **Set email notifications** at 50% and 80% of each limit.
+8. ⬜ **Create an Admin API key** (Console → Settings → Admin keys, `sk-ant-admin01-…`) — needed
+   for the reconciliation query below. Not yet done.
 
 ### Reconciliation query (closes the last Step 0 gap)
 
