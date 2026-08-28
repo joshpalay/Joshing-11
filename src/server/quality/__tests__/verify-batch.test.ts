@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  decodeVerifyCustomId,
-  encodeVerifyCustomId,
-} from '@/server/quality/verify-batch';
+import { decodeVerifyCustomId, encodeVerifyCustomId } from '@/server/quality/verify-batch';
 import { buildVerifyRequestParams } from '@/server/quality/verify-question';
 
 // Pure parts only — batch submit/harvest orchestration touches the network + DB
@@ -92,6 +89,28 @@ describe('buildVerifyRequestParams — the shared sync/batch request', () => {
     } finally {
       if (prev !== undefined) process.env.VERIFY_WEB_SEARCH_ALLOWED_DOMAINS = prev;
     }
+  });
+
+  it('attaches NO web_search tool when only text-only dimensions are routed', () => {
+    // ambiguous_source and self_answering are judgments about the question text;
+    // a searching call costs ~24x a knowledge-only one, so the tool must not be
+    // attached at all rather than left for the model to decline.
+    for (const dimensions of [
+      ['ambiguous_source'] as const,
+      ['self_answering'] as const,
+      ['ambiguous_source', 'self_answering'] as const,
+    ]) {
+      const params = buildVerifyRequestParams({ ...input, dimensions: [...dimensions] });
+      expect(params.tools).toBeUndefined();
+    }
+  });
+
+  it('still attaches web_search when a factual dimension rides along', () => {
+    const params = buildVerifyRequestParams({
+      ...input,
+      dimensions: ['self_answering', 'false_premise'],
+    });
+    expect(params.tools?.[0]).toMatchObject({ type: 'web_search_20250305' });
   });
 
   it('restores unrestricted search with the "*" escape hatch', () => {

@@ -87,23 +87,26 @@ Dimensions:
 - false_premise: a factual claim in the question's SETUP is untrue — a wrong count, date, attribution, relationship, recurrence, or which book/film/episode — EVEN IF the stated answer is correct. A PROPORTION or QUANTIFIER claim in the setup is load-bearing too: "the bulk of", "most of", "the majority of", "primarily", "mostly", "throughout". Confirming that something is INVOLVED or CENTRAL TO THE PREMISE does NOT confirm the stated proportion — a book can be ABOUT a White House mission while most of its action happens elsewhere; a game power can BELONG TO a character without letting a DIFFERENT character do the thing described. If your source establishes only the premise (that X is involved/central) and not the specific proportion, frequency, or agent the setup asserts, that claim is UNSETTLED — return "unverifiable", never "ok". A PRESUPPOSITION carried by the question's INTERROGATIVE counts as a setup claim too: "which X did Y choose", "what kind of X do they plan", "how many X did they settle on" each assert that a settled X exists. If the source RAISES that matter without RESOLVING it — a character's own unanswered question, an open debate, a possibility floated and dropped, a detail the work withholds — then no keyed answer can be correct and this is a false premise: return "demoted", EVEN WHEN every stated clause is true. E.g. "In Macbeth, in what kind of weather do the witches plan to reconvene?" — "thunder, lightning, or rain" are the options inside the First Witch's opening QUESTION, never a decision; the scene settles when, where, and whom, but not the weather. Distinguish this from a fact you merely cannot look up (that is "unverifiable"): here the source is clear, and what it is clear about is that the matter was never settled.
 - extra_fact: the answer or the explanation carries an unasked / adjacent claim that is wrong, even when the headline answer is right.
 - ambiguous_source: the question is NOT self-contained — it leans on a specific work, franchise, series, character, or fictional world WITHOUT naming that source in the question text, so it cannot be answered out of context. This is NOT a fact-check; it needs NO web search. You are given <subject> (the domain this question belongs to) as ground truth, but the PLAYER never sees it — they see ONLY the question text and a broad category label (e.g. "Film & Television"). Judge whether a reader who sees only that could tell WHICH work is being asked about. DEMOTE only when the question genuinely cannot be situated without knowing the hidden <subject> (e.g. "At the start of most episodes, Candace notices the boys' project — whom does she call to get them busted?" never says it is Phineas and Ferb). Do NOT demote when the source is named in the stem, OR when the content is self-evident to a reasonably informed player even without a title (a real-world subject, a famous historical event, a universally known character). When in doubt, treat it as self-contained and do not demote.
+- self_answering: the question GIVES THE ANSWER AWAY in its own text, so a player who knows nothing about the subject can still answer it by reading carefully. This is NOT a fact-check; it needs NO web search — judge the stem and the stated answer side by side and ask: could someone with zero knowledge of this topic produce the stated answer from the stem alone? The commonest form by far is the EPONYM TRAP, where the setup names a work, award, law, instrument, or event after a person or place and then asks who or what it was named for — the name is already sitting in the title. E.g. "Beethoven dedicated his three 'Razumovsky' string quartets, Op. 59, to a Russian patron who was also the Russian ambassador to Vienna. What was that patron's name?" is DEMOTED: the answer is Razumovsky and the stem quotes it. Also demote a near-paraphrase giveaway, where the setup states the answer in slightly different words ("the technique in which the practitioner waits for the patient's own MUSCLE ENERGY to release it" → "muscle energy technique"). Do NOT demote when the shared wording is a genuine PREMISE the question needs in order to be asked — naming the work a question is set in, restating an entity the player must already know to answer, or showing the first half of a quotation whose SECOND half is the answer ("Eliot opens 'East Coker' with 'In my beginning is my end' — what is the closing inversion?" is fine). Do NOT demote merely because a common noun appears in both. The test is whether the stem hands over the DISCRIMINATING part of the answer. When in doubt, do not demote.
 
 Method — web search is a FALLBACK, not the default:
-1. First resolve from well-established knowledge. (The ambiguous_source dimension is a judgment about the question text itself — never search for it.)
+1. First resolve from well-established knowledge. (The ambiguous_source and self_answering dimensions are judgments about the question text itself — never search for either.)
 2. Before reaching for web_search, ask: if I had to state this claim from memory with money riding on it, would I be confident? Mainstream, widely-covered facts — a famous character's canonical trait, a well-known plot event, a major historical date — you already know. Do NOT search to double-check those; searching to reassure yourself about something you already know correctly is the exact failure mode this rule exists to prevent.
 3. Reserve web_search for claims you genuinely cannot recall, cannot distinguish between two specific plausible alternatives, or that concern niche/obscure canon (a minor character, a specific episode or issue number, a small situational detail) where being confidently wrong is a real risk. One search per genuinely unsettled claim is normal; searching every claim in the question is not.
 4. If you still cannot settle a load-bearing claim after searching, treat it as unverifiable.
 
 Return ONE verdict for the whole question, as a single JSON object AFTER any searching:
 { "verdict": "ok" | "demoted" | "unverifiable", "reason": "<short: name the specific error, or 'verified', or what could not be settled>" }
-- "demoted" — a false premise, a wrong adjacent fact, a wrong stated answer, OR (ambiguous_source) a question that does not name the specific source it depends on (name which it is).
+- "demoted" — a false premise, a wrong adjacent fact, a wrong stated answer, (ambiguous_source) a question that does not name the specific source it depends on (name which it is), OR (self_answering) a question whose stem gives its own answer away (quote the giveaway).
 - "unverifiable" — a load-bearing claim could not be confirmed or refuted even after searching. This INCLUDES a proportion/quantifier/agent claim your sources describe only at the premise level (they confirm X is central but not the stated "bulk of"/"most"/"who does it").
-- "ok" — the stated answer is correct, every factual claim in the setup/explanation checks out, AND (if checking ambiguous_source) the question names or self-evidently identifies its source.
+- "ok" — the stated answer is correct, every factual claim in the setup/explanation checks out, AND (if checking ambiguous_source) the question names or self-evidently identifies its source, AND (if checking self_answering) the stem withholds the discriminating part of the answer.
 
 Output JSON only — no prose outside the object.${INSTRUCTION_USER_INPUT_GUIDANCE}${INSTRUCTION_SCOPING_QUALIFIER}`;
 
 /** Pure: parse the verifier's JSON verdict. Exported for unit tests. */
-export function parseVerifyVerdict(raw: string): { outcome: 'ok' | 'demoted' | 'unverifiable'; reason: string } | null {
+export function parseVerifyVerdict(
+  raw: string,
+): { outcome: 'ok' | 'demoted' | 'unverifiable'; reason: string } | null {
   const parsed = parseJsonObject(raw);
   if (!parsed) return null;
   const v = parsed.verdict;
@@ -140,26 +143,36 @@ function buildUserMessage(input: VerifyInput): string {
  * for the target model itself; the batch path must apply sanitizeParamsForModel
  * per request before submission (it bypasses loggedMessagesCreate).
  */
-export function buildVerifyRequestParams(input: VerifyInput): Anthropic.MessageCreateParamsNonStreaming {
+export function buildVerifyRequestParams(
+  input: VerifyInput,
+): Anthropic.MessageCreateParamsNonStreaming {
   const allowedDomains = verifyAllowedDomains();
-  // ambiguous_source is a judgment about the question TEXT — the system prompt
-  // already says it "needs NO web search" and to "never search for it". When
-  // it is the ONLY routed dimension there is nothing to fact-check, so don't
-  // attach the tool at all rather than relying on the model to decline it.
+  // ambiguous_source and self_answering are judgments about the question TEXT —
+  // the system prompt already says they need NO web search and to never search
+  // for either. When only those are routed there is nothing to fact-check, so
+  // don't attach the tool at all rather than relying on the model to decline it.
   //
   // This is a cost lever, not a quality one: a searching call costs ~24x a
   // knowledge-only one (measured 2026-08-03 — search results are re-processed
   // across tool turns, ~21.6k extra cache tokens per call), and a search here
-  // buys nothing the dimension can use. Factual dimensions are unaffected.
-  const needsFactCheck = input.dimensions.some((d) => d !== 'ambiguous_source');
+  // buys nothing either dimension can use. Factual dimensions are unaffected.
+  // This exemption is what keeps the self_answering route cheap: it adds ~16 new
+  // calls per 614 bank rows, all at the knowledge-only tier.
+  const TEXT_ONLY_DIMENSIONS: ReadonlySet<VerificationDimension> = new Set([
+    'ambiguous_source',
+    'self_answering',
+  ]);
+  const needsFactCheck = input.dimensions.some((d) => !TEXT_ONLY_DIMENSIONS.has(d));
   const tools: Anthropic.MessageCreateParamsNonStreaming['tools'] =
     isWebSearchEnabled() && needsFactCheck
-      ? [{
-          type: 'web_search_20250305',
-          name: 'web_search',
-          max_uses: WEB_SEARCH_MAX_USES,
-          ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
-        }]
+      ? [
+          {
+            type: 'web_search_20250305',
+            name: 'web_search',
+            max_uses: WEB_SEARCH_MAX_USES,
+            ...(allowedDomains ? { allowed_domains: allowedDomains } : {}),
+          },
+        ]
       : undefined;
   return {
     model: ANTHROPIC_MODEL,
@@ -169,7 +182,9 @@ export function buildVerifyRequestParams(input: VerifyInput): Anthropic.MessageC
     // on every one of the cron's calls, so re-billing it uncached is pure waste
     // (batch-verify-cost-characterization.md). A no-op below the model's minimum
     // cacheable prefix size — never an error. (In a batch, hits are best-effort.)
-    system: [{ type: 'text' as const, text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } }],
+    system: [
+      { type: 'text' as const, text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } },
+    ],
     messages: [{ role: 'user', content: buildUserMessage(input) }],
     ...(tools ? { tools } : {}),
   };
@@ -181,12 +196,9 @@ export async function verifyQuestion(input: VerifyInput): Promise<VerifyResult |
 
   let response: Anthropic.Message;
   try {
-    response = await loggedMessagesCreate(
-      client,
-      'batch-verify',
-      buildVerifyRequestParams(input),
-      { timeoutMs: VERIFY_TIMEOUT_MS },
-    );
+    response = await loggedMessagesCreate(client, 'batch-verify', buildVerifyRequestParams(input), {
+      timeoutMs: VERIFY_TIMEOUT_MS,
+    });
   } catch (error) {
     console.warn('[verifyQuestion] request_failed', {
       error: error instanceof Error ? error.message : String(error),

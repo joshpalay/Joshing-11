@@ -74,7 +74,10 @@ describe('prefilterForVerification — FALSE PREMISE routing', () => {
   });
 
   it('does not read an abbreviation period as a second sentence', () => {
-    const d = decide('Dr. Seuss wrote which book about a mischievous feline?', 'The Cat in the Hat');
+    const d = decide(
+      'Dr. Seuss wrote which book about a mischievous feline?',
+      'The Cat in the Hat',
+    );
     expect(d.needsVerification).toBe(false);
   });
 
@@ -140,7 +143,10 @@ describe('prefilterForVerification — tightened extra_fact answer heuristic (20
   });
 
   it('the legacy escape hatch restores the old routing', () => {
-    const input = { questionText: 'What items does Ben buy at the store?', answer: 'Bread, eggs and milk' };
+    const input = {
+      questionText: 'What items does Ben buy at the store?',
+      answer: 'Bread, eggs and milk',
+    };
     const strict = prefilterForVerification(input);
     const legacy = prefilterForVerification(input, { legacyExtraFact: true });
     expect(strict.needsVerification).toBe(false);
@@ -209,6 +215,88 @@ describe('prefilterForVerification — tightened explanation heuristic (2026-07-
   });
 });
 
+describe('prefilterForVerification — self_answering routing', () => {
+  it('routes the eponym trap the string gate cannot prove', () => {
+    // Live bank row, and the division of labour in one case: the accepted form
+    // "Nielsen's heuristics" shares only the NAME with the stem, so the
+    // deterministic gate cannot prove a leak and correctly leaves it alone —
+    // but the stem does say "Jakob Nielsen's", which is most of the answer. That
+    // call needs a reader, so it routes here.
+    //
+    // The reported Razumovsky row is the other side of this line: the gate now
+    // proves that one outright (see answer-leak-gate.test.ts) and it never
+    // reaches the LLM at all.
+    const d = prefilterForVerification({
+      questionText:
+        "Jakob Nielsen's ten foundational rules for evaluating interface quality are collectively known by what name — a term that reflects their role as broad guidelines rather than rigid checklists?",
+      answer: "Heuristics (Nielsen's heuristics / usability heuristics)",
+      canonicalSubcategory: 'UX Design',
+    });
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('self_answering');
+  });
+
+  it('leaves the reported Razumovsky row to the deterministic gate', () => {
+    // Spending an LLM call on a leak textContainsAnswer already proves buys
+    // nothing — findAnswerLeaks drops it before serving.
+    const d = prefilterForVerification({
+      questionText:
+        "Beethoven dedicated his three 'Razumovsky' string quartets, Op. 59, to a Russian patron who also happened to be the Russian ambassador to Vienna. What was that patron's name?",
+      answer: 'Andrey Razumovsky (Count Razumovsky)',
+      canonicalSubcategory: 'Beethoven',
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('self_answering');
+  });
+
+  it('routes a near-paraphrase giveaway on two shared load-bearing words', () => {
+    // Live bank row. Both halves of "the anxiety of influence" sit in the stem
+    // ("theory of poetic influence" … "the anxiety that this struggle
+    // produces"), but the phrase never appears contiguously and the form is too
+    // short for the deterministic gate to call it — exactly the judgment this
+    // dimension exists to make.
+    const d = prefilterForVerification({
+      questionText:
+        "Harold Bloom's theory of poetic influence holds that strong poets must struggle against their precursors. What term, borrowed from Freudian psychology, does he use for the anxiety that this struggle produces?",
+      answer: 'the anxiety of influence',
+      canonicalSubcategory: 'Literary Criticism',
+    });
+    expect(d.needsVerification).toBe(true);
+    if (d.needsVerification) expect(d.dimensions).toContain('self_answering');
+  });
+
+  it('does NOT route when the stem withholds the discriminating word', () => {
+    // "Locutus" — the word the player must supply — never appears in the stem.
+    const d = prefilterForVerification({
+      questionText:
+        "In the TNG episode 'The Best of Both Worlds,' Picard is assimilated and given a new designation. What name is he given?",
+      answer: 'Locutus of Borg',
+      canonicalSubcategory: 'Star Trek The Next Generation',
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('self_answering');
+  });
+
+  it('does NOT route on a single shared common noun', () => {
+    // Measured false-positive shape: the stem has to say "book" to pose the ask.
+    const d = prefilterForVerification({
+      questionText: "In 'Paradise Lost,' in which book does Satan's defiant declaration appear?",
+      answer: 'Book I',
+      canonicalSubcategory: "John Milton's Paradise Lost",
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('self_answering');
+  });
+
+  it('does NOT route a leak the deterministic gate already drops', () => {
+    // textContainsAnswer proves this one, so findAnswerLeaks demotes it without
+    // an LLM call — spending one here would buy nothing.
+    const d = prefilterForVerification({
+      questionText: 'What is the heuristic about keeping users informed of system status?',
+      answer: 'System status',
+      canonicalSubcategory: 'User Experience Design',
+    });
+    if (d.needsVerification) expect(d.dimensions).not.toContain('self_answering');
+  });
+});
+
 describe('prefilterForVerification — ambiguous_source (self-containment) routing', () => {
   it('routes a fiction question that never names its own source', () => {
     // The reported Phineas and Ferb case: the served card shows only the question
@@ -261,7 +349,10 @@ describe('prefilterForVerification — ambiguous_source (self-containment) routi
       answer: 'their mother',
     };
     const without = prefilterForVerification(input);
-    const withSub = prefilterForVerification({ ...input, canonicalSubcategory: 'Phineas and Ferb' });
+    const withSub = prefilterForVerification({
+      ...input,
+      canonicalSubcategory: 'Phineas and Ferb',
+    });
     if (without.needsVerification) expect(without.dimensions).not.toContain('ambiguous_source');
     expect(withSub.needsVerification).toBe(true);
     if (withSub.needsVerification) expect(withSub.dimensions).toContain('ambiguous_source');
