@@ -116,7 +116,10 @@ async function main() {
     routed += 1;
     const label = comboLabel(decision.dimensions);
     byCombo.set(label, (byCombo.get(label) ?? 0) + 1);
-    if (decision.dimensions.length === 1 && decision.dimensions[0] === 'ambiguous_source') {
+    // Text-only routes carry no web-search tool (see buildVerifyRequestParams).
+    // self_answering joined ambiguous_source there on 2026-08-27, so the
+    // suppression's reach is every call routed on those dimensions ALONE.
+    if (decision.dimensions.every((d) => d === 'ambiguous_source' || d === 'self_answering')) {
       ambiguousOnly += 1;
       if (ambiguousOnlyExamples.length < 10) ambiguousOnlyExamples.push(row);
     }
@@ -126,16 +129,22 @@ async function main() {
   console.log(
     `\nSample: ${n} rows (${questionRows.length} Question + ${generatedRows.length} GeneratedQuestion, most recent)`,
   );
-  console.log(`Routed to verification: ${routed} (${pct(routed, n)})   Skipped: ${skipped} (${pct(skipped, n)})\n`);
+  console.log(
+    `Routed to verification: ${routed} (${pct(routed, n)})   Skipped: ${skipped} (${pct(skipped, n)})\n`,
+  );
 
   console.log('dimension combination                     rows    % of routed');
   for (const [label, count] of [...byCombo.entries()].sort((a, b) => b[1] - a[1])) {
-    console.log(`${label.padEnd(40)}  ${String(count).padStart(4)}    ${pct(count, routed).padStart(6)}`);
+    console.log(
+      `${label.padEnd(40)}  ${String(count).padStart(4)}    ${pct(count, routed).padStart(6)}`,
+    );
   }
 
   // The headline: how far the no-tool-on-ambiguous_source-only change reaches.
   console.log(`\n=== reach of the ambiguous_source-only tool suppression ===`);
-  console.log(`ambiguous_source-only calls: ${ambiguousOnly} of ${routed} routed (${pct(ambiguousOnly, routed)})`);
+  console.log(
+    `ambiguous_source-only calls: ${ambiguousOnly} of ${routed} routed (${pct(ambiguousOnly, routed)})`,
+  );
 
   if (ambiguousOnly === 0) {
     console.log(

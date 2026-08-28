@@ -12,6 +12,14 @@
  *                    false_premise prose in verify-question.ts.
  *   - extra_fact:    the answer or its explanation carries an unasked / adjacent
  *                    claim, even when the answer itself is right.
+ *   - self_answering: the stem gives the answer away. The deterministic gate
+ *                    (findAnswerLeaks / textContainsAnswer) already DROPS the
+ *                    leaks a string test can prove; this dimension exists for the
+ *                    ones it cannot — above all the eponym trap, where the stem
+ *                    names a work after the person it then asks you to name
+ *                    ("the 'Razumovsky' quartets … what was that patron's
+ *                    name?"). Like ambiguous_source it is a judgment about the
+ *                    TEXT and needs no web search.
  *
  * Stable canonical facts (a bare "what/who is X" over a settled fact with no
  * embedded claim) and opinion-adjacent items are SKIPPED — they never reach a web
@@ -22,11 +30,19 @@
  * from knowledge, so a skip here is the only place spend is truly saved.
  *
  * Pure and deterministic by contract (unit-tested): no I/O, no imports with side
- * effects. The batch-verify route (Phase 3) calls this first and only proceeds to
- * the LLM for `needsVerification: true`.
+ * effects. (self-answering.ts is itself import-free and side-effect-free, so the
+ * self_answering route does not break that contract.) The batch-verify route
+ * (Phase 3) calls this first and only proceeds to the LLM for
+ * `needsVerification: true`.
  */
 
-export type VerificationDimension = 'false_premise' | 'extra_fact' | 'ambiguous_source';
+import { textContainsAnswer } from '@/server/questions/self-answering';
+
+export type VerificationDimension =
+  | 'false_premise'
+  | 'extra_fact'
+  | 'ambiguous_source'
+  | 'self_answering';
 
 export type PrefilterInput = {
   questionText: string;
@@ -129,10 +145,7 @@ function hasSetupClause(stem: string): boolean {
     .map((c) => c.trim())
     .filter(Boolean);
   return (
-    /[—–]| - /.test(stem) ||
-    clauses.length >= 3 ||
-    wordCount >= 28 ||
-    hasSentenceLevelSetup(stem)
+    /[—–]| - /.test(stem) || clauses.length >= 3 || wordCount >= 28 || hasSentenceLevelSetup(stem)
   );
 }
 
@@ -156,9 +169,39 @@ function isOpinionAdjacent(text: string): boolean {
 // English stopwords + bare interrogative/scaffolding openers that a capitalized
 // first letter does NOT make a proper noun. Kept small and lowercase.
 const SELF_CONTAINMENT_STOPWORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'by', 'with',
-  'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
-  'this', 'that', 'these', 'those', 'after', 'before', 'during', 'is', 'are', 'was', 'were',
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'of',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'by',
+  'with',
+  'what',
+  'which',
+  'who',
+  'whom',
+  'whose',
+  'when',
+  'where',
+  'why',
+  'how',
+  'this',
+  'that',
+  'these',
+  'those',
+  'after',
+  'before',
+  'during',
+  'is',
+  'are',
+  'was',
+  'were',
 ]);
 
 // Significant (≥3-char, non-stopword) lowercased tokens of a label.
@@ -201,6 +244,54 @@ function hasForeignProperNoun(stem: string, subjectTokens: string[]): boolean {
   return false;
 }
 
+// Overlap scoring for isSelfAnsweringCandidate. Kept local (and coarse) so the
+// module stays pure: same normalization shape as self-answering.ts, but the only
+// job here is deciding whether to spend an LLM call.
+const OVERLAP_MIN_TOKEN_LENGTH = 4;
+const OVERLAP_STOPWORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'of',
+  'and',
+  'or',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'from',
+  'by',
+  'with',
+  'as',
+  'is',
+  'was',
+  'were',
+  'be',
+  'been',
+  'his',
+  'her',
+  'its',
+  'their',
+  'this',
+  'that',
+  'also',
+  'known',
+  'called',
+  'what',
+  'which',
+  'who',
+]);
+
+function normalizeForOverlap(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -220,15 +311,49 @@ export function isAmbiguousSourceCandidate(
   return hasForeignProperNoun(stem, subjectTokens);
 }
 
+// Route self_answering when the stem already shows a DISCRIMINATING piece of the
+// answer — but not so much of it that the deterministic gate would have dropped
+// the row outright (textContainsAnswer is the drop; this is the suspicion).
+//
+// Two shapes qualify, both measured against the live bank (2026-08-27):
+//   - a shared PROPER NOUN, i.e. a capitalized word of the answer that is not
+//     merely its first word (sentence case) and that the stem also contains.
+//     This is the eponym signature: "Andrey Razumovsky (Count Razumovsky)"
+//     against a stem quoting the 'Razumovsky' quartets.
+//   - two-plus shared load-bearing words, where the overlap is too broad to be
+//     coincidence.
+//
+// Deliberately NOT "any shared word": that routed 44 of the 126 otherwise-skipped
+// bank rows, almost all on common nouns the stem has to use to pose the question
+// at all ("cognitive", "product"). The tightened form routes 16 — and since this
+// dimension attaches no web-search tool, those are the cheap knowledge-only calls,
+// not the ~24x searching kind.
+export function isSelfAnsweringCandidate(stem: string, answer: string): boolean {
+  if (!stem || !answer) return false;
+  // Already provable by string test → the gate drops it; no LLM call needed.
+  if (textContainsAnswer(stem, answer)) return false;
+
+  const haystack = ` ${normalizeForOverlap(stem)} `;
+  const words = answer.split(/\s+/).map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''));
+  let shared = 0;
+  let sharedProperNoun = false;
+  words.forEach((word, i) => {
+    const token = normalizeForOverlap(word);
+    if (token.length < OVERLAP_MIN_TOKEN_LENGTH || OVERLAP_STOPWORDS.has(token)) return;
+    if (!haystack.includes(` ${token} `)) return;
+    shared += 1;
+    if (i > 0 && /^\p{Lu}/u.test(word)) sharedProperNoun = true;
+  });
+  return sharedProperNoun || shared >= 2;
+}
+
 // LEGACY (pre-2026-07-05): substance ≈ claims — ≥60 chars AND (any one signal OR
 // ≥140 chars). MEASURED as the dominant ~90% router (cost-characterization §5
 // retraction): trivia explainers nearly always clear one of those bars — every
 // explainer mentions a year or runs long — so extra_fact routed almost every row
 // and the pre-filter skipped only ~9%. Kept callable for the escape hatch and
 // the before/after measurement script.
-export function explanationCarriesClaimsLegacy(
-  explanation: string | null | undefined,
-): boolean {
+export function explanationCarriesClaimsLegacy(explanation: string | null | undefined): boolean {
   if (!explanation) return false;
   const trimmed = explanation.trim();
   if (trimmed.length < 60) return false; // too short to carry an independent claim
@@ -371,6 +496,13 @@ export function prefilterForVerification(
   // routes — a question can be factually clean yet unanswerable out of context.
   if (isAmbiguousSourceCandidate(stem, input.canonicalSubcategory)) {
     dimensions.push('ambiguous_source');
+  }
+
+  // self_answering: the stem hands over a discriminating piece of the answer in a
+  // way no string test can prove. Independent of every route above — a question
+  // can be factually spotless and self-contained and still answer itself.
+  if (isSelfAnsweringCandidate(stem, answer)) {
+    dimensions.push('self_answering');
   }
 
   if (dimensions.length === 0) {

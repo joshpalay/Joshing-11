@@ -97,7 +97,10 @@ describe('findAnswerLeaks', () => {
     // though the stem says "FDR", that is the SUBJECT being identified, not a
     // leak — the answer is the full name. Must be kept.
     const result = findAnswerLeaks([
-      q('Which U.S. president is commonly referred to by the initials FDR?', 'Franklin D. Roosevelt (FDR)'),
+      q(
+        'Which U.S. president is commonly referred to by the initials FDR?',
+        'Franklin D. Roosevelt (FDR)',
+      ),
     ]);
     expect(result.toDrop.size).toBe(0);
   });
@@ -124,6 +127,81 @@ describe('findAnswerLeaks', () => {
       q('What pricing tactic ends prices in .99?', 'Charm pricing'),
     ]);
     expect([...result.toDrop].sort()).toEqual([1]);
+  });
+
+  // --- accepted-form leaks (the "Razumovsky" class) --------------------------
+
+  it('flags an eponym question whose stem names the person the answer is named after', () => {
+    // The reported miss. "Andrey Razumovsky (Count Razumovsky)" is not a
+    // substring of the stem, so the whole-answer test passed it three times over
+    // (2026-06-24 / 08-20 / 08-27, served 08-27). The accepted form "Count
+    // Razumovsky" reduces to the one word the stem already quotes.
+    const result = findAnswerLeaks([
+      q(
+        "Beethoven dedicated his three 'Razumovsky' string quartets, Op. 59, to a Russian patron who also happened to be the Russian ambassador to Vienna. What was that patron's name?",
+        'Andrey Razumovsky (Count Razumovsky)',
+      ),
+    ]);
+    expect(result.toDrop.size).toBe(1);
+  });
+
+  it('flags a question whose stem contains a parenthetical accepted form', () => {
+    // "the Balrog" is offered as an acceptable answer and the stem hands it over.
+    const result = findAnswerLeaks([
+      q(
+        'In The Fellowship of the Ring, the Fellowship loses one of its members to the Balrog in the Mines of Moria. What is the name of that ancient demon of shadow and flame?',
+        "Durin's Bane (the Balrog)",
+      ),
+    ]);
+    expect(result.toDrop.size).toBe(1);
+  });
+
+  it('flags a long lowercase form whose every word is already in the stem', () => {
+    const result = findAnswerLeaks([
+      q(
+        'People eat more when dining with others than alone. What is the name for this social facilitation of eating?',
+        'Social facilitation of eating (meal size social facilitation)',
+      ),
+    ]);
+    expect(result.toDrop.size).toBe(1);
+  });
+
+  it('keeps an answer whose distinguishing word is withheld by the stem', () => {
+    // "Locutus of Borg" shares only "Borg" with the stem; the name the player
+    // must supply is never shown. Flagging this would drop a good question.
+    const result = findAnswerLeaks([
+      q(
+        "In the TNG episode 'The Best of Both Worlds,' Picard is assimilated by the Borg and given a new designation. What name do the Borg give him?",
+        'Locutus of Borg',
+      ),
+    ]);
+    expect(result.toDrop.size).toBe(0);
+  });
+
+  it('keeps a short generic answer whose words any stem would naturally contain', () => {
+    // Measured false positives from the live bank: these words sit in the stem
+    // because the stem has to pose the question, not because the answer leaked.
+    const result = findAnswerLeaks([
+      q("In 'Paradise Lost,' in which book does Satan's defiant declaration appear?", 'Book I'),
+      q(
+        "Roughly how long is Victor Wembanyama's wingspan, in feet?",
+        '8 feet (approximately 7 feet 10-11 inches)',
+      ),
+      q('If a vote on a motion is tied, does the motion pass or fail by default?', 'It fails'),
+    ]);
+    expect(result.toDrop.size).toBe(0);
+  });
+
+  it('keeps a quote-inversion question that shows the words in the other order', () => {
+    // Complete-the-quote is an explicitly acceptable style; the stem MUST show
+    // the first half for the question to work.
+    const result = findAnswerLeaks([
+      q(
+        "In 'East Coker,' Eliot opens with 'In my beginning is my end' and closes with its opposite. What is that closing inversion?",
+        'In my end is my beginning',
+      ),
+    ]);
+    expect(result.toDrop.size).toBe(0);
   });
 
   it('does not flag short answers below the leak-check token threshold', () => {
