@@ -430,10 +430,8 @@ function QuestionRow({
   dismissing = false,
   onGiveUp,
   giveUpDisabled = false,
-  onDismiss,
-  dismissDisabled = false,
-  onMutePresence,
-  muteDisabled = false,
+  onNotForMe,
+  notForMeDisabled = false,
   reportTarget = null,
   onReportedInappropriate,
 }: {
@@ -450,12 +448,13 @@ function QuestionRow({
   isNew?: boolean;
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
-  onDismiss?: () => void;
-  dismissDisabled?: boolean;
+  // One control, three scopes (see NotForMeSheet). Replaces the old adjacent
+  // onDismiss (temporary skip) and onMutePresence (durable category rest), which
+  // looked identical but were not equally reversible.
+  onNotForMe?: () => void;
+  notForMeDisabled?: boolean;
   // Bonus slots only (D-4 §B): "This is {Name}'s bag but not mine" — rests the
   // slot's domain so the category stops surfacing, and closes this question.
-  onMutePresence?: () => void;
-  muteDisabled?: boolean;
   reportTarget?: ReportReasonTarget | null;
   // Reporting the ACTIVE question as inappropriate also removes it from the
   // round (the card vanishing is the feedback, matching the recap surfaces).
@@ -799,7 +798,7 @@ function QuestionRow({
           ) : null}
         </div>
       </div>
-      {onGiveUp || onDismiss || onMutePresence ? (
+      {onGiveUp || onNotForMe ? (
         <div
           style={{
             display: 'flex',
@@ -819,24 +818,14 @@ function QuestionRow({
               Show me the answer
             </button>
           ) : null}
-          {onMutePresence && presenceSourceName ? (
+          {onNotForMe ? (
             <button
               type="button"
-              onClick={onMutePresence}
-              disabled={muteDisabled}
+              onClick={onNotForMe}
+              disabled={notForMeDisabled}
               style={questionActionLinkStyle}
             >
-              This is {firstNameFrom(presenceSourceName)}&rsquo;s bag but not mine
-            </button>
-          ) : null}
-          {onDismiss ? (
-            <button
-              type="button"
-              onClick={onDismiss}
-              disabled={dismissDisabled}
-              style={questionActionLinkStyle}
-            >
-              Dismiss
+              Not for me
             </button>
           ) : null}
         </div>
@@ -1696,19 +1685,22 @@ export function GameplayChatThread({
   messages,
   onGiveUp,
   giveUpDisabled,
-  onDismiss,
-  dismissDisabled,
-  onMutePresence,
-  muteDisabled,
+  onNotForMe,
+  notForMeDisabled,
+  onSlotClosed,
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
   giveUpDisabled?: boolean;
-  onDismiss?: () => void;
-  dismissDisabled?: boolean;
+  // One control, three scopes (see NotForMeSheet). Replaces the old adjacent
+  // onDismiss (temporary skip) and onMutePresence (durable category rest), which
+  // looked identical but were not equally reversible.
+  onNotForMe?: () => void;
+  notForMeDisabled?: boolean;
+  /** Closes the active slot without opening the sheet — used after an
+   *  inappropriate report, where the card vanishing IS the feedback. */
+  onSlotClosed?: () => void;
   // Bonus-slot opt-out (D-4 §B). Wired only to the active bonus question.
-  onMutePresence?: () => void;
-  muteDisabled?: boolean;
 }) {
   // "Show me the answer" and "Dismiss" belong only under the active (still-
   // unanswered) question — the last question message with no result after it.
@@ -1750,17 +1742,11 @@ export function GameplayChatThread({
                 badges={m.badges}
                 onGiveUp={onGiveUp && m.id === activeQuestionId ? onGiveUp : undefined}
                 giveUpDisabled={giveUpDisabled}
-                onDismiss={onDismiss && m.id === activeQuestionId ? onDismiss : undefined}
-                dismissDisabled={dismissDisabled}
-                onMutePresence={
-                  onMutePresence && m.id === activeQuestionId && m.presenceSourceName
-                    ? onMutePresence
-                    : undefined
-                }
-                muteDisabled={muteDisabled}
+                onNotForMe={onNotForMe && m.id === activeQuestionId ? onNotForMe : undefined}
+                notForMeDisabled={notForMeDisabled}
                 reportTarget={m.reportTarget}
                 onReportedInappropriate={
-                  onDismiss && m.id === activeQuestionId ? onDismiss : undefined
+                  onSlotClosed && m.id === activeQuestionId ? onSlotClosed : undefined
                 }
               />
             );

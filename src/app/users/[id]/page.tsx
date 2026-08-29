@@ -15,6 +15,8 @@ import { ProfileFriendsSection } from '@/components/profile/ProfileFriendsSectio
 import { SectionVisibilityToggle } from '@/components/profile/SectionVisibilityToggle';
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 import { AccountActions } from '@/components/profile/settings/AccountActions';
+import { HiddenQuestions } from '@/components/profile/settings/HiddenQuestions';
+import { getHiddenQuestionsForUser } from '@/server/db/queries/hidden-questions';
 import { getExistingDevToolHrefs } from '@/server/dev/tool-availability';
 import { NotificationsForm } from '@/components/profile/settings/NotificationsForm';
 import { PrivacyForm } from '@/components/profile/settings/PrivacyForm';
@@ -218,6 +220,18 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     // dropdowns reflect the DB; skip the read entirely for non-owners.
     const isOwner = isAdminUser(session.userId);
     const llmProviders = isOwner ? await getProviderSettings() : null;
+    // Hidden questions — the undo for the Not-for-me sheet's durable per-question
+    // scope. Owner-only surface, so the read lives inside this branch.
+    // Fail-open: this is one section of a large settings page, so a failed read
+    // renders an empty Hidden questions list rather than 500-ing the whole page.
+    const hiddenQuestionItems = (
+      await getHiddenQuestionsForUser(session.userId).catch(() => [])
+    ).map((row) => ({
+      id: row.id,
+      questionText: row.questionText,
+      domain: row.domain,
+      hiddenAt: row.hiddenAt.toISOString(),
+    }));
     // B-LLM-PROVIDER-AB-METRICS: load the experiment readout data here (the page
     // is already awaited) and pass it into the sync presentational component.
     const llmExperimentData = isOwner ? await loadLlmExperimentData() : null;
@@ -335,6 +349,10 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         {llmProviders ? <LlmProviderPanel initial={llmProviders} /> : null}
         {llmExperimentData ? <LlmExperimentReadout data={llmExperimentData} /> : null}
         {costReportData ? <LlmCostReportReadout data={costReportData} /> : null}
+
+        <HiddenQuestions
+          initial={hiddenQuestionItems}
+        />
 
         <AccountActions
           isAdmin={isAdminUser(session.userId)}

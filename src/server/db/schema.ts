@@ -1074,6 +1074,48 @@ export const skippedDailyQuestions = pgTable(
   ],
 );
 
+/**
+ * A question the player has permanently hidden ("Never show this question
+ * again" in the Not-for-me sheet). Distinct from SkippedDailyQuestion in two
+ * ways that matter:
+ *
+ *  - No `queue_id`. A skip is scoped to the round it happened in and cascades
+ *    away with its queue; a hide is a durable preference that must outlive
+ *    every queue it was ever served in.
+ *  - It is REVERSIBLE by design. "Hidden questions" in settings lists these
+ *    rows and restoring one deletes it, so nothing is burned irrecoverably.
+ *    That reversibility is what makes permanent hiding acceptable against a
+ *    finite question pool (D-SUPPLY-FINITE-SET-01) -- a player who hides a
+ *    question by accident can always get it back.
+ *
+ * Exactly one of question_id / generated_question_id is set, mirroring how
+ * SkippedDailyQuestion addresses the two question sources.
+ */
+export const hiddenQuestions = pgTable(
+  'HiddenQuestion',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id),
+    questionId: text('question_id').references(() => questions.id),
+    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
+    canonicalSubcategory: text('canonical_subcategory').notNull(),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('HiddenQuestion_user_id_idx').on(table.userId),
+    index('HiddenQuestion_user_id_question_id_idx').on(table.userId, table.questionId),
+    index('HiddenQuestion_user_id_generated_question_id_idx').on(
+      table.userId,
+      table.generatedQuestionId,
+    ),
+    // Standalone covering indexes for the two FKs, same rationale as
+    // SkippedDailyQuestion's (0083 / advisor 0001): the composites lead with
+    // user_id and can't serve an FK check on the question columns alone.
+    index('HiddenQuestion_question_id_idx').on(table.questionId),
+    index('HiddenQuestion_generated_question_id_idx').on(table.generatedQuestionId),
+  ],
+);
+
 export const userDomainDifficulties = pgTable(
   'USER_DOMAIN_DIFFICULTY',
   {
