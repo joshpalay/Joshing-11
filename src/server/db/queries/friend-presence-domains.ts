@@ -183,6 +183,26 @@ function isTerritoryDomain(domain: DomainMastery): boolean {
   return domain.isDeclared || domain.isDeclaredInterest || domain.isDemonstrated;
 }
 
+/**
+ * The activity signal additionally requires at least one CORRECT answer.
+ *
+ * `selectRecentlyExploring` gates only on recency + `!isHidden`, which is right
+ * for the profile's "Recently exploring" section — answering wrong IS exploring,
+ * and that section describes you to yourself. It is NOT enough to put a domain
+ * into someone ELSE's Daily Five: without this floor a single wrong answer
+ * promotes a domain to "{Name}'s world" and broadcasts it to everyone who
+ * follows them. Mirrors the `demonstrated` aggregate in `loadDomainAggregatesBulk`,
+ * which likewise requires `answerState <> 'incorrect'`; the territory path
+ * already inherits that gate via `isDemonstrated`, so only activity was open.
+ *
+ * Lifetime-correct rather than correct-in-window: the point is to establish that
+ * the friend has real purchase on the domain at all, not to re-litigate recency
+ * (`selectRecentlyExploring` already applied the 30-day window).
+ */
+function hasEarnedActivity(domain: DomainMastery): boolean {
+  return domain.questionsCorrect > 0;
+}
+
 function activityMs(lastActivityAt: string | null): number | null {
   if (!lastActivityAt) return null;
   const ms = new Date(lastActivityAt).getTime();
@@ -194,7 +214,10 @@ function activityMs(lastActivityAt: string | null): number | null {
  * viewer follows. Returns at most `limit` candidates (DAILY_BONUS_SLOT_MAX). The
  * pool is friend-sourced only — it never includes the viewer's own domains, so a
  * viewer who follows no one (or no one with eligible domains) gets an empty pool
- * (clean 5).
+ * (clean 5). That own-domain subtraction is ENFORCED below (`ownDomains`), not
+ * merely assumed: it was documented here and in the orchestrator for a long time
+ * while nothing implemented it, which let a friend's answer in the viewer's own
+ * domain round-trip back as "from {Name}'s world".
  *
  * Privacy: the presence signal honors the same `knowledge_base` SECTION
  * visibility the profile enforces (`canViewSection`). Following is one-way, so
@@ -242,21 +265,40 @@ export async function getFriendDomainsForBonus(
   // consumes `allDomains`). Bounded query count regardless of followee count.
   // A batch failure degrades to an empty pool — the same best-effort posture the
   // old per-friend `.catch(() => ({ allDomains: [] }))` gave each fetch.
-  const domainsByFriend = await getKnowledgePageDataForUsers(
-    visibleFriends.map((f) => f.id),
-  ).catch(() => new Map<string, DomainMastery[]>());
+  // The viewer rides along in the SAME batched query as the friends (one extra
+  // row, no extra round-trip) so their own map can be subtracted below.
+  const domainsByUser = await getKnowledgePageDataForUsers([
+    ...visibleFriends.map((f) => f.id),
+    viewerUserId,
+  ]).catch(() => new Map<string, DomainMastery[]>());
+
+  // *** The viewer's OWN domains — subtracted from the pool. ***
+  // This is what makes the "friend-sourced only" invariant above real; it was
+  // documented here and in the orchestrator but never enforced. Without it the
+  // +2 hands a player their own territory back under a friend's name: a followee
+  // who answers a question in the viewer's domain picks that domain up as
+  // territory (or, before the correctness floor below, as bare activity) and it
+  // returns to the viewer as "from {Name}'s world".
+  // Every domain in the viewer's own knowledge map is theirs — declared,
+  // demonstrated, or merely played — so the whole map is excluded, hidden
+  // domains included (hiding a domain doesn't make it someone else's).
+  const ownDomains = new Set(
+    (domainsByUser.get(viewerUserId) ?? []).map((d) => d.domain.toLowerCase()),
+  );
 
   const contributions: FriendDomainContribution[] = [];
   for (const friend of visibleFriends) {
-    const allDomains = domainsByFriend.get(friend.id) ?? [];
+    const allDomains = domainsByUser.get(friend.id) ?? [];
     const activityDomains = new Set(
       selectRecentlyExploring(allDomains).map((d) => d.domain.toLowerCase()),
     );
 
     for (const domain of allDomains) {
-      if (excludeDomains.has(domain.domain.toLowerCase())) continue;
+      const key = domain.domain.toLowerCase();
+      if (excludeDomains.has(key)) continue;
+      if (ownDomains.has(key)) continue;
       const inTerritory = isTerritoryDomain(domain);
-      const inActivity = !domain.isHidden && activityDomains.has(domain.domain.toLowerCase());
+      const inActivity = !domain.isHidden && hasEarnedActivity(domain) && activityDomains.has(key);
       if (!inTerritory && !inActivity) continue;
       contributions.push({
         friendId: friend.id,
