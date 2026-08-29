@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
@@ -13,6 +13,7 @@ import { AuthorName } from '@/components/AuthorName';
 import { EditorialBadge } from '@/components/EditorialBadge';
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
+import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import { CATCH_UP_EMPTY_COPY } from '@/server/play/catch-up-copy';
 
 export default function DailyCatchupPage() {
@@ -38,6 +39,42 @@ export default function DailyCatchupPage() {
     dismissCurrent,
   } = useCatchupFlow();
   const [answer, setAnswer] = useState('');
+  const [notForMeOpen, setNotForMeOpen] = useState(false);
+
+  // Catch-up gets the SAME sheet as the Daily Five rather than its own
+  // differently-behaving button — a control that looks identical across surfaces
+  // must also mean the same thing. "Skip for now" maps to catch-up's existing
+  // dismiss (the item returns on a later day); the two durable scopes call the
+  // same endpoints the Daily Five does.
+  const catchupNotForMe = useCallback(
+    async (scope: 'skip' | 'hide_question' | 'rest_category') => {
+      if (!currentItem) return;
+      if (scope === 'rest_category') {
+        await fetch('/api/daily/preferences/domain-frequency', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ domain: currentItem.domain, frequency: 'resting' }),
+        });
+      }
+      if (scope === 'hide_question') {
+        // reportTarget already discriminates the two id spaces (curated/bank rows
+        // carry questionId, LLM-origin rows carry generatedQuestionId); fall back
+        // to the item's own questionId when a stale payload omits it.
+        const target = currentItem.reportTarget?.generatedQuestionId
+          ? { generated_question_id: currentItem.reportTarget.generatedQuestionId }
+          : { question_id: currentItem.reportTarget?.questionId ?? currentItem.questionId };
+        await fetch('/api/questions/hide', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ...target, domain: currentItem.domain }),
+        });
+      }
+      await dismissCurrent();
+    },
+    [currentItem, dismissCurrent],
+  );
 
   const hasItems = initialTotal > 0;
   const showSummary = phase === 'summary';
@@ -139,8 +176,8 @@ export default function DailyCatchupPage() {
               messages={messages}
               onGiveUp={() => skipCurrent()}
               giveUpDisabled={submitting || isResolvingTurn}
-              onDismiss={() => void dismissCurrent()}
-              dismissDisabled={submitting || isResolvingTurn}
+              onNotForMe={() => setNotForMeOpen(true)}
+              notForMeDisabled={submitting || isResolvingTurn}
             />
             {roundComplete ? (
               <RoundCloseCard
@@ -154,6 +191,19 @@ export default function DailyCatchupPage() {
           </>
         )}
       </section>
+
+      {notForMeOpen && currentItem ? (
+        <NotForMeSheet
+          domain={currentItem.domain}
+          categoryLabel={currentItem.domainDisplayName}
+          skipDisabled={submitting || isResolvingTurn}
+          onChoose={async (scope) => {
+            await catchupNotForMe(scope);
+            setNotForMeOpen(false);
+          }}
+          onClose={() => setNotForMeOpen(false)}
+        />
+      ) : null}
 
       {currentItem && !loading && phase === 'playing' ? (
         <AnswerInputBar

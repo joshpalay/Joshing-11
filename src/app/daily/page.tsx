@@ -19,6 +19,7 @@ import {
 } from '@/lib/answer-submit';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
+import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
@@ -865,64 +866,90 @@ export default function DailyPage() {
     }
   }, [postAnswer]);
 
-  // Bonus slots only (D-4 §B): "This is {Name}'s bag but not mine". Rests the
-  // slot's domain so the category stops surfacing in future rounds, and closes
-  // this bonus question (a skip — bonus slots are additive, so closing one never
-  // drops the round below the core five). Optimistic: the slot is marked skipped
-  // immediately, then reverted if either request fails.
-  const muteBonusDomain = useCallback(async () => {
-    if (!queue || !currentSlot || submitting) return;
-    const slotIndex = currentSlot.slot_index;
-    const { domain } = currentSlot;
-    setError(null);
-    setQueue((existing) =>
-      existing
-        ? {
-            ...existing,
-            slots: existing.slots.map((slot) =>
-              slot.slot_index === slotIndex ? { ...slot, skipped: true } : slot,
-            ),
-          }
-        : existing,
-    );
-    try {
-      // Rest the category (durable preference). Best-effort, but the skip below
-      // is what actually closes this question, so a failure here still throws.
-      const restResponse = await fetch('/api/daily/preferences/domain-frequency', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ domain, frequency: 'resting' }),
-      });
-      if (!restResponse.ok) throw new Error('Could not update that category.');
+  // The Not-for-me sheet's three scopes, all closing the current slot.
+  //
+  // These used to be two adjacent links that looked identical: "Dismiss" (a
+  // temporary skip) and "This is {Name}'s bag but not mine" (a DURABLE category
+  // rest, bonus slots only). Same styling, very different permanence, no
+  // confirmation on either. Now the scope is an explicit choice in a sheet, and
+  // it is available on EVERY question rather than only the +2.
+  //
+  // All three are optimistic: the slot is marked skipped immediately and
+  // reverted if any request fails. The skip call is what actually closes the
+  // slot in every case, so the durable writes run first and throw on failure —
+  // we never want a closed slot with the preference silently not recorded.
+  const [notForMeOpen, setNotForMeOpen] = useState(false);
 
-      const skipResponse = await fetch('/api/daily/skip', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
-      });
-      if (!skipResponse.ok) throw new Error('Could not close that question.');
-      const body = (await skipResponse.json().catch(() => null)) as { slots?: QueueSlot[] } | null;
-      if (Array.isArray(body?.slots)) {
-        const nextSlots = body.slots;
-        setQueue((existing) => (existing ? { ...existing, slots: nextSlots } : existing));
-      }
-    } catch (caught) {
-      // Revert the optimistic skip so the question stays answerable.
+  const notForMe = useCallback(
+    async (scope: 'skip' | 'hide_question' | 'rest_category') => {
+      if (!queue || !currentSlot || submitting) return;
+      const slotIndex = currentSlot.slot_index;
+      const { domain } = currentSlot;
+      setError(null);
       setQueue((existing) =>
         existing
           ? {
               ...existing,
               slots: existing.slots.map((slot) =>
-                slot.slot_index === slotIndex ? { ...slot, skipped: false } : slot,
+                slot.slot_index === slotIndex ? { ...slot, skipped: true } : slot,
               ),
             }
           : existing,
       );
-      setError(caught instanceof Error ? caught.message : 'Could not update that category.');
-    }
-  }, [queue, currentSlot, submitting]);
+      try {
+        if (scope === 'rest_category') {
+          const restResponse = await fetch('/api/daily/preferences/domain-frequency', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ domain, frequency: 'resting' }),
+          });
+          if (!restResponse.ok) throw new Error('Could not update that category.');
+        }
+
+        if (scope === 'hide_question') {
+          // Exactly one id space, matching how the slot addresses its question.
+          const target = currentSlot.generated_question_id
+            ? { generated_question_id: currentSlot.generated_question_id }
+            : { question_id: currentSlot.question_id };
+          const hideResponse = await fetch('/api/questions/hide', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ ...target, domain }),
+          });
+          if (!hideResponse.ok) throw new Error('Could not hide that question.');
+        }
+
+        const skipResponse = await fetch('/api/daily/skip', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
+        });
+        if (!skipResponse.ok) throw new Error('Could not close that question.');
+        const body = (await skipResponse.json().catch(() => null)) as { slots?: QueueSlot[] } | null;
+        if (Array.isArray(body?.slots)) {
+          const nextSlots = body.slots;
+          setQueue((existing) => (existing ? { ...existing, slots: nextSlots } : existing));
+        }
+      } catch (caught) {
+        // Revert the optimistic close so the question stays answerable.
+        setQueue((existing) =>
+          existing
+            ? {
+                ...existing,
+                slots: existing.slots.map((slot) =>
+                  slot.slot_index === slotIndex ? { ...slot, skipped: false } : slot,
+                ),
+              }
+            : existing,
+        );
+        setError(caught instanceof Error ? caught.message : 'Could not update that question.');
+      }
+    },
+    [queue, currentSlot, submitting],
+  );
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
@@ -1005,11 +1032,29 @@ export default function DailyPage() {
             messages={messages}
             onGiveUp={() => void giveUpCurrent()}
             giveUpDisabled={submitting}
-            onMutePresence={() => void muteBonusDomain()}
-            muteDisabled={submitting}
+            onNotForMe={() => setNotForMeOpen(true)}
+            notForMeDisabled={submitting}
           />
         )}
       </section>
+
+      {notForMeOpen && currentSlot ? (
+        <NotForMeSheet
+          domain={currentSlot.domain}
+          categoryLabel={
+            (currentSlot.broad_category && currentSlot.broad_category.trim()) ||
+            (currentSlot.category ? categoryLabel(currentSlot.category) : null) ||
+            currentSlot.domain
+          }
+          presenceSourceName={currentSlot.presence_source_name ?? null}
+          skipDisabled={submitting}
+          onChoose={async (scope) => {
+            await notForMe(scope);
+            setNotForMeOpen(false);
+          }}
+          onClose={() => setNotForMeOpen(false)}
+        />
+      ) : null}
 
       {currentSlot && !loading ? (
         <AnswerInputBar

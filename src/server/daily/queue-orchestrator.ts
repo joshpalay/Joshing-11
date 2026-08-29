@@ -34,6 +34,7 @@ import {
 import { SUBJECT_COOLDOWN_DAYS, makeSubjectCooldownGate } from '@/server/daily/subject-cooldown';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { getFriendAndFoFUserIds } from '@/server/db/queries/friends';
+import { EMPTY_HIDDEN_IDS, getHiddenQuestionIds } from '@/server/db/queries/hidden-questions';
 import {
   getFriendDomainsForBonus,
   type FriendDomainCandidate,
@@ -530,13 +531,28 @@ async function buildDailyQueueForUser(
   const subjectCooldownGate = makeSubjectCooldownGate(recentEntities);
   let deflectedForSubjectCooldown = 0;
 
+  // Permanently hidden questions ("Never show this question again", the durable
+  // scope of the Not-for-me sheet).
+  //
+  // *** THIS IS AN ABSOLUTE DROP, NOT A DEFLECTION. ***
+  // Every other gate in this builder (answer cooldown, subject cooldown,
+  // diversity) pushes a rejected pick into a reserve so a tapped-out knowledge
+  // base can restore it rather than serve a short queue. A hidden question must
+  // never come back by ANY path — not the reserve, not the top-up rounds, not
+  // the short-core backfill. The player said never. Serving a four-question
+  // Daily Five is the correct outcome if the alternative is re-serving something
+  // they explicitly hid.
+  //
+  // Fail-open on error: a lookup failure yields empty sets, so a transient DB
+  // blip degrades to "hides not applied this build" rather than losing the build.
+  const hiddenIds = await getHiddenQuestionIds(userId).catch(() => EMPTY_HIDDEN_IDS);
+  const notHiddenCanonical = <T extends { id: string }>(pick: T): boolean =>
+    !hiddenIds.questionIds.has(pick.id);
+
   const socialGraph = await getFriendAndFoFUserIds(userId);
-  const authoredAll = await pickEligibleAuthoredQuestions(
-    userId,
-    socialGraph,
-    DAILY_QUEUE_SIZE,
-    allowedSubcategories,
-  );
+  const authoredAll = (
+    await pickEligibleAuthoredQuestions(userId, socialGraph, DAILY_QUEUE_SIZE, allowedSubcategories)
+  ).filter(notHiddenCanonical);
   // Cap authored picks first (highest trust → first claim on each subcategory's
   // slots); deflected picks go to a reserve the backfill can draw on if the cap
   // would otherwise leave the queue short.
@@ -567,11 +583,10 @@ async function buildDailyQueueForUser(
   // House content does not enter the Feed and never occupies a +2 bonus slot.
   // Request against the CAPPED authored count so house can fill any slot the cap
   // freed, then run house through the same shared diversity gate.
-  const housePicksAll = await pickHouseQuestions(
-    userId,
-    DAILY_QUEUE_SIZE - authored.length,
-    allowedSubcategories,
-  );
+  // Hidden house picks are dropped outright, same absolute rule as authored above.
+  const housePicksAll = (
+    await pickHouseQuestions(userId, DAILY_QUEUE_SIZE - authored.length, allowedSubcategories)
+  ).filter(notHiddenCanonical);
   const houseReserve: typeof housePicksAll = [];
   const housePicks = housePicksAll.filter((pick) => {
     if (answerCooldownGate.blocks(pick.answerText)) {
@@ -629,6 +644,8 @@ async function buildDailyQueueForUser(
   const generatedReserve: typeof generated = [];
   let droppedDuplicates = 0;
   let droppedGeneric = 0;
+  // Picks dropped because the player permanently hid them (Not-for-me sheet).
+  let droppedHidden = 0;
   let deflectedForDiversity = 0;
   for (const question of generated) {
     // Drop bucket-level domains ("general"/"trivia"/short labels) BEFORE the
@@ -637,6 +654,13 @@ async function buildDailyQueueForUser(
     // (api/daily/queue) silently filter it out, leaving the user one short.
     if (isGenericSubcategory(question.canonicalSubcategory)) {
       droppedGeneric += 1;
+      continue;
+    }
+    // Permanently hidden generated question — absolute drop, no reserve (see the
+    // hiddenIds comment above). A regenerated row reaching the same id the player
+    // hid is still the question they refused.
+    if (hiddenIds.generatedQuestionIds.has(question.id)) {
+      droppedHidden += 1;
       continue;
     }
     const key = normalize(question.questionText);
@@ -892,6 +916,7 @@ async function buildDailyQueueForUser(
       topUpRounds,
       droppedDuplicates,
       droppedGeneric,
+      droppedHidden,
       baseDiversityCap,
       oftenDomains: oftenDomains.size,
       deflectedForDiversity,
@@ -938,6 +963,7 @@ async function buildDailyQueueForUser(
       topUpRounds,
       droppedDuplicates,
       droppedGeneric,
+      droppedHidden,
       baseDiversityCap,
       oftenDomains: oftenDomains.size,
       deflectedForDiversity,

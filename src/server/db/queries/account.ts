@@ -585,6 +585,10 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     await tx.execute(sql`update "DailyPreference" set "friend_ids" = array_remove("friend_ids", ${userId}) where ${userId} = any("friend_ids")`);
 
     await tx.execute(sql`delete from "SkippedDailyQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    // HiddenQuestion (0131) has no ON DELETE CASCADE on its user/question FKs, so
+    // it must be cleared explicitly here or account deletion fails on the FK —
+    // same shape and same reason as the SkippedDailyQuestion sweep above.
+    await tx.execute(sql`delete from "HiddenQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
     await tx.execute(sql`delete from "DailyQueue" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "DailyPreference" where "user_id" = ${userId}`);
 

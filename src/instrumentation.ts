@@ -2349,6 +2349,32 @@ export async function register() {
     } catch {
       // Tables arrive with 0127/0128 in normal migration order.
     }
+    // Migration 0131 adds HiddenQuestion, the durable per-question opt-out behind
+    // the Not-for-me sheet. Both the queue builder (which excludes hidden rows on
+    // every build) and the hide/restore routes touch it, so a recorded-but-absent
+    // migration would 42P01 on the next Daily Five build.
+    // Self-contained; precedent: 0127's MissedReturnDismissed guard above.
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "HiddenQuestion" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id"),
+          "question_id" text REFERENCES "Question"("id"),
+          "generated_question_id" text REFERENCES "GeneratedQuestion"("id"),
+          "canonical_subcategory" text NOT NULL,
+          "hidden_at" timestamp with time zone NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE "HiddenQuestion" ENABLE ROW LEVEL SECURITY`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "HiddenQuestion_user_id_idx" ON "HiddenQuestion" ("user_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "HiddenQuestion_user_id_question_id_idx" ON "HiddenQuestion" ("user_id","question_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "HiddenQuestion_user_id_generated_question_id_idx" ON "HiddenQuestion" ("user_id","generated_question_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "HiddenQuestion_question_id_idx" ON "HiddenQuestion" ("question_id")`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS "HiddenQuestion_generated_question_id_idx" ON "HiddenQuestion" ("generated_question_id")`);
+    } catch {
+      // Fresh databases may not have User/Question/GeneratedQuestion yet —
+      // migrate() creates them all in normal migration order.
+    }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
