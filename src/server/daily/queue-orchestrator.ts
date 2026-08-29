@@ -998,8 +998,10 @@ async function buildDailyQueueForUser(
   // We therefore request coreShortfall + DAILY_BONUS_SLOT_MAX domains so the bonus
   // isn't cannibalized by the backfill. When the core is already full coreShortfall
   // is 0 and this is byte-for-byte the old +2 behavior. Friend-sourced only (never
-  // pads with the viewer's own domains); resting domains are excluded from BOTH the
-  // core backfill and the bonus, so "This is {Name}'s bag but not mine" holds. The
+  // pads with the viewer's own domains — enforced by the `ownDomains` subtraction
+  // inside getFriendDomainsForBonus, NOT by anything here; don't re-assert it as an
+  // invariant at this layer); resting domains are excluded from BOTH the core
+  // backfill and the bonus, so "This is {Name}'s bag but not mine" holds. The
   // pool serves only fresh questions — never a friend's literal answered question
   // (those live behind the Lately milestone click-through, D-4 §A).
   //
