@@ -531,6 +531,21 @@ async function buildDailyQueueForUser(
   const subjectCooldownGate = makeSubjectCooldownGate(recentEntities);
   let deflectedForSubjectCooldown = 0;
 
+  // Per-pick deflection trail (B-DIVERSITY-BACKFILL-CAP-01 diagnostics,
+  // 2026-08-30 follow-up). The aggregate deflectedFor* counters above answer
+  // "how many", not "which domain, from which source, for which reason" — the
+  // exact detail missing when a prod incident (5/5 "Beethoven") needed root-
+  // causing after the fact and only the counts (not the per-row reasons) would
+  // have been available. Logged once, right before the soft-cap backfill draws
+  // on these reserves, so a future incident is diagnosable from THIS build's
+  // logs instead of reconstructed from GeneratedQuestion timestamps days later.
+  type ReserveDeflection = {
+    source: 'authored' | 'house' | 'generated';
+    subcategory: string;
+    reason: 'answer_cooldown' | 'subject_cooldown' | 'diversity_cap';
+  };
+  const reserveDeflections: ReserveDeflection[] = [];
+
   // Permanently hidden questions ("Never show this question again", the durable
   // scope of the Not-for-me sheet).
   //
@@ -561,15 +576,30 @@ async function buildDailyQueueForUser(
     if (answerCooldownGate.blocks(pick.answerText)) {
       deflectedForAnswerCooldown += 1;
       authoredReserve.push(pick);
+      reserveDeflections.push({
+        source: 'authored',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'answer_cooldown',
+      });
       return false;
     }
     if (subjectCooldownGate.blocks(pick.subjectEntity, pick.answerText)) {
       deflectedForSubjectCooldown += 1;
       authoredReserve.push(pick);
+      reserveDeflections.push({
+        source: 'authored',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'subject_cooldown',
+      });
       return false;
     }
     if (!diversityGate.admit(pick.canonicalSubcategory)) {
       authoredReserve.push(pick);
+      reserveDeflections.push({
+        source: 'authored',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'diversity_cap',
+      });
       return false;
     }
     answerCooldownGate.record(pick.answerText);
@@ -592,15 +622,30 @@ async function buildDailyQueueForUser(
     if (answerCooldownGate.blocks(pick.answerText)) {
       deflectedForAnswerCooldown += 1;
       houseReserve.push(pick);
+      reserveDeflections.push({
+        source: 'house',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'answer_cooldown',
+      });
       return false;
     }
     if (subjectCooldownGate.blocks(pick.subjectEntity, pick.answerText)) {
       deflectedForSubjectCooldown += 1;
       houseReserve.push(pick);
+      reserveDeflections.push({
+        source: 'house',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'subject_cooldown',
+      });
       return false;
     }
     if (!diversityGate.admit(pick.canonicalSubcategory)) {
       houseReserve.push(pick);
+      reserveDeflections.push({
+        source: 'house',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'diversity_cap',
+      });
       return false;
     }
     answerCooldownGate.record(pick.answerText);
@@ -675,11 +720,21 @@ async function buildDailyQueueForUser(
     if (answerCooldownGate.blocks(question.answer)) {
       deflectedForAnswerCooldown += 1;
       generatedReserve.push(question);
+      reserveDeflections.push({
+        source: 'generated',
+        subcategory: question.canonicalSubcategory ?? '',
+        reason: 'answer_cooldown',
+      });
       continue;
     }
     if (subjectCooldownGate.blocks(question.subjectEntity, question.answer)) {
       deflectedForSubjectCooldown += 1;
       generatedReserve.push(question);
+      reserveDeflections.push({
+        source: 'generated',
+        subcategory: question.canonicalSubcategory ?? '',
+        reason: 'subject_cooldown',
+      });
       continue;
     }
     // Intra-day diversity cap, applied AFTER the generic + dedup gates so a deflected
@@ -688,6 +743,11 @@ async function buildDailyQueueForUser(
     if (!diversityGate.admit(question.canonicalSubcategory)) {
       deflectedForDiversity += 1;
       generatedReserve.push(question);
+      reserveDeflections.push({
+        source: 'generated',
+        subcategory: question.canonicalSubcategory ?? '',
+        reason: 'diversity_cap',
+      });
       continue;
     }
     answerCooldownGate.record(question.answer);
@@ -763,16 +823,31 @@ async function buildDailyQueueForUser(
       if (answerCooldownGate.blocks(question.answer)) {
         deflectedForAnswerCooldown += 1;
         generatedReserve.push(question);
+        reserveDeflections.push({
+          source: 'generated',
+          subcategory: question.canonicalSubcategory ?? '',
+          reason: 'answer_cooldown',
+        });
         continue;
       }
       if (subjectCooldownGate.blocks(question.subjectEntity, question.answer)) {
         deflectedForSubjectCooldown += 1;
         generatedReserve.push(question);
+        reserveDeflections.push({
+          source: 'generated',
+          subcategory: question.canonicalSubcategory ?? '',
+          reason: 'subject_cooldown',
+        });
         continue;
       }
       if (!diversityGate.admit(question.canonicalSubcategory)) {
         deflectedForDiversity += 1;
         generatedReserve.push(question);
+        reserveDeflections.push({
+          source: 'generated',
+          subcategory: question.canonicalSubcategory ?? '',
+          reason: 'diversity_cap',
+        });
         continue;
       }
       answerCooldownGate.record(question.answer);
@@ -859,6 +934,50 @@ async function buildDailyQueueForUser(
   }
   const diversityBackfilled =
     authoredBackfill.length + houseBackfill.length + generatedBackfill.length;
+
+  // Log the full deflection trail whenever anything was held back this build —
+  // not gated on the generation_failed floor below, since the incident this
+  // exists to catch (5/5 "Beethoven") built a FULL, successful-looking queue.
+  // `bySubcategoryAndReason` collapses the per-pick trail to counts so a build
+  // with many picks in one domain doesn't produce a huge log line; `unusedBy*`
+  // shows exactly what was sitting in each reserve, still eligible, that the
+  // backfill never got to — the detail that was missing when this incident
+  // needed root-causing after the fact.
+  if (reserveDeflections.length > 0) {
+    const bySubcategoryAndReason = new Map<string, number>();
+    for (const d of reserveDeflections) {
+      const key = `${d.source}:${d.subcategory || '(blank)'}:${d.reason}`;
+      bySubcategoryAndReason.set(key, (bySubcategoryAndReason.get(key) ?? 0) + 1);
+    }
+    console.info('[daily/queue-orchestrator] deflection trail', {
+      userId,
+      deflections: Object.fromEntries(bySubcategoryAndReason),
+      backfilled: {
+        authored: authoredBackfill.length,
+        house: houseBackfill.length,
+        generated: generatedBackfill.length,
+      },
+      unusedInReserve: {
+        authored: authoredReserve.length - authoredBackfill.length,
+        house: houseReserve.length - houseBackfill.length,
+        generated: generatedReserve.length - generatedBackfill.length,
+      },
+      // Filtered by id (not a simple slice) — the backfill loop above can SKIP a
+      // reserve item that's already at its backfill cap and admit a later, still-
+      // eligible one, so a backfilled pick is not necessarily a reserve prefix.
+      unusedSubcategories: {
+        authored: authoredReserve
+          .filter((p) => !authoredBackfill.some((b) => b.id === p.id))
+          .map((p) => p.canonicalSubcategory),
+        house: houseReserve
+          .filter((p) => !houseBackfill.some((b) => b.id === p.id))
+          .map((p) => p.canonicalSubcategory),
+        generated: generatedReserve
+          .filter((q) => !generatedBackfill.some((b) => b.id === q.id))
+          .map((q) => q.canonicalSubcategory),
+      },
+    });
+  }
 
   // Final fallback: under-difficulty questions (good, just easier than the
   // requested tier). Tapped ONLY after every in-tier reserve above is exhausted,
