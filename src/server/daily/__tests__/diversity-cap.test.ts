@@ -397,4 +397,37 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     const core = persistedSlots().filter((slot) => !slot.presence_source_id);
     expect(core).toHaveLength(DAILY_QUEUE_MIN_SIZE);
   });
+
+  it('logs the per-domain, per-reason deflection trail whenever a pick is held back', async () => {
+    // The exact diagnostic gap the 2026-08-30 incident hit: the aggregate
+    // deflectedFor* counters only ever reached a log line when the build fell
+    // below DAILY_QUEUE_MIN_SIZE, so a FULL but degenerate queue (5/5 one
+    // domain) left no record of which domains/reasons were actually deflected.
+    // Three authored Hamlet picks — cap admits two, the third is deflected by
+    // the diversity cap — should now produce a log line naming exactly that.
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      mocks.pickEligibleAuthoredQuestions.mockResolvedValue([
+        authoredPick('h1', 'Hamlet'),
+        authoredPick('h2', 'Hamlet'),
+        authoredPick('h3', 'Hamlet'),
+      ]);
+      mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+        genq('j1', 'Jazz'),
+        genq('a1', 'Astronomy'),
+        genq('c1', 'Cartography'),
+      ]);
+
+      await fillDailyQueueForUser(USER);
+
+      const trailCall = infoSpy.mock.calls.find(
+        (call) => call[0] === '[daily/queue-orchestrator] deflection trail',
+      );
+      expect(trailCall).toBeDefined();
+      const payload = trailCall?.[1] as { deflections: Record<string, number> };
+      expect(payload.deflections['authored:Hamlet:diversity_cap']).toBe(1);
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
 });
