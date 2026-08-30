@@ -57,7 +57,7 @@ export function AnsweredQuestionsList({ items }: { items: AnsweredQuestionItem[]
       <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
         <h2 className="font-serif text-2xl font-semibold">No answers yet.</h2>
         <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          Questions you answer in your feed, daily five, or Joshing games will show up here.
+          Questions you answer in your feed or daily five will show up here.
         </p>
       </section>
     );

@@ -869,7 +869,17 @@ const questionActionLinkStyle: CSSProperties = {
   fontSize: '0.58rem',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  color: 'var(--text-muted)',
+  // B-10.2 (2026-08-30): label color only. These read as fine print at
+  // --text-muted (#8a8a8a on --surface is ~3.4:1 — under AA for text this
+  // small), so "Show me the answer" / "Not for me" looked like disclaimers
+  // rather than real options. --warm-ink-700 (#696257) is the dark warm
+  // neutral one rung up: ~5.9:1, clears AA, and at 600 the labels read as
+  // deliberate. Everything else — pill shape, border, padding, size,
+  // position — is deliberately untouched, and there is still no fill, so
+  // the Answer button stays the dominant control. The point of the Daily
+  // Five is the attempt, not the skip.
+  color: 'var(--warm-ink-700)',
+  fontWeight: 600,
   textDecoration: 'none',
 };
 

@@ -110,15 +110,19 @@ export function AccountActions({
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [resettingGame, setResettingGame] = useState(false);
-  const [resetGameError, setResetGameError] = useState<string | null>(null);
+  const [resettingDailyRound, setResettingDailyRound] = useState(false);
+  const [resetDailyRoundError, setResetDailyRoundError] = useState<string | null>(null);
 
   const canDeleteAccount = deleteConfirmation === 'DELETE';
 
-  async function createTestGame() {
-    if (resettingGame) return;
-    setResetGameError(null);
-    setResettingGame(true);
+  // B-10.1 (2026-08-30): this was labelled "Create test game", a name left over
+  // from the now-retired Joshing Games surface. It never created a game — it
+  // resets today's Daily Five round and drops you back into it — so the stale
+  // name is gone and the working tool stays.
+  async function resetDailyRound() {
+    if (resettingDailyRound) return;
+    setResetDailyRoundError(null);
+    setResettingDailyRound(true);
 
     try {
       const response = await fetch('/api/daily/reset', {
@@ -133,8 +137,8 @@ export function AccountActions({
 
       router.push('/daily');
     } catch (caught) {
-      setResetGameError(caught instanceof Error ? caught.message : 'Could not reset daily round.');
-      setResettingGame(false);
+      setResetDailyRoundError(caught instanceof Error ? caught.message : 'Could not reset daily round.');
+      setResettingDailyRound(false);
     }
   }
 
@@ -237,10 +241,10 @@ export function AccountActions({
         {
           kind: 'action',
           icon: <FlaskConical className="size-5" />,
-          title: resettingGame ? 'Resetting…' : 'Create test game',
-          subtitle: "Reset today's game and play again",
-          onClick: () => void createTestGame(),
-          disabled: resettingGame,
+          title: resettingDailyRound ? 'Resetting…' : "Reset today's Daily Five",
+          subtitle: 'Clear this round and play it again',
+          onClick: () => void resetDailyRound(),
+          disabled: resettingDailyRound,
         },
         {
           kind: 'link',
@@ -407,8 +411,8 @@ export function AccountActions({
               <ResetWelcomeTourButton />
             </div>
           </div>
-          {resetGameError ? (
-            <p className="text-destructive mt-2 text-sm">{resetGameError}</p>
+          {resetDailyRoundError ? (
+            <p className="text-destructive mt-2 text-sm">{resetDailyRoundError}</p>
           ) : null}
         </section>
       ) : null}

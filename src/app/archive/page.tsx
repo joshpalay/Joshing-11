@@ -54,11 +54,14 @@ type SourceOption = {
   label: string;
 };
 
+// B-10.1 (2026-08-30): the 'joshing_game' option is gone from the picker —
+// Joshing Games is sunset, and the filter advertised a surface that no longer
+// exists. The ArchiveSource type and the joshing-game reader are deliberately
+// left in place so any historical rows still surface under "All".
 const sourceOptions: SourceOption[] = [
   { value: '', label: 'All' },
   { value: 'daily', label: 'Daily Five' },
   { value: 'feed', label: 'Feed' },
-  { value: 'joshing_game', label: 'Joshing Games' },
   { value: 'sent_to_me', label: 'Sent to me' },
   { value: 'written_by_me', label: 'Mine' },
 ];

@@ -35,9 +35,11 @@ describe('AccountActions — dev-tools grouping & availability', () => {
     expect(html).not.toContain('href="/dev/flags"');
   });
 
-  it('always renders the inline action tool (Create test game) regardless of the available set', () => {
+  it("always renders the inline action tool (Reset today's Daily Five) regardless of the available set", () => {
     const html = renderToStaticMarkup(<AccountActions isAdmin availableToolHrefs={[]} />);
-    expect(html).toContain('Create test game');
+    expect(html).toContain('Reset today&#x27;s Daily Five');
+    // B-10.1: the retired "Create test game" label must not come back.
+    expect(html).not.toContain('Create test game');
   });
 
   it('surfaces the admin bulk-upload link only to admins', () => {
