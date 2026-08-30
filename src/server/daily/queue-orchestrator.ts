@@ -811,6 +811,29 @@ async function buildDailyQueueForUser(
   // knowledge base too narrow to field five distinct subcategories degrades to
   // exactly the queue it would have built without the cap — never shorter, and never
   // a spurious generation_failed below the floor.
+  //
+  // A SECOND, higher cap still applies during backfill (B-DIVERSITY-BACKFILL-CAP-01,
+  // 2026-08-30): capForSubcategory(key) + 1 — one more than the normal cap, never
+  // unbounded. Without this, one reserve fully absorbing a shortfall before another
+  // ever gets drawn from could relax a whole Five back down to a single subcategory —
+  // seen in prod: 5/5 "Beethoven" house questions, even though a genuinely diverse
+  // batch of fresh questions had generated successfully that same build and was
+  // sitting in generatedReserve. It never got drawn from because the house reserve
+  // (3 cap-deflected Beethoven house questions) alone fully covered the shortfall
+  // first, per the authored → house → generated draw order above. "often" domains
+  // stay exempt — that's still an explicit player request, not a fallback artifact —
+  // but every other subcategory can take at most one extra slot during relaxation. A
+  // queue that still can't reach five under this stays short rather than repetitive;
+  // DAILY_QUEUE_MIN_SIZE is the floor.
+  const backfillCapForSubcategory = (normalizedSubcategory: string): number => {
+    if (oftenDomains.has(normalizedSubcategory)) return DAILY_QUEUE_SIZE;
+    return capForSubcategory(normalizedSubcategory) + 1;
+  };
+  const backfillGate = makeSubcategoryDiversityGate(backfillCapForSubcategory);
+  for (const pick of authored) backfillGate.admit(pick.canonicalSubcategory);
+  for (const pick of housePicks) backfillGate.admit(pick.canonicalSubcategory);
+  for (const question of generatedForQueue) backfillGate.admit(question.canonicalSubcategory);
+
   const authoredBackfill: typeof authored = [];
   const houseBackfill: typeof housePicks = [];
   const generatedBackfill: typeof generatedForQueue = [];
@@ -818,16 +841,19 @@ async function buildDailyQueueForUser(
     DAILY_QUEUE_SIZE - (authored.length + housePicks.length + generatedForQueue.length);
   for (const pick of authoredReserve) {
     if (backfillShortfall <= 0) break;
+    if (!backfillGate.admit(pick.canonicalSubcategory)) continue;
     authoredBackfill.push(pick);
     backfillShortfall -= 1;
   }
   for (const pick of houseReserve) {
     if (backfillShortfall <= 0) break;
+    if (!backfillGate.admit(pick.canonicalSubcategory)) continue;
     houseBackfill.push(pick);
     backfillShortfall -= 1;
   }
   for (const question of generatedReserve) {
     if (backfillShortfall <= 0) break;
+    if (!backfillGate.admit(question.canonicalSubcategory)) continue;
     generatedBackfill.push(question);
     backfillShortfall -= 1;
   }
