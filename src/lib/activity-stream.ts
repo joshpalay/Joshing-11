@@ -626,20 +626,17 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       };
     }
 
+    // B-10.1 (2026-08-30): Joshing Games is sunset and /games/* now redirects
+    // home, so the three game cards below keep their historical line but no
+    // longer offer a Play / See-results action that would just bounce the
+    // reader to the home page. No new items of these types are created.
     case 'received_joshing_game': {
-      const complete = item.reference.game?.viewerStatus === 'complete';
       const title = item.reference.game?.title ?? 'a Joshing Game';
       return {
         ...base,
         line: [a, txt(` sent you ${title}`)],
         secondLine: null,
-        action: item.referenceId
-          ? {
-              kind: 'link',
-              href: complete ? `/games/${item.referenceId}/summary` : `/games/${item.referenceId}`,
-              label: complete ? 'See results' : 'Play',
-            }
-          : null,
+        action: null,
         expand: null,
       };
     }
@@ -651,9 +648,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         secondLine: null,
         // Game events stand on their own (their own link), not in a person card.
         friendId: null,
-        action: item.referenceId
-          ? { kind: 'link', href: `/games/${item.referenceId}/summary`, label: 'See so far' }
-          : null,
+        action: null,
         expand: null,
       };
 
@@ -664,9 +659,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         secondLine: null,
         // Group/ambient event — no single friend to card it under.
         friendId: null,
-        action: item.referenceId
-          ? { kind: 'link', href: `/games/${item.referenceId}/summary`, label: 'See results' }
-          : null,
+        action: null,
         expand: null,
       };
 

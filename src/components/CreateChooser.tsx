@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gamepad2, Pencil, Send, Users } from 'lucide-react';
+import { Pencil, Send, Users } from 'lucide-react';
 
 // Capability 8: creating a question is a three-way choice surfaced up front —
 // bank it only, send to your friends, or send to specific people. Sending
@@ -84,21 +84,6 @@ export function CreateChooser({ open, onClose }: { open: boolean; onClose: () =>
               </button>
             );
           })}
-
-          <button
-            type="button"
-            className="flex min-h-20 w-full cursor-not-allowed items-center gap-4 rounded-lg border bg-card px-4 py-3 text-left opacity-40"
-            disabled
-            aria-disabled="true"
-          >
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-foreground" aria-hidden="true">
-              <Gamepad2 className="size-5" />
-            </span>
-            <span>
-              <span className="block font-medium">Add a Joshing Game</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Coming soon.</span>
-            </span>
-          </button>
         </div>
         <div className="mt-5 flex justify-center">
           <button type="button" className="btn-ghost min-w-28" onClick={onClose}>Cancel</button>

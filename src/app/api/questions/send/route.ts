@@ -178,7 +178,11 @@ export async function POST(request: NextRequest) {
   const recipientUser = recipient[0];
   if (recipientUser.phoneNumber && recipientUser.smsOptIn !== 'opted_out') {
     const senderName = senderNameRow[0]?.displayName?.trim() || 'A friend';
-    const feedUrl = `${request.nextUrl.origin}/feed`;
+    // B-11.1 (2026-08-30): the standalone /feed route is retired and now
+    // redirects to home. Deep-link straight at home's feed section anchor
+    // (<section id="feed"> in src/app/page.tsx) so a recipient following
+    // this SMS lands on the question, not the top of the page.
+    const feedUrl = `${request.nextUrl.origin}/#feed`;
     await sendSms(
       recipientUser.phoneNumber,
       `${senderName} sent you a question. ${feedUrl}`,

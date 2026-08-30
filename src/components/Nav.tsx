@@ -117,22 +117,16 @@ export function Nav({
     if (!profileId) return false;
     return profileId !== currentUserId;
   })();
-  const hidesNewGameShortcut =
+  // B-10.1 (2026-08-30): the '/games/' branch is gone with the Joshing Games
+  // sunset (the route redirects home now). Despite the legacy name this is the
+  // Create / add-a-question FAB, not a game shortcut.
+  const hidesCreateShortcut =
     pathname.startsWith('/daily') ||
-    pathname.startsWith('/games/') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/knowledge') ||
     pathname === '/friends' ||
     isOtherUserProfilePath;
-  const showNewGameShortcut = !hidesNewGameShortcut;
-
-  // The Joshing-game play screen (/games/<id>) is a focused flow with its own
-  // in-screen header (title + progress dots + X-to-exit) per the Figma "Game"
-  // frame, so the global app chrome is suppressed there — matching how the
-  // sibling /daily gameplay flow already hides Nav. The summary route
-  // (/games/<id>/summary) keeps the nav.
-  const gameSegments = pathname.split('/').filter(Boolean);
-  const isGamePlayScreen = gameSegments[0] === 'games' && gameSegments.length === 2;
+  const showCreateShortcut = !hidesCreateShortcut;
 
   // The weekly ceremony (/ceremony/<id>) is a full-screen, self-contained
   // takeover with its own progress dots and X-to-exit — same as the game play
@@ -156,7 +150,6 @@ export function Nav({
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
     pathname.startsWith('/invite/') ||
-    isGamePlayScreen ||
     isCeremonyScreen ||
     isOnboardingHarnessPreview
   ) {
@@ -224,7 +217,7 @@ export function Nav({
           </div>
         </div>
       </header>
-      {showNewGameShortcut ? (
+      {showCreateShortcut ? (
         <button
           type="button"
           data-app-chrome

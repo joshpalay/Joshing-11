@@ -222,9 +222,8 @@ export default function DomainDetailPage() {
       {/* The "Answer questions in {domain}" card routed to /daily/setup's
           custom-round mode, which retired with the Configure page (rotation
           now lives in the knowledge portrait's detail pop-up). Dropped, like
-          the detail card's play-now link before it (PR #1514).
-          // v11.1: Joshing Game creation disabled at FAB level. Re-enable
-          // when game creation flow is restored. */}
+          the detail card's play-now link before it (PR #1514). The Joshing
+          Game FAB note that used to sit here went with the B-10.1 sunset. */}
 
       <section className="mb-7">
         <h2 className="font-serif text-2xl font-semibold">Recent activity in this domain</h2>

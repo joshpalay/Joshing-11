@@ -1,24 +1,15 @@
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
-import { getSession } from '@/server/auth/session';
-import { getJoshingGame } from '@/server/db/queries/joshing-game';
-import { JoshingGamePlayClient } from './play-client';
-
-type PageProps = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function JoshingGamePage({ params }: PageProps) {
-  const session = await getSession();
-  if (!session) notFound();
-
-  const { id } = await params;
-  const view = await getJoshingGame({ gameId: id, requestingUserId: session.userId });
-  if (!view) notFound();
-  if (view.game.creatorId !== session.userId && !view.recipients.some((recipient) => recipient.userId === session.userId)) {
-    notFound();
-  }
-  if (view.viewerStatus === 'complete') redirect(`/games/${id}/summary`);
-
-  return <JoshingGamePlayClient game={JSON.parse(JSON.stringify(view))} viewerId={session.userId} />;
+/**
+ * B-10.1 (2026-08-30): Joshing Games is sunset. The play screen redirects home
+ * for any id — old shared links (SMS carried `${baseUrl}/games/<id>`) land
+ * somewhere real instead of 404ing, and no "coming soon" state implies the
+ * surface is coming back.
+ *
+ * Soft sunset only: `src/server/db/queries/joshing-game.ts`, the
+ * `/api/joshing-games/*` routes and the underlying tables are all untouched, so
+ * a revival means restoring this page body and its play client from git.
+ */
+export default async function JoshingGamePage() {
+  redirect('/');
 }
