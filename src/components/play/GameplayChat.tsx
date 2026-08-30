@@ -861,7 +861,12 @@ const reportMenuFontResetStyle: CSSProperties = {
 const questionActionLinkStyle: CSSProperties = {
   alignSelf: 'flex-start',
   background: 'var(--surface)',
-  border: '1px solid var(--border)',
+  // B-10.2 follow-up (2026-08-30): border now matches the label color
+  // instead of the generic --border hairline, which sat a full step
+  // lighter than the text. On the busy triangle background a
+  // lighter-than-label border read as a faint outline; matching it makes
+  // the chip read as one deliberate shape.
+  border: '1px solid var(--warm-ink-700)',
   borderRadius: 'var(--radius-sm)',
   padding: '4px 9px',
   cursor: 'pointer',
@@ -874,7 +879,7 @@ const questionActionLinkStyle: CSSProperties = {
   // small), so "Show me the answer" / "Not for me" looked like disclaimers
   // rather than real options. --warm-ink-700 (#696257) is the dark warm
   // neutral one rung up: ~5.9:1, clears AA, and at 600 the labels read as
-  // deliberate. Everything else — pill shape, border, padding, size,
+  // deliberate. Everything else — pill shape, padding, size,
   // position — is deliberately untouched, and there is still no fill, so
   // the Answer button stays the dominant control. The point of the Daily
   // Five is the attempt, not the skip.
