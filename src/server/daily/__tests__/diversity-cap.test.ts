@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DAILY_QUEUE_MAX_PER_SUBCATEGORY, DAILY_QUEUE_SIZE } from '@/server/daily/types';
+import { DAILY_QUEUE_MAX_PER_SUBCATEGORY, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE } from '@/server/daily/types';
 
 // Same wholesale-mock strategy as queue-floor.test.ts: fillDailyQueueForUser
 // orchestrates DB pickers + LLM generation, all of which touch @/server/db (which
@@ -103,6 +103,24 @@ function authoredPick(id: string, subcategory: string) {
     category: '',
     authorName: null,
     authorNote: null,
+  } as never;
+}
+
+// Minimal stand-in for a house pick (pickHouseQuestions) — distinct answerText
+// per id so the (empty by default) answer-cooldown gate never collides across
+// picks, matching authoredPick's shape plus the fields the answer/subject
+// cooldown gates read.
+function houseQuestion(id: string, subcategory: string) {
+  return {
+    id,
+    questionText: `House ${id}`,
+    answerText: `Answer ${id}`,
+    canonicalSubcategory: subcategory,
+    broadCategory: null,
+    category: '',
+    subjectEntity: null,
+    difficultyEstimate: null,
+    creatorNote: null,
   } as never;
 }
 
@@ -348,5 +366,35 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
 
     // A full five-question queue still builds — the cap degraded gracefully.
     expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+  });
+
+  it('caps the soft-cap backfill at one slot past the normal cap (prod incident 2026-08-30)', async () => {
+    // Reproduces the incident directly: a house bank with only ONE covered
+    // subcategory (5 Botany picks, mirroring the 10-question "Beethoven" house
+    // bank) and generation that comes back empty every round. Before the
+    // B-DIVERSITY-BACKFILL-CAP-01 fix, the soft-cap backfill drained the whole
+    // house reserve to keep the queue full — 5/5 Botany. The backfill must now
+    // stop at ONE slot past the normal cap (3, not 5) and let the queue serve
+    // short rather than repeat the same subcategory past that ceiling.
+    mocks.pickHouseQuestions.mockResolvedValue([
+      houseQuestion('h1', 'Botany'),
+      houseQuestion('h2', 'Botany'),
+      houseQuestion('h3', 'Botany'),
+      houseQuestion('h4', 'Botany'),
+      houseQuestion('h5', 'Botany'),
+    ]);
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([]);
+
+    await fillDailyQueueForUser(USER);
+
+    const houseSlots = persistedSlots().filter(
+      (slot) => slot.source === 'house' && slot.domain === 'Botany',
+    );
+    // Normal cap (2) + exactly one extra slot from the backfill relaxation = 3.
+    expect(houseSlots).toHaveLength(DAILY_QUEUE_MAX_PER_SUBCATEGORY + 1);
+    // With nothing else available to diversify with, the queue serves short —
+    // exactly the floor — rather than padding out to five with more Botany.
+    const core = persistedSlots().filter((slot) => !slot.presence_source_id);
+    expect(core).toHaveLength(DAILY_QUEUE_MIN_SIZE);
   });
 });
