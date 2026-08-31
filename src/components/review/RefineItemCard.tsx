@@ -6,13 +6,20 @@ import type { CSSProperties } from 'react';
 
 import type { RefineItem } from '@/server/refine/types';
 
-// Standard success green (--success) for the single affirmative action verb.
-// Same tint proportions the orange accent used, just re-hued to green.
-const actionStyle: CSSProperties = {
-  color: 'var(--success)',
-  borderColor: 'color-mix(in srgb, var(--success) 38%, var(--brand-border))',
-  background: 'color-mix(in srgb, var(--success) 8%, transparent)',
-};
+// Additive items (friend_expansion, add_territories) get the success green.
+// Reductive items (difficulty_escalation, struggle_pruning) get the existing
+// --warning amber instead — "Ease off"/"Rest" back something away from your
+// rotation, which reads wrong in the same affirmative green as "Add".
+const ADDITIVE_TYPES = new Set<RefineItem['type']>(['friend_expansion', 'add_territories']);
+
+function actionStyleFor(type: RefineItem['type']): CSSProperties {
+  const hue = ADDITIVE_TYPES.has(type) ? 'var(--success)' : 'var(--warning)';
+  return {
+    color: hue,
+    borderColor: `color-mix(in srgb, ${hue} 38%, var(--brand-border))`,
+    background: `color-mix(in srgb, ${hue} 8%, transparent)`,
+  };
+}
 
 const ACTION_CLASS =
   'inline-flex min-h-11 cursor-pointer items-center justify-center self-start rounded-[var(--radius-xs)] border px-4 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto';
@@ -29,7 +36,7 @@ export function RefineItemCard({ item, queueId }: { item: RefineItem; queueId: s
     return (
       <div className={ROW_CLASS}>
         <p className="text-foreground flex-1 text-sm leading-6">{item.openText}</p>
-        <Link href={item.href} style={actionStyle} className={ACTION_CLASS}>
+        <Link href={item.href} style={actionStyleFor(item.type)} className={ACTION_CLASS}>
           {item.actionVerb}
         </Link>
       </div>
@@ -109,7 +116,7 @@ function RefineDecisionCard({ item, queueId }: { item: RefineItem; queueId: stri
             type="button"
             onClick={resolve}
             disabled={busy}
-            style={actionStyle}
+            style={actionStyleFor(item.type)}
             className={ACTION_CLASS}
           >
             {item.actionVerb}
