@@ -132,6 +132,15 @@ function selectPending(limit: number): Promise<[PendingRow[], PendingRow[]]> {
         isNull(questions.verifiedAt),
         ne(questions.visibility, 'blocked'),
         isNull(questions.deletedAt),
+        // House-authored rows (admin bulk-upload / crafter-keep) are
+        // creator-written and admin-trusted at insert time (bulk-upload's own
+        // comment: "Admin-uploaded questions are trusted: verified +
+        // creator-written") — they still get the free deterministic leak
+        // check and the cheap Haiku vet scorer, just never this Sonnet
+        // (+ occasional web search) pass. Excluded so a large admin upload
+        // can't camp the daily 25-row cap and rack up sync-rate Sonnet spend
+        // on content nobody asked to machine-verify (2026-08-31).
+        ne(questions.source, 'house_authored'),
       ))
       .limit(limit),
     db
@@ -202,7 +211,10 @@ async function stampGenerated(rowId: string, verdict: VerificationVerdict, now: 
  * batch-only — NEVER a write-time gate, NEVER overwrites an author's answer.
  *
  * Sweeps both question stores for rows not yet stamped (verified_at IS NULL):
- *   - Question        — eligible, not blocked, not deleted; a demote sets
+ *   - Question        — eligible, not blocked, not deleted, not house-authored
+ *                       (admin bulk-upload / crafter-keep — already trusted at
+ *                       insert time, permanently left unswept here to avoid
+ *                       sync-rate Sonnet spend on it); a demote sets
  *                       publicStatus = 'needs_review'.
  *   - GeneratedQuestion — not already suppressed, not expired; a demote sets
  *                       is_duplicate = true (the only suppress flag the bank honors).
