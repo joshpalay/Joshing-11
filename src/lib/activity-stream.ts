@@ -750,6 +750,21 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         expand: null,
       };
 
+    case 'friend_invitation_reminder': {
+      const reminder = item.reference.friendInvitationReminder;
+      // The invitee has no account yet, so there is no profile to link — render
+      // the name (or the masked phone as a fallback) as plain text, never as an
+      // actor link.
+      const inviteeName = reminder?.inviteeDisplayName?.trim() || reminder?.maskedPhone || 'Your invite';
+      return {
+        ...base,
+        line: [txt(inviteeName), txt(" hasn't accepted your invite yet")],
+        secondLine: null,
+        action: { kind: 'link', href: '/friends', label: 'Resend' },
+        expand: null,
+      };
+    }
+
     default:
       return {
         ...base,
