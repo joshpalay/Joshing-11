@@ -860,6 +860,12 @@ const reportMenuFontResetStyle: CSSProperties = {
 
 const questionActionLinkStyle: CSSProperties = {
   alignSelf: 'flex-start',
+  // Buttons default to inline layout with baseline-aligned content; the mono
+  // font's line-height then leaves the label sitting off-center inside the
+  // fixed padding box. Centering it explicitly keeps the pill balanced.
+  display: 'inline-flex',
+  alignItems: 'center',
+  lineHeight: 1,
   background: 'var(--surface)',
   // B-10.2 follow-up (2026-08-30): border now matches the label color
   // instead of the generic --border hairline, which sat a full step
