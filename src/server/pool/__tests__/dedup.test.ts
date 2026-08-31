@@ -106,8 +106,10 @@ describe('resolveCollision — fact_key-aware threshold (false-suppression fix)'
     expect(d).toEqual({ action: 'suppress_incoming', survivorId: 'old-m' });
   });
 
-  it('falls back to the base threshold when one fact_key is absent', () => {
-    // Human survivors carry no fact_key → the high bar must NOT apply.
+  it('falls back to the base threshold when one fact_key is absent (machine incoming)', () => {
+    // Human survivors carry no fact_key → the high bar must NOT apply here:
+    // this branch only ever suppresses the incoming MACHINE row, so there is
+    // no false-suppression risk to a human row to guard against.
     const d = resolveCollision(
       { id: 'new-m', origin: 'machine', factKey: 'pl-mulciber-pandaemonium' },
       near({ id: 'old-h', origin: 'human', similarity: 0.95, factKey: null }),
@@ -115,5 +117,51 @@ describe('resolveCollision — fact_key-aware threshold (false-suppression fix)'
       DT,
     );
     expect(d).toEqual({ action: 'suppress_incoming', survivorId: 'old-h' });
+  });
+});
+
+describe('resolveCollision — human-vs-human never gets fact_key protection (engine bug fix)', () => {
+  // Human-authored Question rows never carry a fact_key (it's an LLM-generation
+  // artifact — see src/server/questions/fact-key.ts), so two human rows about
+  // the same subject could never reach the factKeysDiffer branch and always
+  // fell back to the lenient 0.92 bar — even though human-vs-human is the ONLY
+  // branch where the suppressed row is ever human-authored (every other branch
+  // either suppresses a machine row outright or always keeps the human row).
+  // Observed in production: "how many piano sonatas did Beethoven write" vs.
+  // "how many symphonies did Beethoven write" collided at ~0.95 purely on
+  // shared phrasing, despite being unrelated facts.
+  it('does NOT suppress two distinct human facts that merely share a subject’s vocabulary', () => {
+    const d = resolveCollision(
+      { id: 'new-h', origin: 'human' },
+      near({ id: 'old-h', origin: 'human', similarity: 0.95 }),
+      T,
+      DT,
+    );
+    expect(d).toEqual({ action: 'none' });
+  });
+
+  it('STILL suppresses near-identical human text with no fact_key on either side', () => {
+    const d = resolveCollision(
+      { id: 'new-h', origin: 'human' },
+      near({ id: 'old-h', origin: 'human', similarity: 0.999 }),
+      T,
+      DT,
+    );
+    expect(d).toEqual({ action: 'suppress_incoming', survivorId: 'old-h' });
+  });
+
+  it('does not raise the bar for human vs machine (only human-vs-human is protected)', () => {
+    const d = resolveCollision(
+      { id: 'new-h', origin: 'human' },
+      near({ id: 'old-m', origin: 'machine', similarity: 0.95 }),
+      T,
+      DT,
+    );
+    expect(d).toEqual({
+      action: 'suppress_existing',
+      existingId: 'old-m',
+      existingOrigin: 'machine',
+      survivorId: 'new-h',
+    });
   });
 });

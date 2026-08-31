@@ -85,7 +85,23 @@ export function resolveCollision(
     incoming.factKey != null &&
     nearest.factKey != null &&
     incoming.factKey !== nearest.factKey;
-  const effectiveThreshold = factKeysDiffer
+  // fact_key is an LLM-generation artifact — a human-authored Question row
+  // never carries one (src/server/questions/fact-key.ts), so a human-vs-human
+  // collision can NEVER reach the factKeysDiffer branch above and always fell
+  // back to the base 0.92 threshold. That's exactly the false-suppression
+  // failure mode fact_key was built to catch (2026-06-27 audit: ~46% of
+  // distinct facts about one subject falsely suppressed at 0.92, because
+  // questions about one subject share enough vocabulary to embed close
+  // together even when the facts differ), just left unprotected for the one
+  // branch below where the row actually LOST is human-authored — every other
+  // branch either only ever suppresses a machine row or always keeps the
+  // human row (see the matrix below). Apply the same raised bar here, on the
+  // same "be conservative absent same-fact evidence" principle, scoped to
+  // human-vs-human so the machine-involving branches (already covered by
+  // fact_key when present, and deliberately left lenient when a machine row's
+  // near-neighbor is an older fact_key-less human row) are untouched.
+  const bothHuman = incoming.origin === 'human' && nearest.origin === 'human';
+  const effectiveThreshold = factKeysDiffer || bothHuman
     ? Math.max(threshold, differentFactThreshold)
     : threshold;
   if (nearest.similarity < effectiveThreshold) return { action: 'none' };
