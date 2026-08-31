@@ -5,6 +5,7 @@ import {
   db,
   feedItems,
   follows,
+  friendInvitations,
   friendships,
   gradeDisputes,
   joshingGameQuestions,
@@ -17,6 +18,7 @@ import {
   questions,
   users,
 } from '@/server/db';
+import { maskPhoneE164 } from '@/lib/phone-e164';
 import { getCannedReaction } from '@/lib/reactions';
 import { resolveAuthorDisplay } from '@/lib/questions-types';
 import { HOME_TOP3_ELIGIBLE_TYPES, type ActivityItemType } from '@/server/activity/write-activity';
@@ -125,6 +127,15 @@ export type ActivityItemView = Pick<
       reviewReason: string | null;
       acceptedAlternative: string | null;
     };
+    // friend_invitation_reminder. inviteeDisplayName mirrors what the inviter
+    // typed at send time (the invitee has no account, so there is no `users`
+    // row to join against). maskedPhone matches the masking PeopleYouInvited
+    // already uses for pending invites.
+    friendInvitationReminder?: {
+      invitationId: string;
+      inviteeDisplayName: string | null;
+      maskedPhone: string;
+    };
   };
 };
 
@@ -161,6 +172,7 @@ function isActivityType(value: string): value is ActivityItemType {
     'grade_dispute_filed',
     'niche_match_answered_your_question',
     'niche_match_you_answered',
+    'friend_invitation_reminder',
   ].includes(value);
 }
 
@@ -815,6 +827,34 @@ async function hydrateDeclaredPromoted(items: ActivityItemRow[]) {
   );
 }
 
+async function hydrateFriendInvitationReminders(items: ActivityItemRow[]) {
+  const relevant = items.filter(
+    (item) => item.type === 'friend_invitation_reminder' && item.referenceType === 'friend_invitation' && item.referenceId,
+  );
+  if (relevant.length === 0) {
+    return new Map<string, NonNullable<ActivityItemView['reference']['friendInvitationReminder']>>();
+  }
+
+  const invitationIds = [...new Set(relevant.map((item) => item.referenceId!))];
+  const rows = await db
+    .select({
+      id: friendInvitations.id,
+      inviteeDisplayName: friendInvitations.inviteeDisplayName,
+      inviteePhone: friendInvitations.inviteePhone,
+    })
+    .from(friendInvitations)
+    .where(inArray(friendInvitations.id, invitationIds));
+
+  return new Map(rows.map((row) => [
+    row.id,
+    {
+      invitationId: row.id,
+      inviteeDisplayName: row.inviteeDisplayName,
+      maskedPhone: maskPhoneE164(row.inviteePhone),
+    },
+  ] as const));
+}
+
 async function hydrateActivityRows(
   rows: ActivityItemRow[],
   userId: string,
@@ -832,6 +872,7 @@ async function hydrateActivityRows(
     authoredSharedQuestionsById,
     declaredPromotedById,
     gradeDisputesById,
+    friendInvitationRemindersById,
   ] = await Promise.all([
     hydrateActors(rows),
     hydrateFriendshipRequests(rows),
@@ -845,6 +886,7 @@ async function hydrateActivityRows(
     hydrateAuthoredSharedQuestions(rows),
     hydrateDeclaredPromoted(rows),
     hydrateGradeDisputes(rows),
+    hydrateFriendInvitationReminders(rows),
   ]);
 
   return rows
@@ -893,6 +935,9 @@ async function hydrateActivityRows(
           : undefined,
         gradeDispute: row.referenceType === 'grade_dispute' && row.referenceId
           ? gradeDisputesById.get(row.referenceId)
+          : undefined,
+        friendInvitationReminder: row.type === 'friend_invitation_reminder' && row.referenceId
+          ? friendInvitationRemindersById.get(row.referenceId)
           : undefined,
       },
     }));

@@ -1,9 +1,9 @@
 import { randomBytes } from 'crypto'
 
-import { and, desc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm'
 
 import { maskPhoneE164 } from '@/lib/phone-e164'
-import { db, friendInvitations, users } from '@/server/db'
+import { activityItems, db, friendInvitations, users } from '@/server/db'
 import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 import { hashTelemetryValue, logTelemetry } from '@/server/telemetry'
@@ -14,7 +14,13 @@ export const INVITATION_ACCEPTANCE_ERROR_MESSAGE =
 export const INVITE_REQUIRED_MESSAGE =
   "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite."
 
-const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 14
+// 30 days (was 14). Kept well inside the ~90-day window US carriers wait
+// before recycling an unused phone number — the risk a perpetual invite would
+// carry is a stranger who later inherits the invitee's old number accepting
+// on their behalf. The friend-invitation-reminders cron fires at this same
+// 30-day mark for still-unaccepted invites, so expiry and "nudge the inviter"
+// land together.
+const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
 
 export type FriendInvitation = typeof friendInvitations.$inferSelect
 
@@ -354,6 +360,55 @@ export async function getValidPendingInvitationForPhone(
     .limit(1)
 
   return invitation ?? null
+}
+
+// Reuses the invitation TTL: the reminder fires at the same 30-day mark the
+// invite itself lapses at, so "nudge the inviter" and "this link stopped
+// working" land together instead of the inviter finding out only when Stan
+// tells them the link is dead.
+const REMINDER_THRESHOLD_MS = DEFAULT_INVITATION_TTL_MS
+
+// Candidates for the friend-invitation-reminders cron: sent >= 30 days ago,
+// still neither accepted nor cancelled, and not already reminded (a prior
+// reminder is any non-deleted ActivityItem of type friend_invitation_reminder
+// referencing this invitation — checked here rather than adding a dedicated
+// column, since the ActivityItem row itself is the durable "already reminded"
+// marker). One-shot per invitation: resending creates a fresh row (see
+// createFriendInvitation), so a resent invite gets its own 30-day clock.
+export async function getInvitationsNeedingReminder(
+  now: Date = new Date()
+): Promise<FriendInvitation[]> {
+  const cutoff = new Date(now.getTime() - REMINDER_THRESHOLD_MS)
+
+  const candidates = await db
+    .select()
+    .from(friendInvitations)
+    .where(
+      and(
+        isNull(friendInvitations.acceptedAt),
+        isNull(friendInvitations.cancelledAt),
+        lte(friendInvitations.sentAt, cutoff)
+      )
+    )
+
+  if (candidates.length === 0) return []
+
+  const alreadyReminded = await db
+    .select({ referenceId: activityItems.referenceId })
+    .from(activityItems)
+    .where(
+      and(
+        eq(activityItems.type, 'friend_invitation_reminder'),
+        isNull(activityItems.deletedAt),
+        inArray(
+          activityItems.referenceId,
+          candidates.map((c) => c.id)
+        )
+      )
+    )
+  const remindedIds = new Set(alreadyReminded.map((r) => r.referenceId))
+
+  return candidates.filter((c) => !remindedIds.has(c.id))
 }
 
 export async function hasValidPendingInvitationForPhone(

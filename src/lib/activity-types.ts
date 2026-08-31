@@ -65,7 +65,13 @@ export type ActivityItemType =
   // positive signal the product makes, and nothing carried it back before. Fires
   // for the WRONG return scope only (an expired-scope return has never been seen,
   // so there is no "it stuck" story to tell).
-  | 'missed_return_recovered';
+  | 'missed_return_recovered'
+  // Written to the INVITER (not the invitee, who has no account yet) by the
+  // friend-invitation-reminders cron once a sent FriendInvitation has sat
+  // unaccepted for 30 days — the same mark at which the invite itself expires.
+  // One-shot: the cron checks for an existing row against the same referenceId
+  // before writing again, so this never repeats for the same invitation.
+  | 'friend_invitation_reminder';
 
 // Events surfaced in Home's top-3 RecentActivity and counted by the bell
 // badge. Light type filtering only — chronological within this set. Single
