@@ -114,7 +114,14 @@ export default async function TermsPage() {
             >
               Privacy Policy
             </Link>{' '}
-            for how we handle mobile information and consent records.
+            for how we handle mobile information and consent records, and review the public{' '}
+            <Link
+              href="/sms-consent"
+              className="font-medium text-[var(--brand-orange)] underline underline-offset-4"
+            >
+              SMS consent details
+            </Link>
+            .
           </p>
         </div>
       </section>

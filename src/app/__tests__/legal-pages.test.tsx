@@ -10,6 +10,7 @@ vi.mock('@/server/auth/session', () => ({
 }));
 
 import PrivacyPage from '@/app/privacy/page';
+import SmsConsentPage from '@/app/sms-consent/page';
 import TermsPage from '@/app/terms/page';
 
 describe('public legal pages', () => {
@@ -32,6 +33,25 @@ describe('public legal pages', () => {
     expect(html).toContain('SMS Terms');
     expect(html).toContain('Consent to receive reminder texts is not a condition of purchase');
     expect(html).toContain('href="/privacy"');
+    expect(html).toContain('href="/sms-consent"');
     expect(html).toContain('href="/login"');
+  });
+
+  it('renders the SMS consent program details for a signed-out visitor', async () => {
+    const html = renderToStaticMarkup(await SmsConsentPage());
+    expect(html).toContain('SMS Consent &amp; Program Details');
+    expect(html).toContain('Daily reminders are separate from account verification');
+    expect(html).toContain('Reply STOP to opt out or HELP for help');
+    expect(html).toContain('Consent is not a condition of purchase');
+    expect(html).toContain('href="/terms"');
+    expect(html).toContain('href="/privacy"');
+    expect(html).toContain('Sign in to manage SMS reminders');
+  });
+
+  it('links authenticated readers directly to the real notification settings control', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
+    const html = renderToStaticMarkup(await SmsConsentPage());
+    expect(html).toContain('href="/users/me#notifications"');
+    expect(html).toContain('Manage SMS reminders');
   });
 });

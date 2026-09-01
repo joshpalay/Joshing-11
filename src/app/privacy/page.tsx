@@ -107,7 +107,14 @@ export default async function PrivacyPage() {
             >
               Terms &amp; Disclaimer
             </Link>{' '}
-            for the SMS program terms.
+            for the SMS program terms or the public{' '}
+            <Link
+              href="/sms-consent"
+              className="font-medium text-[var(--brand-orange)] underline underline-offset-4"
+            >
+              SMS consent details
+            </Link>
+            .
           </p>
         </section>
 
