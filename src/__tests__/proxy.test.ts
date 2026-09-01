@@ -71,6 +71,16 @@ describe('proxy unauthenticated route preservation', () => {
     expect(response.headers.get('location')).toBeNull();
   });
 
+  it('passes public SMS consent screenshot evidence through logged-out', async () => {
+    readSessionClaimsMock.mockResolvedValueOnce(null);
+
+    const response = await proxy(makeRequest('/compliance/otp-request.png'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+    expect(response.headers.get('location')).toBeNull();
+  });
+
   it('lets authenticated readers reach /terms without onboarding/login redirects', async () => {
     readSessionClaimsMock.mockResolvedValueOnce({
       userId: 'u1',

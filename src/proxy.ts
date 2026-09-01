@@ -32,13 +32,18 @@ export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isApi = pathname.startsWith('/api/');
 
-  // Terms, Privacy, and SMS program details are standalone public pages: they are linked from the
-  // logged-out /login card (opened in a new tab), so it must resolve without
+  // Terms, Privacy, SMS program details, and their screenshot evidence are public: they are linked
+  // from the logged-out /login card (opened in a new tab), so they must resolve without
   // a session — otherwise the proxy bounces the unauthenticated reader to
   // /login?next=/terms, a loop back into the very screen they came from. It
   // is equally readable when authenticated, so allow it through for everyone
   // before any auth/onboarding routing runs.
-  if (pathname === '/terms' || pathname === '/privacy' || pathname === '/sms-consent') {
+  if (
+    pathname === '/terms' ||
+    pathname === '/privacy' ||
+    pathname === '/sms-consent' ||
+    pathname.startsWith('/compliance/')
+  ) {
     return tagTiming(NextResponse.next(), startedAt);
   }
 
