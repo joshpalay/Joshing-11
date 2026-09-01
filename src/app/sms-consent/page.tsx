@@ -40,6 +40,21 @@ export default async function SmsConsentPage() {
             verification code. Verification messages are sent only when requested. Message and
             data rates may apply.
           </p>
+          <figure className="mt-5 overflow-hidden rounded-[var(--radius-md)] border bg-card shadow-sm">
+            {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/compliance/otp-request.png"
+              alt="Joshing phone verification screen with the demo number (202) 555-0147, a Continue button, one-time verification code disclosure, message and data rate notice, and Terms and Privacy links"
+              width="916"
+              height="728"
+              className="h-auto w-full"
+            />
+            <figcaption className="border-t px-4 py-3 text-xs leading-5 text-muted-foreground">
+              Joshing&apos;s production OTP request interface, shown with a reserved 555 demo number.
+              The evidence image is informational and does not submit the number or request a code.
+            </figcaption>
+          </figure>
         </section>
 
         <section>
@@ -57,6 +72,22 @@ export default async function SmsConsentPage() {
             Reminder frequency is up to one message per day. Consent is not a condition of
             purchase. You can turn reminders off at any time in your profile or by replying STOP.
           </p>
+          <figure className="mt-5 overflow-hidden rounded-[var(--radius-md)] border bg-card shadow-sm">
+            {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/compliance/daily-sms-reminder.png"
+              alt="Joshing profile Notifications screen with SMS reminders visibly switched off, one-message-per-day wording, message and data rate notice, no-purchase-condition language, STOP and HELP instructions, and Terms and Privacy links"
+              width="916"
+              height="545"
+              className="h-auto w-full"
+            />
+            <figcaption className="border-t px-4 py-3 text-xs leading-5 text-muted-foreground">
+              Joshing&apos;s production reminder preference interface in its default-off state,
+              shown with a reserved 555 demo number. This evidence image is informational and
+              cannot opt anyone in.
+            </figcaption>
+          </figure>
         </section>
 
         <section>
