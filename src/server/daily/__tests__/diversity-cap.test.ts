@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DAILY_QUEUE_MAX_PER_SUBCATEGORY, DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE } from '@/server/daily/types';
+import { DAILY_QUEUE_MAX_PER_SUBCATEGORY, DAILY_QUEUE_SIZE } from '@/server/daily/types';
 
 // Same wholesale-mock strategy as queue-floor.test.ts: fillDailyQueueForUser
 // orchestrates DB pickers + LLM generation, all of which touch @/server/db (which
@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   generateDailyQuestionsFromKnowledgeBase: vi.fn(),
   generateBonusQuestionsForDomains: vi.fn(),
   isGenericSubcategory: vi.fn(),
+  getRecentAnsweredAnswerKeys: vi.fn(),
+  getRecentAnsweredEntities: vi.fn(),
 }));
 
 // The orchestrator assembles the queue in memory via pure slot builders, then
@@ -37,8 +39,8 @@ vi.mock('@/server/db/queries/daily', () => ({
   getExcludedKnowledgeDomains: mocks.getExcludedKnowledgeDomains,
   pickEligibleAuthoredQuestions: mocks.pickEligibleAuthoredQuestions,
   pickHouseQuestions: mocks.pickHouseQuestions,
-  getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
-  getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
+  getRecentAnsweredAnswerKeys: mocks.getRecentAnsweredAnswerKeys,
+  getRecentAnsweredEntities: mocks.getRecentAnsweredEntities,
   persistDailyQueue: mocks.persistDailyQueue,
   buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
     slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
@@ -81,7 +83,7 @@ vi.mock('@/server/refine/commit', () => ({
   commitPendingRefineDecisions: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
+import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 
 const USER = 'user-1';
 
@@ -172,6 +174,8 @@ beforeEach(() => {
   mocks.pickEligibleAuthoredQuestions.mockResolvedValue([]);
   mocks.pickHouseQuestions.mockResolvedValue([]);
   mocks.getFriendAndFoFUserIds.mockResolvedValue({ direct: new Set(), extended: new Set() });
+  mocks.getRecentAnsweredAnswerKeys.mockResolvedValue(new Set<string>());
+  mocks.getRecentAnsweredEntities.mockResolvedValue(new Set<string>());
 
   mocks.getFriendDomainsForBonus.mockResolvedValue([]);
   mocks.generateBonusQuestionsForDomains.mockResolvedValue([]);
@@ -368,14 +372,17 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
   });
 
-  it('caps the soft-cap backfill at one slot past the normal cap (prod incident 2026-08-30)', async () => {
-    // Reproduces the incident directly: a house bank with only ONE covered
-    // subcategory (5 Botany picks, mirroring the 10-question "Beethoven" house
-    // bank) and generation that comes back empty every round. Before the
-    // B-DIVERSITY-BACKFILL-CAP-01 fix, the soft-cap backfill drained the whole
-    // house reserve to keep the queue full — 5/5 Botany. The backfill must now
-    // stop at ONE slot past the normal cap (3, not 5) and let the queue serve
-    // short rather than repeat the same subcategory past that ceiling.
+  it('never lets the soft-cap backfill exceed the normal cap (prod incidents 2026-08-30 and 2026-09-01)', async () => {
+    // Reproduces the 2026-08-30 incident directly: a house bank with only ONE
+    // covered subcategory (5 Botany picks, mirroring the 10-question "Beethoven"
+    // house bank) and generation that comes back empty every round. The original
+    // B-DIVERSITY-BACKFILL-CAP-01 fix stopped the backfill at one slot past the
+    // normal cap (3/5), which itself proved to be one too many in prod on
+    // 2026-09-01 (3 Beethoven questions in one Five, one of them a genuine
+    // answer-cooldown repeat let back in by the backfill). The backfill must now
+    // never exceed the normal per-subcategory cap (2), even mid-relaxation, and
+    // a knowledge base too narrow to diversify past that must serve short/retry
+    // rather than repeat the same subcategory a third time.
     mocks.pickHouseQuestions.mockResolvedValue([
       houseQuestion('h1', 'Botany'),
       houseQuestion('h2', 'Botany'),
@@ -385,17 +392,49 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     ]);
     mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([]);
 
+    // Only 2 Botany house picks clear the cap; with nothing else to diversify
+    // with and generation empty, the build lands below DAILY_QUEUE_MIN_SIZE and
+    // fails closed (retryable) rather than persisting a 3rd repeat.
+    await expect(fillDailyQueueForUser(USER)).rejects.toMatchObject({
+      code: 'generation_failed',
+    });
+    expect(mocks.persistDailyQueue).not.toHaveBeenCalled();
+  });
+
+  it('never backfills a pick that was deflected for answer-cooldown, not diversity (prod incident 2026-09-01)', async () => {
+    // Direct regression for the 2026-09-01 incident: a house pick whose answer
+    // the player already gave within the cooldown window must stay excluded
+    // even though it would otherwise have clean room under the diversity cap.
+    // 3 authored Hamlet picks (unrelated to the repeat, just enough filler to
+    // clear the DAILY_QUEUE_MIN_SIZE floor either way) plus one fresh Botany
+    // house pick that's admitted normally, plus a 2nd Botany house pick whose
+    // answer collides with something the player already answered — diversity
+    // has room for it (cap is 2, only 1 Botany admitted so far), so only the
+    // answer-cooldown gate stands between it and the queue. Before the fix, a
+    // cooldown-deflected pick landed in the same reserve as a diversity-deflected
+    // one and could be pulled back in by the backfill step, which only re-checks
+    // the diversity gate. It must never be re-admitted by ANY path.
+    mocks.pickEligibleAuthoredQuestions.mockResolvedValue([
+      authoredPick('a1', 'Hamlet'),
+      authoredPick('a2', 'Hamlet'),
+      authoredPick('a3', 'Hamlet'),
+    ]);
+    mocks.pickHouseQuestions.mockResolvedValue([
+      houseQuestion('h1', 'Botany'),
+      { ...houseQuestion('h2', 'Botany'), answerText: 'Repeated Answer' },
+    ]);
+    mocks.getRecentAnsweredAnswerKeys.mockResolvedValue(new Set(['repeated answer']));
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([]);
+
     await fillDailyQueueForUser(USER);
 
-    const houseSlots = persistedSlots().filter(
-      (slot) => slot.source === 'house' && slot.domain === 'Botany',
-    );
-    // Normal cap (2) + exactly one extra slot from the backfill relaxation = 3.
-    expect(houseSlots).toHaveLength(DAILY_QUEUE_MAX_PER_SUBCATEGORY + 1);
-    // With nothing else available to diversify with, the queue serves short —
-    // exactly the floor — rather than padding out to five with more Botany.
-    const core = persistedSlots().filter((slot) => !slot.presence_source_id);
-    expect(core).toHaveLength(DAILY_QUEUE_MIN_SIZE);
+    const questionIds = persistedSlots().map((slot) => slot.question_id);
+    // h2 (the cooldown-blocked repeat) must never appear, via the normal pass
+    // or the backfill.
+    expect(questionIds).not.toContain('h2');
+    const houseSlots = persistedSlots().filter((slot) => slot.source === 'house');
+    expect(houseSlots).toHaveLength(1);
+    expect(houseSlots[0]?.question_id).toBe('h1');
   });
 
   it('logs the per-domain, per-reason deflection trail whenever a pick is held back', async () => {

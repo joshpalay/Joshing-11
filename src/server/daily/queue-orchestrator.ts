@@ -571,11 +571,14 @@ async function buildDailyQueueForUser(
   // Cap authored picks first (highest trust → first claim on each subcategory's
   // slots); deflected picks go to a reserve the backfill can draw on if the cap
   // would otherwise leave the queue short.
+  // NOTE: only the diversity_cap branch below pushes into `authoredReserve` —
+  // see the "reserves are diversity-only" comment above the backfill loop for
+  // why answer_cooldown / subject_cooldown deflections must NEVER be backfill-
+  // eligible.
   const authoredReserve: typeof authoredAll = [];
   const authored = authoredAll.filter((pick) => {
     if (answerCooldownGate.blocks(pick.answerText)) {
       deflectedForAnswerCooldown += 1;
-      authoredReserve.push(pick);
       reserveDeflections.push({
         source: 'authored',
         subcategory: pick.canonicalSubcategory ?? '',
@@ -585,7 +588,6 @@ async function buildDailyQueueForUser(
     }
     if (subjectCooldownGate.blocks(pick.subjectEntity, pick.answerText)) {
       deflectedForSubjectCooldown += 1;
-      authoredReserve.push(pick);
       reserveDeflections.push({
         source: 'authored',
         subcategory: pick.canonicalSubcategory ?? '',
@@ -621,7 +623,6 @@ async function buildDailyQueueForUser(
   const housePicks = housePicksAll.filter((pick) => {
     if (answerCooldownGate.blocks(pick.answerText)) {
       deflectedForAnswerCooldown += 1;
-      houseReserve.push(pick);
       reserveDeflections.push({
         source: 'house',
         subcategory: pick.canonicalSubcategory ?? '',
@@ -631,7 +632,6 @@ async function buildDailyQueueForUser(
     }
     if (subjectCooldownGate.blocks(pick.subjectEntity, pick.answerText)) {
       deflectedForSubjectCooldown += 1;
-      houseReserve.push(pick);
       reserveDeflections.push({
         source: 'house',
         subcategory: pick.canonicalSubcategory ?? '',
@@ -719,7 +719,6 @@ async function buildDailyQueueForUser(
     // via the reserve like a diversity deflection.
     if (answerCooldownGate.blocks(question.answer)) {
       deflectedForAnswerCooldown += 1;
-      generatedReserve.push(question);
       reserveDeflections.push({
         source: 'generated',
         subcategory: question.canonicalSubcategory ?? '',
@@ -729,7 +728,6 @@ async function buildDailyQueueForUser(
     }
     if (subjectCooldownGate.blocks(question.subjectEntity, question.answer)) {
       deflectedForSubjectCooldown += 1;
-      generatedReserve.push(question);
       reserveDeflections.push({
         source: 'generated',
         subcategory: question.canonicalSubcategory ?? '',
@@ -887,22 +885,29 @@ async function buildDailyQueueForUser(
   // exactly the queue it would have built without the cap — never shorter, and never
   // a spurious generation_failed below the floor.
   //
-  // A SECOND, higher cap still applies during backfill (B-DIVERSITY-BACKFILL-CAP-01,
-  // 2026-08-30): capForSubcategory(key) + 1 — one more than the normal cap, never
-  // unbounded. Without this, one reserve fully absorbing a shortfall before another
-  // ever gets drawn from could relax a whole Five back down to a single subcategory —
-  // seen in prod: 5/5 "Beethoven" house questions, even though a genuinely diverse
-  // batch of fresh questions had generated successfully that same build and was
-  // sitting in generatedReserve. It never got drawn from because the house reserve
-  // (3 cap-deflected Beethoven house questions) alone fully covered the shortfall
-  // first, per the authored → house → generated draw order above. "often" domains
-  // stay exempt — that's still an explicit player request, not a fallback artifact —
-  // but every other subcategory can take at most one extra slot during relaxation. A
-  // queue that still can't reach five under this stays short rather than repetitive;
-  // DAILY_QUEUE_MIN_SIZE is the floor.
+  // The reserves feeding this backfill hold ONLY diversity_cap-deflected picks —
+  // answer_cooldown and subject_cooldown deflections are filtered out upstream
+  // (never pushed into authoredReserve/houseReserve/generatedReserve) and are
+  // absolute for this build, exactly like the hidden-question drop above. Prod
+  // incident 2026-09-01: a "Beethoven's only opera" pick was answer-cooldown-
+  // deflected (Josh had answered the identical fact 18 days earlier) but the
+  // backfill loop used to re-admit ANY reserved pick it could find room for under
+  // the diversity gate alone, without re-checking why the pick was reserved in the
+  // first place — silently reintroducing the very repeat the cooldown exists to
+  // prevent. Never let backfill re-admit a cooldown-deflected pick.
+  //
+  // The backfill draw is capped by the SAME per-subcategory limit as the primary
+  // pass (B-DIVERSITY-BACKFILL-CAP-01 originally allowed one extra slot here —
+  // capForSubcategory(key) + 1 — to avoid a single reserve monopolizing a
+  // shortfall, e.g. prod's 5/5 "Beethoven" house incident on 2026-08-30. Per Josh
+  // 2026-09-01: even the +1 relaxation (3 of the same subcategory in one Five) is
+  // too many — two is the max he wants to see, full stop). "often" domains stay
+  // exempt — that's still an explicit player request, not a fallback artifact. A
+  // queue that can't reach five under this hard cap stays short rather than
+  // repetitive; DAILY_QUEUE_MIN_SIZE is the floor.
   const backfillCapForSubcategory = (normalizedSubcategory: string): number => {
     if (oftenDomains.has(normalizedSubcategory)) return DAILY_QUEUE_SIZE;
-    return capForSubcategory(normalizedSubcategory) + 1;
+    return capForSubcategory(normalizedSubcategory);
   };
   const backfillGate = makeSubcategoryDiversityGate(backfillCapForSubcategory);
   for (const pick of authored) backfillGate.admit(pick.canonicalSubcategory);
