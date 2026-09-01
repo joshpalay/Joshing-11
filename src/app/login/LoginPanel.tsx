@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { clearCachedLoadingMomentPayload } from '@/components/loading-moment/client-cache';
@@ -167,11 +168,7 @@ function LoadingLabel({ verb }: { verb: string }) {
       {verb}
       <span aria-hidden="true">
         {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="loading-ellipsis-dot"
-            style={{ animationDelay: `${i * 0.16}s` }}
-          >
+          <span key={i} className="loading-ellipsis-dot" style={{ animationDelay: `${i * 0.16}s` }}>
             .
           </span>
         ))}
@@ -188,6 +185,22 @@ function InviteContextCard({ invite }: { invite: InviteContext }) {
         need to verify your phone number and then you can start playing.
       </p>
     </div>
+  );
+}
+
+export function OtpRequestDisclosure() {
+  return (
+    <p className="mt-2 text-center text-xs leading-5 text-black/60">
+      Continuing requests a one-time Joshing verification code. Message and data rates may apply.{' '}
+      <Link href="/terms" className="underline underline-offset-2">
+        Terms
+      </Link>{' '}
+      and{' '}
+      <Link href="/privacy" className="underline underline-offset-2">
+        Privacy
+      </Link>
+      .
+    </p>
   );
 }
 
@@ -631,6 +644,7 @@ export default function LoginPanel({
                 <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
                   {loading ? 'Sending…' : 'Send text'}
                 </button>
+                <OtpRequestDisclosure />
 
                 {/* Divider sets the secondary action apart from the primary:
                     small, muted "or" with more room below it than above. */}
@@ -700,6 +714,7 @@ export default function LoginPanel({
               <button type="submit" className={SUBMIT_CLASS} disabled={loading}>
                 {loading ? <LoadingLabel verb="Continuing" /> : 'Continue'}
               </button>
+              <OtpRequestDisclosure />
             </>
           )}
         </form>

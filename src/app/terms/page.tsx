@@ -34,10 +34,6 @@ const CLAUSES: { lead: string; body: string }[] = [
     body: 'When you create questions or content, you’re letting us use, display, and share it within the game so it works the way it’s meant to.',
   },
   {
-    lead: 'Privacy, briefly.',
-    body: 'We collect what we need to run the game and don’t sell your data. (A fuller privacy policy is coming.)',
-  },
-  {
     lead: 'Changes.',
     body: 'We may update these terms as Joshing grows. Continuing to play means you’re cool with the current version.',
   },
@@ -57,7 +53,7 @@ export default async function TermsPage() {
       <div className="mb-6">
         <Link
           href={backHref}
-          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
+          className="text-muted-foreground text-sm font-medium underline-offset-4 hover:underline"
         >
           {backLabel}
         </Link>
@@ -65,20 +61,65 @@ export default async function TermsPage() {
 
       <h1 className="font-serif text-3xl font-semibold">Terms &amp; Disclaimer</h1>
 
-      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+      <p className="text-muted-foreground mt-4 text-sm leading-6">
         Joshing is a game we’re building and improving as we go. By using it, you agree to a few
         common-sense things:
       </p>
 
       <div className="mt-6 space-y-4">
         {CLAUSES.map((clause) => (
-          <p key={clause.lead} className="text-sm leading-6 text-foreground">
+          <p key={clause.lead} className="text-foreground text-sm leading-6">
             <span className="font-semibold">{clause.lead}</span> {clause.body}
           </p>
         ))}
+        <p className="text-foreground text-sm leading-6">
+          <span className="font-semibold">Privacy.</span> We collect what we need to run the game
+          and don&apos;t sell your data. Read the full{' '}
+          <Link
+            href="/privacy"
+            className="font-medium text-[var(--brand-orange)] underline underline-offset-4"
+          >
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </div>
 
-      <p className="mt-8 text-sm leading-6 text-muted-foreground">
+      <section className="mt-10 border-t pt-8">
+        <h2 className="font-serif text-2xl font-semibold">SMS Terms</h2>
+        <div className="text-foreground mt-4 space-y-4 text-sm leading-6">
+          <p>
+            <span className="font-semibold">Program name and purpose.</span> Joshing SMS sends a
+            one-time verification code when you request one. If you separately opt in on your
+            profile, Joshing may also send one daily reminder when your five questions are ready.
+          </p>
+          <p>
+            <span className="font-semibold">Frequency and charges.</span> Verification messages are
+            sent only when requested. Reminder frequency is up to one message per day. Message and
+            data rates may apply. Consent to receive reminder texts is not a condition of purchase.
+          </p>
+          <p>
+            <span className="font-semibold">Your choices.</span> Reply STOP to opt out of reminder
+            texts. Reply HELP for help, or email{' '}
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="font-medium text-[var(--brand-orange)] underline underline-offset-4"
+            >
+              {CONTACT_EMAIL}
+            </a>
+            . See our{' '}
+            <Link
+              href="/privacy"
+              className="font-medium text-[var(--brand-orange)] underline underline-offset-4"
+            >
+              Privacy Policy
+            </Link>{' '}
+            for how we handle mobile information and consent records.
+          </p>
+        </div>
+      </section>
+
+      <p className="text-muted-foreground mt-8 text-sm leading-6">
         Questions? Reach out to us at{' '}
         <a
           href={`mailto:${CONTACT_EMAIL}`}

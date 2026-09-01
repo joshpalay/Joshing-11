@@ -11,6 +11,25 @@ import { smsLogs } from '@/server/db/schema';
 
 type SmsLogMessageType = typeof smsLogs.$inferInsert.messageType;
 
+export type SmsSendResult =
+  | { ok: true }
+  | { ok: false; reason: 'disabled' | 'not_configured' | 'provider_error' | 'network_error' };
+
+const CAMPAIGN_MESSAGE_TYPES = new Set<SmsMessageType>([
+  'otp',
+  'daily_questions',
+  'daily_questions_batched',
+]);
+
+/**
+ * This A2P campaign is deliberately narrow. Legacy/future-facing call sites
+ * remain in the codebase, but Twilio credentials alone can never activate
+ * invitations, reactions, game/ceremony alerts, or other social messages.
+ */
+export function isSmsMessageTypeEnabled(messageType: SmsMessageType): boolean {
+  return CAMPAIGN_MESSAGE_TYPES.has(messageType);
+}
+
 /**
  * Send an SMS via Twilio and log the attempt.
  * Fails silently on missing env vars (dev environment).
@@ -19,8 +38,8 @@ export async function sendSms(
   to: string,
   body: string,
   messageType: SmsMessageType,
-  userId?: string
-): Promise<void> {
+  userId?: string,
+): Promise<SmsSendResult> {
   async function logAttempt() {
     try {
       await db.insert(smsLogs).values({
@@ -37,10 +56,15 @@ export async function sendSms(
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
 
+  if (!isSmsMessageTypeEnabled(messageType)) {
+    console.warn('[SMS] Message type disabled for current campaign:', messageType);
+    return { ok: false, reason: 'disabled' };
+  }
+
   if (!accountSid || !authToken || !messagingServiceSid) {
     console.warn('[SMS] Twilio env vars missing — SMS not sent:', messageType, to);
     await logAttempt();
-    return;
+    return { ok: false, reason: 'not_configured' };
   }
 
   try {
@@ -58,19 +82,29 @@ export async function sendSms(
           MessagingServiceSid: messagingServiceSid,
           Body: body,
         }).toString(),
-      }
+      },
     );
 
     if (!response.ok) {
-      const text = await response.text();
-      console.error('[SMS] Twilio error:', response.status, text);
+      // Do not log the provider response body: it may echo request details,
+      // and OTP contents must never reach application logs.
+      console.error('[SMS] Twilio error:', response.status, messageType);
+      await logAttempt();
+      return { ok: false, reason: 'provider_error' };
     }
-  } catch (err) {
-    console.error('[SMS] Network error sending SMS:', err);
+  } catch {
+    console.error('[SMS] Network error sending SMS:', messageType);
+    await logAttempt();
+    return { ok: false, reason: 'network_error' };
   }
 
   // Log the send attempt (never log message content per PRD)
   await logAttempt();
+  return { ok: true };
+}
+
+export function buildOtpMessage(code: string): string {
+  return `Joshing verification code: ${code}. Expires in 10 minutes. Do not share this code.`;
 }
 
 /**
@@ -84,7 +118,7 @@ export function buildGameCompleteSmsBody(
   winner: { display_name: string; user_id: string } | null,
   isTie: boolean,
   allMembers: GameWinnerMember[],
-  opts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null }
+  opts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null },
 ): string {
   const mode = opts?.ceremony_mode ?? 'group';
   const hostName = opts?.host_display_name?.trim();
@@ -145,7 +179,7 @@ export async function sendGameCompleteSms(
   winner: { display_name: string; user_id: string } | null = null,
   isTie: boolean = false,
   allMembers: GameWinnerMember[] = [],
-  ceremonyOpts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null }
+  ceremonyOpts?: { ceremony_mode?: 'solo' | 'duo' | 'group'; host_display_name?: string | null },
 ): Promise<void> {
   // If allMembers not provided (legacy call), fetch them
   let members = allMembers;
@@ -165,11 +199,11 @@ export async function sendGameCompleteSms(
         winner,
         isTie,
         members,
-        ceremonyOpts
+        ceremonyOpts,
       );
       const truncated = body.length > 160 ? body.slice(0, 157) + '…' : body;
       sendSms(member.phone_number, truncated, 'joshing_game_complete', member.user_id).catch(
-        (err) => console.error('[SMS] joshing_game_complete send failed:', err)
+        (err) => console.error('[SMS] joshing_game_complete send failed:', err),
       );
     }
   }
@@ -186,7 +220,7 @@ export async function sendDailyReminder(
   userId: string,
   phoneNumber: string,
   groupNames: string[],
-  baseUrl: string
+  baseUrl: string,
 ): Promise<void> {
   if (groupNames.length === 0) return;
 
@@ -196,22 +230,24 @@ export async function sendDailyReminder(
     phoneNumber,
     message,
     (groupNames.length > 1 ? 'daily_questions_batched' : 'daily_questions') as SmsMessageType,
-    userId
+    userId,
   );
 }
 
 export function buildDailyReminderMessage(groupNames: string[], baseUrl: string): string {
-  let message: string;
-  if (groupNames.length === 1) {
-    message = `${groupNames[0]} — up to 5 questions waiting. Your queue refills daily: ${baseUrl}/play`;
-  } else if (groupNames.length === 2) {
-    message = `${groupNames[0]} and ${groupNames[1]} — questions waiting. Your queue refills daily: ${baseUrl}/today`;
-  } else {
-    message = `${groupNames[0]} and ${groupNames.length - 1} other groups — questions waiting. Your queue refills daily: ${baseUrl}/today`;
-  }
+  void groupNames;
+  return buildDailyReminderSmsBody(baseUrl);
+}
 
-  if (message.length > 160) {
-    return message.slice(0, 157) + '…';
-  }
-  return message;
+export function buildDailyReminderSmsBody(baseUrl: string): string {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  return `Joshing: Your five for today are ready: ${normalizedBaseUrl}/daily. Reply STOP to opt out, HELP for help. Msg & data rates may apply.`;
+}
+
+export function isEligibleForDailyReminder(user: {
+  phoneNumber: string | null;
+  phoneVerified: boolean;
+  smsOptIn: string;
+}): boolean {
+  return Boolean(user.phoneNumber && user.phoneVerified && user.smsOptIn === 'opted_in');
 }

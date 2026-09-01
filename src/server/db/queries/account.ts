@@ -1,10 +1,6 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 
-import {
-  contactHashes,
-  db,
-  users,
-} from '@/server/db';
+import { contactHashes, db, users } from '@/server/db';
 
 export type UserProfile = {
   id: string;
@@ -187,6 +183,22 @@ export async function updateProfileFields(
 }
 
 export type ReminderOptInState = 'opted_in' | 'opted_out' | 'not_asked';
+export const SMS_CONSENT_SOURCE = 'profile_web_form';
+export const SMS_CONSENT_POLICY_VERSION = '2026-09-01';
+
+export function buildSmsConsentAuditPatch(
+  smsOptIn: 'opted_in' | 'opted_out',
+  changedAt = new Date(),
+): Record<string, unknown> {
+  return {
+    smsOptIn,
+    smsConsentSource: SMS_CONSENT_SOURCE,
+    smsConsentPolicyVersion: SMS_CONSENT_POLICY_VERSION,
+    ...(smsOptIn === 'opted_in'
+      ? { smsOptInAt: changedAt }
+      : { smsOptOutAt: changedAt }),
+  };
+}
 
 export type ReminderState = {
   smsOptIn: ReminderOptInState;
@@ -195,6 +207,10 @@ export type ReminderState = {
   email: string | null;
   pendingEmail: string | null;
   phoneNumber: string;
+  smsOptInAt: string | null;
+  smsOptOutAt: string | null;
+  smsConsentSource: string | null;
+  smsConsentPolicyVersion: string | null;
   reminderPromptDismissedAt: string | null;
   // D-REMINDER-INTERSTITIAL-01: when the one-time full-screen interstitial was
   // shown (both sign-up and skip stamp it). Null → never shown → still eligible.
@@ -211,6 +227,10 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
       email: users.email,
       pendingEmail: users.pendingEmail,
       phoneNumber: users.phoneNumber,
+      smsOptInAt: users.smsOptInAt,
+      smsOptOutAt: users.smsOptOutAt,
+      smsConsentSource: users.smsConsentSource,
+      smsConsentPolicyVersion: users.smsConsentPolicyVersion,
       reminderPromptDismissedAt: users.reminderPromptDismissedAt,
       reminderInterstitialSeenAt: users.reminderInterstitialSeenAt,
     })
@@ -227,6 +247,10 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
     email: row.email,
     pendingEmail: row.pendingEmail,
     phoneNumber: row.phoneNumber,
+    smsOptInAt: row.smsOptInAt?.toISOString() ?? null,
+    smsOptOutAt: row.smsOptOutAt?.toISOString() ?? null,
+    smsConsentSource: row.smsConsentSource,
+    smsConsentPolicyVersion: row.smsConsentPolicyVersion,
     reminderPromptDismissedAt: row.reminderPromptDismissedAt?.toISOString() ?? null,
     reminderInterstitialSeenAt: row.reminderInterstitialSeenAt?.toISOString() ?? null,
   };
@@ -271,7 +295,9 @@ export async function updateReminderPreferences(
   }
 
   const set: Record<string, unknown> = { updatedAt: new Date() };
-  if (patch.smsOptIn !== undefined) set.smsOptIn = patch.smsOptIn;
+  if (patch.smsOptIn !== undefined) {
+    Object.assign(set, buildSmsConsentAuditPatch(patch.smsOptIn));
+  }
   if (patch.emailOptIn !== undefined) set.emailOptIn = patch.emailOptIn;
   if (patch.pendingEmail !== undefined) set.pendingEmail = patch.pendingEmail;
   if (patch.dismissed === true) set.reminderPromptDismissedAt = new Date();
@@ -365,10 +391,7 @@ export async function assignInitialHandle(params: {
   const now = new Date();
 
   try {
-    await db
-      .update(users)
-      .set({ handle, updatedAt: now })
-      .where(eq(users.id, params.userId));
+    await db.update(users).set({ handle, updatedAt: now }).where(eq(users.id, params.userId));
   } catch (err) {
     if (err instanceof Error && /unique/i.test(err.message)) {
       return { ok: false };
@@ -384,9 +407,7 @@ export type DiscoverabilityState = {
   discoverableByNicheMatch: boolean;
 };
 
-export async function getDiscoverability(
-  userId: string,
-): Promise<DiscoverabilityState | null> {
+export async function getDiscoverability(userId: string): Promise<DiscoverabilityState | null> {
   const [row] = await db
     .select({
       discoverableByContacts: users.discoverableByContacts,
@@ -440,16 +461,14 @@ export async function updateDiscoverability(
 
     await tx.update(users).set(set).where(eq(users.id, userId));
 
-    const turningContactsOff =
-      patch.contacts === false && current.discoverableByContacts === true;
+    const turningContactsOff = patch.contacts === false && current.discoverableByContacts === true;
     if (turningContactsOff) {
       await tx.delete(contactHashes).where(eq(contactHashes.userId, userId));
     }
 
     return {
       discoverableByContacts: patch.contacts ?? current.discoverableByContacts,
-      discoverableByMutualFriends:
-        patch.mutualFriends ?? current.discoverableByMutualFriends,
+      discoverableByMutualFriends: patch.mutualFriends ?? current.discoverableByMutualFriends,
       discoverableByNicheMatch: patch.nicheMatch ?? current.discoverableByNicheMatch,
     };
   });
@@ -460,17 +479,12 @@ export async function updateDiscoverability(
 // discoverableByNicheMatch is currently true. Used to resolve the asymmetric
 // two-flag gate in notifyNicheMatch with a single query rather than a
 // per-user getDiscoverability round-trip.
-export async function getNicheMatchDiscoverable(
-  userIds: string[],
-): Promise<Set<string>> {
+export async function getNicheMatchDiscoverable(userIds: string[]): Promise<Set<string>> {
   if (userIds.length === 0) return new Set();
   const rows = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(
-      inArray(users.id, userIds),
-      eq(users.discoverableByNicheMatch, true),
-    ));
+    .where(and(inArray(users.id, userIds), eq(users.discoverableByNicheMatch, true)));
   return new Set(rows.map((r) => r.id));
 }
 
@@ -478,17 +492,12 @@ export async function getNicheMatchDiscoverable(
 // Returns the subset of the supplied ids whose discoverableByForward is currently
 // true. Sibling to getNicheMatchDiscoverable — kept separate so the "via {source}"
 // forward-relay exposure can be gated independently of niche-match. Single query.
-export async function getForwardDiscoverable(
-  userIds: string[],
-): Promise<Set<string>> {
+export async function getForwardDiscoverable(userIds: string[]): Promise<Set<string>> {
   if (userIds.length === 0) return new Set();
   const rows = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(
-      inArray(users.id, userIds),
-      eq(users.discoverableByForward, true),
-    ));
+    .where(and(inArray(users.id, userIds), eq(users.discoverableByForward, true)));
   return new Set(rows.map((r) => r.id));
 }
 
@@ -497,7 +506,10 @@ export async function getForwardDiscoverable(
 // unconditionally without a separate empty-set branch.
 function idInList(ids: string[]) {
   if (ids.length === 0) return sql`(null)`;
-  return sql`(${sql.join(ids.map((id) => sql`${id}`), sql.raw(', '))})`;
+  return sql`(${sql.join(
+    ids.map((id) => sql`${id}`),
+    sql.raw(', '),
+  )})`;
 }
 
 // Production account deletion (D-ACCOUNT-DELETION-TERRITORY-01). Honors the
@@ -524,9 +536,13 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     // (the question is tombstoned below and re-sources to house). Stripping
     // source-actor cards first also lets a question whose only retained tie was
     // such a card fall through to hard-delete.
-    await tx.execute(sql`delete from "FeedItem" where "recipientUserId" = ${userId} or "sourceUserId" = ${userId} or "joshingGameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`);
+    await tx.execute(
+      sql`delete from "FeedItem" where "recipientUserId" = ${userId} or "sourceUserId" = ${userId} or "joshingGameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`,
+    );
     await tx.execute(sql`delete from "ActivityItem" where "userId" = ${userId}`);
-    await tx.execute(sql`update "ActivityItem" set "actorUserId" = null where "actorUserId" = ${userId}`);
+    await tx.execute(
+      sql`update "ActivityItem" set "actorUserId" = null where "actorUserId" = ${userId}`,
+    );
 
     // Partition this author's questions: TOMBSTONE (A1) when a RETAINED user still
     // has proven territory or a save tied to it, else hard-delete (Decision B).
@@ -560,45 +576,75 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     );
 
     if (
-      questionReactionColumnNames.has('senderUserId')
-      && questionReactionColumnNames.has('recipientUserId')
-      && questionReactionColumnNames.has('questionId')
+      questionReactionColumnNames.has('senderUserId') &&
+      questionReactionColumnNames.has('recipientUserId') &&
+      questionReactionColumnNames.has('questionId')
     ) {
-      await tx.execute(sql`delete from "QuestionReaction" where "senderUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in ${orphanList}`);
+      await tx.execute(
+        sql`delete from "QuestionReaction" where "senderUserId" = ${userId} or "recipientUserId" = ${userId} or "questionId" in ${orphanList}`,
+      );
     } else if (
-      questionReactionColumnNames.has('answerer_id')
-      && questionReactionColumnNames.has('creator_id')
-      && questionReactionColumnNames.has('question_id')
+      questionReactionColumnNames.has('answerer_id') &&
+      questionReactionColumnNames.has('creator_id') &&
+      questionReactionColumnNames.has('question_id')
     ) {
-      await tx.execute(sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in ${orphanList}`);
+      await tx.execute(
+        sql`delete from "QuestionReaction" where "answerer_id" = ${userId} or "creator_id" = ${userId} or "question_id" in ${orphanList}`,
+      );
     }
-    await tx.execute(sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in ${orphanList}`);
+    await tx.execute(
+      sql`delete from "GradeDispute" where "creator_id" = ${userId} or "question_id" in ${orphanList}`,
+    );
 
-    await tx.execute(sql`delete from "JoshingGameResponse" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in ${orphanList}`);
-    await tx.execute(sql`delete from "JoshingGameRecipient" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`);
-    await tx.execute(sql`delete from "JoshingGameQuestion" where "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in ${orphanList}`);
+    await tx.execute(
+      sql`delete from "JoshingGameResponse" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in ${orphanList}`,
+    );
+    await tx.execute(
+      sql`delete from "JoshingGameRecipient" where "userId" = ${userId} or "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`,
+    );
+    await tx.execute(
+      sql`delete from "JoshingGameQuestion" where "gameId" in (select id from "JoshingGame" where "creatorId" = ${userId}) or "questionId" in ${orphanList}`,
+    );
     await tx.execute(sql`delete from "JoshingGame" where "creatorId" = ${userId}`);
 
-    await tx.execute(sql`delete from "Friendship" where "userAId" = ${userId} or "userBId" = ${userId} or "requestedByUserId" = ${userId} or "removedByUserId" = ${userId}`);
+    await tx.execute(
+      sql`delete from "Friendship" where "userAId" = ${userId} or "userBId" = ${userId} or "requestedByUserId" = ${userId} or "removedByUserId" = ${userId}`,
+    );
     await tx.execute(sql`delete from "FriendInvitation" where "inviterUserId" = ${userId}`);
-    await tx.execute(sql`update "FriendInvitation" set "inviteeUserId" = null where "inviteeUserId" = ${userId}`);
-    await tx.execute(sql`update "DailyPreference" set "friend_ids" = array_remove("friend_ids", ${userId}) where ${userId} = any("friend_ids")`);
+    await tx.execute(
+      sql`update "FriendInvitation" set "inviteeUserId" = null where "inviteeUserId" = ${userId}`,
+    );
+    await tx.execute(
+      sql`update "DailyPreference" set "friend_ids" = array_remove("friend_ids", ${userId}) where ${userId} = any("friend_ids")`,
+    );
 
-    await tx.execute(sql`delete from "SkippedDailyQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    await tx.execute(
+      sql`delete from "SkippedDailyQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`,
+    );
     // HiddenQuestion (0131) has no ON DELETE CASCADE on its user/question FKs, so
     // it must be cleared explicitly here or account deletion fails on the FK —
     // same shape and same reason as the SkippedDailyQuestion sweep above.
-    await tx.execute(sql`delete from "HiddenQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    await tx.execute(
+      sql`delete from "HiddenQuestion" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`,
+    );
     await tx.execute(sql`delete from "DailyQueue" where "user_id" = ${userId}`);
     await tx.execute(sql`delete from "DailyPreference" where "user_id" = ${userId}`);
 
-    await tx.execute(sql`delete from "QuestionFeedback" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
-    await tx.execute(sql`delete from "QuestionRating" where "user_id" = ${userId} or "question_id" in ${orphanList}`);
+    await tx.execute(
+      sql`delete from "QuestionFeedback" where "user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`,
+    );
+    await tx.execute(
+      sql`delete from "QuestionRating" where "user_id" = ${userId} or "question_id" in ${orphanList}`,
+    );
     // Decision B: a friend's bank save IS a retained dependency, so a banked
     // question is a tombstone — only THIS user's own bank rows are removed (their
     // saves of a tombstoned question are preserved by the orphan-only question key).
-    await tx.execute(sql`delete from "UserQuestionBank" where "user_id" = ${userId} or "question_id" in ${orphanList}`);
-    await tx.execute(sql`delete from "QuestionAudienceTag" where "creator_id" = ${userId} or "question_id" in ${orphanList}`);
+    await tx.execute(
+      sql`delete from "UserQuestionBank" where "user_id" = ${userId} or "question_id" in ${orphanList}`,
+    );
+    await tx.execute(
+      sql`delete from "QuestionAudienceTag" where "creator_id" = ${userId} or "question_id" in ${orphanList}`,
+    );
 
     // ContentReport: the `ContentReport_one_target` CHECK
     // ((question_id NOT NULL) + (generated_question_id NOT NULL) = 1) forbids
@@ -609,7 +655,9 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     // TOMBSTONE question keep pointing at the surviving row (moderation record
     // preserved). Runs before the orphan-Question and GeneratedQuestion deletes
     // so their RESTRICT FKs don't block.
-    await tx.execute(sql`delete from "ContentReport" where "reporter_user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    await tx.execute(
+      sql`delete from "ContentReport" where "reporter_user_id" = ${userId} or "question_id" in ${orphanList} or "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`,
+    );
 
     // THE territory-preservation core (#1/#3/#4): delete ONLY this user's own
     // mastery rows (their proven territory + their author-credit). Retained users'
@@ -619,11 +667,15 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     // Decision C — degrade convergence/Lately attribution: a retained user's event
     // that named THIS user as the answerer keeps the fact, loses the name.
     // answered_by_user_id is plain text (not an FK); convergence reads it.
-    await tx.execute(sql`update "MASTERY_EVENTS" set "answered_by_user_id" = null where "answered_by_user_id" = ${userId}`);
+    await tx.execute(
+      sql`update "MASTERY_EVENTS" set "answered_by_user_id" = null where "answered_by_user_id" = ${userId}`,
+    );
 
     // A1 tombstone: retained-dependency questions persist, re-sourced to house.
     if (tombstoneIds.length > 0) {
-      await tx.execute(sql`update "Question" set "creator_id" = null, "source" = 'house_authored', "author_deleted" = true, "updated_at" = now() where id in ${idInList(tombstoneIds)}`);
+      await tx.execute(
+        sql`update "Question" set "creator_id" = null, "source" = 'house_authored', "author_deleted" = true, "updated_at" = now() where id in ${idInList(tombstoneIds)}`,
+      );
     }
     // Decision B: questions with no retained dependency hard-delete with the user.
     // Their FeedItems were stripped above and their other referencers removed by
@@ -632,7 +684,9 @@ export async function deleteUserAccount(userId: string): Promise<void> {
       await tx.execute(sql`delete from "Question" where id in ${idInList(orphanIds)}`);
     }
 
-    await tx.execute(sql`update "Question" set "generated_question_id" = null where "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`);
+    await tx.execute(
+      sql`update "Question" set "generated_question_id" = null where "generated_question_id" in (select id from "GeneratedQuestion" where "user_id" = ${userId})`,
+    );
     await tx.execute(sql`delete from "GeneratedQuestion" where "user_id" = ${userId}`);
 
     await tx.execute(sql`delete from "PLAYER_MASTERY" where "user_id" = ${userId}`);

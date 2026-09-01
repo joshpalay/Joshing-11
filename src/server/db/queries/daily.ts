@@ -1,4 +1,19 @@
-import { and, asc, cosineDistance, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  cosineDistance,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import {
   dailyPreferences,
@@ -18,11 +33,25 @@ import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import type { GradableQuestionType } from '@/server/grading';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
-import { notBlockedGeneratedByContentReport, notSuppressedByContentReport } from '@/server/db/queries/content-reports';
+import {
+  notBlockedGeneratedByContentReport,
+  notSuppressedByContentReport,
+} from '@/server/db/queries/content-reports';
 import { notBlocked } from '@/server/feed/visibility';
 import { pgErrorCode } from '@/server/db/pg-error';
-import { CATEGORIES, categoryLabel, HOUSE_AUTHOR, resolveAuthorDisplay } from '@/lib/questions-types';
-import { CATCHUP_LOOKBACK_DAYS, asQueueSlots, dailyQueueItemId, feedCatchupItemId, minusUtcDays } from '@/server/daily/catchup';
+import {
+  CATEGORIES,
+  categoryLabel,
+  HOUSE_AUTHOR,
+  resolveAuthorDisplay,
+} from '@/lib/questions-types';
+import {
+  CATCHUP_LOOKBACK_DAYS,
+  asQueueSlots,
+  dailyQueueItemId,
+  feedCatchupItemId,
+  minusUtcDays,
+} from '@/server/daily/catchup';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { answerCooldownKey } from '@/server/daily/answer-cooldown';
 import {
@@ -38,10 +67,7 @@ import {
   isCatchUpSlotEligible,
   queueAgeInDays,
 } from '@/server/play/catch-up-eligibility';
-import {
-  dedupeCatchUpItems,
-  orderCatchUpItems,
-} from '@/server/play/catch-up-turn-sequencing';
+import { dedupeCatchUpItems, orderCatchUpItems } from '@/server/play/catch-up-turn-sequencing';
 import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { domainKey } from '@/lib/knowledge/domain-key';
@@ -174,7 +200,8 @@ export async function getExcludedKnowledgeDomains(userId: string): Promise<Scope
       .from(userDomainExclusions)
       .where(activeExclusion);
   } catch (error) {
-    if (pgErrorCode(error) === '42P01') return { subcategories: new Set(), broadCategories: new Set() };
+    if (pgErrorCode(error) === '42P01')
+      return { subcategories: new Set(), broadCategories: new Set() };
     // 42703 = the scope OR rest_until column is missing on a database where the
     // additive migration (0036 / 0124) hasn't landed yet. Fall back to a
     // scope='subcategory', treat-all-as-permanent read so the feature degrades
@@ -210,7 +237,7 @@ export async function getExcludedKnowledgeDomains(userId: string): Promise<Scope
   // broadCategories filter.
   if (categoryEnums.length > 0) {
     try {
-      const knownCategories = categoryEnums.filter((value): value is typeof CATEGORIES[number] =>
+      const knownCategories = categoryEnums.filter((value): value is (typeof CATEGORIES)[number] =>
         (CATEGORIES as readonly string[]).includes(value),
       );
       if (knownCategories.length > 0) {
@@ -237,10 +264,17 @@ async function getCorrectAnswerCountsByDomain(userId: string): Promise<Map<strin
       count: sql<number>`count(*)::int`,
     })
     .from(masteryEvents)
-    .where(and(eq(masteryEvents.userId, userId), inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct'])))
+    .where(
+      and(
+        eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      ),
+    )
     .groupBy(masteryEvents.canonicalSubcategory);
 
-  return new Map(rows.map((row) => [normalizeDomain(row.domain).toLowerCase(), Number(row.count ?? 0)]));
+  return new Map(
+    rows.map((row) => [normalizeDomain(row.domain).toLowerCase(), Number(row.count ?? 0)]),
+  );
 }
 
 async function getPlayerMasteryKnowledgeRows(userId: string) {
@@ -283,17 +317,19 @@ async function getPlayerMasteryKnowledgeRows(userId: string) {
 }
 
 export async function getKnowledgeBase(userId: string): Promise<KnowledgeBaseDomain[]> {
-  const [masteryRows, declaredRows, excludedDomains, correctCountsByDomain, preferences] = await Promise.all([
-    getPlayerMasteryKnowledgeRows(userId),
-    getActiveDeclaredInterests(userId),
-    getExcludedKnowledgeDomains(userId),
-    getCorrectAnswerCountsByDomain(userId),
-    getDailyPreferences(userId),
-  ]);
+  const [masteryRows, declaredRows, excludedDomains, correctCountsByDomain, preferences] =
+    await Promise.all([
+      getPlayerMasteryKnowledgeRows(userId),
+      getActiveDeclaredInterests(userId),
+      getExcludedKnowledgeDomains(userId),
+      getCorrectAnswerCountsByDomain(userId),
+      getDailyPreferences(userId),
+    ]);
 
   const isExcluded = (domain: string, broadCategory: string | null): boolean => {
     if (excludedDomains.subcategories.has(domain.toLowerCase())) return true;
-    if (broadCategory && excludedDomains.broadCategories.has(broadCategory.toLowerCase())) return true;
+    if (broadCategory && excludedDomains.broadCategories.has(broadCategory.toLowerCase()))
+      return true;
     return false;
   };
 
@@ -383,8 +419,19 @@ export async function getTodaysDailyQueue(userId: string): Promise<DailyQueueRow
  * summary, content reports) deliberately stay snapshot-first.
  */
 export async function refreshQueueSlotQuestionTexts(slots: QueueSlot[]): Promise<QueueSlot[]> {
-  const generatedIds = [...new Set(slots.map((slot) => slot.generated_question_id).filter((id): id is string => Boolean(id)))];
-  const canonicalIds = [...new Set(slots.filter((slot) => !slot.generated_question_id).map((slot) => slot.question_id).filter((id): id is string => Boolean(id)))];
+  const generatedIds = [
+    ...new Set(
+      slots.map((slot) => slot.generated_question_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const canonicalIds = [
+    ...new Set(
+      slots
+        .filter((slot) => !slot.generated_question_id)
+        .map((slot) => slot.question_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
   if (generatedIds.length === 0 && canonicalIds.length === 0) return slots;
 
   const [generatedRows, canonicalRows] = await Promise.all([
@@ -444,6 +491,22 @@ export async function releaseDailyEmailReminder(queueId: string): Promise<void> 
     .where(eq(dailyQueues.id, queueId));
 }
 
+/** Atomically claim this queue's one allowed daily SMS reminder. */
+export async function claimDailySmsReminder(queueId: string): Promise<boolean> {
+  const claimed = await db
+    .update(dailyQueues)
+    .set({ smsReminderSentAt: new Date() })
+    .where(and(eq(dailyQueues.id, queueId), isNull(dailyQueues.smsReminderSentAt)))
+    .returning({ id: dailyQueues.id });
+
+  return claimed.length > 0;
+}
+
+/** Release a failed SMS claim so a later cron pass can retry delivery. */
+export async function releaseDailySmsReminder(queueId: string): Promise<void> {
+  await db.update(dailyQueues).set({ smsReminderSentAt: null }).where(eq(dailyQueues.id, queueId));
+}
+
 /**
  * Total number of daily queues ever built for this user, across all dates.
  *
@@ -482,11 +545,13 @@ export async function invalidateUntouchedDailyQueues(userId: string): Promise<nu
   const queues = await db
     .select()
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lte(dailyQueues.queueDate, assignmentDateStr),
-      gte(dailyQueues.queueDate, oldestEligible),
-    ));
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        lte(dailyQueues.queueDate, assignmentDateStr),
+        gte(dailyQueues.queueDate, oldestEligible),
+      ),
+    );
 
   const untouchedIds = queues
     .filter((queue) => !asQueueSlots(queue.slots).some((slot) => slot.answered || slot.skipped))
@@ -529,11 +594,13 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
   const [prior] = await db
     .select()
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lt(dailyQueues.queueDate, assignmentDateStr),
-      gte(dailyQueues.queueDate, oldestEligible),
-    ))
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        lt(dailyQueues.queueDate, assignmentDateStr),
+        gte(dailyQueues.queueDate, oldestEligible),
+      ),
+    )
     .orderBy(desc(dailyQueues.queueDate))
     .limit(1);
 
@@ -582,11 +649,13 @@ export async function getPriorInWindowDailyQueue(userId: string): Promise<DailyQ
   const [prior] = await db
     .select()
     .from(dailyQueues)
-    .where(and(
-      eq(dailyQueues.userId, userId),
-      lt(dailyQueues.queueDate, assignmentDateStr),
-      gte(dailyQueues.queueDate, oldestEligible),
-    ))
+    .where(
+      and(
+        eq(dailyQueues.userId, userId),
+        lt(dailyQueues.queueDate, assignmentDateStr),
+        gte(dailyQueues.queueDate, oldestEligible),
+      ),
+    )
     .orderBy(desc(dailyQueues.queueDate))
     .limit(1);
   return prior ?? null;
@@ -677,16 +746,15 @@ export async function getGeneratedQuestionsForQueue(queue: DailyQueueRow) {
 
   if (generatedIds.length === 0) return [];
 
-  return db
-    .select()
-    .from(generatedQuestions)
-    .where(inArray(generatedQuestions.id, generatedIds));
+  return db.select().from(generatedQuestions).where(inArray(generatedQuestions.id, generatedIds));
 }
 
 // Resolve creator display names for a set of (possibly null/duplicate) creator
 // ids, returning a id→name map. Null/absent ids are skipped — their questions
 // are LLM-origin and the client labels them non-relationally.
-export async function resolveCreatorNames(creatorIds: Array<string | null>): Promise<Map<string, string | null>> {
+export async function resolveCreatorNames(
+  creatorIds: Array<string | null>,
+): Promise<Map<string, string | null>> {
   const ids = [...new Set(creatorIds.filter((id): id is string => Boolean(id)))];
   if (ids.length === 0) return new Map();
   const nameRows = await db
@@ -715,10 +783,7 @@ async function getDailyCatchupItems(
     db
       .select()
       .from(dailyQueues)
-      .where(and(
-        eq(dailyQueues.userId, userId),
-        lte(dailyQueues.queueDate, assignmentDateStr),
-      ))
+      .where(and(eq(dailyQueues.userId, userId), lte(dailyQueues.queueDate, assignmentDateStr)))
       .orderBy(asc(dailyQueues.queueDate)),
     getDailyPreferences(userId),
   ]);
@@ -743,12 +808,13 @@ async function getDailyCatchupItems(
 
   const candidateSlots = queues.flatMap((queue) =>
     asQueueSlots(queue.slots)
-      .filter((slot) =>
-        isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) &&
-        isCatchUpSlotEligible(slot) &&
-        !isRestingDomain(slot.domain),
+      .filter(
+        (slot) =>
+          isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) &&
+          isCatchUpSlotEligible(slot) &&
+          !isRestingDomain(slot.domain),
       )
-      .map((slot) => ({ queue, slot }))
+      .map((slot) => ({ queue, slot })),
   );
 
   const generatedIds = candidateSlots
@@ -766,32 +832,36 @@ async function getDailyCatchupItems(
       ? db
           .select()
           .from(generatedQuestions)
-          .where(and(
-            eq(generatedQuestions.userId, userId),
-            inArray(generatedQuestions.id, generatedIds),
-            // Terminal hard-block for LLM-origin content: an upheld-inappropriate
-            // report is the generated equivalent of visibility='blocked'.
-            notBlockedGeneratedByContentReport(generatedQuestions.id),
-          ))
-      : Promise.resolve<typeof generatedQuestions.$inferSelect[]>([]),
+          .where(
+            and(
+              eq(generatedQuestions.userId, userId),
+              inArray(generatedQuestions.id, generatedIds),
+              // Terminal hard-block for LLM-origin content: an upheld-inappropriate
+              // report is the generated equivalent of visibility='blocked'.
+              notBlockedGeneratedByContentReport(generatedQuestions.id),
+            ),
+          )
+      : Promise.resolve<(typeof generatedQuestions.$inferSelect)[]>([]),
     canonicalIds.length > 0
       ? db
           .select()
           .from(canonicalQuestions)
-          .where(and(
-            inArray(canonicalQuestions.id, canonicalIds),
-            // Safety hard-block: a question blocked after assignment (cron re-vet,
-            // upheld report) must not resurface in catch-up.
-            notBlocked(),
-            // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3):
-            // never serve the viewer their own authored question. Structurally
-            // catch-up replays the viewer's own assigned slots (you aren't
-            // assigned your own questions), but with player authoring live the
-            // explicit predicate is load-bearing. NULL creators (house/LLM)
-            // must still pass — hence the isNull arm.
-            or(isNull(canonicalQuestions.creatorId), ne(canonicalQuestions.creatorId, userId)),
-          ))
-      : Promise.resolve<typeof canonicalQuestions.$inferSelect[]>([]),
+          .where(
+            and(
+              inArray(canonicalQuestions.id, canonicalIds),
+              // Safety hard-block: a question blocked after assignment (cron re-vet,
+              // upheld report) must not resurface in catch-up.
+              notBlocked(),
+              // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3):
+              // never serve the viewer their own authored question. Structurally
+              // catch-up replays the viewer's own assigned slots (you aren't
+              // assigned your own questions), but with player authoring live the
+              // explicit predicate is load-bearing. NULL creators (house/LLM)
+              // must still pass — hence the isNull arm.
+              or(isNull(canonicalQuestions.creatorId), ne(canonicalQuestions.creatorId, userId)),
+            ),
+          )
+      : Promise.resolve<(typeof canonicalQuestions.$inferSelect)[]>([]),
   ]);
   const generatedById = new Map(generatedRows.map((question) => [question.id, question]));
   const canonicalById = new Map(canonicalRows.map((question) => [question.id, question]));
@@ -853,16 +923,22 @@ async function getDailyCatchupItems(
       if (!slot.question_id) return null;
       const question = canonicalById.get(slot.question_id);
       if (!question || question.deletedAt) return null;
-      const domain = slot.domain || question.canonicalSubcategory || question.broadCategory || question.category;
+      const domain =
+        slot.domain || question.canonicalSubcategory || question.broadCategory || question.category;
       if (!domain || isGenericSubcategory(domain)) return null;
-      const difficulty = asQueueSlotDifficulty(
-        question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null,
-      ) ?? null;
-      const explanation = question.explainerFullWrong
-        ?? question.explainerFull
-        ?? question.explainerBrief
-        ?? question.factualExplanation
-        ?? null;
+      const difficulty =
+        asQueueSlotDifficulty(
+          question.calibratedDifficulty ??
+            question.llmDifficulty ??
+            question.difficultyEstimate ??
+            null,
+        ) ?? null;
+      const explanation =
+        question.explainerFullWrong ??
+        question.explainerFull ??
+        question.explainerBrief ??
+        question.factualExplanation ??
+        null;
       return {
         dailyQueueItemId: dailyQueueItemId(queue.id, slot.slot_index),
         surface: 'daily',
@@ -888,7 +964,11 @@ async function getDailyCatchupItems(
         wasSkipped: Boolean(slot.skipped),
         questionType: question.questionType,
         authorId: question.creatorId ?? null,
-        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
+        ...resolveAuthorDisplay(
+          question.creatorId,
+          question.source,
+          question.creatorId ? (authorNameById.get(question.creatorId) ?? null) : null,
+        ),
         reportTarget: { questionId: slot.question_id },
       } satisfies CatchupQuestion;
     })
@@ -905,26 +985,31 @@ async function getFeedCatchupItems(
   const oldestDate = new Date(`${assignmentDateStr}T00:00:00.000Z`);
   oldestDate.setUTCDate(oldestDate.getUTCDate() - CATCHUP_LOOKBACK_DAYS);
 
-  let rows: Array<{ feedItem: typeof feedItems.$inferSelect; question: typeof canonicalQuestions.$inferSelect }>;
+  let rows: Array<{
+    feedItem: typeof feedItems.$inferSelect;
+    question: typeof canonicalQuestions.$inferSelect;
+  }>;
   try {
     rows = await db
       .select({ feedItem: feedItems, question: canonicalQuestions })
       .from(feedItems)
       .innerJoin(canonicalQuestions, eq(feedItems.questionId, canonicalQuestions.id))
-      .where(and(
-        eq(feedItems.recipientUserId, userId),
-        eq(feedItems.state, 'answered'),
-        eq(feedItems.answerResult, 'incorrect'),
-        isNull(feedItems.catchupResolvedAt),
-        gte(feedItems.sourceEventAt, oldestDate),
-        // Safety hard-block: a question blocked after the original answer
-        // (cron re-vet, upheld report) must not resurface in catch-up.
-        ne(canonicalQuestions.visibility, 'blocked'),
-        // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3):
-        // never serve the viewer their own authored question, even via a feed
-        // replay. NULL creators (house/LLM) still pass.
-        or(isNull(canonicalQuestions.creatorId), ne(canonicalQuestions.creatorId, userId)),
-      ))
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          eq(feedItems.state, 'answered'),
+          eq(feedItems.answerResult, 'incorrect'),
+          isNull(feedItems.catchupResolvedAt),
+          gte(feedItems.sourceEventAt, oldestDate),
+          // Safety hard-block: a question blocked after the original answer
+          // (cron re-vet, upheld report) must not resurface in catch-up.
+          ne(canonicalQuestions.visibility, 'blocked'),
+          // AUTHORSHIP-EXCLUSION INVARIANT (B-CRAFTER-LIFECYCLE-01 Phase 3):
+          // never serve the viewer their own authored question, even via a feed
+          // replay. NULL creators (house/LLM) still pass.
+          or(isNull(canonicalQuestions.creatorId), ne(canonicalQuestions.creatorId, userId)),
+        ),
+      )
       .orderBy(desc(feedItems.sourceEventAt));
   } catch (error) {
     // catchupResolvedAt is added by migration 0038; tolerate a brief window
@@ -943,15 +1028,20 @@ async function getFeedCatchupItems(
       if (!domain || isGenericSubcategory(domain)) return null;
       const queueDate = feedItem.sourceEventAt.toISOString().slice(0, 10);
       const expiresAt = catchUpExpiresAt(queueDate);
-      const difficulty = asQueueSlotDifficulty(
-        question.calibratedDifficulty ?? question.llmDifficulty ?? question.difficultyEstimate ?? null,
-      ) ?? null;
+      const difficulty =
+        asQueueSlotDifficulty(
+          question.calibratedDifficulty ??
+            question.llmDifficulty ??
+            question.difficultyEstimate ??
+            null,
+        ) ?? null;
       const basePoints = getBasePoints(difficulty, 'first_correct');
-      const explanation = question.explainerFullWrong
-        ?? question.explainerFull
-        ?? question.explainerBrief
-        ?? question.factualExplanation
-        ?? null;
+      const explanation =
+        question.explainerFullWrong ??
+        question.explainerFull ??
+        question.explainerBrief ??
+        question.factualExplanation ??
+        null;
       return {
         dailyQueueItemId: feedCatchupItemId(feedItem.id),
         surface: 'feed',
@@ -976,7 +1066,11 @@ async function getFeedCatchupItems(
         wasSkipped: false,
         questionType: question.questionType,
         authorId: question.creatorId ?? null,
-        ...resolveAuthorDisplay(question.creatorId, question.source, question.creatorId ? authorNameById.get(question.creatorId) ?? null : null),
+        ...resolveAuthorDisplay(
+          question.creatorId,
+          question.source,
+          question.creatorId ? (authorNameById.get(question.creatorId) ?? null) : null,
+        ),
         reportTarget: { questionId: question.id },
       } satisfies CatchupQuestion;
     })
@@ -1022,11 +1116,13 @@ export async function createDailyQueueItem(
   const [question] = await db
     .select()
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.id, generatedQuestionId),
-      eq(generatedQuestions.userId, userId),
-      isNotNull(generatedQuestions.id),
-    ))
+    .where(
+      and(
+        eq(generatedQuestions.id, generatedQuestionId),
+        eq(generatedQuestions.userId, userId),
+        isNotNull(generatedQuestions.id),
+      ),
+    )
     .limit(1);
 
   if (!question) {
@@ -1195,11 +1291,13 @@ export async function createDailyQueueItemFromPresence(
   const [question] = await db
     .select()
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.id, generatedQuestionId),
-      eq(generatedQuestions.userId, userId),
-      isNotNull(generatedQuestions.id),
-    ))
+    .where(
+      and(
+        eq(generatedQuestions.id, generatedQuestionId),
+        eq(generatedQuestions.userId, userId),
+        isNotNull(generatedQuestions.id),
+      ),
+    )
     .limit(1);
 
   if (!question) {
@@ -1332,18 +1430,17 @@ export async function pickEligibleAuthoredQuestions(
     db
       .select({ questionId: masteryEvents.questionId })
       .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, viewerUserId),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        isNotNull(masteryEvents.questionId),
-      )),
+      .where(
+        and(
+          eq(masteryEvents.userId, viewerUserId),
+          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+          isNotNull(masteryEvents.questionId),
+        ),
+      ),
     db
       .select({ questionId: feedItems.questionId })
       .from(feedItems)
-      .where(and(
-        eq(feedItems.recipientUserId, viewerUserId),
-        isNotNull(feedItems.questionId),
-      )),
+      .where(and(eq(feedItems.recipientUserId, viewerUserId), isNotNull(feedItems.questionId))),
   ]);
   const seenQuestionIds = new Set<string>();
   for (const row of pastQueues) {
@@ -1381,20 +1478,19 @@ export async function pickEligibleAuthoredQuestions(
       createdAt: canonicalQuestions.createdAt,
     })
     .from(canonicalQuestions)
-    .where(and(
-      eq(canonicalQuestions.publicStatus, 'eligible_pending'),
-      eq(canonicalQuestions.visibility, 'public'),
-      isNotNull(canonicalQuestions.creatorId),
-      isNotNull(canonicalQuestions.canonicalSubcategory),
-      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
-      isNull(canonicalQuestions.deletedAt),
-      // B-Report-3: never draw a reported question into a new daily queue.
-      notSuppressedByContentReport(canonicalQuestions.id, 'question'),
-    ))
-    .orderBy(
-      desc(canonicalQuestions.publicEligibilityScore),
-      desc(canonicalQuestions.createdAt),
+    .where(
+      and(
+        eq(canonicalQuestions.publicStatus, 'eligible_pending'),
+        eq(canonicalQuestions.visibility, 'public'),
+        isNotNull(canonicalQuestions.creatorId),
+        isNotNull(canonicalQuestions.canonicalSubcategory),
+        inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
+        isNull(canonicalQuestions.deletedAt),
+        // B-Report-3: never draw a reported question into a new daily queue.
+        notSuppressedByContentReport(canonicalQuestions.id, 'question'),
+      ),
     )
+    .orderBy(desc(canonicalQuestions.publicEligibilityScore), desc(canonicalQuestions.createdAt))
     .limit(overFetch);
 
   // Tier-gate (B4 Phase 3): friend-facing requires human_validated|author_confirmed.
@@ -1433,28 +1529,33 @@ export async function pickEligibleAuthoredQuestions(
   if (filtered.length === 0) return [];
 
   // Hydrate author display names in one shot.
-  const authorIds = [...new Set(filtered.map((c) => c.row.creatorId).filter((id): id is string => Boolean(id)))];
+  const authorIds = [
+    ...new Set(filtered.map((c) => c.row.creatorId).filter((id): id is string => Boolean(id))),
+  ];
   const authorRows = await db
     .select({ id: users.id, displayName: users.displayName })
     .from(users)
     .where(inArray(users.id, authorIds));
   const nameById = new Map(authorRows.map((u) => [u.id, u.displayName] as const));
 
-  return filtered.map(({ row }) => ({
-    id: row.id,
-    creatorId: row.creatorId,
-    questionText: row.questionText,
-    answerText: row.answerText,
-    alternateAnswers: row.alternateAnswers ?? [],
-    factualExplanation: row.factualExplanation,
-    canonicalSubcategory: row.canonicalSubcategory ?? '',
-    broadCategory: row.broadCategory,
-    category: String(row.category ?? ''),
-    difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
-    subjectEntity: row.subjectEntity ?? null,
-    authorName: row.creatorId ? nameById.get(row.creatorId) ?? null : null,
-    authorNote: row.creatorNote ?? null,
-  } satisfies AuthoredPick));
+  return filtered.map(
+    ({ row }) =>
+      ({
+        id: row.id,
+        creatorId: row.creatorId,
+        questionText: row.questionText,
+        answerText: row.answerText,
+        alternateAnswers: row.alternateAnswers ?? [],
+        factualExplanation: row.factualExplanation,
+        canonicalSubcategory: row.canonicalSubcategory ?? '',
+        broadCategory: row.broadCategory,
+        category: String(row.category ?? ''),
+        difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+        subjectEntity: row.subjectEntity ?? null,
+        authorName: row.creatorId ? (nameById.get(row.creatorId) ?? null) : null,
+        authorNote: row.creatorNote ?? null,
+      }) satisfies AuthoredPick,
+  );
 }
 
 /**
@@ -1519,15 +1620,16 @@ export function buildReturnSlot(
     generated_question_id: isCanonical ? undefined : question.id,
     // LLM-origin questions have no human author; the client renders its own
     // non-person attribution for those rather than implying someone wrote it.
-    author_id: isCanonical ? question.creatorId ?? undefined : undefined,
-    author_name: isCanonical ? question.authorName ?? null : null,
-    author_note: isCanonical ? question.creatorNote ?? null : null,
+    author_id: isCanonical ? (question.creatorId ?? undefined) : undefined,
+    author_name: isCanonical ? (question.authorName ?? null) : null,
+    author_note: isCanonical ? (question.creatorNote ?? null) : null,
     return_scope: candidate.scope,
     return_last_seen_at: candidate.lastSeenAt.toISOString(),
     // 1-based: the return the player is about to see. Expired first appearances
     // stay at 0 + 1 = 1 but never advance the stored count (§2).
     return_count: candidate.returnCount + 1,
-    domain: question.canonicalSubcategory ?? question.broadCategory ?? question.category ?? 'general',
+    domain:
+      question.canonicalSubcategory ?? question.broadCategory ?? question.category ?? 'general',
     broad_category: question.broadCategory ?? null,
     category: question.category || null,
     question_text: question.questionText,
@@ -1622,19 +1724,22 @@ export function selectHousePicks(
     .filter((row) => row.canonicalSubcategory && !isGenericSubcategory(row.canonicalSubcategory))
     .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
     .slice(0, limit)
-    .map((row) => ({
-      id: row.id,
-      questionText: row.questionText,
-      answerText: row.answerText,
-      alternateAnswers: row.alternateAnswers ?? [],
-      factualExplanation: row.factualExplanation,
-      canonicalSubcategory: row.canonicalSubcategory ?? '',
-      broadCategory: row.broadCategory,
-      category: String(row.category ?? ''),
-      difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
-      subjectEntity: row.subjectEntity ?? null,
-      authorNote: row.creatorNote ?? null,
-    } satisfies HousePick));
+    .map(
+      (row) =>
+        ({
+          id: row.id,
+          questionText: row.questionText,
+          answerText: row.answerText,
+          alternateAnswers: row.alternateAnswers ?? [],
+          factualExplanation: row.factualExplanation,
+          canonicalSubcategory: row.canonicalSubcategory ?? '',
+          broadCategory: row.broadCategory,
+          category: String(row.category ?? ''),
+          difficultyEstimate: asQueueSlotDifficulty(row.difficultyEstimate ?? null) ?? null,
+          subjectEntity: row.subjectEntity ?? null,
+          authorNote: row.creatorNote ?? null,
+        }) satisfies HousePick,
+    );
 }
 
 /**
@@ -1668,11 +1773,13 @@ export async function pickHouseQuestions(
     db
       .select({ questionId: masteryEvents.questionId })
       .from(masteryEvents)
-      .where(and(
-        eq(masteryEvents.userId, viewerUserId),
-        inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
-        isNotNull(masteryEvents.questionId),
-      )),
+      .where(
+        and(
+          eq(masteryEvents.userId, viewerUserId),
+          inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+          isNotNull(masteryEvents.questionId),
+        ),
+      ),
   ]);
   const seenQuestionIds = new Set<string>();
   for (const row of pastQueues) {
@@ -1701,16 +1808,18 @@ export async function pickHouseQuestions(
       createdAt: canonicalQuestions.createdAt,
     })
     .from(canonicalQuestions)
-    .where(and(
-      eq(canonicalQuestions.source, 'house_authored'),
-      isNull(canonicalQuestions.creatorId),
-      eq(canonicalQuestions.visibility, 'public'),
-      isNotNull(canonicalQuestions.canonicalSubcategory),
-      inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
-      isNull(canonicalQuestions.deletedAt),
-      // B-Report-3: a reported house question is suppressed from new queues too.
-      notSuppressedByContentReport(canonicalQuestions.id, 'question'),
-    ))
+    .where(
+      and(
+        eq(canonicalQuestions.source, 'house_authored'),
+        isNull(canonicalQuestions.creatorId),
+        eq(canonicalQuestions.visibility, 'public'),
+        isNotNull(canonicalQuestions.canonicalSubcategory),
+        inArray(canonicalQuestions.canonicalSubcategory, [...allowedSubcategories]),
+        isNull(canonicalQuestions.deletedAt),
+        // B-Report-3: a reported house question is suppressed from new queues too.
+        notSuppressedByContentReport(canonicalQuestions.id, 'question'),
+      ),
+    )
     .orderBy(desc(canonicalQuestions.createdAt))
     .limit(Math.max(limit * 4, 20));
 
@@ -1953,7 +2062,8 @@ export function rankAndFilterBankCandidates<
   }
   // Array.prototype.sort is stable, so equal-rank rows keep their shuffled order.
   ranked.sort(
-    (a, b) => (TRUST_RANK[b.trustTier as TrustTier] ?? 0) - (TRUST_RANK[a.trustTier as TrustTier] ?? 0),
+    (a, b) =>
+      (TRUST_RANK[b.trustTier as TrustTier] ?? 0) - (TRUST_RANK[a.trustTier as TrustTier] ?? 0),
   );
   return { ranked, dudsExcluded };
 }
@@ -1983,10 +2093,7 @@ export async function pickBankSource(
   const viewerClause = isBankIncludeOwnUnusedEnabled()
     ? or(
         sql`${generatedQuestions.userId} <> ${userId}`,
-        and(
-          eq(generatedQuestions.userId, userId),
-          eq(generatedQuestions.usedInQueue, false),
-        ),
+        and(eq(generatedQuestions.userId, userId), eq(generatedQuestions.usedInQueue, false)),
       )
     : sql`${generatedQuestions.userId} <> ${userId}`;
 
@@ -1995,37 +2102,39 @@ export async function pickBankSource(
     candidates = await db
       .select()
       .from(generatedQuestions)
-      .where(and(
-        // BP-7 / C5: match on the folded domain_key (written by domainKey() at
-        // every pool insert) so spelling variants of one domain share stock —
-        // with the legacy exact-string predicate as the fallback for rows that
-        // pre-date the 0074 backfill. No age predicate: the pool is durable
-        // (D8) — recency only biases the window below, it never excludes.
-        or(
-          eq(generatedQuestions.domainKey, domainKey(domain)),
-          eq(generatedQuestions.canonicalSubcategory, domain),
-        ),
-        eq(generatedQuestions.difficultyEstimate, difficulty),
-        isNotNull(generatedQuestions.factKey),
-        viewerClause,
-        eq(generatedQuestions.isDuplicate, false),
-        // B-Report-3: skip generated questions under an open/upheld report.
-        notSuppressedByContentReport(generatedQuestions.id, 'generated'),
-        // Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exclude ANY row whose fact
-        // the viewer has already answered, on any surface, however long ago —
-        // the MASTERY_EVENTS → canonical-twin → fact_key bridge, enforced in
-        // SQL so it cannot be capped. The in-memory avoidFactKeys set below
-        // still covers same-build/batch avoidance, but it is built from the
-        // recency-limited getRecentFactKeys (200) and a 445-fact history
-        // already overflows it — this clause is the uncapped guarantee.
-        sql`NOT EXISTS (
+      .where(
+        and(
+          // BP-7 / C5: match on the folded domain_key (written by domainKey() at
+          // every pool insert) so spelling variants of one domain share stock —
+          // with the legacy exact-string predicate as the fallback for rows that
+          // pre-date the 0074 backfill. No age predicate: the pool is durable
+          // (D8) — recency only biases the window below, it never excludes.
+          or(
+            eq(generatedQuestions.domainKey, domainKey(domain)),
+            eq(generatedQuestions.canonicalSubcategory, domain),
+          ),
+          eq(generatedQuestions.difficultyEstimate, difficulty),
+          isNotNull(generatedQuestions.factKey),
+          viewerClause,
+          eq(generatedQuestions.isDuplicate, false),
+          // B-Report-3: skip generated questions under an open/upheld report.
+          notSuppressedByContentReport(generatedQuestions.id, 'generated'),
+          // Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exclude ANY row whose fact
+          // the viewer has already answered, on any surface, however long ago —
+          // the MASTERY_EVENTS → canonical-twin → fact_key bridge, enforced in
+          // SQL so it cannot be capped. The in-memory avoidFactKeys set below
+          // still covers same-build/batch avoidance, but it is built from the
+          // recency-limited getRecentFactKeys (200) and a 445-fact history
+          // already overflows it — this clause is the uncapped guarantee.
+          sql`NOT EXISTS (
           SELECT 1 FROM "MASTERY_EVENTS" me
           JOIN "Question" cq ON me.question_id = cq.id
           JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
           WHERE me.answered_by_user_id = ${userId}
             AND agq.fact_key = ${generatedQuestions.factKey}
         )`,
-      ))
+        ),
+      )
       .orderBy(desc(generatedQuestions.createdAt))
       .limit(BANK_RECENCY_WINDOW);
   } catch (error) {
@@ -2109,10 +2218,7 @@ export async function getRecentDomainCounts(
       count: sql<number>`count(*)::int`,
     })
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.userId, userId),
-      gte(generatedQuestions.createdAt, since),
-    ))
+    .where(and(eq(generatedQuestions.userId, userId), gte(generatedQuestions.createdAt, since)))
     .groupBy(generatedQuestions.canonicalSubcategory);
 
   // SQL groups by the raw column, so two spelling variants arrive as separate
@@ -2269,13 +2375,15 @@ export async function getRecentAnsweredCanonicalTexts(
     })
     .from(masteryEvents)
     .innerJoin(canonicalQuestions, eq(masteryEvents.questionId, canonicalQuestions.id))
-    .where(and(
-      eq(masteryEvents.answeredByUserId, userId),
-      isNotNull(masteryEvents.questionId),
-      gte(masteryEvents.createdAt, since),
-      sql`${canonicalQuestions.source} <> 'daily_generated'`,
-      isNull(canonicalQuestions.deletedAt),
-    ))
+    .where(
+      and(
+        eq(masteryEvents.answeredByUserId, userId),
+        isNotNull(masteryEvents.questionId),
+        gte(masteryEvents.createdAt, since),
+        sql`${canonicalQuestions.source} <> 'daily_generated'`,
+        isNull(canonicalQuestions.deletedAt),
+      ),
+    )
     .orderBy(desc(masteryEvents.createdAt))
     .limit(limit);
 
@@ -2311,10 +2419,9 @@ export async function getRecentSkipCountsByDomain(
       count: sql<number>`count(*)::int`,
     })
     .from(skippedDailyQuestions)
-    .where(and(
-      eq(skippedDailyQuestions.userId, userId),
-      gte(skippedDailyQuestions.skippedAt, since),
-    ))
+    .where(
+      and(eq(skippedDailyQuestions.userId, userId), gte(skippedDailyQuestions.skippedAt, since)),
+    )
     .groupBy(skippedDailyQuestions.canonicalSubcategory);
 
   const result = new Map<string, number>();
@@ -2349,10 +2456,12 @@ export async function getRecentSubAnglesByDomain(
         subAngles: generatedQuestions.subAngles,
       })
       .from(generatedQuestions)
-      .where(and(
-        eq(generatedQuestions.userId, userId),
-        inArray(generatedQuestions.canonicalSubcategory, domains),
-      ))
+      .where(
+        and(
+          eq(generatedQuestions.userId, userId),
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+        ),
+      )
       .orderBy(sql`${generatedQuestions.createdAt} desc`)
       .limit(rowLimit);
   } catch (error) {
@@ -2426,10 +2535,7 @@ export async function getRecentFactKeys(
         generatedQuestions,
         eq(canonicalQuestions.generatedQuestionId, generatedQuestions.id),
       )
-      .where(and(
-        eq(masteryEvents.answeredByUserId, userId),
-        isNotNull(generatedQuestions.factKey),
-      ))
+      .where(and(eq(masteryEvents.answeredByUserId, userId), isNotNull(generatedQuestions.factKey)))
       .orderBy(sql`${masteryEvents.createdAt} desc`)
       .limit(limit),
     db
@@ -2438,10 +2544,7 @@ export async function getRecentFactKeys(
         domain: generatedQuestions.canonicalSubcategory,
       })
       .from(generatedQuestions)
-      .where(and(
-        eq(generatedQuestions.userId, userId),
-        isNotNull(generatedQuestions.factKey),
-      ))
+      .where(and(eq(generatedQuestions.userId, userId), isNotNull(generatedQuestions.factKey)))
       .orderBy(sql`${generatedQuestions.createdAt} desc`)
       .limit(limit),
   ]);
@@ -2481,10 +2584,9 @@ export async function getAnsweredFactKeysAmong(
       generatedQuestions,
       eq(canonicalQuestions.generatedQuestionId, generatedQuestions.id),
     )
-    .where(and(
-      eq(masteryEvents.answeredByUserId, userId),
-      inArray(generatedQuestions.factKey, keys),
-    ));
+    .where(
+      and(eq(masteryEvents.answeredByUserId, userId), inArray(generatedQuestions.factKey, keys)),
+    );
   return new Set(rows.map((row) => row.factKey).filter((key): key is string => Boolean(key)));
 }
 
@@ -2510,23 +2612,25 @@ export async function countServeableOwnBankStock(
       count: sql<number>`count(*)::int`,
     })
     .from(generatedQuestions)
-    .where(and(
-      eq(generatedQuestions.userId, userId),
-      eq(generatedQuestions.usedInQueue, false),
-      eq(generatedQuestions.isDuplicate, false),
-      isNotNull(generatedQuestions.factKey),
-      or(
-        inArray(generatedQuestions.domainKey, keys),
-        inArray(generatedQuestions.canonicalSubcategory, domains),
-      ),
-      sql`NOT EXISTS (
+    .where(
+      and(
+        eq(generatedQuestions.userId, userId),
+        eq(generatedQuestions.usedInQueue, false),
+        eq(generatedQuestions.isDuplicate, false),
+        isNotNull(generatedQuestions.factKey),
+        or(
+          inArray(generatedQuestions.domainKey, keys),
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+        ),
+        sql`NOT EXISTS (
         SELECT 1 FROM "MASTERY_EVENTS" me
         JOIN "Question" cq ON me.question_id = cq.id
         JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
         WHERE me.answered_by_user_id = ${userId}
           AND agq.fact_key = ${generatedQuestions.factKey}
       )`,
-    ))
+      ),
+    )
     .groupBy(generatedQuestions.canonicalSubcategory);
   const out = new Map<string, number>();
   for (const row of rows) {
@@ -2555,10 +2659,7 @@ export async function getAuthoredQuestionTexts(
       domain: canonicalQuestions.canonicalSubcategory,
     })
     .from(canonicalQuestions)
-    .where(and(
-      eq(canonicalQuestions.creatorId, userId),
-      isNull(canonicalQuestions.deletedAt),
-    ))
+    .where(and(eq(canonicalQuestions.creatorId, userId), isNull(canonicalQuestions.deletedAt)))
     .orderBy(desc(canonicalQuestions.createdAt))
     .limit(limit);
 
@@ -2594,12 +2695,14 @@ export async function getAuthoredExamplesForDomains(
       answerText: canonicalQuestions.answerText,
     })
     .from(canonicalQuestions)
-    .where(and(
-      inArray(canonicalQuestions.canonicalSubcategory, [...domains]),
-      inArray(canonicalQuestions.creatorId, [...authorIds]),
-      isNull(canonicalQuestions.deletedAt),
-      ne(canonicalQuestions.visibility, 'blocked'),
-    ))
+    .where(
+      and(
+        inArray(canonicalQuestions.canonicalSubcategory, [...domains]),
+        inArray(canonicalQuestions.creatorId, [...authorIds]),
+        isNull(canonicalQuestions.deletedAt),
+        ne(canonicalQuestions.visibility, 'blocked'),
+      ),
+    )
     .orderBy(desc(canonicalQuestions.createdAt));
 
   for (const row of rows) {
@@ -2624,11 +2727,13 @@ export async function getKBDomainEntry(userId: string, domain: string) {
   const [row] = await db
     .select()
     .from(declaredInterests)
-    .where(and(
-      eq(declaredInterests.userId, userId),
-      eq(declaredInterests.domain, domain),
-      eq(declaredInterests.isActive, true),
-    ))
+    .where(
+      and(
+        eq(declaredInterests.userId, userId),
+        eq(declaredInterests.domain, domain),
+        eq(declaredInterests.isActive, true),
+      ),
+    )
     .limit(1);
 
   return row ?? null;
