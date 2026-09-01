@@ -20,9 +20,14 @@ import {
   vector,
 } from 'drizzle-orm/pg-core';
 
-const id = (name = 'id') => text(name).primaryKey().default(sql`gen_random_uuid()::text`);
-const createdAt = (name = 'created_at') => timestamp(name, { withTimezone: true }).notNull().defaultNow();
-const updatedAt = (name = 'updated_at') => timestamp(name, { withTimezone: true }).notNull().defaultNow();
+const id = (name = 'id') =>
+  text(name)
+    .primaryKey()
+    .default(sql`gen_random_uuid()::text`);
+const createdAt = (name = 'created_at') =>
+  timestamp(name, { withTimezone: true }).notNull().defaultNow();
+const updatedAt = (name = 'updated_at') =>
+  timestamp(name, { withTimezone: true }).notNull().defaultNow();
 const textArrayDefault = sql`ARRAY[]::text[]`;
 
 export const categoryEnum = pgEnum('Category', [
@@ -41,7 +46,12 @@ export const categoryEnum = pgEnum('Category', [
 // 'blocked' is a safety hard-block terminal state (see verdictToBlockedVisibility):
 // a question that failed the safety vet. It is NOT user-selectable and is excluded
 // by questionVisibilityPredicate and every bank/send/game read path.
-export const questionVisibilityEnum = pgEnum('QuestionVisibility', ['private', 'public', 'friends', 'blocked']);
+export const questionVisibilityEnum = pgEnum('QuestionVisibility', [
+  'private',
+  'public',
+  'friends',
+  'blocked',
+]);
 
 // B1 pool substrate (PRD-D-5 §5.1 / §6). Trust climbs as a question earns it:
 // unverified (fresh, pre-checks) → machine_verified (retrieval + ask-to-answer,
@@ -80,7 +90,11 @@ export const publicStatusEnum = pgEnum('PublicStatus', [
   // ALTER TYPE ... ADD VALUE ordering in the migration.
   'needs_review',
 ]);
-export const answerSourceEnum = pgEnum('AnswerSource', ['llm_suggested', 'creator_written', 'llm_edited']);
+export const answerSourceEnum = pgEnum('AnswerSource', [
+  'llm_suggested',
+  'creator_written',
+  'llm_edited',
+]);
 export const questionStatusEnum = pgEnum('QuestionStatus', ['verified', 'unverified']);
 // B-QUESTION-QUALITY-AGENTS-01 — outcome of the batch verification sweep, stamped
 // on BOTH Question and GeneratedQuestion. `demoted` = a wrong answer / false
@@ -192,8 +206,17 @@ export const themePreferenceEnum = pgEnum('ThemePreference', [
   'sunday_margins',
   'parlor_index',
 ]);
-export const subscriptionPlanEnum = pgEnum('SubscriptionPlan', ['free', 'plus_monthly', 'plus_yearly']);
-export const masteryTierEnum = pgEnum('MasteryTier', ['establishing', 'familiar', 'solid', 'mastery']);
+export const subscriptionPlanEnum = pgEnum('SubscriptionPlan', [
+  'free',
+  'plus_monthly',
+  'plus_yearly',
+]);
+export const masteryTierEnum = pgEnum('MasteryTier', [
+  'establishing',
+  'familiar',
+  'solid',
+  'mastery',
+]);
 export const domainExclusionScopeEnum = pgEnum('DomainExclusionScope', [
   'subcategory',
   'broad_category',
@@ -236,6 +259,10 @@ export const users = pgTable(
     subscriptionPlan: subscriptionPlanEnum('subscription_plan').notNull().default('free'),
     smsOptIn: smsOptInEnum('sms_opt_in').notNull().default('not_asked'),
     smsReminderTime: integer('sms_reminder_time'),
+    smsOptInAt: timestamp('sms_opt_in_at', { withTimezone: true }),
+    smsOptOutAt: timestamp('sms_opt_out_at', { withTimezone: true }),
+    smsConsentSource: text('sms_consent_source'),
+    smsConsentPolicyVersion: text('sms_consent_policy_version'),
     emailOptIn: emailOptInEnum('email_opt_in').notNull().default('not_asked'),
     emailVerified: boolean('email_verified').notNull().default(false),
     pendingEmail: text('pending_email'),
@@ -246,10 +273,14 @@ export const users = pgTable(
     // the interstitial is "not now", not "never" — it must not retire the
     // standing inline RoundReminderCard, so it cannot share that column.
     reminderInterstitialSeenAt: timestamp('reminder_interstitial_seen_at', { withTimezone: true }),
-    areaTopUpPromptDismissedAt: timestamp('area_top_up_prompt_dismissed_at', { withTimezone: true }),
+    areaTopUpPromptDismissedAt: timestamp('area_top_up_prompt_dismissed_at', {
+      withTimezone: true,
+    }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
-    knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', { withTimezone: true }),
+    knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', {
+      withTimezone: true,
+    }),
     slug: text('slug'),
     handle: text('handle'),
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
@@ -303,7 +334,9 @@ export const userSessions = pgTable(
   'UserSession',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     token: text('token').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
@@ -332,7 +365,9 @@ export const questions = pgTable(
   {
     id: id(),
     creatorId: text('creator_id').references(() => users.id),
-    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, { onDelete: 'set null' }),
+    generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id, {
+      onDelete: 'set null',
+    }),
     source: text('source').$type<QuestionSource>().notNull().default('authored'),
     sourceQuestionId: text('source_question_id'),
     sourceCreatorId: text('source_creator_id'),
@@ -457,7 +492,9 @@ export const questionAudienceTags = pgTable(
   'QuestionAudienceTag',
   {
     id: id(),
-    questionId: text('question_id').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    questionId: text('question_id')
+      .notNull()
+      .references(() => questions.id, { onDelete: 'cascade' }),
     creatorId: text('creator_id').notNull(),
     tag: text('tag').notNull(),
     createdAt: createdAt(),
@@ -472,10 +509,16 @@ export const userQuestionBank = pgTable(
   'UserQuestionBank',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
-    questionId: text('question_id').notNull().references(() => questions.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    questionId: text('question_id')
+      .notNull()
+      .references(() => questions.id),
     addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
-    addedFromContextType: text('added_from_context_type').$type<'feed' | 'joshing_game' | 'manual'>(),
+    addedFromContextType: text('added_from_context_type').$type<
+      'feed' | 'joshing_game' | 'manual'
+    >(),
     addedFromContextId: text('added_from_context_id'),
   },
   (table) => [
@@ -493,7 +536,9 @@ export const playerMastery = pgTable(
   'PLAYER_MASTERY',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     broadCategory: text('broad_category'),
     totalPoints: doublePrecision('total_points').notNull().default(0),
@@ -515,12 +560,14 @@ export const playerMastery = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    unique('PLAYER_MASTERY_user_id_canonical_subcategory_key').on(table.userId, table.canonicalSubcategory),
+    unique('PLAYER_MASTERY_user_id_canonical_subcategory_key').on(
+      table.userId,
+      table.canonicalSubcategory,
+    ),
     index('PLAYER_MASTERY_user_id_idx').on(table.userId),
     index('PLAYER_MASTERY_canonical_subcategory_idx').on(table.canonicalSubcategory),
   ],
 );
-
 
 // Generic per-user-per-day usage counter for rate-limited, on-demand LLM
 // endpoints (answer suggestion, verify-answer, crafter drafting, critique,
@@ -532,15 +579,25 @@ export const llmUsageDaily = pgTable(
   'LlmUsageDaily',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     usageDate: date('usage_date').notNull(),
     action: text('action').notNull(),
     count: integer('count').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique('LlmUsageDaily_user_id_usage_date_action_key').on(table.userId, table.usageDate, table.action),
-    index('LlmUsageDaily_user_id_usage_date_action_idx').on(table.userId, table.usageDate, table.action),
+    unique('LlmUsageDaily_user_id_usage_date_action_key').on(
+      table.userId,
+      table.usageDate,
+      table.action,
+    ),
+    index('LlmUsageDaily_user_id_usage_date_action_idx').on(
+      table.userId,
+      table.usageDate,
+      table.action,
+    ),
   ],
 );
 
@@ -548,7 +605,9 @@ export const masteryEvents = pgTable(
   'MASTERY_EVENTS',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     sourceType: masterySourceTypeEnum('source_type').notNull(),
     questionId: text('question_id').references(() => questions.id),
@@ -609,9 +668,15 @@ export const questionReactions = pgTable(
   'QuestionReaction',
   {
     id: id(),
-    senderUserId: text('senderUserId').notNull().references(() => users.id),
-    recipientUserId: text('recipientUserId').notNull().references(() => users.id),
-    questionId: text('questionId').notNull().references(() => questions.id),
+    senderUserId: text('senderUserId')
+      .notNull()
+      .references(() => users.id),
+    recipientUserId: text('recipientUserId')
+      .notNull()
+      .references(() => users.id),
+    questionId: text('questionId')
+      .notNull()
+      .references(() => questions.id),
     contextType: text('contextType').$type<'feed' | 'joshing_game'>().notNull(),
     contextId: text('contextId'),
     reactionType: text('reactionType').notNull(),
@@ -624,7 +689,10 @@ export const questionReactions = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
-    index('QuestionReaction_recipientUserId_repliedAt_idx').on(table.recipientUserId, table.repliedAt),
+    index('QuestionReaction_recipientUserId_repliedAt_idx').on(
+      table.recipientUserId,
+      table.repliedAt,
+    ),
     index('QuestionReaction_senderUserId_idx').on(table.senderUserId),
     index('QuestionReaction_questionId_idx').on(table.questionId),
     index('QuestionReaction_context_idx').on(table.contextType, table.contextId),
@@ -677,7 +745,9 @@ export const emailVerificationTokens = pgTable(
   'EmailVerificationToken',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -698,7 +768,9 @@ export const generatedQuestions = pgTable(
   'GeneratedQuestion',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     // domainKey() fold of canonical_subcategory (apostrophes folded, whitespace
     // collapsed, lowercased), written by the TS fold at insert time. The bank
@@ -785,7 +857,10 @@ export const generatedQuestions = pgTable(
     index('GeneratedQuestion_is_duplicate_idx').on(table.isDuplicate),
     // Bank lookup path (BP-7 / C5): pickBankSource matches folded domain +
     // difficulty tier.
-    index('GeneratedQuestion_domain_key_difficulty_idx').on(table.domainKey, table.difficultyEstimate),
+    index('GeneratedQuestion_domain_key_difficulty_idx').on(
+      table.domainKey,
+      table.difficultyEstimate,
+    ),
   ],
 );
 
@@ -888,7 +963,9 @@ export const knowledgeParentMastery = pgTable(
   'KnowledgeParentMastery',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     parentDomainKey: text('parent_domain_key').notNull(),
     masteredAt: timestamp('mastered_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -907,7 +984,9 @@ export const knowledgeLeafMastery = pgTable(
   'KnowledgeLeafMastery',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     leafDomainKey: text('leaf_domain_key').notNull(),
     masteredAt: timestamp('mastered_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -921,7 +1000,9 @@ export const questionFeedback = pgTable(
   'QuestionFeedback',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     questionId: text('question_id').references(() => questions.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
     signal: feedbackSignalEnum('signal').notNull(),
@@ -930,7 +1011,10 @@ export const questionFeedback = pgTable(
   (table) => [
     uniqueIndex('QuestionFeedback_generated_question_id_key').on(table.generatedQuestionId),
     unique('QuestionFeedback_user_id_question_id_key').on(table.userId, table.questionId),
-    unique('QuestionFeedback_user_id_generated_question_id_key').on(table.userId, table.generatedQuestionId),
+    unique('QuestionFeedback_user_id_generated_question_id_key').on(
+      table.userId,
+      table.generatedQuestionId,
+    ),
     index('QuestionFeedback_user_id_idx').on(table.userId),
     index('QuestionFeedback_question_id_idx').on(table.questionId),
   ],
@@ -940,8 +1024,12 @@ export const questionRatings = pgTable(
   'QuestionRating',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: text('user_id').notNull().references(() => users.id),
-    questionId: text('question_id').notNull().references(() => questions.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    questionId: text('question_id')
+      .notNull()
+      .references(() => questions.id),
     rating: text('rating').notNull(),
     createdAt: createdAt(),
   },
@@ -956,7 +1044,9 @@ export const contentReports = pgTable(
   'ContentReport',
   {
     id: id(),
-    reporterUserId: text('reporter_user_id').notNull().references(() => users.id),
+    reporterUserId: text('reporter_user_id')
+      .notNull()
+      .references(() => users.id),
     questionId: text('question_id').references(() => questions.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
     category: contentReportCategoryEnum('category').notNull(),
@@ -1001,7 +1091,9 @@ export const dailyQueues = pgTable(
   'DailyQueue',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     queueDate: date('queue_date').notNull(),
     slots: jsonb('slots').notNull(),
     createdAt: createdAt(),
@@ -1010,6 +1102,9 @@ export const dailyQueues = pgTable(
     // can't double-send; null = not yet sent, or released back to null after a
     // send failure so a later run can retry.
     emailReminderSentAt: timestamp('email_reminder_sent_at', { withTimezone: true }),
+    // Independent from the email marker: each channel owns its own atomic
+    // per-user/day claim and can be retried without double-sending the other.
+    smsReminderSentAt: timestamp('sms_reminder_sent_at', { withTimezone: true }),
   },
   (table) => [
     unique('DailyQueue_user_id_queue_date_key').on(table.userId, table.queueDate),
@@ -1021,7 +1116,9 @@ export const dailyPreferences = pgTable(
   'DailyPreference',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     friendIds: text('friend_ids').array().notNull().default(textArrayDefault),
     includeCommunity: boolean('include_community').notNull().default(false),
     difficulty: text('difficulty').notNull().default('adaptive'),
@@ -1054,8 +1151,12 @@ export const skippedDailyQuestions = pgTable(
   'SkippedDailyQuestion',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
-    queueId: text('queue_id').notNull().references(() => dailyQueues.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    queueId: text('queue_id')
+      .notNull()
+      .references(() => dailyQueues.id, { onDelete: 'cascade' }),
     questionId: text('question_id').references(() => questions.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
@@ -1064,7 +1165,10 @@ export const skippedDailyQuestions = pgTable(
   (table) => [
     index('SkippedDailyQuestion_user_id_idx').on(table.userId),
     index('SkippedDailyQuestion_user_id_question_id_idx').on(table.userId, table.questionId),
-    index('SkippedDailyQuestion_user_id_generated_question_id_idx').on(table.userId, table.generatedQuestionId),
+    index('SkippedDailyQuestion_user_id_generated_question_id_idx').on(
+      table.userId,
+      table.generatedQuestionId,
+    ),
     index('SkippedDailyQuestion_queue_id_idx').on(table.queueId),
     // Standalone covering indexes for the question_id / generated_question_id
     // FKs (0083 / advisor 0001). The composites above lead with user_id, so they
@@ -1095,7 +1199,9 @@ export const hiddenQuestions = pgTable(
   'HiddenQuestion',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     questionId: text('question_id').references(() => questions.id),
     generatedQuestionId: text('generated_question_id').references(() => generatedQuestions.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
@@ -1120,7 +1226,9 @@ export const userDomainDifficulties = pgTable(
   'USER_DOMAIN_DIFFICULTY',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     servedDifficulty: difficultyEstimateEnum('served_difficulty').notNull(),
     consecutiveCorrect: integer('consecutive_correct').notNull().default(0),
@@ -1151,7 +1259,9 @@ export const userDomainExclusions = pgTable(
   'USER_DOMAIN_EXCLUSIONS',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     scope: domainExclusionScopeEnum('scope').notNull().default('subcategory'),
     excludedAt: timestamp('excluded_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1179,8 +1289,12 @@ export const dailyRefineDecisions = pgTable(
   'DAILY_REFINE_DECISION',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    queueId: text('queue_id').notNull().references(() => dailyQueues.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    queueId: text('queue_id')
+      .notNull()
+      .references(() => dailyQueues.id, { onDelete: 'cascade' }),
     // 'friend_expansion' | 'difficulty_escalation' | 'struggle_pruning'
     itemType: text('item_type').notNull(),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
@@ -1212,9 +1326,14 @@ export const profileSectionVisibility = pgTable(
   'PROFILE_SECTION_VISIBILITY',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     section: profileSectionEnum('section').notNull(),
-    visibility: text('visibility').$type<'public' | 'friends' | 'private'>().notNull().default('public'),
+    visibility: text('visibility')
+      .$type<'public' | 'friends' | 'private'>()
+      .notNull()
+      .default('public'),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -1231,10 +1350,15 @@ export const profileDomainVisibility = pgTable(
   'PROFILE_DOMAIN_VISIBILITY',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     canonicalSubcategory: text('canonical_subcategory').notNull(),
     domain: text('domain').notNull(),
-    visibility: text('visibility').$type<'public' | 'friends' | 'private'>().notNull().default('public'),
+    visibility: text('visibility')
+      .$type<'public' | 'friends' | 'private'>()
+      .notNull()
+      .default('public'),
     isVisible: boolean('is_visible').notNull().default(true),
     updatedAt: updatedAt(),
   },
@@ -1256,7 +1380,9 @@ export const declaredInterests = pgTable(
   'DeclaredInterest',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     domain: text('domain').notNull(),
     broadCategory: text('broadCategory'),
     declaredAt: timestamp('declaredAt', { withTimezone: true }).notNull().defaultNow(),
@@ -1280,7 +1406,9 @@ export const authorInvitations = pgTable(
   'AuthorInvitation',
   {
     id: id(),
-    userId: text('user_id').notNull().references(() => users.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
     domain: text('domain').notNull(),
     reason: text('reason').notNull().default('domain_exhausted'),
     // Nullable since 0114: a set-completion invitation is system-created and has
@@ -1311,7 +1439,9 @@ export const crafterDraftDecisions = pgTable(
   'CrafterDraftDecision',
   {
     id: id(),
-    deciderId: text('decider_id').notNull().references(() => users.id),
+    deciderId: text('decider_id')
+      .notNull()
+      .references(() => users.id),
     domain: text('domain').notNull(),
     tier: text('tier').$type<'shallow' | 'deep'>().notNull(),
     questionText: text('question_text').notNull(),
@@ -1344,14 +1474,19 @@ export const questionSalvageProposals = pgTable(
     // The demoted row's id, in whichever store it lives (see targetTable).
     questionId: text('question_id').notNull(),
     targetTable: text('target_table').$type<'question' | 'generated'>().notNull(),
-    kind: text('kind').$type<'extra_fact_stem' | 'extra_fact_explainer' | 'unsalvageable'>().notNull(),
+    kind: text('kind')
+      .$type<'extra_fact_stem' | 'extra_fact_explainer' | 'unsalvageable'>()
+      .notNull(),
     proposedStem: text('proposed_stem'),
     proposedExplanation: text('proposed_explanation'),
     // Outcome of re-verifying the PROPOSED version. A proposal is only surfaced
     // when this is 'ok' — the human never sees a fix that didn't actually pass.
     reverifyOutcome: text('reverify_outcome').$type<'ok' | 'demoted' | 'unverifiable'>().notNull(),
     reverifyReason: text('reverify_reason'),
-    status: text('status').$type<'ready' | 'applied' | 'rejected' | 'unsalvageable'>().notNull().default('ready'),
+    status: text('status')
+      .$type<'ready' | 'applied' | 'rejected' | 'unsalvageable'>()
+      .notNull()
+      .default('ready'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -1367,10 +1502,16 @@ export const friendships = pgTable(
   'Friendship',
   {
     id: id(),
-    userAId: text('userAId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    userBId: text('userBId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userAId: text('userAId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userBId: text('userBId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     status: text('status').notNull().default('pending'),
-    requestedByUserId: text('requestedByUserId').notNull().references(() => users.id),
+    requestedByUserId: text('requestedByUserId')
+      .notNull()
+      .references(() => users.id),
     formedVia: text('formedVia').notNull(),
     formedAt: timestamp('formedAt', { withTimezone: true }),
     removedAt: timestamp('removedAt', { withTimezone: true }),
@@ -1401,8 +1542,12 @@ export const follows = pgTable(
   'Follow',
   {
     id: id(),
-    followerId: text('followerId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    followeeId: text('followeeId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    followerId: text('followerId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    followeeId: text('followeeId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     state: followStateEnum('state').notNull().default('pending'),
     // Carried from the originating request so the incoming-request card can
     // still render a personal note and suggested interests.
@@ -1451,7 +1596,9 @@ export const joshingGames = pgTable(
   {
     id: id(),
     title: text('title').notNull(),
-    creatorId: text('creatorId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    creatorId: text('creatorId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1462,11 +1609,17 @@ export const feedItems = pgTable(
   'FeedItem',
   {
     id: id(),
-    recipientUserId: text('recipientUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    recipientUserId: text('recipientUserId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     questionId: text('questionId').references(() => questions.id),
-    joshingGameId: text('joshingGameId').references(() => joshingGames.id, { onDelete: 'set null' }),
+    joshingGameId: text('joshingGameId').references(() => joshingGames.id, {
+      onDelete: 'set null',
+    }),
     sourceType: text('sourceType').notNull(),
-    sourceUserId: text('sourceUserId').notNull().references(() => users.id),
+    sourceUserId: text('sourceUserId')
+      .notNull()
+      .references(() => users.id),
     // D-4 via-attribution: the user the FORWARDER got this question from — two
     // hops above the recipient. Stamped at forward time in /api/questions/send as
     // the forwarder's own sourceUserId (no lineage propagation); NULL when the
@@ -1496,9 +1649,17 @@ export const feedItems = pgTable(
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index('FeedItem_recipientUserId_state_idx').on(table.recipientUserId, table.state, table.sourceEventAt.desc()),
-    index('FeedItem_recipientUserId_pinned_idx').on(table.recipientUserId, table.isPinned).where(sql`"isPinned" = TRUE`),
-    uniqueIndex('FeedItem_recipientUserId_sourceAnswerId_key').on(table.recipientUserId, table.sourceAnswerId).where(sql`"sourceAnswerId" IS NOT NULL`),
+    index('FeedItem_recipientUserId_state_idx').on(
+      table.recipientUserId,
+      table.state,
+      table.sourceEventAt.desc(),
+    ),
+    index('FeedItem_recipientUserId_pinned_idx')
+      .on(table.recipientUserId, table.isPinned)
+      .where(sql`"isPinned" = TRUE`),
+    uniqueIndex('FeedItem_recipientUserId_sourceAnswerId_key')
+      .on(table.recipientUserId, table.sourceAnswerId)
+      .where(sql`"sourceAnswerId" IS NOT NULL`),
     // Covering indexes for hot-path foreign keys (B-PERF-03, migration 0079).
     index('FeedItem_questionId_idx').on(table.questionId),
     index('FeedItem_sourceUserId_idx').on(table.sourceUserId),
@@ -1513,8 +1674,12 @@ export const joshingGameRecipients = pgTable(
   'JoshingGameRecipient',
   {
     id: id(),
-    gameId: text('gameId').notNull().references(() => joshingGames.id, { onDelete: 'cascade' }),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    gameId: text('gameId')
+      .notNull()
+      .references(() => joshingGames.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     sentAt: timestamp('sentAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1528,8 +1693,12 @@ export const joshingGameQuestions = pgTable(
   'JoshingGameQuestion',
   {
     id: id(),
-    gameId: text('gameId').notNull().references(() => joshingGames.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id),
+    gameId: text('gameId')
+      .notNull()
+      .references(() => joshingGames.id, { onDelete: 'cascade' }),
+    questionId: text('questionId')
+      .notNull()
+      .references(() => questions.id),
     position: integer('position').notNull(),
   },
   (table) => [
@@ -1546,9 +1715,15 @@ export const joshingGameResponses = pgTable(
   'JoshingGameResponse',
   {
     id: id(),
-    gameId: text('gameId').notNull().references(() => joshingGames.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    gameId: text('gameId')
+      .notNull()
+      .references(() => joshingGames.id, { onDelete: 'cascade' }),
+    questionId: text('questionId')
+      .notNull()
+      .references(() => questions.id),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     submittedAnswer: text('submittedAnswer'),
     isCorrect: boolean('isCorrect'),
     isPartial: boolean('isPartial').notNull().default(false),
@@ -1558,7 +1733,11 @@ export const joshingGameResponses = pgTable(
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique('JoshingGameResponse_gameId_questionId_userId_key').on(table.gameId, table.questionId, table.userId),
+    unique('JoshingGameResponse_gameId_questionId_userId_key').on(
+      table.gameId,
+      table.questionId,
+      table.userId,
+    ),
     index('JoshingGameResponse_gameId_userId_idx').on(table.gameId, table.userId),
     index('JoshingGameResponse_userId_idx').on(table.userId),
     // Covering index for the questionId FK (0083 / advisor 0001).
@@ -1570,7 +1749,9 @@ export const biweeklyCeremonies = pgTable(
   'BiweeklyCeremony',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     cycleStart: date('cycleStart').notNull(),
     cycleEnd: date('cycleEnd').notNull(),
     firedAt: timestamp('firedAt', { withTimezone: true }).notNull().defaultNow(),
@@ -1580,7 +1761,11 @@ export const biweeklyCeremonies = pgTable(
   },
   (table) => [
     uniqueIndex('BiweeklyCeremony_shareCardToken_key').on(table.shareCardToken),
-    uniqueIndex('BiweeklyCeremony_user_cycle_key').on(table.userId, table.cycleStart, table.cycleEnd),
+    uniqueIndex('BiweeklyCeremony_user_cycle_key').on(
+      table.userId,
+      table.cycleStart,
+      table.cycleEnd,
+    ),
     index('BiweeklyCeremony_userId_firedAt_idx').on(table.userId, table.firedAt.desc()),
   ],
 );
@@ -1589,7 +1774,9 @@ export const activityItems = pgTable(
   'ActivityItem',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     type: text('type').notNull(),
     actorUserId: text('actorUserId').references(() => users.id, { onDelete: 'set null' }),
     referenceId: text('referenceId'),
@@ -1610,7 +1797,9 @@ export const feedDismissedDomains = pgTable(
   'FeedDismissedDomain',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     canonicalSubcategory: text('canonicalSubcategory').notNull(),
     dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
     reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
@@ -1634,8 +1823,12 @@ export const recoveredSetAside = pgTable(
   'RecoveredSetAside',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId')
+      .notNull()
+      .references(() => questions.id, { onDelete: 'cascade' }),
     setAsideAt: timestamp('setAsideAt', { withTimezone: true }).notNull().defaultNow(),
     reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
   },
@@ -1661,8 +1854,12 @@ export const milestoneDismissed = pgTable(
   'MilestoneDismissed',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    questionId: text('questionId').notNull().references(() => questions.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    questionId: text('questionId')
+      .notNull()
+      .references(() => questions.id, { onDelete: 'cascade' }),
     dismissedAt: timestamp('dismissedAt', { withTimezone: true }).notNull().defaultNow(),
     reinstatedAt: timestamp('reinstatedAt', { withTimezone: true }),
   },
@@ -1706,7 +1903,9 @@ export const missedReturnDismissed = pgTable(
   'MissedReturnDismissed',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     // Exactly ONE of these is set (DB CHECK, migration 0130), mirroring
     // CatchupQueueItem.reportTarget and DailyQueue.slots — the two other places
     // that carry "a question" that may live in either table.
@@ -1755,7 +1954,9 @@ export const missedReturnState = pgTable(
   'MissedReturnState',
   {
     id: id(),
-    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     // Exactly ONE of these is set (DB CHECK, migration 0130) — see the note on
     // MissedReturnDismissed above.
     questionId: text('questionId').references(() => questions.id, { onDelete: 'cascade' }),
@@ -1781,7 +1982,9 @@ export const friendInvitations = pgTable(
   'FriendInvitation',
   {
     id: id(),
-    inviterUserId: text('inviterUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    inviterUserId: text('inviterUserId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     inviteePhone: text('inviteePhone').notNull(),
     inviteeDisplayName: text('inviteeDisplayName'),
     inviteeUserId: text('inviteeUserId').references(() => users.id),
@@ -1800,7 +2003,10 @@ export const friendInvitations = pgTable(
     // Covering index for the inviteeUserId FK (0083 / advisor 0001).
     index('FriendInvitation_inviteeUserId_idx').on(table.inviteeUserId),
     index('FriendInvitation_inviteePhone_idx').on(table.inviteePhone),
-    index('FriendInvitation_inviterUserId_inviteePhone_idx').on(table.inviterUserId, table.inviteePhone),
+    index('FriendInvitation_inviterUserId_inviteePhone_idx').on(
+      table.inviterUserId,
+      table.inviteePhone,
+    ),
   ],
 );
 
@@ -1823,7 +2029,10 @@ export const appSettings = pgTable(
   () => [
     check('AppSettings_singleton', sql`id = 'singleton'`),
     check('AppSettings_gen_provider_valid', sql`gen_provider IN ('anthropic', 'openai')`),
-    check('AppSettings_categorize_provider_valid', sql`categorize_provider IN ('anthropic', 'openai')`),
+    check(
+      'AppSettings_categorize_provider_valid',
+      sql`categorize_provider IN ('anthropic', 'openai')`,
+    ),
     check('AppSettings_suggest_provider_valid', sql`suggest_provider IN ('anthropic', 'openai')`),
     check('AppSettings_grade_provider_valid', sql`grade_provider IN ('anthropic', 'openai')`),
   ],
@@ -1845,7 +2054,10 @@ export const llmProviderChangeLog = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
-    check('LlmProviderChangeLog_surface_valid', sql`surface IN ('gen', 'categorize', 'suggest', 'grade')`),
+    check(
+      'LlmProviderChangeLog_surface_valid',
+      sql`surface IN ('gen', 'categorize', 'suggest', 'grade')`,
+    ),
     check('LlmProviderChangeLog_from_valid', sql`from_provider IN ('anthropic', 'openai')`),
     check('LlmProviderChangeLog_to_valid', sql`to_provider IN ('anthropic', 'openai')`),
     index('LlmProviderChangeLog_created_at_idx').on(table.createdAt),
@@ -1909,10 +2121,7 @@ export const domainReferencePassage = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
-    check(
-      'DomainReferencePassage_source_valid',
-      sql`source IN ('wikipedia', 'fandom', 'none')`,
-    ),
+    check('DomainReferencePassage_source_valid', sql`source IN ('wikipedia', 'fandom', 'none')`),
     uniqueIndex('DomainReferencePassage_domain_key').on(table.canonicalSubcategory),
   ],
 );
@@ -1971,9 +2180,7 @@ export const domainDepthEstimates = pgTable(
     computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
-  (table) => [
-    uniqueIndex('DomainDepthEstimate_domain_key').on(table.domainKey),
-  ],
+  (table) => [uniqueIndex('DomainDepthEstimate_domain_key').on(table.domainKey)],
 );
 
 // ReviewedDomainPair (0122, D-DOMAIN-MERGE-REVIEW-REDESIGN-01): permanent

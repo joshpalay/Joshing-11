@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import {
   claimDailyEmailReminder,
+  claimDailySmsReminder,
   getTodaysDailyQueue,
   releaseDailyEmailReminder,
+  releaseDailySmsReminder,
 } from '@/server/db/queries/daily';
 import { db, users } from '@/server/db';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
 import { type QueueSlot } from '@/server/daily/types';
 import { runWithConcurrency } from '@/server/lib/concurrency';
 import { isCronAuthorized } from '@/server/auth/cron';
-import { sendSms } from '@/server/sms';
+import { buildDailyReminderSmsBody, isEligibleForDailyReminder, sendSms } from '@/server/sms';
 import { sendEmail } from '@/server/email/client';
 import { buildDailyReminderTemplate } from '@/server/email/templates/daily-reminder';
 import { formatActivityForEmail, topicsForReminder } from '@/server/email/daily-reminder-data';
@@ -55,9 +57,10 @@ const USER_CONCURRENCY = 4;
 // `deferred` and picked up by the idempotent catch-up passes scheduled a few
 // minutes later in vercel.json (the route already skips users whose queue exists,
 // and SMS/email are replay-safe). See D-NARROW-KB-FABRICATION-01.
-const USER_BUDGET_MS = Number(process.env.DAILY_ASSIGNMENTS_BUDGET_MS) > 0
-  ? Number(process.env.DAILY_ASSIGNMENTS_BUDGET_MS)
-  : 250_000;
+const USER_BUDGET_MS =
+  Number(process.env.DAILY_ASSIGNMENTS_BUDGET_MS) > 0
+    ? Number(process.env.DAILY_ASSIGNMENTS_BUDGET_MS)
+    : 250_000;
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
@@ -82,6 +85,7 @@ export async function GET(request: NextRequest) {
     .select({
       id: users.id,
       phoneNumber: users.phoneNumber,
+      phoneVerified: users.phoneVerified,
       smsOptIn: users.smsOptIn,
       email: users.email,
       emailOptIn: users.emailOptIn,
@@ -121,15 +125,9 @@ export async function GET(request: NextRequest) {
       let queue = await getTodaysDailyQueue(user.id);
       const existingSlots = queue ? asQueueSlots(queue.slots) : [];
 
-      // Nudges below are gated on THIS invocation having built the queue.
-      // The workflow curls this route with retries and a timeout equal to
-      // maxDuration, so a client-side timeout (function still running) replays
-      // the whole run; skipping users whose queue already exists makes the
-      // route idempotent for SMS/email — a retry can never re-text someone the
-      // previous attempt already nudged. Side effect (accepted): a user who
-      // built their own queue between the 17:00 reset and this cron gets no
-      // reminder — they're already playing today.
-      let freshlyGenerated = false;
+      // Queue generation and reminder delivery have independent idempotency.
+      // Each channel atomically claims its per-user/day marker below, so retries
+      // can safely revisit both newly generated and already-existing queues.
       if (!queue || existingSlots.length === 0) {
         // Background build: use the longer top-up budget this 300s cron route
         // allows, so a struggling build reaches DAILY_QUEUE_SIZE instead of
@@ -137,19 +135,30 @@ export async function GET(request: NextRequest) {
         await fillDailyQueueForUser(user.id, { background: true });
         queue = await getTodaysDailyQueue(user.id);
         results.generated += 1;
-        freshlyGenerated = true;
       } else {
         results.existing += 1;
       }
 
-      if (freshlyGenerated && queue && user.smsOptIn === 'opted_in' && user.phoneNumber) {
-        await sendSms(
-          user.phoneNumber,
-          `Your five for today. ${baseUrl}/daily`,
-          'daily_questions',
-          user.id,
-        );
-        results.smsSent += 1;
+      if (queue && isEligibleForDailyReminder(user)) {
+        const slots = asQueueSlots(queue.slots);
+        const hasQuestionsReady = slots.some((slot) => !slot.answered && !slot.skipped);
+        if (hasQuestionsReady && (await claimDailySmsReminder(queue.id))) {
+          const smsResult = await sendSms(
+            user.phoneNumber,
+            buildDailyReminderSmsBody(baseUrl),
+            'daily_questions',
+            user.id,
+          );
+          if (smsResult.ok) {
+            results.smsSent += 1;
+          } else {
+            await releaseDailySmsReminder(queue.id);
+            console.warn('[cron/daily-assignments] reminder SMS failed', {
+              userId: user.id,
+              reason: smsResult.reason,
+            });
+          }
+        }
       }
 
       // Email reminder — previews today's first question as a no-spoiler teaser.

@@ -1,12 +1,12 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server';
 
-import { readSessionClaims } from '@/server/auth/session'
+import { readSessionClaims } from '@/server/auth/session';
 
-const SESSION_COOKIE_NAME = 'joshing_session'
+const SESSION_COOKIE_NAME = 'joshing_session';
 
 function tagTiming(response: NextResponse, startedAt: number): NextResponse {
-  response.headers.set('Server-Timing', `proxy;dur=${Date.now() - startedAt}`)
-  return response
+  response.headers.set('Server-Timing', `proxy;dur=${Date.now() - startedAt}`);
+  return response;
 }
 
 /**
@@ -24,34 +24,35 @@ function tagTiming(response: NextResponse, startedAt: number): NextResponse {
  * additional fence, not a replacement.
  */
 export async function middleware(request: NextRequest) {
-  const startedAt = Date.now()
+  const startedAt = Date.now();
   if (request.method === 'OPTIONS') {
-    return tagTiming(new NextResponse(null, { status: 200 }), startedAt)
+    return tagTiming(new NextResponse(null, { status: 200 }), startedAt);
   }
 
-  const { pathname, search } = request.nextUrl
-  const isApi = pathname.startsWith('/api/')
+  const { pathname, search } = request.nextUrl;
+  const isApi = pathname.startsWith('/api/');
 
-  // Terms & Disclaimer is a standalone public page: it is linked from the
+  // Terms and Privacy are standalone public pages: they are linked from the
   // logged-out /login card (opened in a new tab), so it must resolve without
   // a session — otherwise the proxy bounces the unauthenticated reader to
   // /login?next=/terms, a loop back into the very screen they came from. It
   // is equally readable when authenticated, so allow it through for everyone
   // before any auth/onboarding routing runs.
-  if (pathname === '/terms') return tagTiming(NextResponse.next(), startedAt)
+  if (pathname === '/terms' || pathname === '/privacy') {
+    return tagTiming(NextResponse.next(), startedAt);
+  }
 
-  const isLoginPage = pathname === '/login'
+  const isLoginPage = pathname === '/login';
   // Both invite landing surfaces must be reachable logged-out so the invitee
   // can carry their invite into /login: /invite/<token> (FriendInvitation,
   // SMS-style) and /u/<handle>/<token> (per-user evergreen invite link,
   // B-Friends-3). Without /u/ here the proxy bounces the invitee to /login
   // and drops the invite params, so brand-new accounts hit the invite-only
   // gate at verify-otp and can never sign up.
-  const isInvitePage =
-    pathname.startsWith('/invite/') || pathname.startsWith('/u/')
+  const isInvitePage = pathname.startsWith('/invite/') || pathname.startsWith('/u/');
 
-  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  const claims = await readSessionClaims(token)
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const claims = await readSessionClaims(token);
 
   if (!claims) {
     if (isApi) {
@@ -61,12 +62,12 @@ export async function middleware(request: NextRequest) {
           { status: 401 },
         ),
         startedAt,
-      )
+      );
     }
-    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt)
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', pathname + search)
-    return tagTiming(NextResponse.redirect(loginUrl), startedAt)
+    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt);
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('next', pathname + search);
+    return tagTiming(NextResponse.redirect(loginUrl), startedAt);
   }
 
   // Legacy session: valid JWT but no `inv` claim. Trigger graceful refresh.
@@ -81,28 +82,28 @@ export async function middleware(request: NextRequest) {
           { status: 401 },
         ),
         startedAt,
-      )
+      );
     }
-    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt)
-    const refreshUrl = new URL('/api/auth/refresh-session', request.url)
-    refreshUrl.searchParams.set('next', pathname + search)
-    return tagTiming(NextResponse.redirect(refreshUrl), startedAt)
+    if (isLoginPage || isInvitePage) return tagTiming(NextResponse.next(), startedAt);
+    const refreshUrl = new URL('/api/auth/refresh-session', request.url);
+    refreshUrl.searchParams.set('next', pathname + search);
+    return tagTiming(NextResponse.redirect(refreshUrl), startedAt);
   }
 
   // Authenticated with valid invitation. API requests pass through; page
   // requests get the onboarding/login routing pass.
-  if (isApi) return tagTiming(NextResponse.next(), startedAt)
+  if (isApi) return tagTiming(NextResponse.next(), startedAt);
 
-  const isOnboardingPage = pathname === '/onboarding'
+  const isOnboardingPage = pathname === '/onboarding';
   const isAllowedOnboardingPath =
     isOnboardingPage ||
     pathname === '/logout' ||
     pathname.startsWith('/api/onboarding/') ||
-    pathname.startsWith('/api/auth/')
+    pathname.startsWith('/api/auth/');
 
   if (claims.onboardingComplete) {
     if (isOnboardingPage) {
-      return tagTiming(NextResponse.redirect(new URL('/', request.url)), startedAt)
+      return tagTiming(NextResponse.redirect(new URL('/', request.url)), startedAt);
     }
     // /login is intentionally NOT redirected here. These claims are verified
     // from the JWT signature alone (no DB lookup), so they can outlive the DB
@@ -112,7 +113,7 @@ export async function middleware(request: NextRequest) {
     // so the home renders signed-out and /api/feed 401s, yet the proxy bars
     // the one recovery surface. The login page redirects genuinely
     // authenticated users home itself, via a DB-checked getSession().
-    return tagTiming(NextResponse.next(), startedAt)
+    return tagTiming(NextResponse.next(), startedAt);
   }
 
   // claims.onboardingComplete is false: either the user genuinely hasn't
@@ -120,14 +121,11 @@ export async function middleware(request: NextRequest) {
   // their JWT is missing the field. Allow onboarding/auth paths through and
   // route everything else to the refresh endpoint, which does one DB read,
   // re-mints the JWT if needed, and bounces back. Steady-state is JWT-only.
-  if (isAllowedOnboardingPath) return tagTiming(NextResponse.next(), startedAt)
+  if (isAllowedOnboardingPath) return tagTiming(NextResponse.next(), startedAt);
 
-  const refreshUrl = new URL(
-    '/api/auth/refresh-onboarding-claim',
-    request.url,
-  )
-  refreshUrl.searchParams.set('next', pathname + search)
-  return tagTiming(NextResponse.redirect(refreshUrl), startedAt)
+  const refreshUrl = new URL('/api/auth/refresh-onboarding-claim', request.url);
+  refreshUrl.searchParams.set('next', pathname + search);
+  return tagTiming(NextResponse.redirect(refreshUrl), startedAt);
 }
 
 /**
@@ -144,10 +142,10 @@ export async function middleware(request: NextRequest) {
  * handles authenticated users hitting those pages (e.g. redirecting them
  * to /).
  */
-export { middleware as proxy }
+export { middleware as proxy };
 
 export const config = {
   matcher: [
     '/((?!api/auth|api/cron|api/share|api/telemetry|share|images|_next/static|_next/image|favicon\\.ico|__nextjs).*)',
   ],
-}
+};

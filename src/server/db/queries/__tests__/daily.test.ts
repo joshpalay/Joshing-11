@@ -6,6 +6,7 @@ let selectResults: unknown[][] = [[], []];
 let selectCall = 0;
 const deleteWheres: unknown[] = [];
 const updateSets: unknown[] = [];
+let returningRows: unknown[] = [];
 
 const makeChain = () => {
   const chain = {
@@ -34,12 +35,21 @@ vi.mock('@/server/db', () => ({
       set: (vals: unknown) => ({
         where: () => {
           updateSets.push(vals);
-          return Promise.resolve([]);
+          const result = Promise.resolve([]) as Promise<unknown[]> & {
+            returning: () => Promise<unknown[]>;
+          };
+          result.returning = () => Promise.resolve(returningRows);
+          return result;
         },
       }),
     }),
   },
-  dailyQueues: { id: 'id', userId: 'user_id', queueDate: 'queue_date' },
+  dailyQueues: {
+    id: 'id',
+    userId: 'user_id',
+    queueDate: 'queue_date',
+    smsReminderSentAt: 'sms_reminder_sent_at',
+  },
   generatedQuestions: {},
   dailyPreferences: {},
   declaredInterests: {},
@@ -61,8 +71,10 @@ vi.mock('@/lib/games/timezone', async (importActual) => ({
 }));
 
 import {
+  claimDailySmsReminder,
   clearStaleShortTodayQueue,
   carryForwardUntouchedDailyQueue,
+  releaseDailySmsReminder,
 } from '@/server/db/queries/daily';
 
 // Fixtures must satisfy queueSlotSchema — asQueueSlots zod-validates the JSONB
@@ -87,6 +99,22 @@ beforeEach(() => {
   selectCall = 0;
   deleteWheres.length = 0;
   updateSets.length = 0;
+  returningRows = [];
+});
+
+describe('daily SMS reminder claims', () => {
+  it('returns true only when this caller wins the atomic claim', async () => {
+    returningRows = [{ id: 'queue-1' }];
+    expect(await claimDailySmsReminder('queue-1')).toBe(true);
+
+    returningRows = [];
+    expect(await claimDailySmsReminder('queue-1')).toBe(false);
+  });
+
+  it('releases the claim after a failed provider send', async () => {
+    await releaseDailySmsReminder('queue-1');
+    expect(updateSets.at(-1)).toEqual({ smsReminderSentAt: null });
+  });
 });
 
 describe('clearStaleShortTodayQueue', () => {
@@ -103,7 +131,10 @@ describe('clearStaleShortTodayQueue', () => {
   });
 
   it('keeps a started (answered) short queue', async () => {
-    selectResults = [[{ id: 'started', slots: slots(3, { answered: true }), createdAt: BEFORE_WINDOW }], []];
+    selectResults = [
+      [{ id: 'started', slots: slots(3, { answered: true }), createdAt: BEFORE_WINDOW }],
+      [],
+    ];
     expect(await clearStaleShortTodayQueue('u1')).toBe(false);
     expect(deleteWheres).toHaveLength(0);
   });
@@ -134,7 +165,10 @@ describe('carryForwardUntouchedDailyQueue', () => {
   });
 
   it('does NOT carry a started prior queue forward', async () => {
-    selectResults = [[], [{ id: 'p1', slots: slots(5, { answered: true }), createdAt: BEFORE_WINDOW }]];
+    selectResults = [
+      [],
+      [{ id: 'p1', slots: slots(5, { answered: true }), createdAt: BEFORE_WINDOW }],
+    ];
     expect(await carryForwardUntouchedDailyQueue('u1')).toBe(false);
     expect(updateSets).toHaveLength(0);
   });

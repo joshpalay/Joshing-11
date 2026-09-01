@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 import { Switch } from '@/components/ui/Switch';
 import type { ReminderState } from '@/server/db/queries/account';
@@ -11,6 +12,10 @@ type Props = {
 };
 
 const RESEND_COOLDOWN_SECONDS = 60;
+
+export function smsOptInForChecked(checked: boolean): 'opted_in' | 'opted_out' {
+  return checked ? 'opted_in' : 'opted_out';
+}
 
 async function patchReminders(body: Record<string, unknown>): Promise<{
   ok: boolean;
@@ -78,6 +83,9 @@ export function NotificationsForm({ initialState, phone }: Props) {
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [editingEmail, setEditingEmail] = useState(false);
+  const [savingSms, setSavingSms] = useState(false);
+  const [smsNotice, setSmsNotice] = useState<string | null>(null);
+  const [smsError, setSmsError] = useState<string | null>(null);
 
   const smsOn = state.smsOptIn === 'opted_in';
   const emailOn = state.emailOptIn === 'opted_in';
@@ -148,6 +156,21 @@ export function NotificationsForm({ initialState, phone }: Props) {
     setState(result.state);
   }
 
+  async function toggleSms(checked: boolean) {
+    setSavingSms(true);
+    setSmsError(null);
+    setSmsNotice(null);
+    const next = smsOptInForChecked(checked);
+    const result = await patchReminders({ smsOptIn: next });
+    setSavingSms(false);
+    if (!result.ok || !result.state) {
+      setSmsError(result.errorMessage ?? 'Could not save SMS reminder preference.');
+      return;
+    }
+    setState(result.state);
+    setSmsNotice(checked ? 'Daily SMS reminders are on.' : 'Daily SMS reminders are off.');
+  }
+
   async function resendEmail() {
     setResending(true);
     setEmailError(null);
@@ -167,36 +190,56 @@ export function NotificationsForm({ initialState, phone }: Props) {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border bg-card p-5 text-card-foreground">
+      <section className="bg-card text-card-foreground rounded-xl border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-serif text-lg font-semibold">SMS reminders</h3>
-              <span className="inline-flex items-center rounded-full border border-[var(--warning-border)] bg-[var(--warning-surface)] px-2 py-0.5 text-xs font-medium text-[var(--warning)]">
-                Coming soon
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              SMS notifications are coming soon — this functionality isn&apos;t
-              available yet. Once it&apos;s ready, we&apos;ll text {phone}{' '}
-              when a new round opens.
+            <h3 className="font-serif text-lg font-semibold">SMS reminders</h3>
+            <p id="sms-reminder-consent" className="text-muted-foreground mt-1 text-sm">
+              Get one Joshing reminder each day when your questions are ready. Message and data
+              rates may apply. Reply STOP to opt out or HELP for help.
+            </p>
+            <p className="text-muted-foreground mt-2 text-xs leading-5">
+              If enabled, reminders are sent to {phone}. Consent is not a condition of purchase.{' '}
+              <Link href="/terms" className="font-medium underline underline-offset-2">
+                Terms
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="font-medium underline underline-offset-2">
+                Privacy
+              </Link>
+              .
             </p>
           </div>
           <Switch
             checked={smsOn}
-            onCheckedChange={() => {}}
+            onCheckedChange={(checked) => void toggleSms(checked)}
             label="SMS reminders"
-            disabled
-            title="SMS notifications are coming soon"
+            aria-describedby="sms-reminder-consent"
+            disabled={savingSms}
           />
         </div>
+        {savingSms ? (
+          <p className="text-muted-foreground mt-3 text-xs" role="status" aria-live="polite">
+            Saving SMS reminder preference…
+          </p>
+        ) : null}
+        {smsNotice ? (
+          <p className="mt-3 text-xs text-[var(--success)]" role="status" aria-live="polite">
+            {smsNotice}
+          </p>
+        ) : null}
+        {smsError ? (
+          <p className="text-destructive mt-3 text-xs" role="alert">
+            {smsError}
+          </p>
+        ) : null}
       </section>
 
-      <section className="rounded-xl border bg-card p-5 text-card-foreground">
+      <section className="bg-card text-card-foreground rounded-xl border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <h3 className="font-serif text-lg font-semibold">Email reminders</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-sm">
               {hasVerifiedEmail
                 ? `Email ${state.email} when a new round opens.`
                 : 'Add an email address to enable email reminders.'}
@@ -234,7 +277,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
                 setEmailDraft(event.target.value);
                 setEmailError(null);
               }}
-              className="bg-[var(--brand-field)] flex-1 rounded-lg border border-[var(--accent-gold)] px-3 py-2 text-sm focus:border-[var(--brand-navy)]"
+              className="flex-1 rounded-lg border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-sm focus:border-[var(--brand-navy)]"
             />
             <button
               type="button"
@@ -253,7 +296,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
             {editingEmail ? (
               <button
                 type="button"
-                className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                className="text-muted-foreground text-sm underline-offset-2 hover:underline disabled:opacity-50"
                 onClick={cancelEditingEmail}
                 disabled={savingEmail}
               >
@@ -265,7 +308,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
 
         {hasPendingEmail ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {pendingIsChange
                 ? `Confirm ${state.pendingEmail} to switch your reminder address. Until then, we’ll keep emailing ${state.email}.`
                 : `Check ${state.pendingEmail} for a confirmation link. It expires in 24 hours.`}
@@ -285,21 +328,17 @@ export function NotificationsForm({ initialState, phone }: Props) {
           </div>
         ) : null}
         {hasVerifiedEmail && emailOn ? (
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-3 text-xs">
             On. We&apos;ll email you each day when your five are ready.
           </p>
         ) : null}
-        {resendNotice ? (
-          <p className="mt-2 text-xs text-[var(--success)]">{resendNotice}</p>
-        ) : null}
-        {emailError ? (
-          <p className="mt-2 text-xs text-destructive">{emailError}</p>
-        ) : null}
+        {resendNotice ? <p className="mt-2 text-xs text-[var(--success)]">{resendNotice}</p> : null}
+        {emailError ? <p className="text-destructive mt-2 text-xs">{emailError}</p> : null}
       </section>
 
-      <p className="text-xs text-muted-foreground">
-        Once your email is confirmed and reminders are on, we&apos;ll send a daily
-        nudge when your five are ready — with a no-spoiler peek at the first question.
+      <p className="text-muted-foreground text-xs">
+        Once your email is confirmed and reminders are on, we&apos;ll send a daily nudge when your
+        five are ready — with a no-spoiler peek at the first question.
       </p>
     </div>
   );

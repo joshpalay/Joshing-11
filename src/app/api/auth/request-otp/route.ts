@@ -11,6 +11,7 @@ import {
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations';
 import { resolveInviteLink } from '@/server/friends/user-invite-token';
+import { buildOtpMessage, sendSms } from '@/server/sms';
 
 const bodySchema = z.object({
   // Optional: in the invite-prefill flow (useInvitePhone) the client sends no
@@ -59,6 +60,14 @@ export async function POST(request: Request) {
       }
 
       const { code } = await requestOtp(prefill.inviteePhone);
+      const delivery = await sendSms(prefill.inviteePhone, buildOtpMessage(code), 'otp');
+
+      if (process.env.NODE_ENV === 'production' && !delivery.ok) {
+        return NextResponse.json(
+          { error: 'sms_delivery_failed', message: 'Unable to send code. Please try again.' },
+          { status: 502 },
+        );
+      }
 
       return NextResponse.json({
         ok: true,
@@ -118,11 +127,15 @@ export async function POST(request: Request) {
       }
     }
 
-    // TODO: when OTP goes live, send the code via SMS here
-    // (sendSms(phone, ...) from '@/server/sms'). Today requestOtp() only
-    // generates + stores the code; nothing texts it. In non-prod the code is
-    // returned as debugCode below so the flow can be completed manually.
     const { code } = await requestOtp(phone);
+    const delivery = await sendSms(phone, buildOtpMessage(code), 'otp', existingUser?.id);
+
+    if (process.env.NODE_ENV === 'production' && !delivery.ok) {
+      return NextResponse.json(
+        { error: 'sms_delivery_failed', message: 'Unable to send code. Please try again.' },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json({
       ok: true,
