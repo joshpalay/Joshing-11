@@ -374,7 +374,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     hasVerifiedEmail,
   } = await computeReminderPromptState(userId, dateString, totalAnswered);
   const refine: RefineSectionView = queue
-    ? await buildRefineSection(userId, queue.id, slots)
+    ? await buildRefineSection(userId, queue.id, slots, newTerritory.length > 0)
     : { queueId: null, items: [] };
   const touchedForExpansion: TouchedDomainForExpansion[] = [...touchedDomains].map((domain) => ({
     domain,
