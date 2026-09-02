@@ -900,7 +900,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           onClick={() => updateFeedback('thumbs_up')}
         >
           <Heart className={cn('size-4', rating === 'thumbs_up' ? 'fill-current' : '')} />
-          React
+          Like
         </button>
         <SendQuestionAction
           question={{
