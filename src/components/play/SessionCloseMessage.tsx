@@ -28,7 +28,15 @@ export function SessionCloseMessage({
 
   return (
     <>
-      <p className="font-serif text-[1.22rem] text-[var(--text)] leading-relaxed">{scoreLine}</p>
+      {/* This card is a deliberate confirmation gate, not a recap — the
+          previous auto-navigate-to-recap felt jarring, hence the tap. The
+          score line alone ("Untouched.") doesn't say that on its own, so
+          this eyebrow states plainly that the round is over before the
+          stylized line renders underneath it. */}
+      <p className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+        Today&apos;s Joshing: finished
+      </p>
+      <p className="mt-1 font-serif text-[1.22rem] text-[var(--text)] leading-relaxed">{scoreLine}</p>
       {interpretiveLine ? (
         <p
           className="mt-1 text-[1.05rem] text-[var(--text-muted)] leading-relaxed"

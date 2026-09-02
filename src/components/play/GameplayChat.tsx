@@ -938,6 +938,52 @@ function ExplainerLine({ text }: { text: string }) {
   );
 }
 
+// A wrong/discovery reveal's explainer: the one-sentence line by default, with
+// a "More" disclosure for the rest — inline, so a curious player doesn't have
+// to leave the round and wait for the End of Session Review to read the full
+// explanation. Recheck stays a separate, always-visible action below this;
+// only the explanation text itself collapses.
+function ExpandableExplainer({ sentence, full }: { sentence: string; full: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = full.trim().length > sentence.trim().length;
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <p
+        style={{
+          fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
+          fontSize: '0.92rem',
+          color: 'color-mix(in srgb, var(--text-muted) 35%, var(--text))',
+          lineHeight: 1.5,
+        }}
+      >
+        {expanded ? full : sentence}
+      </p>
+      {hasMore ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          style={{
+            marginTop: '4px',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.65rem',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            textDecoration: 'underline',
+            textUnderlineOffset: '3px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {expanded ? 'Less' : 'More'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function reactionEmoji(value: string): string {
   switch (value) {
     case ':exploding_head:':
@@ -1248,8 +1294,10 @@ function ResultRow({
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
-  // Every reveal shows a one-sentence explainer directly under the answer; the
-  // full text always remains in the End of Session Review, so nothing is lost.
+  // Every reveal shows a one-sentence explainer directly under the answer. On
+  // a wrong/discovery reveal it expands inline via "More" (ExpandableExplainer
+  // below) rather than sending the player to the End of Session Review to read
+  // the rest — recheck stays a separate, always-visible action either way.
   // Sourced from the stored explainer that arrives with the answer response —
   // not the async breadcrumb — so the line is shown once and never swaps in
   // longer/replacement content after the fact.
@@ -1510,7 +1558,7 @@ function ResultRow({
           </>
         )}
         {showDiscoveryExplainer && explainerSentence ? (
-          <ExplainerLine text={explainerSentence} />
+          <ExpandableExplainer sentence={explainerSentence} full={explanation ?? explainerSentence} />
         ) : null}
         {typeof pointsAwarded === 'number' ? (
           <p
@@ -1559,7 +1607,7 @@ function SessionCloseRow({
       {summaryHref ? (
         <div className="pt-3">
           <Link href={summaryHref} className="btn-primary inline-flex">
-            See summary →
+            See my recap →
           </Link>
         </div>
       ) : null}
