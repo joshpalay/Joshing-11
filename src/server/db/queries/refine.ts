@@ -291,6 +291,17 @@ export async function buildRefineSection(
   userId: string,
   queueId: string,
   slots: QueueSlot[],
+  /**
+   * True when today's round already demonstrated at least one new domain
+   * (daily-summary.ts's `newTerritory`) — a "Knowledge updated" moment the
+   * player just saw in the round. `getDaysSinceLastTerritoryAdd` reads
+   * `declaredInterests`, a DIFFERENT table from the `playerMastery` write a
+   * demonstrated add makes, so it stays blind to it and the inactivity nudge
+   * could otherwise say "you haven't added anything new" in the same summary
+   * (UX review Priority 6 / Screen 15). Suppress it outright on those days
+   * rather than let two different "added" claims contradict each other.
+   */
+  hasNewTerritoryToday: boolean = false,
 ): Promise<RefineSectionView> {
   if (slots.length === 0) return { queueId, items: [] };
   const [selected, pendingKeys, daysSinceLastAdd] = await Promise.all([
@@ -303,7 +314,11 @@ export async function buildRefineSection(
   // Inactivity nudge fills any room the evidence-based items leave open: if the
   // player hasn't added a territory recently, offer to add some. Lowest priority,
   // so an engaged day with three evidence items crowds it out.
-  if (items.length < REFINE_MAX_ITEMS && shouldNudgeAddTerritories(daysSinceLastAdd)) {
+  if (
+    items.length < REFINE_MAX_ITEMS &&
+    !hasNewTerritoryToday &&
+    shouldNudgeAddTerritories(daysSinceLastAdd)
+  ) {
     items.push(buildAddTerritoriesItem(queueId));
   }
 
