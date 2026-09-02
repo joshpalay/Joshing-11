@@ -37,6 +37,10 @@ function itemsFromDeltas(deltas: DeltaCircleRow[]): RoundCircleItem[] {
       points_total: row.total,
       points_gained_this_round: row.points_earned,
       tier_current: row.new_tier ?? row.current_tier,
+      // `new_tier` is set only when this answer actually crossed a tier
+      // boundary — that's a real before/after, not a guess, so pass it
+      // through the same way the daily summary does.
+      tier_before: row.new_tier ? row.current_tier : undefined,
     }));
 }
 
