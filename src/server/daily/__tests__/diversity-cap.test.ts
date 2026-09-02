@@ -297,10 +297,14 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     expect(core).toHaveLength(DAILY_QUEUE_SIZE);
   });
 
-  it('exempts an "often"-marked subcategory from the cap (Game settings honored)', async () => {
-    // The player explicitly asked to see lots of Botany. The diversity cap must NOT
-    // throttle a topic the player deliberately requested — "often" is exempt, so a
-    // botany-heavy day the player asked for is delivered in full.
+  it('no longer exempts an "often"-marked subcategory from the cap (Josh 2026-09-02, after a 4-of-5 prod incident)', async () => {
+    // "often" used to bypass the cap entirely (bounded only by DAILY_QUEUE_SIZE).
+    // A real Five landed 4-of-5 on one "often" domain (20th Century Composers,
+    // 2026-09-02) and Josh called it too many — "often" now shares the exact
+    // same DAILY_QUEUE_MAX_PER_SUBCATEGORY cap as every other tier. Here Botany
+    // is the ONLY domain with real supply, so once it's held to the cap the
+    // build can't reach the floor — it must fail loudly rather than quietly
+    // serve five repeats of a topic the player merely asked to see often.
     mocks.getDailyPreferences.mockResolvedValue({
       difficulty: 'adaptive',
       domainMode: 'random',
@@ -315,16 +319,13 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
       genq('b5', 'Botany'),
     ]);
 
-    await fillDailyQueueForUser(USER);
-
-    // All five botany slots persisted — not capped at DAILY_QUEUE_MAX_PER_SUBCATEGORY.
-    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+    await expect(fillDailyQueueForUser(USER)).rejects.toThrow(DailyQueueFillError);
   });
 
-  it('still caps OTHER subcategories while an "often" one runs free', async () => {
-    // Botany is "often" (exempt); Jazz is unset (base cap). A mixed batch should let
-    // botany exceed the base cap while jazz is still spaced out — the cap and the
-    // frequency preference coexist.
+  it('caps an "often"-marked subcategory the same as an unset one, and degrades rather than repeats', async () => {
+    // Botany is "often"; Jazz is unset. Both now hit the same base cap, so a
+    // batch with 3 of each admits only 2+2 = 4 and stops there — a short Five
+    // is the correct outcome when the alternative is a 3rd "often" repeat.
     mocks.getDailyPreferences.mockResolvedValue({
       difficulty: 'adaptive',
       domainMode: 'random',
@@ -342,15 +343,11 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
 
     await fillDailyQueueForUser(USER);
 
-    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(persistedBotSlots()).toHaveLength(2 * DAILY_QUEUE_MAX_PER_SUBCATEGORY);
     const domains = persistedGeneratedDomains();
-    // Botany (often) exceeds the base cap; Jazz (unset) is held at it.
-    expect(domains.filter((d) => d === 'Botany').length).toBeGreaterThan(
-      DAILY_QUEUE_MAX_PER_SUBCATEGORY,
-    );
-    expect(domains.filter((d) => d === 'Jazz').length).toBeLessThanOrEqual(
-      DAILY_QUEUE_MAX_PER_SUBCATEGORY,
-    );
+    // Neither domain — "often" or unset — exceeds the base cap.
+    expect(domains.filter((d) => d === 'Botany').length).toBe(DAILY_QUEUE_MAX_PER_SUBCATEGORY);
+    expect(domains.filter((d) => d === 'Jazz').length).toBe(DAILY_QUEUE_MAX_PER_SUBCATEGORY);
   });
 
   it('does not shorten a queue when only one subcategory is available (soft cap)', async () => {

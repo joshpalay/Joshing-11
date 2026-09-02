@@ -478,10 +478,7 @@ async function buildDailyQueueForUser(
       : DAILY_QUEUE_SIZE;
 
   // In concert with the Game settings page, the diversity cap is frequency-aware
-  // at both ends:
-  //   • "often"    → EXEMPT (bounded only by queue size). The cap exists to break
-  //                  up runs the player did NOT request; an explicit "often" IS
-  //                  that request, so it wins.
+  // at the low end only:
   //   • "blue_moon"→ capped at 1 per round. "See rarely" must mean a Blue Moon
   //                  domain can't take two of the five slots — and because THIS
   //                  shared gate also runs over friend-authored picks (unlike the
@@ -490,19 +487,22 @@ async function buildDailyQueueForUser(
   //                  Blue Moon domain from doubling up. Starvation is impossible:
   //                  a deflected 2nd pick goes to the reserve and is backfilled if
   //                  the queue would otherwise come up short.
-  //   • "sometimes"/unset → the base cap (2, scaled up only for very thin KBs).
+  //   • "often"/"sometimes"/unset → the base cap (2, scaled up only for very
+  //                  thin KBs). "often" used to be EXEMPT here (bounded only by
+  //                  queue size) — Josh 2026-09-02, after a 4-of-5 "20th Century
+  //                  Composers" Five: two is the max he wants to see for ANY
+  //                  domain, including an explicit "often". "Often" still does
+  //                  its job through the frequency *weighting* upstream (more
+  //                  likely to be picked at all, and to reappear more days), it
+  //                  just can no longer crowd out the rest of one day's Five.
   //   • "resting"  → already removed from allowedSubcategories upstream.
   // Keys are lowercased to match how restingDomains is built above and how the gate
   // normalizes each subcategory.
   const freqEntries = Object.entries(preferences.domainPreferenceFrequency ?? {});
-  const oftenDomains = new Set(
-    freqEntries.filter(([, frequency]) => frequency === 'often').map(([domain]) => domain.toLowerCase()),
-  );
   const blueMoonDomains = new Set(
     freqEntries.filter(([, frequency]) => frequency === 'blue_moon').map(([domain]) => domain.toLowerCase()),
   );
   const capForSubcategory = (normalizedSubcategory: string): number => {
-    if (oftenDomains.has(normalizedSubcategory)) return DAILY_QUEUE_SIZE;
     if (blueMoonDomains.has(normalizedSubcategory)) return 1;
     return baseDiversityCap;
   };
@@ -901,15 +901,14 @@ async function buildDailyQueueForUser(
   // capForSubcategory(key) + 1 — to avoid a single reserve monopolizing a
   // shortfall, e.g. prod's 5/5 "Beethoven" house incident on 2026-08-30. Per Josh
   // 2026-09-01: even the +1 relaxation (3 of the same subcategory in one Five) is
-  // too many — two is the max he wants to see, full stop). "often" domains stay
-  // exempt — that's still an explicit player request, not a fallback artifact. A
-  // queue that can't reach five under this hard cap stays short rather than
-  // repetitive; DAILY_QUEUE_MIN_SIZE is the floor.
-  const backfillCapForSubcategory = (normalizedSubcategory: string): number => {
-    if (oftenDomains.has(normalizedSubcategory)) return DAILY_QUEUE_SIZE;
-    return capForSubcategory(normalizedSubcategory);
-  };
-  const backfillGate = makeSubcategoryDiversityGate(backfillCapForSubcategory);
+  // too many — two is the max he wants to see, full stop). The "often" exemption
+  // that survived THAT fix is gone too now — Josh 2026-09-02, after a 4-of-5
+  // "20th Century Composers" Five reached exactly this path (the reserve, not
+  // the primary pass, is what let a 4th "often" pick through). Backfill now
+  // shares capForSubcategory outright rather than wrapping it. A queue that
+  // can't reach five under this hard cap stays short rather than repetitive;
+  // DAILY_QUEUE_MIN_SIZE is the floor.
+  const backfillGate = makeSubcategoryDiversityGate(capForSubcategory);
   for (const pick of authored) backfillGate.admit(pick.canonicalSubcategory);
   for (const pick of housePicks) backfillGate.admit(pick.canonicalSubcategory);
   for (const question of generatedForQueue) backfillGate.admit(question.canonicalSubcategory);
@@ -1068,7 +1067,6 @@ async function buildDailyQueueForUser(
       droppedGeneric,
       droppedHidden,
       baseDiversityCap,
-      oftenDomains: oftenDomains.size,
       deflectedForDiversity,
       deflectedForAnswerCooldown,
       deflectedForSubjectCooldown,
@@ -1115,7 +1113,6 @@ async function buildDailyQueueForUser(
       droppedGeneric,
       droppedHidden,
       baseDiversityCap,
-      oftenDomains: oftenDomains.size,
       deflectedForDiversity,
       deflectedForAnswerCooldown,
       deflectedForSubjectCooldown,
