@@ -35,7 +35,7 @@ import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
-import { getSlotPresence, isBonusSlot } from '@/server/daily/bonus';
+import { getSlotPresence, isAdditiveSlot, isBonusSlot } from '@/server/daily/bonus';
 import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
 
@@ -136,11 +136,21 @@ export type QuestionRecap = {
   /** D-3: the author is the non-human house/editorial author (Editorial badge, non-relational copy). */
   authorIsHouse: boolean;
   /**
-   * Daily Five +2: this recap row is an additive bonus question (D-4 §B), set via
-   * the shared bonus selector. Drives the recap dot-track split (core | gap |
-   * bonus). Never enters the spoken X/5 count.
+   * True iff the underlying slot carries a friend-presence source (D-4 §B) — a
+   * genuine +2 bonus question. Narrower than `isAdditive`: a missed-question
+   * return ("Second look") slot is additive but NOT a friend bonus, so it's
+   * false here. Use this only for friend-attribution copy ("from friends"),
+   * never for the core/X-of-5 count — use `isAdditive` for that (see below).
    */
   isBonus: boolean;
+  /**
+   * Daily Five +2 / Second look: this recap row is APPENDED past the core five
+   * — either a friend bonus or a missed-question return slot (D-F3, D-MISSED-
+   * RETURN-01 §2 R3), set via the shared `isAdditiveSlot` selector. Drives the
+   * recap dot-track split (core | gap | additive) and every core count/X-of-5
+   * denominator. Never enters the spoken X/5.
+   */
+  isAdditive: boolean;
   /**
    * Presence attribution for a +2 bonus row: the named friend whose knowledge
    * surfaced this domain, for the quiet "from {Name}'s knowledge" sub-line (D-F4).
@@ -331,6 +341,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       authorNote: slot.source === 'friend' || slot.source === 'house' ? (slot.author_note ?? null) : null,
       authorIsHouse: slot.source === 'house',
       isBonus: isBonusSlot(slot),
+      isAdditive: isAdditiveSlot(slot),
       bonusPresence:
         presence && presence.name
           ? { name: presence.name, extraCount: presence.extraCount }

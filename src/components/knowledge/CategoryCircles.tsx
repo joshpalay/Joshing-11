@@ -24,6 +24,14 @@ export type RoundCircleItem = {
   points_total: number;
   points_gained_this_round: number;
   tier_current: string;
+  /**
+   * The domain's tier at the START of this round, when known (from the
+   * server's authoritative tier-crossing record — the same one a same-page
+   * "you moved to X" sentence draws from). Omit when no crossing happened
+   * this round. Presence gates whether the row shows the TRUE this-round
+   * delta or the forward "next milestone" teaser — see `RoundCircleRow`.
+   */
+  tier_before?: string;
 };
 
 // Re-export for callers that imported getDomainColor from this module.
@@ -66,14 +74,16 @@ function displayTier(raw: string): string {
   return key ? KNOWLEDGE_TIER_LABEL[key] : raw;
 }
 
+// Forward-looking "what's next" teaser for a domain that did NOT cross a
+// tier boundary this round/game. Deliberately does not use the "X → Y" arrow
+// form — that form is reserved for a REAL before/after delta (see
+// `tierChanged` below), so this can never be misread as a completed move.
 function tierProgression(rawTier: string): string {
   const key = tierKey(rawTier);
   if (!key) return rawTier;
   const idx = TIER_ORDER.indexOf(key);
   const next = TIER_ORDER[idx + 1];
-  return next
-    ? `${KNOWLEDGE_TIER_LABEL[key]} → ${KNOWLEDGE_TIER_LABEL[next]}`
-    : KNOWLEDGE_TIER_LABEL.mastery;
+  return next ? `Next: ${KNOWLEDGE_TIER_LABEL[next]}` : KNOWLEDGE_TIER_LABEL.mastery;
 }
 
 // ── Animated knowledge circle — matches PortraitDomainCircle visual style ─────
@@ -304,6 +314,14 @@ function RoundCircleRow({
   }, [index]);
 
   const isMastery = tierKey(item.tier_current) === 'mastery';
+  // A REAL this-round crossing, from the same server-computed record the
+  // page's "you moved to X" sentence draws from — not the forward "next
+  // milestone" guess. Only this form ever uses the "X → Y" arrow, so the
+  // arrow never appears unless a crossing actually happened (Priority 6 /
+  // Screen 13: this used to always show "current → next tier" regardless of
+  // whether the player had actually reached the second tier this round).
+  const tierChanged = Boolean(item.tier_before) && item.tier_before !== item.tier_current;
+  const dc = getPortraitDomainColor(item.broad_category);
 
   return (
     <div
@@ -343,10 +361,14 @@ function RoundCircleRow({
             fontFamily: 'var(--font-mono)',
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
-            color: 'var(--text-muted)',
+            color: tierChanged ? dc.primary : 'var(--text-muted)',
           }}
         >
-          {isMastery ? KNOWLEDGE_TIER_LABEL.mastery : tierProgression(item.tier_current)}
+          {isMastery
+            ? KNOWLEDGE_TIER_LABEL.mastery
+            : tierChanged
+              ? `${displayTier(item.tier_before as string)} → ${displayTier(item.tier_current)}`
+              : tierProgression(item.tier_current)}
         </div>
         <div
           style={{

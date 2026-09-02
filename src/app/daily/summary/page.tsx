@@ -131,12 +131,20 @@ export default function DailySummaryPage() {
   )
   const growthCircleItems = useMemo(() => {
     if (!summary) return []
+    // Same crossing record the interpretive "you moved to X" sentence reads
+    // (summary.tierCrossings) — passing its fromTier through as tier_before
+    // lets the circle show the TRUE this-round delta instead of guessing a
+    // "next milestone" that could contradict the sentence above it.
+    const crossingByDomain = new Map(
+      summary.tierCrossings.map((crossing) => [crossing.domain, crossing])
+    )
     return summary.domainGains.map((gain) => ({
       canonical_subcategory: gain.displayName,
       broad_category: gain.broadCategory,
       points_total: gain.totalPoints,
       points_gained_this_round: gain.pointsGained,
       tier_current: gain.currentTier,
+      tier_before: crossingByDomain.get(gain.domain)?.fromTier,
     }))
   }, [summary])
   const firstTierCrossing = summary?.tierCrossings[0] ?? null
@@ -191,7 +199,7 @@ export default function DailySummaryPage() {
   // questions are additive and never enter the spoken X/Y (or the share). X and
   // Y both come from the same (visible) core rows so they can never disagree;
   // bonus performance is reflected in the bonus dot-group, not the headline.
-  const coreQuestions = summary.questions.filter((q) => !q.isBonus)
+  const coreQuestions = summary.questions.filter((q) => !q.isAdditive)
   const coreCorrect = coreQuestions.filter((q) => q.isCorrect).length
   const coreTotal = coreQuestions.length
 
@@ -398,7 +406,7 @@ function interpretiveLine(summary: DailySummaryView): string | null {
   // 3 & 4 are the "perfect/whiffed five" beats — gated on the CORE five (D-F3:
   // bonus is additive and never enters the count), so they fire on a clean or
   // missed core round regardless of how the +2 bonus went.
-  const coreAnswered = answered.filter((q) => !q.isBonus)
+  const coreAnswered = answered.filter((q) => !q.isAdditive)
   const coreAnsweredCorrect = coreAnswered.filter((q) => q.isCorrect).length
 
   // 3. 5/5
@@ -486,13 +494,19 @@ function ResultDot({
 // "+{N} friend bonus" label. The bonus signal is the gap + label (real
 // text), never color. Mirrors the live-session GeometricProgress track.
 function ResultDots({ questions }: { questions: QuestionRecap[] }) {
-  const core = questions.filter((q) => !q.isBonus)
-  const bonus = questions.filter((q) => q.isBonus)
+  // D-F3 / D-MISSED-RETURN-01: the additive tail is friend bonus AND missed-
+  // question return ("Second look") rows — both are appended past the core
+  // five and neither enters the spoken X/5. `isBonus` (narrower) still
+  // decides the per-dot "from friends" wording so a Second look doesn't get
+  // mislabeled as a friend's gift.
+  const core = questions.filter((q) => !q.isAdditive)
+  const additive = questions.filter((q) => q.isAdditive)
+  const friendBonusCount = additive.filter((q) => q.isBonus).length
 
   const outcome = (q: QuestionRecap) =>
     q.isSkipped ? 'skipped' : q.isCorrect ? 'correct' : 'not this time'
 
-  if (bonus.length === 0) {
+  if (additive.length === 0) {
     return (
       <div className="flex items-center gap-2" aria-label="Question results">
         {core.map((question, index) => (
@@ -520,16 +534,22 @@ function ResultDots({ questions }: { questions: QuestionRecap[] }) {
         className="mx-0.5 h-3 w-px shrink-0"
         style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
       />
-      {bonus.map((question, index) => (
+      {additive.map((question, index) => (
         <ResultDot
           key={question.questionId}
           question={question}
-          ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
+          ariaLabel={
+            question.isBonus
+              ? `Bonus question ${index + 1} of ${additive.length}, from friends: ${outcome(question)}`
+              : `Second look question ${index + 1} of ${additive.length}: ${outcome(question)}`
+          }
         />
       ))}
-      <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
-        +{bonus.length} friend bonus
-      </span>
+      {friendBonusCount > 0 ? (
+        <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
+          +{friendBonusCount} friend bonus
+        </span>
+      ) : null}
     </div>
   )
 }
