@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
-import {
-  getReminderState,
-  updateReminderPreferences,
-} from '@/server/db/queries/account';
+import { getReminderState, updateReminderPreferences } from '@/server/db/queries/account';
 import { sendVerificationEmail } from '@/server/email/send-verification';
+import { buildSmsOptInConfirmationMessage, sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,27 +80,51 @@ export async function PATCH(request: Request) {
     }
   }
 
+  let smsConfirmationSent = false;
+  if (result.ok && parsed.data.smsOptIn === 'opted_in' && priorState?.smsOptIn !== 'opted_in') {
+    const sendResult = await sendSms(
+      result.state.phoneNumber,
+      buildSmsOptInConfirmationMessage(),
+      'sms_opt_in_confirmation',
+      session.userId,
+    );
+    if (!sendResult.ok) {
+      const rollback = await updateReminderPreferences(session.userId, { smsOptIn: 'opted_out' });
+      console.warn(
+        '[reminders] SMS opt-in confirmation failed; reminders kept off:',
+        sendResult.reason,
+      );
+      return NextResponse.json(
+        {
+          error: 'sms_confirmation_failed',
+          message: "We couldn't send the confirmation text, so SMS reminders stayed off.",
+          state: rollback.ok ? rollback.state : null,
+        },
+        { status: 502 },
+      );
+    }
+    smsConfirmationSent = true;
+  }
+
   // Auto-fire the verification email when pendingEmail actually changed.
   // Best-effort: failure is logged but never blocks the save. The UI can
   // also call POST /api/account/email/verify/send to retry / resend.
   let verificationEmailSent = false;
   if (
-    result.ok
-    && parsed.data.pendingEmail
-    && parsed.data.pendingEmail !== priorState?.pendingEmail
+    result.ok &&
+    parsed.data.pendingEmail &&
+    parsed.data.pendingEmail !== priorState?.pendingEmail
   ) {
     const sendResult = await sendVerificationEmail(session.userId);
     verificationEmailSent = sendResult.ok;
     if (!sendResult.ok) {
-      console.warn(
-        '[reminders] verification email auto-send failed:',
-        sendResult.reason,
-      );
+      console.warn('[reminders] verification email auto-send failed:', sendResult.reason);
     }
   }
 
   return NextResponse.json({
     state: result.ok ? result.state : null,
     verificationEmailSent,
+    smsConfirmationSent,
   });
 }

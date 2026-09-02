@@ -31,8 +31,13 @@ describe('NotificationsForm SMS consent', () => {
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="false"');
     expect(html).toContain(
-      'Get one Joshing reminder each day when your questions are ready. Message and data rates may apply. Reply STOP to opt out or HELP for help.',
+      'By turning on SMS reminders, you agree to receive automated Joshing reminder texts',
     );
+    expect(html).toContain('up to one message per day');
+    expect(html).toContain('Message and data rates may apply');
+    expect(html).toContain('Reply <strong>STOP</strong> to unsubscribe');
+    expect(html).toContain('<strong>HELP</strong> for help');
+    expect(html).toContain('Consent is not a condition of purchase');
     expect(html).toContain('href="/terms"');
     expect(html).toContain('href="/privacy"');
     expect(html).not.toContain('Coming soon');

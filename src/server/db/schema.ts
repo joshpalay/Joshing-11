@@ -166,6 +166,7 @@ export const creatorResponseCannedEnum = pgEnum('CreatorResponseCanned', [
  */
 export const smsMessageTypeEnum = pgEnum('SmsMessageType', [
   'otp',
+  'sms_opt_in_confirmation',
   'daily_questions',
   'daily_questions_batched',
   'invitation',

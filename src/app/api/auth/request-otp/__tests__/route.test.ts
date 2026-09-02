@@ -56,7 +56,7 @@ vi.mock('@/server/friends/user-invite-token', () => ({
 
 vi.mock('@/server/sms', () => ({
   buildOtpMessage: (code: string) =>
-    `Joshing verification code: ${code}. Expires in 10 minutes. Do not share this code.`,
+    `Joshing one-time verification code: ${code}. Expires in 10 minutes. Do not share this code. Msg & data rates may apply. Reply STOP to opt out, HELP for help.`,
   sendSms: sendSmsMock,
 }));
 
@@ -109,7 +109,7 @@ describe('/api/auth/request-otp invite gate', () => {
     expect(requestOtpMock).toHaveBeenCalledTimes(1);
     expect(sendSmsMock).toHaveBeenCalledWith(
       NEW_PHONE,
-      'Joshing verification code: 424242. Expires in 10 minutes. Do not share this code.',
+      'Joshing one-time verification code: 424242. Expires in 10 minutes. Do not share this code. Msg & data rates may apply. Reply STOP to opt out, HELP for help.',
       'otp',
       undefined,
     );
@@ -152,7 +152,7 @@ describe('/api/auth/request-otp invite gate', () => {
     expect(requestOtpMock).toHaveBeenCalledTimes(1);
     expect(sendSmsMock).toHaveBeenCalledWith(
       NEW_PHONE,
-      'Joshing verification code: 424242. Expires in 10 minutes. Do not share this code.',
+      'Joshing one-time verification code: 424242. Expires in 10 minutes. Do not share this code. Msg & data rates may apply. Reply STOP to opt out, HELP for help.',
       'otp',
       'user-1',
     );
@@ -189,7 +189,7 @@ describe('/api/auth/request-otp invite-phone prefill', () => {
     expect(requestOtpMock).toHaveBeenCalledWith('+17345556819');
     expect(sendSmsMock).toHaveBeenCalledWith(
       '+17345556819',
-      'Joshing verification code: 424242. Expires in 10 minutes. Do not share this code.',
+      'Joshing one-time verification code: 424242. Expires in 10 minutes. Do not share this code. Msg & data rates may apply. Reply STOP to opt out, HELP for help.',
       'otp',
     );
   });

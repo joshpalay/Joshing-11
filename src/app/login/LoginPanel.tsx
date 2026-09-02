@@ -191,7 +191,9 @@ function InviteContextCard({ invite }: { invite: InviteContext }) {
 export function OtpRequestDisclosure() {
   return (
     <p className="mt-2 text-center text-xs leading-5 text-black/60">
-      Continuing requests a one-time Joshing verification code. Message and data rates may apply.{' '}
+      By selecting Continue, you agree to receive one automated Joshing verification text at this
+      number. Message and data rates may apply. Reply <strong>STOP</strong> to unsubscribe or{' '}
+      <strong>HELP</strong> for help. Consent is not a condition of purchase.{' '}
       <Link href="/terms" className="underline underline-offset-2">
         Terms
       </Link>{' '}

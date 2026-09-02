@@ -17,6 +17,7 @@ export type SmsSendResult =
 
 const CAMPAIGN_MESSAGE_TYPES = new Set<SmsMessageType>([
   'otp',
+  'sms_opt_in_confirmation',
   'daily_questions',
   'daily_questions_batched',
 ]);
@@ -104,7 +105,11 @@ export async function sendSms(
 }
 
 export function buildOtpMessage(code: string): string {
-  return `Joshing verification code: ${code}. Expires in 10 minutes. Do not share this code.`;
+  return `Joshing one-time verification code: ${code}. Expires in 10 minutes. Do not share this code. Msg & data rates may apply. Reply STOP to opt out, HELP for help.`;
+}
+
+export function buildSmsOptInConfirmationMessage(): string {
+  return 'Joshing SMS reminders are on. Up to 1 message per day. Msg & data rates may apply. Reply HELP for help, STOP to unsubscribe.';
 }
 
 /**

@@ -184,7 +184,7 @@ export async function updateProfileFields(
 
 export type ReminderOptInState = 'opted_in' | 'opted_out' | 'not_asked';
 export const SMS_CONSENT_SOURCE = 'profile_web_form';
-export const SMS_CONSENT_POLICY_VERSION = '2026-09-01';
+export const SMS_CONSENT_POLICY_VERSION = '2026-09-02';
 
 export function buildSmsConsentAuditPatch(
   smsOptIn: 'opted_in' | 'opted_out',
@@ -194,9 +194,7 @@ export function buildSmsConsentAuditPatch(
     smsOptIn,
     smsConsentSource: SMS_CONSENT_SOURCE,
     smsConsentPolicyVersion: SMS_CONSENT_POLICY_VERSION,
-    ...(smsOptIn === 'opted_in'
-      ? { smsOptInAt: changedAt }
-      : { smsOptOutAt: changedAt }),
+    ...(smsOptIn === 'opted_in' ? { smsOptInAt: changedAt } : { smsOptOutAt: changedAt }),
   };
 }
 
