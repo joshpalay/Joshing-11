@@ -32,6 +32,7 @@ describe('public legal pages', () => {
     expect(html).toContain('Terms &amp; Disclaimer');
     expect(html).toContain('SMS Terms');
     expect(html).toContain('Consent to receive reminder texts is not a condition of purchase');
+    expect(html).toContain('Carriers are not liable for delayed or undelivered messages');
     expect(html).toContain('href="/privacy"');
     expect(html).toContain('href="/sms-consent"');
     expect(html).toContain('href="/login"');
@@ -41,7 +42,13 @@ describe('public legal pages', () => {
     const html = renderToStaticMarkup(await SmsConsentPage());
     expect(html).toContain('SMS Consent &amp; Program Details');
     expect(html).toContain('Daily reminders are separate from account verification');
-    expect(html).toContain('Reply STOP to opt out or HELP for help');
+    expect(html).toContain(
+      'By selecting Continue, you agree to receive one automated Joshing verification text',
+    );
+    expect(html).toContain(
+      'By turning on SMS reminders, you agree to receive automated Joshing reminder texts',
+    );
+    expect(html).toContain('Reply STOP to unsubscribe or HELP for help');
     expect(html).toContain('Consent is not a condition of purchase');
     expect(html).toContain('href="/terms"');
     expect(html).toContain('href="/privacy"');

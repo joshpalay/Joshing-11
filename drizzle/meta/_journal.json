@@ -932,6 +932,13 @@
       "when": 1787961600000,
       "tag": "0132_sms_consent_and_daily_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1788359890909,
+      "tag": "0133_sms_opt_in_confirmation",
+      "breakpoints": true
     }
   ]
 }

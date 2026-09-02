@@ -13,8 +13,15 @@ vi.mock('next/navigation', () => ({
 import LoginPanel from '@/app/login/LoginPanel';
 
 function expectOneOtpDisclosure(html: string) {
-  expect(html.match(/Continuing requests a one-time Joshing verification code/g)).toHaveLength(1);
+  expect(
+    html.match(
+      /By selecting Continue, you agree to receive one automated Joshing verification text/g,
+    ),
+  ).toHaveLength(1);
   expect(html).toContain('Message and data rates may apply');
+  expect(html).toContain('Reply <strong>STOP</strong> to unsubscribe');
+  expect(html).toContain('<strong>HELP</strong> for help');
+  expect(html).toContain('Consent is not a condition of purchase');
   expect(html).toContain('href="/terms"');
   expect(html).toContain('href="/privacy"');
 }

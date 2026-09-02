@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDailyReminderSmsBody,
   buildOtpMessage,
+  buildSmsOptInConfirmationMessage,
   isEligibleForDailyReminder,
   isSmsMessageTypeEnabled,
 } from '@/server/sms';
@@ -10,6 +11,7 @@ import {
 describe('A2P SMS campaign boundaries and copy', () => {
   it('allows only OTP and daily-reminder message types', () => {
     expect(isSmsMessageTypeEnabled('otp')).toBe(true);
+    expect(isSmsMessageTypeEnabled('sms_opt_in_confirmation')).toBe(true);
     expect(isSmsMessageTypeEnabled('daily_questions')).toBe(true);
     expect(isSmsMessageTypeEnabled('daily_questions_batched')).toBe(true);
 
@@ -28,9 +30,13 @@ describe('A2P SMS campaign boundaries and copy', () => {
     }
   });
 
-  it('builds identified OTP and compliant daily reminder copy', () => {
+  it('builds identified OTP, opt-in confirmation, and daily reminder copy', () => {
     expect(buildOtpMessage('123456')).toBe(
-      'Joshing verification code: 123456. Expires in 10 minutes. Do not share this code.',
+      'Joshing one-time verification code: 123456. Expires in 10 minutes. Do not share this code. Msg & data rates may apply. Reply STOP to opt out, HELP for help.',
+    );
+    expect(buildOtpMessage('123456').length).toBeLessThanOrEqual(160);
+    expect(buildSmsOptInConfirmationMessage()).toBe(
+      'Joshing SMS reminders are on. Up to 1 message per day. Msg & data rates may apply. Reply HELP for help, STOP to unsubscribe.',
     );
     expect(buildDailyReminderSmsBody('https://joshing.example/')).toBe(
       'Joshing: Your five for today are ready: https://joshing.example/daily. Reply STOP to opt out, HELP for help. Msg & data rates may apply.',

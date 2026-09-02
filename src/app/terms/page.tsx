@@ -99,8 +99,8 @@ export default async function TermsPage() {
             data rates may apply. Consent to receive reminder texts is not a condition of purchase.
           </p>
           <p>
-            <span className="font-semibold">Your choices.</span> Reply STOP to opt out of reminder
-            texts. Reply HELP for help, or email{' '}
+            <span className="font-semibold">Your choices.</span> Reply <strong>STOP</strong> to opt
+            out of reminder texts. Reply <strong>HELP</strong> for help, or email{' '}
             <a
               href={`mailto:${CONTACT_EMAIL}`}
               className="font-medium text-[var(--brand-orange)] underline underline-offset-4"
@@ -122,6 +122,10 @@ export default async function TermsPage() {
               SMS consent details
             </Link>
             .
+          </p>
+          <p>
+            <span className="font-semibold">Delivery.</span> Carriers are not liable for delayed or
+            undelivered messages.
           </p>
         </div>
       </section>

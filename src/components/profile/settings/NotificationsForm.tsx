@@ -21,6 +21,7 @@ async function patchReminders(body: Record<string, unknown>): Promise<{
   ok: boolean;
   state: ReminderState | null;
   verificationEmailSent: boolean;
+  smsConfirmationSent: boolean;
   errorMessage: string | null;
 }> {
   const response = await fetch('/api/account/reminders', {
@@ -32,6 +33,7 @@ async function patchReminders(body: Record<string, unknown>): Promise<{
   const json = (await response.json().catch(() => null)) as {
     state?: ReminderState;
     verificationEmailSent?: boolean;
+    smsConfirmationSent?: boolean;
     message?: string;
   } | null;
   if (!response.ok) {
@@ -39,6 +41,7 @@ async function patchReminders(body: Record<string, unknown>): Promise<{
       ok: false,
       state: null,
       verificationEmailSent: false,
+      smsConfirmationSent: false,
       errorMessage: json?.message ?? 'Could not save.',
     };
   }
@@ -46,6 +49,7 @@ async function patchReminders(body: Record<string, unknown>): Promise<{
     ok: true,
     state: json?.state ?? null,
     verificationEmailSent: json?.verificationEmailSent === true,
+    smsConfirmationSent: json?.smsConfirmationSent === true,
     errorMessage: null,
   };
 }
@@ -168,7 +172,13 @@ export function NotificationsForm({ initialState, phone }: Props) {
       return;
     }
     setState(result.state);
-    setSmsNotice(checked ? 'Daily SMS reminders are on.' : 'Daily SMS reminders are off.');
+    setSmsNotice(
+      checked
+        ? result.smsConfirmationSent
+          ? 'Daily SMS reminders are on. Confirmation text sent.'
+          : 'Daily SMS reminders are on.'
+        : 'Daily SMS reminders are off.',
+    );
   }
 
   async function resendEmail() {
@@ -195,11 +205,10 @@ export function NotificationsForm({ initialState, phone }: Props) {
           <div className="flex min-w-0 flex-1 flex-col">
             <h3 className="font-serif text-lg font-semibold">SMS reminders</h3>
             <p id="sms-reminder-consent" className="text-muted-foreground mt-1 text-sm">
-              Get one Joshing reminder each day when your questions are ready. Message and data
-              rates may apply. Reply STOP to opt out or HELP for help.
-            </p>
-            <p className="text-muted-foreground mt-2 text-xs leading-5">
-              If enabled, reminders are sent to {phone}. Consent is not a condition of purchase.{' '}
+              By turning on SMS reminders, you agree to receive automated Joshing reminder texts at{' '}
+              {phone}, up to one message per day. Message and data rates may apply. Reply{' '}
+              <strong>STOP</strong> to unsubscribe or <strong>HELP</strong> for help. Consent is not
+              a condition of purchase.{' '}
               <Link href="/terms" className="font-medium underline underline-offset-2">
                 Terms
               </Link>{' '}
