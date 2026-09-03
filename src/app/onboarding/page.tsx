@@ -3,8 +3,13 @@ import { redirect } from 'next/navigation';
 
 import { getSession } from '@/server/auth/session';
 import { db, friendInvitations } from '@/server/db';
-import { getPreSeededInterestsForUser, getUserOnboardingProfile } from '@/server/db/queries/users';
-import { hasInviteLinkFriendship } from '@/server/friends/user-invite-token';
+import { getInviterForUser } from '@/server/db/queries/friend-invitations';
+import {
+  getPreSeededInterestsForUser,
+  getUserOnboardingProfile,
+  normalizePersonName,
+} from '@/server/db/queries/users';
+import { getInviteLinkSeedTopics, hasInviteLinkFriendship } from '@/server/friends/user-invite-token';
 import { assessInterestAnswerability } from '@/server/llm/interests';
 import { convergeDomain } from '@/server/knowledge/converge-domain';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
@@ -50,7 +55,30 @@ export default async function OnboardingPage() {
     redirect('/login');
   }
 
-  const seeded = await getPreSeededInterestsForUser(session.userId);
+  let seeded = await getPreSeededInterestsForUser(session.userId);
+  // 'named': topics came from friendInvitations.preSeededInterests — the
+  // inviter chose them FOR this person, so OnboardingFlow pre-selects them.
+  // 'link': topics came from the per-user invite link's own resolution below
+  // — they may reach anyone, so OnboardingFlow must NOT pre-select them.
+  let seedSource: 'named' | 'link' = 'named';
+
+  if (seeded.interests.length === 0) {
+    const inviter = await getInviterForUser(session.userId);
+    // Only fall back when the resolved provenance is genuinely the invite-link
+    // follow edge (no FriendInvitation at all). A named invite with a *empty*
+    // seed list also lands here with `seeded.interests.length === 0`, but its
+    // getInviterForUser resolution is sourceType 'friend_invitation' — Stage 2
+    // must not change what that case shows, so it's deliberately excluded.
+    if (inviter?.sourceType === 'follow') {
+      const topics = await getInviteLinkSeedTopics(inviter.inviterUserId);
+      seeded = {
+        interests: topics,
+        inviterName: normalizePersonName(inviter.inviterName),
+        inviteeDisplayName: seeded.inviteeDisplayName,
+      };
+      seedSource = 'link';
+    }
+  }
 
   // Validate the inviter's free-text suggestions at the invitee's first login,
   // before the interests step renders. The inviter can seed anything ("your
@@ -89,6 +117,7 @@ export default async function OnboardingPage() {
   return (
     <OnboardingFlow
       preSeededInterests={preSeededInterests}
+      seedSource={seedSource}
       inviterName={seeded.inviterName}
       inviteeDisplayName={seeded.inviteeDisplayName}
       initialDisplayName={user.displayName}

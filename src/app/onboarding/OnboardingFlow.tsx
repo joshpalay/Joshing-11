@@ -28,6 +28,17 @@ export type PreSeededInterest = ProposedInterest
 
 type OnboardingFlowProps = {
   preSeededInterests: PreSeededInterest[]
+  /**
+   * Where preSeededInterests came from — controls both pre-selection and copy.
+   * 'named': the inviter chose these topics FOR this specific person
+   * (AddFriendInvite) — they arrive pre-selected, as today.
+   * 'link': the topics rode a per-user invite link (curated or auto-fallback
+   * from the inviter's declared interests) that may reach anyone, not someone
+   * the inviter had in mind — they arrive UNSELECTED, offered only as
+   * suggestion chips. Defaults to 'named' so every existing caller (the dev
+   * preview harness included) keeps today's pre-selecting behavior unchanged.
+   */
+  seedSource?: 'named' | 'link'
   inviterName?: string | null
   inviteeDisplayName?: string | null
   initialDisplayName?: string | null
@@ -133,6 +144,7 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
 
 export default function OnboardingFlow({
   preSeededInterests,
+  seedSource = 'named',
   inviterName,
   inviteeDisplayName,
   initialDisplayName,
@@ -174,15 +186,19 @@ export default function OnboardingFlow({
   // invitee keeps, ignores, or removes them (and adds their own), but never edits
   // the wording inline — so this is a stable value, not state.
   const inviteInterests: PreSeededInterest[] = preSeededInterests
+  // Link-sourced seeds may reach someone the inviter never had in mind, so they
+  // must NOT pre-populate the selection — only a named invite's topics do.
   const [selectedInterests, setSelectedInterests] = useState<
     SelectedInterest[]
   >(() =>
-    preSeededInterests
-      .flatMap((interest) => {
-        const selected = toSelected(interest)
-        return selected ? [selected] : []
-      })
-      .slice(0, MAX_INTERESTS)
+    seedSource === 'named'
+      ? preSeededInterests
+          .flatMap((interest) => {
+            const selected = toSelected(interest)
+            return selected ? [selected] : []
+          })
+          .slice(0, MAX_INTERESTS)
+      : []
   )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -643,9 +659,11 @@ export default function OnboardingFlow({
                   Welcome to Joshing
                 </h1>
                 <p className="text-muted-foreground text-base leading-7">
-                  {hasSeeds
-                    ? "A new trivia game. Here are some topics we picked for you — remove any that don't fit, or add your own."
-                    : "A new trivia game. Add a few topics you'd want questions about, and we'll build your first round from them."}
+                  {!hasSeeds
+                    ? "A new trivia game. Add a few topics you'd want questions about, and we'll build your first round from them."
+                    : seedSource === 'link'
+                      ? `A new trivia game. Here are a few from ${displayInviterName} — take any that are yours, or add your own.`
+                      : "A new trivia game. Here are some topics we picked for you — remove any that don't fit, or add your own."}
                 </p>
               </div>
 

@@ -286,6 +286,13 @@ export const users = pgTable(
     handle: text('handle'),
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
     inviteToken: text('invite_token'),
+    // Topics the per-user invite link (/u/<handle>/<token>) shows a logged-out
+    // visitor and pre-populates onboarding suggestions with. Shaped like
+    // FriendInvitation.preSeededInterests (array of {label, description?,
+    // broadCategory?}), capped at 3 by the app layer, not the column. NULL/empty
+    // means "no curated set" — the invite link falls back to the inviter's top
+    // declared interests instead (see getActiveDeclaredInterests).
+    inviteSeedInterests: jsonb('invite_seed_interests'),
     avatarColor: text('avatar_color'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),

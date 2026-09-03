@@ -63,6 +63,54 @@ describe('OnboardingFlow invited interests', () => {
   })
 })
 
+// Stage 2 (invite-link seed topics): link-sourced seeds must render as
+// unselected suggestion chips, never pre-populate the selection the way a
+// named invite's seeds do — a link may reach someone the inviter never had in
+// mind.
+describe('OnboardingFlow seedSource = link', () => {
+  it('renders link-sourced topics unselected, not pre-selected', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        seedSource="link"
+        inviterName="Josh"
+        initialDisplayName="Returning User"
+        initialHandle="returninguser"
+        preSeededInterests={[
+          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
+          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+        ]}
+      />
+    )
+
+    // Counter reads 0 selected, not 2 — the topics are offered, not chosen.
+    expect(html).toContain('0 selected')
+    expect(html).not.toContain('2 selected')
+    // Still surfaced as suggestion chips the invitee can tap to add.
+    expect(html).toContain('Sondheim')
+    expect(html).toContain('Jazz')
+    // Link-specific framing, not the named-invite "we picked for you" copy.
+    expect(html).toContain('Here are a few from Josh')
+    expect(html).not.toContain('Here are some topics we picked for you')
+  })
+
+  it('a named invite (default seedSource) still pre-selects, for contrast', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        inviterName="Josh"
+        initialDisplayName="Returning User"
+        initialHandle="returninguser"
+        preSeededInterests={[
+          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
+          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+        ]}
+      />
+    )
+
+    expect(html).toContain('2 selected · pick at least 1 more')
+    expect(html).toContain('Here are some topics we picked for you')
+  })
+})
+
 describe('OnboardingFlow display-name gate', () => {
   it('renders the setup step first when no displayName is set', () => {
     const html = renderToStaticMarkup(

@@ -5,13 +5,30 @@ const {
   getUserOnboardingProfileMock,
   getPreSeededInterestsForUserMock,
   hasInviteLinkFriendshipMock,
+  getInviterForUserMock,
+  getInviteLinkSeedTopicsMock,
   friendInvitationRowsMock,
   redirectMock,
+  onboardingFlowMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   getUserOnboardingProfileMock: vi.fn(),
   getPreSeededInterestsForUserMock: vi.fn(),
   hasInviteLinkFriendshipMock: vi.fn(async () => false),
+  // Stage 2: resolves null by default so tests whose interests come back
+  // empty for reasons OTHER than a link arrival (e.g. an unrelated redirect
+  // guard test) don't accidentally exercise the link-fallback branch.
+  getInviterForUserMock: vi.fn(async () => null as {
+    inviterUserId: string
+    inviterName: string | null
+    sourceId: string
+    sourceType: 'friend_invitation' | 'follow'
+  } | null),
+  getInviteLinkSeedTopicsMock: vi.fn(async () => [] as Array<{
+    label: string
+    description?: string | null
+    broadCategory?: string | null
+  }>),
   // Drives the FriendInvitation grandfather-guard query result.
   friendInvitationRowsMock: vi.fn(
     async () => [{ id: 'inv-1' }] as Array<{ id: string }>,
@@ -20,6 +37,7 @@ const {
     // Mirror Next.js: redirect() throws to short-circuit rendering.
     throw new Error(`__REDIRECT__:${target}`)
   }),
+  onboardingFlowMock: vi.fn(() => null),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -33,6 +51,10 @@ vi.mock('@/server/auth/session', () => ({
 vi.mock('@/server/db/queries/users', () => ({
   getUserOnboardingProfile: getUserOnboardingProfileMock,
   getPreSeededInterestsForUser: getPreSeededInterestsForUserMock,
+  normalizePersonName: (value: string | null | undefined) => {
+    const trimmed = value?.trim().replace(/\s+/g, ' ')
+    return trimmed ? trimmed.slice(0, 80) : null
+  },
 }))
 
 // The page runs a grandfather-guard query (select FriendInvitation … limit 1)
@@ -60,6 +82,11 @@ vi.mock('@/server/db', () => ({
 
 vi.mock('@/server/friends/user-invite-token', () => ({
   hasInviteLinkFriendship: hasInviteLinkFriendshipMock,
+  getInviteLinkSeedTopics: getInviteLinkSeedTopicsMock,
+}))
+
+vi.mock('@/server/db/queries/friend-invitations', () => ({
+  getInviterForUser: getInviterForUserMock,
 }))
 
 // Seeds run through convergeDomain server-side; stub it to a passthrough (no
@@ -68,17 +95,22 @@ vi.mock('@/server/knowledge/converge-domain', () => ({
   convergeDomain: vi.fn(async (label: string) => ({ raw: label, candidates: [] })),
 }))
 
-// Stub the client component import so this test stays server-side.
+// Stub the client component import so this test stays server-side. Captures
+// props via onboardingFlowMock so tests can assert on seedSource/topics
+// without rendering.
 vi.mock('@/app/onboarding/OnboardingFlow', () => ({
-  default: () => null,
+  default: onboardingFlowMock,
 }))
 
 import OnboardingPage from '@/app/onboarding/page'
 
 async function callPage() {
   try {
-    await OnboardingPage()
-    return { redirected: false as const }
+    const element = await OnboardingPage()
+    // JSX creation doesn't invoke the component function — it just builds a
+    // descriptor — so props live on the returned element, not on a call to
+    // the mocked OnboardingFlow. Expose them for assertions without a real render.
+    return { redirected: false as const, props: (element as { props?: Record<string, unknown> })?.props }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     const match = message.match(/^__REDIRECT__:(.+)$/)
@@ -101,6 +133,10 @@ describe('OnboardingPage guard', () => {
     hasInviteLinkFriendshipMock.mockResolvedValue(false)
     friendInvitationRowsMock.mockReset()
     friendInvitationRowsMock.mockResolvedValue([{ id: 'inv-1' }])
+    getInviterForUserMock.mockReset()
+    getInviterForUserMock.mockResolvedValue(null)
+    getInviteLinkSeedTopicsMock.mockReset()
+    getInviteLinkSeedTopicsMock.mockResolvedValue([])
   })
 
   it('redirects to /login when there is no session', async () => {
@@ -133,7 +169,7 @@ describe('OnboardingPage guard', () => {
       onboardingComplete: false,
     })
     const result = await callPage()
-    expect(result).toEqual({ redirected: false })
+    expect(result.redirected).toBe(false)
     expect(getPreSeededInterestsForUserMock).toHaveBeenCalledWith('u1')
   })
 
@@ -145,8 +181,65 @@ describe('OnboardingPage guard', () => {
     })
     friendInvitationRowsMock.mockResolvedValueOnce([]) // no SMS-style invitation
     hasInviteLinkFriendshipMock.mockResolvedValueOnce(true) // arrived via /u/<handle>/<token>
+    // getPreSeededInterestsForUser finds no accepted FriendInvitation, so it
+    // resolves with no interests AND no inviter name — realistic for a pure
+    // link arrival (matches getPreSeededInterestsForUser's real behavior).
+    getPreSeededInterestsForUserMock.mockResolvedValueOnce({
+      inviterName: null,
+      inviteeDisplayName: null,
+      interests: [],
+    })
+    getInviterForUserMock.mockResolvedValueOnce({
+      inviterUserId: 'inviter-1',
+      inviterName: 'Jaime',
+      sourceId: 'follow-1',
+      sourceType: 'follow',
+    })
+    getInviteLinkSeedTopicsMock.mockResolvedValueOnce([
+      { label: 'Jazz', broadCategory: 'Music' },
+    ])
+
     const result = await callPage()
-    expect(result).toEqual({ redirected: false })
+
+    expect(result.redirected).toBe(false)
+    // Boundary-level check per Stage 1/2's recurring-failure guard: the
+    // resolved link topics must actually reach the OnboardingFlow props, not
+    // just come back correctly from the query.
+    expect(result.props?.seedSource).toBe('link')
+    expect(result.props?.inviterName).toBe('Jaime')
+    expect(result.props?.preSeededInterests).toEqual([
+      { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+    ])
+  })
+
+  it('does NOT fall back to invite-link topics for a named invite with zero seeded interests', async () => {
+    // A named invite where the inviter simply seeded nothing — Stage 2 must
+    // not change what this shows (still the empty "add a few below" state),
+    // even though seeded.interests.length === 0 looks identical to the link
+    // case at first glance. Distinguished via getInviterForUser's sourceType.
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
+    getUserOnboardingProfileMock.mockResolvedValueOnce({
+      id: 'u1',
+      onboardingComplete: false,
+    })
+    getPreSeededInterestsForUserMock.mockResolvedValueOnce({
+      inviterName: 'Alex',
+      inviteeDisplayName: null,
+      interests: [],
+    })
+    getInviterForUserMock.mockResolvedValueOnce({
+      inviterUserId: 'inviter-2',
+      inviterName: 'Alex',
+      sourceId: 'inv-2',
+      sourceType: 'friend_invitation',
+    })
+
+    const result = await callPage()
+
+    expect(result.redirected).toBe(false)
+    expect(getInviteLinkSeedTopicsMock).not.toHaveBeenCalled()
+    expect(result.props?.seedSource).toBe('named')
+    expect(result.props?.preSeededInterests).toEqual([])
   })
 
   it('redirects to /login when there is neither a FriendInvitation nor an invite-link friendship', async () => {

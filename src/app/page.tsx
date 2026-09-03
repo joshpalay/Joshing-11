@@ -12,8 +12,8 @@ import { AddTopicHomeCard } from '@/components/home/AddTopicHomeCard'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
 import { getHomeFriendRequests } from '@/server/db/queries/friends'
-import { getPreSeededInterestsForUser } from '@/server/db/queries/users'
 import { buildHomeEdition } from '@/server/home/build-edition'
+import { getWelcomeInviterName } from '@/server/home/welcome-inviter-name'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getBonusSlots } from '@/server/daily/bonus'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
@@ -41,10 +41,7 @@ export default async function Home({
   // sample reads it), falling back to "a friend" when there's no invitation.
   // Only queried on the one-time welcome path so the normal home render is
   // untouched.
-  const welcomeInviterName =
-    tourActive && session
-      ? (await getPreSeededInterestsForUser(session.userId)).inviterName
-      : null
+  const welcomeInviterName = await getWelcomeInviterName(tourActive, session?.userId ?? null)
 
   return (
     <>

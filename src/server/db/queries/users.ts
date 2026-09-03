@@ -387,7 +387,10 @@ export const getUserOnboardingProfile = cache(async (userId: string) => {
   return user ?? null;
 });
 
-function normalizePersonName(value: string | null | undefined) {
+// Exported for src/app/page.tsx, which needs the same trim/collapse/80-char
+// normalization when it resolves the inviter through getInviterForUser
+// instead of this file's own getPreSeededInterestsForUser.
+export function normalizePersonName(value: string | null | undefined) {
   const normalized = value?.trim().replace(/\s+/g, ' ');
   return normalized ? normalized.slice(0, 80) : null;
 }

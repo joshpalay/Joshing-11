@@ -96,6 +96,7 @@ vi.mock('@/server/profile/preview', () => ({
 
 vi.mock('@/server/friends/user-invite-token', () => ({
   getOrCreateInviteToken: getOrCreateInviteTokenMock,
+  getCuratedInviteSeedTopics: async () => [] as string[],
   buildInviteUrl: (baseUrl: string, handle: string, token: string) =>
     `${baseUrl}/u/${handle}/${token}`,
   getBaseUrl: () => 'https://example.com',

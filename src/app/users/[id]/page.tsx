@@ -43,6 +43,7 @@ import { resolvePreviewAs } from '@/server/profile/preview';
 import {
   buildInviteUrl,
   getBaseUrl,
+  getCuratedInviteSeedTopics,
   getOrCreateInviteToken,
 } from '@/server/friends/user-invite-token';
 
@@ -142,6 +143,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     discoverability,
     reminderState,
     inviteTokenResult,
+    curatedInviteSeedTopics,
   ] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
@@ -175,6 +177,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     isOwnerView ? getDiscoverability(session.userId) : Promise.resolve(null),
     isOwnerView ? getReminderState(session.userId) : Promise.resolve(null),
     isOwnerView ? getOrCreateInviteToken(session.userId) : Promise.resolve(null),
+    isOwnerView ? getCuratedInviteSeedTopics(session.userId) : Promise.resolve([]),
   ]);
 
   let inviteUrl: string | null = null;
@@ -310,7 +313,11 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
           <p className="text-muted-foreground mb-3 text-sm">
             Choose how other people can find you on Joshing.
           </p>
-          <PrivacyForm initialState={discoverability} initialInviteUrl={inviteUrl} />
+          <PrivacyForm
+            initialState={discoverability}
+            initialInviteUrl={inviteUrl}
+            initialSeedTopics={curatedInviteSeedTopics}
+          />
         </section>
 
         <section className="mb-8" id="notifications">

@@ -11,11 +11,12 @@
  * completed round). The seen-marker is set separately when the recap is shown.
  */
 
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { getDailyAssignmentBounds } from '@/lib/games/timezone';
-import { db, feedItems, friendInvitations, users } from '@/server/db';
+import { db, feedItems, users } from '@/server/db';
 import { getDailySummary } from '@/server/db/queries/daily-summary';
+import { getInviterForUser } from '@/server/db/queries/friend-invitations';
 import { SOCIAL_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import {
   computeFirstSessionRecapBeats,
@@ -56,22 +57,9 @@ export async function getFirstSessionRecap(
     return null;
   }
 
-  // Resolve the inviter (most recently accepted invitation), if any.
-  const [invitation] = await db
-    .select({
-      inviterUserId: friendInvitations.inviterUserId,
-      inviterName: users.displayName,
-    })
-    .from(friendInvitations)
-    .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
-    .where(
-      and(
-        eq(friendInvitations.inviteeUserId, userId),
-        isNotNull(friendInvitations.acceptedAt),
-      ),
-    )
-    .orderBy(desc(friendInvitations.acceptedAt))
-    .limit(1);
+  // Resolve the inviter across both arrival paths (named invitation, or a
+  // per-user invite link that leaves a Follow edge but no FriendInvitation row).
+  const invitation = await getInviterForUser(userId);
 
   let inviter: { name: string } | null = null;
   let inviterBackfillItemCount = 0;

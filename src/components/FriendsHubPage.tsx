@@ -5,6 +5,7 @@ import { useState } from 'react';
 import AddFriendInvite from '@/components/AddFriendInvite';
 import FriendsList from '@/components/FriendsList';
 import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
+import { InviteSomeoneNew } from '@/components/friends/InviteSomeoneNew';
 import type { QueryClassification } from '@/components/friends/add-someone';
 
 export default function FriendsHubPage() {
@@ -33,17 +34,21 @@ export default function FriendsHubPage() {
         <h1 className="text-foreground font-serif text-3xl font-semibold">Friends</h1>
       </header>
 
-      {/* One entry point: a single lookup field. An exact @handle/number match
-          offers to send a friend request; no match (or a typed name) drops into
-          the field's own "invite them" state, which expands the invite flow
-          below. The standalone "Invite someone" block is gone — inviting is
-          reachable straight from the field. */}
+      {/* Lookup field: an exact @handle/number match offers to send a friend
+          request; no match (or a typed name) drops into the field's own
+          "invite them" state, which expands the phone-invite flow below. */}
       <section className="border-primary/15 bg-primary/5 text-card-foreground mb-5 rounded-[var(--radius-card)] border p-6 shadow-[var(--shadow-card)]">
         {!inviteOpen ? (
           <FindFriendsSearch variant="add" onInvite={handleLookupInvite} />
         ) : null}
         <AddFriendInvite embedded onExpandedChange={setInviteOpen} />
       </section>
+      {/* Standalone invite block (Stage 3, B-Friends-3): the link is the
+          primary invite action, reachable from here in one tap rather than
+          only via a search no-match. */}
+      <div className="mb-5">
+        <InviteSomeoneNew />
+      </div>
       <FriendsList />
     </main>
   );

@@ -6,6 +6,7 @@ import { getSession } from '@/server/auth/session';
 import { getInvitePrefillByToken } from '@/server/friends/invitations';
 import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
+import { buildLoginInviteViews } from './build-invite-views';
 import LoginPanel from './LoginPanel';
 
 // Mirror LoginPanel.readInvitationToken: accept any of the aliases an invite
@@ -74,31 +75,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const userInviteResolution = userInvite
     ? await resolveInviteLink(userInvite.handle, userInvite.token)
     : null;
-  const invitePrefill = prefill
-    ? {
-        inviterName: prefill.inviterName,
-        inviterUserId: prefill.inviterUserId,
-        inviterAvatarColor: prefill.inviterAvatarColor,
-        // Full number (not masked): the phone-first field pre-fills it so the
-        // invitee can confirm or correct it (D-AUTH-INVITE-PHONE-FIRST §2.3).
-        inviteePhone: prefill.inviteePhone,
-      }
-    : null;
-  const inviteContext = prefill
-    ? {
-        inviterName: prefill.inviterName,
-        inviterUserId: prefill.inviterUserId,
-        inviterAvatarColor: prefill.inviterAvatarColor,
-      }
-    : userInviteResolution
-      ? {
-          inviterName:
-            userInviteResolution.inviterDisplayName?.trim() ||
-            `@${userInviteResolution.inviterHandle}`,
-          inviterUserId: userInviteResolution.inviterUserId,
-          inviterAvatarColor: userInviteResolution.inviterAvatarColor,
-        }
-      : null;
+  const { invitePrefill, inviteContext } = buildLoginInviteViews(prefill, userInviteResolution);
 
   return (
     <TriangleBackground>
