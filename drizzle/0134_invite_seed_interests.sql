@@ -1,0 +1,13 @@
+-- Topics the per-user invite link (/u/<handle>/<token>) carries.
+--
+-- Nullable jsonb, shaped like the existing FriendInvitation.preSeededInterests
+-- payload (array of {label, description?, broadCategory?}) so
+-- parseInvitationInterests / parsePreSeededInterests can parse it without a
+-- second parser. Capped at 3 entries by the app layer, not the column.
+--
+-- NULL/empty means "no curated set" — getInviteLinkSeedTopics (Stage 2) falls
+-- back to the inviter's top declared interests instead of requiring setup.
+-- Existing users are unaffected: the column starts NULL for everyone.
+--
+-- Rollback: ALTER TABLE "User" DROP COLUMN IF EXISTS "invite_seed_interests";
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "invite_seed_interests" jsonb;

@@ -14,6 +14,12 @@ export const dynamic = 'force-dynamic';
  * (no PATCH /api/account, no save-interests). Finishing the areas step chains to
  * the welcome-tour preview. Driven by mock invite data so the inviter-seeded
  * path renders. In `?walk=1` mode the chain carries the walkthrough flag onward.
+ *
+ * `?seedSource=link` (Stage 2 of the invite-link build): swaps in the
+ * per-user invite-link experience — the same mock topics arrive UNSELECTED as
+ * suggestion chips instead of pre-selected, with the "here are a few from
+ * {inviter}" copy — since a link may reach someone the inviter never had in
+ * mind. Default (omitted) stays the named-invite experience: pre-selected.
  */
 
 const MOCK_INTERESTS: PreSeededInterest[] = [
@@ -25,10 +31,11 @@ const MOCK_INTERESTS: PreSeededInterest[] = [
 export default async function DevOnboardingIntroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ walk?: string }>;
+  searchParams: Promise<{ walk?: string; seedSource?: string }>;
 }) {
   const params = await searchParams;
   const walk = params?.walk === '1';
+  const seedSource = params?.seedSource === 'link' ? 'link' : 'named';
   const nextHref = walk ? '/dev/welcome-tour?walk=1' : '/dev/welcome-tour';
 
   return (
@@ -40,14 +47,16 @@ export default async function DevOnboardingIntroPage({
         </Link>
         <span className="text-[12px] font-bold tracking-[0.1em] uppercase">
           {walk ? 'Full walkthrough · writes stubbed' : 'Read-only replay · writes stubbed'}
+          {seedSource === 'link' ? ' · invite-link seeds' : ''}
         </span>
       </div>
       <div style={{ paddingTop: '2.5rem' }}>
         <OnboardingFlow
           previewMode
           previewNextHref={nextHref}
+          seedSource={seedSource}
           preSeededInterests={MOCK_INTERESTS}
-          inviterName="Maya"
+          inviterName={seedSource === 'link' ? 'Robyn' : 'Maya'}
           inviteeDisplayName={null}
           initialDisplayName={null}
           initialHandle={null}

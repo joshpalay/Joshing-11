@@ -24,11 +24,13 @@ describe('Friends page QA surface', () => {
     const html = renderToStaticMarkup(<FriendsHubPage />);
 
     expect(html).toContain('Friends');
-    // The single lookup-field entry point ("Add a friend" / "Add someone")
-    // replaced the standalone "Invite Someone" block — see the comment in
-    // FriendsHubPage.tsx; inviting is reachable from the field's no-match state.
+    // The lookup field ("Add a friend" / "Add someone") is one entry point;
+    // the invite-link block (Stage 3, B-Friends-3) is the other, reachable
+    // without a search no-match — see the comment in FriendsHubPage.tsx.
     expect(html).toContain('Add a friend');
     expect(html).toContain('Add someone');
+    expect(html).toContain('Share invite link');
+    expect(html).toContain('Text a personal invite');
     expect(html).not.toMatch(forbiddenGamificationCopy);
     expect(html).not.toMatch(forbiddenRelationshipCopy);
   });

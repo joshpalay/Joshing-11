@@ -1,7 +1,8 @@
-import { and, count, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 
-import { activityItems, db, friendInvitations, masteryEvents } from '@/server/db';
+import { activityItems, db, masteryEvents } from '@/server/db';
 import { writeActivity } from '@/server/activity/write-activity';
+import { getInviterForUser } from '@/server/db/queries/friend-invitations';
 import {
   FIRST_FIVE_PLAY_SURFACES,
   FIRST_FIVE_THRESHOLD,
@@ -37,22 +38,10 @@ export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Prom
     // Cheap gate before the extra lookups: only the exact crossing matters.
     if (playedCount !== FIRST_FIVE_THRESHOLD) return;
 
-    // Did this user join via a friend's invitation?
-    const [invitationRow] = await db
-      .select({
-        id: friendInvitations.id,
-        inviterUserId: friendInvitations.inviterUserId,
-      })
-      .from(friendInvitations)
-      .where(
-        and(
-          eq(friendInvitations.inviteeUserId, inviteeUserId),
-          isNotNull(friendInvitations.acceptedAt),
-        ),
-      )
-      .limit(1);
-
-    if (!invitationRow) return;
+    // Did this user join via a friend's invitation (named path) or a per-user
+    // invite link (which leaves a Follow edge but no FriendInvitation row)?
+    const inviter = await getInviterForUser(inviteeUserId);
+    if (!inviter) return;
 
     // Defensive idempotency: never write the same milestone twice for one
     // invitation (covers retries and two answers that both observe count == 5).
@@ -61,9 +50,9 @@ export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Prom
       .from(activityItems)
       .where(
         and(
-          eq(activityItems.userId, invitationRow.inviterUserId),
+          eq(activityItems.userId, inviter.inviterUserId),
           eq(activityItems.type, INVITED_FRIEND_FIRST_FIVE_TYPE),
-          eq(activityItems.referenceId, invitationRow.id),
+          eq(activityItems.referenceId, inviter.sourceId),
         ),
       )
       .limit(1);
@@ -71,7 +60,11 @@ export async function maybeNotifyInviterOfFirstFive(inviteeUserId: string): Prom
     const activity = firstFiveActivityToWrite({
       inviteeUserId,
       playedCount,
-      invitation: invitationRow,
+      invitation: {
+        id: inviter.sourceId,
+        inviterUserId: inviter.inviterUserId,
+        referenceType: inviter.sourceType,
+      },
       alreadyNotified: Boolean(existing),
     });
     if (!activity) return;

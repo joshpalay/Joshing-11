@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Hammer,
   Hourglass,
+  Link2,
   Loader2,
   LogOut,
   Network,
@@ -236,6 +237,44 @@ export function AccountActions({
       ],
     },
     {
+      // Stage 6 of the invite-link build: entry points to the screens/flows
+      // Stages 1–3 shipped. The two dev-preview links land directly on the
+      // new tab/variant via a query param; the other two are real live pages
+      // (no preview needed) linked here because that's where the Stage 3
+      // placement change actually landed.
+      eyebrow: 'Growth',
+      tools: [
+        {
+          kind: 'link',
+          icon: <Link2 className="size-5" />,
+          title: 'Invite-link login card',
+          subtitle: 'The per-user link’s topic-chip card on the login screen',
+          href: '/dev/invite-login?screen=linkCard',
+        },
+        {
+          kind: 'link',
+          icon: <Link2 className="size-5" />,
+          title: 'Areas of knowledge (invite-link)',
+          subtitle: 'The interests step seeded via the link — topics arrive unselected',
+          href: '/dev/onboarding/intro?seedSource=link',
+        },
+        {
+          kind: 'link',
+          icon: <UserPlus className="size-5" />,
+          title: 'Invite someone',
+          subtitle: 'Friends hub: Share invite link is now the primary action',
+          href: '/friends',
+        },
+        {
+          kind: 'link',
+          icon: <UserPlus className="size-5" />,
+          title: 'Find friends',
+          subtitle: 'Same invite block, plus the invite-reflection list',
+          href: '/friends/find',
+        },
+      ],
+    },
+    {
       eyebrow: 'Game & session',
       tools: [
         {
@@ -362,8 +401,14 @@ export function AccountActions({
   // null/undefined => the server couldn't run the route-exists check; fail open.
   // Strip any query string first — the availability scan keys on bare route
   // paths, so `/dev/onboarding/intro?walk=1` checks against `/dev/onboarding/intro`.
-  const isToolAvailable = (href: string) =>
-    availableToolHrefs == null || availableToolHrefs.includes(href.split('?')[0]);
+  const isToolAvailable = (href: string) => {
+    const path = href.split('?')[0];
+    // getExistingDevToolHrefs only scans /dev/* and /admin/* — a real core
+    // route (e.g. /friends, linked from the Growth group) always exists and
+    // was never a candidate for this WIP-existence check.
+    if (!path.startsWith('/dev/') && !path.startsWith('/admin/')) return true;
+    return availableToolHrefs == null || availableToolHrefs.includes(path);
+  };
 
   function renderTool(tool: DevTool) {
     if (tool.kind === 'action') {

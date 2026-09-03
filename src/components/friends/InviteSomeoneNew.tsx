@@ -1,16 +1,27 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
-type InviteTokenResponse = { token: string; url: string }
+type InviteTokenResponse = {
+  token: string
+  url: string
+  userId?: string
+  topicCount?: number
+}
 
-// Side-by-side: "Send a personal invite" (opens the existing AddFriendInvite
-// 3-step modal via the friend-invitations:create-new event) and "Copy invite
-// link" (fetches/persists the per-user invite token and copies the URL).
+const SHARE_TEXT = "I'm playing Joshing — come be my friend."
+
+// Side-by-side: "Share invite link" (navigator.share, falling back to copy)
+// and "Text a personal invite" (opens the existing AddFriendInvite 3-step
+// modal via the friend-invitations:create-new event). The link is the
+// primary action — most people should never need the phone-first flow.
 export function InviteSomeoneNew() {
-  const [copying, setCopying] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [ownUserId, setOwnUserId] = useState<string | null>(null)
+  const [topicCount, setTopicCount] = useState<number | null>(null)
 
   useEffect(() => {
     if (!toast) return
@@ -24,9 +35,9 @@ export function InviteSomeoneNew() {
     )
   }
 
-  async function copyInviteLink() {
-    if (copying) return
-    setCopying(true)
+  async function shareInviteLink() {
+    if (sharing) return
+    setSharing(true)
     setError(null)
     try {
       const response = await fetch('/api/account/invite-token', {
@@ -42,12 +53,27 @@ export function InviteSomeoneNew() {
         setError('Could not build your invite link.')
         return
       }
+      setOwnUserId(body.userId ?? null)
+      setTopicCount(typeof body.topicCount === 'number' ? body.topicCount : null)
+
+      if (typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ text: SHARE_TEXT, url: body.url })
+          return
+        } catch (shareError) {
+          // The user closing the share sheet is not a failure — leave it
+          // silent rather than falling back to a surprise clipboard copy.
+          if (shareError instanceof Error && shareError.name === 'AbortError') return
+          // Any other share failure (unsupported target, etc.) falls through
+          // to the clipboard path below.
+        }
+      }
       await navigator.clipboard.writeText(body.url)
       setToast('Link copied.')
     } catch {
-      setError('Could not copy your invite link.')
+      setError('Could not share your invite link.')
     } finally {
-      setCopying(false)
+      setSharing(false)
     }
   }
 
@@ -55,25 +81,35 @@ export function InviteSomeoneNew() {
     <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <h2 className="font-serif text-lg font-semibold">Invite someone new</h2>
       <p className="text-muted-foreground mt-1 text-sm">
-        Text a personal note to someone&rsquo;s phone, or copy a link you can share anywhere.
+        Share a link you can send anywhere, or text a personal note to someone&rsquo;s phone.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"
-          onClick={openPersonalInvite}
+          onClick={() => void shareInviteLink()}
+          disabled={sharing}
           className="btn-primary px-4"
         >
-          Text a personal invite
+          {sharing ? 'Loading…' : 'Share invite link'}
         </button>
         <button
           type="button"
-          onClick={() => void copyInviteLink()}
-          disabled={copying}
+          onClick={openPersonalInvite}
           className="btn-ghost px-4"
         >
-          {copying ? 'Loading…' : 'Copy invite link'}
+          Text a personal invite
         </button>
       </div>
+      {topicCount !== null ? (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Your link shows {topicCount} {topicCount === 1 ? 'topic' : 'topics'}.{' '}
+          {ownUserId ? (
+            <Link href={`/users/${ownUserId}`} className="underline underline-offset-2">
+              Edit
+            </Link>
+          ) : null}
+        </p>
+      ) : null}
       {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
       {toast ? (
         <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">

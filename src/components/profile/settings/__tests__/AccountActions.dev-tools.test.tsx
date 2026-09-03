@@ -12,11 +12,34 @@ import { AccountActions } from '../AccountActions';
  * tool participates in a route-exists check driven by `availableToolHrefs`.
  */
 describe('AccountActions — dev-tools grouping & availability', () => {
-  it('renders the three eyebrow groups', () => {
+  it('renders the four eyebrow groups', () => {
     const html = renderToStaticMarkup(<AccountActions isAdmin />);
     expect(html).toContain('First-time experience');
+    expect(html).toContain('Growth');
     expect(html).toContain('Game &amp; session');
     expect(html).toContain('Diagnostics &amp; flags');
+  });
+
+  // Stage 6 of the invite-link build: entry points to the new screens/flows.
+  it('the Growth group links to the invite-link previews and the live Friends pages', () => {
+    const html = renderToStaticMarkup(<AccountActions isAdmin />);
+    expect(html).toContain('href="/dev/invite-login?screen=linkCard"');
+    expect(html).toContain('href="/dev/onboarding/intro?seedSource=link"');
+    expect(html).toContain('href="/friends"');
+    expect(html).toContain('href="/friends/find"');
+  });
+
+  it('never dims /friends or /friends/find, even when availableToolHrefs omits them', () => {
+    // getExistingDevToolHrefs only ever scans /dev/* and /admin/* — a real
+    // core route like /friends was never a candidate for that WIP-existence
+    // check. An unavailable row renders as a plain <div> with no href at all
+    // (see SettingsRow), so the mere presence of these hrefs as real links
+    // proves they weren't dimmed.
+    const html = renderToStaticMarkup(
+      <AccountActions isAdmin availableToolHrefs={['/dev/first-time-player']} />,
+    );
+    expect(html).toContain('href="/friends"');
+    expect(html).toContain('href="/friends/find"');
   });
 
   it('fails open (no Unavailable pill) when availableToolHrefs is omitted', () => {

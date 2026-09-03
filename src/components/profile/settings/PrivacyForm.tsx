@@ -8,11 +8,16 @@ import type { DiscoverabilityState } from '@/server/db/queries/account';
 type Props = {
   initialState: DiscoverabilityState;
   initialInviteUrl: string | null;
+  initialSeedTopics: string[];
 };
 
 type PatchKey = 'contacts' | 'mutualFriends' | 'nicheMatch';
 
 type InviteTokenResponse = { token: string; url: string };
+
+const SEED_TOPIC_CAP = 3;
+
+type TopicsResponse = { topics?: string[]; message?: string };
 
 async function patchDiscoverability(
   body: Partial<Record<PatchKey, boolean>>,
@@ -70,7 +75,7 @@ function ToggleRow({
   );
 }
 
-export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
+export function PrivacyForm({ initialState, initialInviteUrl, initialSeedTopics }: Props) {
   const [state, setState] = useState<DiscoverabilityState>(initialState);
   const [savingKey, setSavingKey] = useState<PatchKey | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -79,6 +84,11 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
   const [confirmingRotate, setConfirmingRotate] = useState(false);
   const [inviteToast, setInviteToast] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [seedTopics, setSeedTopics] = useState<string[]>(initialSeedTopics);
+  const [seedTopicDraft, setSeedTopicDraft] = useState('');
+  const [savingTopics, setSavingTopics] = useState(false);
+  const [seedTopicsError, setSeedTopicsError] = useState<string | null>(null);
+  const [seedTopicsSaved, setSeedTopicsSaved] = useState(false);
 
   useEffect(() => {
     if (!inviteToast) return;
@@ -123,6 +133,49 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
       setInviteError('Network error. Try again.');
     } finally {
       setRotating(false);
+    }
+  }
+
+  function addSeedTopicDraft() {
+    const topic = seedTopicDraft.trim();
+    if (!topic || seedTopics.length >= SEED_TOPIC_CAP) return;
+    if (seedTopics.some((existing) => existing.toLowerCase() === topic.toLowerCase())) {
+      setSeedTopicDraft('');
+      return;
+    }
+    setSeedTopics([...seedTopics, topic]);
+    setSeedTopicDraft('');
+    setSeedTopicsSaved(false);
+  }
+
+  function removeSeedTopic(topic: string) {
+    setSeedTopics(seedTopics.filter((existing) => existing !== topic));
+    setSeedTopicsSaved(false);
+  }
+
+  async function saveSeedTopics() {
+    if (savingTopics) return;
+    setSavingTopics(true);
+    setSeedTopicsError(null);
+    setSeedTopicsSaved(false);
+    try {
+      const response = await fetch('/api/account/invite-token/topics', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ topics: seedTopics }),
+      });
+      const body = (await response.json().catch(() => null)) as TopicsResponse | null;
+      if (!response.ok) {
+        setSeedTopicsError(body?.message ?? 'Could not save your topics.');
+        return;
+      }
+      setSeedTopics(body?.topics ?? seedTopics);
+      setSeedTopicsSaved(true);
+    } catch {
+      setSeedTopicsError('Network error. Try again.');
+    } finally {
+      setSavingTopics(false);
     }
   }
 
@@ -248,6 +301,69 @@ export function PrivacyForm({ initialState, initialInviteUrl }: Props) {
             Rotating invalidates the old link. Use this if you accidentally shared it broadly.
           </p>
           {inviteError ? <p className="mt-2 text-sm text-destructive">{inviteError}</p> : null}
+
+          <div className="mt-4 border-t pt-4">
+            <h4 className="text-sm font-semibold">Topics your link shows</h4>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Up to {SEED_TOPIC_CAP} topics shown to whoever taps your link. Leave blank to
+              automatically use your own top topics instead.
+            </p>
+            {seedTopics.length > 0 ? (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {seedTopics.map((topic) => (
+                  <li
+                    key={topic}
+                    className="flex items-center gap-1 rounded-full border bg-background px-3 py-1 text-sm"
+                  >
+                    {topic}
+                    <button
+                      type="button"
+                      onClick={() => removeSeedTopic(topic)}
+                      aria-label={`Remove ${topic}`}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {seedTopics.length < SEED_TOPIC_CAP ? (
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="text"
+                  value={seedTopicDraft}
+                  onChange={(event) => setSeedTopicDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    addSeedTopicDraft();
+                  }}
+                  placeholder="Add a topic"
+                  className="border-input bg-background text-foreground h-9 flex-1 rounded-md border px-3 text-sm outline-none focus:border-[var(--brand-navy)]"
+                />
+                <button type="button" onClick={addSeedTopicDraft} className="btn-ghost px-3">
+                  Add
+                </button>
+              </div>
+            ) : null}
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void saveSeedTopics()}
+                disabled={savingTopics}
+                className="btn-primary px-4"
+              >
+                {savingTopics ? 'Saving…' : 'Save topics'}
+              </button>
+              {seedTopicsSaved ? (
+                <span className="text-xs text-muted-foreground">Saved.</span>
+              ) : null}
+            </div>
+            {seedTopicsError ? (
+              <p className="mt-2 text-sm text-destructive">{seedTopicsError}</p>
+            ) : null}
+          </div>
           {inviteToast ? (
             <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
               {inviteToast}

@@ -19,7 +19,13 @@ export type FirstFiveActivity = {
   type: typeof INVITED_FRIEND_FIRST_FIVE_TYPE;
   actorUserId: string;
   referenceId: string;
-  referenceType: 'friend_invitation';
+  // 'friend_invitation' for the named path (referenceId -> FriendInvitation.id);
+  // 'follow' for a link-arrived user, who has no FriendInvitation row — there
+  // referenceId points at the Follow edge left by acceptUserInviteLink instead.
+  // Nothing dereferences this activity type's referenceId against either table
+  // for rendering (see src/lib/activity-stream.ts), so this is a dedup key, not
+  // a strict FK typing.
+  referenceType: 'friend_invitation' | 'follow';
 };
 
 /**
@@ -34,7 +40,11 @@ export type FirstFiveActivity = {
 export function firstFiveActivityToWrite(params: {
   inviteeUserId: string;
   playedCount: number;
-  invitation: { id: string; inviterUserId: string } | null;
+  invitation: {
+    id: string;
+    inviterUserId: string;
+    referenceType: 'friend_invitation' | 'follow';
+  } | null;
   alreadyNotified: boolean;
 }): FirstFiveActivity | null {
   if (params.playedCount !== FIRST_FIVE_THRESHOLD) return null;
@@ -46,6 +56,6 @@ export function firstFiveActivityToWrite(params: {
     type: INVITED_FRIEND_FIRST_FIVE_TYPE,
     actorUserId: params.inviteeUserId,
     referenceId: params.invitation.id,
-    referenceType: 'friend_invitation',
+    referenceType: params.invitation.referenceType,
   };
 }
