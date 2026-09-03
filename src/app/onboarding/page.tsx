@@ -9,10 +9,16 @@ import {
   getUserOnboardingProfile,
   normalizePersonName,
 } from '@/server/db/queries/users';
-import { getInviteLinkSeedTopics, hasInviteLinkFriendship } from '@/server/friends/user-invite-token';
+import {
+  getInviteLinkSeedTopics,
+  getSeedTopicsForJoinedLink,
+  hasInviteLinkFriendship,
+} from '@/server/friends/user-invite-token';
+import { getCatalogSuggestions } from '@/server/db/queries/suggestion-catalog';
 import { assessInterestAnswerability } from '@/server/llm/interests';
 import { convergeDomain } from '@/server/knowledge/converge-domain';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 import OnboardingFlow, { type PreSeededInterest } from './OnboardingFlow';
 
@@ -70,7 +76,16 @@ export default async function OnboardingPage() {
     // getInviterForUser resolution is sourceType 'friend_invitation' — Stage 2
     // must not change what that case shows, so it's deliberately excluded.
     if (inviter?.sourceType === 'follow') {
-      const topics = await getInviteLinkSeedTopics(inviter.inviterUserId);
+      // Slot-precise first: which SPECIFIC link this invitee clicked
+      // (users.joined_via_invite_link_id) resolves to just that link's topic
+      // for a tagged link, or all of the inviter's topics for an untagged
+      // one — B-FRIENDS-INVITE-LINKS-01. Falls back to the old ambient
+      // "all of the inviter's topics" resolution only when attribution is
+      // missing (pre-migration accounts, or the rare organic mutual-follow
+      // this fallback window also catches without an actual link).
+      const topics =
+        (await getSeedTopicsForJoinedLink(session.userId)) ??
+        (await getInviteLinkSeedTopics(inviter.inviterUserId));
       seeded = {
         interests: topics,
         inviterName: normalizePersonName(inviter.inviterName),
@@ -113,6 +128,27 @@ export default async function OnboardingPage() {
       broadCategory: interest.broadCategory ?? 'General Knowledge',
       rationale: interest.description ?? null,
     }));
+
+  // A tagged invite link deliberately carries just ONE topic (seedSource
+  // 'link' never pre-selects, so this doesn't change that) — break the
+  // MIN_INTERESTS=3 blank-screen wall with a few real, verified-question
+  // domains from the SAME broad categories, not a random/invented set.
+  // Skipped when there's nothing to be adjacent to (an untagged link whose
+  // inviter also has no topics yet) — no fabricated suggestions.
+  if (seedSource === 'link' && preSeededInterests.length > 0 && preSeededInterests.length < 3) {
+    const seededKeys = new Set(preSeededInterests.map((interest) => domainKey(interest.domain)));
+    const broadCategories = [
+      ...new Set(preSeededInterests.map((interest) => interest.broadCategory).filter(Boolean)),
+    ];
+    const adjacent = await getCatalogSuggestions(broadCategories, seededKeys, 3 - preSeededInterests.length);
+    for (const suggestion of adjacent) {
+      preSeededInterests.push({
+        domain: suggestion.domain,
+        broadCategory: suggestion.broadCategory ?? 'General Knowledge',
+        rationale: null,
+      });
+    }
+  }
 
   return (
     <OnboardingFlow

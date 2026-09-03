@@ -1196,7 +1196,7 @@ export function recentlyExpandingPromoToStreamItem(
 // A homepage-only "grow your circle" nudge. With `suggestions` it lists a few
 // contact-match people to follow (each row carries its relationship so the
 // embed's AddFriendButton can act); with `invite` it's a copy-only prompt toward
-// /friends/find. Question-free, so it never expands.
+// /friends. Question-free, so it never expands.
 export function addFriendsPromoToStreamItem(
   embed: Extract<StreamEmbed, { kind: 'add_friends' }>,
   sortAt: Date,

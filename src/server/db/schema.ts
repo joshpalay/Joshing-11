@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 
 import type { QuestionSource } from '@/lib/questions-types';
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -285,14 +286,29 @@ export const users = pgTable(
     slug: text('slug'),
     handle: text('handle'),
     handleLastChangedAt: timestamp('handle_last_changed_at', { withTimezone: true }),
+    // DEPRECATED (B-FRIENDS-INVITE-LINKS-01, 2026-09-03) — superseded by the
+    // userInviteLinks table (up to 3 links per user). No longer read or
+    // written; every prior value was backfilled into one untagged
+    // UserInviteLink row in migration 0135. Column + its partial unique index
+    // (idx_users_invite_token, migration 0049) are kept for one deploy cycle
+    // before a follow-up migration drops them, so a rollback of the read-path
+    // swap has somewhere to land.
     inviteToken: text('invite_token'),
-    // Topics the per-user invite link (/u/<handle>/<token>) shows a logged-out
-    // visitor and pre-populates onboarding suggestions with. Shaped like
-    // FriendInvitation.preSeededInterests (array of {label, description?,
+    // Topics the per-user invite links carry — up to 3, in slot order. Shaped
+    // like FriendInvitation.preSeededInterests (array of {label, description?,
     // broadCategory?}), capped at 3 by the app layer, not the column. NULL/empty
-    // means "no curated set" — the invite link falls back to the inviter's top
-    // declared interests instead (see getActiveDeclaredInterests).
+    // means "no curated set" — invite links fall back to the inviter's top
+    // 'often'-frequency domains, then declared interests (see
+    // getInviteLinkSeedTopics).
     inviteSeedInterests: jsonb('invite_seed_interests'),
+    // Set once, on accept, by acceptUserInviteLink. Survives the link being
+    // later deleted (soft delete keeps the UserInviteLink row), so a link's
+    // join count and a joiner's Suggested-friends provenance never dangle.
+    // NULL for every pre-existing account and for anyone who joined via the
+    // named FriendInvitation path instead.
+    joinedViaInviteLinkId: text('joined_via_invite_link_id').references(
+      (): AnyPgColumn => userInviteLinks.id,
+    ),
     avatarColor: text('avatar_color'),
     discoverableByContacts: boolean('discoverable_by_contacts').notNull().default(false),
     discoverableByMutualFriends: boolean('discoverable_by_mutual_friends').notNull().default(false),
@@ -2015,6 +2031,49 @@ export const friendInvitations = pgTable(
       table.inviterUserId,
       table.inviteePhone,
     ),
+  ],
+);
+
+// B-FRIENDS-INVITE-LINKS-01 (2026-09-03) — up to 3 named invite links per
+// user, replacing the single evergreen users.invite_token. slot is the
+// identity a link carries: 0 = untagged (carries all 3 seed topics), 1-3 = a
+// specific slot in the user's standing invite_seed_interests. slot is an
+// INTEGER, not the topic label itself, so renaming a topic never orphans a
+// link or changes its color — the UI resolves slot -> topic -> category at
+// render time.
+//
+// Deletion is soft (deletedAt). A deleted link 404s immediately on
+// /u/<handle>/<token>, but never touches the Follow edge upsertInvitationFriendship
+// wrote on accept — nothing in a friendship references the token, so the
+// people who already joined through a link stay friends after it's deleted.
+// deletedAt also keeps the row (rather than a hard delete) so the join count
+// stat survives and users.joined_via_invite_link_id attribution never dangles.
+//
+// The live-link cap (3) is enforced at the app layer (count non-deleted rows
+// before insert), not here — expressing "at most 3 live rows per user" as a
+// table constraint needs a trigger, which is more machinery than this needs.
+export const userInviteLinks = pgTable(
+  'UserInviteLink',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    slot: integer('slot').notNull().default(0),
+    createdAt: createdAt(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('UserInviteLink_token_key').on(table.token),
+    index('UserInviteLink_user_id_idx').on(table.userId),
+    // A user can hold several untagged (slot 0) links at once, but at most one
+    // LIVE link per named slot — tagging a second link with the same topic
+    // would make "which link is Sondheim" ambiguous.
+    uniqueIndex('UserInviteLink_user_id_slot_live_key')
+      .on(table.userId, table.slot)
+      .where(sql`${table.slot} <> 0 AND ${table.deletedAt} IS NULL`),
+    check('UserInviteLink_slot_range', sql`${table.slot} BETWEEN 0 AND 3`),
   ],
 );
 

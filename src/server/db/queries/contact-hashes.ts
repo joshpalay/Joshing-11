@@ -158,7 +158,7 @@ export async function getNewDiscoveryStatus(callerId: string): Promise<NewDiscov
 }
 
 // Stamp NOW() onto users.last_friend_discovery_check_at. Called on every
-// visit to /friends/find. Idempotent.
+// visit to /friends. Idempotent.
 export async function markDiscoveryChecked(callerId: string, now: Date = new Date()): Promise<void> {
   await db
     .update(users)

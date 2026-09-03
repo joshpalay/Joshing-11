@@ -1,30 +1,46 @@
-import { randomBytes } from 'node:crypto'
-
 import { and, eq, sql } from 'drizzle-orm'
 
 import { domainKey } from '@/lib/knowledge/domain-key'
 import { db, follows, profileDomainVisibility, users } from '@/server/db'
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests'
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
+import {
+  attributeInviteLinkJoin,
+  findLiveInviteLinkByToken,
+  getJoinedInviteLink,
+} from '@/server/db/queries/invite-links'
 import { parsePreSeededInterests, type PreSeededInterest } from '@/server/db/queries/users'
 import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
 import { upsertInvitationFriendship } from '@/server/friends/friendships'
 
+export { generateUserInviteToken } from '@/server/db/queries/invite-links'
+
 // Cap applies to both sources: a curated inviteSeedInterests set and the
-// automatic declared-interests fallback.
+// automatic fallback below.
 const SEED_TOPIC_CAP = 3
 
 // Resolves the topics a per-user invite link carries: whatever the inviter
-// curated in users.invite_seed_interests, or — when that's empty — their top
-// SEED_TOPIC_CAP active declared interests (already first-picked-first
-// ordered by getActiveDeclaredInterests, so slicing keeps that order). The
-// automatic fallback is what makes a link useful on day one with zero setup.
+// curated in users.invite_seed_interests, or — when that's empty — an
+// automatic fallback ordered "what they play most first": their declared
+// interests set to 'often' frequency (DailyPreference.domainPreferenceFrequency),
+// then the rest of their active declared interests in first-picked order.
+// The automatic fallback is what makes a link useful on day one with zero
+// setup.
+//
+// `slot` selects what a SPECIFIC link carries: 0 (default) returns the full
+// resolved set (untagged links carry all of it); 1-3 returns just the one
+// topic at that position, or [] if the inviter doesn't have that many yet —
+// a tagged link only ever shows the one topic it was made for.
 //
 // Unfiltered by profile domain visibility — this is the raw resolution used
 // by both the public invite card (resolveInviteLink, which DOES filter before
 // exposing it to a not-yet-friend visitor) and onboarding (where the invitee
 // is already a mutual-approved friend by the time this is read, so the public
 // visibility bar doesn't apply).
-export async function getInviteLinkSeedTopics(inviterUserId: string): Promise<PreSeededInterest[]> {
+export async function getInviteLinkSeedTopics(
+  inviterUserId: string,
+  slot = 0,
+): Promise<PreSeededInterest[]> {
   const [row] = await db
     .select({ inviteSeedInterests: users.inviteSeedInterests })
     .from(users)
@@ -32,19 +48,43 @@ export async function getInviteLinkSeedTopics(inviterUserId: string): Promise<Pr
     .limit(1)
 
   const curated = parsePreSeededInterests(row?.inviteSeedInterests).slice(0, SEED_TOPIC_CAP)
-  if (curated.length > 0) return curated
+  let resolved = curated
 
-  const declared = await getActiveDeclaredInterests(inviterUserId)
-  return declared.slice(0, SEED_TOPIC_CAP).map((interest) => ({
-    label: interest.domain,
-    broadCategory: interest.broadCategory,
-  }))
+  if (resolved.length === 0) {
+    const [declared, dailyPreferences] = await Promise.all([
+      getActiveDeclaredInterests(inviterUserId),
+      getDailyPreferences(inviterUserId),
+    ])
+    const often = declared.filter((interest) => dailyPreferences.domainPreferenceFrequency[interest.domain] === 'often')
+    const rest = declared.filter((interest) => dailyPreferences.domainPreferenceFrequency[interest.domain] !== 'often')
+    resolved = [...often, ...rest].slice(0, SEED_TOPIC_CAP).map((interest) => ({
+      label: interest.domain,
+      broadCategory: interest.broadCategory,
+    }))
+  }
+
+  if (slot === 0) return resolved
+  const single = resolved[slot - 1]
+  return single ? [single] : []
+}
+
+// Slot-aware resolution for an already-joined invitee: reads which specific
+// link they came through (users.joined_via_invite_link_id) and resolves that
+// link's exact topic set. Returns null when there's no attribution at all —
+// pre-migration accounts, named-invite joins, or the rare organic mutual
+// follow getInviterForUser's fallback window also catches — so the caller can
+// fall back to its own unslotted resolution.
+export async function getSeedTopicsForJoinedLink(inviteeUserId: string): Promise<PreSeededInterest[] | null> {
+  const joined = await getJoinedInviteLink(inviteeUserId)
+  if (!joined) return null
+  return getInviteLinkSeedTopics(joined.inviterUserId, joined.slot)
 }
 
 // The curated set only — no automatic-fallback resolution. This is what the
-// PrivacyForm editor shows and edits; it must read back "nothing curated" as
-// empty, not silently pre-fill the inviter's declared interests as though
-// they were a saved choice (that fallback is invisible/implicit by design).
+// topic editor (PrivacyForm, and the Friends page's link-creation panel)
+// shows and edits; it must read back "nothing curated" as empty, not
+// silently pre-fill the inviter's declared interests as though they were a
+// saved choice (that fallback is invisible/implicit by design).
 export async function getCuratedInviteSeedTopics(userId: string): Promise<string[]> {
   const [row] = await db
     .select({ inviteSeedInterests: users.inviteSeedInterests })
@@ -60,7 +100,7 @@ export async function getCuratedInviteSeedTopics(userId: string): Promise<string
 // Overwrites the curated set. Callers are responsible for validating each
 // topic (e.g. isTooBroadInterest) before calling this — it trusts its input
 // and just cleans/caps/persists. An empty array clears the curated set,
-// reverting the link to the automatic declared-interests fallback.
+// reverting the link to the automatic fallback.
 export async function setCuratedInviteSeedTopics(userId: string, topics: string[]): Promise<void> {
   const seen = new Set<string>()
   const cleaned: string[] = []
@@ -111,61 +151,6 @@ async function getPubliclyHiddenDomainKeys(userId: string): Promise<Set<string>>
   return hidden
 }
 
-// Match the prior-art token primitive used for FriendInvitation tokens at
-// src/server/friends/invitations.ts:166 — randomBytes(32).toString('base64url')
-// yields a 43-char URL-safe string.
-export function generateUserInviteToken(): string {
-  return randomBytes(32).toString('base64url')
-}
-
-export type UserInviteTokenResult = {
-  token: string
-  handle: string | null
-}
-
-// Returns the user's invite token, generating + persisting one if NULL.
-// Handle may be null for pre-handle accounts (shouldn't happen post-P0-A
-// rollout, but be defensive — callers that need to build a URL should
-// surface a "set a handle first" error in that case).
-export async function getOrCreateInviteToken(userId: string): Promise<UserInviteTokenResult | null> {
-  const [row] = await db
-    .select({ inviteToken: users.inviteToken, handle: users.handle })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1)
-
-  if (!row) return null
-  if (row.inviteToken) return { token: row.inviteToken, handle: row.handle }
-
-  const token = generateUserInviteToken()
-  await db
-    .update(users)
-    .set({ inviteToken: token, updatedAt: new Date() })
-    .where(eq(users.id, userId))
-
-  return { token, handle: row.handle }
-}
-
-// Always regenerates + persists. The old token, if any, stops resolving
-// immediately — /u/<handle>/<old-token> returns 404.
-export async function rotateInviteToken(userId: string): Promise<UserInviteTokenResult | null> {
-  const [row] = await db
-    .select({ handle: users.handle })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1)
-
-  if (!row) return null
-
-  const token = generateUserInviteToken()
-  await db
-    .update(users)
-    .set({ inviteToken: token, updatedAt: new Date() })
-    .where(eq(users.id, userId))
-
-  return { token, handle: row.handle }
-}
-
 // Lifted from src/app/api/friend-invitations/route.ts:158-173 so invite-link
 // URLs use the same base-resolution as SMS invitation URLs. Accepts either
 // a Request (route handlers) or a Headers map (server components reading
@@ -194,17 +179,20 @@ export function buildInviteUrl(baseUrl: string, handle: string, token: string): 
   return `${baseUrl}/u/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`
 }
 
-// Resolves /u/<handle>/<token> by looking up the inviter case-insensitively
-// on handle and verifying the token matches exactly.
-// Returns null when not found OR mismatched (don't reveal which).
+// Resolves /u/<handle>/<token>: looks up the inviter case-insensitively on
+// handle, then the specific LIVE UserInviteLink matching that user + token.
+// Returns null when the handle doesn't resolve, the link doesn't exist,
+// belongs to someone else, or was deleted (don't reveal which).
 export type InviteLinkResolution = {
   inviterUserId: string
   inviterHandle: string
   inviterDisplayName: string | null
   inviterAvatarColor: string | null
-  // Up to 3 topic labels, already filtered to what a not-yet-friend visitor
-  // may see (getPubliclyHiddenDomainKeys). Empty when the inviter has no
-  // curated set AND no declared interests.
+  linkId: string
+  slot: number
+  // The topics THIS link carries — all of the inviter's resolved set for an
+  // untagged (slot 0) link, or just the one tagged topic — already filtered
+  // to what a not-yet-friend visitor may see (getPubliclyHiddenDomainKeys).
   seedTopics: string[]
 }
 
@@ -215,17 +203,18 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
       handle: users.handle,
       displayName: users.displayName,
       avatarColor: users.avatarColor,
-      inviteToken: users.inviteToken,
     })
     .from(users)
     .where(sql`LOWER(${users.handle}) = LOWER(${handle})`)
     .limit(1)
 
-  if (!row || !row.handle || !row.inviteToken) return null
-  if (row.inviteToken !== token) return null
+  if (!row || !row.handle) return null
+
+  const link = await findLiveInviteLinkByToken(row.id, token)
+  if (!link) return null
 
   const [topics, hiddenDomainKeys] = await Promise.all([
-    getInviteLinkSeedTopics(row.id),
+    getInviteLinkSeedTopics(row.id, link.slot),
     getPubliclyHiddenDomainKeys(row.id),
   ])
   const seedTopics = topics
@@ -237,6 +226,8 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
     inviterHandle: row.handle,
     inviterDisplayName: row.displayName,
     inviterAvatarColor: row.avatarColor,
+    linkId: link.id,
+    slot: link.slot,
     seedTopics,
   }
 }
@@ -259,11 +250,13 @@ export async function hasInviteLinkFriendship(userId: string): Promise<boolean> 
 }
 
 // Called from verify-otp when the user arrives via /u/<handle>/<token>.
-// Validates server-side and creates an active Friendship via the existing
-// upsertInvitationFriendship helper. Silent failure (don't block login on
+// Validates server-side, creates an active Friendship via the existing
+// upsertInvitationFriendship helper, and attributes the join to the specific
+// link clicked. Silent failure on the friendship itself (don't block login on
 // any error path — the worst case is the user logs in without the new
 // friendship, which they can fix by tapping Add Friend on the inviter's
-// profile).
+// profile). Attribution is best-effort on top of that: a failure there must
+// never undo an otherwise-successful accept.
 export async function acceptUserInviteLink({
   handle,
   token,
@@ -291,6 +284,12 @@ export async function acceptUserInviteLink({
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
     })
+    try {
+      await attributeInviteLinkJoin(inviteeUserId, inviter.linkId)
+    } catch {
+      // Attribution is a nice-to-have (join counts, Suggested-friends
+      // provenance) — never worth failing an otherwise-successful accept.
+    }
     return { accepted: true }
   } catch {
     return { accepted: false }
