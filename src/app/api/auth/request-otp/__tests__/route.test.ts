@@ -8,6 +8,7 @@ const {
   findUserSelectMock,
   hasValidPendingInvitationForPhoneMock,
   getInvitePrefillByTokenMock,
+  getOtpBypassCodeForPhoneMock,
   requestOtpMock,
   resolveInviteLinkMock,
   sendSmsMock,
@@ -17,6 +18,7 @@ const {
     findUserSelectMock,
     hasValidPendingInvitationForPhoneMock: vi.fn(async () => false),
     getInvitePrefillByTokenMock: vi.fn(async () => null as unknown),
+    getOtpBypassCodeForPhoneMock: vi.fn(() => null as string | null),
     requestOtpMock: vi.fn(async () => ({ code: '424242' })),
     resolveInviteLinkMock: vi.fn(async () => null as unknown),
     sendSmsMock: vi.fn(async () => ({ ok: true as const })),
@@ -24,6 +26,7 @@ const {
 });
 
 vi.mock('@/server/auth', () => ({
+  getOtpBypassCodeForPhone: getOtpBypassCodeForPhoneMock,
   isUsPhoneNumber: (value: string) => /^\+1\d{10}$/.test(value),
   normalizePhone: (value: string) => value,
   requestOtp: requestOtpMock,
@@ -80,6 +83,7 @@ describe('/api/auth/request-otp invite gate', () => {
     findUserSelectMock.mockResolvedValue([]);
     hasValidPendingInvitationForPhoneMock.mockResolvedValue(false);
     getInvitePrefillByTokenMock.mockResolvedValue(null);
+    getOtpBypassCodeForPhoneMock.mockReturnValue(null);
     resolveInviteLinkMock.mockResolvedValue(null);
     requestOtpMock.mockResolvedValue({ code: '424242' });
     sendSmsMock.mockResolvedValue({ ok: true });
@@ -166,6 +170,7 @@ describe('/api/auth/request-otp invite-phone prefill', () => {
     findUserSelectMock.mockResolvedValue([]);
     hasValidPendingInvitationForPhoneMock.mockResolvedValue(false);
     getInvitePrefillByTokenMock.mockResolvedValue(null);
+    getOtpBypassCodeForPhoneMock.mockReturnValue(null);
     resolveInviteLinkMock.mockResolvedValue(null);
     requestOtpMock.mockResolvedValue({ code: '424242' });
     sendSmsMock.mockResolvedValue({ ok: true });
@@ -213,6 +218,44 @@ describe('/api/auth/request-otp invite-phone prefill', () => {
     expect(getInvitePrefillByTokenMock).not.toHaveBeenCalled();
     expect(requestOtpMock).not.toHaveBeenCalled();
   });
+
+  it('skips SMS for the explicitly configured invite phone', async () => {
+    getInvitePrefillByTokenMock.mockResolvedValue({
+      inviterName: 'Alex',
+      inviteePhone: '+17345556819',
+      maskedPhone: '•••-•••-6819',
+    });
+    getOtpBypassCodeForPhoneMock.mockReturnValue('654321');
+
+    const response = await POST(jsonRequest({ invitationToken: 'tok-1', useInvitePhone: true }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      maskedPhone: '•••-•••-6819',
+      debugCode: '654321',
+    });
+    expect(requestOtpMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('/api/auth/request-otp configured SMS bypass', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    findUserSelectMock.mockReset();
+    findUserSelectMock.mockResolvedValue([{ id: 'user-1' }]);
+    getOtpBypassCodeForPhoneMock.mockReturnValue('654321');
+  });
+
+  it('advances without creating or sending an OTP for the allowlisted phone', async () => {
+    const response = await POST(jsonRequest({ phone: NEW_PHONE }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, phone: NEW_PHONE, debugCode: '654321' });
+    expect(requestOtpMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('/api/auth/request-otp production delivery safety', () => {
@@ -221,6 +264,7 @@ describe('/api/auth/request-otp production delivery safety', () => {
     vi.stubEnv('NODE_ENV', 'production');
     findUserSelectMock.mockReset();
     findUserSelectMock.mockResolvedValue([{ id: 'user-1' }]);
+    getOtpBypassCodeForPhoneMock.mockReturnValue(null);
     requestOtpMock.mockResolvedValue({ code: '424242' });
     sendSmsMock.mockResolvedValue({ ok: true });
   });
@@ -236,5 +280,16 @@ describe('/api/auth/request-otp production delivery safety', () => {
     const response = await POST(jsonRequest({ phone: NEW_PHONE }));
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ error: 'sms_delivery_failed' });
+  });
+
+  it('advances the allowlisted walkthrough phone without contacting Twilio', async () => {
+    getOtpBypassCodeForPhoneMock.mockReturnValue('654321');
+
+    const response = await POST(jsonRequest({ phone: NEW_PHONE }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, phone: NEW_PHONE });
+    expect(requestOtpMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 });
