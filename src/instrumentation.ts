@@ -46,6 +46,7 @@ export async function register() {
     const { sql } = await import('drizzle-orm');
     const path = await import('path');
     const fs = await import('fs');
+    const { decideBootMigrate, refusalMessage } = await import('@/server/db/migrate-safety');
     const crypto = await import('crypto');
 
     // Bound how long a cold boot will wait on the DB. A degraded cold connection
@@ -2615,6 +2616,32 @@ export async function register() {
       }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
+
+    // SAFETY GATE (2026-09-04). A `npm run dev` boot on an unmerged branch
+    // applied migration 0136 to the PRODUCTION database as a side effect of
+    // starting up -- this repo's local .env DATABASE_URL points at prod, and
+    // migrate() applies every pending migration on the current branch. Auto
+    // migrate is for DEPLOYED environments; a local process pointed at a remote
+    // database must now ask explicitly. See src/server/db/migrate-safety.ts.
+    const migrateDecision = decideBootMigrate(process.env.DATABASE_URL, {
+      VERCEL: process.env.VERCEL,
+      ALLOW_REMOTE_BOOT_MIGRATE: process.env.ALLOW_REMOTE_BOOT_MIGRATE,
+    });
+    if (!migrateDecision.allowed) {
+      // Warn, do not throw: the app still serves requests, only the automatic
+      // migrate is skipped. Throwing here would kill the instrumentation hook
+      // and 500 every request -- same reasoning as the PHONE_HASH_SALT check.
+      console.warn(refusalMessage(migrateDecision.host));
+      console.info('[instrumentation boot]', {
+        guards_ran: runBootGuards,
+        guards_ms: guardChainMs,
+        migrate_ms: 0,
+        migrate_skipped: migrateDecision.reason,
+        total_ms: Date.now() - guardChainStartedAt,
+      });
+      await pool.end().catch(() => {});
+      return;
+    }
 
     const migrateStartedAt = Date.now();
     // Hard cap on migrate() so a stalled connection can't eat the whole function
