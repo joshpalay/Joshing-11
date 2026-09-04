@@ -68,19 +68,12 @@ export function ContactMatchBlock({
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  if (!supportsContactsAPI()) {
-    return (
-      <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
-        <h2 className="font-serif text-lg font-semibold">
-          Find friends already on Joshing
-        </h2>
-        <p className="text-muted-foreground mt-1 text-sm leading-6">
-          Your browser doesn&rsquo;t support automatic contact matching. You can still
-          search by @handle or phone number (above), or send a friend an invite link.
-        </p>
-      </section>
-    )
-  }
+  // The Contacts Picker API is Chrome-on-Android only -- absent on iOS Safari
+  // AND on every desktop browser, which is most of the user base. This used to
+  // render a card apologising for that, permanently, above the fold. There is
+  // nothing the reader can do about it and the search field above already
+  // covers the same job, so render nothing at all.
+  if (!supportsContactsAPI()) return null
 
   if (!discoverableByContacts) {
     return (

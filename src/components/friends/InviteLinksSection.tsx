@@ -176,6 +176,10 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
           const topic = link.slot === 0 ? null : (topics[link.slot - 1] ?? null)
           const color = topicColor(topic)
           const label = slotLabel(link.slot, topics)
+          // An untagged link carries every standing topic; a tagged one carries
+          // exactly its slot. Same resolution the server uses in
+          // getInviteLinkSeedTopics(userId, slot).
+          const carriedTopics = link.slot === 0 ? topics : topic ? [topic] : []
           return (
             <article
               key={link.id}
@@ -194,10 +198,34 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
                 <span className="size-1.5 rounded-full" style={{ background: color.primary }} />
                 {label}
               </span>
-              <p className="text-muted-foreground mt-1.5 break-all font-mono text-xs">{link.url}</p>
+              {/* The raw share URL is deliberately NOT rendered. It was 60+
+                  characters of base64 wrapping onto two lines -- the loudest
+                  thing on the card, and unreadable by design (nobody reads a
+                  token). What a person actually needs to recognise a link is
+                  what it CARRIES and how it has done, so the topic chips and
+                  the join count take that space instead. The URL still reaches
+                  the clipboard and the share sheet via the buttons below. */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {carriedTopics.length > 0 ? (
+                  carriedTopics.map((topic) => {
+                    const chipColor = topicColor(topic)
+                    return (
+                      <span
+                        key={topic.label}
+                        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+                        style={{ borderColor: `color-mix(in srgb, ${chipColor.primary} 40%, transparent)`, color: chipColor.text }}
+                      >
+                        <span className="size-1 rounded-full" style={{ background: chipColor.primary }} />
+                        {topic.label}
+                      </span>
+                    )
+                  })
+                ) : (
+                  <span className="text-muted-foreground text-xs">No topics yet</span>
+                )}
+              </div>
               <p className="text-muted-foreground/80 mt-1.5 text-xs">
-                {link.slot === 0 ? 'Carries all your topics' : `Carries ${label}`} · {link.joinedCount}{' '}
-                joined
+                {link.joinedCount} joined
               </p>
               <div className="mt-2 flex gap-2">
                 <button

@@ -757,9 +757,15 @@ export default function FriendsList() {
           </h2>
           {friends.length > 0 ? (
             <>
+              {/* A FILTER on the roster below, not a second way to find people.
+                  It used to sit in a bordered card with the same gold-bordered
+                  input as the add-someone lookup at the top of the page --
+                  identical treatment for two different jobs, which read as two
+                  competing searches. Card chrome dropped and the field quieted
+                  so it reads as subordinate to the list it filters. */}
               <div
-                className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2 sm:grid-cols-[1fr_2fr]"
-                aria-label="Friend filters"
+                className="grid grid-cols-1 gap-2 pb-2 sm:grid-cols-[1fr_2fr]"
+                aria-label="Filter your friends"
               >
                 <label className="relative">
                   <select
@@ -782,8 +788,8 @@ export default function FriendsList() {
                   <input
                     value={friendSearch}
                     onChange={(event) => setFriendSearch(event.target.value)}
-                    placeholder="Search friends..."
-                    className="focus:border-[var(--brand-navy)] h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pr-3 pl-10 text-sm outline-none"
+                    placeholder="Filter by name or topic"
+                    className="focus:border-[var(--brand-navy)] border-border bg-background h-10 w-full rounded-md border pr-3 pl-10 text-sm outline-none"
                   />
                 </label>
               </div>
