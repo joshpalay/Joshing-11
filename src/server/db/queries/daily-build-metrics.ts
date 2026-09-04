@@ -15,11 +15,7 @@ import { DAILY_QUEUE_SIZE } from '@/server/daily/types';
  * Swallows its own errors: a telemetry failure must never convert a successful
  * build into a failed one.
  */
-export async function recordDailyBuildMetric(
-  ctx: DailyBuildContext,
-  outcome: string,
-  finalSize?: number,
-): Promise<void> {
+export async function recordDailyBuildMetric(ctx: DailyBuildContext): Promise<void> {
   try {
     const bankHits = ctx.bankAttempts.filter((a) => a.outcome === 'hit').length;
     await db.insert(dailyBuildMetrics).values({
@@ -35,9 +31,13 @@ export async function recordDailyBuildMetric(
       bankAttempts: ctx.bankAttempts,
       gatedFloorReachedMs: ctx.gatedFloorReachedMs,
       targetSize: DAILY_QUEUE_SIZE,
-      finalSize: finalSize ?? 0,
+      finalSize: ctx.finalSize,
       aborted: ctx.aborted,
-      outcome,
+      // Analysis MUST filter on outcome='built'. The early-return paths
+      // (existing queue, carry-forward, partial carry-forward) record zero
+      // generation calls and would otherwise be indistinguishable from a
+      // genuine bank-only build.
+      outcome: ctx.outcome,
     });
   } catch (error) {
     console.warn('[daily/build-metric] record failed (telemetry only)', {

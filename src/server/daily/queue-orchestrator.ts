@@ -60,7 +60,13 @@ import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { verifyGateThinDeclared } from '@/server/daily/verify-gate-thin';
 import { commitPendingRefineDecisions } from '@/server/refine/commit';
 import { logLatency } from '@/server/telemetry';
-import { noteFinalSize, noteGatedFloorReached, noteRound, runInBuildContext } from '@/server/daily/build-context';
+import {
+  noteFinalSize,
+  noteGatedFloorReached,
+  noteOutcome,
+  noteRound,
+  runBuildWithMetrics,
+} from '@/server/daily/build-context';
 import { recordDailyBuildMetric } from '@/server/db/queries/daily-build-metrics';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
@@ -344,19 +350,15 @@ export function fillDailyQueueForUser(
   // LlmUsageEvent rows on time again — an approach that produced three separate
   // measurement errors. Purely observational: nothing here changes what is
   // generated or served.
-  const promise = runInBuildContext(userId, async (ctx) => {
-    let outcome = 'ok';
-    try {
-      return await buildDailyQueueForUser(userId, durationBudgetMs);
-    } catch (error) {
-      outcome = error instanceof DailyQueueFillError ? error.code : 'error';
-      throw error;
-    } finally {
-      // Best-effort: a telemetry write must never turn a successful build into
-      // a failure, nor mask a real build error.
-      await recordDailyBuildMetric(ctx, outcome, ctx.finalSize).catch(() => {});
-    }
-  }).finally(() => {
+  const promise = runBuildWithMetrics(
+    userId,
+    () => buildDailyQueueForUser(userId, durationBudgetMs),
+    (ctx) => recordDailyBuildMetric(ctx),
+    (error) =>
+      error instanceof DailyQueueFillError && error.code === 'no_knowledge_base'
+        ? 'no_knowledge_base'
+        : 'error',
+  ).finally(() => {
     // Clear on settle (success OR failure) so the next genuine build for this
     // user isn't blocked by a stale entry — a rejected build must be retryable.
     inFlightFills.delete(userId);
@@ -391,7 +393,10 @@ async function buildDailyQueueForUser(
     // TodayQueue drops only that case (a short queue actually built today is
     // left alone so we don't re-bill the LLM on every load) and lets us fall
     // through to regenerate a fresh, full set.
-    if (!(await clearStaleShortTodayQueue(userId))) return;
+    if (!(await clearStaleShortTodayQueue(userId))) {
+      noteOutcome('existing_queue');
+      return;
+    }
   }
 
   // Before billing the LLM for a new set, roll a previous *unplayed* queue
@@ -400,14 +405,20 @@ async function buildDailyQueueForUser(
   // generation every day for questions they never opened. Their last queue is
   // still sitting unplayed; re-dating it gives them the same five at zero cost.
   // A played prior queue is left alone, so engaged users still get a fresh set.
-  if (await carryForwardUntouchedDailyQueue(userId)) return;
+  if (await carryForwardUntouchedDailyQueue(userId)) {
+    noteOutcome('carry_forward');
+    return;
+  }
 
   // Before billing a full fresh build, top-up-carry-forward a PARTIAL/SHORT prior
   // unplayed queue: keep the unplayed questions, generate only the shortfall to
   // refill to five. carryForwardUntouchedDailyQueue above only handles a fully
   // untouched set; this covers "they played some / got a short set yesterday but
   // still have unplayed questions — don't regenerate from scratch" (flag-gated).
-  if (await topUpAndCarryForwardPartialQueue(userId)) return;
+  if (await topUpAndCarryForwardPartialQueue(userId)) {
+    noteOutcome('partial_carry_forward');
+    return;
+  }
 
   const [knowledgeBase, preferences, excludedDomains] = await Promise.all([
     getKnowledgeBase(userId),

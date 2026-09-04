@@ -69,7 +69,24 @@ export type DailyBuildContext = {
   aborted: boolean;
   /** Slot count actually persisted. 0 when the build threw before assembly. */
   finalSize: number;
+  /**
+   * What this invocation actually DID. Critical for analysis: buildDailyQueue-
+   * ForUser early-returns on an existing queue, a carry-forward, and a partial
+   * carry-forward. Those are not builds, and recording them as `built` with
+   * zero generation calls would make them indistinguishable from genuine
+   * bank-only builds -- the same contamination that made the withdrawn "bank
+   * builds take 0.0s" figure wrong. Analysis must filter on outcome='built'.
+   */
+  outcome: BuildOutcome;
 };
+
+export type BuildOutcome =
+  | 'built'
+  | 'existing_queue'
+  | 'carry_forward'
+  | 'partial_carry_forward'
+  | 'no_knowledge_base'
+  | 'error';
 
 const storage = new AsyncLocalStorage<DailyBuildContext>();
 
@@ -89,6 +106,7 @@ export function runInBuildContext<T>(
     gatedFloorReachedMs: null,
     aborted: false,
     finalSize: 0,
+    outcome: 'built',
   };
   return storage.run(ctx, () => fn(ctx));
 }
@@ -138,7 +156,42 @@ export function noteFinalSize(size: number): void {
   if (ctx) ctx.finalSize = size;
 }
 
+export function noteOutcome(outcome: BuildOutcome): void {
+  const ctx = storage.getStore();
+  if (ctx) ctx.outcome = outcome;
+}
+
 export function noteAborted(): void {
   const ctx = storage.getStore();
   if (ctx) ctx.aborted = true;
+}
+
+
+/**
+ * Run one build inside a fresh context and record its metric on EVERY exit
+ * path, including a throw.
+ *
+ * Extracted from the orchestrator specifically so the failure path is unit
+ * testable. If the metric were written only on success, aborted and thrown
+ * builds would emit no row and the tail -- the entire population Track A
+ * targets -- would be invisible in the data.
+ */
+export async function runBuildWithMetrics<T>(
+  userId: string,
+  build: () => Promise<T>,
+  record: (ctx: DailyBuildContext) => Promise<void>,
+  classifyError: (error: unknown) => BuildOutcome = () => 'error',
+): Promise<T> {
+  return runInBuildContext(userId, async (ctx) => {
+    try {
+      return await build();
+    } catch (error) {
+      ctx.outcome = classifyError(error);
+      throw error;
+    } finally {
+      // Best-effort: telemetry must never convert a successful build into a
+      // failure, nor mask a real build error on its way out.
+      await record(ctx).catch(() => {});
+    }
+  });
 }

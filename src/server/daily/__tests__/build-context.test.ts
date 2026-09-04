@@ -8,7 +8,9 @@ import {
   noteFinalSize,
   noteGatedFloorReached,
   noteGenerateCall,
+  noteOutcome,
   noteRound,
+  runBuildWithMetrics,
   runInBuildContext,
 } from '@/server/daily/build-context';
 import { DAILY_QUEUE_SIZE } from '@/server/daily/types';
@@ -129,5 +131,130 @@ describe('build correlation context (A0)', () => {
     // schema.ts duplicates this as a literal (it must stay free of server-tree
     // runtime imports); this is the assertion that keeps the two in step.
     expect(DAILY_QUEUE_SIZE).toBe(5);
+  });
+
+  it('keeps FOUR concurrent builds isolated, with correct per-build call attribution', async () => {
+    // The daily cron fans out at USER_CONCURRENCY=4 and enters the context
+    // INSIDE the per-user callback. If it were entered around the fan-out
+    // instead, all four builds would share one id and A0 would have
+    // reintroduced cross-build attribution error inside the very primitive
+    // built to eliminate it -- and unlike the earlier clustering mistakes it
+    // would NOT be catchable by reconciling against a call total, because the
+    // counts would still sum correctly.
+    const plan = [
+      { user: 'u1', calls: 1 },
+      { user: 'u2', calls: 4 },
+      { user: 'u3', calls: 2 },
+      { user: 'u4', calls: 3 },
+    ];
+    const ctxs = await Promise.all(
+      plan.map(({ user, calls }) =>
+        runInBuildContext(user, async (ctx) => {
+          for (let i = 0; i < calls; i += 1) {
+            noteGenerateCall();
+            // Yield between calls so the four builds genuinely interleave.
+            await new Promise((r) => setTimeout(r, 1));
+          }
+          return ctx;
+        }),
+      ),
+    );
+
+    expect(new Set(ctxs.map((c) => c.buildId)).size).toBe(4);
+    expect(ctxs.map((c) => c.userId)).toEqual(['u1', 'u2', 'u3', 'u4']);
+    // Attribution, not just distinctness: each build kept its OWN count.
+    expect(ctxs.map((c) => c.generateCallCount)).toEqual([1, 4, 2, 3]);
+  });
+
+  it('context survives Promise.all fan-out inside a build (parallel chunks)', async () => {
+    // Generation dispatches chunks via Promise.all; the id must be visible in
+    // every branch or those calls write a NULL build_id and drop out of the
+    // build's own statistics.
+    const ctx = await runInBuildContext('u1', async (c) => {
+      const ids = await Promise.all([
+        Promise.resolve().then(() => currentBuildId()),
+        new Promise((r) => setTimeout(r, 3)).then(() => currentBuildId()),
+        Promise.resolve().then(async () => {
+          await new Promise((r) => setTimeout(r, 1));
+          return currentBuildId();
+        }),
+      ]);
+      expect(ids).toEqual([c.buildId, c.buildId, c.buildId]);
+      return c;
+    });
+    expect(ctx.buildId).toBeTruthy();
+  });
+});
+
+describe('runBuildWithMetrics — the metric must survive every exit path', () => {
+  it('records on the SUCCESS path', async () => {
+    const recorded: string[] = [];
+    await runBuildWithMetrics('u1', async () => 'ok', async (ctx) => {
+      recorded.push(ctx.outcome);
+    });
+    expect(recorded).toEqual(['built']);
+  });
+
+  it('records on the THROWING path, and still propagates the error', async () => {
+    // If the metric were written only on success, aborted and failed builds
+    // would emit no row -- and the tail is the entire population Track A is
+    // about. It would disappear from the data it is meant to justify.
+    const recorded: string[] = [];
+    const boom = new Error('generation blew up');
+    await expect(
+      runBuildWithMetrics(
+        'u1',
+        async () => {
+          throw boom;
+        },
+        async (ctx) => {
+          recorded.push(ctx.outcome);
+        },
+        () => 'error',
+      ),
+    ).rejects.toBe(boom);
+    expect(recorded).toEqual(['error']);
+  });
+
+  it('classifies a known fill error rather than lumping it into error', async () => {
+    const recorded: string[] = [];
+    await expect(
+      runBuildWithMetrics(
+        'u1',
+        async () => {
+          throw new Error('no kb');
+        },
+        async (ctx) => {
+          recorded.push(ctx.outcome);
+        },
+        () => 'no_knowledge_base',
+      ),
+    ).rejects.toThrow('no kb');
+    expect(recorded).toEqual(['no_knowledge_base']);
+  });
+
+  it('a failing recorder never converts a successful build into a failure', async () => {
+    await expect(
+      runBuildWithMetrics('u1', async () => 'value', async () => {
+        throw new Error('telemetry table missing');
+      }),
+    ).resolves.toBe('value');
+  });
+
+  it('early-return outcomes are distinguishable from genuine bank-only builds', async () => {
+    // Both record zero generation calls. Without the outcome tag they would be
+    // indistinguishable in the data -- the same contamination that made the
+    // withdrawn "bank builds take 0.0s" figure wrong.
+    const recorded: Array<{ outcome: string; calls: number }> = [];
+    const capture = async (ctx: { outcome: string; generateCallCount: number }) => {
+      recorded.push({ outcome: ctx.outcome, calls: ctx.generateCallCount });
+    };
+    await runBuildWithMetrics('u1', async () => noteOutcome('carry_forward'), capture);
+    await runBuildWithMetrics('u2', async () => undefined, capture);
+
+    expect(recorded).toEqual([
+      { outcome: 'carry_forward', calls: 0 },
+      { outcome: 'built', calls: 0 },
+    ]);
   });
 });
