@@ -33,9 +33,33 @@ schema change to a live database as a side effect of starting up.
 - **User impact: none.** No application code reads `DailyQueue.target_size`
   (re-verified 2026-09-04); production was running the old code against a
   slightly newer schema, which is benign. `DailyBuildMetric` remained empty.
-- **Not dormant.** Production was actively serving: 10 queues, 80 answers, and
-  5 distinct users in the trailing week. A destructive migration on the same
-  path would not have been recoverable.
+- **Not dormant.** Production is actively serving: 10 Daily Five queues built
+  in the trailing week, 2 in the last 24 hours, most recent 2026-09-04 17:05
+  UTC. A destructive migration on the same path would not have been
+  recoverable.
+
+## Two DDL paths, not one
+
+`register()` writes schema along **two independent routes**, and the incident
+review initially accounted for only one:
+
+1. the **~70 idempotent boot guards** (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE
+   IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`) — **unjournalled**, and they
+   run **before** `migrate()`; and
+2. **`migrate()`** — journalled.
+
+`SKIP_BOOT_DB_GUARDS` is set only in production. The incident boot was a *dev*
+process pointed at production, so the flag was unset and **the guard chain
+executed DDL against the production database**, ahead of `migrate()`.
+
+Which route actually created the 0136 columns is **not recoverable**: both use
+identical `IF NOT EXISTS` DDL — including the same partial index predicate — so
+the live schema cannot discriminate, and the guard block was uncommitted at the
+time of the boot. What is certain is that `migrate()` ran (the ledger row and
+the backfill `UPDATE` exist only there), and that the guard chain ran too.
+
+This split is why "what actually applied?" was hard to answer. Unifying the two
+routes is a larger change; the guard below covers **both**.
 
 ## Why it was not caught
 
@@ -46,14 +70,23 @@ none of it was the thing that mattered.
 
 ## Fix
 
-`src/server/db/migrate-safety.ts` — `decideBootMigrate()` gates the boot
-`migrate()` call. A boot may auto-apply migrations only when one of:
+`src/server/db/migrate-safety.ts` — `decideBootSchemaWrite()` gates the entire
+schema-writing phase, positioned **above the guard chain** so it covers both
+routes. A boot may write schema only when one of:
 
 | condition | rationale |
 |---|---|
 | target host is loopback | a developer's own database |
-| `VERCEL` is set | a real deploy; production must migrate exactly as before |
-| `ALLOW_REMOTE_BOOT_MIGRATE=1` | deliberate, per-run, explicit |
+| `VERCEL_ENV === 'production'` | a production deploy; must migrate exactly as before |
+| `ALLOW_REMOTE_BOOT_MIGRATE=1` | deliberate, per-run, explicit — and logged loudly |
+
+**Not** the presence of `VERCEL`: that variable is set on *every* Vercel
+deployment including previews. Keying on it would let any branch that receives a
+preview deploy write schema to whatever `DATABASE_URL` that environment
+resolves to — the same incident, sourced from CI instead of a laptop, and
+permitted by the guard. Previews now need the explicit override, set once as a
+Preview-scoped variable: a deliberate act visible in the dashboard rather than
+an accident of branch naming.
 
 Otherwise it **warns and skips the migrate** — the app still boots and serves
 requests; only the automatic schema change is withheld. It deliberately does
@@ -95,6 +128,12 @@ forward.
 - [ ] Deliver `0137` by a deliberate path (`npm run db:migrate` or a deploy),
       **not** by another boot — the broken mechanism must not deliver the fix
       for what the broken mechanism did.
+- [ ] **If preview deployments have their own database**, set
+      `ALLOW_REMOTE_BOOT_MIGRATE=1` on the Preview environment in Vercel, or
+      previews will stop auto-migrating and drift. If previews share the
+      production string, leave it unset — that is the hole this closes.
+- [ ] Consider unifying the two DDL routes so schema reaches the database only
+      through the journal. The guard covers both today; it does not merge them.
 - [ ] Consider separating local and production credentials entirely, so a dev
       environment cannot reach production at all. Strictly stronger than this
       guard, and larger than one change.
