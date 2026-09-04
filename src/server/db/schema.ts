@@ -30,10 +30,6 @@ const createdAt = (name = 'created_at') =>
 const updatedAt = (name = 'updated_at') =>
   timestamp(name, { withTimezone: true }).notNull().defaultNow();
 const textArrayDefault = sql`ARRAY[]::text[]`;
-// Mirrors DAILY_QUEUE_SIZE in src/server/daily/types.ts. Duplicated as a literal
-// rather than imported because schema.ts must stay free of runtime imports from
-// the server tree; the two are asserted equal in the A0 build-context tests.
-const DAILY_QUEUE_TARGET_DEFAULT = 5;
 
 export const categoryEnum = pgEnum('Category', [
   'music',
@@ -1135,7 +1131,14 @@ export const dailyQueues = pgTable(
     // Invariant for A2: target_size may only be LOWERED at the final write, and
     // never after build_completed_at is set, so a mid-session player is never
     // silently moved to a shorter round.
-    targetSize: integer('target_size').notNull().default(DAILY_QUEUE_TARGET_DEFAULT),
+    // NULLABLE and WITHOUT a default, deliberately (0137). `NOT NULL DEFAULT 5`
+    // made an unwritten target_size indistinguishable from a deliberate one --
+    // a build landing short would silently carry 5 and strand the player. NULL
+    // means "unknown, do not judge completeness from this"; every historical
+    // row is NULL because core and bonus slots cannot be reliably separated
+    // retroactively. The writer is code A1 / the bonus deferral still has to
+    // add, at persist, from the core count the builder already holds.
+    targetSize: integer('target_size'),
     // NULL = still building. Backfilled to created_at for every pre-existing
     // row, so they all read as complete at their current size.
     buildCompletedAt: timestamp('build_completed_at', { withTimezone: true }),

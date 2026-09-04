@@ -1,0 +1,50 @@
+-- Corrects DailyQueue.target_size semantics (Track A, A0a).
+--
+-- WHAT WENT WRONG. Migration 0136 backfilled
+--   target_size = GREATEST(1, jsonb_array_length(slots))
+-- which counts EVERY slot. But a Daily Five queue is five CORE slots plus up
+-- to two optional "+2" bonus slots (and additive return slots), so the modal
+-- 7-slot queue was written as target_size = 7. Under the intended completeness
+-- rule (answered >= target_size) a player who answered all five core questions
+-- would read as INCOMPLETE -- the same class of defect as
+-- B-DAILY-PARTIAL-QUEUE-01, arriving through the very column added to prevent
+-- it. Measured on the live database: 148 rows had target_size > 5.
+--
+-- No live harm occurred: nothing reads target_size yet (A1 is the first
+-- reader). 0136 is left ALONE rather than edited, because it has already been
+-- applied -- editing an applied migration diverges the journal from the
+-- applied state and Drizzle will not reconcile that.
+--
+-- WHY NULL RATHER THAN A CORRECTED NUMBER. Core and bonus slots are not
+-- reliably distinguishable on historical rows: the type comment says bonus
+-- slots are marked by the presence of certain fields, but that comment is
+-- already known to contradict observed behaviour, and the positional fallback
+-- (slot_index < 5) breaks precisely on skip-extended queues -- the rows the
+-- skip rule most needs to get right. LEAST(5, ...) would be that unsafe
+-- heuristic wearing a different hat: quietly wrong instead of visibly unknown.
+-- So historical rows are set to NULL, meaning "unknown -- do not judge
+-- completeness from this", and A1 must treat NULL as unknown rather than as
+-- incomplete.
+--
+-- WHY THE DEFAULT IS DROPPED. `NOT NULL DEFAULT 5` made an UNWRITTEN
+-- target_size indistinguishable from a deliberate one: a build that landed
+-- short (3 core slots) would silently carry target_size = 5 and strand the
+-- player just as surely. Dropping the default makes the absence visible, which
+-- matters because nothing writes this column yet -- the write is code A1/the
+-- bonus deferral still has to add, at persist, from the core count the builder
+-- already has.
+--
+-- Rollback:
+--   UPDATE "DailyQueue" SET "target_size" = GREATEST(1, jsonb_array_length("slots"))
+--     WHERE "target_size" IS NULL;
+--   ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" SET DEFAULT 5;
+--   ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" SET NOT NULL;
+
+ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" DROP DEFAULT;
+--> statement-breakpoint
+ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" DROP NOT NULL;
+--> statement-breakpoint
+-- Clear every value 0136 wrote. All of them were derived from the same
+-- all-slots expression, so none can be trusted -- including the ones that
+-- happen to equal 5, which are only correct by coincidence of queue length.
+UPDATE "DailyQueue" SET "target_size" = NULL;

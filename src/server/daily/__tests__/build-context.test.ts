@@ -127,9 +127,11 @@ describe('build correlation context (A0)', () => {
     expect(ctx.bankAttempts[1]!.missReason).toBe('no_stock');
   });
 
-  it('the schema default for target_size matches DAILY_QUEUE_SIZE', () => {
-    // schema.ts duplicates this as a literal (it must stay free of server-tree
-    // runtime imports); this is the assertion that keeps the two in step.
+  it('DAILY_QUEUE_SIZE is the core-slot count the target must be written from', () => {
+    // target_size no longer carries a schema DEFAULT (0137): an unwritten value
+    // must be visibly NULL rather than a plausible 5, because a build landing
+    // short would otherwise strand the player. This is the number the writer
+    // has to derive from at persist -- core slots, never slots.length.
     expect(DAILY_QUEUE_SIZE).toBe(5);
   });
 

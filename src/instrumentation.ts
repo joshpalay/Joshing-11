@@ -2666,6 +2666,20 @@ export async function register() {
         // User / DailyQueue / LlmUsageEvent may not exist yet on a fresh
         // database -- migrate() creates them in normal order.
       }
+
+      // Migration 0137 corrects DailyQueue.target_size semantics. 0136
+      // backfilled it from ALL slots, so the modal 5-core-plus-2-bonus queue
+      // was written as 7 -- which would have read a player who answered all
+      // five core questions as INCOMPLETE. Historical rows go to NULL
+      // ("unknown"), and the NOT NULL/DEFAULT 5 pair is dropped so an
+      // UNWRITTEN target_size is visible rather than silently plausible.
+      try {
+        await db.execute(sql`ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" DROP DEFAULT`);
+        await db.execute(sql`ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" DROP NOT NULL`);
+        await db.execute(sql`UPDATE "DailyQueue" SET "target_size" = NULL WHERE "target_size" IS NOT NULL`);
+      } catch {
+        // DailyQueue may not exist yet on a fresh database.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
