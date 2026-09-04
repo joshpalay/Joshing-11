@@ -2613,6 +2613,59 @@ export async function register() {
         // User table may not exist yet on a fresh database — migrate()
         // creates it before this migration runs.
       }
+
+      // Migration 0136 (A0) adds Daily Five build instrumentation: a build
+      // correlation id on LlmUsageEvent, the inert target_size /
+      // build_completed_at columns on DailyQueue, and the DailyBuildMetric
+      // table. All additive and observational -- nothing reads the DailyQueue
+      // columns until A1/A2 -- but a recorded-but-absent migration would 500
+      // every queue build on the metric insert.
+      try {
+        await db.execute(sql`ALTER TABLE "LlmUsageEvent" ADD COLUMN IF NOT EXISTS "build_id" text`);
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "LlmUsageEvent_build_id_idx" ON "LlmUsageEvent" ("build_id") WHERE "build_id" IS NOT NULL`,
+        );
+        await db.execute(
+          sql`ALTER TABLE "DailyQueue" ADD COLUMN IF NOT EXISTS "target_size" integer NOT NULL DEFAULT 5`,
+        );
+        await db.execute(
+          sql`ALTER TABLE "DailyQueue" ADD COLUMN IF NOT EXISTS "build_completed_at" timestamp with time zone`,
+        );
+        await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DailyBuildMetric" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "build_id" text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "started_at" timestamp with time zone NOT NULL,
+          "completed_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "span_ms" integer NOT NULL,
+          "round_count" integer NOT NULL DEFAULT 0,
+          "generate_call_count" integer NOT NULL DEFAULT 0,
+          "rounds" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "bank_hit_count" integer NOT NULL DEFAULT 0,
+          "bank_miss_count" integer NOT NULL DEFAULT 0,
+          "bank_attempts" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "gated_floor_reached_ms" integer,
+          "target_size" integer NOT NULL,
+          "final_size" integer NOT NULL,
+          "aborted" boolean NOT NULL DEFAULT false,
+          "outcome" text NOT NULL DEFAULT 'ok'
+        )
+      `);
+        await db.execute(sql`ALTER TABLE "DailyBuildMetric" ENABLE ROW LEVEL SECURITY`);
+        await db.execute(
+          sql`CREATE UNIQUE INDEX IF NOT EXISTS "DailyBuildMetric_build_id_key" ON "DailyBuildMetric" ("build_id")`,
+        );
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "DailyBuildMetric_user_id_idx" ON "DailyBuildMetric" ("user_id")`,
+        );
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "DailyBuildMetric_completed_at_idx" ON "DailyBuildMetric" ("completed_at")`,
+        );
+      } catch {
+        // User / DailyQueue / LlmUsageEvent may not exist yet on a fresh
+        // database -- migrate() creates them in normal order.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
