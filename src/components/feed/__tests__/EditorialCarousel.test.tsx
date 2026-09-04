@@ -90,7 +90,7 @@ describe('CommonGroundFeature carousel', () => {
     ],
   };
 
-  it('renders a slide per friend plus a final "Invite someone" slide linking to /friends/find', () => {
+  it('renders a slide per friend plus a final "Invite someone" slide linking to /friends', () => {
     const html = renderToStaticMarkup(<CommonGroundFeature embed={embed} />);
     // Each friend slide shows the friend's name and their shared areas — both of
     // Sadie's, Theo's single one.
@@ -101,7 +101,7 @@ describe('CommonGroundFeature carousel', () => {
     expect(html).toContain('Bikini Bottom');
     expect(html).toContain('href="/users/theo"');
     expect(html).toContain('Invite someone');
-    expect(html).toContain('href="/friends/find"');
+    expect(html).toContain('href="/friends"');
     // Two friends + invite = three pagination dots: the carousel pages by
     // FRIEND, so Sadie's two areas share one slide rather than adding a fourth.
     const dots = html.match(/aria-label="Go to item \d+ of 3"/g) ?? [];

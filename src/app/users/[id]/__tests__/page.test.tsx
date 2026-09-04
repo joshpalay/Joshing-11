@@ -12,7 +12,6 @@ const {
   getEditableProfileMock,
   getDiscoverabilityMock,
   getReminderStateMock,
-  getOrCreateInviteTokenMock,
   getFriendsMock,
   resolvePreviewAsMock,
   getCommonGroundMock,
@@ -28,7 +27,6 @@ const {
   getEditableProfileMock: vi.fn(),
   getDiscoverabilityMock: vi.fn(),
   getReminderStateMock: vi.fn(),
-  getOrCreateInviteTokenMock: vi.fn(),
   getFriendsMock: vi.fn(async () => []),
   resolvePreviewAsMock: vi.fn(async () => null),
   getCommonGroundMock: vi.fn(),
@@ -92,14 +90,6 @@ vi.mock('@/server/db/queries/friends', () => ({
 
 vi.mock('@/server/profile/preview', () => ({
   resolvePreviewAs: resolvePreviewAsMock,
-}))
-
-vi.mock('@/server/friends/user-invite-token', () => ({
-  getOrCreateInviteToken: getOrCreateInviteTokenMock,
-  getCuratedInviteSeedTopics: async () => [] as string[],
-  buildInviteUrl: (baseUrl: string, handle: string, token: string) =>
-    `${baseUrl}/u/${handle}/${token}`,
-  getBaseUrl: () => 'https://example.com',
 }))
 
 vi.mock('next/headers', () => ({
@@ -173,7 +163,6 @@ describe('/users/[id] friend profile page', () => {
     getEditableProfileMock.mockResolvedValue(null)
     getDiscoverabilityMock.mockResolvedValue(null)
     getReminderStateMock.mockResolvedValue(null)
-    getOrCreateInviteTokenMock.mockResolvedValue(null)
     getFriendPortraitDataMock.mockResolvedValue({
       user: {
         id: 'friend-1',
@@ -502,10 +491,6 @@ describe('/users/[id] friend profile page', () => {
       pendingEmail: null,
       emailVerified: false,
     })
-    getOrCreateInviteTokenMock.mockResolvedValueOnce({
-      handle: 'owner',
-      token: 'invite-token-abc',
-    })
     getFriendPortraitDataMock.mockResolvedValueOnce({
       user: {
         id: 'self-1',
@@ -552,7 +537,10 @@ describe('/users/[id] friend profile page', () => {
     expect(html).toContain('Delete account')
     expect(html).toContain('id="privacy-discovery"')
     expect(html).toContain('id="notifications"')
-    expect(html).toContain('Your invite link')
+    // Invite-link creation/tagging/deletion moved to the consolidated Friends
+    // page (B-FRIENDS-INVITE-LINKS-01) — PrivacyForm just points there now.
+    expect(html).toContain('Invite links')
+    expect(html).toContain('href="/friends"')
     expect(html).not.toContain('href="/account"')
     expect(html).not.toContain('href="/account/')
   })
@@ -580,10 +568,6 @@ describe('/users/[id] friend profile page', () => {
         email: null,
         pendingEmail: null,
         emailVerified: false,
-      })
-      getOrCreateInviteTokenMock.mockResolvedValueOnce({
-        handle: 'owner',
-        token: 'invite-token-abc',
       })
       getFriendPortraitDataMock.mockResolvedValueOnce({
         user: {

@@ -8,7 +8,7 @@
  *   1. `suggestions` — contact-match people the viewer can follow, each with an
  *      Add affordance.
  *   2. `invite` — when there are no addable matches, a copy-only nudge toward
- *      /friends/find.
+ *      /friends.
  *
  * HOME-ONLY: assembled here, not in buildActivityStream, so /activities and
  * Lately stay free of the promo. Stateless — no per-user counter.
@@ -22,7 +22,7 @@ import {
 import { listContactMatches } from '@/server/db/queries/contact-hashes';
 
 const MAX_SUGGESTIONS = 3;
-const FRIENDS_FIND_HREF = '/friends/find';
+const FRIENDS_HREF = '/friends';
 
 export async function getAddFriendsPromo(
   userId: string,
@@ -53,7 +53,7 @@ export async function getAddFriendsPromo(
     const embed: Extract<StreamEmbed, { kind: 'add_friends'; variant: 'suggestions' }> = {
       kind: 'add_friends',
       variant: 'suggestions',
-      href: FRIENDS_FIND_HREF,
+      href: FRIENDS_HREF,
       people,
       // Rotate the headline by the day seed (Pool 4); eyebrow / CTA stay fixed.
       headlineIndex: daySeed,
@@ -65,7 +65,7 @@ export async function getAddFriendsPromo(
   const embed: Extract<StreamEmbed, { kind: 'add_friends'; variant: 'invite' }> = {
     kind: 'add_friends',
     variant: 'invite',
-    href: FRIENDS_FIND_HREF,
+    href: FRIENDS_HREF,
     headlineIndex: daySeed,
   };
   return addFriendsPromoToStreamItem(embed, now, `add-friends-invite-${daySeed}`);

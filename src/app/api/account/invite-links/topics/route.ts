@@ -5,6 +5,7 @@ import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity'
 import { getSession } from '@/server/auth/session'
 import {
   getCuratedInviteSeedTopics,
+  getInviteLinkSeedTopics,
   setCuratedInviteSeedTopics,
 } from '@/server/friends/user-invite-token'
 
@@ -16,11 +17,16 @@ const bodySchema = z.object({
   topics: z.array(z.string().trim().min(1).max(80)).max(SEED_TOPIC_CAP),
 })
 
+// Returns the RESOLVED set — curated if the caller has one, otherwise the
+// automatic fallback (getInviteLinkSeedTopics) — so the Friends page's link
+// creation panel always shows what an untagged link actually carries right
+// now, prefilled and ready to swap. The first edit (any add/remove) persists
+// that resolution as an explicit curated set via PATCH below.
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const topics = await getCuratedInviteSeedTopics(session.userId)
+  const topics = await getInviteLinkSeedTopics(session.userId)
   return NextResponse.json({ topics })
 }
 
@@ -53,6 +59,6 @@ export async function PATCH(request: Request) {
   }
 
   await setCuratedInviteSeedTopics(session.userId, parsed.data.topics)
-  const topics = await getCuratedInviteSeedTopics(session.userId)
-  return NextResponse.json({ topics })
+  const curated = await getCuratedInviteSeedTopics(session.userId)
+  return NextResponse.json({ topics: curated.map((label) => ({ label })) })
 }

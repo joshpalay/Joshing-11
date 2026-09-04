@@ -2556,6 +2556,63 @@ export async function register() {
         // Fresh databases may not have User/Question/GeneratedQuestion yet —
         // migrate() creates them all in normal migration order.
       }
+
+      // Migration 0135 adds UserInviteLink (up to 3 named invite links per
+      // user, replacing the single evergreen users.invite_token) and
+      // users.joined_via_invite_link_id. Both /u/<handle>/<token> resolution
+      // and the Friends page's link list read UserInviteLink directly, so a
+      // recorded-but-absent migration would 42P01 on the next request to
+      // either. Self-contained; precedent: 0131's HiddenQuestion guard above.
+      try {
+        await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "UserInviteLink" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "token" text NOT NULL,
+          "slot" integer NOT NULL DEFAULT 0,
+          "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "deleted_at" timestamp with time zone
+        )
+      `);
+        await db.execute(sql`ALTER TABLE "UserInviteLink" ENABLE ROW LEVEL SECURITY`);
+        await db.execute(
+          sql`CREATE UNIQUE INDEX IF NOT EXISTS "UserInviteLink_token_key" ON "UserInviteLink" ("token")`,
+        );
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "UserInviteLink_user_id_idx" ON "UserInviteLink" ("user_id")`,
+        );
+        await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "UserInviteLink_user_id_slot_live_key"
+          ON "UserInviteLink" ("user_id", "slot")
+          WHERE "slot" <> 0 AND "deleted_at" IS NULL
+      `);
+        await db.execute(sql`
+        DO $$ BEGIN
+          ALTER TABLE "UserInviteLink"
+            ADD CONSTRAINT "UserInviteLink_slot_range" CHECK ("slot" BETWEEN 0 AND 3);
+        EXCEPTION
+          WHEN duplicate_object THEN null;
+        END $$
+      `);
+        await db.execute(sql`
+        ALTER TABLE "User"
+          ADD COLUMN IF NOT EXISTS "joined_via_invite_link_id" text
+            REFERENCES "UserInviteLink"("id")
+      `);
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "User_joined_via_invite_link_id_idx" ON "User" ("joined_via_invite_link_id")`,
+        );
+        await db.execute(sql`
+        INSERT INTO "UserInviteLink" ("id", "user_id", "token", "slot", "created_at")
+        SELECT gen_random_uuid()::text, "id", "invite_token", 0, COALESCE("created_at", now())
+        FROM "User"
+        WHERE "invite_token" IS NOT NULL
+        ON CONFLICT ("token") DO NOTHING
+      `);
+      } catch {
+        // User table may not exist yet on a fresh database — migrate()
+        // creates it before this migration runs.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

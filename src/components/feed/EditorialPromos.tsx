@@ -63,7 +63,7 @@ const COMMON_GROUND_HEADLINES = [
 // The closing carousel slide isn't a friend — it nudges toward widening the
 // circle — so the headline and CTA shift to match it instead of naming a friend.
 const COMMON_GROUND_INVITE_HEADLINE = 'There’s more ground to share.';
-const COMMON_GROUND_INVITE_HREF = '/friends/find';
+const COMMON_GROUND_INVITE_HREF = '/friends';
 
 function rotate<T>(pool: readonly T[], index: number | undefined): T {
   return pool[(index ?? 0) % pool.length]!;
@@ -189,7 +189,7 @@ export function CommonGroundFeature({
 /**
  * "Grow Your Circle" — either a few contact-match people the viewer can follow
  * inline (suggestions), or, when there's no one to suggest, a decorative invite
- * nudge toward /friends/find.
+ * nudge toward /friends.
  */
 export function GrowYourCircleFeature({
   embed,

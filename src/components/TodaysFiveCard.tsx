@@ -411,10 +411,10 @@ export default function TodaysFiveCard({
           // questions done). This is the calmest completed state, so it carries
           // no button: the day's work is finished. All three nudges sit on one
           // quiet link row (wraps on narrow widths) — Find friends routes to the
-          // canonical /friends/find destination ("Find friends →" elsewhere).
+          // canonical /friends destination ("Find friends →" elsewhere).
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
             <Link
-              href="/friends/find"
+              href="/friends"
               className="text-[var(--brand-link)] underline underline-offset-4 transition-colors hover:text-[var(--brand-ink)]"
             >
               Find friends →

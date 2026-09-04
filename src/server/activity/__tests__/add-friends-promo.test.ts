@@ -49,7 +49,7 @@ describe('getAddFriendsPromo', () => {
     expect(embed.variant).toBe('suggestions');
     if (embed.variant !== 'suggestions') throw new Error('expected suggestions variant');
     expect(embed.people.map((p) => p.id)).toEqual(['a', 'b', 'd']);
-    expect(embed.href).toBe('/friends/find');
+    expect(embed.href).toBe('/friends');
   });
 
   it('falls back to the invite nudge when shown but no match is addable', async () => {

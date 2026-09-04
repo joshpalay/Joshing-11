@@ -1,6 +1,5 @@
 import { Brain, Flag, Globe, type LucideIcon, Pencil, RotateCcw, Users as UsersIcon } from 'lucide-react';
 import Link from 'next/link';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard';
@@ -40,12 +39,6 @@ import { getAuthoredQuestionsForUser } from '@/server/db/queries/questions';
 import { getFriendPortraitData } from '@/server/profile/friend';
 import { toKnowledgeCardDomain, topPointPositiveDomains } from '@/server/profile/knowledge-view';
 import { resolvePreviewAs } from '@/server/profile/preview';
-import {
-  buildInviteUrl,
-  getBaseUrl,
-  getCuratedInviteSeedTopics,
-  getOrCreateInviteToken,
-} from '@/server/friends/user-invite-token';
 
 const APP_VERSION = 'v1.0.0';
 
@@ -142,8 +135,6 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     editableProfile,
     discoverability,
     reminderState,
-    inviteTokenResult,
-    curatedInviteSeedTopics,
   ] = await Promise.all([
     getUserMasteryOverview(portrait.user.id),
     getKnowledgePageData(portrait.user.id),
@@ -176,19 +167,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
     // variants to avoid pointless queries.
     isOwnerView ? getDiscoverability(session.userId) : Promise.resolve(null),
     isOwnerView ? getReminderState(session.userId) : Promise.resolve(null),
-    isOwnerView ? getOrCreateInviteToken(session.userId) : Promise.resolve(null),
-    isOwnerView ? getCuratedInviteSeedTopics(session.userId) : Promise.resolve([]),
   ]);
-
-  let inviteUrl: string | null = null;
-  if (isOwnerView && inviteTokenResult?.handle) {
-    const requestHeaders = await headers();
-    inviteUrl = buildInviteUrl(
-      getBaseUrl(requestHeaders),
-      inviteTokenResult.handle,
-      inviteTokenResult.token,
-    );
-  }
 
   const sortedDomains = [...pageData.allDomains].sort(
     (a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName),
@@ -315,8 +294,6 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
           </p>
           <PrivacyForm
             initialState={discoverability}
-            initialInviteUrl={inviteUrl}
-            initialSeedTopics={curatedInviteSeedTopics}
           />
         </section>
 

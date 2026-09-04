@@ -261,16 +261,9 @@ export function AccountActions({
         {
           kind: 'link',
           icon: <UserPlus className="size-5" />,
-          title: 'Invite someone',
-          subtitle: 'Friends hub: Share invite link is now the primary action',
+          title: 'Friends',
+          subtitle: 'Find friends, suggestions, and up-to-3 tagged invite links, in one page',
           href: '/friends',
-        },
-        {
-          kind: 'link',
-          icon: <UserPlus className="size-5" />,
-          title: 'Find friends',
-          subtitle: 'Same invite block, plus the invite-reflection list',
-          href: '/friends/find',
         },
       ],
     },
