@@ -22,4 +22,13 @@ describe('getOtpBypassCodeForPhone', () => {
     expect(getOtpBypassCodeForPhone('+15551234567')).toBe('654321');
     expect(getOtpBypassCodeForPhone('+15557654321')).toBeNull();
   });
+
+  it('accepts a comma-separated list of allowlisted phones sharing one code', () => {
+    vi.stubEnv('AUTH_OTP_BYPASS_PHONE', '+15551111111, (555) 222-2222');
+    vi.stubEnv('AUTH_OTP_BYPASS_CODE', '000000');
+
+    expect(getOtpBypassCodeForPhone('+15551111111')).toBe('000000');
+    expect(getOtpBypassCodeForPhone('+15552222222')).toBe('000000');
+    expect(getOtpBypassCodeForPhone('+15553333333')).toBeNull();
+  });
 });
