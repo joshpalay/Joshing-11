@@ -100,6 +100,7 @@ import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
 import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 import { enrichAcceptableVariants, mergeVariants } from './enrich-variants';
+import { noteBankAttempt, noteGenerateCall } from '@/server/daily/build-context';
 
 // Cap the recent question-text block at this many entries inside the prompt.
 // The full recent history (up to 200) is still used to derive the fact-key
@@ -1502,6 +1503,7 @@ async function callLlmOnce(
   // on purpose — claude-haiku-4-5's minimum cacheable prefix is 4096 tokens
   // and every gate system prompt (even the exemplar-bearing quality gate at
   // ~2k) is under it, so a marker would be a silent no-op.
+  noteGenerateCall();
   const response = await loggedMessagesCreate(client, 'generate-questions', {
     model: ANTHROPIC_MODEL,
     max_tokens: 2000,
@@ -2890,6 +2892,19 @@ async function pickBankPicksForDomains(
       tierRequested: difficulty,
       tierServed: source ? servedTier : null,
       fallbackUsed: Boolean(source) && servedTier !== difficulty,
+    });
+    // A0: the same signal, made queryable. Topic-level bank COVERAGE is ~82%
+    // (71 of 87 declared topics have >=3 verified questions) yet only ~11% of
+    // builds avoid generation entirely -- something eats the difference. The
+    // two candidates are the difficulty-tier match and the uncapped per-viewer
+    // answered-fact exclusion; missReason is what separates them, and neither
+    // is knowable from the database today.
+    noteBankAttempt({
+      domain,
+      outcome: source ? 'hit' : 'miss',
+      missReason: source ? null : ladder.length > 1 ? 'tier' : 'no_stock',
+      tierRequested: difficulty,
+      tierServed: source ? servedTier : null,
     });
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;

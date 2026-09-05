@@ -387,7 +387,7 @@ async function hydrateMasteryEvents(items: ActivityItemRow[]) {
   // every distinct (user, domain) pair these events reference in a single query
   // rather than one round-trip per event (the old N+1 fired up to one query per
   // activity item against PlayerMastery on the home-page render path).
-  const pairKey = (userId: string, domain: string) => `${userId} ${domain}`;
+  const pairKey = (userId: string, domain: string) => `${userId}\u0000${domain}`;
   const distinctPairs = new Map<string, { userId: string; domain: string }>();
   for (const row of rows) {
     distinctPairs.set(pairKey(row.userId, row.domain), { userId: row.userId, domain: row.domain });

@@ -94,8 +94,11 @@ describe('skip replacements are core, not additive', () => {
     // neither presence_source_id nor return_scope, so getCoreSlots classifies
     // it as CORE. This is what preserves the original 2026-05-28 fix: a
     // skip-extended queue is not complete until the replacement is resolved.
-    // If a replacement ever starts carrying a marker, this test fails and the
-    // skip-extension guarantee is silently gone.
+    // IF THIS TEST FAILS, IT IS NOT A TEST PROBLEM. It means a skip
+    // replacement has acquired an additive marker, and completeness
+    // semantics just changed for every skip-extended queue: players will
+    // finish rounds without resolving their replacements. Fix the writer,
+    // or change this deliberately and say so.
     const slots = [
       ...[0, 1, 2, 3].map((i) => core(i, { answered: true })),
       core(4, { skipped: true }),

@@ -60,6 +60,15 @@ import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { verifyGateThinDeclared } from '@/server/daily/verify-gate-thin';
 import { commitPendingRefineDecisions } from '@/server/refine/commit';
 import { logLatency } from '@/server/telemetry';
+import {
+  noteFinalSize,
+  noteGatedFloorReached,
+  noteOutcome,
+  noteQueuePersisted,
+  noteRound,
+  runBuildWithMetrics,
+} from '@/server/daily/build-context';
+import { recordDailyBuildMetric } from '@/server/db/queries/daily-build-metrics';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
@@ -162,6 +171,12 @@ const hasBudgetForAnotherRound = (elapsedMs: number, budgetMs: number) =>
 // this keeps a tapped-out knowledge base from burning the whole time budget (and
 // LLM spend) on rounds that can never reach the target.
 const MAX_TOP_UP_ROUNDS = 4;
+
+// Mirrors GENERATION_CHUNK_SIZE in generate-questions.ts. Used only to record
+// how many parallel chunks a round dispatched (A0 telemetry) — never to decide
+// anything. Kept local rather than imported so telemetry can't couple the
+// orchestrator to the generator's internals.
+const GENERATION_CHUNK_SIZE_HINT = 3;
 
 // The generator's quality/factual/history-dedup gates routinely drop ~half (and
 // for some niche or deep-history domains far more) of each batch. Requesting
@@ -330,7 +345,21 @@ export function fillDailyQueueForUser(
     ? BACKGROUND_DURATION_BUDGET_MS
     : FUNCTION_DURATION_BUDGET_MS;
 
-  const promise = buildDailyQueueForUser(userId, durationBudgetMs).finally(() => {
+  // A0: every LLM call made anywhere inside this build inherits one correlation
+  // id via AsyncLocalStorage, and the build records its OWN wall clock. Both
+  // exist so build spans never have to be reconstructed by clustering
+  // LlmUsageEvent rows on time again — an approach that produced three separate
+  // measurement errors. Purely observational: nothing here changes what is
+  // generated or served.
+  const promise = runBuildWithMetrics(
+    userId,
+    () => buildDailyQueueForUser(userId, durationBudgetMs),
+    (ctx) => recordDailyBuildMetric(ctx),
+    (error) =>
+      error instanceof DailyQueueFillError && error.code === 'no_knowledge_base'
+        ? 'no_knowledge_base'
+        : 'error',
+  ).finally(() => {
     // Clear on settle (success OR failure) so the next genuine build for this
     // user isn't blocked by a stale entry — a rejected build must be retryable.
     inFlightFills.delete(userId);
@@ -365,7 +394,10 @@ async function buildDailyQueueForUser(
     // TodayQueue drops only that case (a short queue actually built today is
     // left alone so we don't re-bill the LLM on every load) and lets us fall
     // through to regenerate a fresh, full set.
-    if (!(await clearStaleShortTodayQueue(userId))) return;
+    if (!(await clearStaleShortTodayQueue(userId))) {
+      noteOutcome('existing_queue');
+      return;
+    }
   }
 
   // Before billing the LLM for a new set, roll a previous *unplayed* queue
@@ -374,14 +406,20 @@ async function buildDailyQueueForUser(
   // generation every day for questions they never opened. Their last queue is
   // still sitting unplayed; re-dating it gives them the same five at zero cost.
   // A played prior queue is left alone, so engaged users still get a fresh set.
-  if (await carryForwardUntouchedDailyQueue(userId)) return;
+  if (await carryForwardUntouchedDailyQueue(userId)) {
+    noteOutcome('carry_forward');
+    return;
+  }
 
   // Before billing a full fresh build, top-up-carry-forward a PARTIAL/SHORT prior
   // unplayed queue: keep the unplayed questions, generate only the shortfall to
   // refill to five. carryForwardUntouchedDailyQueue above only handles a fully
   // untouched set; this covers "they played some / got a short set yesterday but
   // still have unplayed questions — don't regenerate from scratch" (flag-gated).
-  if (await topUpAndCarryForwardPartialQueue(userId)) return;
+  if (await topUpAndCarryForwardPartialQueue(userId)) {
+    noteOutcome('partial_carry_forward');
+    return;
+  }
 
   const [knowledgeBase, preferences, excludedDomains] = await Promise.all([
     getKnowledgeBase(userId),
@@ -777,6 +815,19 @@ async function buildDailyQueueForUser(
   // signal that this knowledge base is tapped out for today.
   const topUpGenerated: typeof dedupedGenerated = [];
   let topUpRounds = 0;
+  // A0 counterfactual: stamp the moment GATED slots first reach the playable
+  // floor, measured against in-memory assembly rather than the write. Under
+  // A0/A1 the write happens once at the end, so deriving this from the write
+  // would make it identical to the final span by construction — the same
+  // circularity as the withdrawn "bank builds take 0.0s" figure. This is the
+  // only honest input to "what would write-at-3 have bought?".
+  const stampFloorIfReached = () => {
+    if (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length >=
+        DAILY_QUEUE_MIN_SIZE) {
+      noteGatedFloorReached();
+    }
+  };
+  stampFloorIfReached();
   while (
     DAILY_QUEUE_SIZE -
       (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length) >
@@ -785,6 +836,7 @@ async function buildDailyQueueForUser(
     hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)
   ) {
     topUpRounds += 1;
+    const roundStartedAt = Date.now();
     const roundShortfall =
       DAILY_QUEUE_SIZE -
       (authored.length + housePicks.length + dedupedGenerated.length + topUpGenerated.length);
@@ -853,6 +905,20 @@ async function buildDailyQueueForUser(
       topUpGenerated.push(question);
       recoveredThisRound += 1;
     }
+    // A0: close this round's span and re-check the playable floor. Round count
+    // is recorded alongside call count because the two disagree about what
+    // drives wall clock — chunks run in PARALLEL (GENERATION_CHUNK_SIZE = 3)
+    // while rounds are separated by a sequential gate chain, so a 9-call single
+    // round can finish faster than 5 calls spread over three rounds. Recording
+    // both lets that be regressed rather than argued.
+    noteRound({
+      round: topUpRounds,
+      phase: 'core',
+      generationMs: Date.now() - roundStartedAt,
+      gateMs: 0,
+      chunks: Math.ceil(overRequest(roundShortfall) / GENERATION_CHUNK_SIZE_HINT),
+    });
+    stampFloorIfReached();
     if (recoveredThisRound > 0) {
       console.info('[daily/queue-orchestrator] topped up short queue', {
         userId,
@@ -1199,10 +1265,26 @@ async function buildDailyQueueForUser(
       const presenceByDomain = new Map(
         friendDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
       );
+      // A0: time the bonus cycle as its own phase-tagged span. This is the
+      // block the deferral moves off the critical path, so it has to be
+      // measurable on its own BEFORE the move -- otherwise the "what did
+      // deferring buy?" question is answered by comparing across a deploy.
+      // Note it runs here, ahead of persistDailyQueue, which is precisely why
+      // the player waits for it today.
+      const bonusStartedAt = Date.now();
       const generatedFriend = await generateBonusQuestionsForDomains(
         userId,
         friendDomains.map((candidate) => candidate.domain),
       );
+      noteRound({
+        round: 0,
+        phase: 'bonus',
+        generationMs: Date.now() - bonusStartedAt,
+        gateMs: 0,
+        // The bonus path generates per-domain (one call each, sequentially),
+        // so the domain count IS the chunk count here.
+        chunks: friendDomains.length,
+      });
       let promotedToCore = 0;
       let bonusAppended = 0;
       for (const { domain, question } of generatedFriend) {
@@ -1307,7 +1389,14 @@ async function buildDailyQueueForUser(
     });
   }
 
+  // A0: record the size actually persisted, for the build metric.
+  noteFinalSize(slots.length);
   await persistDailyQueue(userId, slots, generatedQuestionIds);
+  // A0 (§2): the queue is now readable — everything after this point is off the
+  // player's critical path. Today the bonus cycle above runs BEFORE this line,
+  // so userVisibleMs ≈ spanMs; the deferral's whole purpose is to move it after,
+  // at which point the two fields diverge by the amount deferral bought.
+  noteQueuePersisted();
 
   // Server timing for the slow path. Logged only when a full build actually ran
   // (the existing-queue / carry-forward early returns above never reach here),

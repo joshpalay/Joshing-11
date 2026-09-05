@@ -1120,6 +1120,28 @@ export const dailyQueues = pgTable(
       .references(() => users.id),
     queueDate: date('queue_date').notNull(),
     slots: jsonb('slots').notNull(),
+    // A0 (0136) — shipped INERT. Nothing reads these yet; A1 writes them when a
+    // build aborts short, and A2 uses them for the append path.
+    //
+    // target_size is the round's DENOMINATOR, deliberately distinct from the
+    // number of rows present. Completion must be `answered >= target_size`,
+    // NEVER `answered >= slots.length` — the latter is what let a 3-slot queue
+    // read as a finished round and produced B-DAILY-PARTIAL-QUEUE-01.
+    //
+    // Invariant for A2: target_size may only be LOWERED at the final write, and
+    // never after build_completed_at is set, so a mid-session player is never
+    // silently moved to a shorter round.
+    // NULLABLE and WITHOUT a default, deliberately (0137). `NOT NULL DEFAULT 5`
+    // made an unwritten target_size indistinguishable from a deliberate one --
+    // a build landing short would silently carry 5 and strand the player. NULL
+    // means "unknown, do not judge completeness from this"; every historical
+    // row is NULL because core and bonus slots cannot be reliably separated
+    // retroactively. The writer is code A1 / the bonus deferral still has to
+    // add, at persist, from the core count the builder already holds.
+    targetSize: integer('target_size'),
+    // NULL = still building. Backfilled to created_at for every pre-existing
+    // row, so they all read as complete at their current size.
+    buildCompletedAt: timestamp('build_completed_at', { withTimezone: true }),
     createdAt: createdAt(),
     // Set when the daily reminder email has been sent for this queue (one row
     // per user/day). Claimed atomically before send so the cron's retry-replay
@@ -2158,11 +2180,101 @@ export const llmUsageEvent = pgTable(
     // so the ledger doesn't over-report batch spend 2x.
     isBatch: boolean('is_batch').notNull().default(false),
     durationMs: integer('duration_ms'),
+    // A0 (0136) — Daily Five build correlation. Set from AsyncLocalStorage
+    // (src/server/daily/build-context.ts) for calls made inside a queue build;
+    // NULL for every other caller (batch verify, crafter drafting, admin
+    // audits). That NULL is load-bearing: it keeps unrelated scopes out of
+    // build statistics without needing a scope allowlist, which is what made
+    // the earlier timestamp-clustering analysis wrong three times.
+    buildId: text('build_id'),
     createdAt: createdAt(),
   },
   (table) => [
     check('LlmUsageEvent_provider_valid', sql`provider IN ('anthropic', 'openai')`),
     index('LlmUsageEvent_provider_created_at_idx').on(table.provider, table.createdAt),
+    // Partial: only build-scoped calls are ever queried this way, and they're a
+    // minority of the table.
+    index('LlmUsageEvent_build_id_idx').on(table.buildId).where(sql`build_id IS NOT NULL`),
+  ],
+);
+
+// A0 (0136) — one row per Daily Five build. Purely observational; nothing reads
+// it in the serving path.
+//
+// It exists because build spans were previously RECONSTRUCTED by clustering
+// LlmUsageEvent rows on time, which was wrong three separate ways (a one-day
+// batch sweep read as build traffic; overlapping lookback windows double-counting
+// the 36% of queues the cron builds back-to-back; and a circular 0.0s for builds
+// that make no LLM calls at all). Every field here is measured by the build
+// itself.
+export const dailyBuildMetrics = pgTable(
+  'DailyBuildMetric',
+  {
+    id: id(),
+    buildId: text('build_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+    // Authoritative wall clock — covers bank-only builds, which have no LLM
+    // events to reconstruct a span from.
+    spanMs: integer('span_ms').notNull(),
+    // The open §2 question: does span track ROUNDS (each separated by ~10s of
+    // sequential gates) or CALLS (which run in parallel chunks of 3)? The 9+
+    // bucket having a LOWER median than 4-8 suggests rounds. Both are recorded
+    // so it can be regressed rather than argued.
+    roundCount: integer('round_count').notNull().default(0),
+    generateCallCount: integer('generate_call_count').notNull().default(0),
+    rounds: jsonb('rounds')
+      .$type<Array<{ round: number; generationMs: number; gateMs: number; chunks: number }>>()
+      .notNull()
+      .default([]),
+    bankHitCount: integer('bank_hit_count').notNull().default(0),
+    bankMissCount: integer('bank_miss_count').notNull().default(0),
+    // The existing [daily/bank-telemetry] console line, made queryable. Answers
+    // which narrower dominates misses (difficulty tier vs the uncapped
+    // per-viewer answered-fact exclusion) and whether coverage decays with
+    // tenure — neither of which is knowable from the DB today.
+    bankAttempts: jsonb('bank_attempts')
+      .$type<
+        Array<{
+          domain: string;
+          outcome: 'hit' | 'miss';
+          missReason: 'tier' | 'fact_history' | 'no_stock' | null;
+          tierRequested: string;
+          tierServed: string | null;
+        }>
+      >()
+      .notNull()
+      .default([]),
+    // Counterfactual for the A2 go/no-go: when IN-MEMORY assembly first crossed
+    // DAILY_QUEUE_MIN_SIZE. Deliberately not derived from the write, which under
+    // A0/A1 happens once at the end and would make this tautological.
+    gatedFloorReachedMs: integer('gated_floor_reached_ms'),
+    /**
+     * Build start -> queue persisted and READABLE. The latency a player waits.
+     *
+     * Distinct from span_ms on purpose (0138). After the bonus deferral the
+     * build still does the bonus work, just off the critical path, so span_ms
+     * will keep reading ~21s and the win would be invisible in the instrument
+     * built to see it. Pre-deferral these are equal; post-deferral they diverge
+     * by exactly what deferral bought, which makes the effect a subtraction
+     * between two columns on ONE row instead of a before/after across a deploy
+     * -- at ~2 queues/day that comparison would be hopelessly confounded.
+     *
+     * NULL when the build never reached persistence.
+     */
+    userVisibleMs: integer('user_visible_ms'),
+    targetSize: integer('target_size').notNull(),
+    finalSize: integer('final_size').notNull(),
+    aborted: boolean('aborted').notNull().default(false),
+    outcome: text('outcome').notNull().default('ok'),
+  },
+  (table) => [
+    uniqueIndex('DailyBuildMetric_build_id_key').on(table.buildId),
+    index('DailyBuildMetric_user_id_idx').on(table.userId),
+    index('DailyBuildMetric_completed_at_idx').on(table.completedAt),
   ],
 );
 

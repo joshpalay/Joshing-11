@@ -1,0 +1,24 @@
+# Binary-source ratchet: fail the PR if any tracked source file contains a NUL
+# byte. Git classifies such files as BINARY, so their diffs render as
+# "Bin N -> M bytes" and every change to them passes through review invisibly —
+# and the exemption is itself invisible, because the thing you'd notice it in is
+# the diff. Five files were in that state on 2026-09-04, all using a raw NUL as
+# a composite map-key separator; the \u0000 escape produces a byte-identical
+# string and keeps the file text. Ceiling is 0 and should stay there.
+# The ceiling lives in scripts/check-binary-sources.mjs.
+name: Binary-source ratchet
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev2]
+
+jobs:
+  binary-sources-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-binary-sources.mjs

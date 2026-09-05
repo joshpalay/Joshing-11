@@ -2663,6 +2663,85 @@ export async function register() {
         // User table may not exist yet on a fresh database — migrate()
         // creates it before this migration runs.
       }
+
+      // Migration 0136 (A0) adds Daily Five build instrumentation: a build
+      // correlation id on LlmUsageEvent, the inert target_size /
+      // build_completed_at columns on DailyQueue, and the DailyBuildMetric
+      // table. All additive and observational -- nothing reads the DailyQueue
+      // columns until A1/A2 -- but a recorded-but-absent migration would 500
+      // every queue build on the metric insert.
+      try {
+        await db.execute(sql`ALTER TABLE "LlmUsageEvent" ADD COLUMN IF NOT EXISTS "build_id" text`);
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "LlmUsageEvent_build_id_idx" ON "LlmUsageEvent" ("build_id") WHERE "build_id" IS NOT NULL`,
+        );
+        await db.execute(
+          sql`ALTER TABLE "DailyQueue" ADD COLUMN IF NOT EXISTS "target_size" integer NOT NULL DEFAULT 5`,
+        );
+        await db.execute(
+          sql`ALTER TABLE "DailyQueue" ADD COLUMN IF NOT EXISTS "build_completed_at" timestamp with time zone`,
+        );
+        await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "DailyBuildMetric" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "build_id" text NOT NULL,
+          "user_id" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "started_at" timestamp with time zone NOT NULL,
+          "completed_at" timestamp with time zone NOT NULL DEFAULT now(),
+          "span_ms" integer NOT NULL,
+          "round_count" integer NOT NULL DEFAULT 0,
+          "generate_call_count" integer NOT NULL DEFAULT 0,
+          "rounds" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "bank_hit_count" integer NOT NULL DEFAULT 0,
+          "bank_miss_count" integer NOT NULL DEFAULT 0,
+          "bank_attempts" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "gated_floor_reached_ms" integer,
+          "target_size" integer NOT NULL,
+          "final_size" integer NOT NULL,
+          "aborted" boolean NOT NULL DEFAULT false,
+          "outcome" text NOT NULL DEFAULT 'ok'
+        )
+      `);
+        await db.execute(sql`ALTER TABLE "DailyBuildMetric" ENABLE ROW LEVEL SECURITY`);
+        await db.execute(
+          sql`CREATE UNIQUE INDEX IF NOT EXISTS "DailyBuildMetric_build_id_key" ON "DailyBuildMetric" ("build_id")`,
+        );
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "DailyBuildMetric_user_id_idx" ON "DailyBuildMetric" ("user_id")`,
+        );
+        await db.execute(
+          sql`CREATE INDEX IF NOT EXISTS "DailyBuildMetric_completed_at_idx" ON "DailyBuildMetric" ("completed_at")`,
+        );
+      } catch {
+        // User / DailyQueue / LlmUsageEvent may not exist yet on a fresh
+        // database -- migrate() creates them in normal order.
+      }
+
+      // Migration 0137 corrects DailyQueue.target_size semantics. 0136
+      // backfilled it from ALL slots, so the modal 5-core-plus-2-bonus queue
+      // was written as 7 -- which would have read a player who answered all
+      // five core questions as INCOMPLETE. Historical rows go to NULL
+      // ("unknown"), and the NOT NULL/DEFAULT 5 pair is dropped so an
+      // UNWRITTEN target_size is visible rather than silently plausible.
+      try {
+        await db.execute(sql`ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" DROP DEFAULT`);
+        await db.execute(sql`ALTER TABLE "DailyQueue" ALTER COLUMN "target_size" DROP NOT NULL`);
+        await db.execute(sql`UPDATE "DailyQueue" SET "target_size" = NULL WHERE "target_size" IS NOT NULL`);
+      } catch {
+        // DailyQueue may not exist yet on a fresh database.
+      }
+
+      // Migration 0138 separates user-visible from total build latency. The
+      // bonus deferral moves work OFF the critical path rather than removing
+      // it, so span_ms alone would keep reading the same number and hide the
+      // whole win.
+      try {
+        await db.execute(
+          sql`ALTER TABLE "DailyBuildMetric" ADD COLUMN IF NOT EXISTS "user_visible_ms" integer`,
+        );
+      } catch {
+        // DailyBuildMetric may not exist yet on a fresh database.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
