@@ -20,6 +20,7 @@ const DEV_ROUTES_UNGATED = true;
 
 export default async function DevLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
+  if (!session && process.env.NODE_ENV === 'development') return <>{children}</>;
   if (!session || (!DEV_ROUTES_UNGATED && !isAdminUser(session.userId))) notFound();
   return <>{children}</>;
 }

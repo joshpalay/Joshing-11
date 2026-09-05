@@ -106,6 +106,8 @@ type LoginPanelProps = {
   // so it can be inspected without a real failed gate round-trip. Never passed
   // by the production login page.
   previewDeadEnd?: boolean;
+  // Dev-preview only: render a later sign-up state without sending an OTP.
+  previewStep?: Step;
 };
 
 type Step = 'phone' | 'code' | 'profile';
@@ -228,6 +230,7 @@ export default function LoginPanel({
   invitePrefill = null,
   inviteContext = null,
   previewDeadEnd = false,
+  previewStep = 'phone',
 }: LoginPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -238,7 +241,11 @@ export default function LoginPanel({
   // invited number so the invitee can verify it before continuing
   // (D-AUTH-INVITE-PHONE-FIRST §2.2). Empty on the cold / per-user-link paths.
   const [phone, setPhone] = useState(() =>
-    invitePrefill?.inviteePhone ? formatUsPhoneInput(invitePrefill.inviteePhone) : '',
+    invitePrefill?.inviteePhone
+      ? formatUsPhoneInput(invitePrefill.inviteePhone)
+      : previewStep === 'code'
+        ? formatUsPhoneInput('+12025550147')
+        : '',
   );
   const [code, setCode] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -254,7 +261,7 @@ export default function LoginPanel({
   // The invite arrival is now phone-first: it collapses into the `phone` step
   // with the field pre-filled, rather than a separate masked confirmation card
   // (D-AUTH-INVITE-PHONE-FIRST §4b / §6.1).
-  const [step, setStep] = useState<Step>('phone');
+  const [step, setStep] = useState<Step>(previewStep);
   // Inline warm dead-end (Screen 1b): set when the invitee says the invited
   // number isn't theirs. The number is confirm-only (not editable), so the way
   // out is a fresh invite from the inviter — carried by wording, not an error

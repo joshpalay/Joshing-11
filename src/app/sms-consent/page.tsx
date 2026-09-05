@@ -61,6 +61,22 @@ export default async function SmsConsentPage() {
               a code.
             </figcaption>
           </figure>
+          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-sm">
+            {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/compliance/daily-summary-sms-reminder.png"
+              alt="Joshing one-time Daily Summary reminder choice with Text me and Not now buttons, a verified demo number, frequency, rates, STOP and HELP, no-purchase-condition language, Terms, and Privacy"
+              width="390"
+              height="844"
+              className="mx-auto h-auto w-full max-w-sm"
+            />
+            <figcaption className="text-muted-foreground border-t px-4 py-3 text-xs leading-5">
+              The one-time follow-up shown after a player skips reminders during onboarding. It
+              offers the same optional SMS consent, then is never shown again whether accepted or
+              declined.
+            </figcaption>
+          </figure>
         </section>
 
         <section>

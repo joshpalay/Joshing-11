@@ -56,10 +56,12 @@ describe('public legal pages', () => {
     expect(html).toContain('src="/compliance/otp-request.png"');
     expect(html).toContain('src="/compliance/daily-sms-reminder.png"');
     expect(html).toContain('src="/compliance/onboarding-sms-reminder.png"');
+    expect(html).toContain('src="/compliance/daily-summary-sms-reminder.png"');
     expect(html).toContain('reserved 555 demo number');
     expect(html).toContain('does not submit the number or request a code');
     expect(html).toContain('cannot opt anyone in');
     expect(html).toContain('SMS reminders visibly switched off');
+    expect(html).toContain('never shown again whether accepted or declined');
     expect(html).toContain('Sign in to manage SMS reminders');
   });
 

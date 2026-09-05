@@ -174,11 +174,13 @@ export function ReminderInterstitial({
                     Not now
                   </button>
                 </div>
-                <SmsReminderDisclosure
-                  phoneNumber={phoneNumber}
-                  actionLabel="Text me"
-                  className="text-xs leading-5"
-                />
+                <div style={{ color: th.sub }}>
+                  <SmsReminderDisclosure
+                    phoneNumber={phoneNumber}
+                    actionLabel="Text me"
+                    className="text-xs leading-5"
+                  />
+                </div>
                 {state.kind === 'ask' && state.error ? (
                   <p style={{ fontSize: 13, color: th.fg }} role="alert">
                     {state.error}
