@@ -2730,6 +2730,18 @@ export async function register() {
       } catch {
         // DailyQueue may not exist yet on a fresh database.
       }
+
+      // Migration 0138 separates user-visible from total build latency. The
+      // bonus deferral moves work OFF the critical path rather than removing
+      // it, so span_ms alone would keep reading the same number and hide the
+      // whole win.
+      try {
+        await db.execute(
+          sql`ALTER TABLE "DailyBuildMetric" ADD COLUMN IF NOT EXISTS "user_visible_ms" integer`,
+        );
+      } catch {
+        // DailyBuildMetric may not exist yet on a fresh database.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

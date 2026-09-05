@@ -32,6 +32,18 @@ import { randomUUID } from 'node:crypto';
 
 export type BuildRoundSpan = {
   round: number;
+  /**
+   * Which phase of the build this cycle belongs to. Set AT THE CALL SITE, never
+   * derived from ordering or index arithmetic -- ordering is what `slot_index
+   * < 5` tried to be, and it broke on exactly the queues it most needed to get
+   * right.
+   *
+   * Without this tag, core rounds and bonus cycles land in one undifferentiated
+   * series and reproduce the contamination that made the earlier round analyses
+   * unusable. With it, the decomposition that took several exchanges of
+   * statistical argument to infer becomes a GROUP BY.
+   */
+  phase: BuildPhase;
   /** Wall clock inside generation (parallel chunks) for this round. */
   generationMs: number;
   /** Wall clock inside the sequential gate chain for this round. */
@@ -39,6 +51,15 @@ export type BuildRoundSpan = {
   /** Chunks the round actually dispatched (GENERATION_CHUNK_SIZE-bounded). */
   chunks: number;
 };
+
+/**
+ * 'core'  -- a top-up round filling the five. On the critical path, always.
+ * 'bonus' -- the +2 friend-bonus cycle. TODAY this also runs on the critical
+ *            path, before persistDailyQueue; deferring it is the point of the
+ *            exercise, and this tag is what lets the two be told apart in the
+ *            data before and after.
+ */
+export type BuildPhase = 'core' | 'bonus';
 
 export type BankAttempt = {
   domain: string;
@@ -66,6 +87,25 @@ export type DailyBuildContext = {
    * honest input to "what would write-at-3 have bought?".
    */
   gatedFloorReachedMs: number | null;
+  /**
+   * Time from build start to the queue being PERSISTED AND READABLE -- the
+   * latency a player actually waits through.
+   *
+   * WHY THIS IS SEPARATE FROM spanMs. After the bonus deferral, the build still
+   * does the bonus work; it just does it off the critical path. A span measured
+   * from start to bonus completion would therefore read the SAME ~21s it reads
+   * today, and the ~15s win would be invisible in the very instrument built to
+   * see it. Pre-deferral these two fields are identical; post-deferral they
+   * diverge by exactly the prize.
+   *
+   * That makes the deferral's effect a subtraction between two fields on ONE
+   * row, rather than a before/after comparison across a deploy -- which at ~2
+   * queues a day would be confounded by model latency, bank hit rate and domain
+   * mix, and would need volume this system does not have.
+   *
+   * Null when the build never reached persistence (threw, or early-returned).
+   */
+  userVisibleMs: number | null;
   aborted: boolean;
   /** Slot count actually persisted. 0 when the build threw before assembly. */
   finalSize: number;
@@ -104,6 +144,7 @@ export function runInBuildContext<T>(
     rounds: [],
     bankAttempts: [],
     gatedFloorReachedMs: null,
+    userVisibleMs: null,
     aborted: false,
     finalSize: 0,
     outcome: 'built',
@@ -148,6 +189,19 @@ export function noteGatedFloorReached(): void {
   const ctx = storage.getStore();
   if (ctx && ctx.gatedFloorReachedMs === null) {
     ctx.gatedFloorReachedMs = Date.now() - ctx.startedAt;
+  }
+}
+
+/**
+ * Stamp the moment the queue became readable by the player. Called immediately
+ * after persistDailyQueue resolves. First call wins: a later append (the
+ * deferred bonus write) must not move it, or the field stops meaning "when
+ * could the player start".
+ */
+export function noteQueuePersisted(): void {
+  const ctx = storage.getStore();
+  if (ctx && ctx.userVisibleMs === null) {
+    ctx.userVisibleMs = Date.now() - ctx.startedAt;
   }
 }
 

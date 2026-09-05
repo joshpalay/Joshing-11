@@ -15,9 +15,39 @@
  * A slot is a bonus slot iff it carries a non-empty `presence_source_id`. The
  * presence of that field is the marker (types.ts:37-55). Malformed or missing
  * presence is treated as CORE — bonus is opt-in, never inferred from position.
+ *
+ * TWO CALLERS, OPPOSITE REQUIREMENTS — read this before deriving any number
+ * from these helpers.
+ *
+ *   For COMPLETENESS (isRoundComplete), marker-less-means-core is exactly
+ *   right: the failure mode is a player answering one extra question, which is
+ *   strictly better than a player stranded on a round that never completes.
+ *
+ *   For ANALYTICS, the same default is WRONG and silently so. Any slot written
+ *   before the marker existed classifies as core, so a bonus rate computed
+ *   across all history is understated with nothing in the data to say so.
+ *   Scope every such figure to BONUS_MARKER_FLOOR below, or label it unscoped.
+ *
+ * The helpers do not need to change. The split needs to be known.
  */
 
 import type { QueueSlot } from './types';
+
+/**
+ * First date a bonus marker was written to a live queue.
+ *
+ * `presence_source_id` entered the schema 2026-06-02 (replacing the retired
+ * `answerer_id`), and the first production queue carrying one was written
+ * 2026-06-04. 117 of 309 queues — 38% of all history — predate it and therefore
+ * classify as ALL CORE regardless of what they actually contained.
+ *
+ * Consequences, both real:
+ *   - a retroactive core/bonus split is only valid from this date forward;
+ *   - a pre-floor queue with a stranded bonus slot is undetectable by the
+ *     core-resolved test, so measured stranding incidence is a LOWER BOUND
+ *     historically, though it is the correct rate going forward.
+ */
+export const BONUS_MARKER_FLOOR = '2026-06-04';
 
 /**
  * Presence attribution for a bonus slot: WHERE the question's domain came from

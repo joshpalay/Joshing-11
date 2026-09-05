@@ -2252,6 +2252,20 @@ export const dailyBuildMetrics = pgTable(
     // DAILY_QUEUE_MIN_SIZE. Deliberately not derived from the write, which under
     // A0/A1 happens once at the end and would make this tautological.
     gatedFloorReachedMs: integer('gated_floor_reached_ms'),
+    /**
+     * Build start -> queue persisted and READABLE. The latency a player waits.
+     *
+     * Distinct from span_ms on purpose (0138). After the bonus deferral the
+     * build still does the bonus work, just off the critical path, so span_ms
+     * will keep reading ~21s and the win would be invisible in the instrument
+     * built to see it. Pre-deferral these are equal; post-deferral they diverge
+     * by exactly what deferral bought, which makes the effect a subtraction
+     * between two columns on ONE row instead of a before/after across a deploy
+     * -- at ~2 queues/day that comparison would be hopelessly confounded.
+     *
+     * NULL when the build never reached persistence.
+     */
+    userVisibleMs: integer('user_visible_ms'),
     targetSize: integer('target_size').notNull(),
     finalSize: integer('final_size').notNull(),
     aborted: boolean('aborted').notNull().default(false),

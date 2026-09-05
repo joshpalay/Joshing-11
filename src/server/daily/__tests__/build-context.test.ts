@@ -9,6 +9,7 @@ import {
   noteGatedFloorReached,
   noteGenerateCall,
   noteOutcome,
+  noteQueuePersisted,
   noteRound,
   runBuildWithMetrics,
   runInBuildContext,
@@ -258,5 +259,54 @@ describe('runBuildWithMetrics — the metric must survive every exit path', () =
       { outcome: 'carry_forward', calls: 0 },
       { outcome: 'built', calls: 0 },
     ]);
+  });
+});
+
+describe('A0a §2 — user-visible vs total span', () => {
+  it('stamps userVisibleMs at persistence, and only once', async () => {
+    // The deferred bonus write appends AFTER the queue is readable. If a later
+    // append moved this stamp, the field would stop meaning "when could the
+    // player start" and the deferral would appear to buy nothing.
+    await runInBuildContext('u1', async (ctx) => {
+      expect(ctx.userVisibleMs).toBeNull();
+      noteQueuePersisted();
+      const first = ctx.userVisibleMs;
+      expect(first).not.toBeNull();
+      await new Promise((r) => setTimeout(r, 15));
+      noteQueuePersisted();
+      expect(ctx.userVisibleMs).toBe(first);
+    });
+  });
+
+  it('leaves userVisibleMs null when a build never reaches persistence', async () => {
+    // A throw, or an early return on an existing queue / carry-forward. NULL
+    // means "did not get there", never zero -- same rule 0137 applied to
+    // target_size: an unwritten value must be visible, not plausible.
+    await runInBuildContext('u2', async (ctx) => {
+      expect(ctx.userVisibleMs).toBeNull();
+    });
+  });
+});
+
+describe('A0a §3 — rounds are phase-tagged', () => {
+  it('keeps core rounds and the bonus cycle separable', async () => {
+    // Untagged, these land in one series and reproduce the contamination that
+    // made the earlier round analyses unusable. Tagged, the decomposition is a
+    // GROUP BY.
+    await runInBuildContext('u3', async (ctx) => {
+      noteRound({ round: 1, phase: 'core', generationMs: 10, gateMs: 3, chunks: 2 });
+      noteRound({ round: 2, phase: 'core', generationMs: 12, gateMs: 4, chunks: 1 });
+      noteRound({ round: 0, phase: 'bonus', generationMs: 21, gateMs: 0, chunks: 2 });
+
+      expect(ctx.roundCount).toBe(3);
+      const core = ctx.rounds.filter((r) => r.phase === 'core');
+      const bonus = ctx.rounds.filter((r) => r.phase === 'bonus');
+      expect(core).toHaveLength(2);
+      expect(bonus).toHaveLength(1);
+      // The number the deferral is meant to move, isolated at the source.
+      expect(bonus[0].generationMs).toBe(21);
+      // Every span must carry a phase; an untagged one is unreadable.
+      expect(ctx.rounds.every((r) => r.phase === 'core' || r.phase === 'bonus')).toBe(true);
+    });
   });
 });

@@ -64,6 +64,7 @@ import {
   noteFinalSize,
   noteGatedFloorReached,
   noteOutcome,
+  noteQueuePersisted,
   noteRound,
   runBuildWithMetrics,
 } from '@/server/daily/build-context';
@@ -912,6 +913,7 @@ async function buildDailyQueueForUser(
     // both lets that be regressed rather than argued.
     noteRound({
       round: topUpRounds,
+      phase: 'core',
       generationMs: Date.now() - roundStartedAt,
       gateMs: 0,
       chunks: Math.ceil(overRequest(roundShortfall) / GENERATION_CHUNK_SIZE_HINT),
@@ -1263,10 +1265,26 @@ async function buildDailyQueueForUser(
       const presenceByDomain = new Map(
         friendDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
       );
+      // A0: time the bonus cycle as its own phase-tagged span. This is the
+      // block the deferral moves off the critical path, so it has to be
+      // measurable on its own BEFORE the move -- otherwise the "what did
+      // deferring buy?" question is answered by comparing across a deploy.
+      // Note it runs here, ahead of persistDailyQueue, which is precisely why
+      // the player waits for it today.
+      const bonusStartedAt = Date.now();
       const generatedFriend = await generateBonusQuestionsForDomains(
         userId,
         friendDomains.map((candidate) => candidate.domain),
       );
+      noteRound({
+        round: 0,
+        phase: 'bonus',
+        generationMs: Date.now() - bonusStartedAt,
+        gateMs: 0,
+        // The bonus path generates per-domain (one call each, sequentially),
+        // so the domain count IS the chunk count here.
+        chunks: friendDomains.length,
+      });
       let promotedToCore = 0;
       let bonusAppended = 0;
       for (const { domain, question } of generatedFriend) {
@@ -1374,6 +1392,11 @@ async function buildDailyQueueForUser(
   // A0: record the size actually persisted, for the build metric.
   noteFinalSize(slots.length);
   await persistDailyQueue(userId, slots, generatedQuestionIds);
+  // A0 (§2): the queue is now readable — everything after this point is off the
+  // player's critical path. Today the bonus cycle above runs BEFORE this line,
+  // so userVisibleMs ≈ spanMs; the deferral's whole purpose is to move it after,
+  // at which point the two fields diverge by the amount deferral bought.
+  noteQueuePersisted();
 
   // Server timing for the slow path. Logged only when a full build actually ran
   // (the existing-queue / carry-forward early returns above never reach here),

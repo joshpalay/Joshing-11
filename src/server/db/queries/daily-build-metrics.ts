@@ -1,5 +1,6 @@
 import { db, dailyBuildMetrics } from '@/server/db';
 import type { DailyBuildContext } from '@/server/daily/build-context';
+import { BONUS_MARKER_FLOOR } from '@/server/daily/bonus';
 import { DAILY_QUEUE_SIZE } from '@/server/daily/types';
 
 /**
@@ -14,7 +15,20 @@ import { DAILY_QUEUE_SIZE } from '@/server/daily/types';
  *
  * Swallows its own errors: a telemetry failure must never convert a successful
  * build into a failed one.
+ *
+ * READING THE ROUNDS ARRAY. Every span carries a `phase` ('core' | 'bonus') set
+ * at its call site. Do NOT aggregate across phases: an untagged series mixes
+ * critical-path core rounds with the bonus cycle and reproduces exactly the
+ * contamination that made the earlier round analyses unusable. GROUP BY phase.
+ *
+ * READING ANY CORE/BONUS FIGURE. Bonus-ness is marker-based and the marker did
+ * not exist before BONUS_MARKER_FLOOR (2026-06-04) — 38% of historical queues
+ * predate it and classify as all-core with nothing in the data saying so. Rows
+ * in THIS table are all post-floor by construction, so its own metrics are
+ * safe; the floor is re-exported for anything joining back to historical
+ * DailyQueue rows.
  */
+export { BONUS_MARKER_FLOOR };
 export async function recordDailyBuildMetric(ctx: DailyBuildContext): Promise<void> {
   try {
     const bankHits = ctx.bankAttempts.filter((a) => a.outcome === 'hit').length;
@@ -30,6 +44,9 @@ export async function recordDailyBuildMetric(ctx: DailyBuildContext): Promise<vo
       bankMissCount: ctx.bankAttempts.length - bankHits,
       bankAttempts: ctx.bankAttempts,
       gatedFloorReachedMs: ctx.gatedFloorReachedMs,
+      // §2: the player-visible half of the span. Compare against spanMs on the
+      // same row to price the bonus deferral; see the column comment.
+      userVisibleMs: ctx.userVisibleMs,
       targetSize: DAILY_QUEUE_SIZE,
       finalSize: ctx.finalSize,
       aborted: ctx.aborted,

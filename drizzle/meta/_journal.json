@@ -967,6 +967,13 @@
       "when": 1788397823476,
       "tag": "0137_target_size_core_only",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1788398823476,
+      "tag": "0138_build_metric_user_visible_ms",
+      "breakpoints": true
     }
   ]
 }
