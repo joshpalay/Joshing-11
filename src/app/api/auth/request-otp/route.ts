@@ -2,12 +2,7 @@ import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import {
-  getOtpBypassCodeForPhone,
-  isUsPhoneNumber,
-  normalizePhone,
-  requestOtp,
-} from '@/server/auth';
+import { isUsPhoneNumber, normalizePhone, requestOtp } from '@/server/auth';
 import { db, users } from '@/server/db';
 import {
   getInvitePrefillByToken,
@@ -64,11 +59,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const bypassCode = getOtpBypassCodeForPhone(prefill.inviteePhone);
-      const code = bypassCode ?? (await requestOtp(prefill.inviteePhone)).code;
-      const delivery = bypassCode
-        ? { ok: true as const }
-        : await sendSms(prefill.inviteePhone, buildOtpMessage(code), 'otp');
+      const { code } = await requestOtp(prefill.inviteePhone);
+      const delivery = await sendSms(prefill.inviteePhone, buildOtpMessage(code), 'otp');
 
       if (process.env.NODE_ENV === 'production' && !delivery.ok) {
         return NextResponse.json(
@@ -135,11 +127,8 @@ export async function POST(request: Request) {
       }
     }
 
-    const bypassCode = getOtpBypassCodeForPhone(phone);
-    const code = bypassCode ?? (await requestOtp(phone)).code;
-    const delivery = bypassCode
-      ? { ok: true as const }
-      : await sendSms(phone, buildOtpMessage(code), 'otp', existingUser?.id);
+    const { code } = await requestOtp(phone);
+    const delivery = await sendSms(phone, buildOtpMessage(code), 'otp', existingUser?.id);
 
     if (process.env.NODE_ENV === 'production' && !delivery.ok) {
       return NextResponse.json(

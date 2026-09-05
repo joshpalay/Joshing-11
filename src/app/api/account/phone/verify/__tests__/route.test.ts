@@ -6,7 +6,6 @@ const {
   getSessionMock,
   getReminderStateMock,
   markPhoneVerifiedMock,
-  getOtpBypassCodeForPhoneMock,
   requestOtpMock,
   verifyOtpMock,
   sendSmsMock,
@@ -14,7 +13,6 @@ const {
   getSessionMock: vi.fn(),
   getReminderStateMock: vi.fn(),
   markPhoneVerifiedMock: vi.fn(),
-  getOtpBypassCodeForPhoneMock: vi.fn(),
   requestOtpMock: vi.fn(),
   verifyOtpMock: vi.fn(),
   sendSmsMock: vi.fn(),
@@ -22,7 +20,6 @@ const {
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/auth', () => ({
-  getOtpBypassCodeForPhone: getOtpBypassCodeForPhoneMock,
   requestOtp: requestOtpMock,
   verifyOtp: verifyOtpMock,
 }));
@@ -69,7 +66,6 @@ describe('/api/account/phone/verify', () => {
     getSessionMock.mockResolvedValue({ userId: 'user-1' });
     getReminderStateMock.mockResolvedValue(unverifiedState);
     markPhoneVerifiedMock.mockResolvedValue(verifiedState);
-    getOtpBypassCodeForPhoneMock.mockReturnValue(null);
     requestOtpMock.mockResolvedValue({ code: '123456', normalizedPhone: '+12025550147' });
     verifyOtpMock.mockResolvedValue('+12025550147');
     sendSmsMock.mockResolvedValue({ ok: true });

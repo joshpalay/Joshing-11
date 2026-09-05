@@ -9,7 +9,6 @@ import { and, count, desc, eq, gt, gte } from 'drizzle-orm';
 
 import { db } from '@/server/db';
 import { otpCodes, smsLogs } from '@/server/db/schema';
-import { getOtpBypassCodeForPhone } from './otp-bypass';
 import { normalizePhone } from './phone';
 
 export { isUsPhoneNumber, normalizePhone } from './phone';
@@ -34,10 +33,6 @@ export async function requestOtp(phone: string): Promise<{ code: string; normali
 
 export async function verifyOtp(phone: string, code: string): Promise<string | null> {
   const normalized = normalizePhone(phone);
-
-  if (code === getOtpBypassCodeForPhone(normalized)) {
-    return normalized;
-  }
 
   const [entry] = await db
     .select()

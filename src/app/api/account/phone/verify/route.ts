@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getOtpBypassCodeForPhone, requestOtp, verifyOtp } from '@/server/auth';
+import { requestOtp, verifyOtp } from '@/server/auth';
 import { getSession } from '@/server/auth/session';
 import { getReminderState, markPhoneVerified } from '@/server/db/queries/account';
 import { buildOtpMessage, sendSms } from '@/server/sms';
@@ -37,11 +37,13 @@ export async function POST(request: Request) {
   }
 
   if (parsed.data.action === 'send') {
-    const bypassCode = getOtpBypassCodeForPhone(state.phoneNumber);
-    const code = bypassCode ?? (await requestOtp(state.phoneNumber)).code;
-    const delivery = bypassCode
-      ? { ok: true as const }
-      : await sendSms(state.phoneNumber, buildOtpMessage(code), 'otp', session.userId);
+    const { code } = await requestOtp(state.phoneNumber);
+    const delivery = await sendSms(
+      state.phoneNumber,
+      buildOtpMessage(code),
+      'otp',
+      session.userId,
+    );
 
     if (process.env.NODE_ENV === 'production' && !delivery.ok) {
       return NextResponse.json(

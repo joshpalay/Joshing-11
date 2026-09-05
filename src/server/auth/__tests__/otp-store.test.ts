@@ -46,16 +46,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('verifyOtp configured bypass', () => {
-  it('accepts the configured code for the allowlisted phone without reading OTP storage', async () => {
-    vi.stubEnv('AUTH_OTP_BYPASS_PHONE', '+15551234567');
-    vi.stubEnv('AUTH_OTP_BYPASS_CODE', '654321');
-
-    await expect(verifyOtp('(555) 123-4567', '654321')).resolves.toBe('+15551234567');
-    expect(selectMock).not.toHaveBeenCalled();
-  });
-
-  it('does not retain the old universal 000000 bypass', async () => {
+describe('verifyOtp accepts no bypass', () => {
+  // The scoped AUTH_OTP_BYPASS_* escape hatch was removed once Twilio delivery
+  // resumed -- the condition its own .env.example note set for removal. What
+  // remains is the invariant that matters permanently: verifyOtp reads OTP
+  // storage and nothing else. Any code that works without a stored row is a
+  // bypass, whatever it is called.
+  it('does not accept the old universal 000000 bypass', async () => {
     await expect(verifyOtp('+15551234567', '000000')).resolves.toBeNull();
     expect(selectMock).toHaveBeenCalledTimes(1);
   });
