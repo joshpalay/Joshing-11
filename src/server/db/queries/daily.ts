@@ -1211,7 +1211,38 @@ export async function persistDailyQueue(
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(dailyQueues)
-      .values({ userId, queueDate: assignmentDateStr, slots })
+      // target_size is the builder's TARGET, not a measurement of what it
+      // achieved. It is DAILY_QUEUE_SIZE, full stop -- the constant the fill
+      // loop, the top-up rounds and borrow-back are all trying to reach.
+      //
+      // IT MUST NOT BE DERIVED FROM `slots`. An earlier cut wrote
+      // getCoreSlots(slots).length, which is the ACHIEVED count, and that
+      // reintroduces the defect 0137 was written to remove one layer down: a
+      // build that misses and persists four core slots would record
+      // target_size 4, and `answered >= target_size` would then read that
+      // queue as COMPLETE at four answers. The under-delivery becomes the
+      // target, and the short queue is certified rather than detected.
+      //
+      // Nothing would have caught that. On every healthy build intended and
+      // achieved are both 5, so the two formulas are indistinguishable in
+      // tests, in review, and in every row where the system worked -- they
+      // diverge only on the builds this column exists to identify. Same shape
+      // as `slot_index < 5` and as 0136's `target_size = actual_slots`.
+      //
+      // No build intends fewer than five: DAILY_QUEUE_MIN_SIZE is a tolerated
+      // graceful-degrade FLOOR, not an intent, and a queue below five is always
+      // a shortfall. If a build ever legitimately targets a smaller round, this
+      // becomes a parameter -- but it still comes from the target, never the
+      // array, because reading the array is what makes a failure look like a
+      // plan.
+      //
+      // Written EXACTLY ONCE, here. The deferred bonus append never touches it.
+      .values({
+        userId,
+        queueDate: assignmentDateStr,
+        slots,
+        targetSize: DAILY_QUEUE_SIZE,
+      })
       .onConflictDoNothing({
         target: [dailyQueues.userId, dailyQueues.queueDate],
       })
@@ -1316,7 +1347,16 @@ export async function createDailyQueueItemFromPresence(
     if (!existing) {
       const [created] = await tx
         .insert(dailyQueues)
-        .values({ userId, queueDate: assignmentDateStr, slots: [slot] })
+        // No queue exists yet -- anomalous for a bonus append, since the
+        // deferred path runs after persist. Stamp the target anyway so a queue
+        // can never be born with a NULL target_size through a side door; the
+        // build still intended five, it just has no core slots yet.
+        .values({
+          userId,
+          queueDate: assignmentDateStr,
+          slots: [slot],
+          targetSize: DAILY_QUEUE_SIZE,
+        })
         .returning();
       await tx
         .update(generatedQuestions)

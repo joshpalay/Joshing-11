@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
   persistDailyQueue: vi.fn(),
+  createDailyQueueItemFromPresence: vi.fn(),
   getDailyPreferences: vi.fn(),
   getFriendAndFoFUserIds: vi.fn(),
   getFriendDomainsForBonus: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
   getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
   persistDailyQueue: mocks.persistDailyQueue,
+  createDailyQueueItemFromPresence: mocks.createDailyQueueItemFromPresence,
   buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
     slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
   }),
@@ -130,6 +132,7 @@ beforeEach(() => {
   mocks.isGenericSubcategory.mockReturnValue(false);
 
   mocks.persistDailyQueue.mockResolvedValue(undefined);
+  mocks.createDailyQueueItemFromPresence.mockResolvedValue({ slots: [] });
 });
 
 // The single atomic persist call's slots argument, with the generated (bot) core
@@ -263,8 +266,21 @@ function friendQ(domain: string, id = `f-${domain}`) {
 }
 
 // The persisted BONUS slots (bot rows carrying a presence_source_id).
+//
+// After the deferral, this is expected to be EMPTY on every build: bonus slots
+// are no longer part of the atomic persist. They are appended afterwards, off
+// the player's critical path, via createDailyQueueItemFromPresence -- which is
+// what deferredBonusAppends() below counts. A non-empty result here means bonus
+// generation has moved back onto the critical path.
 function persistedBonusSlots(): Array<Record<string, unknown>> {
   return persistedSlots().filter((slot) => Boolean(slot.presence_source_id));
+}
+
+// The +2 slots appended by the deferred continuation. In tests there is no
+// request scope, so after() is unavailable and the tail runs INLINE -- the end
+// state is identical, which is the property that makes the fallback safe.
+function deferredBonusAppends(): string[] {
+  return mocks.createDailyQueueItemFromPresence.mock.calls.map((call) => call[1] as string);
 }
 
 describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () => {
@@ -298,10 +314,24 @@ describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () =
       'q4',
       'f-Chess',
     ]);
-    expect(persistedBonusSlots().map((slot) => slot.generated_question_id)).toEqual([
-      'f-Opera',
-      'f-Sushi',
+    // THE DEFERRAL SPLIT, asserted directly. Core-fill and bonus used to share
+    // one generation call; only bonus is optional, so only bonus is deferred.
+    // The core question must be generated SYNCHRONOUSLY -- the queue cannot be
+    // served without its fifth slot -- while the two +2 questions are generated
+    // after persist.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenCalledTimes(2);
+    // Synchronous call: exactly the shortfall (1), taken in the selector's own
+    // order, never a positional guess.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(1, USER, ['Chess']);
+    // Deferred call: the remaining domains, capped at DAILY_BONUS_SLOT_MAX.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(2, USER, [
+      'Opera',
+      'Sushi',
     ]);
+    // Nothing bonus-shaped is in the atomic persist any more...
+    expect(persistedBonusSlots()).toHaveLength(0);
+    // ...it arrives through the deferred append instead.
+    expect(deferredBonusAppends()).toHaveLength(DAILY_BONUS_SLOT_MAX);
   });
 
   it('requests coreShortfall + DAILY_BONUS_SLOT_MAX friend domains so the +2 is not cannibalized', async () => {
@@ -354,12 +384,134 @@ describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () =
     expect(persistedBotSlots().map((slot) => slot.generated_question_id)).toEqual([
       'q1', 'q2', 'q3', 'q4', 'q5',
     ]);
-    expect(persistedBonusSlots()).toHaveLength(DAILY_BONUS_SLOT_MAX);
+    // Bonus is no longer in the atomic persist -- it is appended after the
+    // queue is readable. Same two questions, one step later.
+    expect(persistedBonusSlots()).toHaveLength(0);
+    expect(deferredBonusAppends()).toHaveLength(DAILY_BONUS_SLOT_MAX);
     // Core full → asks only for the standard +2 (coreShortfall 0).
     expect(mocks.getFriendDomainsForBonus).toHaveBeenCalledWith(
       USER,
       DAILY_BONUS_SLOT_MAX,
       expect.anything(),
     );
+  });
+});
+
+describe('deferral — core-fill robustness (borrow-back)', () => {
+  it('borrows a bonus domain back when the core slice under-delivers', async () => {
+    // THE REGRESSION THIS PREVENTS. Before the deferral, generation ran across
+    // ALL shortfall+2 domains and promotion drew from the whole returned pool,
+    // so a domain that produced nothing was covered by another. Slicing domains
+    // into core/bonus roles first would leave the queue SHORT on any miss --
+    // in the very backstop that exists to stop short queues.
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3'), genq('q4')])
+      .mockResolvedValue([genq('q1')]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('Chess'),
+      friendDomain('Opera'),
+      friendDomain('Sushi'),
+    ]);
+    // The core slice (['Chess']) produces NOTHING; the borrowed domain does.
+    mocks.generateBonusQuestionsForDomains
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([friendQ('Opera')])
+      .mockResolvedValue([friendQ('Sushi')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // The five are intact — Opera was borrowed back to fill the fifth slot.
+    const core = persistedBotSlots();
+    expect(core).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(core.map((slot) => slot.generated_question_id)).toEqual([
+      'q1', 'q2', 'q3', 'q4', 'f-Opera',
+    ]);
+    // Borrowing is synchronous and per-domain: the core slice, then Opera.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(1, USER, ['Chess']);
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(2, USER, ['Opera']);
+    // A borrowed domain leaves the deferred set, so it is never generated twice.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(3, USER, ['Sushi']);
+  });
+
+  it('does not borrow when the core slice delivers — the happy path pays nothing', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('Chess'),
+      friendDomain('Opera'),
+    ]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess'), friendQ('Opera')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // Core was already full, so there is no synchronous call at all — the whole
+    // friend-domain cycle is deferred.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenCalledTimes(1);
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(1, USER, [
+      'Chess',
+      'Opera',
+    ]);
+  });
+});
+
+describe('target_size is the INTENDED size, never the achieved one', () => {
+  it('a build that lands SHORT still persists exactly once, target untouched by the shortfall', async () => {
+    // THE DEFECT THIS PINS. An earlier cut wrote getCoreSlots(slots).length --
+    // the ACHIEVED count. A build that misses and persists four core slots
+    // would record target_size 4, and `answered >= target_size` then reads that
+    // queue COMPLETE at four answers: the under-delivery becomes the target and
+    // the short queue is certified instead of detected. Same shape as
+    // `slot_index < 5` and 0136's `target_size = actual_slots` -- a value that
+    // agrees with the truth on every healthy build and diverges only on the
+    // ones the column exists to find.
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3'), genq('q4')])
+      .mockResolvedValue([]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([]); // nothing to borrow
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
+    // Short by one, and it must STAY visibly short.
+    expect(persistedBotSlots().length).toBeLessThan(DAILY_QUEUE_SIZE);
+  });
+
+  it('is path-independent: a deferred build persists core-only and still intends five', async () => {
+    // The deferred path persists a core-only array; the inline fallback may
+    // persist a longer one. Both intend five. Trivially true while the value is
+    // a constant -- this exists so a future change that derives it from `slots`
+    // splits the two paths visibly instead of silently.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(persistedBonusSlots()).toHaveLength(0);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+  });
+
+  it('the deferred append cannot rewrite the queue target', async () => {
+    // "Written once, never recomputed" rests on
+    // createDailyQueueItemFromPresence setting only `slots`. If it ever gains a
+    // queue-level field, a 7-slot post-append array could rewrite the column
+    // and undo the point of writing it at persist.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.createDailyQueueItemFromPresence).toHaveBeenCalled();
+    for (const call of mocks.createDailyQueueItemFromPresence.mock.calls) {
+      // (userId, generatedQuestionId, presence, position) -- no queue-level fields.
+      expect(call).toHaveLength(4);
+      expect(typeof call[3]).toBe('number');
+    }
   });
 });

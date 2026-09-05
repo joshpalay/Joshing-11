@@ -100,6 +100,85 @@ Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
 - **Ratify the Playables cap re-open (4→5) for the streak-header render.** `[ratification]` `D-FROMFRIENDS-STREAK-HEADER-01 D-B` re-opens `PLAYABLE_SERVE_CAP` 4→5, which `D-HOME-DASHBOARD-MODEL-01` had explicitly **withdrawn** ("the audit's 5/5/6 cap change is withdrawn; … Playables 4"). Confirm this is a deliberate, scoped re-open of that one constant (Direct 3 / Texture 8 stay withdrawn) before the B-prompt edits the constant; re-verify the `select-edition` budget unit tests and add a cap=5 case. (Recorded 2026-06-22.)
 - **`Via` answerer attribution ships ungated for the 12-user test phase.** `[test-phase]` `B-VIA-ATTRIBUTION-01` adds a "Via [friend]" line to feed cards (follow-gated, recency-ordered, names friends who answered a question correctly; `src/server/feed/via-answerers.ts` + `ViaAttribution.tsx`). **(a)** It is **on-by-default with no answerer consent control** — a friend cannot opt out of being named as having answered. **(b)** Unlike authorship (which is self-evidently public the moment you write a question), "Via" **leaks a friend's answering activity** — a more sensitive fact the answerer never affirmatively published. **(c) Revisit before opening the graph** beyond the trusted test cohort, and before/when a two-sided consent primitive is built — this ties directly to the consent-primitive gap flagged in `D-FRIEND-VISIBILITY-PRIVACY-AUDIT-01`. This entry is the line between "pragmatic MVP" and latent privacy debt nobody chose: shipping ungated is a deliberate test-phase call, not an oversight.
 
+## What belongs in this file
+
+**The trigger is a decision *not* to build something** — or a rule about *how* to build that no single
+change embodies. Those are the entries with nowhere else to live: a decision to build leaves a PR, code
+and tests behind, while a decision to skip work leaves nothing at all — and an omission here reads as
+“never considered” rather than “considered and declined.”
+
+## Track A / deferral decisions (2026-09-04 → 05)
+
+Recorded here because these were **decisions not to build something**, or rules about *how* to
+build, and that class has nowhere else to live: a decision to skip work leaves no code behind.
+Where a rule is already durable in a comment or test, this is a pointer, not a copy.
+
+- **`INVITE-DEFAULT-01` — new invite links default to the untagged "No category" slot.** `[decided: OUT]`
+  Selection, editing, validation and top-three-by-frequency defaulting are **already live** —
+  `AddTopicField` capped at three, `PATCH /api/account/invite-links/topics` validating with
+  onboarding's own too-broad check, `getInviteLinkSeedTopics` ordering `often` first, panel
+  prefilled so the first edit converts automatic → curated, per-link slot selection present. The
+  **open item is the default slot only**: making category-scoped the primary structure is a
+  data-model change behind topics. Out on *ordering*, not cost — it sat ahead of a measured ~15s
+  latency win with a known mechanism, and the complaint that started it (a raw base64 URL on the
+  card) is fixed. **Re-raise when** (1) the bonus deferral has shipped and p50 is re-measured, or
+  (2) anyone touches topic categorisation for another reason.
+  *An earlier version of this entry described the whole feature as unbuilt. It was wrong, and a
+  product decision was made on it. Scope is a carried claim until something reads the code.*
+
+- **Parallelising the bonus generation loop — rejected.** `[decided: NO]` Deferral removes the wait
+  without touching the loop, so the concurrency risk buys nothing that sequencing does not.
+
+- **Never edit an applied migration; correct forward.** `[rule]` `0135` was edited after it had been
+  applied (a `CHECK` idempotency wrapper added after a failed boot). Semantically harmless, but its
+  file hash no longer matches the applied row. Drizzle compares `created_at` against `folderMillis`
+  and **never reads `hash`** — verified in `pg-core/dialect.cjs` and then observed on a live deploy —
+  so the divergence is cosmetic. The rule stands regardless: once applied, correct forward.
+
+- **`target_size` is INTENDED size, never ACHIEVED size.** `[built]` Written once at persist as the
+  constant `DAILY_QUEUE_SIZE` — the target the fill loop, the top-up rounds and borrow-back are all
+  trying to reach — and **never derived from `slots`**. Deriving it from the array (an earlier cut
+  used `getCoreSlots(slots).length`) records the ACHIEVED count, so a build that misses and persists
+  four core slots sets `target_size` 4 and reads as *complete at four answers* — the under-delivery
+  written in as the target, certifying the short queue instead of detecting it. The two formulas are
+  indistinguishable on every healthy build and diverge only on the builds the column exists to find,
+  which is why nothing catches it. No build intends fewer than five: `DAILY_QUEUE_MIN_SIZE` is a
+  tolerated graceful-degrade floor, not an intent. Upstream history: `0136` backfilled from *all*
+  slots and wrote 7 for the modal 5-core+2-bonus queue (148 rows); `0137` set every row to NULL
+  rather than a corrected number, for the same reason. The `NOT NULL DEFAULT 5` was dropped too:
+  **an unwritten value must be visible, not plausible** — a rule since applied to `user_visible_ms`
+  (0138), `span_ms` (0139) and the 0140 counts.
+- **`getCoreSlots` marker-less-means-core serves two callers with opposite requirements.** `[rule]`
+  Right for **completeness** (an extra question beats a stranded player); wrong for **analytics**
+  (it silently understates bonus). `BONUS_MARKER_FLOOR = '2026-06-04'` is the first date a bonus
+  marker reached a live queue — **117 of 309 queues, 38% of history, predate it** and classify as
+  all-core with nothing in the data saying so. Scope any retroactive core/bonus figure to that floor
+  or label it unscoped. Durable in `src/server/daily/bonus.ts`.
+
+- **A1a was a deliberate reversal, not a bug fix.** `[built]` `isRoundComplete` now counts core slots
+  only. The test it overturned was added 2026-06-01 in the +2 commit itself, using the then-current
+  `answerer_id` marker, and **knowingly** asserted that an unanswered bonus slot holds the round
+  open. Reversed because counting additive slots stranded the modal queue permanently — 5 real
+  queues measured, and completion also gates the demand-pull bank replenish, so a stranded round
+  never restocked. The block's *stated* concern ("track the actual slot count, not a fixed five") is
+  preserved: skip replacements carry no marker, so they remain core.
+
+- **`ALLOW_REMOTE_BOOT_MIGRATE` stays unset on Preview.** `[decided]` The refusal fired live in
+  preview naming host `aws-1-us-west-2.pooler.supabase.com`, vs production's
+  `db.<project-ref>.supabase.co`. A different hostname is **not** evidence of a different database:
+  that pooler endpoint is shared and multiplexes projects by the username, which the guard
+  deliberately never logs. Most likely the same database via the pooled endpoint — recorded as
+  **inference, not observation**. Fail toward the recoverable error: if preview shares prod, setting
+  the flag recreates the 2026-09-03 incident from CI automatically; if preview is isolated, the only
+  cost is schema drift in a throwaway environment. Preview is additionally behind Vercel SSO, so
+  booting one requires an authenticated team member. See `_docs/INCIDENT-2026-09-03-boot-migrate.md`.
+
+- **A deploy does not apply migrations; a request does.** `[rule]` A production deployment can sit
+  READY with `register()` never having run, because Vercel does not boot a function until traffic
+  arrives — observed on the `#1597` deploy, which applied nothing until a `GET /login`. **Never read
+  READY as evidence that a migration applied.** It also sharpens the incident: production sits cold,
+  so a local process pointed at prod is often the *only* thing running `register()` at all.
+
 ## Known-stale source claims
 
 Corrected at the source when next editing those files:

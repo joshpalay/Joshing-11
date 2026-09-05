@@ -9,6 +9,8 @@ import {
   noteGatedFloorReached,
   noteGenerateCall,
   noteOutcome,
+  noteDeferred,
+  noteDeferredContinuation,
   noteQueuePersisted,
   noteRound,
   runBuildWithMetrics,
@@ -307,6 +309,75 @@ describe('A0a §3 — rounds are phase-tagged', () => {
       expect(bonus[0].generationMs).toBe(21);
       // Every span must carry a phase; an untagged one is unreadable.
       expect(ctx.rounds.every((r) => r.phase === 'core' || r.phase === 'bonus')).toBe(true);
+    });
+  });
+});
+
+describe("deferral (B') — metric ownership", () => {
+  it('does NOT record in the finally when a continuation owns the tail', async () => {
+    // THE COLLISION THIS PREVENTS. The finally runs the moment the build
+    // RETURNS, which under the deferral is before the deferred bonus work has
+    // finished. Recording there would stamp span_ms at persist time, make it
+    // equal user_visible_ms on every row, and report that deferring bought
+    // exactly zero -- a plausible, wrong, unfalsifiable answer.
+    const recorded: string[] = [];
+    await runBuildWithMetrics(
+      'u-deferred',
+      async () => {
+        noteQueuePersisted();
+        noteDeferredContinuation();
+      },
+      async (ctx) => {
+        recorded.push(ctx.buildId);
+      },
+    );
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('DOES record in the finally when the tail ran inline', async () => {
+    // No request scope → no after() → the tail runs inline and the finally is
+    // still the thing that writes the row.
+    const recorded: string[] = [];
+    await runBuildWithMetrics(
+      'u-inline',
+      async () => {
+        noteQueuePersisted();
+        noteDeferred(false);
+      },
+      async (ctx) => {
+        recorded.push(ctx.buildId);
+      },
+    );
+    expect(recorded).toHaveLength(1);
+  });
+
+  it('still records when the build throws before persisting', async () => {
+    // A build that never reached persist has no continuation, so the finally
+    // must still write a row -- otherwise the tail (the population Track A
+    // targets) is invisible.
+    const recorded: Array<{ outcome: string; userVisibleMs: number | null }> = [];
+    await expect(
+      runBuildWithMetrics(
+        'u-threw',
+        async () => {
+          throw new Error('boom');
+        },
+        async (ctx) => {
+          recorded.push({ outcome: ctx.outcome, userVisibleMs: ctx.userVisibleMs });
+        },
+      ),
+    ).rejects.toThrow('boom');
+    expect(recorded).toEqual([{ outcome: 'error', userVisibleMs: null }]);
+  });
+
+  it('deferred defaults to null until decided', async () => {
+    // null = "predates the flag / never decided", distinct from false = "ran
+    // inline". Same rule as target_size and user_visible_ms: an unwritten value
+    // must be visible, not plausible.
+    await runInBuildContext('u-null', async (ctx) => {
+      expect(ctx.deferred).toBeNull();
+      noteDeferred(true);
+      expect(ctx.deferred).toBe(true);
     });
   });
 });
