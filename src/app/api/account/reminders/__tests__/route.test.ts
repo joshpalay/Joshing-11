@@ -6,12 +6,14 @@ const {
   getSessionMock,
   getReminderStateMock,
   updateReminderPreferencesMock,
+  restoreSmsReminderConsentMock,
   sendSmsMock,
   sendVerificationEmailMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   getReminderStateMock: vi.fn(),
   updateReminderPreferencesMock: vi.fn(),
+  restoreSmsReminderConsentMock: vi.fn(),
   sendSmsMock: vi.fn(),
   sendVerificationEmailMock: vi.fn(),
 }));
@@ -19,6 +21,7 @@ const {
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/db/queries/account', () => ({
   getReminderState: getReminderStateMock,
+  restoreSmsReminderConsent: restoreSmsReminderConsentMock,
   updateReminderPreferences: updateReminderPreferencesMock,
 }));
 vi.mock('@/server/email/send-verification', () => ({
@@ -78,12 +81,16 @@ describe('SMS reminder opt-in confirmation', () => {
     getSessionMock.mockResolvedValue({ userId: 'user-1' });
     getReminderStateMock.mockResolvedValue(baseState);
     updateReminderPreferencesMock.mockResolvedValue({ ok: true, state: optedInState });
+    restoreSmsReminderConsentMock.mockResolvedValue(baseState);
     sendSmsMock.mockResolvedValue({ ok: true });
     sendVerificationEmailMock.mockResolvedValue({ ok: true });
   });
 
   it('sends the recurring-program confirmation when consent changes to opted in', async () => {
-    const response = await PATCH(patchRequest({ smsOptIn: 'opted_in' }));
+    const response = await PATCH(patchRequest({
+      smsOptIn: 'opted_in',
+      smsConsentSource: 'profile_web_form',
+    }));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -101,7 +108,10 @@ describe('SMS reminder opt-in confirmation', () => {
   it('does not send another confirmation for an already opted-in user', async () => {
     getReminderStateMock.mockResolvedValue(optedInState);
 
-    const response = await PATCH(patchRequest({ smsOptIn: 'opted_in' }));
+    const response = await PATCH(patchRequest({
+      smsOptIn: 'opted_in',
+      smsConsentSource: 'profile_web_form',
+    }));
 
     expect(response.status).toBe(200);
     expect(sendSmsMock).not.toHaveBeenCalled();
@@ -117,21 +127,49 @@ describe('SMS reminder opt-in confirmation', () => {
     expect(sendSmsMock).not.toHaveBeenCalled();
   });
 
-  it('rolls back to opted out when the confirmation cannot be delivered', async () => {
-    updateReminderPreferencesMock
-      .mockResolvedValueOnce({ ok: true, state: optedInState })
-      .mockResolvedValueOnce({ ok: true, state: optedOutState });
+  it('restores the exact prior state when the confirmation cannot be delivered', async () => {
     sendSmsMock.mockResolvedValue({ ok: false, reason: 'provider_error' });
 
-    const response = await PATCH(patchRequest({ smsOptIn: 'opted_in' }));
+    const response = await PATCH(patchRequest({
+      smsOptIn: 'opted_in',
+      smsConsentSource: 'onboarding_web_form',
+    }));
 
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({
       error: 'sms_confirmation_failed',
-      state: optedOutState,
+      state: baseState,
     });
+    expect(restoreSmsReminderConsentMock).toHaveBeenCalledWith('user-1', baseState);
+  });
+
+  it('requires a source for every SMS opt-in', async () => {
+    const response = await PATCH(patchRequest({ smsOptIn: 'opted_in' }));
+
+    expect(response.status).toBe(400);
+    expect(updateReminderPreferencesMock).not.toHaveBeenCalled();
+  });
+
+  it('retires later prompts only after a non-settings opt-in succeeds', async () => {
+    const completedState = {
+      ...optedInState,
+      smsConsentSource: 'onboarding_web_form',
+      reminderPromptDismissedAt: '2026-09-05T16:00:00.000Z',
+      reminderInterstitialSeenAt: '2026-09-05T16:00:00.000Z',
+    };
+    updateReminderPreferencesMock
+      .mockResolvedValueOnce({ ok: true, state: completedState })
+      .mockResolvedValueOnce({ ok: true, state: completedState });
+
+    const response = await PATCH(patchRequest({
+      smsOptIn: 'opted_in',
+      smsConsentSource: 'onboarding_web_form',
+    }));
+
+    expect(response.status).toBe(200);
     expect(updateReminderPreferencesMock).toHaveBeenNthCalledWith(2, 'user-1', {
-      smsOptIn: 'opted_out',
+      dismissed: true,
+      interstitialSeen: true,
     });
   });
 });

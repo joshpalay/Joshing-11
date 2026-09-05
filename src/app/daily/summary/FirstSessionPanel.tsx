@@ -9,10 +9,10 @@
  * the next set lands), and a link to change which questions you get.
  *
  * The earlier versions of this panel also carried a social "beat 3" (connect to
- * an inviter / invite-a-friend) and an email reminder opt-in. Both were dropped
- * — the first time you finish a game, the recap itself is the reward and the
- * extra asks were noise. The seen-signal is still persisted the moment the
- * panel mounts so refresh / re-entry never re-trigger it.
+ * an inviter / invite-a-friend) and a reminder opt-in. Both were removed from
+ * this card; the separately gated reminder prompt handles the single follow-up
+ * opportunity for players who skipped it during setup. The seen-signal is still
+ * persisted the moment the panel mounts so refresh / re-entry never re-trigger it.
  */
 
 import Link from 'next/link'

@@ -91,7 +91,8 @@ export default async function TermsPage() {
           <p>
             <span className="font-semibold">Program name and purpose.</span> Joshing SMS sends a
             one-time verification code when you request one. If you separately opt in on your
-            profile, Joshing may also send one daily reminder when your five questions are ready.
+            onboarding screen, the one-time Daily Summary follow-up, or your profile, Joshing may
+            also send one daily reminder when your five questions are ready.
           </p>
           <p>
             <span className="font-semibold">Frequency and charges.</span> Verification messages are

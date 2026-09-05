@@ -6,8 +6,8 @@
  * Replaces the old full-screen "first game" cinematic. For a user's first
  * completed Joshing game we now show a quiet inline panel at the top of the
  * game summary instead of taking over the screen: a short "nice going", the
- * reminder opt-in (reused from the Daily Five summary), and a link to change
- * which questions you get. The summary itself is the reward.
+ * daily cadence, and a link to change which questions you get. Reminder
+ * acquisition is handled by onboarding and the single Daily Summary follow-up.
  *
  * The eligibility fetch + seen-signal plumbing is unchanged from the cinematic:
  * the panel only renders for the first completed game, and the seen-signal is
@@ -17,7 +17,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 
-import { RoundReminderCard } from '@/app/daily/summary/RoundReminderCard';
 import type { FirstGameRecapView } from '@/server/games/first-game-recap';
 
 const monoStyle: CSSProperties = {
@@ -77,11 +76,6 @@ export function FirstGamePanel({ gameId }: { gameId: string }) {
           .
         </p>
       </section>
-
-      <RoundReminderCard
-        title="Want a reminder when new questions land?"
-        description="One message a day, max. You can turn it off any time."
-      />
     </>
   );
 }

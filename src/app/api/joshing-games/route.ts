@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     const gameUrl = `${getBaseUrl(request)}/games/${created.id}`;
     await Promise.all(
       recipientRows.map((recipient) => {
-        if (!recipient.phoneNumber || recipient.smsOptIn === 'opted_out') return Promise.resolve();
+        if (!recipient.phoneNumber || recipient.smsOptIn !== 'opted_in') return Promise.resolve();
         return sendSms(
           recipient.phoneNumber,
           `${creatorName} sent you a Joshing Game: ${parsed.title}. Play it here: ${gameUrl}`,

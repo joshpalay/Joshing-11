@@ -5,17 +5,13 @@ import { useState } from 'react'
 
 import { ReminderInterstitial } from '../ReminderInterstitial'
 
-// Preview harness for the one-time email-reminder interstitial
+// Preview harness for the one-time SMS-reminder interstitial
 // (D-REMINDER-INTERSTITIAL-01), so it can be reviewed from the profile's
 // developer tools without having to finish a daily and land on a fresh account
 // with reminder_interstitial_seen_at still null. The interstitial is rendered in
 // `preview` mode — signing up or skipping here mutates nothing.
 //
-// Two entry paths exist live, gated on whether the player already has a verified
-// email: one-tap opt-in vs. inline email collection. The chooser mounts whichever
-// you pick; "Not now" / "Home" returns you here.
-
-type Preview = null | { hasVerifiedEmail: boolean }
+type Preview = null | 'sms'
 
 export default function ReminderInterstitialPreviewPage() {
   const [preview, setPreview] = useState<Preview>(null)
@@ -24,7 +20,7 @@ export default function ReminderInterstitialPreviewPage() {
     return (
       <ReminderInterstitial
         preview
-        hasVerifiedEmail={preview.hasVerifiedEmail}
+        phoneNumber="+17345550123"
         onProceed={() => setPreview(null)}
       />
     )
@@ -45,35 +41,23 @@ export default function ReminderInterstitialPreviewPage() {
         Reminder interstitial preview
       </h1>
       <p className="text-muted-foreground mt-1 text-sm leading-6">
-        The one-time full-screen email-reminder ask, shown when a player leaves the daily-Five
+        The one-time full-screen SMS-reminder ask, shown when a player leaves the daily-Five
         summary via a <code>/</code> exit (the ✕, the &ldquo;Session recap&rdquo; link, or
-        &ldquo;Back home&rdquo;). Pick an entry path below. It renders in preview mode &mdash;
-        &ldquo;Email me&rdquo; and &ldquo;Not now&rdquo; change nothing on your account.
+        &ldquo;Back home&rdquo;). It renders in preview mode &mdash; &ldquo;Text me&rdquo; and
+        &ldquo;Not now&rdquo; change nothing on your account.
       </p>
 
       <div className="mt-6 flex flex-col gap-3">
         <button
           type="button"
-          onClick={() => setPreview({ hasVerifiedEmail: false })}
+          onClick={() => setPreview('sms')}
           className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-left transition hover:bg-[var(--brand-cream-page)]"
         >
           <span className="block text-sm font-semibold text-[var(--brand-ink)]">
-            Player without a verified email
+            Preview SMS reminder
           </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
-            &ldquo;Email me&rdquo; expands the inline email field, then the confirm state.
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setPreview({ hasVerifiedEmail: true })}
-          className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-left transition hover:bg-[var(--brand-cream-page)]"
-        >
-          <span className="block text-sm font-semibold text-[var(--brand-ink)]">
-            Player with a verified email
-          </span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            &ldquo;Email me&rdquo; opts in with one tap, straight to the confirm state.
+            &ldquo;Text me&rdquo; opts in with the verified account phone in one tap.
           </span>
         </button>
       </div>

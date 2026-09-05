@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 // ─────────────────────────────────────────────────────────────────────────────
 // Ceremony "room" primitives — the full-bleed, full-color takeover shell shared
 // by the weekly ceremony (src/app/ceremony/[ceremonyId]/page.tsx) and the
-// one-time email-reminder interstitial (D-REMINDER-INTERSTITIAL-01). Extracted
+// one-time SMS-reminder interstitial (D-REMINDER-INTERSTITIAL-01). Extracted
 // verbatim from the ceremony page so the two surfaces share one room shell
 // rather than drifting apart. Colors come from the --ceremony-* token ramp in
 // globals.css — no inline hex. These are pure presentational components (no

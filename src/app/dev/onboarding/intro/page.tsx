@@ -60,6 +60,8 @@ export default async function DevOnboardingIntroPage({
           inviteeDisplayName={null}
           initialDisplayName={null}
           initialHandle={null}
+            phoneNumber="+17345550123"
+            showReminderOffer
         />
       </div>
     </>

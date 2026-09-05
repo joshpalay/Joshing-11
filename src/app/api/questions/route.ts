@@ -462,7 +462,7 @@ export async function POST(request: NextRequest) {
       });
       await rollOffOldItems(recipientId);
 
-      if (recipientRow?.phoneNumber && recipientRow.smsOptIn !== 'opted_out') {
+      if (recipientRow?.phoneNumber && recipientRow.smsOptIn === 'opted_in') {
         // B-11.1 (2026-08-30): the standalone /feed route is retired and now
         // redirects to home. Deep-link straight at home's feed section anchor
         // (<section id="feed"> in src/app/page.tsx) so a recipient following

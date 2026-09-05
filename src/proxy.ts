@@ -41,7 +41,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname === '/terms' ||
     pathname === '/privacy' ||
-    pathname === '/sms-consent' ||
+    pathname.startsWith('/sms-consent') ||
     pathname.startsWith('/compliance/')
   ) {
     return tagTiming(NextResponse.next(), startedAt);

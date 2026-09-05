@@ -174,7 +174,10 @@ export function NotificationsForm({ initialState, phone }: Props) {
     setSmsError(null);
     setSmsNotice(null);
     const next = smsOptInForChecked(checked);
-    const result = await patchReminders({ smsOptIn: next });
+    const result = await patchReminders({
+      smsOptIn: next,
+      ...(checked ? { smsConsentSource: 'profile_web_form' } : {}),
+    });
     setSavingSms(false);
     if (!result.ok || !result.state) {
       setSmsError(result.errorMessage ?? 'Could not save SMS reminder preference.');
