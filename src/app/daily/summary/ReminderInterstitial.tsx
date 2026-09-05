@@ -4,19 +4,18 @@ import { useEffect, useState } from 'react'
 
 import { Eyebrow, Reveal, Shell, roomTheme } from '@/components/ceremony/room'
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion'
+import { SmsReminderDisclosure } from '@/components/reminders/SmsReminderDisclosure'
 
-// D-REMINDER-INTERSTITIAL-01 — the one-time, full-screen email-reminder ask.
-// Fires when a player leaves the daily summary via a `/` path (E1), at most once
-// per account. It is a single ceremony ROOM (Decision I): the navy TH.open
+// D-REMINDER-INTERSTITIAL-01 — the one-time, full-screen SMS-reminder ask.
+// Fires when a player who skipped onboarding reminders leaves the daily summary
+// via a `/` path, at most once per account. It is a single ceremony ROOM: the navy TH.open
 // ground, ochre accent, staggered reveal — reusing the shared Shell/Reveal/
 // Eyebrow primitives. Deliberately NOT the ceremony's tap-to-advance: this is
 // one room with two equal-weight buttons (G1), not a story. No ✕ — a third exit
 // would be ambiguous against "Not now" and need its own write path.
 //
-// Both buttons stamp reminder_interstitial_seen_at (so it never re-fires) and
-// then proceed to `/` (Decision F1 — honor the exit the player pressed). Skip
-// (`Not now`) writes ONLY the seen column, never reminder_prompt_dismissed_at
-// (Decision D) — the standing inline RoundReminderCard lives on.
+// Mounting stamps reminder_interstitial_seen_at, so displaying this surface
+// consumes the one contextual follow-up. Settings remains available afterward.
 
 async function patchReminders(body: Record<string, unknown>): Promise<boolean> {
   try {
@@ -33,34 +32,29 @@ async function patchReminders(body: Record<string, unknown>): Promise<boolean> {
 }
 
 type State =
-  // Two equal-weight buttons: "Email me" / "Not now".
-  | { kind: 'ask' }
-  // No verified email on file — collect one inline before opting in.
-  | { kind: 'collect'; value: string; error: string | null; saving: boolean }
-  // A seen-stamping PATCH is in flight (verified one-tap opt-in, or skip).
+  // Two equal-weight buttons: "Text me" / "Not now".
+  | { kind: 'ask'; error: string | null }
+  // An opt-in or skip write is in flight.
   | { kind: 'working' }
   // Signed up — a short acknowledgement before proceeding home.
   | { kind: 'done'; message: string }
 
 export function ReminderInterstitial({
-  hasVerifiedEmail,
+  phoneNumber,
   onProceed,
   preview = false,
 }: {
-  // When the player already has a verified email, "Email me" opts them in with
-  // one tap; otherwise it expands an inline email field.
-  hasVerifiedEmail: boolean
-  // Called once the seen-stamp has been attempted (best-effort), to deliver the
-  // player to the `/` exit they originally pressed. Never blocks on the network.
+  phoneNumber?: string | null
+  // Delivers the player to the `/` exit they originally pressed.
   onProceed: () => void
   // Preview mode (admin/dev route): render the room and drive every state, but
-  // never touch the account — no seen-stamp, no opt-in, no pending email. The
+  // never touch the account — no seen-stamp or opt-in. The
   // buttons still advance the local state so the flow can be reviewed.
   preview?: boolean
 }) {
   const reduced = usePrefersReducedMotion()
   const th = roomTheme('open')
-  const [state, setState] = useState<State>({ kind: 'ask' })
+  const [state, setState] = useState<State>({ kind: 'ask', error: null })
 
   // In preview mode every write is a no-op that reports success, so the state
   // machine advances exactly as it would live without mutating anything.
@@ -76,34 +70,37 @@ export function ReminderInterstitial({
     return () => cancelAnimationFrame(id)
   }, [])
 
+  useEffect(() => {
+    if (preview) return
+    void patchReminders({ interstitialSeen: true })
+  }, [preview])
+
   async function skip() {
     setState({ kind: 'working' })
     await save({ interstitialSeen: true })
     onProceed()
   }
 
-  async function optInWithVerifiedEmail() {
+  async function optInWithSms() {
     setState({ kind: 'working' })
-    const ok = await save({ emailOptIn: 'opted_in', interstitialSeen: true })
+    const ok = await save({
+      smsOptIn: 'opted_in',
+      smsConsentSource: 'daily_summary_web_form',
+    })
     if (ok) {
       setState({
         kind: 'done',
-        message: "You're set. We'll email you when each day's five open.",
+        message: "You're set. We'll text you when each day's five open.",
       })
       return
     }
-    // Signup failed but the ask is spent — stamp seen and let them leave rather
-    // than trapping them on a broken room.
-    onProceed()
+    setState({
+      kind: 'ask',
+      error: "We couldn't turn on text reminders. Try again or choose Not now.",
+    })
   }
 
-  const busy = state.kind === 'working' || (state.kind === 'collect' && state.saving)
-
-  const fieldStyle = {
-    borderColor: th.accent,
-    backgroundColor: 'var(--brand-field)',
-    color: 'var(--brand-ink)',
-  }
+  const busy = state.kind === 'working'
 
   return (
     <div
@@ -150,98 +147,22 @@ export function ReminderInterstitial({
           <>
             <Reveal show={shown} delay={reduced ? 0 : 0.16} reduced={reduced}>
               <p style={{ fontSize: 16, lineHeight: 1.55, color: th.sub, marginBottom: 28 }}>
-                We&rsquo;ll email you when they open. That&rsquo;s the whole thing &mdash; one
+                We&rsquo;ll text you when they open. That&rsquo;s the whole thing &mdash; one
                 note a day, and only when there&rsquo;s something new to find out.
               </p>
             </Reveal>
 
-            {state.kind === 'collect' ? (
-              <Reveal show reduced={reduced}>
-                <form
-                  className="flex flex-col gap-3"
-                  onSubmit={async (event) => {
-                    event.preventDefault()
-                    if (state.kind !== 'collect') return
-                    const trimmed = state.value.trim()
-                    if (!trimmed) {
-                      setState({ ...state, error: 'Please enter an email address.' })
-                      return
-                    }
-                    setState({ ...state, saving: true, error: null })
-                    const ok = await save({
-                      pendingEmail: trimmed,
-                      interstitialSeen: true,
-                    })
-                    if (!ok) {
-                      setState({ ...state, saving: false, error: 'Could not save. Try again.' })
-                      return
-                    }
-                    setState({
-                      kind: 'done',
-                      message: `Check ${trimmed} to confirm, and we'll email you when each day's five open.`,
-                    })
-                  }}
-                >
-                  <input
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    required
-                    autoFocus
-                    placeholder="you@example.com"
-                    value={state.value}
-                    disabled={state.saving}
-                    onChange={(event) =>
-                      setState((prev) =>
-                        prev.kind === 'collect'
-                          ? { ...prev, value: event.target.value, error: null }
-                          : prev,
-                      )
-                    }
-                    className="min-h-11 w-full rounded-[var(--radius-md)] border px-3 py-2 text-sm outline-none"
-                    style={fieldStyle}
-                  />
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button
-                      type="submit"
-                      disabled={state.saving}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
-                      style={{ backgroundColor: th.fg, color: th.bg }}
-                    >
-                      {state.saving ? 'Saving…' : 'Email me'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={state.saving}
-                      onClick={skip}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
-                      style={{ borderColor: th.fg, color: th.fg }}
-                    >
-                      Not now
-                    </button>
-                  </div>
-                  {state.error ? (
-                    <p style={{ fontSize: 13, color: th.fg }} role="alert">
-                      {state.error}
-                    </p>
-                  ) : null}
-                </form>
-              </Reveal>
-            ) : (
-              <Reveal show={shown} delay={reduced ? 0 : 0.24} reduced={reduced}>
+            <Reveal show={shown} delay={reduced ? 0 : 0.24} reduced={reduced}>
+              <div className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() =>
-                      hasVerifiedEmail
-                        ? optInWithVerifiedEmail()
-                        : setState({ kind: 'collect', value: '', error: null, saving: false })
-                    }
+                    onClick={() => void optInWithSms()}
                     className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
                     style={{ backgroundColor: th.fg, color: th.bg }}
                   >
-                    Email me
+                    {busy ? 'Turning on…' : 'Text me'}
                   </button>
                   <button
                     type="button"
@@ -253,8 +174,20 @@ export function ReminderInterstitial({
                     Not now
                   </button>
                 </div>
-              </Reveal>
-            )}
+                <div style={{ color: th.sub }}>
+                  <SmsReminderDisclosure
+                    phoneNumber={phoneNumber}
+                    actionLabel="Text me"
+                    className="text-xs leading-5"
+                  />
+                </div>
+                {state.kind === 'ask' && state.error ? (
+                  <p style={{ fontSize: 13, color: th.fg }} role="alert">
+                    {state.error}
+                  </p>
+                ) : null}
+              </div>
+            </Reveal>
           </>
         )}
       </Shell>

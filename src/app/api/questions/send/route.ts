@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
   await rollOffOldItems(parsed.recipientUserId);
 
   const recipientUser = recipient[0];
-  if (recipientUser.phoneNumber && recipientUser.smsOptIn !== 'opted_out') {
+  if (recipientUser.phoneNumber && recipientUser.smsOptIn === 'opted_in') {
     const senderName = senderNameRow[0]?.displayName?.trim() || 'A friend';
     // B-11.1 (2026-08-30): the standalone /feed route is retired and now
     // redirects to home. Deep-link straight at home's feed section anchor

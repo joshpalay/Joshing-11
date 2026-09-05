@@ -2,11 +2,38 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import OnboardingFlow from '@/app/onboarding/OnboardingFlow'
+import OnboardingFlow, { OnboardingReminderStep } from '@/app/onboarding/OnboardingFlow'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }))
+
+describe('Onboarding reminder choice', () => {
+  it('offers the SMS reminder primary action and the decline button', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingReminderStep
+        phoneNumber="+17345550123"
+        topics={['Sondheim', 'Jazz']}
+        saving={false}
+        error={null}
+        onContinueWithReminders={vi.fn()}
+        onContinueWithoutReminders={vi.fn()}
+      />
+    )
+
+    expect(html).toContain('We’re writing your first five.')
+    expect(html).toContain('Text me when they open')
+    expect(html).toContain('I’ll check back on my own')
+    expect(html).toContain('(734) 555-0123')
+    expect(html).toContain('automated Joshing reminder texts')
+    expect(html).toContain('Sondheim')
+    expect(html).toContain('Jazz')
+    expect(html).not.toContain('Email me')
+    // No duration claim — the crafting screen that follows proves the wait
+    // rather than the copy asserting a length for it.
+    expect(html).not.toMatch(/minute|second/i)
+  })
+})
 
 describe('OnboardingFlow invited interests', () => {
   it('pre-selects a seeded interest on the interests step', () => {

@@ -132,7 +132,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         ]);
 
         if (newlyComplete && !completion.allComplete) {
-          if (creator?.phoneNumber && creator.smsOptIn !== 'opted_out') {
+          if (creator?.phoneNumber && creator.smsOptIn === 'opted_in') {
             const actorName = actor?.displayName?.trim() || 'Someone';
             await sendSms(
               creator.phoneNumber,
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         if (newlyAllComplete) {
-          if (creator?.phoneNumber && creator.smsOptIn !== 'opted_out') {
+          if (creator?.phoneNumber && creator.smsOptIn === 'opted_in') {
             await sendSms(
               creator.phoneNumber,
               `Everyone played ${existingView.game.title}. See the full results. ${baseUrl}/games/${id}/summary`,

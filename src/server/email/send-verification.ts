@@ -32,8 +32,8 @@ function appBaseUrl(): string {
 // failure. Used by:
 //   - POST /api/account/email/verify/send (explicit resend)
 //   - PATCH /api/account/reminders (auto-trigger on pendingEmail change)
-//   - POST /api/onboarding/email-reminder (passes optInOnConfirm so confirming
-//     the link also flips emailOptIn on — the onboarding beat's single action)
+// optInOnConfirm remains supported for verification tokens minted by the retired
+// onboarding-email flow before SMS became the acquisition channel.
 export async function sendVerificationEmail(
   userId: string,
   options: { optInOnConfirm?: boolean } = {},

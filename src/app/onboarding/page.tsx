@@ -19,6 +19,8 @@ import { assessInterestAnswerability } from '@/server/llm/interests';
 import { convergeDomain } from '@/server/knowledge/converge-domain';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { getReminderState } from '@/server/db/queries/account';
+import { shouldOfferReminderAcquisition } from '@/server/reminders/acquisition';
 
 import OnboardingFlow, { type PreSeededInterest } from './OnboardingFlow';
 
@@ -37,6 +39,11 @@ export default async function OnboardingPage() {
   if (user.onboardingComplete) {
     redirect('/');
   }
+
+  const reminderState = await getReminderState(session.userId);
+  const showReminderOffer = reminderState
+    ? shouldOfferReminderAcquisition(reminderState)
+    : false;
 
   // Belt-and-suspenders invitation check: the middleware JWT gate runs first,
   // but this protects the onboarding route against any future session path
@@ -158,6 +165,8 @@ export default async function OnboardingPage() {
       inviteeDisplayName={seeded.inviteeDisplayName}
       initialDisplayName={user.displayName}
       initialHandle={user.handle}
+      phoneNumber={user.phoneNumber}
+      showReminderOffer={showReminderOffer}
     />
   );
 }

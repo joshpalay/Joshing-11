@@ -46,10 +46,16 @@ const PREVIEW_LINK_CONTEXT = {
   topics: ['Jazz', 'Chess Openings', '1990s Sitcoms'],
 };
 
-type PreviewScreen = 'phone' | 'deadEnd' | 'linkCard';
+type PreviewScreen = 'phone' | 'deadEnd' | 'linkCard' | 'code' | 'profile';
 
 function isPreviewScreen(value: string | null): value is PreviewScreen {
-  return value === 'phone' || value === 'deadEnd' || value === 'linkCard';
+  return (
+    value === 'phone' ||
+    value === 'deadEnd' ||
+    value === 'linkCard' ||
+    value === 'code' ||
+    value === 'profile'
+  );
 }
 
 // `useSearchParams` requires a Suspense boundary at or above its call site
@@ -119,6 +125,12 @@ function DevInviteLoginPageInner() {
           onClick={() => setScreen('linkCard')}
           label="Screen 1c — invite-link card"
         />
+        <PreviewTab active={screen === 'code'} onClick={() => setScreen('code')} label="Code" />
+        <PreviewTab
+          active={screen === 'profile'}
+          onClick={() => setScreen('profile')}
+          label="Profile"
+        />
       </div>
 
       {/* Render the real LoginPanel so the preview can never drift from prod.
@@ -132,6 +144,7 @@ function DevInviteLoginPageInner() {
             invitePrefill={screen === 'linkCard' ? null : PREVIEW_PREFILL}
             inviteContext={screen === 'linkCard' ? PREVIEW_LINK_CONTEXT : PREVIEW_INVITER}
             previewDeadEnd={screen === 'deadEnd'}
+            previewStep={screen === 'code' || screen === 'profile' ? screen : 'phone'}
           />
         </Suspense>
       </div>

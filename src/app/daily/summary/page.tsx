@@ -28,7 +28,6 @@ import type {
   DailySummaryView,
   QuestionRecap,
 } from '@/server/db/queries/daily-summary'
-import { RoundReminderCard } from './RoundReminderCard'
 import { ReminderInterstitial } from './ReminderInterstitial'
 import { InvitationTakeoverGate } from './InvitationTakeoverGate'
 import { ExpandDomainOfferCard } from './ExpandDomainOfferCard'
@@ -307,10 +306,6 @@ export default function DailySummaryPage() {
           </div>
         </section>
 
-        {summary.reminderPromptState === 'show' && !firstSessionRecap ? (
-          <RoundReminderCard />
-        ) : null}
-
         {summary.recentFriendBridge ? (
           <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
             <h2 style={titleStyle}>Meanwhile</h2>
@@ -362,7 +357,7 @@ export default function DailySummaryPage() {
           seen column and proceed to `/`. */}
       {interstitialOpen ? (
         <ReminderInterstitial
-          hasVerifiedEmail={summary.hasVerifiedEmail}
+          phoneNumber={summary.phoneNumber}
           onProceed={() => router.push('/')}
         />
       ) : null}

@@ -269,11 +269,9 @@ export const users = pgTable(
     emailVerified: boolean('email_verified').notNull().default(false),
     pendingEmail: text('pending_email'),
     reminderPromptDismissedAt: timestamp('reminder_prompt_dismissed_at', { withTimezone: true }),
-    // D-REMINDER-INTERSTITIAL-01: stamped when the one-time full-screen reminder
-    // interstitial is shown (on BOTH sign-up and skip), so it fires at most once.
-    // Deliberately separate from reminderPromptDismissedAt (Decision D): skipping
-    // the interstitial is "not now", not "never" — it must not retire the
-    // standing inline RoundReminderCard, so it cannot share that column.
+    // Stamped when the one allowed post-onboarding reminder follow-up is shown.
+    // The shared acquisition state treats it as terminal for contextual prompts;
+    // Settings remains available for a later user-initiated change.
     reminderInterstitialSeenAt: timestamp('reminder_interstitial_seen_at', { withTimezone: true }),
     areaTopUpPromptDismissedAt: timestamp('area_top_up_prompt_dismissed_at', {
       withTimezone: true,
