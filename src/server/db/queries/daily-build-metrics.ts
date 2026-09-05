@@ -29,14 +29,72 @@ import { DAILY_QUEUE_SIZE } from '@/server/daily/types';
  * DailyQueue rows.
  */
 export { BONUS_MARKER_FLOOR };
-export async function recordDailyBuildMetric(ctx: DailyBuildContext): Promise<void> {
+/**
+ * PHASE 1 -- called immediately after the queue is persisted and readable.
+ *
+ * Writes the row with user_visible_ms set and span_ms NULL. The row therefore
+ * exists from the moment the player can start, which matters because phase 2
+ * runs in a scheduled continuation that is not guaranteed to complete: a
+ * serverless freeze after the response, a throw in bonus generation, or a
+ * caller where after() never runs. Writing only in the continuation would leave
+ * no row at all, which is ambiguous between "the build never happened" and "the
+ * continuation was lost". A NULL span_ms says exactly which.
+ *
+ * Idempotent on build_id -- a retried insert is a no-op, never a duplicate row.
+ */
+export async function insertDailyBuildMetric(ctx: DailyBuildContext): Promise<void> {
   try {
     const bankHits = ctx.bankAttempts.filter((a) => a.outcome === 'hit').length;
-    await db.insert(dailyBuildMetrics).values({
+    await db
+      .insert(dailyBuildMetrics)
+      .values({
+        buildId: ctx.buildId,
+        userId: ctx.userId,
+        startedAt: new Date(ctx.startedAt),
+        // Deliberately NOT set here. Phase 2 owns total time.
+        spanMs: null,
+        userVisibleMs: ctx.userVisibleMs,
+        deferred: ctx.deferred,
+        roundCount: ctx.roundCount,
+        generateCallCount: ctx.generateCallCount,
+        rounds: ctx.rounds,
+        bankHitCount: bankHits,
+        bankMissCount: ctx.bankAttempts.length - bankHits,
+        bankAttempts: ctx.bankAttempts,
+        gatedFloorReachedMs: ctx.gatedFloorReachedMs,
+        targetSize: DAILY_QUEUE_SIZE,
+        finalSize: ctx.finalSize,
+        aborted: ctx.aborted,
+        outcome: ctx.outcome,
+      })
+      .onConflictDoNothing();
+  } catch (error) {
+    console.warn('[daily/build-metric] insert failed (telemetry only)', {
       buildId: ctx.buildId,
-      userId: ctx.userId,
-      startedAt: new Date(ctx.startedAt),
-      spanMs: Math.max(0, Date.now() - ctx.startedAt),
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * PHASE 2 -- called when ALL work for the build is done, deferred bonus
+ * included. Sets span_ms (total, including work moved off the critical path)
+ * and re-writes the counters the continuation may have advanced.
+ *
+ * Upserts rather than updates: an early-return or a build that threw before
+ * persisting never ran phase 1, and those rows must still exist. Analysis MUST
+ * filter on outcome='built' -- the early-return paths record zero generation
+ * calls and would otherwise be indistinguishable from a genuine bank-only
+ * build.
+ */
+export async function finalizeDailyBuildMetric(ctx: DailyBuildContext): Promise<void> {
+  try {
+    const bankHits = ctx.bankAttempts.filter((a) => a.outcome === 'hit').length;
+    const spanMs = Math.max(0, Date.now() - ctx.startedAt);
+    const shared = {
+      spanMs,
+      userVisibleMs: ctx.userVisibleMs,
+      deferred: ctx.deferred,
       roundCount: ctx.roundCount,
       generateCallCount: ctx.generateCallCount,
       rounds: ctx.rounds,
@@ -44,20 +102,22 @@ export async function recordDailyBuildMetric(ctx: DailyBuildContext): Promise<vo
       bankMissCount: ctx.bankAttempts.length - bankHits,
       bankAttempts: ctx.bankAttempts,
       gatedFloorReachedMs: ctx.gatedFloorReachedMs,
-      // §2: the player-visible half of the span. Compare against spanMs on the
-      // same row to price the bonus deferral; see the column comment.
-      userVisibleMs: ctx.userVisibleMs,
-      targetSize: DAILY_QUEUE_SIZE,
       finalSize: ctx.finalSize,
       aborted: ctx.aborted,
-      // Analysis MUST filter on outcome='built'. The early-return paths
-      // (existing queue, carry-forward, partial carry-forward) record zero
-      // generation calls and would otherwise be indistinguishable from a
-      // genuine bank-only build.
       outcome: ctx.outcome,
-    });
+    };
+    await db
+      .insert(dailyBuildMetrics)
+      .values({
+        buildId: ctx.buildId,
+        userId: ctx.userId,
+        startedAt: new Date(ctx.startedAt),
+        targetSize: DAILY_QUEUE_SIZE,
+        ...shared,
+      })
+      .onConflictDoUpdate({ target: dailyBuildMetrics.buildId, set: shared });
   } catch (error) {
-    console.warn('[daily/build-metric] record failed (telemetry only)', {
+    console.warn('[daily/build-metric] finalize failed (telemetry only)', {
       buildId: ctx.buildId,
       message: error instanceof Error ? error.message : String(error),
     });

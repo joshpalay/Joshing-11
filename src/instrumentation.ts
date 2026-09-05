@@ -2742,6 +2742,20 @@ export async function register() {
       } catch {
         // DailyBuildMetric may not exist yet on a fresh database.
       }
+
+      // Migration 0139 makes the build metric a TWO-PHASE write: the row is
+      // inserted at persist with span_ms NULL, then updated when the deferred
+      // bonus work completes. span_ms must therefore be nullable -- a NULL means
+      // the continuation never finished, which is a visible signal rather than a
+      // missing row. `deferred` separates a deferred build from an inline one.
+      try {
+        await db.execute(sql`ALTER TABLE "DailyBuildMetric" ALTER COLUMN "span_ms" DROP NOT NULL`);
+        await db.execute(
+          sql`ALTER TABLE "DailyBuildMetric" ADD COLUMN IF NOT EXISTS "deferred" boolean`,
+        );
+      } catch {
+        // DailyBuildMetric may not exist yet on a fresh database.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

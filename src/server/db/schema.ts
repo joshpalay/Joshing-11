@@ -2219,7 +2219,12 @@ export const dailyBuildMetrics = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
     // Authoritative wall clock — covers bank-only builds, which have no LLM
     // events to reconstruct a span from.
-    spanMs: integer('span_ms').notNull(),
+    /**
+     * Total build wall clock, INCLUDING deferred bonus work. Written in the
+     * second phase (0139), so NULL means the build persisted but its
+     * continuation never completed -- a visible signal, not a missing row.
+     */
+    spanMs: integer('span_ms'),
     // The open §2 question: does span track ROUNDS (each separated by ~10s of
     // sequential gates) or CALLS (which run in parallel chunks of 3)? The 9+
     // bucket having a LOWER median than 4-8 suggests rounds. Both are recorded
@@ -2266,6 +2271,16 @@ export const dailyBuildMetrics = pgTable(
      * NULL when the build never reached persistence.
      */
     userVisibleMs: integer('user_visible_ms'),
+    /**
+     * Did the bonus work run OFF the critical path for this build?
+     *
+     * After the deferral ships, cron builds defer while any caller without a
+     * request scope (no after()) falls back to running inline. Both write rows,
+     * and an inline row has span_ms ~ user_visible_ms -- the same signature as a
+     * pre-deferral row and as a FAILED deferral. Three states, one reading,
+     * without this flag. NULL means the build predates it.
+     */
+    deferred: boolean('deferred'),
     targetSize: integer('target_size').notNull(),
     finalSize: integer('final_size').notNull(),
     aborted: boolean('aborted').notNull().default(false),

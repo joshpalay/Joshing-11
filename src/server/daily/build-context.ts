@@ -106,6 +106,28 @@ export type DailyBuildContext = {
    * Null when the build never reached persistence (threw, or early-returned).
    */
   userVisibleMs: number | null;
+  /**
+   * Did the bonus work run OFF the player's critical path for this build?
+   *
+   * Null until decided. Set true when the continuation is scheduled, false when
+   * we fall back to running inline because no request scope was available
+   * (after() only exists inside a request). Both cases persist a row, and
+   * without this flag an inline row is indistinguishable from a pre-deferral
+   * row AND from a deferral that silently failed.
+   */
+  deferred: boolean | null;
+  /**
+   * True once the build has handed its remaining work (deferred bonus, then the
+   * phase-2 metric write) to a scheduled continuation.
+   *
+   * runBuildWithMetrics checks this before recording: if a continuation owns the
+   * tail, the finally block must NOT write the metric, because it runs the
+   * moment the build returns -- which is BEFORE the deferred work finishes. That
+   * would set span_ms at persist time, making it equal user_visible_ms on every
+   * row and reporting a deferral that bought exactly zero. The continuation
+   * finalizes instead.
+   */
+  deferredContinuationScheduled: boolean;
   aborted: boolean;
   /** Slot count actually persisted. 0 when the build threw before assembly. */
   finalSize: number;
@@ -145,6 +167,8 @@ export function runInBuildContext<T>(
     bankAttempts: [],
     gatedFloorReachedMs: null,
     userVisibleMs: null,
+    deferred: null,
+    deferredContinuationScheduled: false,
     aborted: false,
     finalSize: 0,
     outcome: 'built',
@@ -205,6 +229,21 @@ export function noteQueuePersisted(): void {
   }
 }
 
+/**
+ * Hand the tail of the build to a scheduled continuation. After this, the
+ * continuation owns the phase-2 metric write.
+ */
+export function noteDeferredContinuation(): void {
+  const ctx = storage.getStore();
+  if (ctx) ctx.deferredContinuationScheduled = true;
+}
+
+/** Record whether the bonus work was deferred or run inline. */
+export function noteDeferred(deferred: boolean): void {
+  const ctx = storage.getStore();
+  if (ctx) ctx.deferred = deferred;
+}
+
 export function noteFinalSize(size: number): void {
   const ctx = storage.getStore();
   if (ctx) ctx.finalSize = size;
@@ -245,7 +284,13 @@ export async function runBuildWithMetrics<T>(
     } finally {
       // Best-effort: telemetry must never convert a successful build into a
       // failure, nor mask a real build error on its way out.
-      await record(ctx).catch(() => {});
+      //
+      // Skipped when a continuation owns the tail: this block runs the moment
+      // the build RETURNS, which under the bonus deferral is before the deferred
+      // work has finished. Recording here would stamp span_ms at persist time,
+      // make it equal user_visible_ms on every row, and report that deferring
+      // bought nothing. The continuation calls finalize instead.
+      if (!ctx.deferredContinuationScheduled) await record(ctx).catch(() => {});
     }
   });
 }

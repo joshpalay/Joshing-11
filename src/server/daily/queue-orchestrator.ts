@@ -1,8 +1,8 @@
+import { after } from 'next/server';
 import {
   buildAuthoredSlot,
   buildBotSlot,
   buildHouseSlot,
-  buildPresenceSlot,
   buildReturnSlot,
   resolveCreatorNames,
   carryForwardUntouchedDailyQueue,
@@ -13,6 +13,7 @@ import {
   getKnowledgeBase,
   getPriorInWindowDailyQueue,
   getTodaysDailyQueue,
+  createDailyQueueItemFromPresence,
   persistDailyQueue,
   pickEligibleAuthoredQuestions,
   pickHouseQuestions,
@@ -64,11 +65,17 @@ import {
   noteFinalSize,
   noteGatedFloorReached,
   noteOutcome,
+  currentBuildContext,
+  noteDeferred,
+  noteDeferredContinuation,
   noteQueuePersisted,
   noteRound,
   runBuildWithMetrics,
 } from '@/server/daily/build-context';
-import { recordDailyBuildMetric } from '@/server/db/queries/daily-build-metrics';
+import {
+  finalizeDailyBuildMetric,
+  insertDailyBuildMetric,
+} from '@/server/db/queries/daily-build-metrics';
 
 export type DailyQueueFillErrorCode = 'no_knowledge_base' | 'generation_failed';
 
@@ -354,7 +361,7 @@ export function fillDailyQueueForUser(
   const promise = runBuildWithMetrics(
     userId,
     () => buildDailyQueueForUser(userId, durationBudgetMs),
-    (ctx) => recordDailyBuildMetric(ctx),
+    (ctx) => finalizeDailyBuildMetric(ctx),
     (error) =>
       error instanceof DailyQueueFillError && error.code === 'no_knowledge_base'
         ? 'no_knowledge_base'
@@ -1247,6 +1254,8 @@ async function buildDailyQueueForUser(
   // Generated BEFORE the single persist so the whole queue (core + bonus) lands
   // atomically. Wrapped so a generation failure degrades to a core-only queue
   // (possibly still short) instead of losing the entire build.
+  // Set when there is +2 bonus work to run AFTER the queue is readable.
+  let deferredBonusPlan: { candidates: FriendDomainCandidate[] } | null = null;
   try {
     // At this point `slots` holds only core slots (bonus is appended below), so its
     // length IS the core count. A dry own-palette leaves this under DAILY_QUEUE_SIZE.
@@ -1262,56 +1271,66 @@ async function buildDailyQueueForUser(
     // lose the whole build. The core backfill is best-effort for the same reason a
     // short queue is tolerated down to the floor: a served four beats a lost build.
     if (friendDomains.length > 0 && hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)) {
-      const presenceByDomain = new Map(
-        friendDomains.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
+      // DEFERRAL SPLIT. Two different jobs used to share one generation call:
+      // filling a SHORT core (promotion) and appending the +2 (bonus). Only the
+      // second is optional, so only the second is deferred.
+      //
+      //   * core-fill runs SYNCHRONOUSLY and before persist -- those questions
+      //     are part of the five, and a queue must not be served without them.
+      //   * bonus generation is handed to a continuation that runs AFTER the
+      //     queue is readable. That is the ~15s the player stops waiting for.
+      //
+      // The domains are ordered by getFriendDomainsForBonus, so taking the
+      // first `coreShortfall` for promotion is the selector's own preference,
+      // not a positional guess.
+      const coreDomains = friendDomains.slice(0, coreShortfall);
+      const bonusDomains = friendDomains.slice(
+        coreShortfall,
+        coreShortfall + DAILY_BONUS_SLOT_MAX,
       );
-      // A0: time the bonus cycle as its own phase-tagged span. This is the
-      // block the deferral moves off the critical path, so it has to be
-      // measurable on its own BEFORE the move -- otherwise the "what did
-      // deferring buy?" question is answered by comparing across a deploy.
-      // Note it runs here, ahead of persistDailyQueue, which is precisely why
-      // the player waits for it today.
-      const bonusStartedAt = Date.now();
-      const generatedFriend = await generateBonusQuestionsForDomains(
-        userId,
-        friendDomains.map((candidate) => candidate.domain),
-      );
-      noteRound({
-        round: 0,
-        phase: 'bonus',
-        generationMs: Date.now() - bonusStartedAt,
-        gateMs: 0,
-        // The bonus path generates per-domain (one call each, sequentially),
-        // so the domain count IS the chunk count here.
-        chunks: friendDomains.length,
-      });
+
+      let generatedFriend: Awaited<ReturnType<typeof generateBonusQuestionsForDomains>> = [];
+      if (coreDomains.length > 0) {
+        const coreFillStartedAt = Date.now();
+        generatedFriend = await generateBonusQuestionsForDomains(
+          userId,
+          coreDomains.map((candidate) => candidate.domain),
+        );
+        // Tagged 'core', not 'bonus': this cycle fills the five and stays on the
+        // critical path. Phase describes the WORK, not the code path it shares.
+        noteRound({
+          round: 0,
+          phase: 'core',
+          generationMs: Date.now() - coreFillStartedAt,
+          gateMs: 0,
+          chunks: coreDomains.length,
+        });
+      }
+      if (bonusDomains.length > 0) {
+        deferredBonusPlan = { candidates: bonusDomains };
+      }
       let promotedToCore = 0;
-      let bonusAppended = 0;
-      for (const { domain, question } of generatedFriend) {
-        if (slots.length < DAILY_QUEUE_SIZE) {
-          // Still short on core → promote into the five as a plain core slot. No
-          // presence attribution: it reads as a normal fifth question, not a "+2".
-          slots.push(buildBotSlot(question, position));
-          generatedQuestionIds.push(question.id);
-          position += 1;
-          promotedToCore += 1;
-        } else if (bonusAppended < DAILY_BONUS_SLOT_MAX) {
-          const candidate = presenceByDomain.get(domain.toLowerCase());
-          slots.push(buildPresenceSlot(question, toBonusPresence(candidate), position));
-          generatedQuestionIds.push(question.id);
-          position += 1;
-          bonusAppended += 1;
-        } else {
-          break;
-        }
+      for (const { question } of generatedFriend) {
+        // Promotion only. Bonus slots no longer land here -- they are appended
+        // by the deferred continuation, after persist. A generated question
+        // beyond the five is dropped rather than appended as a bonus, because
+        // appending it here would put the player back behind the work this
+        // split exists to move.
+        if (slots.length >= DAILY_QUEUE_SIZE) break;
+        slots.push(buildBotSlot(question, position));
+        generatedQuestionIds.push(question.id);
+        position += 1;
+        promotedToCore += 1;
       }
       if (promotedToCore > 0) {
         console.info('[daily/queue-orchestrator] backfilled short core from friend domains', {
           userId,
           coreShortfall,
           promotedToCore,
-          bonusAppended,
-          coreAfter: slots.length - bonusAppended,
+          // Bonus is appended by the deferred continuation now, so every slot
+          // present at this point is core.
+          coreAfter: slots.length,
+          deferredBonusDomains: deferredBonusPlan?.candidates.length ?? 0,
         });
       }
     }
@@ -1392,11 +1411,51 @@ async function buildDailyQueueForUser(
   // A0: record the size actually persisted, for the build metric.
   noteFinalSize(slots.length);
   await persistDailyQueue(userId, slots, generatedQuestionIds);
-  // A0 (§2): the queue is now readable — everything after this point is off the
-  // player's critical path. Today the bonus cycle above runs BEFORE this line,
-  // so userVisibleMs ≈ spanMs; the deferral's whole purpose is to move it after,
-  // at which point the two fields diverge by the amount deferral bought.
+  // A0 (§2): the queue is now readable. user_visible_ms stops here; span_ms
+  // keeps running through the deferred bonus work below, and the difference
+  // between them on a single row is what the deferral bought.
   noteQueuePersisted();
+
+  // ── The deferral (B'). ────────────────────────────────────────────────────
+  // The queue is readable; everything below is off the player's critical path.
+  //
+  // PHASE 1 of the metric is written HERE, not in the continuation, so the row
+  // exists from the moment the player can start. A continuation is not
+  // guaranteed to complete -- a serverless freeze after the response, a throw,
+  // or a caller where after() never runs -- and writing only there would leave
+  // NO row, which cannot be told apart from "the build never happened". A row
+  // with span_ms NULL says exactly which.
+  const buildCtx = currentBuildContext();
+  const runBonusTail = async () => {
+    if (deferredBonusPlan) {
+      await appendDeferredBonusSlots(userId, deferredBonusPlan.candidates, slots.length);
+    }
+    if (buildCtx) await finalizeDailyBuildMetric(buildCtx);
+  };
+
+  // after() exists only inside a request scope. The cron and the synchronous
+  // POST have one; a direct script invocation does not. Falling back to inline
+  // keeps those callers correct -- they simply do not get the latency win, and
+  // `deferred: false` on the row says so, which is what stops an inline build
+  // being read as a deferral that bought nothing.
+  let scheduled = false;
+  if (deferredBonusPlan) {
+    try {
+      after(runBonusTail);
+      scheduled = true;
+    } catch {
+      scheduled = false;
+    }
+  }
+  noteDeferred(scheduled);
+  // Phase 1 lands before the continuation can fire, so the row is present the
+  // moment the queue is readable either way.
+  if (scheduled) noteDeferredContinuation();
+  if (buildCtx) await insertDailyBuildMetric(buildCtx);
+  // Inline fallback: no request scope, so run the tail now. Correct, just not
+  // faster -- and `deferred: false` on the row is what stops this being read as
+  // a deferral that bought nothing.
+  if (!scheduled) await runBonusTail();
 
   // Server timing for the slow path. Logged only when a full build actually ran
   // (the existing-queue / carry-forward early returns above never reach here),
@@ -1408,6 +1467,84 @@ async function buildDailyQueueForUser(
     top_up_rounds: topUpRounds,
     first_run: isFirstRun,
   });
+}
+
+/**
+ * Append the +2 bonus slots AFTER the queue is readable (the deferral).
+ *
+ * Runs off the player's critical path, so its only job is to not make things
+ * worse. Every failure mode is an explicit no-op: the player keeps a complete,
+ * playable five and simply does not get the two optional extras.
+ *
+ * Appends through createDailyQueueItemFromPresence -- the same primitive the
+ * skip replacement uses -- so it inherits that path's invariants: it re-reads
+ * the persisted slots inside a transaction rather than trusting the in-memory
+ * array this build assembled, which by now may be stale (a skip could have
+ * appended a replacement while bonus generation was running).
+ *
+ * Generation stays SEQUENTIAL. Parallelising it is rejected for the reasons
+ * already on record; deferral removes the wait without touching the loop.
+ */
+async function appendDeferredBonusSlots(
+  userId: string,
+  candidates: FriendDomainCandidate[],
+  startPosition: number,
+): Promise<void> {
+  try {
+    const presenceByDomain = new Map(
+      candidates.map((candidate) => [candidate.domain.toLowerCase(), candidate]),
+    );
+    const bonusStartedAt = Date.now();
+    const generated = await generateBonusQuestionsForDomains(
+      userId,
+      candidates.map((candidate) => candidate.domain),
+    );
+    // The phase-tagged span for the work that just moved off the critical path.
+    // Recorded before the appends so it prices GENERATION, which is the ~15s.
+    noteRound({
+      round: 0,
+      phase: 'bonus',
+      generationMs: Date.now() - bonusStartedAt,
+      gateMs: 0,
+      chunks: candidates.length,
+    });
+
+    let position = startPosition;
+    let appended = 0;
+    for (const { domain, question } of generated) {
+      if (appended >= DAILY_BONUS_SLOT_MAX) break;
+      try {
+        await createDailyQueueItemFromPresence(
+          userId,
+          question.id,
+          toBonusPresence(presenceByDomain.get(domain.toLowerCase())),
+          position,
+        );
+        position += 1;
+        appended += 1;
+      } catch (error) {
+        // One bad append must not cost the others.
+        console.warn('[daily/queue-orchestrator] deferred bonus append failed', {
+          userId,
+          domain,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (appended > 0) {
+      console.info('[daily/queue-orchestrator] appended deferred bonus slots', {
+        userId,
+        appended,
+        generationMs: Date.now() - bonusStartedAt,
+      });
+    }
+  } catch (error) {
+    // Explicit no-op: the five are already persisted and playable.
+    console.warn('[daily/queue-orchestrator] deferred bonus generation failed; core queue stands', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 // Map a ranked friend-domain candidate to the slot's presence attribution: the

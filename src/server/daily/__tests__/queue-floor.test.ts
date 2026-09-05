@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   pickEligibleAuthoredQuestions: vi.fn(),
   pickHouseQuestions: vi.fn(),
   persistDailyQueue: vi.fn(),
+  createDailyQueueItemFromPresence: vi.fn(),
   getDailyPreferences: vi.fn(),
   getFriendAndFoFUserIds: vi.fn(),
   getFriendDomainsForBonus: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
   getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
   persistDailyQueue: mocks.persistDailyQueue,
+  createDailyQueueItemFromPresence: mocks.createDailyQueueItemFromPresence,
   buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
     slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
   }),
@@ -130,6 +132,7 @@ beforeEach(() => {
   mocks.isGenericSubcategory.mockReturnValue(false);
 
   mocks.persistDailyQueue.mockResolvedValue(undefined);
+  mocks.createDailyQueueItemFromPresence.mockResolvedValue({ slots: [] });
 });
 
 // The single atomic persist call's slots argument, with the generated (bot) core
@@ -263,8 +266,21 @@ function friendQ(domain: string, id = `f-${domain}`) {
 }
 
 // The persisted BONUS slots (bot rows carrying a presence_source_id).
+//
+// After the deferral, this is expected to be EMPTY on every build: bonus slots
+// are no longer part of the atomic persist. They are appended afterwards, off
+// the player's critical path, via createDailyQueueItemFromPresence -- which is
+// what deferredBonusAppends() below counts. A non-empty result here means bonus
+// generation has moved back onto the critical path.
 function persistedBonusSlots(): Array<Record<string, unknown>> {
   return persistedSlots().filter((slot) => Boolean(slot.presence_source_id));
+}
+
+// The +2 slots appended by the deferred continuation. In tests there is no
+// request scope, so after() is unavailable and the tail runs INLINE -- the end
+// state is identical, which is the property that makes the fallback safe.
+function deferredBonusAppends(): string[] {
+  return mocks.createDailyQueueItemFromPresence.mock.calls.map((call) => call[1] as string);
 }
 
 describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () => {
@@ -298,10 +314,24 @@ describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () =
       'q4',
       'f-Chess',
     ]);
-    expect(persistedBonusSlots().map((slot) => slot.generated_question_id)).toEqual([
-      'f-Opera',
-      'f-Sushi',
+    // THE DEFERRAL SPLIT, asserted directly. Core-fill and bonus used to share
+    // one generation call; only bonus is optional, so only bonus is deferred.
+    // The core question must be generated SYNCHRONOUSLY -- the queue cannot be
+    // served without its fifth slot -- while the two +2 questions are generated
+    // after persist.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenCalledTimes(2);
+    // Synchronous call: exactly the shortfall (1), taken in the selector's own
+    // order, never a positional guess.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(1, USER, ['Chess']);
+    // Deferred call: the remaining domains, capped at DAILY_BONUS_SLOT_MAX.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(2, USER, [
+      'Opera',
+      'Sushi',
     ]);
+    // Nothing bonus-shaped is in the atomic persist any more...
+    expect(persistedBonusSlots()).toHaveLength(0);
+    // ...it arrives through the deferred append instead.
+    expect(deferredBonusAppends()).toHaveLength(DAILY_BONUS_SLOT_MAX);
   });
 
   it('requests coreShortfall + DAILY_BONUS_SLOT_MAX friend domains so the +2 is not cannibalized', async () => {
@@ -354,7 +384,10 @@ describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () =
     expect(persistedBotSlots().map((slot) => slot.generated_question_id)).toEqual([
       'q1', 'q2', 'q3', 'q4', 'q5',
     ]);
-    expect(persistedBonusSlots()).toHaveLength(DAILY_BONUS_SLOT_MAX);
+    // Bonus is no longer in the atomic persist -- it is appended after the
+    // queue is readable. Same two questions, one step later.
+    expect(persistedBonusSlots()).toHaveLength(0);
+    expect(deferredBonusAppends()).toHaveLength(DAILY_BONUS_SLOT_MAX);
     // Core full → asks only for the standard +2 (coreShortfall 0).
     expect(mocks.getFriendDomainsForBonus).toHaveBeenCalledWith(
       USER,
