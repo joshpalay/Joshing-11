@@ -35,6 +35,7 @@ import { PATCH } from '@/app/api/account/reminders/route';
 const baseState: ReminderState = {
   smsOptIn: 'not_asked',
   emailOptIn: 'not_asked',
+  phoneVerified: true,
   emailVerified: false,
   email: null,
   pendingEmail: null,

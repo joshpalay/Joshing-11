@@ -90,6 +90,10 @@ export function NotificationsForm({ initialState, phone }: Props) {
   const [savingSms, setSavingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState<string | null>(null);
   const [smsError, setSmsError] = useState<string | null>(null);
+  const [phoneVerificationStep, setPhoneVerificationStep] = useState<'idle' | 'code'>('idle');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [sendingPhoneCode, setSendingPhoneCode] = useState(false);
+  const [verifyingPhoneCode, setVerifyingPhoneCode] = useState(false);
 
   const smsOn = state.smsOptIn === 'opted_in';
   const emailOn = state.emailOptIn === 'opted_in';
@@ -161,6 +165,11 @@ export function NotificationsForm({ initialState, phone }: Props) {
   }
 
   async function toggleSms(checked: boolean) {
+    if (checked && !state.phoneVerified) {
+      setSmsError('Verify your phone number before enabling SMS reminders.');
+      return;
+    }
+
     setSavingSms(true);
     setSmsError(null);
     setSmsNotice(null);
@@ -179,6 +188,68 @@ export function NotificationsForm({ initialState, phone }: Props) {
           : 'Daily SMS reminders are on.'
         : 'Daily SMS reminders are off.',
     );
+  }
+
+  async function sendPhoneVerificationCode() {
+    setSendingPhoneCode(true);
+    setSmsError(null);
+    setSmsNotice(null);
+    const response = await fetch('/api/account/phone/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'send' }),
+    });
+    const json = (await response.json().catch(() => null)) as {
+      message?: string;
+      verified?: boolean;
+      state?: ReminderState;
+    } | null;
+    setSendingPhoneCode(false);
+
+    if (!response.ok) {
+      setSmsError(json?.message ?? 'Unable to send a verification code.');
+      return;
+    }
+    if (json?.verified && json.state) {
+      setState(json.state);
+      setSmsNotice('Phone number verified. You can turn on SMS reminders.');
+      return;
+    }
+    setPhoneVerificationStep('code');
+    setSmsNotice(`We sent a 6-digit code to ${phone}.`);
+  }
+
+  async function confirmPhoneVerification() {
+    const code = phoneCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setSmsError('Enter the 6-digit verification code.');
+      return;
+    }
+
+    setVerifyingPhoneCode(true);
+    setSmsError(null);
+    const response = await fetch('/api/account/phone/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm', code }),
+    });
+    const json = (await response.json().catch(() => null)) as {
+      message?: string;
+      state?: ReminderState;
+    } | null;
+    setVerifyingPhoneCode(false);
+
+    if (!response.ok || !json?.state) {
+      setSmsError(json?.message ?? 'Unable to verify that code.');
+      return;
+    }
+
+    setState(json.state);
+    setPhoneCode('');
+    setPhoneVerificationStep('idle');
+    setSmsNotice('Phone number verified. You can now turn on SMS reminders.');
   }
 
   async function resendEmail() {
@@ -231,6 +302,59 @@ export function NotificationsForm({ initialState, phone }: Props) {
           <p className="text-muted-foreground mt-3 text-xs" role="status" aria-live="polite">
             Saving SMS reminder preference…
           </p>
+        ) : null}
+        {!state.phoneVerified ? (
+          <div className="mt-4 rounded-lg border border-[var(--accent-gold)]/50 bg-[var(--brand-field)] p-3">
+            <p className="text-sm font-medium">Verify your phone to turn on SMS reminders.</p>
+            {phoneVerificationStep === 'idle' ? (
+              <button
+                type="button"
+                className="btn-primary mt-3"
+                onClick={() => void sendPhoneVerificationCode()}
+                disabled={sendingPhoneCode}
+              >
+                {sendingPhoneCode ? 'Sending…' : 'Send verification code'}
+              </button>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <label htmlFor="phone-verification-code" className="block text-xs font-medium">
+                  6-digit code
+                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="phone-verification-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={phoneCode}
+                    onChange={(event) => {
+                      setPhoneCode(event.target.value.replace(/\D/g, '').slice(0, 6));
+                      setSmsError(null);
+                    }}
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--accent-gold)] bg-[var(--brand-card)] px-3 text-center tracking-[0.25em]"
+                    aria-describedby="sms-reminder-consent"
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => void confirmPhoneVerification()}
+                    disabled={verifyingPhoneCode}
+                  >
+                    {verifyingPhoneCode ? 'Verifying…' : 'Verify phone'}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
+                  onClick={() => void sendPhoneVerificationCode()}
+                  disabled={sendingPhoneCode}
+                >
+                  {sendingPhoneCode ? 'Sending…' : 'Send a new code'}
+                </button>
+              </div>
+            )}
+          </div>
         ) : null}
         {smsNotice ? (
           <p className="mt-3 text-xs text-[var(--success)]" role="status" aria-live="polite">

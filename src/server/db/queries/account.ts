@@ -201,6 +201,7 @@ export function buildSmsConsentAuditPatch(
 export type ReminderState = {
   smsOptIn: ReminderOptInState;
   emailOptIn: ReminderOptInState;
+  phoneVerified: boolean;
   emailVerified: boolean;
   email: string | null;
   pendingEmail: string | null;
@@ -221,6 +222,7 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
     .select({
       smsOptIn: users.smsOptIn,
       emailOptIn: users.emailOptIn,
+      phoneVerified: users.phoneVerified,
       emailVerified: users.emailVerified,
       email: users.email,
       pendingEmail: users.pendingEmail,
@@ -241,6 +243,7 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
   return {
     smsOptIn: row.smsOptIn,
     emailOptIn: row.emailOptIn,
+    phoneVerified: row.phoneVerified,
     emailVerified: row.emailVerified,
     email: row.email,
     pendingEmail: row.pendingEmail,
@@ -252,6 +255,15 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
     reminderPromptDismissedAt: row.reminderPromptDismissedAt?.toISOString() ?? null,
     reminderInterstitialSeenAt: row.reminderInterstitialSeenAt?.toISOString() ?? null,
   };
+}
+
+export async function markPhoneVerified(userId: string): Promise<ReminderState | null> {
+  await db
+    .update(users)
+    .set({ phoneVerified: true, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+
+  return getReminderState(userId);
 }
 
 export type ReminderPreferenceUpdate = {

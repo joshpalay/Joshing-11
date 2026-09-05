@@ -99,7 +99,13 @@ async function provisionUserForPhone(
   const phoneHash = computePhoneHash(phoneNumber)
   const [created] = await db
     .insert(users)
-    .values({ id, phoneNumber, avatarColor: colorForUser(id), phoneHash })
+    .values({
+      id,
+      phoneNumber,
+      phoneVerified: true,
+      avatarColor: colorForUser(id),
+      phoneHash,
+    })
     .onConflictDoNothing({ target: users.phoneNumber })
     .returning(USER_SELECTION)
 
@@ -192,6 +198,14 @@ export async function POST(request: Request) {
     // gate was added are grandfathered — they re-authenticate freely. Only
     // brand-new accounts must arrive via an accepted friend invitation.
     if (existingUser) {
+      // A successful OTP proves possession of the account phone number. Older
+      // versions authenticated the user but left phone_verified false, which
+      // made the SMS-reminder gate impossible to satisfy after login.
+      await db
+        .update(users)
+        .set({ phoneVerified: true, updatedAt: new Date() })
+        .where(eq(users.id, existingUser.id))
+
       let invitationResult: { accepted: boolean } = { accepted: false }
 
       if (hasUsableToken) {
