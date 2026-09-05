@@ -100,6 +100,13 @@ Execution scaffolding (kept separate, not product spec): `docs/build-prompts/`.
 - **Ratify the Playables cap re-open (4→5) for the streak-header render.** `[ratification]` `D-FROMFRIENDS-STREAK-HEADER-01 D-B` re-opens `PLAYABLE_SERVE_CAP` 4→5, which `D-HOME-DASHBOARD-MODEL-01` had explicitly **withdrawn** ("the audit's 5/5/6 cap change is withdrawn; … Playables 4"). Confirm this is a deliberate, scoped re-open of that one constant (Direct 3 / Texture 8 stay withdrawn) before the B-prompt edits the constant; re-verify the `select-edition` budget unit tests and add a cap=5 case. (Recorded 2026-06-22.)
 - **`Via` answerer attribution ships ungated for the 12-user test phase.** `[test-phase]` `B-VIA-ATTRIBUTION-01` adds a "Via [friend]" line to feed cards (follow-gated, recency-ordered, names friends who answered a question correctly; `src/server/feed/via-answerers.ts` + `ViaAttribution.tsx`). **(a)** It is **on-by-default with no answerer consent control** — a friend cannot opt out of being named as having answered. **(b)** Unlike authorship (which is self-evidently public the moment you write a question), "Via" **leaks a friend's answering activity** — a more sensitive fact the answerer never affirmatively published. **(c) Revisit before opening the graph** beyond the trusted test cohort, and before/when a two-sided consent primitive is built — this ties directly to the consent-primitive gap flagged in `D-FRIEND-VISIBILITY-PRIVACY-AUDIT-01`. This entry is the line between "pragmatic MVP" and latent privacy debt nobody chose: shipping ungated is a deliberate test-phase call, not an oversight.
 
+## What belongs in this file
+
+**The trigger is a decision *not* to build something** — or a rule about *how* to build that no single
+change embodies. Those are the entries with nowhere else to live: a decision to build leaves a PR, code
+and tests behind, while a decision to skip work leaves nothing at all — and an omission here reads as
+“never considered” rather than “considered and declined.”
+
 ## Track A / deferral decisions (2026-09-04 → 05)
 
 Recorded here because these were **decisions not to build something**, or rules about *how* to
@@ -128,15 +135,19 @@ Where a rule is already durable in a comment or test, this is a pointer, not a c
   and **never reads `hash`** — verified in `pg-core/dialect.cjs` and then observed on a live deploy —
   so the divergence is cosmetic. The rule stands regardless: once applied, correct forward.
 
-- **`target_size` is INTENDED size, never ACHIEVED size.** `[built]` Written once at persist from
-  `getCoreSlots(slots).length`, never recomputed. `0136` backfilled it from *all* slots and wrote 7
-  for the modal 5-core+2-bonus queue (148 rows); `0137` set every row to NULL rather than a
-  corrected number, because backfilling from the achieved core count makes `answered >= target_size`
-  trivially true — a 3-slot build would read complete, which is the exact defect the column exists
-  to prevent. The `NOT NULL DEFAULT 5` was dropped for the same reason: **an unwritten value must be
-  visible, not plausible.** Same rule applied again to `user_visible_ms` (0138), `span_ms` (0139),
-  and the 0140 counts.
-
+- **`target_size` is INTENDED size, never ACHIEVED size.** `[built]` Written once at persist as the
+  constant `DAILY_QUEUE_SIZE` — the target the fill loop, the top-up rounds and borrow-back are all
+  trying to reach — and **never derived from `slots`**. Deriving it from the array (an earlier cut
+  used `getCoreSlots(slots).length`) records the ACHIEVED count, so a build that misses and persists
+  four core slots sets `target_size` 4 and reads as *complete at four answers* — the under-delivery
+  written in as the target, certifying the short queue instead of detecting it. The two formulas are
+  indistinguishable on every healthy build and diverge only on the builds the column exists to find,
+  which is why nothing catches it. No build intends fewer than five: `DAILY_QUEUE_MIN_SIZE` is a
+  tolerated graceful-degrade floor, not an intent. Upstream history: `0136` backfilled from *all*
+  slots and wrote 7 for the modal 5-core+2-bonus queue (148 rows); `0137` set every row to NULL
+  rather than a corrected number, for the same reason. The `NOT NULL DEFAULT 5` was dropped too:
+  **an unwritten value must be visible, not plausible** — a rule since applied to `user_visible_ms`
+  (0138), `span_ms` (0139) and the 0140 counts.
 - **`getCoreSlots` marker-less-means-core serves two callers with opposite requirements.** `[rule]`
   Right for **completeness** (an extra question beats a stranded player); wrong for **analytics**
   (it silently understates bonus). `BONUS_MARKER_FLOOR = '2026-06-04'` is the first date a bonus
