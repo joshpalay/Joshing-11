@@ -66,8 +66,10 @@ import {
   noteGatedFloorReached,
   noteOutcome,
   currentBuildContext,
+  noteBorrowedDomain,
   noteDeferred,
   noteDeferredContinuation,
+  noteDeferredDomainCount,
   noteQueuePersisted,
   noteRound,
   runBuildWithMetrics,
@@ -1316,6 +1318,14 @@ async function buildDailyQueueForUser(
         // beyond the five is dropped rather than appended as a bonus, because
         // appending it here would put the player back behind the work this
         // split exists to move.
+        //
+        // Dropping it costs nothing: generateDailyQuestions already persisted it
+        // with usedInQueue=false, only slots that reach the persisted queue flip
+        // that true, and pickBankSource draws the viewer's OWN never-served rows
+        // as well as cross-user stock -- so the question banks and makes this
+        // user's next build faster. That property depends on
+        // BANK_INCLUDE_OWN_UNUSED, which defaults ON. Turning it off makes every
+        // dropped question here pure waste: generated, gated, never served.
         if (slots.length >= DAILY_QUEUE_SIZE) break;
         slots.push(buildBotSlot(question, position));
         generatedQuestionIds.push(question.id);
@@ -1342,6 +1352,7 @@ async function buildDailyQueueForUser(
       ) {
         const borrowed = remainingForBonus.shift();
         if (!borrowed) break;
+        noteBorrowedDomain();
         const borrowStartedAt = Date.now();
         const recovered = await generateBonusQuestionsForDomains(userId, [borrowed.domain]);
         noteRound({
@@ -1360,6 +1371,7 @@ async function buildDailyQueueForUser(
         }
       }
 
+      noteDeferredDomainCount(remainingForBonus.length);
       if (remainingForBonus.length > 0) {
         deferredBonusPlan = { candidates: remainingForBonus };
       }

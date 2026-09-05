@@ -116,6 +116,10 @@ export type DailyBuildContext = {
    * row AND from a deferral that silently failed.
    */
   deferred: boolean | null;
+  /** Bonus domains borrowed back to protect the five (cost lands in user_visible_ms). */
+  borrowedDomainCount: number;
+  /** Domains handed to the deferred continuation. 0 means there was nothing to defer. */
+  deferredDomainCount: number;
   /**
    * True once the build has handed its remaining work (deferred bonus, then the
    * phase-2 metric write) to a scheduled continuation.
@@ -168,6 +172,8 @@ export function runInBuildContext<T>(
     gatedFloorReachedMs: null,
     userVisibleMs: null,
     deferred: null,
+    borrowedDomainCount: 0,
+    deferredDomainCount: 0,
     deferredContinuationScheduled: false,
     aborted: false,
     finalSize: 0,
@@ -236,6 +242,18 @@ export function noteQueuePersisted(): void {
 export function noteDeferredContinuation(): void {
   const ctx = storage.getStore();
   if (ctx) ctx.deferredContinuationScheduled = true;
+}
+
+/** One bonus domain was borrowed back to fill a short core. */
+export function noteBorrowedDomain(): void {
+  const ctx = storage.getStore();
+  if (ctx) ctx.borrowedDomainCount += 1;
+}
+
+/** How many domains the deferred continuation was handed. */
+export function noteDeferredDomainCount(count: number): void {
+  const ctx = storage.getStore();
+  if (ctx) ctx.deferredDomainCount = count;
 }
 
 /** Record whether the bonus work was deferred or run inline. */

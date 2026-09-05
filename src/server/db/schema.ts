@@ -2281,6 +2281,20 @@ export const dailyBuildMetrics = pgTable(
      * without this flag. NULL means the build predates it.
      */
     deferred: boolean('deferred'),
+    /**
+     * Bonus domains BORROWED BACK to fill a short core, generated synchronously.
+     * Their cost lands in user_visible_ms by design, which makes that field
+     * bimodal: a miss-path build looks like a deferral that bought nothing.
+     * This separates the two modes at the source rather than by inference.
+     */
+    borrowedDomainCount: integer('borrowed_domain_count'),
+    /**
+     * Domains actually handed to the deferred continuation. Disambiguates the
+     * two reasons `deferred` can be false:
+     *   > 0 -> no request scope, tail ran inline
+     *   = 0 -> nothing to defer (all borrowed back, or none existed)
+     */
+    deferredDomainCount: integer('deferred_domain_count'),
     targetSize: integer('target_size').notNull(),
     finalSize: integer('final_size').notNull(),
     aborted: boolean('aborted').notNull().default(false),

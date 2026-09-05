@@ -2753,6 +2753,17 @@ export async function register() {
         await db.execute(
           sql`ALTER TABLE "DailyBuildMetric" ADD COLUMN IF NOT EXISTS "deferred" boolean`,
         );
+        // 0140: separates the deferral's two modes. borrowed_domain_count marks
+        // builds that paid synchronously to protect the five (their cost lands
+        // in user_visible_ms, which would otherwise read as a failed deferral);
+        // deferred_domain_count tells "no request scope" apart from "nothing to
+        // defer" when `deferred` is false.
+        await db.execute(
+          sql`ALTER TABLE "DailyBuildMetric" ADD COLUMN IF NOT EXISTS "borrowed_domain_count" integer`,
+        );
+        await db.execute(
+          sql`ALTER TABLE "DailyBuildMetric" ADD COLUMN IF NOT EXISTS "deferred_domain_count" integer`,
+        );
       } catch {
         // DailyBuildMetric may not exist yet on a fresh database.
       }

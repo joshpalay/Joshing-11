@@ -52,6 +52,7 @@ import {
   feedCatchupItemId,
   minusUtcDays,
 } from '@/server/daily/catchup';
+import { getCoreSlots } from '@/server/daily/bonus';
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { answerCooldownKey } from '@/server/daily/answer-cooldown';
 import {
@@ -1211,7 +1212,25 @@ export async function persistDailyQueue(
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(dailyQueues)
-      .values({ userId, queueDate: assignmentDateStr, slots })
+      // target_size is the INTENDED core size for this build -- what the
+      // builder was trying to produce -- and it is written EXACTLY ONCE, here,
+      // and never recomputed. Derived from getCoreSlots so bonus and return
+      // slots can never inflate it (0136 backfilled from all slots and wrote 7
+      // for the modal queue, which is what 0137 had to null out).
+      //
+      // Read AFTER borrow-back, which is automatic: borrow-back mutates `slots`
+      // before persist, so a borrowed domain is already a core slot by the time
+      // this runs. Reading it any earlier would undercount exactly the builds
+      // that had to work hardest to reach five.
+      //
+      // A deferred bonus slot appended later does NOT touch this value -- it is
+      // additive by canon, and target_size is about the five.
+      .values({
+        userId,
+        queueDate: assignmentDateStr,
+        slots,
+        targetSize: getCoreSlots(slots).length,
+      })
       .onConflictDoNothing({
         target: [dailyQueues.userId, dailyQueues.queueDate],
       })

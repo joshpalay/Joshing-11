@@ -454,3 +454,23 @@ describe('deferral — core-fill robustness (borrow-back)', () => {
     ]);
   });
 });
+
+describe('target_size is written at persist, from CORE slots only', () => {
+  it('records the intended five, not the seven the queue ends up carrying', async () => {
+    // 0136 backfilled target_size from ALL slots and wrote 7 for the modal
+    // queue, which 0137 had to null out. The write-at-persist path must not
+    // reintroduce that: bonus and return slots are additive and never count.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
+    const slots = persistedSlots();
+    const core = slots.filter((slot) => !slot.presence_source_id && !slot.return_scope);
+    expect(core).toHaveLength(DAILY_QUEUE_SIZE);
+  });
+});
