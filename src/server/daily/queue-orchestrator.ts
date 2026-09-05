@@ -1306,9 +1306,9 @@ async function buildDailyQueueForUser(
           chunks: coreDomains.length,
         });
       }
-      if (bonusDomains.length > 0) {
-        deferredBonusPlan = { candidates: bonusDomains };
-      }
+      // Deferred candidates, minus any this build has to borrow back to fill
+      // the five. See the borrow loop below.
+      const remainingForBonus = [...bonusDomains];
       let promotedToCore = 0;
       for (const { question } of generatedFriend) {
         // Promotion only. Bonus slots no longer land here -- they are appended
@@ -1322,6 +1322,48 @@ async function buildDailyQueueForUser(
         position += 1;
         promotedToCore += 1;
       }
+      // BORROW-BACK. Pre-assigning domains to roles costs robustness the old
+      // code had for free: it generated across ALL shortfall+2 domains and
+      // promoted from the whole returned pool, so a domain that produced
+      // nothing was covered by another. Slicing first means one miss in the
+      // core slice leaves the queue SHORT -- a regression in the very
+      // short-core backstop this block exists to be.
+      //
+      // So when the core slice under-delivers, borrow the bonus domains back,
+      // one at a time, and generate them synchronously. The cost is paid ONLY
+      // on a miss: the happy path never enters this loop, and a build that is
+      // already short is one where protecting the five beats protecting
+      // latency. Every borrowed domain leaves the deferred set, so it can never
+      // be generated twice.
+      while (
+        slots.length < DAILY_QUEUE_SIZE &&
+        remainingForBonus.length > 0 &&
+        hasBudgetForAnotherRound(Date.now() - startedAt, durationBudgetMs)
+      ) {
+        const borrowed = remainingForBonus.shift();
+        if (!borrowed) break;
+        const borrowStartedAt = Date.now();
+        const recovered = await generateBonusQuestionsForDomains(userId, [borrowed.domain]);
+        noteRound({
+          round: 0,
+          phase: 'core',
+          generationMs: Date.now() - borrowStartedAt,
+          gateMs: 0,
+          chunks: 1,
+        });
+        for (const { question } of recovered) {
+          if (slots.length >= DAILY_QUEUE_SIZE) break;
+          slots.push(buildBotSlot(question, position));
+          generatedQuestionIds.push(question.id);
+          position += 1;
+          promotedToCore += 1;
+        }
+      }
+
+      if (remainingForBonus.length > 0) {
+        deferredBonusPlan = { candidates: remainingForBonus };
+      }
+
       if (promotedToCore > 0) {
         console.info('[daily/queue-orchestrator] backfilled short core from friend domains', {
           userId,

@@ -396,3 +396,61 @@ describe('fillDailyQueueForUser — short-core serving backstop (Layer 1)', () =
     );
   });
 });
+
+describe('deferral — core-fill robustness (borrow-back)', () => {
+  it('borrows a bonus domain back when the core slice under-delivers', async () => {
+    // THE REGRESSION THIS PREVENTS. Before the deferral, generation ran across
+    // ALL shortfall+2 domains and promotion drew from the whole returned pool,
+    // so a domain that produced nothing was covered by another. Slicing domains
+    // into core/bonus roles first would leave the queue SHORT on any miss --
+    // in the very backstop that exists to stop short queues.
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3'), genq('q4')])
+      .mockResolvedValue([genq('q1')]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('Chess'),
+      friendDomain('Opera'),
+      friendDomain('Sushi'),
+    ]);
+    // The core slice (['Chess']) produces NOTHING; the borrowed domain does.
+    mocks.generateBonusQuestionsForDomains
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([friendQ('Opera')])
+      .mockResolvedValue([friendQ('Sushi')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // The five are intact — Opera was borrowed back to fill the fifth slot.
+    const core = persistedBotSlots();
+    expect(core).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(core.map((slot) => slot.generated_question_id)).toEqual([
+      'q1', 'q2', 'q3', 'q4', 'f-Opera',
+    ]);
+    // Borrowing is synchronous and per-domain: the core slice, then Opera.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(1, USER, ['Chess']);
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(2, USER, ['Opera']);
+    // A borrowed domain leaves the deferred set, so it is never generated twice.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(3, USER, ['Sushi']);
+  });
+
+  it('does not borrow when the core slice delivers — the happy path pays nothing', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('Chess'),
+      friendDomain('Opera'),
+    ]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess'), friendQ('Opera')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    // Core was already full, so there is no synchronous call at all — the whole
+    // friend-domain cycle is deferred.
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenCalledTimes(1);
+    expect(mocks.generateBonusQuestionsForDomains).toHaveBeenNthCalledWith(1, USER, [
+      'Chess',
+      'Opera',
+    ]);
+  });
+});
