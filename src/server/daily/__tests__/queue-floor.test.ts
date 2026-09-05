@@ -455,11 +455,33 @@ describe('deferral — core-fill robustness (borrow-back)', () => {
   });
 });
 
-describe('target_size is written at persist, from CORE slots only', () => {
-  it('records the intended five, not the seven the queue ends up carrying', async () => {
-    // 0136 backfilled target_size from ALL slots and wrote 7 for the modal
-    // queue, which 0137 had to null out. The write-at-persist path must not
-    // reintroduce that: bonus and return slots are additive and never count.
+describe('target_size is the INTENDED size, never the achieved one', () => {
+  it('a build that lands SHORT still persists exactly once, target untouched by the shortfall', async () => {
+    // THE DEFECT THIS PINS. An earlier cut wrote getCoreSlots(slots).length --
+    // the ACHIEVED count. A build that misses and persists four core slots
+    // would record target_size 4, and `answered >= target_size` then reads that
+    // queue COMPLETE at four answers: the under-delivery becomes the target and
+    // the short queue is certified instead of detected. Same shape as
+    // `slot_index < 5` and 0136's `target_size = actual_slots` -- a value that
+    // agrees with the truth on every healthy build and diverges only on the
+    // ones the column exists to find.
+    mocks.generateDailyQuestionsFromKnowledgeBase
+      .mockResolvedValueOnce([genq('q1'), genq('q2'), genq('q3'), genq('q4')])
+      .mockResolvedValue([]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([]); // nothing to borrow
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
+    // Short by one, and it must STAY visibly short.
+    expect(persistedBotSlots().length).toBeLessThan(DAILY_QUEUE_SIZE);
+  });
+
+  it('is path-independent: a deferred build persists core-only and still intends five', async () => {
+    // The deferred path persists a core-only array; the inline fallback may
+    // persist a longer one. Both intend five. Trivially true while the value is
+    // a constant -- this exists so a future change that derives it from `slots`
+    // splits the two paths visibly instead of silently.
     mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
       genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
     ]);
@@ -468,9 +490,28 @@ describe('target_size is written at persist, from CORE slots only', () => {
 
     await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
 
-    expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
-    const slots = persistedSlots();
-    const core = slots.filter((slot) => !slot.presence_source_id && !slot.return_scope);
-    expect(core).toHaveLength(DAILY_QUEUE_SIZE);
+    expect(persistedBonusSlots()).toHaveLength(0);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+  });
+
+  it('the deferred append cannot rewrite the queue target', async () => {
+    // "Written once, never recomputed" rests on
+    // createDailyQueueItemFromPresence setting only `slots`. If it ever gains a
+    // queue-level field, a 7-slot post-append array could rewrite the column
+    // and undo the point of writing it at persist.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.createDailyQueueItemFromPresence).toHaveBeenCalled();
+    for (const call of mocks.createDailyQueueItemFromPresence.mock.calls) {
+      // (userId, generatedQuestionId, presence, position) -- no queue-level fields.
+      expect(call).toHaveLength(4);
+      expect(typeof call[3]).toBe('number');
+    }
   });
 });
