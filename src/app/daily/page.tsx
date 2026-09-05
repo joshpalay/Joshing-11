@@ -247,6 +247,21 @@ export default function DailyPage() {
   // generation wait is in progress (the long-wait surface, C-7). Reads cached-
   // only data; empty on a cold cache → the loader just rotates the craft phrases.
   const loadingMoments = useLoadingMoments(loading && generatingAttempt != null);
+  // Set when onboarding's final reminder ask was accepted, so the crafting
+  // loader can confirm it. Read once from the one-time `remindersOn` handoff
+  // param and then stripped from the URL — a plain useEffect read (not
+  // useSearchParams) so this page doesn't need a Suspense boundary.
+  const [justOptedIntoReminders, setJustOptedIntoReminders] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('remindersOn') !== '1') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of a URL handoff param from onboarding, not derived render state.
+    setJustOptedIntoReminders(true);
+    params.delete('remindersOn');
+    const rest = params.toString();
+    router.replace(rest ? `/daily?${rest}` : '/daily');
+  }, [router]);
   const [pausedAfterSlotIndex, setPausedAfterSlotIndex] = useState<number | null>(null);
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
@@ -1006,6 +1021,11 @@ export default function DailyPage() {
               fullScreen
               messages={GENERATING_MESSAGES}
               loadingMoments={loadingMoments}
+              note={
+                justOptedIntoReminders
+                  ? "You're set — we'll text you when each day's five open."
+                  : undefined
+              }
             />
           ) : (
             <LoadingScreen fullScreen label="Loading today" />

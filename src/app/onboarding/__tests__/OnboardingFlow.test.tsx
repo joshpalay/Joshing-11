@@ -9,10 +9,11 @@ vi.mock('next/navigation', () => ({
 }))
 
 describe('Onboarding reminder choice', () => {
-  it('restores the SMS reminder primary action and the continue-without link', () => {
+  it('offers the SMS reminder primary action and the decline button', () => {
     const html = renderToStaticMarkup(
       <OnboardingReminderStep
         phoneNumber="+17345550123"
+        topics={['Sondheim', 'Jazz']}
         saving={false}
         error={null}
         onContinueWithReminders={vi.fn()}
@@ -20,11 +21,17 @@ describe('Onboarding reminder choice', () => {
       />
     )
 
-    expect(html).toContain('Continue with SMS reminders')
-    expect(html).toContain('Continue without reminders')
+    expect(html).toContain('We’re writing your first five.')
+    expect(html).toContain('Text me when they open')
+    expect(html).toContain('I’ll check back on my own')
     expect(html).toContain('(734) 555-0123')
     expect(html).toContain('automated Joshing reminder texts')
+    expect(html).toContain('Sondheim')
+    expect(html).toContain('Jazz')
     expect(html).not.toContain('Email me')
+    // No duration claim — the crafting screen that follows proves the wait
+    // rather than the copy asserting a length for it.
+    expect(html).not.toMatch(/minute|second/i)
   })
 })
 

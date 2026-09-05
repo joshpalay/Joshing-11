@@ -9,9 +9,11 @@ import { SmsReminderDisclosure } from '@/components/reminders/SmsReminderDisclos
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
 // optional expander there; the cultural-anchor/background step was removed).
 // Picking areas marks onboarding complete and kicks off question generation.
-// A final, optional SMS-reminder choice then closes setup: opting in suppresses
-// the later recap ask; continuing without reminders leaves that one later
-// opportunity intact.
+// A final, optional SMS-reminder choice then closes setup — both answers land
+// on /daily, whose own load path shows the crafting screen while the first
+// queue finishes generating. Declining stamps reminderInterstitialSeenAt (same
+// as opting in), so this is the ONE ask: the daily-summary interstitial never
+// repeats it later for an account that made this choice here.
 type CurrentStep = 'setup' | 'review' | 'reminders'
 
 export type ProposedInterest = {
@@ -145,14 +147,24 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   )
 }
 
+// D-REMINDER-ASK-CRAFTING-01 — the final onboarding beat, once interests are
+// saved and the first queue has started generating in the background. Both
+// exits land on `/daily`, whose own load path shows the crafting screen while
+// generation finishes — so declining costs nothing (same destination, same
+// wait) and the SMS button is the consent act itself, matching the pattern
+// already published as compliance evidence on /sms-consent for the OTP step.
+// No duration is claimed here; the crafting screen that follows proves the
+// "written from your topics" claim rather than asserting a wait length.
 export function OnboardingReminderStep({
   phoneNumber,
+  topics,
   saving,
   error,
   onContinueWithReminders,
   onContinueWithoutReminders,
 }: {
   phoneNumber?: string | null
+  topics: string[]
   saving: boolean
   error: string | null
   onContinueWithReminders: () => void
@@ -165,10 +177,23 @@ export function OnboardingReminderStep({
           Joshing
         </p>
         <StepHeader
-          title="Want a daily text reminder?"
-          subtitle="We’ll text you when each day’s five are ready. One message a day, max."
+          title="We’re writing your first five."
+          subtitle="Made from your topics, not pulled off a shelf. A new five lands every afternoon."
         />
       </div>
+
+      {topics.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {topics.map((topic) => (
+            <li
+              key={topic}
+              className="bg-[var(--brand-card)] border-[var(--brand-border)] rounded-full border px-3 py-1.5 text-sm"
+            >
+              {topic}
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <div className="space-y-4">
         <button
@@ -177,20 +202,20 @@ export function OnboardingReminderStep({
           onClick={onContinueWithReminders}
           disabled={saving}
         >
-          {saving ? 'Turning on reminders…' : 'Continue with SMS reminders'}
+          {saving ? 'Turning on…' : 'Text me when they open'}
         </button>
         <SmsReminderDisclosure
           phoneNumber={phoneNumber}
-          actionLabel="Continue with SMS reminders"
+          actionLabel="Text me when they open"
         />
         {error ? <p className="text-destructive text-sm" role="alert">{error}</p> : null}
         <button
           type="button"
-          className="text-muted-foreground mx-auto block text-sm font-medium underline underline-offset-4 transition hover:text-foreground disabled:opacity-50"
+          className="btn-ghost h-12 w-full"
           onClick={onContinueWithoutReminders}
           disabled={saving}
         >
-          Continue without reminders
+          I&rsquo;ll check back on my own
         </button>
       </div>
     </div>
@@ -575,15 +600,47 @@ export default function OnboardingFlow({
     }
   }
 
-  function finishOnboarding() {
-    router.push(previewMode ? previewNextHref : '/?welcome=1')
+  // Both reminder-ask exits land on the same place: `/daily`, whose own load
+  // path shows the crafting screen (LoadingScreen) while the first queue
+  // finishes generating (D-REMINDER-ASK-CRAFTING-01). Declining a reminder
+  // costs nothing — same destination, same wait — which is what keeps the
+  // consent genuinely optional rather than a toll on getting into the app.
+  // `optedIntoReminders` rides a one-time `remindersOn` query param so the
+  // crafting screen can confirm the opt-in; /daily strips it after reading it.
+  function finishOnboarding(optedIntoReminders = false) {
+    const dest = previewMode ? previewNextHref : '/daily'
+    if (!optedIntoReminders) {
+      router.push(dest)
+      return
+    }
+    const [path, existingQuery] = dest.split('?')
+    const params = new URLSearchParams(existingQuery)
+    params.set('remindersOn', '1')
+    router.push(`${path}?${params.toString()}`)
+  }
+
+  // "I'll check back on my own" — the one write this ask must make on decline.
+  // Stamping reminderInterstitialSeenAt here is what keeps this a single ask:
+  // without it, deriveReminderAcquisitionState stays 'eligible' and the daily
+  // summary's full-screen interstitial fires again a day later for the same
+  // decision already made. Best-effort and never blocks navigation — a lost
+  // write just means Settings remains the fallback place to opt in.
+  function declineReminders() {
+    finishOnboarding()
+    if (previewMode) return
+    void fetch('/api/account/reminders', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interstitialSeen: true }),
+    }).catch(() => {})
   }
 
   async function continueWithSmsReminders() {
     setReminderError(null)
 
     if (previewMode) {
-      finishOnboarding()
+      finishOnboarding(true)
       return
     }
 
@@ -613,7 +670,7 @@ export default function OnboardingFlow({
 
       // The server stamps the shared acquisition state only after the required
       // confirmation text succeeds, so a failed send never consumes this ask.
-      finishOnboarding()
+      finishOnboarding(true)
     } catch {
       setReminderError("We couldn't turn on reminders. Try again or continue without them.")
     } finally {
@@ -854,10 +911,11 @@ export default function OnboardingFlow({
           {currentStep === 'reminders' ? (
             <OnboardingReminderStep
               phoneNumber={phoneNumber}
+              topics={selectedInterests.map((interest) => interest.domain)}
               saving={savingReminder}
               error={reminderError}
               onContinueWithReminders={() => void continueWithSmsReminders()}
-              onContinueWithoutReminders={finishOnboarding}
+              onContinueWithoutReminders={declineReminders}
             />
           ) : null}
 

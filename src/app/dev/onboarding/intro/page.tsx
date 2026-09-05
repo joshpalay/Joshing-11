@@ -9,11 +9,14 @@ export const dynamic = 'force-dynamic';
  * Dev harness: replay the real setup (name + call sign) → areas-of-knowledge
  * flow.
  *
- * Mounts the genuine `OnboardingFlow` with `previewMode`, so the setup and
- * interests steps advance through the actual UI but skip their mutating writes
- * (no PATCH /api/account, no save-interests). Finishing the areas step chains to
- * the welcome-tour preview. Driven by mock invite data so the inviter-seeded
- * path renders. In `?walk=1` mode the chain carries the walkthrough flag onward.
+ * Mounts the genuine `OnboardingFlow` with `previewMode`, so the setup,
+ * interests, and final reminder-ask steps advance through the actual UI but
+ * skip their mutating writes (no PATCH /api/account, no save-interests, no
+ * real SMS opt-in). Both reminder-ask exits now chain to the "building your
+ * first five" preview — matching the real flow, where onboarding always lands
+ * on `/daily` and its own load path shows the crafting screen. Driven by mock
+ * invite data so the inviter-seeded path renders. In `?walk=1` mode the chain
+ * carries the walkthrough flag onward.
  *
  * `?seedSource=link` (Stage 2 of the invite-link build): swaps in the
  * per-user invite-link experience — the same mock topics arrive UNSELECTED as
@@ -36,7 +39,7 @@ export default async function DevOnboardingIntroPage({
   const params = await searchParams;
   const walk = params?.walk === '1';
   const seedSource = params?.seedSource === 'link' ? 'link' : 'named';
-  const nextHref = walk ? '/dev/welcome-tour?walk=1' : '/dev/welcome-tour';
+  const nextHref = walk ? '/dev/onboarding/building?walk=1' : '/dev/onboarding/building';
 
   return (
     <>
