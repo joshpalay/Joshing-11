@@ -19,6 +19,11 @@ const {
     async () => [] as Array<Record<string, unknown>>
   )
   const dbMock = {
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(async () => undefined),
+      })),
+    })),
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
         onConflictDoNothing: vi.fn(() => ({
@@ -67,6 +72,8 @@ vi.mock('@/server/db', () => ({
     handle: 'users.handle',
     timezone: 'users.timezone',
     onboardingComplete: 'users.onboardingComplete',
+    phoneVerified: 'users.phoneVerified',
+    updatedAt: 'users.updatedAt',
   },
 }))
 

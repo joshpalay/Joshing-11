@@ -10,6 +10,7 @@ import type { ReminderState } from '@/server/db/queries/account';
 const initialState: ReminderState = {
   smsOptIn: 'not_asked',
   emailOptIn: 'not_asked',
+  phoneVerified: false,
   emailVerified: false,
   email: null,
   pendingEmail: null,
@@ -40,6 +41,8 @@ describe('NotificationsForm SMS consent', () => {
     expect(html).toContain('Consent is not a condition of purchase');
     expect(html).toContain('href="/terms"');
     expect(html).toContain('href="/privacy"');
+    expect(html).toContain('Verify your phone to turn on SMS reminders');
+    expect(html).toContain('Send verification code');
     expect(html).not.toContain('Coming soon');
   });
 
