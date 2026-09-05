@@ -67,22 +67,29 @@ describe('isRoundComplete / hasPendingSlot', () => {
 
 // Daily Five +2: the queue is variable-length (core 5 + 0-2 bonus slots).
 //
-// REVERSED BY A1a. This block previously asserted that completion tracks the
-// ACTUAL slot count -- a 7-slot queue stayed incomplete until all seven were
-// answered. That was a deliberate decision, made to stop completion being
-// hardcoded to five, and the variable-length concern behind it is still valid.
-// But applied to ADDITIVE slots it stranded the modal queue: bonus questions
-// are optional, so a player who answers the five core questions and stops
-// leaves them pending forever and the round never completes. Measured on the
-// live database: 5 queues permanently in that state, four of them
-// 5-answered-of-5 with a bonus slot open. Completion also gates the demand-pull
-// bank replenish, so those rounds never restocked.
+// WHAT A1a CHANGES, PRECISELY. This block was added 2026-06-01 in the +2 commit
+// itself ("Daily Five +2: append accessible friend-answered bonus slots"), and
+// its fixtures used the then-current bonus marker `answerer_id` (replaced by
+// `presence_source_id` a day later). So it DID knowingly assert that an
+// unanswered bonus slot holds the round open. A1a reverses that specific
+// behaviour -- not by accident, and not because the test was stale.
 //
-// The rule is now: completion tracks the actual CORE count (still not a
-// hardcoded five), and additive slots -- bonus and missed-question returns --
-// never hold the round open. That matches the D-F3 canon these helpers already
-// enforce everywhere else: bonus slots never count toward the five, so they
-// must not decide whether the five are done.
+// What it does NOT reverse is the concern the comment actually states: "track
+// the ACTUAL slot count, not a fixed five". Skip replacements are built by
+// buildBotSlot, which carries neither `presence_source_id` nor `return_scope`,
+// so getCoreSlots classifies them as CORE. A skip-extended 6-slot queue still
+// has 6 core slots and still needs all six resolved. That half is preserved
+// exactly, and is pinned below.
+//
+// Why the bonus half had to go: counting additive slots stranded the modal
+// queue permanently. 5 core + 2 bonus, the player answers the five core
+// questions and stops -- the bonus two are optional, so they stay pending and
+// the round never completes. Measured on the live database: 5 queues in exactly
+// that state, four of them 5-answered-of-5 with a bonus slot open. Completion
+// also gates the demand-pull bank replenish, so those rounds never restocked.
+// And it contradicted the D-F3 canon these helpers enforce everywhere else:
+// bonus slots never count toward the five, so they must not decide whether the
+// five are done.
 describe('isRoundComplete -- variable-length queues, core-scoped (A1a)', () => {
   function bonusSlot(slot_index: number, answered: boolean): QueueSlot {
     return {

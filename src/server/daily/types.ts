@@ -147,7 +147,9 @@ export type QueueSlotAnswerState = z.infer<typeof queueSlotAnswerStateSchema>;
 export type QueueSlot = z.infer<typeof queueSlotSchema>;
 
 /**
- * Phase 4 skip mechanic — capped at 3 skips per round, server-enforced.
+ * Phase 4 skip mechanic — capped at DAILY_SKIP_LIMIT skips per round,
+ * server-enforced. (This line used to say "3"; the constant below has been 5.
+ * Code beats comment — the enforced limit is the constant.)
  * A skip writes a SkippedDailyQuestion row and temporarily cools that question
  * down in the queue builder.
  */

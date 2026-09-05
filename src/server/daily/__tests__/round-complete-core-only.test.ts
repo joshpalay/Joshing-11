@@ -87,3 +87,20 @@ describe('isRoundComplete — core-only (A1a)', () => {
     expect(isRoundComplete(slots)).toBe(true);
   });
 });
+
+describe('skip replacements are core, not additive', () => {
+  it('a marker-less replacement slot holds the round open', () => {
+    // buildBotSlot (the skip-replacement builder in db/queries/daily.ts) sets
+    // neither presence_source_id nor return_scope, so getCoreSlots classifies
+    // it as CORE. This is what preserves the original 2026-05-28 fix: a
+    // skip-extended queue is not complete until the replacement is resolved.
+    // If a replacement ever starts carrying a marker, this test fails and the
+    // skip-extension guarantee is silently gone.
+    const slots = [
+      ...[0, 1, 2, 3].map((i) => core(i, { answered: true })),
+      core(4, { skipped: true }),
+      core(5), // replacement, marker-less
+    ];
+    expect(isRoundComplete(slots)).toBe(false);
+  });
+});
