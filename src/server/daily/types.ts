@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import type { DifficultyEstimate } from '@/types/db';
+import { getCoreSlots } from './bonus';
 
 type DailyDifficultyEstimate = DifficultyEstimate | 'accessible' | 'moderate' | 'specialist';
 
@@ -205,15 +206,44 @@ export function hasPendingSlot(slots: QueueSlot[]): boolean {
 }
 
 /**
- * A round is complete once it has slots and none of them are still pending.
+ * A round is complete once its CORE slots are all resolved (answered or
+ * skipped). Additive slots — the +2 bonus and missed-question returns — are
+ * deliberately excluded.
  *
- * This is the canonical definition of "done" — the status API and the play
- * page both derive from it so the home card and the player can't disagree
- * (a skipped-but-unreplaced slot used to leave the round advertising "Resume"
- * while the player bounced straight to the summary).
+ * This is the canonical definition of "done": the status API and the home card
+ * both derive from it so they can't disagree (a skipped-but-unreplaced slot
+ * used to leave the home card advertising "Resume" while /daily bounced
+ * straight to the summary).
+ *
+ * WHY CORE ONLY (A1a). This predicate used to count EVERY slot, which stranded
+ * the modal queue permanently: 5 core + 2 bonus, player answers all five core
+ * questions and stops — the bonus two are optional, so they stay
+ * `answered: false, skipped: false`, stay pending, and the round never
+ * completes. Measured on the live database: 5 queues in exactly that state,
+ * four of them 5-answered-of-5 with a bonus slot left open. That is not
+ * cosmetic — completion also gates the demand-pull bank replenish in
+ * /api/daily/answer, so a stranded round never restocks the player's bank.
+ * Counting additive slots also contradicted the D-F3 canon these very helpers
+ * enforce: bonus slots never count toward the five, so they must not decide
+ * whether the five are done.
+ *
+ * It is also a PRECONDITION of deferring bonus generation. Under deferral the
+ * bonus slots are appended AFTER the queue is persisted and being played, so a
+ * player could finish all five, see the round complete, and have it flip back
+ * to incomplete when the deferred slots land.
+ *
+ * `hasPendingSlot` is deliberately NOT changed: navigation ("is there another
+ * slot to play?") must still see bonus slots, because the player can still play
+ * them. Only the completeness verdict is core-scoped.
+ *
+ * Degenerate case: a queue with no core slots at all falls back to judging
+ * every slot, so an all-additive queue can still complete rather than
+ * stranding forever on the new rule.
  */
 export function isRoundComplete(slots: QueueSlot[]): boolean {
-  return slots.length > 0 && !hasPendingSlot(slots);
+  const core = getCoreSlots(slots);
+  const considered = core.length > 0 ? core : slots;
+  return considered.length > 0 && !hasPendingSlot(considered);
 }
 
 /**
