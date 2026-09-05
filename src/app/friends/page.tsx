@@ -37,7 +37,6 @@ export default async function FriendsPage() {
     .select({
       handle: users.handle,
       discoverableByContacts: users.discoverableByContacts,
-      discoverableByMutualFriends: users.discoverableByMutualFriends,
     })
     .from(users)
     .where(eq(users.id, session.userId))
@@ -78,9 +77,10 @@ export default async function FriendsPage() {
         <h1 className="text-foreground font-serif text-3xl font-semibold">Friends</h1>
       </header>
 
-      {/* Section 1 — Find Friends: active seeking (search + contact sync). */}
-      <section className="mb-5 space-y-3">
-        <h2 className="text-foreground font-serif text-xl font-semibold">Find friends</h2>
+      {/* Add someone new: exact @handle / phone lookup, plus contact sync where
+          the browser supports it. No section heading -- the card carries its own,
+          and a heading over a single card was pure vertical cost. */}
+      <div className="mb-5 space-y-3">
         <FindFriendsSearch />
         <ContactMatchBlock
           discoverableByContacts={viewer.discoverableByContacts}
@@ -94,15 +94,19 @@ export default async function FriendsPage() {
           }))}
           initialRefreshDue={contactRefreshDue}
         />
-      </section>
+      </div>
 
-      {/* Section 2 — Suggested: passive scanning. Every row carries a
-          provenance chip so a suggestion never reads as unexplained. */}
-      <section className="mb-5 space-y-3">
-        <div className="flex items-baseline justify-between">
+      {/* Suggested: passive scanning. Every row carries a provenance chip so a
+          suggestion never reads as unexplained.
+
+          Rendered ONLY when it has people in it -- heading included. Previously
+          the heading always rendered, so with no contact matches and no invite
+          reflections the whole section was a title over a "Coming soon" card:
+          roughly a third of the first screen saying nothing. An empty section
+          should be absent, not empty. */}
+      {hasSuggestions ? (
+        <section className="mb-5 space-y-3">
           <h2 className="text-foreground font-serif text-xl font-semibold">Suggested</h2>
-        </div>
-        {hasSuggestions ? (
           <div className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
             {reflections.map((reflection) => {
               const displayName = reflection.displayName?.trim() || `@${reflection.handle ?? ''}`
@@ -131,26 +135,18 @@ export default async function FriendsPage() {
               )
             })}
           </div>
-        ) : viewer.discoverableByContacts ? null : (
-          <p className="text-muted-foreground text-sm">
-            Turn on contact matching above to see people you already know.
-          </p>
-        )}
-        {viewer.discoverableByMutualFriends ? (
-          <div className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
-            <h3 className="font-serif text-base font-semibold">Suggested via mutual friends</h3>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Coming soon — suggestions from people you have friends in common with.
-            </p>
-          </div>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
-      {/* Section 3 — Invite via Link. */}
+      {/* Invite via link. An action rather than a destination, so it sits above
+          the roster but below the lookup. */}
       <div className="mb-5">
         <InviteLinksSection initialTopics={resolvedTopics} initialLinks={initialLinks} />
       </div>
 
+      {/* The roster is what people come back for, so it moves up: with the dead
+          contact card and the empty Suggested section gone, it now starts on the
+          first screen instead of the third. */}
       <FriendsList />
     </main>
   )

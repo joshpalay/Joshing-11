@@ -46,6 +46,9 @@ export async function register() {
     const { sql } = await import('drizzle-orm');
     const path = await import('path');
     const fs = await import('fs');
+    const { decideBootSchemaWrite, refusalMessage, overrideMessage } = await import(
+      '@/server/db/migrate-safety'
+    );
     const crypto = await import('crypto');
 
     // Bound how long a cold boot will wait on the DB. A degraded cold connection
@@ -61,6 +64,7 @@ export async function register() {
       Number(process.env.BOOT_DB_CONNECT_TIMEOUT_MS) > 0
         ? Number(process.env.BOOT_DB_CONNECT_TIMEOUT_MS)
         : 10_000;
+    const bootStartedAt = Date.now();
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       connectionTimeoutMillis: bootConnectTimeoutMs,
@@ -121,6 +125,52 @@ export async function register() {
     // migrations (keep _journal.json in lockstep with drizzle/*.sql) rather
     // than relying on a guard as a migration's only application path. See
     // CLAUDE.md.
+    // SAFETY GATE (2026-09-04) -- MUST stay above the guard chain.
+    //
+    // On 2026-09-03 a `npm run dev` boot on an unmerged branch wrote schema to
+    // the PRODUCTION database as a side effect of starting up: this repo's
+    // local .env DATABASE_URL points at prod. Note this gate sits BEFORE the
+    // guard chain, not just before migrate(). register() writes DDL along TWO
+    // independent paths -- the ~70 idempotent guards below (unjournalled, and
+    // they run first) and migrate() (journalled). Gating only migrate() would
+    // close the door the incident used and leave the other one open.
+    // See src/server/db/migrate-safety.ts.
+    const schemaWrite = decideBootSchemaWrite(process.env.DATABASE_URL, {
+      VERCEL_ENV: process.env.VERCEL_ENV,
+      ALLOW_REMOTE_BOOT_MIGRATE: process.env.ALLOW_REMOTE_BOOT_MIGRATE,
+    });
+    if (!schemaWrite.allowed) {
+      // Warn, do not throw: the app still serves requests, only the automatic
+      // schema writes are skipped. Throwing here would kill the instrumentation
+      // hook and 500 every request -- same reasoning as the PHONE_HASH_SALT
+      // check above. console.warn goes to the same stream as the dev server's
+      // own output, so this is visible in `npm run dev`.
+      console.warn(refusalMessage(schemaWrite.host));
+      console.info('[instrumentation boot]', {
+        guards_ran: false,
+        guards_ms: 0,
+        migrate_ms: 0,
+        schema_write_skipped: schemaWrite.reason,
+        total_ms: Date.now() - bootStartedAt,
+      });
+      await pool.end().catch(() => {});
+      return;
+    }
+    if (schemaWrite.reason === 'explicit_override') {
+      // An intentional override must leave a trace: the incident's defining
+      // feature was that it left none.
+      let journalHead: string | null = null;
+      try {
+        const journal = JSON.parse(
+          fs.readFileSync(path.join(process.cwd(), 'drizzle/meta/_journal.json'), 'utf8'),
+        ) as { entries?: Array<{ tag?: string }> };
+        journalHead = journal.entries?.at(-1)?.tag ?? null;
+      } catch {
+        journalHead = null;
+      }
+      console.warn(overrideMessage(schemaWrite.host, journalHead));
+    }
+
     const runBootGuards = process.env.SKIP_BOOT_DB_GUARDS !== '1';
     // Boot-cost telemetry (B-GRADE-COLDSTART-01): the guard chain is the
     // suspected dominant cold-start cost that the first request waits behind.
