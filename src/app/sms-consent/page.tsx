@@ -67,14 +67,15 @@ export default async function SmsConsentPage() {
           <h2 className="font-serif text-xl font-semibold">Optional daily reminder</h2>
           <p className="mt-2">
             Daily reminders are separate from account verification and are off by default. After
-            signing in with a verified phone number, you can turn them on under Profile →
-            Notifications. The consent control displays:
+            signing in with a verified phone number, you may opt in on the final onboarding screen,
+            in the one-time Daily Summary follow-up, or later under Profile → Notifications. Each
+            consent control identifies its action and displays:
           </p>
           <blockquote className="mt-4 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-[var(--brand-cream-card)] p-4">
-            “By turning on SMS reminders, you agree to receive automated Joshing reminder texts at
-            your verified number, up to one message per day. Message and data rates may apply. Reply
-            STOP to unsubscribe or HELP for help. Consent is not a condition of purchase. Terms and
-            Privacy.”
+            “By choosing [the opt-in action], you agree to receive automated Joshing reminder texts
+            at your verified number, up to one message per day. Message and data rates may apply.
+            Reply STOP to unsubscribe or HELP for help. Consent is not a condition of purchase.
+            Terms and Privacy.”
           </blockquote>
           <p className="mt-4">
             Reminder frequency is up to one message per day. Consent is not a condition of purchase.
@@ -94,6 +95,21 @@ export default async function SmsConsentPage() {
               Joshing&apos;s production reminder preference interface in its default-off state,
               shown with a reserved 555 demo number. This evidence image is informational and cannot
               opt anyone in.
+            </figcaption>
+          </figure>
+          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-sm">
+            {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/compliance/onboarding-sms-reminder.png"
+              alt="Joshing onboarding reminder choice with a Continue with SMS reminders button, Continue without reminders link, verified demo number, frequency, rates, STOP and HELP, no-purchase-condition language, Terms, and Privacy"
+              width="390"
+              height="700"
+              className="mx-auto h-auto w-full max-w-sm"
+            />
+            <figcaption className="text-muted-foreground border-t px-4 py-3 text-xs leading-5">
+              The production onboarding opt-in screen, shown with a reserved 555 demo number. The
+              choice is optional; continuing without reminders completes setup without consent.
             </figcaption>
           </figure>
         </section>

@@ -14,20 +14,18 @@ describe('SMS consent audit persistence', () => {
   });
 
   it('builds one atomic opt-in update with timestamp, source, and policy version', () => {
-    expect(buildSmsConsentAuditPatch('opted_in', changedAt)).toEqual({
+    expect(buildSmsConsentAuditPatch('opted_in', 'onboarding_web_form', changedAt)).toEqual({
       smsOptIn: 'opted_in',
       smsOptInAt: changedAt,
-      smsConsentSource: SMS_CONSENT_SOURCE,
+      smsConsentSource: 'onboarding_web_form',
       smsConsentPolicyVersion: SMS_CONSENT_POLICY_VERSION,
     });
   });
 
-  it('builds one atomic opt-out update with its own timestamp', () => {
-    expect(buildSmsConsentAuditPatch('opted_out', changedAt)).toEqual({
+  it('records opt-out without overwriting the retained opt-in proof', () => {
+    expect(buildSmsConsentAuditPatch('opted_out', SMS_CONSENT_SOURCE, changedAt)).toEqual({
       smsOptIn: 'opted_out',
       smsOptOutAt: changedAt,
-      smsConsentSource: SMS_CONSENT_SOURCE,
-      smsConsentPolicyVersion: SMS_CONSENT_POLICY_VERSION,
     });
   });
 });

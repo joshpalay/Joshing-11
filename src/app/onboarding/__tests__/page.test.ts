@@ -10,6 +10,7 @@ const {
   getSeedTopicsForJoinedLinkMock,
   friendInvitationRowsMock,
   getCatalogSuggestionsMock,
+  getReminderStateMock,
   redirectMock,
   onboardingFlowMock,
 } = vi.hoisted(() => ({
@@ -50,6 +51,7 @@ const {
     domain: string
     broadCategory: string | null
   }>),
+  getReminderStateMock: vi.fn(),
   redirectMock: vi.fn((target: string) => {
     // Mirror Next.js: redirect() throws to short-circuit rendering.
     throw new Error(`__REDIRECT__:${target}`)
@@ -72,6 +74,10 @@ vi.mock('@/server/db/queries/users', () => ({
     const trimmed = value?.trim().replace(/\s+/g, ' ')
     return trimmed ? trimmed.slice(0, 80) : null
   },
+}))
+
+vi.mock('@/server/db/queries/account', () => ({
+  getReminderState: getReminderStateMock,
 }))
 
 // The page runs a grandfather-guard query (select FriendInvitation … limit 1)
@@ -163,6 +169,16 @@ describe('OnboardingPage guard', () => {
     getSeedTopicsForJoinedLinkMock.mockResolvedValue(null)
     getCatalogSuggestionsMock.mockReset()
     getCatalogSuggestionsMock.mockResolvedValue([])
+    getReminderStateMock.mockReset()
+    getReminderStateMock.mockResolvedValue({
+      phoneNumber: '+17345550123',
+      phoneVerified: true,
+      smsOptIn: 'not_asked',
+      emailOptIn: 'not_asked',
+      pendingEmail: null,
+      reminderPromptDismissedAt: null,
+      reminderInterstitialSeenAt: null,
+    })
   })
 
   it('redirects to /login when there is no session', async () => {
@@ -193,10 +209,36 @@ describe('OnboardingPage guard', () => {
     getUserOnboardingProfileMock.mockResolvedValueOnce({
       id: 'u1',
       onboardingComplete: false,
+      phoneNumber: '+17345550123',
     })
     const result = await callPage()
     expect(result.redirected).toBe(false)
     expect(getPreSeededInterestsForUserMock).toHaveBeenCalledWith('u1')
+    expect(result.props?.phoneNumber).toBe('+17345550123')
+    expect(result.props?.showReminderOffer).toBe(true)
+  })
+
+  it('does not offer reminder acquisition to an existing subscriber', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
+    getUserOnboardingProfileMock.mockResolvedValueOnce({
+      id: 'u1',
+      onboardingComplete: false,
+      phoneNumber: '+17345550123',
+    })
+    getReminderStateMock.mockResolvedValueOnce({
+      phoneNumber: '+17345550123',
+      phoneVerified: true,
+      smsOptIn: 'opted_in',
+      emailOptIn: 'not_asked',
+      pendingEmail: null,
+      reminderPromptDismissedAt: null,
+      reminderInterstitialSeenAt: null,
+    })
+
+    const result = await callPage()
+
+    expect(result.redirected).toBe(false)
+    expect(result.props?.showReminderOffer).toBe(false)
   })
 
   it('renders OnboardingFlow for an invite-link signup (no FriendInvitation row, but an invite-link friendship)', async () => {

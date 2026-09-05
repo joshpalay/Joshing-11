@@ -1,6 +1,11 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import { contactHashes, db, users } from '@/server/db';
+import {
+  SMS_CONSENT_POLICY_VERSION,
+  type ReminderOptInState,
+  type SmsConsentSource,
+} from '@/server/reminders/acquisition';
 
 export type UserProfile = {
   id: string;
@@ -182,20 +187,27 @@ export async function updateProfileFields(
   return { ok: true };
 }
 
-export type ReminderOptInState = 'opted_in' | 'opted_out' | 'not_asked';
+export type { ReminderOptInState };
 export const SMS_CONSENT_SOURCE = 'profile_web_form';
-export const SMS_CONSENT_POLICY_VERSION = '2026-09-02';
+export { SMS_CONSENT_POLICY_VERSION };
 
 export function buildSmsConsentAuditPatch(
   smsOptIn: 'opted_in' | 'opted_out',
+  source: SmsConsentSource = SMS_CONSENT_SOURCE,
   changedAt = new Date(),
 ): Record<string, unknown> {
-  return {
-    smsOptIn,
-    smsConsentSource: SMS_CONSENT_SOURCE,
-    smsConsentPolicyVersion: SMS_CONSENT_POLICY_VERSION,
-    ...(smsOptIn === 'opted_in' ? { smsOptInAt: changedAt } : { smsOptOutAt: changedAt }),
-  };
+  if (smsOptIn === 'opted_in') {
+    return {
+      smsOptIn,
+      smsOptInAt: changedAt,
+      smsConsentSource: source,
+      smsConsentPolicyVersion: SMS_CONSENT_POLICY_VERSION,
+    };
+  }
+
+  // Preserve the proof of the consent being withdrawn. The source and policy
+  // fields describe the opt-in event and should not be overwritten on opt-out.
+  return { smsOptIn, smsOptOutAt: changedAt };
 }
 
 export type ReminderState = {
@@ -211,9 +223,8 @@ export type ReminderState = {
   smsConsentSource: string | null;
   smsConsentPolicyVersion: string | null;
   reminderPromptDismissedAt: string | null;
-  // D-REMINDER-INTERSTITIAL-01: when the one-time full-screen interstitial was
-  // shown (both sign-up and skip stamp it). Null → never shown → still eligible.
-  // Deliberately separate from reminderPromptDismissedAt (Decision D).
+  // When the one allowed post-onboarding follow-up was shown. Null means the
+  // player may still receive that single contextual opportunity.
   reminderInterstitialSeenAt: string | null;
 };
 
@@ -268,13 +279,12 @@ export async function markPhoneVerified(userId: string): Promise<ReminderState |
 
 export type ReminderPreferenceUpdate = {
   smsOptIn?: 'opted_in' | 'opted_out';
+  smsConsentSource?: SmsConsentSource;
   emailOptIn?: 'opted_in' | 'opted_out';
   pendingEmail?: string;
   dismissed?: true;
-  // D-REMINDER-INTERSTITIAL-01 Decision D: records that the one-time interstitial
-  // was shown. Stamps reminder_interstitial_seen_at ONLY — it must NOT write
-  // reminder_prompt_dismissed_at, so skipping the interstitial ("not now") never
-  // retires the standing inline RoundReminderCard ("never" is its "No thanks").
+  // Records that the one allowed post-onboarding follow-up was shown. Once set,
+  // the shared acquisition rule retires every contextual reminder prompt.
   interstitialSeen?: true;
 };
 
@@ -306,14 +316,17 @@ export async function updateReminderPreferences(
 
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.smsOptIn !== undefined) {
-    Object.assign(set, buildSmsConsentAuditPatch(patch.smsOptIn));
+    Object.assign(
+      set,
+      buildSmsConsentAuditPatch(
+        patch.smsOptIn,
+        patch.smsConsentSource ?? SMS_CONSENT_SOURCE,
+      ),
+    );
   }
   if (patch.emailOptIn !== undefined) set.emailOptIn = patch.emailOptIn;
   if (patch.pendingEmail !== undefined) set.pendingEmail = patch.pendingEmail;
   if (patch.dismissed === true) set.reminderPromptDismissedAt = new Date();
-  // Decision D: interstitialSeen stamps ONLY the interstitial column. Never
-  // reminderPromptDismissedAt — that stays reserved for the inline card's
-  // explicit "No thanks".
   if (patch.interstitialSeen === true) set.reminderInterstitialSeenAt = new Date();
 
   await db.update(users).set(set).where(eq(users.id, userId));
@@ -321,6 +334,33 @@ export async function updateReminderPreferences(
   const state = await getReminderState(userId);
   if (!state) return { ok: false, reason: 'not_found' };
   return { ok: true, state };
+}
+
+/** Restore the exact SMS consent snapshot after confirmation delivery fails. */
+export async function restoreSmsReminderConsent(
+  userId: string,
+  prior: Pick<
+    ReminderState,
+    | 'smsOptIn'
+    | 'smsOptInAt'
+    | 'smsOptOutAt'
+    | 'smsConsentSource'
+    | 'smsConsentPolicyVersion'
+  >,
+): Promise<ReminderState | null> {
+  await db
+    .update(users)
+    .set({
+      smsOptIn: prior.smsOptIn,
+      smsOptInAt: prior.smsOptInAt ? new Date(prior.smsOptInAt) : null,
+      smsOptOutAt: prior.smsOptOutAt ? new Date(prior.smsOptOutAt) : null,
+      smsConsentSource: prior.smsConsentSource,
+      smsConsentPolicyVersion: prior.smsConsentPolicyVersion,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+
+  return getReminderState(userId);
 }
 
 export async function updateDisplayName(params: {

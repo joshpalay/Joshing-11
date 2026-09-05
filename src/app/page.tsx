@@ -80,10 +80,8 @@ export default async function Home({
         <TodaysFiveCard />
       )}
 
-      {/* The home teal-band reminder prompt was retired by
-          D-REMINDER-INTERSTITIAL-01 (Decision C): the standing offer is now the
-          inline RoundReminderCard on the daily summary, plus the one-time
-          full-screen interstitial. */}
+      {/* Reminder acquisition lives in onboarding plus one state-gated
+          Daily Summary follow-up. Home never repeats the ask. */}
 
       {/* Pending follow requests — a quiet "Wants to connect" section at the head
           of the social content (below the daily-five + reminder block, above the

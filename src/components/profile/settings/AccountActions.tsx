@@ -329,7 +329,7 @@ export function AccountActions({
           kind: 'link',
           icon: <Bell className="size-5" />,
           title: 'Reminder interstitial',
-          subtitle: 'Preview the one-time email-reminder takeover on summary exit',
+          subtitle: 'Preview the one-time SMS-reminder takeover on summary exit',
           href: '/daily/summary/reminder-interstitial-preview',
         },
         {

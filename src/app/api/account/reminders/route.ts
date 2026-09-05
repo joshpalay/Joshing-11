@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
-import { getReminderState, updateReminderPreferences } from '@/server/db/queries/account';
+import {
+  getReminderState,
+  restoreSmsReminderConsent,
+  updateReminderPreferences,
+} from '@/server/db/queries/account';
 import { sendVerificationEmail } from '@/server/email/send-verification';
+import { SMS_CONSENT_SOURCES } from '@/server/reminders/acquisition';
 import { buildSmsOptInConfirmationMessage, sendSms } from '@/server/sms';
 
 export const dynamic = 'force-dynamic';
@@ -11,13 +16,12 @@ export const dynamic = 'force-dynamic';
 const bodySchema = z
   .object({
     smsOptIn: z.enum(['opted_in', 'opted_out']).optional(),
+    smsConsentSource: z.enum(SMS_CONSENT_SOURCES).optional(),
     emailOptIn: z.enum(['opted_in', 'opted_out']).optional(),
     pendingEmail: z.string().trim().email().optional(),
     dismissed: z.literal(true).optional(),
-    // D-REMINDER-INTERSTITIAL-01: the one-time interstitial marks itself seen on
-    // both outcomes. May arrive alone (skip) or alongside pendingEmail/emailOptIn
-    // (sign-up) in a single PATCH. Stamps the interstitial column only, never the
-    // inline card's dismissed column (Decision D).
+    // The one post-onboarding acquisition surface stamps itself seen as soon as
+    // it is displayed, retiring further contextual asks while leaving Settings.
     interstitialSeen: z.literal(true).optional(),
   })
   .refine(
@@ -28,6 +32,10 @@ const bodySchema = z
       b.dismissed === true ||
       b.interstitialSeen === true,
     'must specify at least one change',
+  )
+  .refine(
+    (b) => b.smsOptIn !== 'opted_in' || b.smsConsentSource !== undefined,
+    'SMS opt-in source is required',
   );
 
 export async function GET() {
@@ -89,21 +97,36 @@ export async function PATCH(request: Request) {
       session.userId,
     );
     if (!sendResult.ok) {
-      const rollback = await updateReminderPreferences(session.userId, { smsOptIn: 'opted_out' });
+      const rollback = priorState
+        ? await restoreSmsReminderConsent(session.userId, priorState)
+        : null;
       console.warn(
-        '[reminders] SMS opt-in confirmation failed; reminders kept off:',
+        '[reminders] SMS opt-in confirmation failed; prior consent state restored:',
         sendResult.reason,
       );
       return NextResponse.json(
         {
           error: 'sms_confirmation_failed',
           message: "We couldn't send the confirmation text, so SMS reminders stayed off.",
-          state: rollback.ok ? rollback.state : null,
+          state: rollback,
         },
         { status: 502 },
       );
     }
     smsConfirmationSent = true;
+  }
+
+  let finalState = result.ok ? result.state : null;
+  if (
+    result.ok &&
+    parsed.data.smsOptIn === 'opted_in' &&
+    parsed.data.smsConsentSource !== 'profile_web_form'
+  ) {
+    const completed = await updateReminderPreferences(session.userId, {
+      dismissed: true,
+      interstitialSeen: true,
+    });
+    if (completed.ok) finalState = completed.state;
   }
 
   // Auto-fire the verification email when pendingEmail actually changed.
@@ -123,7 +146,7 @@ export async function PATCH(request: Request) {
   }
 
   return NextResponse.json({
-    state: result.ok ? result.state : null,
+    state: finalState,
     verificationEmailSent,
     smsConfirmationSent,
   });

@@ -4,14 +4,15 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
+import { SmsReminderDisclosure } from '@/components/reminders/SmsReminderDisclosure'
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
 // optional expander there; the cultural-anchor/background step was removed).
-// Picking areas marks onboarding complete, kicks off question generation, and
-// lands the player straight in /daily. The daily-reminder email opt-in moved
-// off this flow into the post-first-five recap (FirstSessionRecap), so the ask
-// arrives once the player has actually felt the loop.
-type CurrentStep = 'setup' | 'review'
+// Picking areas marks onboarding complete and kicks off question generation.
+// A final, optional SMS-reminder choice then closes setup: opting in suppresses
+// the later recap ask; continuing without reminders leaves that one later
+// opportunity intact.
+type CurrentStep = 'setup' | 'review' | 'reminders'
 
 export type ProposedInterest = {
   domain: string
@@ -43,6 +44,8 @@ type OnboardingFlowProps = {
   inviteeDisplayName?: string | null
   initialDisplayName?: string | null
   initialHandle?: string | null
+  phoneNumber?: string | null
+  showReminderOffer?: boolean
   /**
    * Read-only replay for the dev onboarding harness. When set, the name, handle,
    * and interests steps advance through the real UI WITHOUT their mutating
@@ -142,6 +145,58 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   )
 }
 
+export function OnboardingReminderStep({
+  phoneNumber,
+  saving,
+  error,
+  onContinueWithReminders,
+  onContinueWithoutReminders,
+}: {
+  phoneNumber?: string | null
+  saving: boolean
+  error: string | null
+  onContinueWithReminders: () => void
+  onContinueWithoutReminders: () => void
+}) {
+  return (
+    <div className="flex flex-1 flex-col justify-center gap-8">
+      <div className="space-y-3">
+        <p className="font-wordmark text-quiet font-bold tracking-[0.18em] text-[var(--brand-navy)] uppercase">
+          Joshing
+        </p>
+        <StepHeader
+          title="Want a daily text reminder?"
+          subtitle="We’ll text you when each day’s five are ready. One message a day, max."
+        />
+      </div>
+
+      <div className="space-y-4">
+        <button
+          type="button"
+          className="btn-primary h-12 w-full"
+          onClick={onContinueWithReminders}
+          disabled={saving}
+        >
+          {saving ? 'Turning on reminders…' : 'Continue with SMS reminders'}
+        </button>
+        <SmsReminderDisclosure
+          phoneNumber={phoneNumber}
+          actionLabel="Continue with SMS reminders"
+        />
+        {error ? <p className="text-destructive text-sm" role="alert">{error}</p> : null}
+        <button
+          type="button"
+          className="text-muted-foreground mx-auto block text-sm font-medium underline underline-offset-4 transition hover:text-foreground disabled:opacity-50"
+          onClick={onContinueWithoutReminders}
+          disabled={saving}
+        >
+          Continue without reminders
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function OnboardingFlow({
   preSeededInterests,
   seedSource = 'named',
@@ -149,6 +204,8 @@ export default function OnboardingFlow({
   inviteeDisplayName,
   initialDisplayName,
   initialHandle,
+  phoneNumber,
+  showReminderOffer = true,
   previewMode = false,
   previewNextHref = '/dev/welcome-tour',
 }: OnboardingFlowProps) {
@@ -202,6 +259,8 @@ export default function OnboardingFlow({
   )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [savingReminder, setSavingReminder] = useState(false)
+  const [reminderError, setReminderError] = useState<string | null>(null)
   const displayInviterName = inviterName?.trim()
     ? inviterName.trim()
     : 'A friend'
@@ -464,10 +523,11 @@ export default function OnboardingFlow({
 
     setError(null)
 
-    // Dev harness replay — skip the save + first-round generation and chain to
-    // the next stage (the welcome tour) instead of the live home.
+    // Dev harness replay — skip the save + first-round generation and advance
+    // through the genuine final reminder choice without mutating the account.
     if (previewMode) {
-      router.push(previewNextHref)
+      if (showReminderOffer) setCurrentStep('reminders')
+      else finishOnboarding()
       return
     }
 
@@ -504,17 +564,60 @@ export default function OnboardingFlow({
         keepalive: true,
       }).catch(() => {})
 
-      // Onboarding is now complete (save-interests set the flag) and the queue
-      // is generating in the background. Land the player on home with the
-      // first-run welcome tour armed (`?welcome=1`); its closing CTA drops them
-      // straight into playing their Five. The tour self-suppresses after one
-      // run, so returning users skip it. The daily-reminder opt-in lives in the
-      // post-first-five recap.
-      router.push('/?welcome=1')
+      // Onboarding is complete and the first queue is warming. Close setup with
+      // the optional reminder choice before entering the welcome tour.
+      if (showReminderOffer) setCurrentStep('reminders')
+      else finishOnboarding()
     } catch {
       setError('Unable to save interests.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  function finishOnboarding() {
+    router.push(previewMode ? previewNextHref : '/?welcome=1')
+  }
+
+  async function continueWithSmsReminders() {
+    setReminderError(null)
+
+    if (previewMode) {
+      finishOnboarding()
+      return
+    }
+
+    setSavingReminder(true)
+    try {
+      // Record consent first. The reminders route sends the required opt-in
+      // confirmation and keeps SMS off if delivery fails.
+      const response = await fetch('/api/account/reminders', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smsOptIn: 'opted_in',
+          smsConsentSource: 'onboarding_web_form',
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.state) {
+        setReminderError(
+          typeof data?.message === 'string'
+            ? data.message
+            : "We couldn't turn on reminders. Try again or continue without them.",
+        )
+        return
+      }
+
+      // The server stamps the shared acquisition state only after the required
+      // confirmation text succeeds, so a failed send never consumes this ask.
+      finishOnboarding()
+    } catch {
+      setReminderError("We couldn't turn on reminders. Try again or continue without them.")
+    } finally {
+      setSavingReminder(false)
     }
   }
 
@@ -746,6 +849,16 @@ export default function OnboardingFlow({
                 </button>
               </div>
             </div>
+          ) : null}
+
+          {currentStep === 'reminders' ? (
+            <OnboardingReminderStep
+              phoneNumber={phoneNumber}
+              saving={savingReminder}
+              error={reminderError}
+              onContinueWithReminders={() => void continueWithSmsReminders()}
+              onContinueWithoutReminders={finishOnboarding}
+            />
           ) : null}
 
         </div>

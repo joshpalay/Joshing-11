@@ -2,11 +2,31 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import OnboardingFlow from '@/app/onboarding/OnboardingFlow'
+import OnboardingFlow, { OnboardingReminderStep } from '@/app/onboarding/OnboardingFlow'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }))
+
+describe('Onboarding reminder choice', () => {
+  it('restores the SMS reminder primary action and the continue-without link', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingReminderStep
+        phoneNumber="+17345550123"
+        saving={false}
+        error={null}
+        onContinueWithReminders={vi.fn()}
+        onContinueWithoutReminders={vi.fn()}
+      />
+    )
+
+    expect(html).toContain('Continue with SMS reminders')
+    expect(html).toContain('Continue without reminders')
+    expect(html).toContain('(734) 555-0123')
+    expect(html).toContain('automated Joshing reminder texts')
+    expect(html).not.toContain('Email me')
+  })
+})
 
 describe('OnboardingFlow invited interests', () => {
   it('pre-selects a seeded interest on the interests step', () => {
