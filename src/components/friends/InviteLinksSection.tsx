@@ -304,10 +304,10 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
                     type="button"
                     disabled={locked}
                     onClick={() => void removeTopic(topic.label)}
-                    aria-label={`Swap out ${topic.label}`}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-3 text-lg"
+                    aria-label={`Swap out ${topic.label} for something else`}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 px-3 text-xs font-medium underline underline-offset-2"
                   >
-                    ×
+                    Swap
                   </button>
                 </div>
               )
@@ -334,7 +334,12 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
                 ) : null}
               </span>
               <span className="text-sm font-semibold">
-                No category <span className="text-muted-foreground text-xs font-medium">carries all your topics</span>
+                No category{' '}
+                <span className="text-muted-foreground text-xs font-medium">
+                  {topics.length > 0
+                    ? `carries all ${topics.length} topic${topics.length === 1 ? '' : 's'} above`
+                    : 'carries your most-played topics'}
+                </span>
               </span>
             </button>
           </div>
@@ -361,7 +366,14 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
                 + Create your own
               </button>
             )
-          ) : null}
+          ) : (
+            // At the 3-topic cap the add flow isn't gone, just one step away —
+            // say so instead of rendering nothing, since a bare "×" glyph
+            // above doesn't read as "this reopens adding."
+            <p className="text-muted-foreground text-center text-xs">
+              All 3 topics are taken. Tap Swap above to trade one for something new.
+            </p>
+          )}
 
           {createError ? <p className="text-destructive text-sm">{createError}</p> : null}
 

@@ -6,4 +6,4 @@
 export { createSession, getSession, getSessionToken, validateSessionToken, destroySession } from './session';
 export { getCurrentUser, requireUser } from './user';
 export { requestOtp, verifyOtp, getStoredCodeForPhone, isUsPhoneNumber, normalizePhone } from './otp-store';
-export { getOtpBypassCodeForPhone } from './otp-bypass';
+export { getOtpBypassCodeForPhone, isBypassTestPhone } from './otp-bypass';

@@ -26,12 +26,6 @@ type LoadingScreenProps = {
    * cached-only data off the critical path; this component never fetches.
    */
   loadingMoments?: ResolvedLoadingMoment[];
-  /**
-   * A short reassurance shown below the card, outside the rotating copy slot
-   * (e.g. confirming a reminder opt-in just taken on the screen before this
-   * one). Static — never rotates, never resizes the card above it.
-   */
-  note?: string;
 };
 
 type RotationItem =
@@ -157,7 +151,6 @@ export default function LoadingScreen({
   fullScreen = false,
   loadingMoment = null,
   loadingMoments,
-  note,
 }: LoadingScreenProps) {
   const triangles = React.useMemo(() => buildTriangles(), []);
   const reducedMotion = usePrefersReducedMotion();
@@ -201,7 +194,7 @@ export default function LoadingScreen({
     currentItem.kind === "moment" ? currentItem.moment.artifact : currentItem.text;
 
   const wrapperClass = [
-    "isolate flex flex-col items-center justify-center gap-4 overflow-hidden bg-[var(--brand-cream-page)]",
+    "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
     fullScreen
       ? "fixed inset-0 z-[var(--z-takeover)]"
       : "relative h-full w-full min-h-[480px]",
@@ -332,12 +325,6 @@ export default function LoadingScreen({
         </p>
         )}
       </div>
-
-      {note ? (
-        <p className="border-[var(--brand-border)] bg-[var(--brand-cream-card)] shadow-[var(--shadow-card)] relative z-10 mx-6 max-w-xs rounded-full border px-4 py-2 text-center text-xs font-semibold leading-snug text-[var(--brand-ink-700)]">
-          {note}
-        </p>
-      ) : null}
     </div>
   );
 }

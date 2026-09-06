@@ -143,6 +143,22 @@ describe('SMS reminder opt-in confirmation', () => {
     expect(restoreSmsReminderConsentMock).toHaveBeenCalledWith('user-1', baseState);
   });
 
+  it('skips the real send for an allowlisted test phone', async () => {
+    vi.stubEnv('AUTH_OTP_BYPASS_PHONE', baseState.phoneNumber ?? '');
+    vi.stubEnv('AUTH_OTP_BYPASS_CODE', '000000');
+
+    const response = await PATCH(patchRequest({
+      smsOptIn: 'opted_in',
+      smsConsentSource: 'onboarding_web_form',
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ smsConfirmationSent: true });
+    expect(sendSmsMock).not.toHaveBeenCalled();
+
+    vi.unstubAllEnvs();
+  });
+
   it('requires a source for every SMS opt-in', async () => {
     const response = await PATCH(patchRequest({ smsOptIn: 'opted_in' }));
 
