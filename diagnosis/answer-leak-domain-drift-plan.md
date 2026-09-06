@@ -195,3 +195,111 @@ Both labelers are running now. Next update will carry:
 (`800c44a3…`, `139e1932…`, `357618e3…`) are **still live and servable in
 prod** — re-checked today, `is_duplicate` is still `false` on all three. The
 demote SQL from PR #1611 has not been run yet.
+
+### 2026-09-06 (later still) — Phase 1 complete: both gates clear the bar
+
+Both blind labelers finished. Scored against the real flags from the blind
+sets above (raw per-occurrence basis — several corpus rows are re-generated
+duplicates of the same underlying question, noted separately below):
+
+| Gate | Flagged | Labeler agrees (TP) | Labeler disagrees (FP) | **Precision** | Controls flagged anyway (recall gap) |
+|---|---|---|---|---|---|
+| Partial leak | 13 | 12 | 1 | **92.3%** (87.5% distinct-content, 7/8) | 3 / 50 (6.0%) |
+| Answer shape | 41 | 38 | 3 | **92.7%** | 1 / 50 (2.0%) |
+
+Both clear the Phase 1 exit bar (≥ 90% precision) on the primary,
+per-occurrence metric.
+
+**Disagreement items for Josh to adjudicate** (7 distinct, not the full 154 —
+as the plan predicted):
+
+*Partial leak — rule flagged, labeler disagreed (1):*
+- `model year` for "...releasing updated vehicle styling tied to a specific
+  year..." — the rule's Rule B (generic-head-noun) has `model` in its
+  generic-noun list, but here "model" is the *substantive* jargon word, not
+  filler, and "year" (the word actually shown) is what's generic. This is
+  the mirror-image of the "dental plan" case the rule was built for. **Fix
+  candidate:** drop `model` from `GENERIC_HEAD_NOUNS` in
+  `src/server/questions/self-answering.ts`.
+
+*Partial leak — labeler flagged a control the rule missed (3, all real
+semantic leaks a lexical rule structurally cannot reach):*
+- "Credo in un Dio crudel" (Iago's aria) — stem paraphrases the Italian
+  title's meaning ("belief in a cruel God") without using its words. Needs
+  semantic understanding, not lexical overlap.
+- "The Feast of the Epiphany" — stem says the term "epiphany" was borrowed
+  from a feast day and asks which one; "feast" isn't in `GENERIC_HEAD_NOUNS`.
+- "Quilt block" — stem already says "a square block" in a quilting-themed
+  question; the labeler judged the domain context makes "quilt" redundant,
+  a contextual read a token-overlap rule can't make.
+
+*Answer shape — rule flagged, labeler disagreed (3 raw, 2 distinct — two
+are the same duplicate row):*
+- The Joyce/Woolf answer itself (`139e1932…` and an older duplicate
+  `f10644…`) — `"A petition calling for universal peace / ... (specifically,
+  the Czar Nicholas II's 1898 peace manifesto)"`. The labeler read the
+  `"(specifically, X)"` clause as an appositive narrowing down *which*
+  petition, not narration — disagreeing with the `SENTENCE_TELLS` regex,
+  which treats `specifically` as a sentence tell. **Worth noting:** this row
+  is independently caught by the partial-leak gate regardless of this
+  disagreement, so the *outcome* (drop it) is right either way — only the
+  shape gate's stated *reason* is debatable here.
+- "He floats behind them (they levitate him / he is carried out unconscious
+  on a stretcher-like levitation)" — labeler read the parenthetical as
+  alternate phrasings, not narration.
+
+*Answer shape — labeler flagged a control the rule missed (1):*
+- "He has inherited his uncle's fortune (his rich uncle has died and left
+  him wealthy)" — has the pronoun-start tell but is only ~85 characters,
+  under `ANSWER_SHAPE_MAX_CHARS` (100), so the length+tell AND doesn't
+  trigger. Suggests the length threshold may be a little high.
+
+**Recommendation:**
+- **`PARTIAL_ANSWER_LEAK_ENABLED`** — precision clears the bar; recommend
+  flipping it on. This is a Vercel environment-variable change across
+  deploy environments, which I won't make without Josh's go-ahead even with
+  the precision bar cleared (shared-infra change, not a code change this PR
+  can carry).
+- **Answer shape gate** — confirmed correct as already shipped (default on).
+  No action needed.
+- Two small rule tightenings are worth a follow-up PR, not blocking the flag
+  decision above: drop `model` from `GENERIC_HEAD_NOUNS`, and reconsider
+  whether `specifically` should stay in `SENTENCE_TELLS` given the
+  appositive-clarification counter-example.
+- The recall gaps (Credo, Epiphany, Quilt block) are the ceiling of a
+  lexical-only approach — closing them needs semantic/contextual judgment a
+  regex can't do. Relevant to Phase 4: at ~13 rows/day, worth asking whether
+  an LLM backstop is warranted before spending more effort tightening
+  regexes that are already near their lexical ceiling.
+
+### 2026-09-06 (later still) — Phase 2 fixtures built, not yet run
+
+Wrote `src/server/daily/__tests__/domain-drift.eval.test.ts`, following the
+exact conventions of the existing `quality-gate.eval.test.ts` live-eval
+harness (`RUN_LLM_EVALS=1 ANTHROPIC_API_KEY=... npx vitest run
+domain-drift.eval`, self-skips without both). Fixtures are the real rows
+named in the plan: 3 positives (Joyce + Forster under Woolf, Romantic Opera
+under Romantic Era Orchestral Music) and 4 containment negatives (Mrs.
+Dalloway under Woolf, Sesame Street under Classic Children's Television,
+Breaking Bad under Color References, a New Testament book under New
+Testament), plus one mixed-batch test matching how the gate actually runs
+in production (several questions in one call).
+
+**Not run yet** — this environment has no local `ANTHROPIC_API_KEY`, so the
+whole suite self-skips here. Someone with API access (CI, or Josh's local
+`.env`) needs to run it and log the pass/fail here before
+`DOMAIN_DRIFT_DROP_ENABLED` can be considered. Per the Phase 2 exit
+criteria: it needs to catch every positive **and** flag zero containment
+negatives — a single containment false positive disqualifies the gate from
+dropping, since that failure mode is otherwise invisible in production.
+
+### Next steps
+1. Josh: adjudicate the 7 disagreement items above, and decide whether to
+   flip `PARTIAL_ANSWER_LEAK_ENABLED`.
+2. Someone with `ANTHROPIC_API_KEY`: run `domain-drift.eval.test.ts`, log the
+   result here.
+3. If Phase 2 passes, full-corpus pass (~230 Haiku calls) for a real
+   off-domain hit rate before flipping `DOMAIN_DRIFT_DROP_ENABLED`.
+4. Phase 3 (drop-vs-refile) and Phase 4 (drift-as-demand-signal) not started.
+5. Still outstanding: the three original bad rows are still live in prod —
+   demote SQL from PR #1611 has not been run.
