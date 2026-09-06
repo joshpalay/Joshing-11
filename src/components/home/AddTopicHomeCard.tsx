@@ -175,7 +175,7 @@ export function AddTopicHomeCard() {
           <div className="flex-1">
             <p className="m-0 text-quiet text-[var(--ink)]">
               {added.created ? (
-                <>Added &ldquo;{added.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+                <>Added &ldquo;{added.domain}&rdquo; — it may show up in an upcoming round.</>
               ) : (
                 <>&ldquo;{added.domain}&rdquo; is already in your topics.</>
               )}
