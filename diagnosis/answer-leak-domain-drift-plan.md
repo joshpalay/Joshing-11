@@ -150,3 +150,48 @@ negative bar.
 
 ### 2026-09-06
 Folder created; plan captured as written and agreed. No phases started yet.
+
+### 2026-09-06 (later) — Phase 1 started: blind labeling in progress
+Extracted all 2,304 currently-servable (`is_duplicate = false`) rows from
+prod via a read-only SELECT, then ran the actual shipped functions from PR
+#1611 (`questionPartiallyLeaksAnswer`, `textContainsAnswer`,
+`findAnswerShapeFailures` — not a re-derivation, the real code) against every
+row to reproduce:
+
+- **13** partial-leak hits
+- **41** answer-shape hits
+- a pool of rows flagged by neither, from which **50** were sampled as
+  shared controls (deterministic shuffle, reproducible)
+
+Built two blind sets for independent labeling, each rule's hits mixed with
+the same 50 controls and shuffled so order carries no signal:
+- `leak` set: 63 items (13 flagged + 50 controls)
+- `shape` set: 91 items (41 flagged + 50 controls)
+
+Labeler-facing copies carry only `{item_id, question_text, answer}` — no
+rule tag, no flag, no row id — so the grading judgment can't be contaminated
+by knowing which rule (if any) fired.
+
+**Labeler:** two fresh, context-free subagents (no memory of this
+conversation, no knowledge of which rule wrote which candidate, no exposure
+to my reasoning about "genuine leak") — one per rule, run in parallel. This
+is the check against my own self-grading in the original PR: I wrote both
+rules and graded them against the corpus myself before shipping, which is
+the exact weakness this phase exists to close. A real Anthropic-API-backed
+Sonnet grading pass (matching how the app's own gates work) wasn't available
+in this environment — no `ANTHROPIC_API_KEY` is present in the local
+`.env` — so independent subagents stood in as the blind labeler instead.
+
+Both labelers are running now. Next update will carry:
+- LEAK / NO_LEAK and BAD_SHAPE / CLEAN counts per set
+- precision per gate (of the rule's own hits, how many the labeler agrees
+  are genuinely defective)
+- a recall proxy (of the 50 controls, how many the labeler flagged as bad
+  that neither rule caught)
+- the specific disagreement items, for Josh to adjudicate directly (this is
+  the ~10-item review the plan calls for, not the full 154)
+
+**Still outstanding, unrelated to Phase 1:** the three original bad rows
+(`800c44a3…`, `139e1932…`, `357618e3…`) are **still live and servable in
+prod** — re-checked today, `is_duplicate` is still `false` on all three. The
+demote SQL from PR #1611 has not been run yet.
