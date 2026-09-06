@@ -29,6 +29,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - `npm run check:typesize` — type-size ratchet (arbitrary `text-[Npx]`/`[Nrem]` count must stay ≤ the ceiling in `scripts/check-typesize-ratchet.mjs`; runs in CI. The 13px secondary register is named: use `text-quiet`, never `text-[13px]` — see `_docs/STYLE-GUIDE-TYPE.md` §3. Inline `fontSize:` styles are out of scope — see the script header)
 - `npm run format` — Prettier write
 - `npm run db:migrate` — Drizzle migrations
+- `npm run check:build-latency` — Daily Five build-latency reading (read-only; prints the Phase 2/3 checks from `diagnosis/daily-build-latency-deferral-plan.md`, with the `outcome='built'` filter applied so early returns can't be mistaken for fast builds)
 - `npm run smoke:daily-catchup` — daily catchup smoke test
 - `npx tsc -p tsconfig.typecheck.json` — typecheck convention (this is what produces the `tsconfig.typecheck.tsbuildinfo` churn; do not commit the `.tsbuildinfo` files)
 
