@@ -972,7 +972,13 @@ export default function DailyPage() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
-      <ReminderConfirmedToast show={justOptedIntoReminders} />
+      {/* Gated on `!loading` because the fullscreen LoadingScreen renders at
+          --z-takeover (80), above --z-toast (70) — an ungated toast is covered
+          by it while its own dismiss timer runs underneath, so it expires
+          before the player can ever see it. Waiting for load means it appears
+          when there's actually something to appear over: right after the
+          crafting screen on a slow build, immediately on a fast one. */}
+      <ReminderConfirmedToast show={justOptedIntoReminders && !loading} />
       {/* Brand triangle pattern (same artwork as the login screen / home feed)
           tiled full-strength behind the game. No cream scrim — the gameplay
           thread is entirely cards, which sit opaque on top; the sticky header
