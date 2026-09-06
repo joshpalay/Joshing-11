@@ -85,7 +85,12 @@ export type ChatMessage =
        * (1–5); `bonus` renders `✦` instead (additive, never numbered). Omit to
        * render no marker (e.g. non-Daily-Five surfaces).
        */
-      numberMarker?: { value: number; bonus: boolean } | null;
+      numberMarker?: {
+        value: number;
+        bonus: boolean;
+        bonusIndex?: number;
+        bonusTotal?: number;
+      } | null;
       /**
        * Catch-up dismiss: set true while the dismiss call is in flight so the
        * card collapses (shrinks) in place before it is swapped for the
@@ -436,7 +441,12 @@ function QuestionRow({
   onReportedInappropriate,
 }: {
   subhead?: string | null;
-  numberMarker?: { value: number; bonus: boolean } | null;
+  numberMarker?: {
+    value: number;
+    bonus: boolean;
+    bonusIndex?: number;
+    bonusTotal?: number;
+  } | null;
   dismissing?: boolean;
   badges?: Array<{ label: string; tone?: 'muted' | 'warning' }>;
   questionText: string;
@@ -519,7 +529,12 @@ function QuestionRow({
         // unchanged after the question is answered (F2) and never reflects
         // result state.
         <div style={{ paddingLeft: '6px', marginBottom: '8px' }}>
-          <QuestionNumberMarker value={numberMarker.value} bonus={numberMarker.bonus} />
+          <QuestionNumberMarker
+            value={numberMarker.value}
+            bonus={numberMarker.bonus}
+            bonusIndex={numberMarker.bonusIndex}
+            bonusTotal={numberMarker.bonusTotal}
+          />
         </div>
       ) : null}
       <div
