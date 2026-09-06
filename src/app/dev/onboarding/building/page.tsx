@@ -1,5 +1,4 @@
 import LoadingScreen from '@/components/LoadingScreen';
-import { ReminderConfirmedToast } from '@/components/ReminderConfirmedToast';
 
 import { WalkthroughAdvance } from './WalkthroughAdvance';
 
@@ -10,27 +9,27 @@ export const dynamic = 'force-dynamic';
  *
  * In the real flow both onboarding exits (opted into SMS reminders or not) now
  * land here — on `/daily`, whose own load path shows this same `LoadingScreen`
- * while the first queue finishes generating. `?remindersOn=1` (set by the
- * onboarding harness when the reminder ask was accepted) mirrors the real
- * `/daily?remindersOn=1` handoff and renders the same ReminderConfirmedToast
- * production does — unconditionally, not tied to this loading screen still
- * being up, since a fast build often means it never shows at all. In `?walk=1`
- * (full-walkthrough) mode it pauses on the build, then advances to the
- * first-session recap — the "first time finished" stage. (Real play itself
- * can't be faithfully stubbed, so the walkthrough brackets it.)
+ * while the first queue finishes generating. In `?walk=1` (full-walkthrough)
+ * mode it pauses on the build, then advances to the first-session recap — the
+ * "first time finished" stage. (Real play itself can't be faithfully stubbed,
+ * so the walkthrough brackets it.)
+ *
+ * Deliberately does NOT preview ReminderConfirmedToast. That toast renders at
+ * --z-toast (70), below this screen's --z-takeover (80), so it would sit
+ * invisible behind the loader here — and in production it is gated on loading
+ * having finished for exactly that reason. It belongs to the screen AFTER this
+ * one, so previewing it here would show a state that never occurs.
  */
 export default async function DevBuildingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ walk?: string; remindersOn?: string }>;
+  searchParams: Promise<{ walk?: string }>;
 }) {
   const params = await searchParams;
   const walk = params?.walk === '1';
-  const remindersOn = params?.remindersOn === '1';
 
   return (
     <main className="min-h-dvh">
-      <ReminderConfirmedToast show={remindersOn} />
       <LoadingScreen fullScreen label="Building your first five…" />
       {walk ? <WalkthroughAdvance nextHref="/dev/first-time-player" /> : null}
     </main>
