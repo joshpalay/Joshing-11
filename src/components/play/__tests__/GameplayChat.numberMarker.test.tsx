@@ -49,6 +49,30 @@ describe('GameplayChat question number marker', () => {
     expect(rendered).not.toContain('6.');
   });
 
+  // D-GAMEPLAY-BONUS-COUNT-01 (#1615). The component and its prop threading
+  // merged ahead of the caller that supplies these, so until `daily/page.tsx`
+  // builds them every bonus slot silently took the ✦ fallback above and the
+  // feature was inert in production. These two cases pin the live behaviour so
+  // a caller regression shows up here rather than as a quietly missing count.
+  it('renders a counted bonus question as "n of N"', () => {
+    const rendered = html([
+      questionMessage({ numberMarker: { value: 6, bonus: true, bonusIndex: 1, bonusTotal: 2 } }),
+    ]);
+    expect(rendered).toContain('1 of 2');
+    expect(rendered).toContain('Bonus question 1 of 2'); // accessible label
+    expect(rendered).not.toContain('6.');
+  });
+
+  it('falls back to ✦ for an additive slot with no bonus sequence (a return slot)', () => {
+    // A return slot is additive — `bonus: true` — but is not part of the +2 run,
+    // so it carries no index. It must keep the original glyph rather than
+    // inventing a position in a sequence it does not belong to.
+    const rendered = html([questionMessage({ numberMarker: { value: 7, bonus: true } })]);
+    expect(rendered).toContain('✦');
+    expect(rendered).toContain('Bonus question');
+    expect(rendered).not.toContain(' of ');
+  });
+
   it('renders no marker when numberMarker is absent (non-Daily-Five surfaces)', () => {
     const rendered = html([questionMessage({})]);
     expect(rendered).not.toContain('aria-label="Question');

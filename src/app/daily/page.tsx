@@ -23,10 +23,12 @@ import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { ReminderConfirmedToast } from '@/components/ReminderConfirmedToast';
-import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
+import { type InsideJokeKind } from '@/lib/questions-types';
+import { slotCategoryLabel } from '@/server/daily/slot-label';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import {
   getBonusCount,
+  getBonusSlots,
   getCoreSlots,
   getSlotPresence,
   isAdditiveSlot,
@@ -39,10 +41,7 @@ import {
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   // Figma shows the topic/category as the question chip (not the difficulty tier).
-  const category =
-    (slot.broad_category && slot.broad_category.trim()) ||
-    (slot.category ? categoryLabel(slot.category) : '') ||
-    slot.domain;
+  const category = slotCategoryLabel(slot);
   const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category
     ? [{ label: category }]
     : [];
@@ -598,6 +597,20 @@ export default function DailyPage() {
   const messages = useMemo<ChatMessage[]>(() => {
     if (!queue) return [];
     const rows: ChatMessage[] = [];
+    // "Bonus n of N" — the bonus run's OWN sequence, computed over the +2 slots
+    // only. Returns stay uncounted (they're additive but not bonus, and have no
+    // run to be part of), and the core five keep their own 1–5 untouched, so
+    // nothing here enters the daily-five denominator.
+    const bonusOrder = new Map(
+      getBonusSlots(queue.slots).map((bonusSlot, index) => [bonusSlot.slot_index, index + 1]),
+    );
+    const bonusTotal = bonusOrder.size;
+    const markerFor = (slot: QueueSlot) => ({
+      value: slot.slot_index + 1,
+      bonus: isAdditiveSlot(slot),
+      bonusIndex: bonusOrder.get(slot.slot_index),
+      bonusTotal: bonusOrder.has(slot.slot_index) ? bonusTotal : undefined,
+    });
     for (const slot of queue.slots) {
       if (slot.answered) {
         const gaveUp = slot.answer_state === 'incorrect' && !slot.submitted_answer;
@@ -615,7 +628,7 @@ export default function DailyPage() {
           // `bonus` here means "additive — render ✦, never a numeral", which is
           // true of a return slot for the same reason it's true of a +2: it
           // appends past the five and is never in the denominator (R3).
-          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
+          numberMarker: markerFor(slot),
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -667,10 +680,7 @@ export default function DailyPage() {
         // A rested bonus slot ("This is {Name}'s bag but not mine") is closed via
         // the same skip path, but it's an opt-out, not a "bring it back later" —
         // so it gets its own copy naming the category we've stopped surfacing.
-        const restedLabel =
-          (slot.broad_category && slot.broad_category.trim()) ||
-          (slot.category ? categoryLabel(slot.category) : '') ||
-          slot.domain;
+        const restedLabel = slotCategoryLabel(slot);
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
@@ -696,7 +706,7 @@ export default function DailyPage() {
           // `bonus` here means "additive — render ✦, never a numeral", which is
           // true of a return slot for the same reason it's true of a +2: it
           // appends past the five and is never in the denominator (R3).
-          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
+          numberMarker: markerFor(slot),
           badges: questionBadges(slot),
         });
         if (submitting && answer.trim()) {
@@ -970,8 +980,15 @@ export default function DailyPage() {
     [queue, currentSlot, submitting],
   );
 
+  // h-dvh, not min-h-dvh: the header below is `sticky top-0`, but with a MIN
+  // height this shell grows past the viewport, the window becomes the scroller,
+  // and the header — sticky inside an `overflow-hidden` box that is itself
+  // scrolling away — goes with it, which is why the progress dots disappeared
+  // on a long thread. Pinning the shell to exactly one viewport makes the inner
+  // <section> the only scroller, which is what the sticky header and its
+  // `flex-1 overflow-y-auto` sibling always assumed.
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
+    <main className="relative mx-auto flex h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
       {/* Gated on `!loading` because the fullscreen LoadingScreen renders at
           --z-takeover (80), above --z-toast (70) — an ungated toast is covered
           by it while its own dismiss timer runs underneath, so it expires
@@ -1067,11 +1084,7 @@ export default function DailyPage() {
       {notForMeOpen && currentSlot ? (
         <NotForMeSheet
           domain={currentSlot.domain}
-          categoryLabel={
-            (currentSlot.broad_category && currentSlot.broad_category.trim()) ||
-            (currentSlot.category ? categoryLabel(currentSlot.category) : null) ||
-            currentSlot.domain
-          }
+          categoryLabel={slotCategoryLabel(currentSlot)}
           presenceSourceName={currentSlot.presence_source_name ?? null}
           skipDisabled={submitting}
           onChoose={async (scope) => {
