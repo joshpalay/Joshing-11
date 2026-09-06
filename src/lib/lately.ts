@@ -104,9 +104,14 @@ export function assignCaption(
 // an actor link). Selection is deterministic by moment id (the same djb2
 // mechanism the moments use). "you both" is accurate here only — convergence is
 // the one mutual event.
+//
+// "have {topic} down cold" was removed (2026-09-06): it asserts standing
+// mastery on the strength of three questions in one cluster, the same
+// overclaim shape found and removed from activity-stream.ts's one-way pools
+// (GOT_YOU_LINES / YOU_GOT_LINES). The other five lines here describe the
+// event that happened; this was the only one asserting more than that.
 export const CONVERGENCE_SINGLE_TOPIC = [
   'You and {Name} both know {topic} down',
-  'You and {Name} have {topic} down cold',
   'You and {Name} both know {topic} inside out',
   'You and {Name} are right there together on {topic}',
   'You and {Name} both came through on {topic}',
