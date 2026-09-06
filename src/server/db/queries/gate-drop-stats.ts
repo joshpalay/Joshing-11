@@ -24,6 +24,12 @@ export const GATE_NAMES = [
   'answer_cooldown',
   'subject_cooldown',
   'answer_leak',
+  // Measure-only until PARTIAL_ANSWER_LEAK_ENABLED / DOMAIN_DRIFT_DROP_ENABLED
+  // are set: `dropped` counts what each rule WOULD remove, so the flags get
+  // flipped on evidence. See findAnswerLeaks / findQualityFailures.
+  'answer_leak_partial',
+  'answer_shape',
+  'domain_drift',
   'difficulty_floor',
   'thin_declared',
 ] as const;
