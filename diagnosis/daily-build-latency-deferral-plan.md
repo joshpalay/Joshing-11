@@ -16,6 +16,10 @@ shipped; what has not happened yet is the measurement that says whether it
 worked and by how much. The "Recommendation" section below is a running
 best-guess and should be read as provisional until Phase 3 completes.
 
+**To take a reading: `npm run check:build-latency`.** Read-only, safe any time,
+and it prints PASS/FAIL against the Phase 2 and Phase 3 criteria below. See
+§6 for what it does and when to run it.
+
 Everything above the Updates log is history. Correct it by appending a dated
 entry, not by editing in place.
 
@@ -206,6 +210,48 @@ today's cron, it simply rides the general instrumentation cleanup later.
 What would change this recommendation: `deferred: false` on a cron-built row
 (meaning `after()` is unavailable on that path and the deferral is inert in the
 one place it matters), or `build_id: null` on bonus-phase LLM events.
+
+---
+
+## 6. How to take a reading
+
+```bash
+npm run check:build-latency
+```
+
+Read-only: no writes, no LLM calls, safe to run repeatedly. It needs
+`DATABASE_URL` in `.env`, which points at production.
+
+**When.** The cron builds at **17:05 UTC**. Give it ten minutes and run the
+script. If it says "no post-deferral build yet", that is not a failure — a row
+appears only when someone actually needs a queue built, and at current volume
+that is roughly one genuine build a day.
+
+**What it prints, in order:**
+
+| section | what it answers |
+|---|---|
+| totals by `outcome` | how many rows exist, and how many are early returns |
+| pre-deferral baseline | the unrepeatable `span ≈ user_visible` row, re-shown for reference |
+| **Phase 2** | `deferred`, `span_ms`, `target_size`, the two counts — four unknowns |
+| LLM attribution | whether `build_id` survives the `after()` boundary |
+| **Phase 3** | the subtraction, per row and as a median, against the ~7.6s prediction |
+
+**The filter is baked in.** Analysis uses `outcome='built'` only. Forgetting
+that mixes in `carry_forward` / `existing_queue` early returns, which record
+zero generation calls and read as implausibly fast builds — the same
+contamination that produced the withdrawn "bank builds take 0.0s" figure. The
+script applies the filter so nobody has to remember it.
+
+**Two failure signatures it calls out explicitly**, because neither is obvious
+from the raw numbers:
+
+- `deferred: true` with `span_ms: null` → the continuation was **dropped**.
+  `after()` ran and never finished. This is precisely what the two-phase write
+  exists to make visible rather than absent.
+- `deferred: false` on a **cron** build → `after()` was unavailable and the tail
+  ran inline. Correct, but not faster — and it means the deferral is inert on
+  the one path that matters.
 
 ---
 

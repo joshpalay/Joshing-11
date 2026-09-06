@@ -18,6 +18,7 @@
     "check:zindex": "node scripts/check-zindex-ratchet.mjs",
     "check:typesize": "node scripts/check-typesize-ratchet.mjs",
     "check:binary": "node scripts/check-binary-sources.mjs",
+    "check:build-latency": "node scripts/build-latency-check.mjs",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",
     "smoke:invite-first-five": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/invite-first-five.smoke.mjs",
