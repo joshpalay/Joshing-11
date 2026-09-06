@@ -604,8 +604,14 @@ async function computeReminderPromptState(
     phoneNumber: null,
   };
 
-  // Today must have at least one answered slot to count as "completed" — the
-  // reminder surfaces only arrive on a summary the player actually finished.
+  // NAME IS A MISNOMER, kept for now: `isFirstCompletedRound` is true for a
+  // player's first session with AT LEAST ONE answer, not for a finished round.
+  // A single answer out of five satisfies it, which is why the first-session
+  // panel must not announce completion (it used to read "First five complete"
+  // while home still offered "Resume round · 2 of 5 answered"). Gating the
+  // first-session recap this loosely is deliberate — a new player who answers
+  // three and wanders off should still get their orientation moment — but any
+  // copy hung off this flag has to stay true of a partial session.
   if (todayAnswered <= 0) {
     return hidden;
   }

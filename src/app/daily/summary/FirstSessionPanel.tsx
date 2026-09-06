@@ -52,8 +52,15 @@ export function FirstSessionPanel({
 
   return (
     <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
+      {/* Deliberately does NOT claim the round is finished. This panel is gated
+          on "first session with at least one answer" (computeReminderPromptState:
+          todayAnswered > 0 and no prior day with an answered slot), which a
+          player hits after a single answer — so "First five complete" announced
+          a completion that had not happened, while home simultaneously offered
+          "Resume round · 2 of 5 answered". The panel's job is orientation
+          (cadence + where to change topics), not congratulation. */}
       <p className="text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-        First five complete
+        Your first session
       </p>
       <h2 className="mt-2 font-serif text-2xl leading-tight text-[var(--brand-ink)]">
         Nice start{recap.firstName ? `, ${recap.firstName}` : ''}.

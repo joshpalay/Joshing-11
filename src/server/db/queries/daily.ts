@@ -806,16 +806,21 @@ async function getDailyCatchupItems(
   const isRestingDomain = (domain: string | null | undefined): boolean =>
     typeof domain === 'string' && restingKeys.has(normalizeDomain(domain).toLowerCase());
 
-  const candidateSlots = queues.flatMap((queue) =>
-    asQueueSlots(queue.slots)
+  const candidateSlots = queues.flatMap((queue) => {
+    const queueDate = String(queue.queueDate);
+    // Today's own round is date-eligible (wrong answers resurface at once) but
+    // its UNANSWERED slots are still pending, not missed — see
+    // isCatchUpSlotEligible.
+    const isTodaysQueue = queueDate === assignmentDateStr;
+    return asQueueSlots(queue.slots)
       .filter(
         (slot) =>
-          isCatchUpQueueDateEligible(String(queue.queueDate), assignmentDateStr) &&
-          isCatchUpSlotEligible(slot) &&
+          isCatchUpQueueDateEligible(queueDate, assignmentDateStr) &&
+          isCatchUpSlotEligible(slot, isTodaysQueue) &&
           !isRestingDomain(slot.domain),
       )
-      .map((slot) => ({ queue, slot })),
-  );
+      .map((slot) => ({ queue, slot }));
+  });
 
   const generatedIds = candidateSlots
     .map(({ slot }) => slot.generated_question_id)

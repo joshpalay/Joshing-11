@@ -25,7 +25,23 @@ export function isCatchUpQueueDateEligible(
   return queueDate <= assignmentDate && queueDate >= oldestDate;
 }
 
-export function isCatchUpSlotEligible(slot: QueueSlot): boolean {
+/**
+ * `isTodaysQueue` narrows what today's own round contributes to catch-up.
+ *
+ * Today's queue is date-eligible on purpose, so a wrong answer resurfaces
+ * immediately instead of waiting until tomorrow. But the unanswered arm below
+ * swept in slots the player simply has not reached yet, so a round played
+ * 2-of-5 reported the other three as "missed" while home was concurrently
+ * offering "Pick up where you left off · Resume round" — the same slots
+ * counted as pending and missed at once. It also broke the promise the skip
+ * sheet makes out loud ("It'll come back another day"): a slot skipped for
+ * now reappeared as catch-up debt the same afternoon.
+ *
+ * So for TODAY only, an unanswered slot is still pending, not missed. It
+ * becomes ordinary catch-up tomorrow, when its queue is no longer today's.
+ * Wrong answers from today are unaffected and still surface immediately.
+ */
+export function isCatchUpSlotEligible(slot: QueueSlot, isTodaysQueue = false): boolean {
   if (slot.dismissed_at) return false;
   // Bot slots carry generated_question_id; friend-authored slots carry
   // question_id (the canonical Question.id). Either is sufficient to
@@ -38,7 +54,8 @@ export function isCatchUpSlotEligible(slot: QueueSlot): boolean {
   if (slot.catchup_answer_state === 'correct') return false;
   // Wrong daily-5 answers are eligible for re-attempt; correct ones are not.
   if (slot.answered) return slot.answer_state === 'incorrect';
-  return true;
+  // Unanswered: genuinely missed on a past day, still pending on today's.
+  return !isTodaysQueue;
 }
 
 export function expiresWithin24Hours(expiresAt: string, now = new Date()): boolean {
