@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { isBypassTestPhone } from '@/server/auth';
 import { getSession } from '@/server/auth/session';
 import {
   getReminderState,
@@ -90,12 +91,17 @@ export async function PATCH(request: Request) {
 
   let smsConfirmationSent = false;
   if (result.ok && parsed.data.smsOptIn === 'opted_in' && priorState?.smsOptIn !== 'opted_in') {
-    const sendResult = await sendSms(
-      result.state.phoneNumber,
-      buildSmsOptInConfirmationMessage(),
-      'sms_opt_in_confirmation',
-      session.userId,
-    );
+    // Allowlisted test numbers (AUTH_OTP_BYPASS_PHONE) skip the real send —
+    // same test accounts that bypass the OTP text also need to reach
+    // opted_in without a live Twilio delivery to an undeliverable number.
+    const sendResult = isBypassTestPhone(result.state.phoneNumber)
+      ? ({ ok: true } as const)
+      : await sendSms(
+          result.state.phoneNumber,
+          buildSmsOptInConfirmationMessage(),
+          'sms_opt_in_confirmation',
+          session.userId,
+        );
     if (!sendResult.ok) {
       const rollback = priorState
         ? await restoreSmsReminderConsent(session.userId, priorState)

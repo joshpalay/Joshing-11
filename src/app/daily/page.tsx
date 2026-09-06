@@ -22,6 +22,7 @@ import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
+import { ReminderConfirmedToast } from '@/components/ReminderConfirmedToast';
 import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import {
@@ -247,10 +248,13 @@ export default function DailyPage() {
   // generation wait is in progress (the long-wait surface, C-7). Reads cached-
   // only data; empty on a cold cache → the loader just rotates the craft phrases.
   const loadingMoments = useLoadingMoments(loading && generatingAttempt != null);
-  // Set when onboarding's final reminder ask was accepted, so the crafting
-  // loader can confirm it. Read once from the one-time `remindersOn` handoff
-  // param and then stripped from the URL — a plain useEffect read (not
-  // useSearchParams) so this page doesn't need a Suspense boundary.
+  // Set when onboarding's final reminder ask was accepted, so this page can
+  // confirm it via ReminderConfirmedToast — rendered unconditionally (not
+  // tied to the crafting screen still being up), since a fast build means
+  // generation is often already done by the time the player lands here. Read
+  // once from the one-time `remindersOn` handoff param and then stripped from
+  // the URL — a plain useEffect read (not useSearchParams) so this page
+  // doesn't need a Suspense boundary.
   const [justOptedIntoReminders, setJustOptedIntoReminders] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -968,6 +972,7 @@ export default function DailyPage() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
+      <ReminderConfirmedToast show={justOptedIntoReminders} />
       {/* Brand triangle pattern (same artwork as the login screen / home feed)
           tiled full-strength behind the game. No cream scrim — the gameplay
           thread is entirely cards, which sit opaque on top; the sticky header
@@ -1021,11 +1026,6 @@ export default function DailyPage() {
               fullScreen
               messages={GENERATING_MESSAGES}
               loadingMoments={loadingMoments}
-              note={
-                justOptedIntoReminders
-                  ? "You're set — we'll text you when each day's five open."
-                  : undefined
-              }
             />
           ) : (
             <LoadingScreen fullScreen label="Loading today" />
