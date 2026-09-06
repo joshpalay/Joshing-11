@@ -985,8 +985,15 @@ export default function DailyPage() {
     [queue, currentSlot, submitting],
   );
 
+  // h-dvh, not min-h-dvh: the header below is `sticky top-0`, but with a MIN
+  // height this shell grows past the viewport, the window becomes the scroller,
+  // and the header — sticky inside an `overflow-hidden` box that is itself
+  // scrolling away — goes with it, which is why the progress dots disappeared
+  // on a long thread. Pinning the shell to exactly one viewport makes the inner
+  // <section> the only scroller, which is what the sticky header and its
+  // `flex-1 overflow-y-auto` sibling always assumed.
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
+    <main className="relative mx-auto flex h-dvh max-w-lg flex-col overflow-hidden bg-[var(--surface)] bg-[url('/images/Variant4.png')] bg-repeat px-0">
       {/* Gated on `!loading` because the fullscreen LoadingScreen renders at
           --z-takeover (80), above --z-toast (70) — an ungated toast is covered
           by it while its own dismiss timer runs underneath, so it expires
