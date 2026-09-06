@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Verification report — round three</title>
+<style>
+  @page { size: Letter; margin: 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: #1c2530; background: #fff;
+    font-family: "Georgia", "Times New Roman", serif;
+    font-size: 10.8pt; line-height: 1.5;
+  }
+  .mono { font-family: "Consolas", "SFMono-Regular", monospace; font-size: 9pt; }
+  h1 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 19pt; font-weight: 700; letter-spacing: -.01em;
+    margin: 0 0 3px; color: #10182a;
+  }
+  .subtitle { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10pt; color: #56606f; margin: 0 0 4px; }
+  .meta {
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 8.5pt; color: #7a8494;
+    border-bottom: 1.5px solid #10182a; padding-bottom: 10px; margin-bottom: 16px;
+  }
+  h2 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    color: #10182a; margin: 20px 0 8px; border-bottom: 1px solid #d8dce2; padding-bottom: 4px;
+  }
+  .lede { font-size: 10.8pt; color: #333; margin: 0 0 4px; }
+  .headline {
+    border-left: 2.5px solid #2f7a4f; background: #f4faf6;
+    padding: 10px 14px; margin: 14px 0 4px;
+  }
+  .headline .tag {
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 7.5pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; color: #2f7a4f;
+  }
+  .headline p { margin: 4px 0 0; }
+  ol.steps { margin: 0; padding-left: 20px; }
+  ol.steps li { margin-bottom: 7px; }
+  ol.steps b { color: #10182a; }
+  table { width: 100%; border-collapse: collapse; font-family: "Helvetica Neue", Arial, sans-serif; font-size: 9pt; }
+  th {
+    text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .06em;
+    color: #7a8494; border-bottom: 1px solid #10182a; padding: 4px 8px 5px 0;
+  }
+  td { padding: 6px 8px 6px 0; border-bottom: 1px solid #eceef1; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .ok::before { content: "\2713  "; color: #2f7a4f; font-weight: 700; }
+  .bad::before { content: "\2717  "; color: #b23b3b; font-weight: 700; }
+  .note::before { content: "\00B7  "; color: #7a8494; font-weight: 700; }
+  .finding { border-left: 2.5px solid #10182a; padding: 2px 0 2px 12px; margin-bottom: 12px; }
+  .finding.cleared { border-left-color: #9aa2ae; }
+  .finding .tag {
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 7.5pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; color: #10182a;
+  }
+  .finding.cleared .tag { color: #7a8494; }
+  .finding p { margin: 3px 0 0; }
+  .finding .why { color: #56606f; font-size: 9.8pt; }
+  .evidence {
+    background: #f7f8fa; border: 1px solid #e4e7ec; border-radius: 3px;
+    padding: 9px 12px; margin-top: 6px;
+    font-family: "Consolas", "SFMono-Regular", monospace; font-size: 8.4pt;
+    color: #3c4552; line-height: 1.5;
+  }
+  footer {
+    margin-top: 20px; padding-top: 8px; border-top: 1px solid #d8dce2;
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 7.5pt; color: #9aa2ae;
+  }
+</style>
+</head>
+<body>
+
+<h1>Reminder ask &mdash; verification round three</h1>
+<p class="subtitle">Re-walkthrough after PR #1608, joshing-11.vercel.app</p>
+<p class="meta">2026&#8209;09&#8209;06 &middot; Duo Prova (+1&nbsp;555&#8209;222&#8209;2222, inviter) &rarr; Rue Prova (+1&nbsp;555&#8209;333&#8209;3333, fresh signup) &middot; Production at <span class="mono">af3582ad</span> &middot; Verifies #1608; re&#8209;confirms #1607 and #1610</p>
+
+<p class="lede">Third pass through invite &rarr; signup &rarr; onboarding &rarr; reminder ask against production. The confirmation toast &mdash; invisible in round one, invisible again in round two &mdash; now reaches the player, and this time the handoff from the loading screen was measured rather than eyeballed. Four further observations came out of the walkthrough, none of them in the flow it set out to test.</p>
+
+<div class="headline">
+  <span class="tag">Headline &middot; the fix worked</span>
+  <p><b>The toast is visible, and it waits for the loader to get out of its way.</b> A 50&nbsp;ms&#8209;resolution DOM probe over the deliberate reproduction caught the exact handoff #1608 was written to produce: at <span class="mono">t=0</span> the fullscreen loader is up and the toast is <i>not in the DOM at all</i> &mdash; the <span class="mono">!loading</span> gate holding it back rather than painting it under the takeover layer. At <span class="mono">t=1103&nbsp;ms</span> the loader is gone and the toast is present in the same tick, at <span class="mono">z&#8209;index 70</span>, <span class="mono">opacity 1</span>, and &mdash; the part neither earlier round could claim &mdash; <span class="mono">elementFromPoint</span> at its own centre returns the toast itself, so nothing is covering it. It was also caught on screen, over the first question.</p>
+</div>
+
+<h2>What round three confirmed</h2>
+<table>
+  <tr><th>Behavior</th><th>Result</th></tr>
+  <tr><td><b>Confirmation toast visible to the player</b></td><td class="ok">Fixed &mdash; the defect from rounds one and two is closed</td></tr>
+  <tr><td>Toast held back while the loader is up, released when it clears</td><td class="ok">Confirmed by probe, 50&nbsp;ms resolution</td></tr>
+  <tr><td>Invite-link rows read &ldquo;Swap&rdquo;, not a bare &times;</td><td class="ok">Still live</td></tr>
+  <tr><td>At-cap helper: &ldquo;All 3 topics are taken. Tap Swap above&hellip;&rdquo;</td><td class="ok">Still live</td></tr>
+  <tr><td>&ldquo;No category &mdash; carries all 3 topics above&rdquo;</td><td class="ok">Still live, accurate count</td></tr>
+  <tr><td>Invite-only signup admits a fresh number through a link</td><td class="ok">Confirmed &mdash; <span class="mono">joined_via_invite_link_id</span> set</td></tr>
+  <tr><td>Link-invite topics arrive unselected as suggestions</td><td class="ok">Confirmed</td></tr>
+  <tr><td>SMS opt-in completes end-to-end with a test number</td><td class="ok">Confirmed &mdash; <span class="mono">opted_in</span></td></tr>
+  <tr><td>Opt-in retires both later prompts in one write</td><td class="ok">Confirmed &mdash; identical timestamps</td></tr>
+  <tr><td>No Twilio send fires for an allowlisted number</td><td class="ok">Confirmed &mdash; no new <span class="mono">SmsLog</span> row</td></tr>
+  <tr><td>Crafting screen on the live pass</td><td class="note">Not exercised &mdash; see the caveat under Steps</td></tr>
+</table>
+
+<h2>Steps</h2>
+<ol class="steps">
+  <li>Logged in as <b>Duo Prova</b>, opened the invite-link panel, and re-confirmed all three #1607 fixes render as intended. Cancelled without creating a second link.</li>
+  <li>Logged out and opened Duo&rsquo;s existing <span class="mono">/u/duoprova/&hellip;</span> link as a number the app had never seen since the prior fixture was deleted.</li>
+  <li>Signed up <b>+1&nbsp;555&#8209;333&#8209;3333</b>; OTP bypass carried it with no real text. Profile saved as <b>Rue Prova</b>.</li>
+  <li>Onboarding arrived with all three of Duo&rsquo;s seeded topics as unselected suggestions. Selected all three; generation started here, at <span class="mono">15:41:04Z</span>.</li>
+  <li>Reached the reminder ask and tapped <b>Text me when they open</b> at <span class="mono">15:45:56Z</span>. It succeeded, straight through to <span class="mono">/daily</span>, <b>and the toast was there</b> &mdash; first line of the page&rsquo;s own text, over question one.</li>
+  <li><i>Caveat on that pass:</i> the build had finished four and a half minutes earlier, because inspecting the ask screen kept me on it far longer than a player would linger. So the live pass took the fast path and the crafting screen never appeared &mdash; the same fast path round one hit, for a different reason. It does not exercise the loader handoff.</li>
+  <li>So the handoff was reproduced deliberately via <span class="mono">/daily?remindersOn=1</span>, the same route round two used to prove the failure, this time with a DOM probe armed at page load rather than a screenshot race.</li>
+  <li>Played 2 of 5, then verified consent, suppression state and the SMS log directly in the database.</li>
+</ol>
+
+<h2>Evidence</h2>
+
+<p class="lede" style="margin-bottom:6px">The handoff, as recorded by the probe (entries are state changes, not samples):</p>
+<div class="evidence">
+t=0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ms&nbsp;&nbsp;&nbsp;loader=true&nbsp;&nbsp;&nbsp;toast=absent<br>
+t=1103&nbsp;&nbsp;ms&nbsp;&nbsp;&nbsp;loader=false&nbsp;&nbsp;toast=present&nbsp;&nbsp;z=70&nbsp;&nbsp;opacity=1&nbsp;&nbsp;onTop=true<br>
+t=4334&nbsp;&nbsp;ms&nbsp;&nbsp;&nbsp;loader=false&nbsp;&nbsp;toast=absent&nbsp;&nbsp;&nbsp;(self-dismissed)
+</div>
+<p class="lede" style="margin:4px 0 0; font-size:9.6pt; color:#56606f">The dismissal timestamp is the one number here not to trust: a screenshot capture blocked the page between the second and third entries, so the 1.8&nbsp;s timer is observed late. Appearance and coverage &mdash; the two things in question &mdash; are unaffected.</p>
+
+<p class="lede" style="margin:10px 0 6px">The opt-in write:</p>
+<div class="evidence">
+sms_opt_in&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;opted_in<br>
+sms_opt_in_at&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2026-09-06 15:45:56.617+00<br>
+sms_consent_source&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;onboarding_web_form<br>
+sms_consent_policy_version&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2026-09-02<br>
+reminder_prompt_dismissed_at&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2026-09-06 15:45:56.815+00<br>
+reminder_interstitial_seen_at&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2026-09-06 15:45:56.815+00<br>
+joined_via_invite_link_id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2a0730bc&hellip; (Duo&rsquo;s standing link)
+</div>
+
+<p class="lede" style="margin:10px 0 6px">Every SMS ever logged for that number &mdash; still only round one&rsquo;s two failed real sends, none from this signup or this opt-in:</p>
+<div class="evidence">
+otp&nbsp;&nbsp;&nbsp;&nbsp;2026-09-05 23:25:47+00<br>
+otp&nbsp;&nbsp;&nbsp;&nbsp;2026-09-05 23:25:06+00
+</div>
+
+<h2>What else the walkthrough turned up</h2>
+
+<div class="finding">
+  <span class="tag">Overclaim &middot; activity copy</span>
+  <p><b>&ldquo;You&rsquo;ve got Renaissance Florence down cold&rdquo; &mdash; on two correct answers, at the lowest tier.</b> Home said it on a first-ever session. <span class="mono">PLAYER_MASTERY</span> for that territory reads <span class="mono">tier=establishing</span>, <span class="mono">tier_reached_at=null</span>, 60 points; the session recap on the same data says <span class="mono">NEXT: FAMILIAR</span>. Two surfaces, opposite claims, same moment.</p>
+  <p class="why">It is one of six lines in the <span class="mono">you_got</span> pool in <span class="mono">activity-stream.ts</span>, chosen by hash of the event id. The other five describe the event that happened (&ldquo;You knew {friend}&rsquo;s {topic} question&rdquo;); this one alone asserts a standing fact about the player&rsquo;s knowledge that the event does not evidence. Same shape as the &ldquo;First five complete&rdquo; eyebrow #1610 just fixed &mdash; copy asserting a state its gate never checks. Cheapest fix is to retire the line from the pool.</p>
+</div>
+
+<div class="finding">
+  <span class="tag">Mislabel &middot; question badge</span>
+  <p><b>The player&rsquo;s first two questions were badged &ldquo;General Knowledge&rdquo;, not &ldquo;Renaissance Florence&rdquo;.</b> Both slots carry <span class="mono">domain: "Renaissance Florence"</span> &mdash; the topic they had just chosen &mdash; and both display the generic bucket instead, on the screen whose promise is &ldquo;Made from your topics, not pulled off a shelf.&rdquo;</p>
+  <p class="why">Not a data error at the slot level: <span class="mono">questionBadges</span> in <span class="mono">daily/page.tsx</span> prefers <span class="mono">broad_category</span>, then <span class="mono">category</span>, and only falls back to <span class="mono">domain</span> &mdash; least specific first. 68 of 1,302 questions with a specific <span class="mono">canonical_subcategory</span> carry &ldquo;General Knowledge&rdquo; as their broad category (5.2%), and every one of them badges generically. Hitting two of two on a first session was luck; the exposure is real. Either reorder the fallback, or stop letting a specific subcategory sit under a generic broad category.</p>
+</div>
+
+<div class="finding">
+  <span class="tag">Leak shape &middot; outside #1611&rsquo;s reach</span>
+  <p><b>The first question a new player saw glossed its own answer.</b> &ldquo;Literally meaning <i>the offices</i>, what famous Florentine museum&hellip;&rdquo; &mdash; answer: <b>The Uffizi</b>, which is what <i>uffizi</i> means. The stem hands over a translation of the answer word while withholding the word.</p>
+  <p class="why">It is <span class="mono">answer_source: creator_written</span>, so it never passed through the generator at all. The authored path calls <span class="mono">textContainsAnswer</span>, a containment check the stem passes cleanly; the partial-leak gate #1611 shipped lives in <span class="mono">generate-questions.ts</span> and does not run here. Worth deciding whether the new gates belong on the authored path too &mdash; the leak family is identical, and a friend-authored question is exactly what a new player meets first.</p>
+</div>
+
+<div class="finding">
+  <span class="tag">Bonus &middot; the build-latency doc is unblocked</span>
+  <p><b>This signup produced the first post-deferral <span class="mono">built</span> row.</b> The diagnosis doc&rsquo;s Phase 2 was waiting on data &ldquo;that arrives on its own at the next cron&rdquo;; the walkthrough generated it. <span class="mono">npm run check:build-latency</span> now passes every Phase 2 check: <span class="mono">deferred=true</span>, <span class="mono">span_ms 22282</span>, <span class="mono">user_visible_ms 21022</span>, target size and call attribution both clean.</p>
+  <p class="why">Phase 3&rsquo;s subtraction reads <b>1,260&nbsp;ms saved</b> against a pre-registered prediction of ~7,646&nbsp;ms &mdash; a sixth of it. On one row that is an instrument reading, not a population estimate, and the doc says so. But it is the first evidence on the question, and it points the other way from the prediction.</p>
+</div>
+
+<div class="finding cleared">
+  <span class="tag">Investigated and cleared &middot; #1610 holds</span>
+  <p>Home showed <b>&ldquo;Catch up &middot; 5 missed questions&rdquo;</b> on a first-day account, which is exactly the contradiction #1610 shipped to remove. It is not a regression. The 17:00&nbsp;UTC daily reset landed mid-session, so by the time home rendered, the round I had been playing was genuinely the previous window&rsquo;s and its five unplayed slots were genuinely missed. <span class="mono">isCatchUpSlotEligible</span> behaved as written.</p>
+  <p class="why">Two boundary artifacts came with it, both from a session that straddled the reset and neither reproducible on demand: two answers landed against the expired round and were credited (they survive in <span class="mono">MASTERY_EVENTS</span> and in the recap&rsquo;s &ldquo;+60 this round&rdquo;), and the queue row was then rebuilt in place for the new day, so the round&rsquo;s own dots went back to unanswered. Noted rather than filed &mdash; one observation each, at a boundary a real player crosses rarely.</p>
+</div>
+
+<h2>What this says about the process</h2>
+
+<div class="finding">
+  <span class="tag">Three rounds, three different failure modes</span>
+  <p>Round one found the toast never rendered. Round two found the fix rendered it under a takeover layer. Round three found it working &mdash; and to say so with any confidence needed an instrument, not a look, because the thing being verified lives for 1.8 seconds and the previous round&rsquo;s failure was invisible by construction.</p>
+  <p class="why">The general lesson is narrow but worth keeping: when the defect is <i>&ldquo;the player never saw it&rdquo;</i>, the verification has to measure presence and coverage, not take a screenshot and hope to catch it.</p>
+</div>
+
+<div class="finding">
+  <span class="tag">The flow under test was the least of it</span>
+  <p>The reminder ask passed cleanly. Everything worth Josh&rsquo;s attention above &mdash; a mastery claim on two answers, a topic badged as its own opposite, an answer glossed in its own stem &mdash; came from walking past those screens on the way, on a genuinely new account. None of it is reachable from a test suite, and none of it was what the walkthrough was for.</p>
+</div>
+
+<footer>Live production walkthrough &middot; Rue Prova (+1&nbsp;555&#8209;333&#8209;3333) is a disposable fixture and can be deleted at will.</footer>
+
+</body>
+</html>
