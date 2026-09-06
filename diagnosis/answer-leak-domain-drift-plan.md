@@ -414,3 +414,108 @@ flipping, which is exactly what the Phase 2 eval was built to find out.
 5. If Phase 2 passes, full-corpus pass (~230 Haiku calls) for a real
    off-domain hit rate before flipping `DOMAIN_DRIFT_DROP_ENABLED`.
 6. Phase 3 (drop-vs-refile) and Phase 4 (drift-as-demand-signal) not started.
+
+### 2026-09-06 (night) — ROOT CAUSE FOUND: bank picks bypass every gate
+
+**This supersedes the "defect mode has shifted to semantic" framing in the
+entry above.** That entry was right that all three rows pass the
+deterministic gates, but wrong about why it matters: **two of the three
+never reached any gate at all.**
+
+Settled from Vercel runtime logs + deploy timeline + the DB, not inference:
+
+The production deploy carrying PR #1611 went live **~12:29 UTC**; the rows
+in question were minted at **17:03–17:04**, 4.5 hours later. Traffic in that
+window came entirely from `dpl_AFdMdpcjzg24Xb371cyXBRwAovse` (commit
+`af3582ad`), which `git merge-base --is-ancestor` confirms contains the
+gate code. So the rolling-deploy hypothesis from the previous entry is dead
+— the new code *was* live. But the logs show what actually happened:
+
+```
+[daily/generate-questions] bank-pick used {
+  domain: "Virginia Woolf's Novels and Essays",
+  factKey: 'james-joyce-irish-modernism-...-claritas' }
+[daily/generate-questions] bank-pick used {
+  domain: 'Food Chemistry & Cooking Science',
+  factKey: 'food-chemistry-onion-cutting-tears-response' }
+```
+
+Both were **bank picks** — re-serves of existing stock, not fresh
+generation. Confirmed in the DB by their source rows:
+
+| Row served today | Originally generated | Age |
+|---|---|---|
+| Joyce/Claritas `815b3ad8…` | `939c53c7…`, **2026-05-09** | ~4 months |
+| Tears `b1804847…` | `f92dd6f2…`, **2026-08-21** (re-served 08-30 too) | ~2 weeks |
+
+`pickBankSource` (`generate-questions.ts:3105–3160`) does a straight
+`db.insert()` clone of the source row — new id, today's `created_at`,
+quality/verification fields copied over — and **runs no gate of any kind**.
+Not `findAnswerLeaks`, not `findQualityFailures`/OFF_DOMAIN, not
+`findAnswerShapeFailures`. The gate chain lives in `generateDailyQuestions`
+and only ever sees *newly generated* questions.
+
+**So the gates guard the front door while the bank re-serves old stock
+through a side door.** Any defect that entered the bank before the gates
+existed will be re-served indefinitely, and no amount of gate tuning will
+ever touch it.
+
+**The gates are, in fact, working where they run.** In that same batch, of
+`originalCount: 6` freshly-generated questions the chain dropped 4 — two for
+`ANSWER_LEAKED` (quality gate, correctly quoting the leak in its reason),
+one false premise (factual gate), plus dedup drops. That is not a broken
+gate chain; it is a gate chain with a hole beside it.
+
+**Corrected per-row attribution:**
+
+| Row | Path | Verdict |
+|---|---|---|
+| Tears | bank pick (2026-08-21 stock) | **Never gated** — bypass |
+| Joyce/Claritas | bank pick (2026-05-09 stock) | **Never gated** — bypass |
+| 19th Amendment | fresh generation (bank fell through) | **Gated, and passed** — a genuine miss |
+
+Only the 19th Amendment row is a true gate miss, and it's the
+accessible-tier definitional-giveaway hole described in the previous entry.
+
+**This also clears OFF_DOMAIN of today's charge.** The gate never ran on the
+Joyce row, so today says *nothing* about whether its prompt works. Phase 2's
+eval remains the only way to answer that, and it is still unrun.
+
+#### Recommended fix (in priority order)
+
+1. **Gate the bank-pick path with the deterministic checks.** They are pure
+   functions — no LLM, no network, microseconds — so running
+   `textContainsAnswer` / `questionPartiallyLeaksAnswer` /
+   `findAnswerShapeFailures` on a bank candidate before cloning it costs
+   nothing. On failure, skip to the next candidate; the path already has a
+   fallback for insert failure, so the plumbing exists. This permanently
+   stops known-bad stock from being re-served.
+
+2. **One-time LLM sweep of existing bank stock.** Item 1 alone would NOT
+   have caught today's two rows — verified, they pass every deterministic
+   gate. Cleaning them requires the Haiku quality gate + OFF_DOMAIN run over
+   the ~2,300 servable rows (~230 batched calls, negligible cost — the same
+   gate the generation path already pays for daily). Demote or report what
+   fails. This is what actually removes the May-vintage stock.
+
+3. **Close the accessible-tier hole.** Add a quality-gate defect for "the
+   stem supplies a definition/description that uniquely determines the
+   answer," applicable at **all** tiers, since `GENERIC_AT_TIER` is
+   explicitly forbidden from flagging accessible items. This is the
+   19th Amendment class.
+
+Items 1 and 2 are complementary: 1 prevents future re-serves, 2 cleans what
+is already in stock. Neither substitutes for the other.
+
+#### Revised next steps
+1. Build fix 1 (gate the bank-pick path) — highest value, lowest risk, no
+   ongoing cost.
+2. Build fix 2 (bank sweep) — needs `ANTHROPIC_API_KEY`, same constraint as
+   the Phase 2 eval.
+3. Fix 3 (quality-gate defect for definitional giveaways).
+4. Phase 2 eval still unrun and still the only evidence that can settle
+   `DOMAIN_DRIFT_DROP_ENABLED`. **Deprioritised relative to fix 1** — drift
+   reaching players via bank re-serves is unaffected by that flag either way.
+5. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
+   are still open, but note fix 1 raises the value of that flag — the
+   partial-leak rule would then also protect the re-serve path.
