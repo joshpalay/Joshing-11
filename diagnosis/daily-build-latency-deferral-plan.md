@@ -1,6 +1,6 @@
 ---
 name: daily-build-latency-deferral-plan
-status: active
+status: needs-decision
 opened: 2026-09-04
 last-reviewed: 2026-09-06
 owner: Josh
@@ -63,6 +63,16 @@ player waits on questions they did not ask for.
 4. **Is the +2 bonus worth ~7.6s of generation at all?** Bonus is additive and
    optional by canon. Deferral moves the cost off the critical path; it does not
    remove it. Worth asking separately whether the feature earns its spend.
+5. **[NEEDS DECISION] Is the deferred bonus append silently overwriting core
+   slots on some builds?** One of three post-deferral rows shows a queue with
+   only 3 real core slots (no `presence_source_id`) sitting alongside 2 bonus
+   slots at `slot_index` 3 and 4 — positions that should not have been
+   available to the append given the build's own recorded `final_size: 5`. See
+   the 2026-09-06 Update. Root cause not confirmed. Question for Josh: pause
+   trusting Phase 3 numbers until this is traced in code, or treat it as a
+   single-row anomaly and keep going? I'd lean toward pausing — a silently
+   dropped core question is worse than a slow build — but it is your call on
+   how much investigation time this warrants before the next cron.
 
 ## 3. What we know so far
 
@@ -161,7 +171,7 @@ synchronous; borrow-back protects the five when the core slice under-delivers.
 **Exit criterion:** 0139/0140 applied in production and the three new columns
 present. **MET** — 2026-09-05, ledger head `1788400823476`.
 
-### Phase 2 — first post-deferral row · **PENDING**
+### Phase 2 — first post-deferral row · **MET, WITH A CAVEAT**
 
 **Exit criterion**, all on one row:
 - `deferred: true` — `after()` actually ran
@@ -171,12 +181,22 @@ present. **MET** — 2026-09-05, ledger head `1788400823476`.
 - bonus-phase `LlmUsageEvent` rows carry a **non-null `build_id`** — ALS crossed
   the boundary
 
-Four unknowns, one read.
+Four unknowns, one read. **All four passed** on the first row (see the
+2026-09-06 Update) — but a data-integrity anomaly was found on that same row
+while checking a fifth thing the exit criteria didn't ask for (whether the
+persisted queue's core count matches what the build recorded). See open
+question 5.
 
-### Phase 3 — the subtraction · **PENDING**
+### Phase 3 — the subtraction · **IN PROGRESS, NOT YET TRUSTED**
 
 **Exit criterion:** median `span_ms - user_visible_ms` over `outcome='built'`
 rows. Judge against the ~7.6s pre-registration, not against ~15s.
+
+**First reading (2026-09-06, n=3): median 1,362ms.** Far below the ~7.6s
+prediction, and see the Update for why that may say more about the baseline
+than about the deferral. Not treated as final: one of the three rows carries
+the unresolved anomaly from open question 5, so this median is provisional
+until that is understood.
 
 Volume note: ~1 genuine build/day, so this accumulates slowly. Three or four
 rows is a usable read; one is not.
@@ -187,7 +207,29 @@ rows is a usable read; one is not.
 4 — whether the +2 bonus earns its generation spend at all — and whether any
 further latency work is justified against the remaining core time.
 
-## 5. Recommendation (as of 2026-09-06)
+## 5. Recommendation (as of 2026-09-06, updated)
+
+**Do not treat the deferral as validated yet. Trace the slot-collision anomaly
+before relying on any Phase 3 number, and before the next cron builds more
+rows on top of an unexplained mechanism.**
+
+Phase 2's four criteria all passed on the first real row — `after()` ran, the
+continuation completed, ALS crossed the boundary, `target_size` wrote
+correctly. That part of the experiment worked. But checking a fifth thing (do
+the numbers match the actual persisted queue?) found a queue with only 3 real
+core slots dressed as a "Daily Five," and I cannot yet explain how the append
+landed where it did given the code as read. That is a bigger risk than a slow
+build: a build that silently drops a real question is worse than one that
+takes longer, and it is exactly the kind of thing that would keep happening on
+every build with this shape until someone finds it.
+
+What I'd do next, in order: (1) reproduce locally with a forced short core and
+a deferred bonus, stepping through `slots.length` at both `noteFinalSize` and
+the `appendDeferredBonusSlots` call to see it directly rather than inferring it
+from timestamps; (2) if reproduced, this is a `#1601` follow-up fix, not a
+diagnosis-doc entry; (3) only then trust Phase 3's median.
+
+Superseded, kept for the record — my prior recommendation:
 
 **Wait for Phase 2. Change nothing.**
 
@@ -313,3 +355,75 @@ deferral attribution is unaffected.
 generation (open question 3)? One line, low value, and only improves rows
 written after it deploys. Default if unanswered: skip it, and let it ride the
 general instrumentation cleanup.
+
+### 2026-09-06 (later) — Phase 2 passed; Phase 3's first reading; a real anomaly found checking a fifth thing
+
+Ran `npm run check:build-latency` at 17:09 UTC. `DailyBuildMetric` now holds
+**4 `outcome='built'` rows** (1 pre-deferral, 3 post): totals
+`carry_forward=43, existing_queue=4, built=4, partial_carry_forward=1`.
+
+**Phase 2 — all four exit criteria passed**, on build
+`123cd09b-b28b-4760-809b-537d45b9884d` (started 2026-09-06T15:41:04.395Z):
+
+- `deferred: true` — `after()` ran.
+- `span_ms: 22282`, `user_visible_ms: 21022` — both populated, the continuation
+  completed.
+- `target_size = 5` on all 3 queues built since — the write-at-persist fix
+  works.
+- 4 `generate-questions` LLM events since that build, all 4 carrying a
+  non-null `build_id` — **AsyncLocalStorage crosses the `after()` boundary.**
+  This was the largest unverified assumption in the whole plan and it holds.
+
+**Phase 3 — first reading, n=3: median saving 1,362ms** (individual rows:
+1260ms, 1529ms, 1362ms). Far below the ~7.6s pre-registered prediction. Two
+things narrow down why, one benign and one not.
+
+**Benign: the bonus generation itself now runs much faster than the baseline
+suggested.** All three post-deferral bonus rounds took 437–544ms for
+`chunks: 2` — the pre-deferral baseline's *same-shaped* bonus round
+(`chunks: 2`) took **7,646ms**, a ~15x difference. The three post-deferral
+rows agree tightly with each other and disagree sharply with the single
+baseline; the baseline's build was also the slowest ever observed overall
+(45.9s, more than double the ~21s figure quoted earlier). Most likely reading:
+**the baseline was an atypically slow build, not a typical one**, and the true
+"cost of bonus" the deferral is removing was probably always closer to
+~500ms–1.5s than to ~7.6s. If that holds up over more rows, the honest
+description of this effort becomes "the deferral removes roughly a second and
+a half of wait," not "~7.6s" and certainly not the original "~15s." Still real,
+still worth having, just smaller than hoped.
+
+**Not benign: one of the three rows shows a data-integrity anomaly I could not
+resolve.** Build `123cd09b` recorded `final_size: 5` (5 core slots persisted)
+and `deferred_domain_count: 2`. Its persisted queue
+(`f3d9dc54-3a45-4b1f-852a-8b881503a0f6`) has exactly **5 total slots**, and two
+of them — `slot_index` **3 and 4** — carry `presence_source_id` (bonus
+markers). That leaves only **3 real core slots**, not 5, even though
+`target_size` correctly says 5 (the target-size fix is doing its job: this
+queue is now *visibly* short rather than silently certified as complete).
+
+What makes this hard to explain: `slots` in the orchestrator is declared
+`const` and only ever grows via `.push()` (confirmed by reading the full
+function — no reassignment anywhere). `noteFinalSize(slots.length)` recorded
+5 moments before `appendDeferredBonusSlots(userId, plan.candidates,
+slots.length)` reads the same array's `.length` again — those two reads
+cannot legitimately differ. Yet the appended slots landed at index 3 and 4,
+which is where `slots.length` would have been if the core count were 3, not
+5. I traced this as far as DB evidence allows (the full `LlmUsageEvent` history
+for this build_id, every `GeneratedQuestion` row in the window, confirming
+there is only one `DailyQueue` row for this user+date) and could not identify
+the mechanism with confidence — the two live hypotheses (a second, unrecorded
+concurrent build for the same user+date; or some path that mutates `slots`
+that I have not found by reading) are both incomplete explanations of the
+exact indices observed.
+
+**Not asserting a root cause I have not confirmed.** Logged as open question 5
+above, `needs-decision`. The other two post-deferral rows (`final_size` 6 and
+6, persisted queues with 8 total slots, 2 bonus each — fully consistent) show
+no such anomaly, so this is not universal, but it happened on 1 of 3 observed
+builds, which is not rare enough to dismiss.
+
+**Recommendation updated accordingly — see §5.** The instrument's own
+validation (Phase 2) succeeded in full. What's now blocking confidence in the
+result (Phase 3) is a correctness question the instrument was never built to
+catch, found only because a fifth check was run that the exit criteria didn't
+require.
