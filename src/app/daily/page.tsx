@@ -27,6 +27,7 @@ import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import {
   getBonusCount,
+  getBonusSlots,
   getCoreSlots,
   getSlotPresence,
   isAdditiveSlot,
@@ -598,6 +599,20 @@ export default function DailyPage() {
   const messages = useMemo<ChatMessage[]>(() => {
     if (!queue) return [];
     const rows: ChatMessage[] = [];
+    // "Bonus n of N" — the bonus run's OWN sequence, computed over the +2 slots
+    // only. Returns stay uncounted (they're additive but not bonus, and have no
+    // run to be part of), and the core five keep their own 1–5 untouched, so
+    // nothing here enters the daily-five denominator.
+    const bonusOrder = new Map(
+      getBonusSlots(queue.slots).map((bonusSlot, index) => [bonusSlot.slot_index, index + 1]),
+    );
+    const bonusTotal = bonusOrder.size;
+    const markerFor = (slot: QueueSlot) => ({
+      value: slot.slot_index + 1,
+      bonus: isAdditiveSlot(slot),
+      bonusIndex: bonusOrder.get(slot.slot_index),
+      bonusTotal: bonusOrder.has(slot.slot_index) ? bonusTotal : undefined,
+    });
     for (const slot of queue.slots) {
       if (slot.answered) {
         const gaveUp = slot.answer_state === 'incorrect' && !slot.submitted_answer;
@@ -615,7 +630,7 @@ export default function DailyPage() {
           // `bonus` here means "additive — render ✦, never a numeral", which is
           // true of a return slot for the same reason it's true of a +2: it
           // appends past the five and is never in the denominator (R3).
-          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
+          numberMarker: markerFor(slot),
           badges: questionBadges(slot),
         });
         if (slot.submitted_answer) {
@@ -696,7 +711,7 @@ export default function DailyPage() {
           // `bonus` here means "additive — render ✦, never a numeral", which is
           // true of a return slot for the same reason it's true of a +2: it
           // appends past the five and is never in the denominator (R3).
-          numberMarker: { value: slot.slot_index + 1, bonus: isAdditiveSlot(slot) },
+          numberMarker: markerFor(slot),
           badges: questionBadges(slot),
         });
         if (submitting && answer.trim()) {
