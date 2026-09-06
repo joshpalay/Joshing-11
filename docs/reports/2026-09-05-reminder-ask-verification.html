@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Verification report</title>
+<style>
+  @page { size: Letter; margin: 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: #1c2530; background: #fff;
+    font-family: "Georgia", "Times New Roman", serif;
+    font-size: 10.8pt; line-height: 1.5;
+  }
+  .mono { font-family: "Consolas", "SFMono-Regular", monospace; font-size: 9pt; }
+  h1 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 19pt; font-weight: 700; letter-spacing: -.01em;
+    margin: 0 0 3px; color: #10182a;
+  }
+  .subtitle { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10pt; color: #56606f; margin: 0 0 4px; }
+  .meta {
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 8.5pt; color: #7a8494;
+    border-bottom: 1.5px solid #10182a; padding-bottom: 10px; margin-bottom: 16px;
+  }
+  h2 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    color: #10182a; margin: 20px 0 8px; border-bottom: 1px solid #d8dce2; padding-bottom: 4px;
+  }
+  .lede { font-size: 10.8pt; color: #333; margin: 0 0 4px; }
+  ol.steps { margin: 0; padding-left: 20px; }
+  ol.steps li { margin-bottom: 7px; }
+  ol.steps b { color: #10182a; }
+  table { width: 100%; border-collapse: collapse; font-family: "Helvetica Neue", Arial, sans-serif; font-size: 9pt; }
+  th {
+    text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .06em;
+    color: #7a8494; border-bottom: 1px solid #10182a; padding: 4px 8px 5px 0;
+  }
+  td { padding: 6px 8px 6px 0; border-bottom: 1px solid #eceef1; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .ok::before { content: "✓ "; color: #2f7a4f; font-weight: 700; }
+  .bad::before { content: "✗ "; color: #b23b3b; font-weight: 700; }
+  .finding { border-left: 2.5px solid #10182a; padding: 2px 0 2px 12px; margin-bottom: 12px; }
+  .finding .tag {
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 7.5pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; color: #10182a;
+  }
+  .finding p { margin: 3px 0 0; }
+  .finding .why { color: #56606f; font-size: 9.8pt; }
+  footer {
+    margin-top: 20px; padding-top: 8px; border-top: 1px solid #d8dce2;
+    font-family: "Helvetica Neue", Arial, sans-serif; font-size: 7.5pt; color: #9aa2ae;
+  }
+</style>
+</head>
+<body>
+
+<h1>Onboarding SMS-reminder ask &mdash; live verification</h1>
+<p class="subtitle">Real production walkthrough of PR #1604 / #1605, joshing-11.vercel.app</p>
+<p class="meta">2026&#8209;09&#8209;05 &middot; Test accounts: Duo Prova (+1&nbsp;555&#8209;222&#8209;2222, inviter) &rarr; Trey Prova (+1&nbsp;555&#8209;333&#8209;3333, fresh signup, invitee) &middot; OTP bypass via AUTH_OTP_BYPASS_PHONE</p>
+
+<p class="lede">Used one test account to invite a second, brand-new one, seeding the invite with Final&nbsp;Fantasy as a topic, then walked the invitee through real onboarding, the new reminder ask, and into the daily round &mdash; confirming the shipped fix holds under real production infrastructure, not just the preview harness.</p>
+
+<h2>Steps</h2>
+<ol class="steps">
+  <li>Logged into <b>Duo Prova</b> (existing test account) via the OTP bypass.</li>
+  <li>The Friends page only supports link-based invites now &mdash; no phone-targeted named invite with per-person topics exists in the current UI.</li>
+  <li>Added <b>Final Fantasy</b> as a topic on Duo Prova via Manage&nbsp;your&nbsp;topics (<span class="mono">/daily/setup</span>). <i>Correction: this step was unnecessary. Invite-link topics are validated only for length and specificity, so an inviter can seed a topic they do not have themselves &mdash; the "+ Create your own" control in the link panel would have done it directly.</i></li>
+  <li>Discovered invite links carry a separate <b>curated</b> 3-topic set (<span class="mono">users.invite_seed_interests</span>), not the account's full topic list &mdash; "No category" only resolves that curated set. Swapped <i>Breaking Bad</i> for <i>Final Fantasy</i> in it.</li>
+  <li>Shared the link (<span class="mono">/u/duoprova/&hellip;</span>) and, as a fresh number never seen before, signed up as <b>Trey Prova</b>.</li>
+  <li>Onboarding review step arrived with all 3 topics as <b>unselected suggestion chips</b> (correct link-invite behavior) &mdash; selected all three.</li>
+  <li>Reached the new reminder-ask step: headline, subhead, topic-chip recap, and both buttons rendered exactly as designed, including Final Fantasy in the recap.</li>
+  <li>Tapped <b>Text me when they open</b> &mdash; the real Twilio confirmation send failed (fake number), and the route correctly rolled back consent with the designed error copy. No SMS bypass exists for this send.</li>
+  <li>Tapped <b>I&rsquo;ll check back on my own</b> instead &mdash; landed on <span class="mono">/daily</span>. Generation had already finished, so the crafting screen never appeared.</li>
+  <li>Answered 2 of 5 questions (both genuine Final Fantasy VII items &mdash; Sephiroth, Chocobo), skipped 3, exited early.</li>
+  <li>Landed on <span class="mono">/daily/summary</span> &mdash; the LoadingScreen appeared for the summary load itself, then the recap rendered. <b>No reminder interstitial fired.</b></li>
+  <li>Confirmed via direct query: <span class="mono">reminder_interstitial_seen_at</span> was set at decline time; <span class="mono">sms_opt_in</span> stayed <span class="mono">not_asked</span>; the legacy <span class="mono">reminder_prompt_dismissed_at</span> was never touched.</li>
+</ol>
+
+<h2>What was verified</h2>
+<table>
+  <tr><th>Behavior</th><th>Result</th></tr>
+  <tr><td>Reminder-ask copy, chips, and buttons match the shipped design</td><td class="ok">Confirmed by eye &mdash; copy, chips and buttons all as specified</td></tr>
+  <tr><td>Link-invite topics arrive unselected as suggestions (not pre-selected)</td><td class="ok">Confirmed</td></tr>
+  <tr><td>Decline writes <span class="mono">reminderInterstitialSeenAt</span></td><td class="ok">Confirmed via DB</td></tr>
+  <tr><td>Daily-summary interstitial does not re-fire after decline</td><td class="ok">Confirmed &mdash; no popup on real summary load</td></tr>
+  <tr><td>Failed SMS confirmation rolls back consent cleanly</td><td class="ok">Confirmed (real Twilio failure)</td></tr>
+  <tr><td>Crafting-screen note is reachable on a real "opted in" flow</td><td class="bad">Not verified &mdash; no way to opt in with a fake number</td></tr>
+</table>
+
+<h2>Opportunities to improve</h2>
+
+<div class="finding">
+  <span class="tag">Gap &middot; QA coverage</span>
+  <p>The OTP-verification bypass has no counterpart for the SMS <em>reminder confirmation</em> send. A QA test account can complete signup but can never reach the &ldquo;opted-in&rdquo; success state through the real UI &mdash; only by writing to the database directly.</p>
+  <p class="why">Worth extending the same allowlist to skip <span class="mono">sendSms</span> for the confirmation message too, so the full happy path is exercisable end-to-end.</p>
+</div>
+
+<div class="finding">
+  <span class="tag">Design risk &middot; crafting screen</span>
+  <p>The crafting screen is conditional on generation still being in flight. In this run it had already finished, so the screen &mdash; and the &ldquo;you&rsquo;re set&rdquo; confirmation note built for it &mdash; never appeared at all.</p>
+  <p class="why">The confirmation may be seen rarely in practice. Worth a lighter-weight acknowledgment (e.g. an inline toast on the reminder-ask screen itself, before navigating) as a backstop that doesn&rsquo;t depend on the wait being slow.</p>
+</div>
+
+<div class="finding">
+  <span class="tag">Copy accuracy &middot; invite links</span>
+  <p>&ldquo;No category &mdash; carries all your topics&rdquo; is inaccurate: it carries only the 3 curated <span class="mono">invite_seed_interests</span>, never the account&rsquo;s full topic list once that curated set is non-empty. This actively misled the walkthrough until the resolution code was read directly.</p>
+  <p class="why">Reword to something like &ldquo;carries your 3 tagged topics&rdquo; so the UI matches <span class="mono">getInviteLinkSeedTopics</span>&rsquo;s actual behavior.</p>
+</div>
+
+<footer>Generated from a live walkthrough against production &middot; test accounts and data described above are disposable fixtures.</footer>
+
+</body>
+</html>
