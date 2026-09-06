@@ -1,3 +1,12 @@
+---
+name: answer-leak-domain-drift-plan
+status: needs-decision
+opened: 2026-09-05
+last-reviewed: 2026-09-06
+owner: Josh
+related-pr: "#1611"
+---
+
 # Diagnosis: answer-leak & domain-drift gate rollout
 
 _Started 2026-09-05 · Owner: Josh · Working branch: `claude/answer-leak-and-domain-drift-gates` (PR #1611)_
@@ -197,6 +206,10 @@ prod** — re-checked today, `is_duplicate` is still `false` on all three. The
 demote SQL from PR #1611 has not been run yet.
 
 ### 2026-09-06 (later still) — Phase 1 complete: both gates clear the bar
+
+**NEEDS DECISION:** flip `PARTIAL_ANSWER_LEAK_ENABLED` on? Precision clears
+the bar (92.3%); see the 7 disagreement items below before deciding, and
+note this is a Vercel env-var change across deploy environments.
 
 Both blind labelers finished. Scored against the real flags from the blind
 sets above (raw per-occurrence basis — several corpus rows are re-generated
