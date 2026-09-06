@@ -249,6 +249,128 @@ function answerLeaksIntoQuestion(normalizedQuestion: string, candidate: string):
   return false;
 }
 
+// --- PARTIAL leak detection (the "dental plan" class) ------------------------
+//
+// acceptedFormLeaks above is CONJUNCTIVE: it fires only when the stem shows
+// EVERY substantive word of an accepted form. That is the right bar for a
+// fail-closed gate, but it is blind to the leak shape that actually dominates
+// in production — the stem hands over the answer's RARE, discriminating word
+// and withholds only a generic head noun the player can supply for free:
+//
+//   Q: "...What specific DENTAL benefit are the workers fighting to keep?"
+//   A: "Dental plan"                        (served 2026-09-05)
+//   Q: "In 'LEMON of Troy'... recover Springfield's prized ……"
+//   A: "lemon tree"                         (served 2026-09-04)
+//   Q: "...refuses to sign A PETITION FOR UNIVERSAL PEACE... What cause did
+//       that petition support?"
+//   A: "A petition CALLING for universal peace / ..."   (served 2026-09-05)
+//
+// The first two withhold one generic noun; the third withholds one filler
+// gerund out of four words the stem already prints verbatim. All three read as
+// giveaways to a player, and all three pass the conjunctive test.
+//
+// Two narrow rules cover them without touching the conjunctive gate:
+//
+//  A. CONTIGUOUS RUN — the stem prints two or more of the answer's substantive
+//     words consecutively, in order, AND every word it withholds is filler.
+//     "petition ... universal peace" is the answer read off the page; the
+//     missing "calling" changes nothing. The filler condition is what keeps
+//     this off "Enfield Tennis Academy" against a stem that says "Boston
+//     tennis academy" — there the run is real but the withheld "Enfield" is
+//     the whole answer, a false positive the module has always warned about.
+//  B. GENERIC HEAD NOUN — exactly one word is missing, it is a generic noun
+//     that names a CATEGORY rather than the answer's substance, and at least
+//     one word the stem DOES show is not generic. "dental|plan", "lemon|tree",
+//     "cyclic|form" fire; "basset|clarinet", "plagal|cadence" and
+//     "cabbage patch|kids" correctly do NOT, because there the withheld word is
+//     the substance and the shown word is the category.
+//
+// Both skip counting questions ("how many bases…" → "Two bases"), where the
+// stem naming the unit is normal and the withheld number IS the answer. This
+// is the single largest false-positive source: structurally it is identical to
+// a leak.
+//
+// Gated OFF by default (see PARTIAL_ANSWER_LEAK_ENABLED in the daily gate
+// chain) because, unlike the conjunctive test, these rules DROP on a heuristic
+// rather than on a full match.
+
+// Nouns that name the CATEGORY an answer belongs to rather than its substance.
+// A stem may hand one of these over for free; what makes the answer the answer
+// is the modifier in front of it.
+const GENERIC_HEAD_NOUNS = new Set([
+  'plan', 'tree', 'form', 'system', 'technique', 'method', 'process', 'model',
+  'theory', 'principle', 'rule', 'law', 'effect', 'style', 'period', 'era',
+  'movement', 'school', 'test', 'sign', 'device', 'section', 'scene', 'act',
+  'song', 'book', 'film', 'movie', 'show', 'series', 'game', 'award', 'prize',
+  'term', 'name', 'type', 'kind', 'group', 'set', 'unit', 'part', 'piece',
+  'shape', 'color', 'colour', 'sound', 'word', 'phrase', 'line', 'title',
+]);
+
+// Light verbs and connectives that pad an answer without being any part of it.
+// "A petition CALLING for universal peace" answers the same question as "a
+// petition for universal peace", so their absence from the stem withholds
+// nothing from the player.
+const FILLER_WORDS = new Set([
+  'calling', 'called', 'known', 'named', 'naming', 'describing', 'describes',
+  'meaning', 'means', 'being', 'involving', 'featuring', 'concerning',
+  'regarding', 'containing', 'showing', 'referring', 'relating', 'consisting',
+  'made', 'given', 'used', 'using', 'about', 'specifically', 'roughly',
+  'approximately', 'often', 'usually', 'typically', 'simply', 'literally',
+]);
+
+const COUNTING_ASK = /\bhow (?:many|much|long|old|far|tall)\b/;
+const NUMBER_WORD = new Set([
+  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'first', 'second', 'third', 'fourth', 'fifth', 'zero',
+  'half', 'both', 'dozen', 'hundred', 'thousand',
+]);
+const isNumeric = (token: string) => NUMBER_WORD.has(token) || /^\d+$/.test(token);
+
+/**
+ * True when the question gives away enough of the answer that the player can
+ * read it off the stem, even though the stem does not contain the whole answer.
+ *
+ * Only the PRIMARY accepted form is examined. Secondary variants after a "/" or
+ * inside parentheses are alternative phrasings, not the keyed answer, and
+ * matching against them produced false positives ("the craniosacral system"
+ * firing on a question whose real answer is "cerebrospinal fluid").
+ */
+export function questionPartiallyLeaksAnswer(text: string, answer: string): boolean {
+  const normalizedQuestion = normalize(text);
+  if (!normalizedQuestion) return false;
+  if (COUNTING_ASK.test(normalizedQuestion)) return false;
+
+  const [primary] = acceptedForms(answer);
+  if (!primary) return false;
+  const tokens = substantiveTokens(primary);
+  if (tokens.length < 2) return false;
+
+  const padded = ` ${normalizedQuestion} `;
+  const shows = (token: string) => padded.includes(` ${token} `);
+  const missing = tokens.filter((t) => !shows(t));
+  // Nothing withheld is the conjunctive gate's business, not ours.
+  if (missing.length === 0) return false;
+  // The withheld word IS the answer when it is a number — that is a counting
+  // question wearing a different stem, not a leak.
+  if (missing.some(isNumeric)) return false;
+
+  // Rule A — the stem prints a run of the answer, in order, and everything it
+  // withholds is filler. Without the filler condition this fires on a stem that
+  // paraphrases the answer's category ("Boston tennis academy" vs the answer
+  // "Enfield Tennis Academy"), where the withheld word IS the answer.
+  if (missing.every((t) => FILLER_WORDS.has(t))) {
+    let run = 0;
+    for (const token of tokens) {
+      run = shows(token) ? run + 1 : 0;
+      if (run >= 2) return true;
+    }
+  }
+
+  // Rule B — one generic head noun withheld, real substance already shown.
+  if (missing.length !== 1 || !GENERIC_HEAD_NOUNS.has(missing[0])) return false;
+  return tokens.some((t) => shows(t) && !GENERIC_HEAD_NOUNS.has(t));
+}
+
 export function textContainsAnswer(
   text: string,
   answer: string,

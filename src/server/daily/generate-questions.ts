@@ -94,7 +94,10 @@ import { ANSWER_COOLDOWN_DAYS, answerCooldownKey } from '@/server/daily/answer-c
 import { SUBJECT_COOLDOWN_DAYS, entityKey } from '@/server/daily/subject-cooldown';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
-import { textContainsAnswer } from '@/server/questions/self-answering';
+import {
+  questionPartiallyLeaksAnswer,
+  textContainsAnswer,
+} from '@/server/questions/self-answering';
 import { embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
 import { resolveDailyBasePoints } from './types';
 import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
@@ -812,16 +815,21 @@ const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-gene
 6. MULTI_PART — the question bundles two DISTINCT asks into one, so it has no single clean answer. Tells: an "— and what…/who…/where…?" tail, or any setup that demands two separate facts (a thing AND its location, a name AND a date). E.g. "What vulnerability lets Hagen kill Siegfried — and what is the precise location of it on his body?" is MULTI_PART. This is NOT the name_multiple style (ONE ask for several items of the SAME kind, e.g. "name the three Norns"), which is fine — flag only a question asking for two DIFFERENT facts.
 7. MISLEADING_SETUP — a clause in the setup most naturally describes a DIFFERENT answer than the intended one, so a player who knows the topic is steered toward the wrong response. The intended answer may be technically defensible, but the wording conflates two things (or attaches a clue that points elsewhere), so the reader can't tell which answer is wanted. This is distinct from OPINION_OR_VAGUE (there the answer is genuinely open) — here a single answer exists but the phrasing misdirects. E.g. "In tennis, a player who has won zero points in a game is said to have this score, which is also used to describe a set won without the opponent taking a single game. What is this term for a scoreless result?" (intended answer: Love) is MISLEADING_SETUP — the clause "a set won without the opponent taking a single game" describes a *love set* (or a "bagel"), so the setup points a knowledgeable player at a different answer than the single word "love." Flag only when the misdirection is clear — never for a question that is merely wordy or that simply requires thought.
 
+8. OFF_DOMAIN — the question is not about the domain it was generated for. Each item carries the domain it was filed under and the generator's own fact_key, which the generator derives from the question's ACTUAL content: when the fact_key names a different territory than the domain, that is the generator confessing it drifted. E.g. domain="Virginia Woolf's Novels and Essays" with fact_key="james-joyce-irish-modernism-portrait-of-the-artist..." and a stem about Stephen Dedalus is OFF_DOMAIN — Joyce is Woolf's CONTEMPORARY, not part of her body of work.
+   CRITICAL — containment is NOT a defect. A question about a work, character, chapter, or episode that BELONGS to the domain is correctly filed, however different the fact_key looks: domain="Virginia Woolf's Novels and Essays" with fact_key="mrs-dalloway-big-ben-chimes" is FINE (Mrs. Dalloway is a Woolf novel), and so are "Sesame Street" under "Classic Children's Television" and "Breaking Bad" under "Color References Across Film and TV". Flag ONLY when the subject sits OUTSIDE the domain — a sibling author, a neighbouring period, an adjacent franchise. When you are unsure whether the subject belongs to the domain, do NOT flag.
+
 A high bar applies — flag a question only when one of these defects is clearly present. Subtle wordsmithing concerns are NOT defects.
 
 The following styles are explicitly ACCEPTABLE and must NOT be flagged on style grounds alone — fill-in-the-blank, complete-the-quote, name-multiple, and concise idiomatic questions all belong in Joshing. Reference exemplars:
 
 ${STYLE_EXEMPLAR_BLOCK}
 
-Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, MULTI_PART, MISLEADING_SETUP, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
+Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, MULTI_PART, MISLEADING_SETUP, OFF_DOMAIN, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
 
 Return JSON only:
-{ "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<short reason>" } }
+{ "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<DEFECT_NAME>: <short reason>" } }
+
+Every reason MUST begin with the defect name exactly as spelled above, followed by a colon — e.g. "OFF_DOMAIN: question is about Joyce, filed under Woolf". The caller routes on that prefix.
 
 If no questions are defective, return { "drop_indices": [], "reasons": {} }.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
@@ -831,19 +839,30 @@ If no questions are defective, return { "drop_indices": [], "reasons": {} }.${IN
 export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   toDrop: Set<number>;
   reasons: Record<number, string>;
+  /** OFF_DOMAIN hits, held OUT of toDrop — see isDomainDriftDropEnabled. */
+  offDomain: Set<number>;
 }> {
-  if (generated.length === 0) return { toDrop: new Set(), reasons: {} };
+  const empty = { toDrop: new Set<number>(), reasons: {}, offDomain: new Set<number>() };
+  if (generated.length === 0) return empty;
   const client = getAnthropicClient();
-  if (!client) return { toDrop: new Set(), reasons: {} };
+  if (!client) return empty;
 
   // tier= feeds the GENERIC_AT_TIER defect (judged only at moderate/specialist).
   // difficulty_estimate is the same field serving and scoring treat as the
   // question's tier (resolveDailyBasePoints, bank matching), so the gate and the
   // serving path agree on what tier a question is.
+  //
+  // fact= feeds OFF_DOMAIN. `canonical_subcategory` is worthless as a drift
+  // signal on its own: the generation prompt instructs the model to echo the
+  // domain it was handed, so it is a carbon copy of the request even when the
+  // question wandered somewhere else. fact_key is the opposite — the model
+  // derives it from what it actually wrote, so a Joyce question generated for
+  // the Woolf domain still stamps "james-joyce-irish-modernism-...". Handing
+  // the gate both fields is what makes the drift visible.
   const body = generated
     .map(
       (q, i) =>
-        `[${i}] domain=${q.canonical_subcategory} tier=${q.difficulty_estimate}\n    q=${q.question_text}\n    a=${q.answer}`,
+        `[${i}] domain=${q.canonical_subcategory} tier=${q.difficulty_estimate} fact=${q.fact_key ?? '(none)'}\n    q=${q.question_text}\n    a=${q.answer}`,
     )
     .join('\n\n');
   const userMessage = wrapUserInput('batch', body);
@@ -881,15 +900,50 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
         }
       }
     }
-    return { toDrop, reasons };
+    // OFF_DOMAIN is a NEW defect shipping in measure-only mode: pull those
+    // indices back out of the drop set so the gate's established defects keep
+    // dropping exactly as before, and a misjudged containment case ("Mrs.
+    // Dalloway" read as off-domain for the Woolf domain) costs a log line
+    // rather than a question. isDomainDriftDropEnabled promotes it to a drop.
+    const offDomain = new Set<number>();
+    for (const idx of toDrop) {
+      if (/^\s*OFF_DOMAIN\b/i.test(reasons[idx] ?? '')) offDomain.add(idx);
+    }
+    for (const idx of offDomain) toDrop.delete(idx);
+    if (offDomain.size > 0) {
+      console.warn('[daily/generate-questions] off-domain questions detected', {
+        dropping: isDomainDriftDropEnabled(),
+        indices: [...offDomain].sort((a, b) => a - b),
+        detail: [...offDomain].map((i) => ({
+          domain: generated[i].canonical_subcategory,
+          factKey: generated[i].fact_key,
+          reason: reasons[i],
+          questionPreview: generated[i].question_text.slice(0, 120),
+        })),
+      });
+    }
+    return { toDrop, reasons, offDomain };
   } catch (err) {
     // Fail open: don't block the daily queue on a Haiku outage.
     console.warn('[daily/generate-questions] quality gate failed', {
       error: err instanceof Error ? err.message : String(err),
     });
     recordGateFailedOpen('quality');
-    return { toDrop: new Set(), reasons: {} };
+    return { toDrop: new Set(), reasons: {}, offDomain: new Set() };
   }
+}
+
+/**
+ * DOMAIN_DRIFT_DROP_ENABLED — default OFF. The OFF_DOMAIN defect is detected,
+ * logged and counted (gate `domain_drift`) from the first deploy, but does not
+ * remove questions until this is set. The judgement it rests on — "is this
+ * subject INSIDE the domain, or merely adjacent to it?" — is exactly the call
+ * the reconcile prompt gets right and a lexical check cannot make at all, so it
+ * earns a measurement period before it is allowed to cost supply.
+ */
+export function isDomainDriftDropEnabled(): boolean {
+  const raw = process.env.DOMAIN_DRIFT_DROP_ENABLED?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
 // Factual-correctness gate. The dedup and quality gates above never reliably
@@ -1083,12 +1137,121 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
 } {
   const toDrop = new Set<number>();
   const reasons: Record<number, string> = {};
+  const partialEnabled = isPartialAnswerLeakEnabled();
   for (let i = 0; i < generated.length; i += 1) {
     const q = generated[i];
     if (textContainsAnswer(q.question_text, q.answer)) {
       toDrop.add(i);
       reasons[i] = `answer "${q.answer}" appears in question text`.slice(0, 200);
+      continue;
     }
+    // Partial leak (the "dental plan" class): the stem hands over the answer's
+    // discriminating words and withholds only a generic noun or filler. Always
+    // MEASURED so the flag can be flipped on evidence; only DROPS when enabled.
+    if (questionPartiallyLeaksAnswer(q.question_text, q.answer)) {
+      if (partialEnabled) {
+        toDrop.add(i);
+        reasons[i] = `question gives away answer "${q.answer}"`.slice(0, 200);
+      } else {
+        console.warn('[daily/generate-questions] partial answer leak (measuring, not dropping)', {
+          answer: q.answer.slice(0, 80),
+          questionPreview: q.question_text.slice(0, 120),
+        });
+      }
+    }
+  }
+  return { toDrop, reasons };
+}
+
+/**
+ * PARTIAL_ANSWER_LEAK_ENABLED — default OFF. The partial-leak rules drop on a
+ * heuristic rather than on a whole-answer match, so they ship in measure-only
+ * mode: every hit is logged and counted under the `answer_leak_partial` gate,
+ * and nothing is dropped until this is set. Flip to a truthy value once the
+ * counters show the hit rate and the logged samples read as real leaks.
+ */
+export function isPartialAnswerLeakEnabled(): boolean {
+  const raw = process.env.PARTIAL_ANSWER_LEAK_ENABLED?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+/** Hits the partial-leak rules found, whether or not the flag lets them drop. */
+export function countPartialAnswerLeaks(generated: LlmQuestion[]): number {
+  let n = 0;
+  for (const q of generated) {
+    if (
+      !textContainsAnswer(q.question_text, q.answer) &&
+      questionPartiallyLeaksAnswer(q.question_text, q.answer)
+    ) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
+// --- Rule 3 ("ONE CLEAN ANSWER") enforcement --------------------------------
+//
+// The generation prompt requires a single short checkable answer — "a name, a
+// title, a word, a short phrase" — and warns that paragraph-length answers
+// "grade unpredictably and must not be produced". Nothing enforced it, and the
+// live bank shows the model ignoring it regularly: "It signals the end of
+// Wotan's power and the gods' dominion — the spear, engraved with the contracts
+// that undergird Wotan's authority, is broken, meaning...".
+//
+// These are not merely ugly. A sprawling answer also DEFEATS the answer-leak
+// gate, because that gate requires the stem to contain every substantive word
+// of the answer and each extra word is another chance one is absent. The Joyce
+// question served 2026-09-05 leaked "a petition for universal peace" verbatim
+// and survived solely because its answer padded in the word "calling".
+//
+// Length alone is the wrong test — "Tennis Player Michael Joyce's Professional
+// Artistry as a Paradigm of Certain Stuff About Choice, Freedom, Discipline,
+// Joy, Grotesquerie, and Human Completeness" is a real 159-char essay title and
+// a perfectly clean answer. So we require length PLUS a sentence tell: a clause
+// break, an aside, or a leading pronoun. Measured against the live bank this
+// flags 15 of the 16 longest answers and spares that title.
+const ANSWER_SHAPE_MAX_CHARS = 100;
+// " — X" / "; X" / "(specifically, …)" are clause joins; a leading pronoun +
+// verb ("It signals…", "He gives…") is a sentence rather than a noun phrase.
+const SENTENCE_TELLS: RegExp[] = [
+  /\s[—–-]\s/,
+  /;\s/,
+  /\((?:specifically|or more precisely|i\.e\.|meaning|because)\b/i,
+  /^(?:it|he|she|they|you|we)\s+\w+/i,
+];
+
+function answerShapeMaxChars(): number {
+  const parsed = Number(process.env.ANSWER_SHAPE_MAX_CHARS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : ANSWER_SHAPE_MAX_CHARS;
+}
+
+/**
+ * ANSWER_SHAPE_GATE_ENABLED — default ON. Set to a falsy value to revert to the
+ * pre-gate behaviour without a deploy, matching the RECONCILE_BANK_DOMAINS
+ * kill-switch contract.
+ */
+export function isAnswerShapeGateEnabled(): boolean {
+  const raw = process.env.ANSWER_SHAPE_GATE_ENABLED?.trim().toLowerCase();
+  if (raw === undefined || raw === '') return true; // default ON
+  return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
+}
+
+/** Answers that are sentences rather than the single clean answer Rule 3 requires. */
+export function findAnswerShapeFailures(generated: LlmQuestion[]): {
+  toDrop: Set<number>;
+  reasons: Record<number, string>;
+} {
+  const toDrop = new Set<number>();
+  const reasons: Record<number, string> = {};
+  if (!isAnswerShapeGateEnabled()) return { toDrop, reasons };
+  const maxChars = answerShapeMaxChars();
+  for (let i = 0; i < generated.length; i += 1) {
+    const answer = generated[i].answer.trim();
+    if (answer.length <= maxChars) continue;
+    const tell = SENTENCE_TELLS.find((re) => re.test(answer));
+    if (!tell) continue;
+    toDrop.add(i);
+    reasons[i] = `answer is a sentence, not one clean answer (${answer.length} chars)`.slice(0, 200);
   }
   return { toDrop, reasons };
 }
@@ -1857,6 +2020,24 @@ export async function generateDailyQuestions(
     });
   }
 
+  // OFF_DOMAIN hits from the quality gate (the "Joyce question filed under
+  // Virginia Woolf" case). Held separate from qualityResult.toDrop so the new
+  // defect can be measured before it is allowed to cost supply.
+  const offDomain = qualityResult.offDomain;
+
+  // Rule 3 ("ONE CLEAN ANSWER") backstop. A paragraph-length answer grades
+  // unpredictably AND blinds the answer-leak gate above, so it is dropped here
+  // rather than served. Deterministic and pure — cannot fail open.
+  const answerShape = findAnswerShapeFailures(generated);
+  if (answerShape.toDrop.size > 0) {
+    console.warn('[daily/generate-questions] dropping sentence-shaped answers', {
+      droppedCount: answerShape.toDrop.size,
+      droppedIndices: [...answerShape.toDrop].sort((a, b) => a - b),
+      reasons: answerShape.reasons,
+      originalCount: generated.length,
+    });
+  }
+
   // Difficulty-floor backstop: the per-domain target / fixed preference is only a
   // prompt hint, and difficulty_estimate is the model's own label of what it
   // wrote. Drop questions that came back more than one tier below what was asked
@@ -1915,6 +2096,16 @@ export async function generateDailyQuestions(
       dropped: subjectCooldownDuplicates.size,
     },
     { gate: 'answer_leak', considered: generated.length, dropped: answerLeaks.toDrop.size },
+    // Measure-only until PARTIAL_ANSWER_LEAK_ENABLED is set: `dropped` counts
+    // what the rules WOULD drop, so the flag can be flipped on evidence rather
+    // than on faith. Once enabled these hits also appear under `answer_leak`.
+    {
+      gate: 'answer_leak_partial',
+      considered: generated.length,
+      dropped: countPartialAnswerLeaks(generated),
+    },
+    { gate: 'answer_shape', considered: generated.length, dropped: answerShape.toDrop.size },
+    { gate: 'domain_drift', considered: generated.length, dropped: offDomain.size },
     { gate: 'difficulty_floor', considered: generated.length, dropped: underDifficulty.toDrop.size },
   ]);
 
@@ -1928,6 +2119,11 @@ export async function generateDailyQuestions(
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
+    ...answerShape.toDrop,
+    // offDomain is deliberately NOT unioned unconditionally — see the OFF_DOMAIN
+    // block above. It is measured and logged by default; flipping
+    // DOMAIN_DRIFT_DROP_ENABLED is what promotes it to a drop.
+    ...(isDomainDriftDropEnabled() ? offDomain : []),
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));
@@ -3077,10 +3273,13 @@ export async function screenGroundedBatch(questions: LlmQuestion[]): Promise<Set
     findFactualFailures(questions),
   ]);
   const answerLeaks = findAnswerLeaks(questions);
+  const answerShape = findAnswerShapeFailures(questions);
   return new Set<number>([
     ...batchDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
+    ...answerShape.toDrop,
+    ...(isDomainDriftDropEnabled() ? qualityResult.offDomain : []),
   ]);
 }
