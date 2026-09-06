@@ -313,6 +313,17 @@ const HOME_ELIGIBLE = new Set<string>(HOME_TOP3_ELIGIBLE_TYPES);
 // ANY instance of its type, and the register is connection-only — the
 // competition vocabulary the style guide prohibits is kept out by construction.
 //
+// Every line must be safe on ONE event, because that is all these pools ever
+// see: a single answered question. "{x} has {topic} down cold" was not — it
+// asserted standing mastery of a territory on the strength of one correct
+// answer, and a live walkthrough caught it on a first-ever session whose
+// PLAYER_MASTERY row read tier=establishing while the session recap on the same
+// data said "NEXT: FAMILIAR". Two surfaces, opposite claims, same moment. Same
+// shape as the "First five complete" eyebrow #1610 fixed: copy asserting a
+// state its gate never checks. Removed from both pools rather than gated on
+// tier — the remaining lines describe the event that actually happened, which
+// is all the event evidences.
+//
 // Pool 1 — got_you: a friend answered a question YOU wrote (one-way; no "you both").
 const GOT_YOU_LINES = [
   '{friend} knew your {topic} question',
@@ -320,7 +331,6 @@ const GOT_YOU_LINES = [
   '{friend} was right there with you on {topic}',
   '{friend} came through on your {topic} question',
   '{friend} understood your {topic} question',
-  '{friend} has {topic} down cold',
 ] as const;
 // When the event carries no topic, fall back to the calm topic-less baseline
 // rather than dangling an empty category.
@@ -333,7 +343,6 @@ const YOU_GOT_LINES = [
   'You were right there with {friend} on {topic}',
   "You came through on {friend}'s {topic} question",
   "You understood {friend}'s {topic} question",
-  "You've got {topic} down cold",
 ] as const;
 const YOU_GOT_NO_TOPIC = "You knew {friend}'s question";
 

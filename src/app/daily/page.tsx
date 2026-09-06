@@ -23,7 +23,8 @@ import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { ReminderConfirmedToast } from '@/components/ReminderConfirmedToast';
-import { categoryLabel, type InsideJokeKind } from '@/lib/questions-types';
+import { type InsideJokeKind } from '@/lib/questions-types';
+import { slotCategoryLabel } from '@/server/daily/slot-label';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import {
   getBonusCount,
@@ -40,10 +41,7 @@ import {
 
 function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' | 'warning' }> {
   // Figma shows the topic/category as the question chip (not the difficulty tier).
-  const category =
-    (slot.broad_category && slot.broad_category.trim()) ||
-    (slot.category ? categoryLabel(slot.category) : '') ||
-    slot.domain;
+  const category = slotCategoryLabel(slot);
   const badges: Array<{ label: string; tone?: 'muted' | 'warning' }> = category
     ? [{ label: category }]
     : [];
@@ -682,10 +680,7 @@ export default function DailyPage() {
         // A rested bonus slot ("This is {Name}'s bag but not mine") is closed via
         // the same skip path, but it's an opt-out, not a "bring it back later" —
         // so it gets its own copy naming the category we've stopped surfacing.
-        const restedLabel =
-          (slot.broad_category && slot.broad_category.trim()) ||
-          (slot.category ? categoryLabel(slot.category) : '') ||
-          slot.domain;
+        const restedLabel = slotCategoryLabel(slot);
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
@@ -1089,11 +1084,7 @@ export default function DailyPage() {
       {notForMeOpen && currentSlot ? (
         <NotForMeSheet
           domain={currentSlot.domain}
-          categoryLabel={
-            (currentSlot.broad_category && currentSlot.broad_category.trim()) ||
-            (currentSlot.category ? categoryLabel(currentSlot.category) : null) ||
-            currentSlot.domain
-          }
+          categoryLabel={slotCategoryLabel(currentSlot)}
           presenceSourceName={currentSlot.presence_source_name ?? null}
           skipDisabled={submitting}
           onChoose={async (scope) => {
