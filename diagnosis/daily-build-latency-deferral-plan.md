@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: needs-decision
 opened: 2026-09-04
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-07
 owner: Josh
 related-pr: "#1601"
 ---
@@ -604,3 +604,49 @@ question, and letting the cron keep running against it isn't neutral.
 Did not implement a fix. The design choice (check-and-skip vs.
 recompute-against-winner vs. an upstream lock) belongs to whoever picks this up
 next, not to this diagnosis pass.
+
+### 2026-09-07 (diagnosis-review) — a fourth built row, n=3; the concurrency fix still isn't built
+
+**NEEDS DECISION (unchanged):** the fix for open question 5 — check-and-skip,
+recompute-against-winner, or an upstream lock — still hasn't been designed or
+built. Nothing below changes that; it's still the gate on trusting Phase 3.
+
+Ran `npm run check:build-latency` (read-only, safe, as documented in §6):
+
+```
+DailyBuildMetric totals: carry_forward=65  existing_queue=6  built=4
+Phase 2: unchanged, still passes on the original row.
+Phase 3 (3 usable rows, up from 2):
+  2026-09-06T17:03:54  saved 1529ms  bonus  501ms  residual 1028ms  [PASS]
+  2026-09-06T17:05:14  saved 1362ms  bonus  437ms  residual  925ms  [PASS]
+  2026-09-07T17:05:14  saved 2154ms  bonus  527ms  residual 1627ms  [PASS]  <- new
+  residual spread: 925..1627ms over 3 rows -- wide; explain before relying on it.
+  3b median saving: 1529ms (was 1362ms at n=2)
+```
+
+A genuine new row landed at today's 17:05 UTC cron. `target_size` matched on
+all 3 built-since rows (3/3/0 mismatches) — **no repeat of the slot-collision
+anomaly** on this reading. That is reassuring about frequency, not about the
+mechanism: it does not mean the race was fixed, only that it didn't fire
+today. Confirmed by reading the code, not inferring from the absence of
+symptoms: `git log --oneline -- src/server/daily/queue-orchestrator.ts` still
+stops at `#1601` (the deferral itself), and the current uncommitted working
+tree (branch `claude/domain-drift-safety-net`) touches unrelated files only —
+`persistDailyQueue`'s return value is still discarded at line 1467, and
+`appendDeferredBonusSlots` still receives local `slots.length` at line 1485,
+exactly as reproduced in the 2026-09-06 entry above. §5's recommendation
+stands unaddressed.
+
+The residual (the ~1s of saving beyond the bonus generation itself) widened
+from a tight 925–1028ms band to 925–1627ms with this third row — the script's
+own output already flags this as "wide; explain before relying on it." Not
+investigated further this pass; worth watching whether it stabilizes or keeps
+spreading as more rows accumulate.
+
+**PR `#1601` reconfirmed `MERGED` to `main`** via `gh pr view` — no other PR
+is referenced by this doc.
+
+Still open: what the concurrency fix should be (not designed, not built);
+whether the ~1.5s median (n=3) holds up with more volume; open questions 3
+and 4 (phase-tagging core generation, whether the +2 bonus earns its spend)
+untouched since they were last deferred.
