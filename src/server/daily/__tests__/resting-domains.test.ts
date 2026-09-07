@@ -119,7 +119,7 @@ beforeEach(() => {
     Array.from({ length: DAILY_QUEUE_SIZE }, (_, i) => genq(`q${i}`)),
   );
 
-  mocks.persistDailyQueue.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue({ row: { id: 'mock-queue-id' } as never, won: true });
 });
 
 describe('fillDailyQueueForUser — Game settings categories drive selection', () => {

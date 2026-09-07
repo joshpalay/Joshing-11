@@ -142,6 +142,13 @@ export type DailyBuildContext = {
    * zero generation calls would make them indistinguishable from genuine
    * bank-only builds -- the same contamination that made the withdrawn "bank
    * builds take 0.0s" figure wrong. Analysis must filter on outcome='built'.
+   *
+   * 'lost_persist_race' (diagnosis/daily-build-latency-deferral-plan.md, open
+   * question 5): this build generated a full set of content, but a concurrent
+   * build for the same user+date won the persistDailyQueue insert first. This
+   * build's content was never served -- it correctly does NOT count as
+   * 'built', and correctly does not run the deferred bonus append, which is
+   * what used to silently overwrite the winner's real questions.
    */
   outcome: BuildOutcome;
 };
@@ -152,7 +159,8 @@ export type BuildOutcome =
   | 'carry_forward'
   | 'partial_carry_forward'
   | 'no_knowledge_base'
-  | 'error';
+  | 'error'
+  | 'lost_persist_race';
 
 const storage = new AsyncLocalStorage<DailyBuildContext>();
 

@@ -65,7 +65,7 @@ Revisit once diagnosis docs settle on `main` as their normal home.
 | File | Status | Opened | Last reviewed | Related PR |
 |---|---|---|---|---|
 | [answer-leak-domain-drift-plan.md](answer-leak-domain-drift-plan.md) | **needs-decision** | 2026-09-05 | 2026-09-07 | #1611, #1613, #1618, #1619 |
-| [daily-build-latency-deferral-plan.md](daily-build-latency-deferral-plan.md) | **needs-decision** | 2026-09-04 | 2026-09-07 | #1601 |
+| [daily-build-latency-deferral-plan.md](daily-build-latency-deferral-plan.md) | active | 2026-09-04 | 2026-09-07 | #1620 |
 
 Keep this table in sync by hand when you add/close a file, or let
 `/diagnosis-review` do it — it rewrites this table from each file's

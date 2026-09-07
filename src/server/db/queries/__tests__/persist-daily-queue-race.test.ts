@@ -125,18 +125,23 @@ describe('persistDailyQueue — first-writer-wins (B-DAILY-QUEUE-SWAP-01)', () =
     expect(insertCalls[0].conflictArg).toEqual({ target: ['user_id', 'queue_date'] });
   });
 
-  it('winner: returns the freshly inserted row and flags its generated questions used', async () => {
+  it('winner: returns { row, won: true } and flags its generated questions used', async () => {
     const inserted = { id: 'winner', userId: USER, queueDate: '2026-06-18', slots: slotsA };
     returningRows = [inserted];
 
     const result = await persistDailyQueue(USER, slotsA, ['a1']);
 
-    expect(result).toBe(inserted);
+    expect(result?.row).toBe(inserted);
+    // `won` is the signal a caller MUST check before doing anything further
+    // with its own `slots` array or a position derived from it (see the
+    // PersistDailyQueueResult doc comment) — confirmed missing in production,
+    // diagnosis/daily-build-latency-deferral-plan.md open question 5.
+    expect(result?.won).toBe(true);
     // Its generated questions are marked used because they made it into the queue.
     expect(updateSets).toEqual([{ usedInQueue: true }]);
   });
 
-  it('loser: returns the EXISTING winning queue and does NOT flag its discarded questions used', async () => {
+  it('loser: returns { row: winner, won: false } and does NOT flag its discarded questions used', async () => {
     // RETURNING empty = the conflict row already existed (the winner). The loser
     // must hand back that winning queue unchanged...
     returningRows = [];
@@ -144,7 +149,8 @@ describe('persistDailyQueue — first-writer-wins (B-DAILY-QUEUE-SWAP-01)', () =
 
     const result = await persistDailyQueue(USER, [{ slot_index: 0, generated_question_id: 'b1' }] as never, ['b1']);
 
-    expect(result).toBe(existingRow);
+    expect(result?.row).toBe(existingRow);
+    expect(result?.won).toBe(false);
     // ...and must NOT mark its own (discarded) generated questions as used —
     // they never entered the persisted queue.
     expect(updateSets).toEqual([]);

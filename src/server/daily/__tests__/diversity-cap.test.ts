@@ -182,7 +182,7 @@ beforeEach(() => {
 
   mocks.isGenericSubcategory.mockReturnValue(false);
 
-  mocks.persistDailyQueue.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue({ row: { id: 'mock-queue-id' } as never, won: true });
 });
 
 describe('fillDailyQueueForUser — intra-day diversity cap', () => {

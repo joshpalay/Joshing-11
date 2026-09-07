@@ -144,7 +144,7 @@ beforeEach(() => {
   mocks.generateBonusQuestionsForDomains.mockResolvedValue([]);
   mocks.isGenericSubcategory.mockReturnValue(false);
   mocks.commitPendingRefineDecisions.mockResolvedValue(undefined);
-  mocks.persistDailyQueue.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue({ row: { id: 'mock-queue-id' } as never, won: true });
 });
 
 describe('fillDailyQueueForUser — concurrent build coalescing (B-DAILY-QUEUE-SWAP-01)', () => {
