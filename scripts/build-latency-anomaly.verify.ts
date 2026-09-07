@@ -38,7 +38,13 @@ import type { QueueSlot } from '../src/server/daily/types';
 // is namespaced by a unique run id and removed in `finally`, even on
 // assertion failure. Touches only rows this script creates.
 //
-// Usage: npx tsx scripts/build-latency-anomaly.verify.ts
+// Usage: npm run verify:build-latency-anomaly
+// (equivalently: npx tsx scripts/build-latency-anomaly.verify.ts)
+//
+// Registered as a regression test in
+// diagnosis/daily-build-latency-deferral-plan.md §7 -- run it before merging
+// any further change to persistDailyQueue's return contract or the deferred-
+// bonus append path.
 
 const RUN = `latency-anomaly-${randomUUID().slice(0, 8)}`;
 const id = (label: string) => `${RUN}-${label}`;

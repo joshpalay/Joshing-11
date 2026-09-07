@@ -397,6 +397,55 @@ from the raw numbers:
 
 ---
 
+## 7. Regression test: the persist-race fix (open question 5)
+
+```bash
+npm run verify:build-latency-anomaly
+```
+
+`scripts/build-latency-anomaly.verify.ts`. **Not read-only** — unlike §6's
+reading, this one WRITES: it seeds a disposable user, generated questions, and
+a `DailyQueue` row, exercises the real `persistDailyQueue` /
+`createDailyQueueItemFromPresence` functions against them, then deletes
+everything it created in a `finally` block regardless of outcome (same pattern
+as `scripts/account-deletion-territory.verify.ts`). Safe to run against
+production — it needs `DATABASE_URL` in `.env` for the same reason §6 does —
+but it is not read-only the way §6 is, so don't reach for it as a casual
+status check.
+
+**What it proves, in two scenarios run back to back:**
+
+- **Scenario A (the historical bug, kept on purpose):** deliberately ignores
+  `persistDailyQueue`'s `won` field, the way every call site used to. Must
+  still reproduce the exact damage — 5 total slots, bonus at index 3 and 4, 2
+  of the winning build's 5 real questions destroyed. If this scenario ever
+  stops reproducing the damage, something changed the underlying mechanism (not
+  necessarily for the better) and needs explaining before trusting Scenario B.
+- **Scenario B (the fix):** checks `won` and skips the deferred append on a
+  loss, exactly as `queue-orchestrator.ts` now does. Must leave the winning
+  build's queue at exactly 5 slots, 0 destroyed, 0 spurious appends.
+
+**PASS** means both scenarios matched their expected shape — the mechanism
+still exists (A) and the fix still closes it (B). **FAIL on Scenario A**
+would mean the reproduction itself is stale (unlikely to matter — the mocked
+unit tests below are the ones that would actually catch a regression in CI).
+**FAIL on Scenario B** is the one that matters: it means a future change to
+`persistDailyQueue`, `queue-orchestrator.ts`, or `createDailyQueueItemFromPresence`
+reopened the ability for a losing build to corrupt the winner's queue.
+
+**When to run it:** before merging any further change that touches
+`persistDailyQueue`'s return contract or the deferred-bonus append path.
+
+**The faster, CI-covered version of the same fix** lives in
+`src/server/daily/__tests__/queue-floor.test.ts` (describe block "a lost
+persistDailyQueue race must not touch the deferred bonus tail") and
+`src/server/db/queries/__tests__/persist-daily-queue-race.test.ts` — both run
+on every `vitest run`, mocked, no DB required. This script is the slower,
+real-DB confirmation for when mocked coverage alone doesn't feel like enough
+before touching this path again.
+
+---
+
 ## Updates
 
 ### 2026-09-04 — instrument built, and it caught a defect in itself

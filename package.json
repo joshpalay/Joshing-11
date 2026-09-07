@@ -29,6 +29,7 @@
     "smoke:lately-milestones": "tsx scripts/lately-milestones.smoke.ts",
     "smoke:niche-match-dedup": "tsx scripts/niche-match-dedup.smoke.ts",
     "verify:account-deletion": "tsx scripts/account-deletion-territory.verify.ts",
+    "verify:build-latency-anomaly": "tsx scripts/build-latency-anomaly.verify.ts",
     "smoke:gameplay": "tsx scripts/playtest/playtest.ts",
     "audit:gate-variance": "tsx -r dotenv/config scripts/audit-gate-variance.ts",
     "pool:health": "tsx scripts/pool-health.ts",
