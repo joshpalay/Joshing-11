@@ -912,3 +912,33 @@ single 92%-precision number on a small sample.
    mitigation is built and validated against the real 2026-09-07 case.
 4. The "why does Woolf keep generating Joyce" investigation — still not
    started.
+
+### 2026-09-08 (later) — `PARTIAL_ANSWER_LEAK_ENABLED` flipped in Vercel Production; redeploy pending
+
+Josh added `PARTIAL_ANSWER_LEAK_ENABLED` to the **Production** environment in
+Vercel (screenshot, added "just now"), resolving Next step 2 above. PR #1623
+(the `model`-noun fix, the blocker for this flag) confirmed `MERGED` to `main`
+via `gh pr view` — merged 2026-09-07T23:48:46Z.
+
+**Not yet in effect.** Vercel's own toast on that screen says it plainly: "A
+new deployment is needed for changes to take effect" — adding an env var
+doesn't touch already-running instances. Nothing to verify against
+`GateDropStat` until a new deploy ships; the `answer_leak_partial` gate will
+keep showing `dropped: 0` (measure-only) until then even though the flag is
+now set.
+
+Left the actual redeploy to Josh — he's already on that exact Vercel screen
+with the Redeploy button in front of him, and I have no standing MCP session
+into his mobile browser to click it from here. If he'd rather I trigger a
+fresh production deploy through the Vercel MCP tools instead, say so and I
+will, but tapping the button already on screen is simpler.
+
+**Once redeployed**, worth a follow-up check here: `GateDropStat` for
+`answer_leak_partial` should start showing `dropped > 0` instead of
+`dropped: 0, considered: N`, which is the confirmation that the flag is
+actually live, not just set.
+
+**Still open:** `DOMAIN_DRIFT_DROP_ENABLED` — untouched in this screenshot,
+still Josh's call, now backed by the merged second-opinion mitigation
+(#1623). The "why does Woolf keep generating Joyce" investigation — still
+not started.
