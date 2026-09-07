@@ -2,9 +2,9 @@
 name: answer-leak-domain-drift-plan
 status: needs-decision
 opened: 2026-09-05
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619"
+related-pr: "#1611, #1613, #1618, #1619, #1623"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
