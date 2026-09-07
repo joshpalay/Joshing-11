@@ -1207,11 +1207,27 @@ export async function createDailyQueueItem(
  * discarded; the loser's generatedQuestionIds are intentionally NOT flagged
  * usedInQueue, since they never entered the persisted queue.
  */
+/**
+ * Whether THIS CALL's insert won the user_id+queue_date race, plus the row
+ * that now exists for that key either way (the caller's own, or the winner's
+ * if it lost).
+ *
+ * `won` exists because of a confirmed production defect
+ * (diagnosis/daily-build-latency-deferral-plan.md, open question 5): a caller
+ * that discards this distinction and proceeds as if its own content is what's
+ * persisted will, on a race, run its deferred bonus append against the
+ * WINNING build's queue using ITS OWN (losing, irrelevant) core count as the
+ * position -- silently overwriting real questions in the winner's queue.
+ * Every caller MUST check `won` before doing anything further with `slots`
+ * or a position derived from them.
+ */
+export type PersistDailyQueueResult = { row: DailyQueueRow; won: boolean } | null;
+
 export async function persistDailyQueue(
   userId: string,
   slots: QueueSlot[],
   generatedQuestionIds: string[],
-): Promise<DailyQueueRow | null> {
+): Promise<PersistDailyQueueResult> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -1260,17 +1276,19 @@ export async function persistDailyQueue(
         .where(inArray(generatedQuestions.id, generatedQuestionIds));
     }
 
-    if (row) return row;
+    if (row) return { row, won: true };
 
     // Conflict hit an existing row, so DO NOTHING was a no-op and RETURNING
     // produced nothing. This build lost the race; hand back the queue that won
-    // (unchanged) so the caller serves the one the player is already on.
+    // (unchanged) so the caller serves the one the player is already on --
+    // `won: false` is the signal that must stop the caller doing anything
+    // further with ITS OWN slots array or a position derived from it.
     const [existing] = await tx
       .select()
       .from(dailyQueues)
       .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
       .limit(1);
-    return existing ?? null;
+    return existing ? { row: existing, won: false } : null;
   });
 }
 
