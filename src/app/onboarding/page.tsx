@@ -136,13 +136,19 @@ export default async function OnboardingPage() {
       rationale: interest.description ?? null,
     }));
 
-  // A tagged invite link deliberately carries just ONE topic (seedSource
-  // 'link' never pre-selects, so this doesn't change that) — break the
-  // MIN_INTERESTS=3 blank-screen wall with a few real, verified-question
-  // domains from the SAME broad categories, not a random/invented set.
-  // Skipped when there's nothing to be adjacent to (an untagged link whose
-  // inviter also has no topics yet) — no fabricated suggestions.
-  if (seedSource === 'link' && preSeededInterests.length > 0 && preSeededInterests.length < 3) {
+  // A tagged invite link deliberately carries just ONE topic, and a named
+  // (SMS) invite can just as easily arrive with only 1-2 — AskFriendForDomain
+  // seeds the asked-about domain and leaves the other two slots genuinely
+  // optional ("add up to two more ideas if they feel right"). Either way the
+  // invitee would hit the MIN_INTERESTS=3 blank-screen wall with no seeds of
+  // their own yet, so break it with a few real, verified-question domains from
+  // the SAME broad categories, not a random/invented set. `fromCatalog: true`
+  // keeps these out of named-invite auto-pre-selection (OnboardingFlow) so an
+  // app guess is never presented as if the friend picked it — it's offered as
+  // an addable suggestion chip, same as every link-sourced seed already is.
+  // Skipped when there's nothing to be adjacent to (no topics yet at all) —
+  // no fabricated suggestions.
+  if (preSeededInterests.length > 0 && preSeededInterests.length < 3) {
     const seededKeys = new Set(preSeededInterests.map((interest) => domainKey(interest.domain)));
     const broadCategories = [
       ...new Set(preSeededInterests.map((interest) => interest.broadCategory).filter(Boolean)),
@@ -153,6 +159,7 @@ export default async function OnboardingPage() {
         domain: suggestion.domain,
         broadCategory: suggestion.broadCategory ?? 'General Knowledge',
         rationale: null,
+        fromCatalog: true,
       });
     }
   }
