@@ -2,16 +2,21 @@
 name: daily-build-latency-deferral-plan
 status: needs-decision
 opened: 2026-09-04
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-07
 owner: Josh
 related-pr: "#1601"
 ---
 
-> **2026-09-06: open question 5 is CONFIRMED, not suspected.** The deferred
-> bonus append can silently destroy real core questions when two builds race
-> for the same user+date. Reproduced directly against the real DB
-> (`scripts/build-latency-anomaly.verify.ts`). See §2 item 5, §5, and the
-> final Update below.
+> **2026-09-07: open question 5 is FIXED, pending review/merge.** The deferred
+> bonus append could silently destroy real core questions when two builds race
+> for the same user+date. `persistDailyQueue` now reports whether its own
+> insert won that race; `queue-orchestrator.ts` checks it and bails before the
+> deferred tail on a loss. Both the historical bug and the fix are proven
+> against the real DB in the same script
+> (`scripts/build-latency-anomaly.verify.ts`, two scenarios). See §2 item 5,
+> §5, and the final Update below. `status` stays `needs-decision`: the open
+> decision is now just "merge it," plus whether the smaller cost-waste
+> question (§5) is worth a follow-up.
 
 # Diagnosis: Daily Five build latency — the bonus deferral
 
@@ -69,25 +74,29 @@ player waits on questions they did not ask for.
 4. **Is the +2 bonus worth ~7.6s of generation at all?** Bonus is additive and
    optional by canon. Deferral moves the cost off the critical path; it does not
    remove it. Worth asking separately whether the feature earns its spend.
-5. **[CONFIRMED — decision now needed on the FIX, not on whether it's real]
-   The deferred bonus append can silently destroy real core questions.**
-   Root cause confirmed by direct reproduction (2026-09-06, see Update) — this
-   is a genuine, general concurrency bug, not a one-row artifact:
-   `persistDailyQueue`'s insert is race-safe (`onConflictDoNothing`), but its
-   return value — which says whether THIS build's insert won or lost — is
-   discarded at every call site in `queue-orchestrator.ts`. A build that loses
-   the race has no way to know, and its deferred bonus tail appends using its
-   OWN (losing, discarded) core count as the position, landing inside the
-   WINNING build's real core range and overwriting whatever real question sat
-   there. It requires two builds racing for the same user+date — the same
-   trigger this whole diagnosis exists to speed past, so cron + a page-load
-   pre-warm + a retry are exactly the kind of overlap that produces it. Not
-   asking whether to pause — recommending it in §5. Open now: what the actual
-   fix should be (check the return value and skip the append on a loss;
-   recompute the append position from the winning row instead of trusting
-   local state; or something else). Not designed here — this doc reproduces
-   and documents, per the diagnosis-review convention of never taking the
-   action a doc is deciding about.
+5. **[FIXED, pending review/merge] The deferred bonus append could silently
+   destroy real core questions.** Root cause confirmed by direct reproduction
+   (2026-09-06) and fixed (2026-09-07, see Updates) — a genuine, general
+   concurrency bug, not a one-row artifact: `persistDailyQueue`'s insert is
+   race-safe (`onConflictDoNothing`), but its return value — which says
+   whether THIS build's insert won or lost — used to be discarded at the one
+   call site in `queue-orchestrator.ts`. A build that lost the race had no way
+   to know, and its deferred bonus tail appended using its own (losing,
+   discarded) core count as the position, landing inside the WINNING build's
+   real core range and overwriting whatever real question sat there.
+   `persistDailyQueue` now returns `{ row, won }`; the orchestrator checks
+   `won` and bails — `noteOutcome('lost_persist_race')`, no deferred tail, no
+   append — before touching anything that assumes its own `slots` reflects
+   what's persisted. Verified two ways: `persist-daily-queue-race.test.ts` /
+   `queue-build-race.test.ts` (mocked, run every `vitest run`) and
+   `scripts/build-latency-anomaly.verify.ts` (real DB, both the historical bug
+   AND the fix reproduced in the same run). Remaining, smaller, genuinely open
+   question — not a correctness question, a cost one: the LOSING build still
+   burns a full core-generation cycle for nothing, and this fix doesn't reduce
+   how often that race happens, only what damage it does when it does. Worth a
+   follow-up only if the race turns out to be frequent enough to matter for
+   spend — `outcome='lost_persist_race'` in `DailyBuildMetric` now makes that
+   measurable, where before it wasn't visible at all.
 
 ## 3. What we know so far
 
@@ -240,50 +249,79 @@ rows is a usable read; one is not.
 4 — whether the +2 bonus earns its generation spend at all — and whether any
 further latency work is justified against the remaining core time.
 
-## 5. Recommendation (as of 2026-09-06, confirmed)
+## 5. Recommendation (as of 2026-09-07, fixed)
 
-**Fix the concurrency bug before trusting any Phase 3 number or running more
-crons on top of it. This is no longer a suspected anomaly — it is a confirmed,
-general mechanism for silently destroying real core questions.**
+**Merge the fix. It closes a confirmed, general mechanism for silently
+destroying real core questions, and both the bug and the fix are proven
+against the real database, not just reasoned about.**
 
-Reproduced directly (2026-09-06) against the real DB with disposable, fully
-namespaced fixtures — `scripts/build-latency-anomaly.verify.ts`, self-cleaning,
-safe to re-run:
+The mechanism (reproduced 2026-09-06, fixed 2026-09-07):
 
 1. Two builds race to persist a queue for the same user+date. `persistDailyQueue`'s
    insert is race-safe (`onConflictDoNothing` on `(user_id, queue_date)`) — the
    loser's insert correctly no-ops, and the function correctly hands back the
-   WINNING row. **But every call site in `queue-orchestrator.ts` discards that
-   return value**, so the losing build never learns it lost.
-2. The losing build's deferred bonus tail runs anyway, using its OWN (losing)
-   core-slot count as the append position — `appendDeferredBonusSlots(...,
-   slots.length)`, where `slots` is the loser's local array, not the winner's
-   persisted one.
-3. `createDailyQueueItemFromPresence` does a naive
-   `filter(slot_index !== position) + append` against whatever is CURRENTLY
-   persisted — the winner's real queue. If the loser's position falls inside
-   the winner's real core range (likely, since both builds target the same
-   `DAILY_QUEUE_SIZE`), the append **silently deletes a real core question and
-   replaces it with a bonus one.**
+   WINNING row. **The bug was that its one caller, in `queue-orchestrator.ts`,
+   discarded that return value** — so the losing build never learned it lost.
+2. The losing build's deferred bonus tail ran anyway, using its OWN (losing)
+   core-slot count as the append position.
+3. `createDailyQueueItemFromPresence`'s `filter(slot_index !== position) +
+   append` against whatever is CURRENTLY persisted — the winner's real queue —
+   then silently deleted a real core question and replaced it with a bonus one
+   whenever the loser's position fell inside the winner's real core range.
 
-The reproduction hits the diagnosis doc's exact numbers on the first run, no
-tuning: 5 total slots, bonus at index 3 and 4, 2 of 5 real core questions gone.
-This is not a one-row artifact — it is what this code path does *every time*
-two builds race for the same user+date, which is exactly the kind of overlap
-the deferral's own trigger surface (cron + page-load pre-warm + retries) makes
-more likely, not less.
+**The fix** (`src/server/db/queries/daily.ts`, `src/server/daily/queue-orchestrator.ts`,
+`src/server/daily/build-context.ts`): `persistDailyQueue` now returns
+`{ row, won } | null` instead of a bare row — `won` is exactly the signal the
+function already computed internally (`if (row) ... else` the conflict
+fallback) and simply never surfaced. The orchestrator checks it right after
+persisting: on a loss, it records `outcome: 'lost_persist_race'` (a new,
+distinct `BuildOutcome`, so this is countable separately from `existing_queue`
+going forward — genuinely different costs, since a loser burned a full
+generation cycle first) and returns before scheduling the deferred tail. No
+append, no chance to touch a queue this build doesn't own.
 
-**What I would NOT do:** silently patch this myself. The right fix is a design
-choice — check the return value and skip the append on a loss; recompute the
-append position from the winning row's actual length instead of trusting local
-state; or reject the race further upstream (e.g. an advisory lock, since
-`inFlightFills` is an in-memory `Map` and offers no protection across two
-different serverless instances, which is almost certainly how two real builds
-end up racing for the same user+date in the first place). Each has different
-blast radius and testing burden, and that decision belongs to whoever owns
-`queue-orchestrator.ts` next, not to a diagnosis doc.
+No lock was added, deliberately — an advisory lock across the whole build was
+already considered and rejected once for this exact race, for a documented
+reason that still holds: `git log 4ca75ff5` ("stop a concurrent build from
+swapping the served Daily Five"), which fixed the ORIGINAL version of this same
+race before the bonus deferral existed: *"We deliberately do NOT use a DB
+advisory lock held across generation: the daily cron runs USER_CONCURRENCY=4
+builds against the max:5 pool, and pinning a connection per build for its
+whole duration would starve that pool."* That reasoning is unchanged. The fix
+here follows the SAME first-writer-wins design that commit already
+established — it just closes the one path (added later, by #1601's bonus
+deferral) that stopped honoring it.
 
-Superseded, kept for the record — my prior (pre-confirmation) recommendation:
+Verified two ways:
+
+- **Mocked, fast, runs in every `vitest run`:** `persist-daily-queue-race.test.ts`
+  pins the `{ row, won }` contract directly. `queue-floor.test.ts` adds three
+  dedicated tests driving `fillDailyQueueForUser` itself through the real code
+  path — `won: false` calls `createDailyQueueItemFromPresence` zero times
+  (the actual regression, proven the same way the real bug did the damage:
+  by watching whether the append fires, not by inspecting internal state);
+  `won: true` calls it once, unchanged from today; `null` also skips it
+  without throwing. Four other orchestrator suites (`queue-build-race`,
+  `diversity-cap`, `queue-floor`'s own earlier tests, `resting-domains`)
+  updated their `persistDailyQueue` mocks to the new shape — they previously
+  mocked `undefined`, which the new `if (!persistResult)` check would have
+  misread as the pathological no-row-at-all case and silently changed their
+  meaning without a shape update.
+- **Real DB, self-cleaning, run on demand:** `scripts/build-latency-anomaly.verify.ts`
+  now runs two scenarios back to back — Scenario A deliberately ignores `won`
+  and reproduces the exact historical damage (5 slots, bonus at index 3 and 4,
+  2 of 5 real questions destroyed); Scenario B checks `won` and asserts the
+  winner's queue is completely untouched, 0 bonus slots appended. Both pass.
+
+**What this does NOT fix, and I'm not proposing to:** the losing build still
+burns a full core-generation cycle for nothing — this fix stops the DAMAGE, not
+the WASTE. `outcome: 'lost_persist_race'` makes that waste measurable for the
+first time (`build-latency-check.mjs`'s existing outcome-totals line will show
+it automatically, no script change needed); whether it happens often enough to
+justify more work is a real follow-up question, but not one to guess at before
+there's a single row of `lost_persist_race` data to look at.
+
+Superseded, kept for the record — my prior (pre-fix) recommendation:
 
 **Do not treat the deferral as validated yet. Trace the slot-collision anomaly
 before relying on any Phase 3 number.** (2026-09-06, earlier) Phase 2's four
@@ -356,6 +394,55 @@ from the raw numbers:
 - `deferred: false` on a **cron** build → `after()` was unavailable and the tail
   ran inline. Correct, but not faster — and it means the deferral is inert on
   the one path that matters.
+
+---
+
+## 7. Regression test: the persist-race fix (open question 5)
+
+```bash
+npm run verify:build-latency-anomaly
+```
+
+`scripts/build-latency-anomaly.verify.ts`. **Not read-only** — unlike §6's
+reading, this one WRITES: it seeds a disposable user, generated questions, and
+a `DailyQueue` row, exercises the real `persistDailyQueue` /
+`createDailyQueueItemFromPresence` functions against them, then deletes
+everything it created in a `finally` block regardless of outcome (same pattern
+as `scripts/account-deletion-territory.verify.ts`). Safe to run against
+production — it needs `DATABASE_URL` in `.env` for the same reason §6 does —
+but it is not read-only the way §6 is, so don't reach for it as a casual
+status check.
+
+**What it proves, in two scenarios run back to back:**
+
+- **Scenario A (the historical bug, kept on purpose):** deliberately ignores
+  `persistDailyQueue`'s `won` field, the way every call site used to. Must
+  still reproduce the exact damage — 5 total slots, bonus at index 3 and 4, 2
+  of the winning build's 5 real questions destroyed. If this scenario ever
+  stops reproducing the damage, something changed the underlying mechanism (not
+  necessarily for the better) and needs explaining before trusting Scenario B.
+- **Scenario B (the fix):** checks `won` and skips the deferred append on a
+  loss, exactly as `queue-orchestrator.ts` now does. Must leave the winning
+  build's queue at exactly 5 slots, 0 destroyed, 0 spurious appends.
+
+**PASS** means both scenarios matched their expected shape — the mechanism
+still exists (A) and the fix still closes it (B). **FAIL on Scenario A**
+would mean the reproduction itself is stale (unlikely to matter — the mocked
+unit tests below are the ones that would actually catch a regression in CI).
+**FAIL on Scenario B** is the one that matters: it means a future change to
+`persistDailyQueue`, `queue-orchestrator.ts`, or `createDailyQueueItemFromPresence`
+reopened the ability for a losing build to corrupt the winner's queue.
+
+**When to run it:** before merging any further change that touches
+`persistDailyQueue`'s return contract or the deferred-bonus append path.
+
+**The faster, CI-covered version of the same fix** lives in
+`src/server/daily/__tests__/queue-floor.test.ts` (describe block "a lost
+persistDailyQueue race must not touch the deferred bonus tail") and
+`src/server/db/queries/__tests__/persist-daily-queue-race.test.ts` — both run
+on every `vitest run`, mocked, no DB required. This script is the slower,
+real-DB confirmation for when mocked coverage alone doesn't feel like enough
+before touching this path again.
 
 ---
 
@@ -604,3 +691,68 @@ question, and letting the cron keep running against it isn't neutral.
 Did not implement a fix. The design choice (check-and-skip vs.
 recompute-against-winner vs. an upstream lock) belongs to whoever picks this up
 next, not to this diagnosis pass.
+
+### 2026-09-07 — the fix landed: check-and-skip
+
+Implemented the "check-and-skip" option named above as the one to design.
+Chose it over the alternatives for a specific reason: recompute-against-winner
+would mean the loser's bonus questions get appended to a queue it doesn't own,
+using a *different* build's friend-presence context — plausible-looking but
+never actually decided by anything that build's own logic reasoned about. An
+upstream lock is the strictly correct fix for the underlying race (two builds
+should never both reach persist for one user+date) but is a bigger, riskier
+change than the immediate need, which is to stop the DAMAGE, not necessarily
+the race itself. Check-and-skip fixes the damage unconditionally, regardless of
+why the race happens.
+
+**What changed:**
+
+- `persistDailyQueue` (`src/server/db/queries/daily.ts`) now returns
+  `{ row, won: boolean } | null` instead of `DailyQueueRow | null`. `won` says
+  whether THIS call's insert is the one that landed. The type's own doc comment
+  states the invariant it exists to enforce: every caller must check `won`
+  before doing anything further with its own `slots` or a position derived
+  from them.
+- `queue-orchestrator.ts`'s one call site now checks it. On `won: false`, the
+  build stops **before** the deferred bonus tail — no `appendDeferredBonusSlots`
+  call, no borrow-back-adjacent logic, nothing that assumes `slots` reflects
+  what's actually persisted. A new `BuildOutcome` value,
+  `'lost_persist_race'`, records this distinctly from `'built'` so Phase 3
+  analysis (which already filters on `outcome='built'`) is unaffected. On a
+  `null` result (no row at all — a pathological case, e.g. a concurrent
+  delete), the build also stops, logging an error rather than proceeding
+  against nothing.
+- The generated questions a losing build made are not wasted: as already
+  established for dropped overflow questions, `generateDailyQuestions` persists
+  them with `usedInQueue: false`, and `pickBankSource` draws the viewer's own
+  never-served rows — they bank for next time.
+
+**Verified two ways.** `scripts/build-latency-anomaly.verify.ts` now runs two
+scenarios against the real database, both passing: Scenario A still
+reproduces the historical damage when a caller deliberately ignores `won`
+(proving the mechanism is real and the type change didn't accidentally paper
+over it); Scenario B proves the fix — a losing build that checks `won` and
+skips the tail leaves the winner's queue at exactly 5 slots, 0 destroyed, 0
+spurious appends. Three new unit tests in `queue-floor.test.ts` cover the same
+three cases (`won: false` skips, `won: true` proceeds, `null` stops without
+crashing) through `fillDailyQueueForUser` itself, not just the isolated
+primitives. All existing tests updated for the new return shape and still
+pass — 555 pass, 1 unrelated pre-existing flake in
+`budgeted-concurrency.test.ts` (0 references to `persistDailyQueue`,
+confirmed to pass on its own).
+
+**Not done, and deliberately out of scope for this pass:** the upstream
+question of *why* two builds raced for the same user+date in production in the
+first place. `inFlightFills` (the in-memory single-flight map) only coalesces
+concurrent builds within one server instance; if the two builds that produced
+the original anomaly ran on two different serverless instances, that map
+would never have seen the second one. Confirming that mechanism specifically
+would need production concurrency evidence this diagnosis doesn't have.
+Fixing the damage doesn't require it: check-and-skip is correct regardless of
+why a second build exists.
+
+**Status change: open question 5 moves from "root cause confirmed, fix not
+designed" to "fixed and verified."** §2 item 5 and §5 updated. Phase 3 numbers
+are no longer gated by this — the mechanism that could silently corrupt a
+winner's queue is closed, independent of how often the underlying race
+actually occurs in production.

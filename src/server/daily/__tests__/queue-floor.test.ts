@@ -131,7 +131,7 @@ beforeEach(() => {
 
   mocks.isGenericSubcategory.mockReturnValue(false);
 
-  mocks.persistDailyQueue.mockResolvedValue(undefined);
+  mocks.persistDailyQueue.mockResolvedValue({ row: { id: 'mock-queue-id' } as never, won: true });
   mocks.createDailyQueueItemFromPresence.mockResolvedValue({ slots: [] });
 });
 
@@ -513,5 +513,64 @@ describe('target_size is the INTENDED size, never the achieved one', () => {
       expect(call).toHaveLength(4);
       expect(typeof call[3]).toBe('number');
     }
+  });
+});
+
+describe('a lost persistDailyQueue race must not touch the deferred bonus tail', () => {
+  // CONFIRMED PRODUCTION DEFECT (diagnosis/daily-build-latency-deferral-plan.md,
+  // open question 5; reproduced against the real functions in
+  // scripts/build-latency-anomaly.verify.ts). persistDailyQueue's insert is
+  // race-safe (onConflictDoNothing keyed on user_id+queue_date), but its
+  // return value -- which says whether THIS call's insert won or lost -- used
+  // to be discarded. A losing build had no way to know, so its deferred bonus
+  // tail proceeded using its OWN (losing, irrelevant) core count as the
+  // append position, landing inside the WINNING build's real core range and
+  // silently destroying real questions there.
+  it('skips the deferred bonus append entirely when persistDailyQueue reports won=false', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+    // A concurrent build already won the insert for this user+date.
+    mocks.persistDailyQueue.mockResolvedValue({
+      row: { id: 'winning-queue-id' } as never,
+      won: false,
+    });
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.persistDailyQueue).toHaveBeenCalledTimes(1);
+    // The whole point: nothing appends against a queue we don't own.
+    expect(mocks.createDailyQueueItemFromPresence).not.toHaveBeenCalled();
+  });
+
+  it('still runs the full build, including the bonus tail, when persistDailyQueue reports won=true', async () => {
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([friendDomain('Chess')]);
+    mocks.generateBonusQuestionsForDomains.mockResolvedValue([friendQ('Chess')]);
+    mocks.persistDailyQueue.mockResolvedValue({
+      row: { id: 'our-own-queue-id' } as never,
+      won: true,
+    });
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.createDailyQueueItemFromPresence).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a null persistDailyQueue result (no row at all) as a hard stop, not a crash', async () => {
+    // Pathological: onConflictDoNothing fired but the existing row is also
+    // gone (e.g. a concurrent delete). Nothing safe to serve or append to.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('q1'), genq('q2'), genq('q3'), genq('q4'), genq('q5'),
+    ]);
+    mocks.persistDailyQueue.mockResolvedValue(null);
+
+    await expect(fillDailyQueueForUser(USER)).resolves.toBeUndefined();
+
+    expect(mocks.createDailyQueueItemFromPresence).not.toHaveBeenCalled();
   });
 });

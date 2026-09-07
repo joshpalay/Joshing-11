@@ -1464,11 +1464,56 @@ async function buildDailyQueueForUser(
 
   // A0: record the size actually persisted, for the build metric.
   noteFinalSize(slots.length);
-  await persistDailyQueue(userId, slots, generatedQuestionIds);
+  const persistResult = await persistDailyQueue(userId, slots, generatedQuestionIds);
   // A0 (§2): the queue is now readable. user_visible_ms stops here; span_ms
   // keeps running through the deferred bonus work below, and the difference
   // between them on a single row is what the deferral bought.
   noteQueuePersisted();
+
+  // CONFIRMED PRODUCTION DEFECT (diagnosis/daily-build-latency-deferral-plan.md,
+  // open question 5), fixed here. persistDailyQueue's insert is race-safe
+  // (onConflictDoNothing keyed on user_id+queue_date), but its RETURN VALUE --
+  // which says whether THIS call's insert won or lost -- used to be discarded.
+  // A losing build had no way to know it lost, so its deferred bonus tail below
+  // proceeded using its OWN (losing) core count as the append position via
+  // appendDeferredBonusSlots -> createDailyQueueItemFromPresence, which
+  // re-reads whatever queue is CURRENTLY persisted (now the winner's) and does
+  // a naive filter+append at that position. When the loser's position fell
+  // inside the winner's real core range, the append silently DESTROYED real
+  // questions there. Reproduced deterministically in
+  // scripts/build-latency-anomaly.verify.ts (no timing/race needed; the
+  // outcome of onConflictDoNothing depends only on call order).
+  //
+  // The fix: if we lost, this build's own slots were never served. Bail before
+  // the deferred tail -- do not touch bonus, do not run borrow-back logic,
+  // nothing that assumes `slots` reflects what's actually persisted. The
+  // generated questions this build made are not wasted: generateDailyQuestions
+  // already persisted them with usedInQueue=false, so they bank for next time
+  // exactly like a dropped overflow question does (see the comment at the
+  // core/bonus split above).
+  if (!persistResult) {
+    // Pathological: no row exists for this user+date at all, even after a
+    // conflict (e.g. a concurrent delete raced in between). Nothing to serve
+    // and nothing safe to do with `slots`.
+    noteOutcome('error');
+    console.error('[daily/queue-orchestrator] persistDailyQueue returned no row after conflict; nothing to serve', {
+      userId,
+    });
+    return;
+  }
+  if (!persistResult.won) {
+    noteOutcome('lost_persist_race');
+    console.warn(
+      "[daily/queue-orchestrator] lost the persist race for this user+date; serving the winning queue, discarding this build's content",
+      {
+        userId,
+        winningQueueId: persistResult.row.id,
+      },
+    );
+    const buildCtx = currentBuildContext();
+    if (buildCtx) await insertDailyBuildMetric(buildCtx);
+    return;
+  }
 
   // ── The deferral (B'). ────────────────────────────────────────────────────
   // The queue is readable; everything below is off the player's critical path.
