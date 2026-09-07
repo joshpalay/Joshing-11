@@ -559,3 +559,68 @@ assume any given DML is blocked or allowed without trying it.
    still open.
 3. Phase 2 eval (`domain-drift.eval.test.ts`) still unrun — same API-key
    constraint as item 1.
+
+### 2026-09-07 (later) — LLM half of the bank sweep run: 507 more rows demoted
+
+The blocker on item 1 above resolved: `.env.local` had an `ANTHROPIC_API_KEY`
+this whole time, but every script in the repo loads plain `.env` via
+`import 'dotenv/config'`, which never reads `.env.local` — that's a Next.js
+convention `dotenv` doesn't know about. First key found in there was also
+independently invalid (`401 authentication_error` from Anthropic, confirmed
+via a live call, not a guess) — Josh rotated it and the retry worked.
+Corrected in the `prod-db-write-access` memory.
+
+Ran the full sweep (`npx tsx -r dotenv/config scripts/sweep-bank-quality.ts
+--apply dotenv_config_path=.env.local`) against the 2,221 rows the
+deterministic pass had already cleared. Verified against the DB, not just
+script stdout:
+
+```
+quality-gate findings:  507 (demoted)
+off-domain findings:     24 (reported, NOT demoted -- see below)
+still_servable:       1,714    (2,324 - 610 total demoted, both passes)
+```
+
+Breakdown of the 507 by defect (`verification_reason ILIKE`):
+
+| Defect | Count |
+|---|---|
+| **DEFINITION_SUPPLIED** (new, this PR) | **253** |
+| GENERIC_AT_TIER | 70 |
+| SELF_ANSWERING | 49 |
+| ANSWER_LEAKED | 42 |
+| MULTI_PART | 39 |
+| FALSE_PREMISE | 30 |
+| MISLEADING_SETUP | 19 |
+| OPINION_OR_VAGUE | 5 |
+
+**This is a bigger finding than the deterministic pass suggested.** Combined
+with yesterday's 103 (62 full-leak + 41 bad-shape), **610 of 2,324 servable
+bank rows were defective — 26.2% of the entire bank**, all of it re-serve
+stock that predates any gate ever touching it. `DEFINITION_SUPPLIED` alone
+(the fix built specifically for the 19th-Amendment class) accounts for
+253 rows on its own — the single largest category, and confirmation that
+hole was real and large, not a one-off.
+
+**Real cost, from `LlmUsageEvent`** (not the earlier estimate): 223 Haiku
+calls, 1,042,596 input + 49,817 output tokens, **$1.29**, ~13 minutes
+wall-clock (14:51–15:04 UTC). Close to the ~$1.47 / ~10 min estimate.
+
+**The 24 OFF_DOMAIN hits were found but deliberately NOT demoted** — the
+sweep script requires `--include-off-domain` to act on those, since that
+judgment still has no precision data behind it (Phase 2's eval, item 3
+below). They're sitting in the sweep's stdout log for whenever that eval
+clears the bar.
+
+Fix 1 (gating the bank-pick path at serve time) now matters more than it
+looked yesterday: it's the only thing standing between 26% bank-defect-rate
+stock and a player, going forward.
+
+### Next steps (revised again)
+1. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
+   still open.
+2. Phase 2 eval (`domain-drift.eval.test.ts`) — a key now works locally, so
+   this is unblocked. Running it would also validate the 24 off-domain hits
+   found above before anyone decides whether to demote them.
+3. Once Phase 2 passes, re-run the sweep with `--include-off-domain` to
+   clear those 24 (plus whatever the full-corpus pass finds beyond them).
