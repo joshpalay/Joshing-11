@@ -189,7 +189,7 @@ function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
     <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
       <p className="text-[15px] leading-6 text-black/75">
-        {inviterFirstName(invite.inviterName)} invited you to Joshing, a new trivia game. We just
+        {inviterFirstName(invite.inviterName)} invited you to Joshing, a trivia game built for you. We just
         need to verify your phone number and then you can start playing.
       </p>
       {topics.length > 0 ? (
@@ -660,8 +660,8 @@ export default function LoginPanel({
             <>
               <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
                 <p className="text-[15px] leading-6 text-black/75">
-                  {inviterFirstName(invitePrefill.inviterName)} invited you to Joshing, a new trivia
-                  game. We just need to send a text to confirm it’s you:
+                  {inviterFirstName(invitePrefill.inviterName)} invited you to Joshing, a trivia
+                  game built for you. We just need to send a text to confirm it’s you:
                 </p>
                 <p className="text-[20px] leading-7 font-semibold tracking-wide text-[var(--brand-navy)]">
                   {formatUsPhoneInput(invitePrefill.inviteePhone)}

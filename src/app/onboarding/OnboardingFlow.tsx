@@ -20,6 +20,15 @@ export type ProposedInterest = {
   domain: string
   broadCategory: string
   rationale?: string | null
+  /**
+   * True for a topic the app added to top up a sparse invite (B-INVITE-TOPUP),
+   * never one the inviter actually typed. Must never be pre-selected — a named
+   * invite's own seeds ARE the inviter's picks and get auto-selected below, but
+   * a catalog-guessed addition is exactly the "invent personal meaning" failure
+   * mode this product avoids, so it's offered as a suggestion chip like a
+   * link-sourced seed, regardless of seedSource.
+   */
+  fromCatalog?: boolean
 }
 
 type SelectedInterest = {
@@ -275,6 +284,7 @@ export default function OnboardingFlow({
   >(() =>
     seedSource === 'named'
       ? preSeededInterests
+          .filter((interest) => !interest.fromCatalog)
           .flatMap((interest) => {
             const selected = toSelected(interest)
             return selected ? [selected] : []
@@ -820,10 +830,10 @@ export default function OnboardingFlow({
                 </h1>
                 <p className="text-muted-foreground text-base leading-7">
                   {!hasSeeds
-                    ? "A new trivia game. Add a few topics you'd want questions about, and we'll build your first round from them."
+                    ? "A trivia game built for you. Add a few topics you'd want questions about, and we'll build your first round from them."
                     : seedSource === 'link'
-                      ? `A new trivia game. Here are a few from ${displayInviterName} — take any that are yours, or add your own.`
-                      : "A new trivia game. Here are some topics we picked for you — remove any that don't fit, or add your own."}
+                      ? `A trivia game built for you. Here are a few from ${displayInviterName} — take any that are yours, or add your own.`
+                      : "A trivia game built for you. Here are some topics we picked for you — remove any that don't fit, or add your own."}
                 </p>
               </div>
 

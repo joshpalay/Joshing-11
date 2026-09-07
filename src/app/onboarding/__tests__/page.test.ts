@@ -359,8 +359,8 @@ describe('OnboardingPage guard', () => {
     expect(result.props?.seedSource).toBe('link')
     expect(result.props?.preSeededInterests).toEqual([
       { domain: 'Sondheim', broadCategory: 'Music', rationale: null },
-      { domain: 'Kander & Ebb', broadCategory: 'Music', rationale: null },
-      { domain: 'Cole Porter', broadCategory: 'Music', rationale: null },
+      { domain: 'Kander & Ebb', broadCategory: 'Music', rationale: null, fromCatalog: true },
+      { domain: 'Cole Porter', broadCategory: 'Music', rationale: null, fromCatalog: true },
     ])
   })
 
@@ -450,6 +450,44 @@ describe('OnboardingPage guard', () => {
     expect(getInviteLinkSeedTopicsMock).not.toHaveBeenCalled()
     expect(result.props?.seedSource).toBe('named')
     expect(result.props?.preSeededInterests).toEqual([])
+  })
+
+  it('breaks the blank-topic wall for a thin NAMED invite too, marking the top-up as fromCatalog', async () => {
+    // AskFriendForDomain seeds the asked-about domain and leaves the other two
+    // slots genuinely optional, so a named (SMS) invite can arrive with just
+    // one topic the same way a tagged link does. The catalog top-up already
+    // built for links must also cover this path — but the added topics must
+    // carry fromCatalog so OnboardingFlow never auto-pre-selects an app guess
+    // as if the friend had chosen it.
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1', id: 's1' })
+    getUserOnboardingProfileMock.mockResolvedValueOnce({
+      id: 'u1',
+      onboardingComplete: false,
+    })
+    getPreSeededInterestsForUserMock.mockResolvedValueOnce({
+      inviterName: 'Duo',
+      inviteeDisplayName: null,
+      interests: [{ label: 'Michigan football', broadCategory: 'Sports', description: null }],
+    })
+    getCatalogSuggestionsMock.mockResolvedValueOnce([
+      { domain: 'College football rivalries', broadCategory: 'Sports' },
+      { domain: 'NFL history', broadCategory: 'Sports' },
+    ])
+
+    const result = await callPage()
+
+    expect(getInviterForUserMock).not.toHaveBeenCalled()
+    expect(getCatalogSuggestionsMock).toHaveBeenCalledWith(
+      ['Sports'],
+      new Set(['michigan football']),
+      2,
+    )
+    expect(result.props?.seedSource).toBe('named')
+    expect(result.props?.preSeededInterests).toEqual([
+      { domain: 'Michigan football', broadCategory: 'Sports', rationale: null },
+      { domain: 'College football rivalries', broadCategory: 'Sports', rationale: null, fromCatalog: true },
+      { domain: 'NFL history', broadCategory: 'Sports', rationale: null, fromCatalog: true },
+    ])
   })
 
   it('redirects to /login when there is neither a FriendInvitation nor an invite-link friendship', async () => {
