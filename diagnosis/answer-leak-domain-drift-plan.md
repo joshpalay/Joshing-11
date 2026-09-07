@@ -847,3 +847,68 @@ open items here:
 `PARTIAL_ANSWER_LEAK_ENABLED`; `DOMAIN_DRIFT_DROP_ENABLED` (now with a
 concrete in-progress mitigation, see WIP item 2 above); the "why does Woolf
 keep generating Joyce" investigation, still not started.
+
+### 2026-09-08 — the two WIP items above finished, tested against live Phase 2 fixtures, and pushed
+
+**GateDropStat note above: worth flagging up, not just noting.** The
+229 `failed_open` spike on 2026-09-07 is very likely the credit-exhaustion
+incident's error retries writing into the same daily counter live generation
+uses, per the previous entry's tracing. Anyone reading that counter as a
+"the quality gate is failing on real player traffic" signal should discount
+2026-09-07 specifically until this is confirmed with certainty.
+
+**Item 1 (the `model` bug) and item 2 (the off-domain second opinion) are
+both finished, tested, and pushed** — no longer uncommitted WIP:
+
+- `PARTIAL_ANSWER_LEAK_ENABLED` blocker: fixed. `model` removed from
+  `GENERIC_HEAD_NOUNS`, with a regression test reproducing the exact
+  "model year" failure. This was the only one of the 7 Phase 1 items that
+  actually blocked this flag — the other 6 concern the answer-shape gate,
+  which is already on and needs no action.
+- `DOMAIN_DRIFT_DROP_ENABLED` mitigation: the lexical "corroboration"
+  attempt mentioned in the last entry was tested against the 24 real
+  off-domain hits from 2026-09-07 and **failed outright on Mrs. Dalloway**
+  — a genuinely correctly-filed row — because a specific work's fact_key
+  names the work, not its author, so "shares no words with the domain name"
+  is not a valid drift signal. Deleted rather than shipped broken.
+  Replaced with a real second, independently-worded LLM opinion
+  (`src/server/quality/off-domain-second-opinion.ts`), asked only about
+  rows the primary gate already flagged, reasoning fresh from the raw
+  question/answer text — not the fact_key, not the first gate's own
+  reasoning. Wired into both live call sites in `generate-questions.ts`
+  (`findQualityFailures` now returns `offDomainConfirmed` alongside
+  `offDomain`; `isDomainDriftDropEnabled` gates on the confirmed subset,
+  never the raw one) and into `sweep-bank-quality.ts`'s
+  `--include-off-domain` path.
+
+**Validated live against the actual production false positive, not just
+mocks or the Phase 2 fixtures**: replayed the real Mozart row
+(`fact_key="mozart-clarinet-concerto-basset-clarinet"`, the exact false
+positive the primary gate produced on 2026-09-07) through the full pipeline
+end-to-end with `DOMAIN_DRIFT_DROP_ENABLED=true` — the second opinion
+correctly overturns it, while still confirming genuine Joyce-under-Woolf
+drift in the same call. Also re-ran the full Phase 2 eval suite: still 9/11
+(the 2 failures are the same pre-existing Romantic Opera edge case from
+2026-09-07, unrelated to this change, not a regression).
+
+Full test suite: 2,627 passed. Typecheck, lint, all six ratchets clean.
+Pushed to branch `claude/domain-drift-safety-net`; PR not yet opened as of
+this entry (see Next steps).
+
+**This meaningfully de-risks `DOMAIN_DRIFT_DROP_ENABLED`** — the specific
+failure mode that made it the one gate I'd resist flipping (a wrongly
+demoted, correctly-filed question, invisible in production forever) now
+requires TWO independent LLM calls to agree before anything drops. It's
+still worth Josh's judgment call before flipping, not an autonomous
+decision, but the evidence behind it is now substantially stronger than a
+single 92%-precision number on a small sample.
+
+### Next steps
+1. Open the PR for `claude/domain-drift-safety-net`.
+2. Josh: flip `PARTIAL_ANSWER_LEAK_ENABLED` (Vercel env var, production —
+   I can't set this myself, no MCP tool exposes env var writes). The one
+   blocking bug is fixed; the other 6 disagreement items don't block it.
+3. Josh: decide on `DOMAIN_DRIFT_DROP_ENABLED` now that the false-positive
+   mitigation is built and validated against the real 2026-09-07 case.
+4. The "why does Woolf keep generating Joyce" investigation — still not
+   started.
