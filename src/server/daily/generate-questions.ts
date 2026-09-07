@@ -47,6 +47,7 @@ import {
   type RecentFactKeyEntry,
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { confirmOffDomain } from '@/server/quality/off-domain-second-opinion';
 import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
 import {
   coCalibrateRaisedEstimates,
@@ -846,8 +847,23 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
   reasons: Record<number, string>;
   /** OFF_DOMAIN hits, held OUT of toDrop — see isDomainDriftDropEnabled. */
   offDomain: Set<number>;
+  /**
+   * The subset of `offDomain` a SECOND, independently-worded opinion also
+   * confirms (see off-domain-second-opinion.ts). This is what
+   * isDomainDriftDropEnabled should gate a drop on, never raw `offDomain` —
+   * a lexical-only "corroboration" attempt was tried and rejected before
+   * shipping (it failed on Mrs. Dalloway, see diagnosis doc), so this is an
+   * LLM check, not a free heuristic. Empty whenever `offDomain` is empty or
+   * the flag is off (no point paying for a check nothing will act on).
+   */
+  offDomainConfirmed: Set<number>;
 }> {
-  const empty = { toDrop: new Set<number>(), reasons: {}, offDomain: new Set<number>() };
+  const empty = {
+    toDrop: new Set<number>(),
+    reasons: {},
+    offDomain: new Set<number>(),
+    offDomainConfirmed: new Set<number>(),
+  };
   if (generated.length === 0) return empty;
   const client = getAnthropicClient();
   if (!client) return empty;
@@ -927,14 +943,43 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
         })),
       });
     }
-    return { toDrop, reasons, offDomain };
+    // Second opinion, only worth paying for when the flag could actually act
+    // on the answer — while the flag is off, offDomain is measured but never
+    // dropped either way, so nothing here can change the outcome.
+    let offDomainConfirmed = new Set<number>();
+    if (offDomain.size > 0 && isDomainDriftDropEnabled()) {
+      const offDomainList = [...offDomain];
+      const confirmedLocal = await confirmOffDomain(
+        offDomainList.map((i) => ({
+          canonicalSubcategory: generated[i].canonical_subcategory,
+          questionText: generated[i].question_text,
+          answer: generated[i].answer,
+        })),
+      );
+      offDomainConfirmed = new Set(offDomainList.filter((_, localIdx) => confirmedLocal.has(localIdx)));
+      const heldBack = offDomainList.filter((i) => !offDomainConfirmed.has(i));
+      if (heldBack.length > 0) {
+        console.warn(
+          '[daily/generate-questions] second opinion disagrees — holding these back from the drop despite the flag being on',
+          {
+            indices: heldBack,
+            detail: heldBack.map((i) => ({
+              domain: generated[i].canonical_subcategory,
+              factKey: generated[i].fact_key,
+              questionPreview: generated[i].question_text.slice(0, 120),
+            })),
+          },
+        );
+      }
+    }
+    return { toDrop, reasons, offDomain, offDomainConfirmed };
   } catch (err) {
     // Fail open: don't block the daily queue on a Haiku outage.
     console.warn('[daily/generate-questions] quality gate failed', {
       error: err instanceof Error ? err.message : String(err),
     });
     recordGateFailedOpen('quality');
-    return { toDrop: new Set(), reasons: {}, offDomain: new Set() };
+    return { toDrop: new Set(), reasons: {}, offDomain: new Set(), offDomainConfirmed: new Set() };
   }
 }
 
@@ -2077,6 +2122,10 @@ export async function generateDailyQuestions(
   // Virginia Woolf" case). Held separate from qualityResult.toDrop so the new
   // defect can be measured before it is allowed to cost supply.
   const offDomain = qualityResult.offDomain;
+  // The subset a SECOND, independent opinion also agrees on — see
+  // off-domain-second-opinion.ts. This, not raw offDomain, is what
+  // isDomainDriftDropEnabled should ever be allowed to drop.
+  const offDomainConfirmed = qualityResult.offDomainConfirmed;
 
   // Rule 3 ("ONE CLEAN ANSWER") backstop. A paragraph-length answer grades
   // unpredictably AND blinds the answer-leak gate above, so it is dropped here
@@ -2173,10 +2222,12 @@ export async function generateDailyQuestions(
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
     ...answerShape.toDrop,
-    // offDomain is deliberately NOT unioned unconditionally — see the OFF_DOMAIN
-    // block above. It is measured and logged by default; flipping
-    // DOMAIN_DRIFT_DROP_ENABLED is what promotes it to a drop.
-    ...(isDomainDriftDropEnabled() ? offDomain : []),
+    // offDomainConfirmed (NOT raw offDomain) is deliberately the only thing
+    // unioned here, and only when the flag is on — a row the primary gate
+    // flags but the second opinion doesn't confirm stays measured, never
+    // dropped, regardless of the flag. See findQualityFailures /
+    // off-domain-second-opinion.ts.
+    ...(isDomainDriftDropEnabled() ? offDomainConfirmed : []),
   ]);
   if (allDrops.size > 0) {
     generated = generated.filter((_, i) => !allDrops.has(i));
@@ -3375,6 +3426,7 @@ export async function screenGroundedBatch(questions: LlmQuestion[]): Promise<Set
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
     ...answerShape.toDrop,
-    ...(isDomainDriftDropEnabled() ? qualityResult.offDomain : []),
+    // Same second-opinion gate as the per-user path — see findQualityFailures.
+    ...(isDomainDriftDropEnabled() ? qualityResult.offDomainConfirmed : []),
   ]);
 }

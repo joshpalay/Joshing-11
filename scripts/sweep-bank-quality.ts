@@ -9,6 +9,7 @@ import {
   type LlmQuestion,
 } from '../src/server/daily/generate-questions';
 import { verdictToGeneratedPatch } from '../src/server/quality/verify-question';
+import { confirmOffDomain } from '../src/server/quality/off-domain-second-opinion';
 
 // One-time hygiene sweep over EXISTING bank stock.
 //
@@ -63,7 +64,13 @@ type BankRow = {
   acceptableVariants: string[];
 };
 
-type Finding = { row: BankRow; reason: string; kind: 'deterministic' | 'llm' | 'off_domain' };
+type Finding = {
+  row: BankRow;
+  reason: string;
+  kind: 'deterministic' | 'llm' | 'off_domain';
+  /** off_domain findings only: did the second opinion also agree? */
+  confirmed?: boolean;
+};
 
 function asLlmQuestion(row: BankRow): LlmQuestion {
   const tier = (['accessible', 'moderate', 'specialist'] as const).includes(
@@ -145,6 +152,35 @@ async function main() {
     console.log('[sweep] --no-llm: skipped the quality gate (semantic defects NOT checked)');
   }
 
+  // Second opinion on every off_domain finding — a wrongly-demoted, correctly-
+  // filed question is invisible in production forever, so nothing here gets
+  // acted on off one gate's word alone. See off-domain-second-opinion.ts for
+  // why this is a real second LLM call rather than a free lexical heuristic
+  // (a first attempt at the latter was built and rejected: diagnosis/
+  // answer-leak-domain-drift-plan.md).
+  const offDomainFindings = findings.filter((f) => f.kind === 'off_domain');
+  if (offDomainFindings.length > 0 && !NO_LLM) {
+    const confirmedIdx = await confirmOffDomain(
+      offDomainFindings.map((f) => ({
+        canonicalSubcategory: f.row.canonicalSubcategory,
+        questionText: f.row.questionText,
+        answer: f.row.answer,
+      })),
+    );
+    offDomainFindings.forEach((f, i) => {
+      f.confirmed = confirmedIdx.has(i);
+    });
+    const heldBack = offDomainFindings.filter((f) => !f.confirmed);
+    console.log(
+      `[sweep] off-domain second opinion: ${confirmedIdx.size}/${offDomainFindings.length} confirmed, ${heldBack.length} held back (disagreement or check unavailable)`,
+    );
+    for (const f of heldBack) {
+      console.log(
+        `  [held back] ${f.row.id} (${f.row.canonicalSubcategory}) — first opinion said off-domain, second opinion disagreed or couldn't confirm`,
+      );
+    }
+  }
+
   const byKind = {
     deterministic: findings.filter((f) => f.kind === 'deterministic'),
     llm: findings.filter((f) => f.kind === 'llm'),
@@ -159,7 +195,12 @@ async function main() {
     );
   }
 
-  const toDemote = findings.filter((f) => f.kind !== 'off_domain' || INCLUDE_OFF_DOMAIN);
+  // off_domain requires BOTH --include-off-domain AND the second opinion's
+  // agreement (f.confirmed) — a row the first gate flagged but the second
+  // didn't confirm is never demoted by this script, flag or no flag.
+  const toDemote = findings.filter(
+    (f) => f.kind !== 'off_domain' || (INCLUDE_OFF_DOMAIN && f.confirmed),
+  );
   if (!APPLY) {
     console.log(
       `\n[sweep] DRY RUN — would demote ${toDemote.length} row(s). Re-run with --apply to write.`,

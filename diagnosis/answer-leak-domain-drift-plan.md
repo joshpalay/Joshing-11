@@ -2,9 +2,9 @@
 name: answer-leak-domain-drift-plan
 status: needs-decision
 opened: 2026-09-05
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619"
+related-pr: "#1611, #1613, #1618, #1619, #1623"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
@@ -785,3 +785,130 @@ before.
    22-row hand-verify above for the evidence gathered so far).
 3. Worth a separate look: why "Virginia Woolf's Novels and Essays" keeps
    generating Joyce content specifically.
+
+### 2026-09-07 (diagnosis-review) — flags unchanged; new WIP found on this branch; a GateDropStat contamination note
+
+**NEEDS DECISION (unchanged):** flip `PARTIAL_ANSWER_LEAK_ENABLED`? Flip
+`DOMAIN_DRIFT_DROP_ENABLED`? Neither has moved since the last entry.
+
+Re-checked everything this doc depends on, read-only:
+
+- **Flags** — `PARTIAL_ANSWER_LEAK_ENABLED` and `DOMAIN_DRIFT_DROP_ENABLED`
+  are still absent from `.env` (default OFF, per the code comments in
+  `generate-questions.ts`). `ANSWER_SHAPE_GATE_ENABLED` is also absent
+  (default ON). No flip since the last entry.
+- **PRs** — `#1611`, `#1613`, `#1618`, `#1619` all confirmed `MERGED` to
+  `main` via `gh pr view`. This doc's content already reflected all four as
+  of the last entry; nothing new to fold in.
+- **Bank state** — `still_servable` (is_duplicate=false) is now **2,138**,
+  up from the ~2,130 implied by the last entry's final tally (632 demoted −
+  438 recovered against a 2,324 starting corpus). Consistent with ordinary
+  generation at the documented ~13 rows/day rate; not investigated further.
+- **The 3 original `ContentReport` rows** (`800c44a3…`, `357618e3…`,
+  `139e1932…`) are all still `status='open'` — unresolved, as expected; this
+  doc doesn't own their resolution.
+- **New data-quality note on `GateDropStat`:** the `quality` gate shows
+  `failed_open: 229` on 2026-09-07, versus 0 on every prior day back to
+  2026-08-25. Traced (via `grep`, not by reading logs) to
+  `recordGateFailedOpen('quality')` living inside `findQualityFailures`
+  itself (`generate-questions.ts`), and both `scripts/sweep-bank-quality.ts`
+  and `scripts/rewrite-bank-demotions.ts` import that same function. That
+  makes it very likely today's spike is the Anthropic credit-exhaustion
+  incident from the rewrite pass (documented in the "2026-09-07 (night)"
+  entry above) writing into the **same counter** the live daily-generation
+  gate uses — not 229 real failures on player-facing traffic. Not confirmed
+  with certainty (didn't correlate individual `GateDropStat` writes to
+  script runs), but worth knowing before anyone reads that counter as a
+  live-gate health signal.
+
+**Uncommitted work-in-progress found on this branch**
+(`claude/domain-drift-safety-net`), not yet a PR, directly relevant to two
+open items here:
+
+1. `model` removed from `GENERIC_HEAD_NOUNS` in `self-answering.ts`, with a
+   new regression test — this is exactly the Phase 1 disagreement item #1
+   fix ("model year") recommended above.
+2. A new file, `src/server/quality/off-domain-second-opinion.ts`, wired into
+   `findQualityFailures`: a second, independently-worded Haiku call that
+   must ALSO confirm OFF_DOMAIN before `isDomainDriftDropEnabled` would act
+   on it (only invoked when that flag is on, so it's inert while the flag
+   stays off). Its own header notes a lexical-only corroboration attempt was
+   tried and rejected first (failed on Mrs. Dalloway/Woolf). This is a
+   direct answer to the false-positive risk the 22-row hand-verify surfaced
+   (the Mozart FP) — but it is **uncommitted, untested against the Phase 2
+   eval fixtures, and not yet a PR**, so it doesn't move decision 2 yet.
+   Flagging its existence here so it isn't lost or duplicated.
+3. Unrelated to this doc, sharing the same dirty working tree: edits to
+   `LoginPanel.tsx`, `OnboardingFlow.tsx`, the onboarding page + its test,
+   and a "fond and teasing" tone guardrail in `src/lib/llm.ts`. Noted only
+   so a future reviewer doesn't assume they're part of this gate work.
+
+**Still open, unchanged:** the 7 Phase 1 disagreement items +
+`PARTIAL_ANSWER_LEAK_ENABLED`; `DOMAIN_DRIFT_DROP_ENABLED` (now with a
+concrete in-progress mitigation, see WIP item 2 above); the "why does Woolf
+keep generating Joyce" investigation, still not started.
+
+### 2026-09-08 — the two WIP items above finished, tested against live Phase 2 fixtures, and pushed
+
+**GateDropStat note above: worth flagging up, not just noting.** The
+229 `failed_open` spike on 2026-09-07 is very likely the credit-exhaustion
+incident's error retries writing into the same daily counter live generation
+uses, per the previous entry's tracing. Anyone reading that counter as a
+"the quality gate is failing on real player traffic" signal should discount
+2026-09-07 specifically until this is confirmed with certainty.
+
+**Item 1 (the `model` bug) and item 2 (the off-domain second opinion) are
+both finished, tested, and pushed** — no longer uncommitted WIP:
+
+- `PARTIAL_ANSWER_LEAK_ENABLED` blocker: fixed. `model` removed from
+  `GENERIC_HEAD_NOUNS`, with a regression test reproducing the exact
+  "model year" failure. This was the only one of the 7 Phase 1 items that
+  actually blocked this flag — the other 6 concern the answer-shape gate,
+  which is already on and needs no action.
+- `DOMAIN_DRIFT_DROP_ENABLED` mitigation: the lexical "corroboration"
+  attempt mentioned in the last entry was tested against the 24 real
+  off-domain hits from 2026-09-07 and **failed outright on Mrs. Dalloway**
+  — a genuinely correctly-filed row — because a specific work's fact_key
+  names the work, not its author, so "shares no words with the domain name"
+  is not a valid drift signal. Deleted rather than shipped broken.
+  Replaced with a real second, independently-worded LLM opinion
+  (`src/server/quality/off-domain-second-opinion.ts`), asked only about
+  rows the primary gate already flagged, reasoning fresh from the raw
+  question/answer text — not the fact_key, not the first gate's own
+  reasoning. Wired into both live call sites in `generate-questions.ts`
+  (`findQualityFailures` now returns `offDomainConfirmed` alongside
+  `offDomain`; `isDomainDriftDropEnabled` gates on the confirmed subset,
+  never the raw one) and into `sweep-bank-quality.ts`'s
+  `--include-off-domain` path.
+
+**Validated live against the actual production false positive, not just
+mocks or the Phase 2 fixtures**: replayed the real Mozart row
+(`fact_key="mozart-clarinet-concerto-basset-clarinet"`, the exact false
+positive the primary gate produced on 2026-09-07) through the full pipeline
+end-to-end with `DOMAIN_DRIFT_DROP_ENABLED=true` — the second opinion
+correctly overturns it, while still confirming genuine Joyce-under-Woolf
+drift in the same call. Also re-ran the full Phase 2 eval suite: still 9/11
+(the 2 failures are the same pre-existing Romantic Opera edge case from
+2026-09-07, unrelated to this change, not a regression).
+
+Full test suite: 2,627 passed. Typecheck, lint, all six ratchets clean.
+Pushed to branch `claude/domain-drift-safety-net`; PR not yet opened as of
+this entry (see Next steps).
+
+**This meaningfully de-risks `DOMAIN_DRIFT_DROP_ENABLED`** — the specific
+failure mode that made it the one gate I'd resist flipping (a wrongly
+demoted, correctly-filed question, invisible in production forever) now
+requires TWO independent LLM calls to agree before anything drops. It's
+still worth Josh's judgment call before flipping, not an autonomous
+decision, but the evidence behind it is now substantially stronger than a
+single 92%-precision number on a small sample.
+
+### Next steps
+1. Open the PR for `claude/domain-drift-safety-net`.
+2. Josh: flip `PARTIAL_ANSWER_LEAK_ENABLED` (Vercel env var, production —
+   I can't set this myself, no MCP tool exposes env var writes). The one
+   blocking bug is fixed; the other 6 disagreement items don't block it.
+3. Josh: decide on `DOMAIN_DRIFT_DROP_ENABLED` now that the false-positive
+   mitigation is built and validated against the real 2026-09-07 case.
+4. The "why does Woolf keep generating Joyce" investigation — still not
+   started.

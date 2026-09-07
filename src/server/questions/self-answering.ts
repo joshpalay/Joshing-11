@@ -297,8 +297,16 @@ function answerLeaksIntoQuestion(normalizedQuestion: string, candidate: string):
 // Nouns that name the CATEGORY an answer belongs to rather than its substance.
 // A stem may hand one of these over for free; what makes the answer the answer
 // is the modifier in front of it.
+// NOTE: 'model' was removed 2026-09-08 (Phase 1 disagreement item, see
+// diagnosis/answer-leak-domain-drift-plan.md). It backfires on jargon
+// compounds where "model" is the substantive term, not filler — "model
+// year" was flagged as a leak because "model" sat in this set while the
+// truly generic word ("year") was what the stem actually showed. Genuine
+// generic-filler uses of "model" (e.g. "a scale model") are rare enough,
+// and the false-positive cost real enough, that this errs toward NOT
+// treating it as generic.
 const GENERIC_HEAD_NOUNS = new Set([
-  'plan', 'tree', 'form', 'system', 'technique', 'method', 'process', 'model',
+  'plan', 'tree', 'form', 'system', 'technique', 'method', 'process',
   'theory', 'principle', 'rule', 'law', 'effect', 'style', 'period', 'era',
   'movement', 'school', 'test', 'sign', 'device', 'section', 'scene', 'act',
   'song', 'book', 'film', 'movie', 'show', 'series', 'game', 'award', 'prize',
