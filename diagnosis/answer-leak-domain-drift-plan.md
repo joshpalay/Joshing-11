@@ -619,8 +619,62 @@ stock and a player, going forward.
 ### Next steps (revised again)
 1. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
    still open.
-2. Phase 2 eval (`domain-drift.eval.test.ts`) — a key now works locally, so
-   this is unblocked. Running it would also validate the 24 off-domain hits
-   found above before anyone decides whether to demote them.
+2. ~~Phase 2 eval~~ — **run 2026-09-07, see below.**
 3. Once Phase 2 passes, re-run the sweep with `--include-off-domain` to
    clear those 24 (plus whatever the full-corpus pass finds beyond them).
+
+### 2026-09-07 (later) — Phase 2 eval run: 6/8, containment bar clean
+
+`NODE_OPTIONS="-r dotenv/config" DOTENV_CONFIG_PATH=.env.local RUN_LLM_EVALS=1
+npx vitest run domain-drift.eval.test.ts`:
+
+| Test | Result |
+|---|---|
+| Joyce under Woolf (positive) | ✓ pass |
+| Forster under Woolf (positive) | ✓ pass |
+| Romantic Opera under Romantic Era Orchestral Music (positive) | **✗ fail** |
+| Mrs. Dalloway under Woolf (negative — containment) | ✓ pass |
+| Sesame Street under Classic Children's Television (negative) | ✓ pass |
+| Breaking Bad under Color References (negative) | ✓ pass |
+| New Testament book under New Testament (negative) | ✓ pass |
+| Mixed batch (all four above in one call) | **✗ fail** (same Opera case) |
+
+**All 4 containment negatives passed** — the exit criteria's harder bar
+("flags zero containment negatives... a single false positive
+disqualifies... otherwise invisible in production") is clean. 2 of 3
+positives passed. The one miss (Opera/Orchestral) is a genuinely more
+ambiguous case than Joyce/Woolf or Forster/Woolf — opera and orchestral
+concert music are adjacent enough that not flagging it is a defensible
+call, not obviously wrong, unlike the clean literary-era mismatches.
+
+**Separately, we now have real corpus-scale evidence, not just the 3-item
+fixture set**: the SAME off-domain check already ran across all 2,221 bank
+rows during today's sweep (same LLM call as the quality-gate pass — no
+extra cost) and found **24 real hits**, held back from demotion pending
+this eval (`--include-off-domain` was not passed). Those 24 are sitting in
+the sweep's stdout log with full detail (row id, domain, fact_key, reason).
+
+**Recommendation:** spot-check a sample of those 24 real hits by hand
+before flipping `DOMAIN_DRIFT_DROP_ENABLED` or re-running the sweep with
+`--include-off-domain` — that's a stronger signal than the fixture eval
+alone, and cheap (the detection cost is already sunk). The exit criteria as
+originally written ("catches every known positive") is not cleanly met on
+this tiny sample; whether the Opera miss is disqualifying or just an
+edge case worth a rubric tweak is a judgment call, not a re-run.
+
+### Next steps (revised again)
+1. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
+   still open.
+2. Spot-check the 24 real off-domain hits from today's sweep log before
+   deciding on `DOMAIN_DRIFT_DROP_ENABLED`.
+3. **New, raised 2026-09-07:** scope a targeted rewrite-and-reverify pass
+   for the ~500 of 610 demoted rows whose defect looks like bad WORDING
+   around a good fact (DEFINITION_SUPPLIED, ANSWER_LEAKED, SELF_ANSWERING,
+   MULTI_PART, MISLEADING_SETUP, yesterday's leak/shape) rather than bad
+   CONTENT (FALSE_PREMISE, OPINION_OR_VAGUE — ~35, not fixable by rewording).
+   `salvage-generated.ts` exists and does something adjacent
+   (propose-fix + re-verify + auto-apply, since these rows are
+   machine-authored) but is calibrated for false_premise/extra_fact fixes,
+   not this shape — untested against these categories. Not started; needs a
+   design decision (auto-apply vs. review queue, which model, re-verify
+   dimensions per defect type) before building.
