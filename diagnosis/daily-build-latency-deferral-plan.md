@@ -1,22 +1,22 @@
 ---
 name: daily-build-latency-deferral-plan
-status: needs-decision
+status: active
 opened: 2026-09-04
 last-reviewed: 2026-09-07
 owner: Josh
-related-pr: "#1601"
+related-pr: "#1620"
 ---
 
-> **2026-09-07: open question 5 is FIXED, pending review/merge.** The deferred
-> bonus append could silently destroy real core questions when two builds race
-> for the same user+date. `persistDailyQueue` now reports whether its own
-> insert won that race; `queue-orchestrator.ts` checks it and bails before the
-> deferred tail on a loss. Both the historical bug and the fix are proven
-> against the real DB in the same script
-> (`scripts/build-latency-anomaly.verify.ts`, two scenarios). See §2 item 5,
-> §5, and the final Update below. `status` stays `needs-decision`: the open
-> decision is now just "merge it," plus whether the smaller cost-waste
-> question (§5) is worth a follow-up.
+> **2026-09-07: open question 5 is FIXED, MERGED, and deployed (#1620).** The
+> deferred bonus append could silently destroy real core questions when two
+> builds raced for the same user+date. `persistDailyQueue` now reports whether
+> its own insert won that race; `queue-orchestrator.ts` checks it and bails
+> before the deferred tail on a loss. Proven both ways against the real DB
+> (`scripts/build-latency-anomaly.verify.ts`, two scenarios). No open decision
+> remains on this item. `status` moved to `active`: Phase 3's latency numbers
+> are still being measured (now n=3; the "stable residual" read at n=2 did
+> NOT hold at n=3 — see the final Update), and question 4 (is the +2 bonus
+> worth its own generation cost) is still open.
 
 # Diagnosis: Daily Five build latency — the bonus deferral
 
@@ -74,7 +74,7 @@ player waits on questions they did not ask for.
 4. **Is the +2 bonus worth ~7.6s of generation at all?** Bonus is additive and
    optional by canon. Deferral moves the cost off the critical path; it does not
    remove it. Worth asking separately whether the feature earns its spend.
-5. **[FIXED, pending review/merge] The deferred bonus append could silently
+5. **[FIXED and MERGED, #1620] The deferred bonus append could silently
    destroy real core questions.** Root cause confirmed by direct reproduction
    (2026-09-06) and fixed (2026-09-07, see Updates) — a genuine, general
    concurrency bug, not a one-row artifact: `persistDailyQueue`'s insert is
@@ -756,3 +756,34 @@ designed" to "fixed and verified."** §2 item 5 and §5 updated. Phase 3 numbers
 are no longer gated by this — the mechanism that could silently corrupt a
 winner's queue is closed, independent of how often the underlying race
 actually occurs in production.
+
+### 2026-09-07 (later) — #1620 merged; n=3, and the "stable residual" claim from n=2 does not hold
+
+`#1620` (the persist-race fix) merged and deployed. `npm run check:build-latency`
+re-run for a fresh reading — a third genuine post-deferral build landed
+(2026-09-07T17:05:14.513Z), taking Phase 3 to n=3.
+
+```
+saved 1529ms  bonus  501ms  residual 1028ms
+saved 1362ms  bonus  437ms  residual  925ms
+saved 2154ms  bonus  527ms  residual 1627ms   <- new row
+```
+
+**Retracting the "stable" claim from the n=2 entry above.** At n=2 the residual
+sat in a 103ms band (925–1028ms) and read as fixed, non-generation overhead.
+The third row's residual is 1627ms — 60% above the previous high end, not a
+tight cluster. Two rows agreeing was not yet evidence of stability; it was
+just two rows. The honest statement now is: the deferral saves the bonus
+generation time **plus some overhead that itself varies**, not "plus a fixed
+~1s." Whether that overhead correlates with anything (bonus domain count,
+total build size, time of day) is unanswered and would need more rows to say.
+
+**3b population, updated: median saving 1529ms** (n=3, was 1362ms at n=2).
+Still far below the ~7.6s pre-registered prediction, for the reason already
+recorded above (the baseline build was atypically slow). This number will keep
+moving at this volume (~1 genuine build/day) — treat every reading here as
+provisional until the doc says otherwise.
+
+**Not re-litigated:** the fix itself (§ above) is unaffected by any of this —
+it stops data corruption regardless of what the latency numbers turn out to
+say.
