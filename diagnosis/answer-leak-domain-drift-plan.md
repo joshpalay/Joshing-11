@@ -616,11 +616,118 @@ Fix 1 (gating the bank-pick path at serve time) now matters more than it
 looked yesterday: it's the only thing standing between 26% bank-defect-rate
 stock and a player, going forward.
 
+### 2026-09-07 (evening) — 22 of 24 off-domain hits hand-verified and demoted
+
+Rather than blanket-demote the 24 off-domain hits, cross-checked every one
+against its stored `fact_key` before acting (`scripts/demote-2026-09-07-off-domain-review.ts`):
+
+- **22 confirmed and demoted** — 16 Joyce + 2 Forster under Virginia Woolf's
+  Novels and Essays (several duplicate re-generations of the same fact), 3
+  duplicate "Rent" (Jonathan Larson) rows under Stephen Sondheim Musicals, 1
+  Johannes Tinctoris (15th-c. Renaissance treatise) row under J.S. Bach &
+  Baroque Counterpoint.
+- **1 real false positive excluded**: `bc1f47f0…` domain=Mozart,
+  `fact_key="mozart-clarinet-concerto-basset-clarinet"` — correctly filed.
+  The gate's own reason text admitted as much ("belongs to the domain
+  'Mozart' (correctly filed), but...") and flagged it anyway. Left servable.
+- **1 genuinely ambiguous case excluded**: `e6a64867…` domain="Well-Tempered
+  Clavier", `fact_key="wtc-glenn-gould-recording-legacy"` — the `wtc-` prefix
+  suggests this was generated FOR that domain on purpose (Gould's WTC fame is
+  why the fact belongs there). Same shape as the Phase 2 eval's one miss
+  (Romantic Opera). Left servable.
+
+**Measured off-domain precision on this spot-check: 22/24 = 91.7%.** One
+real false positive in 24 is exactly the failure mode the plan worried about
+("invisible in production, dropping a correctly-filed question forever") —
+this argues for keeping a hand-verification step before any full
+`--include-off-domain` auto-demote, not just trusting the aggregate rate.
+
+Also striking: 18 of the 24 hits were the SAME recurring pattern (Joyce
+under Woolf), several as literal duplicates of the same fact_key — this
+reads as a systemic issue with that one domain's generation context, not
+scattered random drift. Worth a separate look at why "Virginia Woolf's
+Novels and Essays" keeps minting Joyce content specifically, independent of
+the gate work here.
+
+### 2026-09-07 (night) — rewrite-and-recover pass built, run, and an incident
+
+Josh asked for the rewrite pass to actually be run (not just scoped), and
+for the 24 off-domain hits to be resolved. Built:
+
+- `src/server/quality/salvage-bank-rewrite.ts` — a NEW proposer (Sonnet).
+  The existing `salvage-question.ts` proposer is the wrong tool: its hard
+  rule is "never change the stated answer," which is exactly wrong for a
+  sentence-shaped-answer fix. This one is purpose-built for the wording
+  defects (ANSWER_LEAKED, SELF_ANSWERING, DEFINITION_SUPPLIED, MULTI_PART,
+  MISLEADING_SETUP, yesterday's leak/shape) and allowed to adjust the answer
+  when fixing a shape defect or trimming a multi-part stem.
+- `scripts/rewrite-bank-demotions.ts` — propose, then reverify against the
+  SAME deterministic checks + batched Haiku quality gate the sweep used (a
+  recovered row clears the identical bar new generation clears), then
+  apply. Excludes FALSE_PREMISE/OPINION_OR_VAGUE (content wrong, not
+  wording), GENERIC_AT_TIER (a tier problem), and OFF_DOMAIN (a filing
+  problem — handled above instead).
+
+**15-row pilot: 9/15 (60%) recovered**, every example inspected preserved
+the fact while fixing the defect. The pilot also caught the reverify step
+correctly rejecting a rewrite that was STILL off-domain — a second
+Rent/Sondheim row the original sweep hadn't flagged, found independently.
+
+**Two operational problems surfaced running the full ~505-row pass, both now fixed:**
+
+1. **The original design lost work on interruption.** It computed ALL
+   proposals before reverifying/applying any of them. A background run got
+   interrupted after ~340 of 505 proposals — nothing was corrupted (nothing
+   had been written yet), but the computed work was gone, unlogged, and had
+   to be redone. **Fixed**: rewritten to process in chunks of 10 — propose,
+   reverify, APPLY, next chunk — so an interruption costs at most one
+   chunk. The eligibility query itself is the resume mechanism (a
+   processed row's reason no longer matches `bank sweep:%`), so re-running
+   the same command picks up where it left off with no separate bookkeeping.
+
+2. **The Anthropic account ran out of credits mid-run**
+   (`400 invalid_request_error: Your credit balance is too low`). The
+   proposer's fail-SAFE design is correct — on any fault it returns
+   `unsalvageable` rather than fabricate a fix — but its generic failure
+   note ("no safe rewrite") is byte-identical to what a genuinely
+   ambiguous row would show only if the model returned an empty note, which
+   it structurally can't for a real unsalvageable verdict (that path
+   defaults to the word `"unsalvageable"`, not `"no safe rewrite"` — the
+   two default strings are deliberately different, which is exactly what
+   made this fixable). **329 rows got stamped with this fault-fallback
+   reason** — not real judgments, API failures wearing the failure
+   handler's generic label. Wrote `scripts/revert-credit-failure-fallout.ts`
+   to detect the exact fallback string (unambiguous — a genuine verdict
+   never produces it) and restore each row's ORIGINAL sweep-demotion
+   reason from the saved sweep log, so they fall back into
+   `rewrite-bank-demotions.ts`'s eligibility query for a real attempt once
+   credits exist. 279 of 329 recovered their exact original reason from the
+   log; 50 didn't match the log parser (a regex edge case, not a deeper
+   problem) and got an honest placeholder reason instead — still
+   re-eligible, just without the original specific wording. **Verified: 0
+   rows now carry the fault-fallback marker.**
+
+**Current true state** (verified against the DB, not script stdout):
+
+| | Count |
+|---|---|
+| Recovered (rewritten, restored to serving) | 151 |
+| Confirmed still defective after rewrite (left demoted) | 23 |
+| Confirmed genuinely unsalvageable (real model verdict) | 2 |
+| **Pending — needs a real attempt once credits exist** | **242** |
+| Fault-fallback pollution remaining | **0** |
+
+**This is now blocked on Anthropic account credits, not on anything in this
+repo.** Add credits, then `npx tsx -r dotenv/config scripts/rewrite-bank-demotions.ts --apply dotenv_config_path=.env.local` resumes automatically — no flags needed, the query only sees the 242 still-untouched rows.
+
 ### Next steps (revised again)
-1. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
+1. **Josh: add Anthropic API credits, then re-run the rewrite pass** — 242
+   rows are correctly queued and waiting; nothing else blocks them.
+2. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
    still open.
-2. Phase 2 eval (`domain-drift.eval.test.ts`) — a key now works locally, so
-   this is unblocked. Running it would also validate the 24 off-domain hits
-   found above before anyone decides whether to demote them.
-3. Once Phase 2 passes, re-run the sweep with `--include-off-domain` to
-   clear those 24 (plus whatever the full-corpus pass finds beyond them).
+3. Phase 2 eval ran 2026-09-07 (see above), 6/8 — containment bar clean.
+   `DOMAIN_DRIFT_DROP_ENABLED` decision still open; the 22-row hand-verify
+   above is real evidence toward it (91.7% precision, one real FP found).
+4. Worth a separate look: why does "Virginia Woolf's Novels and Essays"
+   keep generating Joyce content specifically? 18 of today's 24 off-domain
+   hits were that one recurring pattern.

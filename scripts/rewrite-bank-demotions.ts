@@ -24,13 +24,18 @@ import { proposeBankRewrite } from '../src/server/quality/salvage-bank-rewrite';
 // (a difficulty-tier problem, not a wording one), and OFF_DOMAIN (a filing
 // problem — see scripts/demote-2026-09-07-off-domain-review.ts instead).
 //
-// Two phases, not interleaved, so batching and concurrency don't fight:
-//   A) PROPOSE — Sonnet, concurrent (proposeBankRewrite). Every row gets a
-//      rewritten candidate or an unsalvageable verdict.
-//   B) REVERIFY — deterministic (findBankSourceDefect, free) then the SAME
-//      Haiku quality gate the sweep used, batched. A candidate is applied
-//      ONLY if it clears BOTH — the identical bar new generation clears, not
-//      a lower one for "recovered" content.
+// CHUNKED, NOT two global phases (2026-09-07 revision — the original all-
+// propose-then-all-reverify design lost ~340 already-paid-for Sonnet
+// proposals when the process was killed mid-run: nothing had been applied
+// yet, so nothing was lost from the DB's point of view, but the computed
+// proposals themselves were never logged and had to be redone). Now:
+// propose a chunk (concurrent) -> reverify that chunk (deterministic, then
+// the batched Haiku quality gate) -> APPLY that chunk's survivors -> next
+// chunk. A kill mid-run costs at most one chunk's work, not the whole run.
+// The eligibility query also excludes rows already touched by a prior run
+// (verification_reason no longer starts with 'bank sweep:' once rewritten
+// or marked unsalvageable) — RE-RUNNING THIS SCRIPT RESUMES, it does not
+// restart from scratch.
 //
 //   npx tsx scripts/rewrite-bank-demotions.ts                    # DRY RUN
 //   npx tsx scripts/rewrite-bank-demotions.ts --apply             # writes
@@ -38,7 +43,7 @@ import { proposeBankRewrite } from '../src/server/quality/salvage-bank-rewrite';
 
 const APPLY = process.argv.includes('--apply');
 const PROPOSE_CONCURRENCY = Math.max(1, Number(process.env.REWRITE_CONCURRENCY ?? 3));
-const REVERIFY_BATCH_SIZE = Math.max(1, Number(process.env.REWRITE_BATCH_SIZE ?? 10));
+const CHUNK_SIZE = Math.max(1, Number(process.env.REWRITE_CHUNK_SIZE ?? 10));
 const LIMIT = Number(process.env.REWRITE_LIMIT ?? 0); // 0 = no cap
 
 type Row = {
@@ -73,8 +78,8 @@ function toLlmQuestion(row: Row, text: string, ans: string): LlmQuestion {
   };
 }
 
-async function main() {
-  const eligible = (await db
+async function fetchEligible(): Promise<Row[]> {
+  return (await db
     .select({
       id: generatedQuestions.id,
       questionText: generatedQuestions.questionText,
@@ -90,6 +95,11 @@ async function main() {
     .where(
       and(
         eq(generatedQuestions.isDuplicate, true),
+        // Exactly the still-untouched sweep demotions: a prior run of THIS
+        // script stamps a different reason ('rewritten: ...' on success,
+        // 'unsalvageable: ...' / 'still defective: ...' on failure) so those
+        // rows fall out of this WHERE clause on the next run — that's the
+        // resume mechanism, no separate "already processed" bookkeeping.
         ilike(generatedQuestions.verificationReason, 'bank sweep:%'),
         not(
           or(
@@ -101,24 +111,24 @@ async function main() {
         ),
       ),
     )) as Row[];
+}
 
-  const population = LIMIT > 0 ? eligible.slice(0, LIMIT) : eligible;
-  console.log(
-    `[rewrite] ${population.length} wording-defect rows eligible${LIMIT > 0 ? ` (capped from ${eligible.length})` : ''}`,
-  );
+type Outcome =
+  | { kind: 'unsalvageable'; row: Row; note: string }
+  | { kind: 'rejected'; row: Row; note: string }
+  | { kind: 'recovered'; row: Row; text: string; answer: string; explainer: string; note: string };
 
-  // --- Phase A: propose, concurrent ---------------------------------------
-  type Proposed = {
+async function processChunk(chunk: Row[]): Promise<Outcome[]> {
+  // Propose, concurrent within the chunk.
+  const proposed: {
     row: Row;
-    proposedText: string;
-    proposedAnswer: string;
-    proposedExplainer: string;
+    text: string;
+    answer: string;
+    explainer: string;
     note: string;
-  };
-  const proposals: Proposed[] = [];
-  let unsalvageable = 0;
-  let done = 0;
-  await runWithConcurrency(population, PROPOSE_CONCURRENCY, async (row) => {
+  }[] = [];
+  const outcomes: Outcome[] = [];
+  await runWithConcurrency(chunk, PROPOSE_CONCURRENCY, async (row) => {
     const defectReason = row.verificationReason.replace(/^bank sweep:\s*/i, '');
     const proposal = await proposeBankRewrite({
       questionText: row.questionText,
@@ -128,99 +138,131 @@ async function main() {
       canonicalSubcategory: row.canonicalSubcategory,
       broadCategory: row.broadCategory,
     });
-    done += 1;
-    if (done % 50 === 0) console.log(`[rewrite] ...proposed ${done}/${population.length}`);
     if (proposal.kind === 'unsalvageable' || (!proposal.proposedQuestionText && !proposal.proposedAnswer)) {
-      unsalvageable += 1;
-      console.log(`[rewrite] [unsalvageable] ${row.id} (${row.canonicalSubcategory}) — ${proposal.note.slice(0, 140)}`);
+      outcomes.push({ kind: 'unsalvageable', row, note: proposal.note });
       return;
     }
-    proposals.push({
+    proposed.push({
       row,
-      proposedText: proposal.proposedQuestionText ?? row.questionText,
-      proposedAnswer: proposal.proposedAnswer ?? row.answer,
-      proposedExplainer: proposal.proposedExplainer ?? row.explainer,
+      text: proposal.proposedQuestionText ?? row.questionText,
+      answer: proposal.proposedAnswer ?? row.answer,
+      explainer: proposal.proposedExplainer ?? row.explainer,
       note: proposal.note,
     });
   });
-  console.log(`[rewrite] Phase A done: ${proposals.length} proposed, ${unsalvageable} unsalvageable`);
 
-  // --- Phase B: reverify ---------------------------------------------------
-  // Deterministic pass first — free, instant, catches a rewrite that traded
-  // one leak for another.
-  const detPassed: Proposed[] = [];
-  let detRejected = 0;
-  for (const p of proposals) {
-    const defect = findBankSourceDefect({ questionText: p.proposedText, answer: p.proposedAnswer });
+  // Deterministic reverify — free, catches a rewrite that traded one leak
+  // for another.
+  const detPassed: typeof proposed = [];
+  for (const p of proposed) {
+    const defect = findBankSourceDefect({ questionText: p.text, answer: p.answer });
     if (defect) {
-      detRejected += 1;
-      console.log(`[rewrite] [rejected:deterministic] ${p.row.id} — ${defect.slice(0, 140)}`);
-      continue;
+      outcomes.push({ kind: 'rejected', row: p.row, note: `deterministic: ${defect}` });
+    } else {
+      detPassed.push(p);
     }
-    detPassed.push(p);
   }
-  console.log(`[rewrite] deterministic reverify: ${detPassed.length} passed, ${detRejected} rejected`);
 
-  // Same Haiku quality gate the sweep used, batched — the rewritten candidate
-  // must clear the identical bar new generation clears.
-  const cleared: Proposed[] = [];
-  let llmRejected = 0;
-  for (let i = 0; i < detPassed.length; i += REVERIFY_BATCH_SIZE) {
-    const batch = detPassed.slice(i, i + REVERIFY_BATCH_SIZE);
+  // Same Haiku quality gate the sweep used, one batched call per chunk — the
+  // rewritten candidate must clear the identical bar new generation clears.
+  if (detPassed.length > 0) {
     const result = await findQualityFailures(
-      batch.map((p) => toLlmQuestion(p.row, p.proposedText, p.proposedAnswer)),
+      detPassed.map((p) => toLlmQuestion(p.row, p.text, p.answer)),
     );
-    batch.forEach((p, idx) => {
+    detPassed.forEach((p, idx) => {
       if (result.toDrop.has(idx) || result.offDomain.has(idx)) {
-        llmRejected += 1;
-        console.log(
-          `[rewrite] [rejected:quality-gate] ${p.row.id} — ${(result.reasons[idx] ?? '').slice(0, 140)}`,
-        );
+        outcomes.push({
+          kind: 'rejected',
+          row: p.row,
+          note: `quality-gate: ${(result.reasons[idx] ?? 'flagged').slice(0, 300)}`,
+        });
       } else {
-        cleared.push(p);
+        outcomes.push({
+          kind: 'recovered',
+          row: p.row,
+          text: p.text,
+          answer: p.answer,
+          explainer: p.explainer,
+          note: p.note,
+        });
       }
     });
-    if ((i / REVERIFY_BATCH_SIZE) % 10 === 0) {
-      console.log(`[rewrite] ...reverified ${Math.min(i + REVERIFY_BATCH_SIZE, detPassed.length)}/${detPassed.length}`);
-    }
   }
-  console.log(`[rewrite] quality-gate reverify: ${cleared.length} cleared, ${llmRejected} rejected`);
+
+  return outcomes;
+}
+
+async function main() {
+  const eligible = await fetchEligible();
+  const population = LIMIT > 0 ? eligible.slice(0, LIMIT) : eligible;
+  console.log(
+    `[rewrite] ${population.length} wording-defect rows eligible${LIMIT > 0 ? ` (capped from ${eligible.length})` : ''}`,
+  );
+
+  let unsalvageable = 0;
+  let rejected = 0;
+  let recovered = 0;
+
+  for (let i = 0; i < population.length; i += CHUNK_SIZE) {
+    const chunk = population.slice(i, i + CHUNK_SIZE);
+    const outcomes = await processChunk(chunk);
+
+    for (const o of outcomes) {
+      if (o.kind === 'unsalvageable') {
+        unsalvageable += 1;
+        console.log(`[rewrite] [unsalvageable] ${o.row.id} (${o.row.canonicalSubcategory}) — ${o.note.slice(0, 140)}`);
+      } else if (o.kind === 'rejected') {
+        rejected += 1;
+        console.log(`[rewrite] [rejected] ${o.row.id} (${o.row.canonicalSubcategory}) — ${o.note.slice(0, 140)}`);
+      } else {
+        recovered += 1;
+        console.log(`[rewrite] [recovered] ${o.row.id} (${o.row.canonicalSubcategory}) — ${o.note.slice(0, 140)}`);
+        console.log(`    was Q: ${o.row.questionText.slice(0, 120)}`);
+        console.log(`    now Q: ${o.text.slice(0, 120)}`);
+        console.log(`    was A: ${o.row.answer.slice(0, 80)}  ->  now A: ${o.answer.slice(0, 80)}`);
+      }
+    }
+
+    if (APPLY) {
+      for (const o of outcomes) {
+        if (o.kind === 'unsalvageable') {
+          await db
+            .update(generatedQuestions)
+            .set({ verificationReason: `unsalvageable: ${o.note}`.slice(0, 500) })
+            .where(inArray(generatedQuestions.id, [o.row.id]));
+        } else if (o.kind === 'rejected') {
+          await db
+            .update(generatedQuestions)
+            .set({ verificationReason: `still defective: ${o.note}`.slice(0, 500) })
+            .where(inArray(generatedQuestions.id, [o.row.id]));
+        } else {
+          await db
+            .update(generatedQuestions)
+            .set({
+              questionText: o.text,
+              answer: o.answer,
+              explainer: o.explainer,
+              isDuplicate: false,
+              verificationVerdict: 'ok',
+              verifiedAt: new Date(),
+              verificationReason: `rewritten: ${o.note}`.slice(0, 500),
+            })
+            .where(inArray(generatedQuestions.id, [o.row.id]));
+        }
+      }
+    }
+
+    console.log(
+      `[rewrite] ...chunk ${Math.min(i + CHUNK_SIZE, population.length)}/${population.length} — running totals: ${recovered} recovered, ${rejected} rejected, ${unsalvageable} unsalvageable${APPLY ? '' : ' (DRY RUN, not written)'}`,
+    );
+  }
 
   console.log(
-    `\n[rewrite] SUMMARY: ${population.length} eligible -> ${unsalvageable} unsalvageable, ${detRejected + llmRejected} rewrite-still-defective, ${cleared.length} recoverable`,
+    `\n[rewrite] DONE. ${population.length} eligible -> ${recovered} recovered, ${rejected} rewrite-still-defective, ${unsalvageable} unsalvageable.`,
   );
-  for (const p of cleared) {
-    console.log(`\n  [recoverable] ${p.row.id} (${p.row.canonicalSubcategory})`);
-    console.log(`    was Q: ${p.row.questionText.slice(0, 120)}`);
-    console.log(`    was A: ${p.row.answer.slice(0, 90)}`);
-    console.log(`    now Q: ${p.proposedText.slice(0, 120)}`);
-    console.log(`    now A: ${p.proposedAnswer.slice(0, 90)}`);
-    console.log(`    note: ${p.note.slice(0, 160)}`);
-  }
-
   if (!APPLY) {
-    console.log(`\n[rewrite] DRY RUN — would restore ${cleared.length} row(s). Re-run with --apply to write.`);
-    return;
+    console.log('[rewrite] DRY RUN — nothing was written. Re-run with --apply.');
   }
-
-  let applied = 0;
-  for (const p of cleared) {
-    const updated = await db
-      .update(generatedQuestions)
-      .set({
-        questionText: p.proposedText,
-        answer: p.proposedAnswer,
-        explainer: p.proposedExplainer,
-        isDuplicate: false,
-        verificationVerdict: 'ok',
-        verifiedAt: new Date(),
-        verificationReason: `rewritten: ${p.note}`.slice(0, 500),
-      })
-      .where(inArray(generatedQuestions.id, [p.row.id]))
-      .returning({ id: generatedQuestions.id });
-    applied += updated.length;
-  }
-  console.log(`\n[rewrite] restored ${applied} row(s) to serving.`);
 }
 
 main()
