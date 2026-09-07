@@ -23,6 +23,7 @@
 import { describe, expect, it } from 'vitest';
 import { getAnthropicClient } from '@/lib/llm';
 import { findQualityFailures, type LlmQuestion } from '@/server/daily/generate-questions';
+import { confirmOffDomain } from '@/server/quality/off-domain-second-opinion';
 
 const evalsEnabled = process.env.RUN_LLM_EVALS === '1' && getAnthropicClient() !== null;
 
@@ -175,6 +176,88 @@ describe.skipIf(!evalsEnabled)('quality gate OFF_DOMAIN (live)', () => {
       expect(result.offDomain.has(1)).toBe(false); // Mrs. Dalloway
       expect(result.offDomain.has(2)).toBe(true); // Romantic Opera
       expect(result.offDomain.has(3)).toBe(false); // Sesame Street
+    },
+    EVAL_TIMEOUT_MS,
+  );
+});
+
+// --- The second opinion (2026-09-08) ---------------------------------------
+//
+// A first "corroboration" attempt (comparing fact_key vocabulary against the
+// domain name) was built and REJECTED before shipping — it failed on Mrs.
+// Dalloway, because a specific work's fact_key names the work, not the
+// author. This is the replacement: a real, independently-worded second LLM
+// opinion, called only on rows the primary gate already flagged.
+//
+// The case below is not invented — it is THE actual false positive the
+// primary OFF_DOMAIN gate produced in production on 2026-09-07, found only
+// by hand-checking fact_key against domain (diagnosis/
+// answer-leak-domain-drift-plan.md): a correctly-filed Mozart row, whose
+// gate-generated reason text even admitted "correctly filed" and flagged it
+// anyway. This is the exact case the second opinion exists to catch.
+describe.skipIf(!evalsEnabled)('off-domain second opinion (live)', () => {
+  const MOZART_FALSE_POSITIVE = {
+    canonicalSubcategory: 'Mozart',
+    questionText:
+      "Mozart's Clarinet Concerto in A major was written for a friend who played a now-rare variant of the instrument with an extended lower range. What is this instrument called?",
+    answer: 'Basset clarinet',
+  };
+
+  it(
+    'overturns the real Mozart false positive — does NOT confirm it as off-domain',
+    async () => {
+      const result = await confirmOffDomain([MOZART_FALSE_POSITIVE]);
+      expect(result.has(0)).toBe(false);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'still confirms a genuine drift case (Joyce under Woolf) in the same call',
+    async () => {
+      const result = await confirmOffDomain([
+        MOZART_FALSE_POSITIVE,
+        {
+          canonicalSubcategory: WOOLF,
+          questionText:
+            "In Joyce's 'A Portrait of the Artist as a Young Man,' Stephen Dedalus famously refuses to sign a petition for universal peace circulated among students at University College Dublin. What cause did that petition support?",
+          answer: 'A petition calling for universal peace',
+        },
+      ]);
+      expect(result.has(0)).toBe(false); // Mozart still spared
+      expect(result.has(1)).toBe(true); // Joyce still caught
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'end-to-end: with the flag ON, the second opinion still holds the Mozart-shaped false positive back',
+    async () => {
+      const prevFlag = process.env.DOMAIN_DRIFT_DROP_ENABLED;
+      process.env.DOMAIN_DRIFT_DROP_ENABLED = 'true';
+      try {
+        const q: LlmQuestion = {
+          canonical_subcategory: MOZART_FALSE_POSITIVE.canonicalSubcategory,
+          broad_category: 'Classical Music',
+          question_text: MOZART_FALSE_POSITIVE.questionText,
+          answer: MOZART_FALSE_POSITIVE.answer,
+          explainer: 'Context.',
+          difficulty_estimate: 'moderate',
+          fact_key: 'mozart-clarinet-concerto-basset-clarinet',
+          subject_entity: null,
+          sub_angles: [],
+          question_shape: null,
+        };
+        const result = await findQualityFailures([q]);
+        // Whether or not the primary gate even flags this one (it may not,
+        // since fact_key correctly prefixes "mozart-" here) — the load-bearing
+        // assertion is that nothing this genuinely correctly-filed ever ends
+        // up in offDomainConfirmed, which is the only thing an auto-drop acts on.
+        expect(result.offDomainConfirmed.has(0)).toBe(false);
+      } finally {
+        if (prevFlag === undefined) delete process.env.DOMAIN_DRIFT_DROP_ENABLED;
+        else process.env.DOMAIN_DRIFT_DROP_ENABLED = prevFlag;
+      }
     },
     EVAL_TIMEOUT_MS,
   );

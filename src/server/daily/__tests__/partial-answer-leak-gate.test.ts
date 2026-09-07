@@ -106,6 +106,20 @@ describe('questionPartiallyLeaksAnswer', () => {
     ).toBe(false);
   });
 
+  it('does not fire when the withheld word is the substance, not filler (the "model year" case)', () => {
+    // Phase 1 disagreement item (diagnosis/answer-leak-domain-drift-plan.md):
+    // 'model' used to sit in GENERIC_HEAD_NOUNS, so Rule B read this backwards
+    // -- "year" (shown, genuinely generic) was treated as the leaked substance
+    // and "model" (withheld, the actual jargon term) was waved through as
+    // filler. Removed 'model' from the generic set to fix it.
+    expect(
+      questionPartiallyLeaksAnswer(
+        'What is commonly used for the annual practice, standard among American automakers for decades, of releasing updated vehicle styling tied to a specific year?',
+        'model year',
+      ),
+    ).toBe(false);
+  });
+
   it('does not fire on counting questions, where the stem naming the unit is normal', () => {
     // Structurally identical to a leak — the stem shows "bases"/"books" and the
     // answer adds a number — but the withheld number IS the answer.

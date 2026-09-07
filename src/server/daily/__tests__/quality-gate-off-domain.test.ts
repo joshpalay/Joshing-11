@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Plumbing tests for the OFF_DOMAIN defect — the "Joyce question filed under
 // Virginia Woolf" case served to production on 2026-09-05.
@@ -141,5 +141,80 @@ describe('quality gate — OFF_DOMAIN plumbing', () => {
     const result = await findQualityFailures([DRIFTED]);
     expect(result.toDrop.size).toBe(0);
     expect(result.offDomain.size).toBe(0);
+  });
+
+  describe('offDomainConfirmed (the second opinion)', () => {
+    // A first, purely-lexical "corroboration" attempt was built and rejected
+    // before shipping (see diagnosis/answer-leak-domain-drift-plan.md) — it
+    // failed on Mrs. Dalloway, because a specific work's fact_key naturally
+    // names the work, not the author. These tests cover the real replacement:
+    // a second, independently-worded LLM call, only made when the flag is on.
+
+    afterEach(() => {
+      delete process.env.DOMAIN_DRIFT_DROP_ENABLED;
+    });
+
+    it('does NOT call the second opinion while the flag is off — nothing to act on yet', async () => {
+      mocks.loggedMessagesCreate.mockResolvedValue(
+        llmResponse({ drop_indices: [0], reasons: { '0': 'OFF_DOMAIN: about Joyce, filed under Woolf' } }),
+      );
+      const result = await findQualityFailures([DRIFTED]);
+      expect([...result.offDomain]).toEqual([0]);
+      expect(result.offDomainConfirmed.size).toBe(0);
+      // Only the quality-gate call happened — no second call to spend on.
+      expect(mocks.loggedMessagesCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('confirms the hit when the second opinion agrees, with the flag on', async () => {
+      process.env.DOMAIN_DRIFT_DROP_ENABLED = 'true';
+      mocks.loggedMessagesCreate.mockImplementation(async (_client: unknown, tag: string) => {
+        if (tag === 'quality-gate') {
+          return llmResponse({
+            drop_indices: [0],
+            reasons: { '0': 'OFF_DOMAIN: about Joyce, filed under Woolf' },
+          });
+        }
+        if (tag === 'off-domain-second-opinion') {
+          return llmResponse({ verdicts: { '0': 'OFF_DOMAIN' } });
+        }
+        throw new Error(`unexpected tag ${tag}`);
+      });
+      const result = await findQualityFailures([DRIFTED]);
+      expect([...result.offDomain]).toEqual([0]);
+      expect([...result.offDomainConfirmed]).toEqual([0]);
+    });
+
+    it('holds the hit back when the second opinion disagrees, even with the flag on', async () => {
+      process.env.DOMAIN_DRIFT_DROP_ENABLED = 'true';
+      mocks.loggedMessagesCreate.mockImplementation(async (_client: unknown, tag: string) => {
+        if (tag === 'quality-gate') {
+          // The gate flags a row exactly like the real Mozart false positive.
+          return llmResponse({
+            drop_indices: [0],
+            reasons: { '0': "OFF_DOMAIN: filed under the wrong domain" },
+          });
+        }
+        if (tag === 'off-domain-second-opinion') {
+          return llmResponse({ verdicts: { '0': 'FILED_CORRECTLY' } });
+        }
+        throw new Error(`unexpected tag ${tag}`);
+      });
+      const result = await findQualityFailures([DRIFTED]);
+      expect([...result.offDomain]).toEqual([0]); // still reported
+      expect(result.offDomainConfirmed.size).toBe(0); // but not confirmed
+    });
+
+    it('holds back rather than confirms when the second opinion itself fails', async () => {
+      process.env.DOMAIN_DRIFT_DROP_ENABLED = 'true';
+      mocks.loggedMessagesCreate.mockImplementation(async (_client: unknown, tag: string) => {
+        if (tag === 'quality-gate') {
+          return llmResponse({ drop_indices: [0], reasons: { '0': 'OFF_DOMAIN: about Joyce' } });
+        }
+        throw new Error('anthropic 529');
+      });
+      const result = await findQualityFailures([DRIFTED]);
+      expect([...result.offDomain]).toEqual([0]);
+      expect(result.offDomainConfirmed.size).toBe(0);
+    });
   });
 });
