@@ -30,6 +30,13 @@ export const GATE_NAMES = [
   'answer_leak_partial',
   'answer_shape',
   'domain_drift',
+  // Bank RE-SERVE path, not generation. Every gate above runs only on freshly
+  // generated questions; pickBankSource cloned old stock into the queue
+  // ungated, so a defect that entered the bank before a gate existed was
+  // re-served forever (2026-09-06: a Joyce-under-Woolf row from 2026-05-09 and
+  // a self-answering onion/tears row from 2026-08-21, both re-served that day).
+  // `considered` counts bank candidates examined, `dropped` counts rejected.
+  'bank_pick_quality',
   'difficulty_floor',
   'thin_declared',
 ] as const;

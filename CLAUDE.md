@@ -30,6 +30,7 @@ Project-specific guidance for Claude. Keep this file short; reference, don't dup
 - `npm run format` — Prettier write
 - `npm run db:migrate` — Drizzle migrations
 - `npm run check:build-latency` — Daily Five build-latency reading (read-only; prints the Phase 2/3 checks from `diagnosis/daily-build-latency-deferral-plan.md`, with the `outcome='built'` filter applied so early returns can't be mistaken for fast builds)
+- `npm run sweep:bank-quality` — one-time hygiene sweep over EXISTING bank stock (`GeneratedQuestion` where `is_duplicate=false`). **Dry-run by default**; `--apply` writes demotions, `--no-llm` runs only the deterministic checks (no API key needed), `--include-off-domain` also demotes OFF_DOMAIN hits (off by default — that judgement has no precision data yet). Exists because the generation gate chain only ever sees FRESHLY GENERATED questions: `pickBankSource` re-serves old stock by cloning it into the queue, so anything that entered the bank before its gate existed is re-served forever. First run (2026-09-06) found 103 defective rows of 2,324 — 62 whose stem contains their own answer, 41 sentence-shaped answers.
 - `npm run smoke:daily-catchup` — daily catchup smoke test
 - `npx tsc -p tsconfig.typecheck.json` — typecheck convention (this is what produces the `tsconfig.typecheck.tsbuildinfo` churn; do not commit the `.tsbuildinfo` files)
 

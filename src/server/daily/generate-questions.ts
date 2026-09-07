@@ -818,13 +818,18 @@ const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-gene
 8. OFF_DOMAIN — the question is not about the domain it was generated for. Each item carries the domain it was filed under and the generator's own fact_key, which the generator derives from the question's ACTUAL content: when the fact_key names a different territory than the domain, that is the generator confessing it drifted. E.g. domain="Virginia Woolf's Novels and Essays" with fact_key="james-joyce-irish-modernism-portrait-of-the-artist..." and a stem about Stephen Dedalus is OFF_DOMAIN — Joyce is Woolf's CONTEMPORARY, not part of her body of work.
    CRITICAL — containment is NOT a defect. A question about a work, character, chapter, or episode that BELONGS to the domain is correctly filed, however different the fact_key looks: domain="Virginia Woolf's Novels and Essays" with fact_key="mrs-dalloway-big-ben-chimes" is FINE (Mrs. Dalloway is a Woolf novel), and so are "Sesame Street" under "Classic Children's Television" and "Breaking Bad" under "Color References Across Film and TV". Flag ONLY when the subject sits OUTSIDE the domain — a sibling author, a neighbouring period, an adjacent franchise. When you are unsure whether the subject belongs to the domain, do NOT flag.
 
+9. DEFINITION_SUPPLIED — the setup describes the answer so completely that the stem itself uniquely identifies it, and the player is only asked to attach the name. Distinct from SELF_ANSWERING (which needs the answer's own words to appear) and from ANSWER_LEAKED (which needs a paraphrase of the answer term): here every DEFINING property is handed over and the recall step has been removed. Test: strike the interrogative and ask whether the remaining sentence already picks out exactly one thing in the world. If it does, and the ask is just "what is that called?", it is DEFINITION_SUPPLIED.
+   E.g. "During the Progressive Era, women across the country organized and marched for the right to vote, culminating in a constitutional amendment ratified in 1920. What is this amendment commonly called?" — "constitutional amendment" + "1920" + "women voting" identifies the Nineteenth Amendment and nothing else; naming it is a relabel, not a recall.
+   **This defect applies at EVERY tier, accessible included.** Do not treat it as tier-gated the way GENERIC_AT_TIER is — an accessible question is allowed to be EASY, but it is not allowed to answer itself.
+   NOT this defect: a stem that supplies genuine context or narrows a field without settling it ("In Star Trek: The Next Generation, what is the name of Captain Picard's civilian brother…" — knowing the show and that he has a brother does not tell you "Robert"), or one whose defining details are exactly the fact being tested at specialist tier. When the stem leaves any real identification work to the player, do NOT flag.
+
 A high bar applies — flag a question only when one of these defects is clearly present. Subtle wordsmithing concerns are NOT defects.
 
 The following styles are explicitly ACCEPTABLE and must NOT be flagged on style grounds alone — fill-in-the-blank, complete-the-quote, name-multiple, and concise idiomatic questions all belong in Joshing. Reference exemplars:
 
 ${STYLE_EXEMPLAR_BLOCK}
 
-Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, MULTI_PART, MISLEADING_SETUP, OFF_DOMAIN, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
+Only flag a question matching one of those styles if it independently exhibits ANSWER_LEAKED, OPINION_OR_VAGUE, FALSE_PREMISE, SELF_ANSWERING, MULTI_PART, MISLEADING_SETUP, OFF_DOMAIN, DEFINITION_SUPPLIED, or — at moderate/specialist tier only — GENERIC_AT_TIER. Style never exempts a question from the tier bar: a concise identification-style question at moderate/specialist must still clear strip-the-domain.
 
 Return JSON only:
 { "drop_indices": [list of zero-based indices to drop], "reasons": { "<index>": "<DEFECT_NAME>: <short reason>" } }
@@ -1255,6 +1260,54 @@ export function findAnswerShapeFailures(generated: LlmQuestion[]): {
   }
   return { toDrop, reasons };
 }
+
+// --- Bank RE-SERVE gate -----------------------------------------------------
+//
+// Every gate above runs inside generateDailyQuestions, which only ever sees
+// FRESHLY GENERATED questions. pickBankSource takes a different path: it clones
+// an existing bank row straight into the serving table. Nothing checked those
+// clones, so a defect that entered the bank before its gate existed was
+// re-served indefinitely and no amount of gate tuning could reach it.
+//
+// Found 2026-09-06 from production logs: a Joyce question filed under
+// "Virginia Woolf's Novels and Essays" (generated 2026-05-09) and a
+// self-answering onion/tears question (generated 2026-08-21, already re-served
+// on 08-30) were both served that day as `bank-pick used`, never having passed
+// through a single gate. See diagnosis/answer-leak-domain-drift-plan.md.
+//
+// This runs the DETERMINISTIC gates only — pure functions, no LLM, no network,
+// microseconds per candidate — so it is free to apply on the serving hot path.
+// The semantic defects (a stem that paraphrases its answer, a question filed
+// under a sibling domain) are NOT reachable here; clearing those out of
+// existing stock is the bank-sweep script's job (scripts/sweep-bank-quality.ts).
+//
+// Flag posture deliberately MIRRORS the generation path: a rule not trusted to
+// drop at generation time is not trusted to reject a re-serve either, so one
+// flag governs both. Flipping PARTIAL_ANSWER_LEAK_ENABLED therefore also arms
+// the partial-leak rule here.
+export function findBankSourceDefect(source: {
+  questionText: string;
+  answer: string;
+  acceptableVariants?: string[];
+}): string | null {
+  const { questionText, answer } = source;
+  if (textContainsAnswer(questionText, answer, source.acceptableVariants ?? [])) {
+    return `answer "${answer}" appears in question text`;
+  }
+  // Reuses the generation-path gate on a single-element batch so the two paths
+  // can never drift apart in what counts as a bad answer shape.
+  const shape = findAnswerShapeFailures([{ answer } as LlmQuestion]);
+  if (shape.toDrop.size > 0) return shape.reasons[0];
+  if (isPartialAnswerLeakEnabled() && questionPartiallyLeaksAnswer(questionText, answer)) {
+    return `question gives away answer "${answer}"`;
+  }
+  return null;
+}
+
+// A domain whose bank keeps offering defective rows must not spin forever:
+// after this many rejections we stop asking and let the domain fall through to
+// fresh generation, which is gated anyway.
+const MAX_BANK_QUALITY_REJECTS_PER_DOMAIN = 3;
 
 // Tier ladder shared by the difficulty-floor gate. Index = how hard, ascending.
 const DIFFICULTY_TIER_LADDER: LlmQuestion['difficulty_estimate'][] = [
@@ -3059,6 +3112,9 @@ async function pickBankPicksForDomains(
   const avoidFactKeys = new Set(previousFactKeys.map((entry) => entry.factKey));
   const picks: GeneratedQuestionRow[] = [];
   const expiresAt = getNextDailyResetBoundary();
+  // bank_pick_quality telemetry, summed across domains and recorded once below.
+  let bankCandidatesConsidered = 0;
+  let bankCandidatesRejected = 0;
 
   for (const domain of domains) {
     const difficulty = resolveDomainDifficulty(
@@ -3070,14 +3126,42 @@ async function pickBankPicksForDomains(
     if (!difficulty) continue;
     const floor = tierFallbackFloors?.get(domain);
     const ladder = floor ? bankTierLadder(difficulty, floor) : [difficulty];
+    let domainRejects = 0;
 
     let source: BankSource | null = null;
     let servedTier: BankDifficulty = difficulty;
-    for (const tier of ladder) {
-      source = await pickBankSource(userId, domain, tier, avoidFactKeys, avoidQuestionTexts).catch(() => null);
-      if (source) {
-        servedTier = tier;
-        break;
+    // Quality-reject a bank candidate and ask for the NEXT one rather than
+    // giving up on the domain: a single bad row in stock shouldn't cost the
+    // player a slot. Rejected fact_keys join avoidFactKeys, which
+    // pickBankSource already honours, so the same row can't come back and the
+    // loop always terminates (BankSource.factKey is non-nullable).
+    tierLadder: for (const tier of ladder) {
+      for (;;) {
+        const candidate = await pickBankSource(
+          userId,
+          domain,
+          tier,
+          avoidFactKeys,
+          avoidQuestionTexts,
+        ).catch(() => null);
+        if (!candidate) break; // no stock left at this tier — try the next one
+        bankCandidatesConsidered += 1;
+        const defect = findBankSourceDefect(candidate);
+        if (!defect) {
+          source = candidate;
+          servedTier = tier;
+          break tierLadder;
+        }
+        bankCandidatesRejected += 1;
+        console.warn('[daily/generate-questions] bank-pick rejected by quality gate', {
+          domain,
+          tier,
+          factKey: candidate.factKey,
+          defect,
+        });
+        avoidFactKeys.add(candidate.factKey);
+        domainRejects += 1;
+        if (domainRejects >= MAX_BANK_QUALITY_REJECTS_PER_DOMAIN) break tierLadder;
       }
     }
     // BP-7 Phase-3 telemetry: per-domain hit / fall-through, so bank hit rate
@@ -3155,6 +3239,17 @@ async function pickBankPicksForDomains(
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+  // Fire-and-forget, same contract as the generation-path gate telemetry: a
+  // counters failure must never cost the player a queue.
+  if (bankCandidatesConsidered > 0) {
+    void recordGateDrops([
+      {
+        gate: 'bank_pick_quality',
+        considered: bankCandidatesConsidered,
+        dropped: bankCandidatesRejected,
+      },
+    ]);
   }
   return picks;
 }
