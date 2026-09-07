@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import fs from 'node:fs';
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { db, pool, generatedQuestions } from '../src/server/db';
 
@@ -53,7 +53,22 @@ async function main() {
   const corrupted = await db
     .select({ id: generatedQuestions.id })
     .from(generatedQuestions)
-    .where(eq(generatedQuestions.verificationReason, 'unsalvageable: no safe rewrite'));
+    .where(
+      and(
+        eq(generatedQuestions.verificationReason, 'unsalvageable: no safe rewrite'),
+        // GUARD (added after a real incident): a row can pick up the fault
+        // marker from one attempt and then be legitimately recovered by a
+        // LATER, overlapping attempt (is_duplicate flips back to false,
+        // reason becomes 'rewritten: ...') before this script runs. Without
+        // this filter, this script would find it by the stale marker check
+        // alone and stomp its correct 'rewritten:' reason back to the
+        // original defect text — the row stays correctly SERVED the whole
+        // time (content and verdict='ok' are untouched), but the audit
+        // trail lies about why. Only touch rows still actually out of
+        // circulation.
+        eq(generatedQuestions.isDuplicate, true),
+      ),
+    );
   console.log(`[revert] ${corrupted.length} rows carry the fault-fallback marker`);
 
   const recoverable: { id: string; reason: string }[] = [];

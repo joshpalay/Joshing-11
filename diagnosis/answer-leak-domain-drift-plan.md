@@ -731,3 +731,57 @@ repo.** Add credits, then `npx tsx -r dotenv/config scripts/rewrite-bank-demotio
 4. Worth a separate look: why does "Virginia Woolf's Novels and Essays"
    keep generating Joyce content specifically? 18 of today's 24 off-domain
    hits were that one recurring pattern.
+
+### 2026-09-07 (later still) — rewrite pass finished; credits were the only blocker
+
+Josh added Anthropic credits. Re-ran `rewrite-bank-demotions.ts` — it
+resumed on its own, no flags needed, exactly as designed. Cleared the
+remaining rows in two more passes (113, then a final single row that had
+picked up a leftover fault-marker from a mid-run hiccup — same
+credit-exhaustion signature as before, just one row this time, fixed the
+same way: restore, re-attempt). **Final verified state, zero rows left
+pending, zero fault-fallback pollution:**
+
+| | Count |
+|---|---|
+| **Recovered** (rewritten, restored to serving) | **221** |
+| Confirmed still defective after a rewrite attempt | 64 |
+| Confirmed genuinely unsalvageable | 6 |
+| Still pending | **0** |
+
+**One more mix-up found and fixed immediately after this**: 214 of the
+"still pending" rows turned out to already be correctly recovered — the two
+overlapping runs from the interruption/credit incidents above had raced on
+them, and `revert-credit-failure-fallout.ts` (matching purely on the
+fault-fallback reason STRING, no `is_duplicate` guard) stomped their
+`verification_reason` back to the ORIGINAL defect text on a row that had
+*already* been legitimately fixed by a later write. **Verified by hand:
+the CONTENT was never wrong** — `verification_verdict='ok'` on all 214, and
+a sample of five read as cleanly rewritten, defect-free questions. Only the
+audit-trail label was stale; nothing bad was ever served. Fixed the guard
+in `revert-credit-failure-fallout.ts` (added `is_duplicate=true` to its
+WHERE clause, so it can never again overwrite a row that moved on after
+picking up the fault marker) and relabeled the 214 rows with
+`scripts/fix-mislabeled-recovered-rows.ts`.
+
+**True final total, verified directly against the DB (not summed from
+script stdout):**
+
+| | Count |
+|---|---|
+| Ever demoted (610 sweep + 22 hand-verified off-domain) | **632** |
+| **Recovered — back in the bank** | **438** |
+| Confirmed still bad — stay out | **194** |
+
+Bank quality is materially better than it was two days ago, and the two
+fixes from PR #1618 (gate the re-serve path, sweep existing stock) mean
+this class of problem shouldn't silently re-accumulate the way it did
+before.
+
+### Next steps
+1. Josh: the 7 Phase 1 disagreement items and `PARTIAL_ANSWER_LEAK_ENABLED`
+   still open.
+2. `DOMAIN_DRIFT_DROP_ENABLED` decision still open (see Phase 2 eval +
+   22-row hand-verify above for the evidence gathered so far).
+3. Worth a separate look: why "Virginia Woolf's Novels and Essays" keeps
+   generating Joyce content specifically.
