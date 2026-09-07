@@ -171,4 +171,43 @@ describe.skipIf(!evalsEnabled)('quality gate FALSE_PREMISE (live)', () => {
     },
     EVAL_TIMEOUT_MS,
   );
+
+  // DEFINITION_SUPPLIED (added 2026-09-06). The 19th Amendment row below was
+  // generated and served in production on 2026-09-06: it passed the gate
+  // because the one defect that describes it, GENERIC_AT_TIER, is explicitly
+  // forbidden from flagging accessible-tier items. The new defect applies at
+  // every tier. See diagnosis/answer-leak-domain-drift-plan.md.
+  it(
+    'flags a stem that supplies the full definition and asks only for the name (accessible tier)',
+    async () => {
+      const result = await findQualityFailures([
+        q(
+          'During the Progressive Era, women across the country organized and marched for the right to vote, culminating in a constitutional amendment ratified in 1920. What is this amendment commonly called?',
+          'the Nineteenth Amendment',
+          'accessible',
+          'Progressive Era American Politics',
+        ),
+      ]);
+      expect([...result.toDrop]).toEqual([0]);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag an accessible question that still requires real recall',
+    async () => {
+      // Knowing the show, and that Picard has a brother, does not give you
+      // "Robert" -- the identification work is still the player's.
+      const result = await findQualityFailures([
+        q(
+          "In Star Trek: The Next Generation, what is the name of Captain Picard's civilian brother, whom he visits at the family vineyard in France?",
+          'Robert Picard',
+          'accessible',
+          'Star Trek: The Next Generation',
+        ),
+      ]);
+      expect(result.toDrop.size).toBe(0);
+    },
+    EVAL_TIMEOUT_MS,
+  );
 });
