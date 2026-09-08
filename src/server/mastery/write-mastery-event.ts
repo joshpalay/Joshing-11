@@ -50,12 +50,16 @@ export type WriteMasteryEventParams = {
   basePoints?: number;
   weight?: number;
   answeredByUserId?: string | null;
-  // B-DOMAIN-BONUS-ROTATION-01: true when this answer came from a Daily Five +2
-  // BONUS slot (a friend-sourced domain). A bonus answer still records mastery
-  // (stats/profile count it) but a domain it newly opens is parked
-  // rotation_eligible=false so it can't leak into the core top-5 until the player
-  // adopts it (a non-resting frequency) or declares it. A core/feed/declared
-  // answer (the default, isBonus falsy) always (re)earns rotation eligibility.
+  // B-DOMAIN-BONUS-ROTATION-01 / ask-before-add: true when this answer came from
+  // a Daily Five +2 BONUS slot (a friend-sourced domain). A bonus answer always
+  // records the MASTERY_EVENTS row (points/stats count it), but when it would
+  // OPEN a brand-new territory (no existing PLAYER_MASTERY row for the domain)
+  // the knowledge-base row itself is deliberately NOT written — the domain
+  // isn't on the player's map until they answer the "Add {domain} to your
+  // topics?" prompt (adoptBonusDomain below writes the row on confirm). A
+  // repeat bonus answer in an already-open-but-unconfirmed domain still updates
+  // normally. A core/feed/declared answer (the default, isBonus falsy) always
+  // writes immediately and (re)earns rotation eligibility.
   isBonus?: boolean;
   // B-LLM-PROVIDER-AB-SWITCH B3: provider that GRADED this answer ('anthropic'|
   // 'openai'), or null when the grade never hit an LLM (exact-match/give-up) or
@@ -77,6 +81,11 @@ export type MasteryEventWriteResult = {
   previousTier: MasteryTier;
   newTier: MasteryTier;
   tierChanged: boolean;
+  // True whenever this is the player's first correct answer in `domain` — for
+  // a bonus answer that's true even though the PLAYER_MASTERY row was
+  // deliberately NOT written (see deferKnowledgeBaseWrite above); the caller
+  // uses it to decide whether to show the "New territory" reveal card at all,
+  // ask-before-add or already-added depending on `isBonus`.
   openedNewTerritory: boolean;
   // Whether THIS call actually inserted the mastery event (false on dedup
   // conflict). The deferred side-effect tail must only run when true.
@@ -255,7 +264,15 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
 
     const inserted = insertResult.rows.length > 0;
 
-    if (inserted && params.pointsAwarded > 0) {
+    // Ask-before-add: a bonus answer that would OPEN a new territory (no
+    // existing row) skips the knowledge-base write entirely — the MASTERY_
+    // EVENTS row above already banked the points, but the domain doesn't join
+    // the player's map until they confirm via adoptBonusDomain. A repeat bonus
+    // answer against an already-open row (existing truthy) still falls through
+    // to the update below as before.
+    const deferKnowledgeBaseWrite = Boolean(params.isBonus) && !existing;
+
+    if (inserted && params.pointsAwarded > 0 && !deferKnowledgeBaseWrite) {
       await tx
         .insert(playerMastery)
         .values({
@@ -266,9 +283,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
           tier: nextTier,
           tierReachedAt: tierChanged ? new Date() : null,
           lifetimePointsBaseline: 0,
-          // A brand-new domain opened by a +2 bonus answer is parked out of the
-          // core rotation; every other surface (core/feed/declared) earns it.
-          rotationEligible: !params.isBonus,
+          rotationEligible: true,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -329,4 +344,79 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
     openedNewTerritory,
     eventInserted: true,
   };
+}
+
+export type AdoptBonusDomainParams = {
+  userId: string;
+  domain: string;
+  broadCategory?: string | null;
+};
+
+export type AdoptBonusDomainResult = {
+  domain: string;
+  alreadyAdopted: boolean;
+};
+
+/**
+ * Ask-before-add confirm: creates the PLAYER_MASTERY row for a domain a +2
+ * bonus answer opened but deliberately did NOT persist (see the
+ * deferKnowledgeBaseWrite branch in writeMasteryEvent above). Call this only
+ * once the player has answered "Add {domain} to your topics?" with a
+ * non-Never choice. totalPoints is reconstructed by summing every
+ * MASTERY_EVENTS row already recorded for this domain — points were always
+ * awarded for the correct answer(s); only the map membership was deferred —
+ * so answering the same still-unconfirmed bonus domain more than once doesn't
+ * lose points. "Not now" needs no call at all: nothing was ever written.
+ */
+export async function adoptBonusDomain(params: AdoptBonusDomainParams): Promise<AdoptBonusDomainResult> {
+  const userTerritories = await db
+    .select({ canonicalSubcategory: playerMastery.canonicalSubcategory })
+    .from(playerMastery)
+    .where(eq(playerMastery.userId, params.userId));
+
+  const domain = resolveToExistingTerritory(
+    params.domain,
+    userTerritories.map((row) => row.canonicalSubcategory),
+  );
+
+  const alreadyAdopted = userTerritories.some((row) => row.canonicalSubcategory === domain);
+  if (alreadyAdopted) {
+    // Already on the map (adopted via a different path in the meantime, or a
+    // duplicate confirm tap) — just make sure it isn't parked out of rotation.
+    await db
+      .update(playerMastery)
+      .set({ rotationEligible: true, updatedAt: new Date() })
+      .where(and(eq(playerMastery.userId, params.userId), eq(playerMastery.canonicalSubcategory, domain)));
+    return { domain, alreadyAdopted: true };
+  }
+
+  const [pointsRow] = await db
+    .select({ total: sql<number>`coalesce(sum(${masteryEvents.awardedPoints}), 0)` })
+    .from(masteryEvents)
+    .where(and(eq(masteryEvents.userId, params.userId), eq(masteryEvents.canonicalSubcategory, domain)));
+  const totalPoints = Number(pointsRow?.total ?? 0);
+
+  const authorCredit = await readAuthorCredit(params.userId, domain);
+  const tier = effectiveTier(totalPoints, authorCredit.points, authorCredit.distinctQuestions);
+  const broadCategory = normalizeBroadCategory(params.broadCategory ?? null);
+
+  await db
+    .insert(playerMastery)
+    .values({
+      userId: params.userId,
+      canonicalSubcategory: domain,
+      broadCategory,
+      totalPoints,
+      tier,
+      tierReachedAt: tier !== 'establishing' ? new Date() : null,
+      lifetimePointsBaseline: 0,
+      rotationEligible: true,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [playerMastery.userId, playerMastery.canonicalSubcategory],
+      set: { rotationEligible: true, updatedAt: new Date() },
+    });
+
+  return { domain, alreadyAdopted: false };
 }
