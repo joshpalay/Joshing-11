@@ -10,6 +10,7 @@ import {
 } from '../src/server/daily/generate-questions';
 import { verdictToGeneratedPatch } from '../src/server/quality/verify-question';
 import { confirmOffDomain } from '../src/server/quality/off-domain-second-opinion';
+import { getHeartedBankQuestionIds } from '../src/server/quality/hearted-bank-questions';
 
 // One-time hygiene sweep over EXISTING bank stock.
 //
@@ -70,6 +71,8 @@ type Finding = {
   kind: 'deterministic' | 'llm' | 'off_domain';
   /** off_domain findings only: did the second opinion also agree? */
   confirmed?: boolean;
+  /** true if a player hearted this exact bank row — see getHeartedBankQuestionIds. */
+  hearted?: boolean;
 };
 
 function asLlmQuestion(row: BankRow): LlmQuestion {
@@ -181,6 +184,28 @@ async function main() {
     }
   }
 
+  // Hearted-question protection: a heart is a human saying this specific
+  // question was good. Every finding here is a taste/filing judgment
+  // (deterministic lexical check, quality gate, or off-domain filing) — never
+  // a factual-correctness one — so a hearted row is held back from auto-
+  // demotion for a human to look at instead, regardless of finding kind or
+  // flags. See hearted-bank-questions.ts for why this must never extend to
+  // the factual verification pipeline.
+  if (findings.length > 0) {
+    const heartedIds = await getHeartedBankQuestionIds(findings.map((f) => f.row.id));
+    for (const f of findings) f.hearted = heartedIds.has(f.row.id);
+    if (heartedIds.size > 0) {
+      console.log(`[sweep] hearted-question protection: ${heartedIds.size} flagged row(s) held back`);
+      for (const f of findings) {
+        if (f.hearted) {
+          console.log(
+            `  [held back] ${f.row.id} (${f.row.canonicalSubcategory}) — hearted by a player, ${f.kind} finding: ${f.reason.slice(0, 120)}`,
+          );
+        }
+      }
+    }
+  }
+
   const byKind = {
     deterministic: findings.filter((f) => f.kind === 'deterministic'),
     llm: findings.filter((f) => f.kind === 'llm'),
@@ -191,15 +216,16 @@ async function main() {
   );
   for (const f of findings) {
     console.log(
-      `\n  [${f.kind}] ${f.row.id}  (${f.row.canonicalSubcategory})\n    Q: ${f.row.questionText.slice(0, 130)}\n    A: ${f.row.answer.slice(0, 90)}\n    why: ${f.reason.slice(0, 160)}`,
+      `\n  [${f.kind}]${f.hearted ? ' [HEARTED]' : ''} ${f.row.id}  (${f.row.canonicalSubcategory})\n    Q: ${f.row.questionText.slice(0, 130)}\n    A: ${f.row.answer.slice(0, 90)}\n    why: ${f.reason.slice(0, 160)}`,
     );
   }
 
   // off_domain requires BOTH --include-off-domain AND the second opinion's
   // agreement (f.confirmed) — a row the first gate flagged but the second
-  // didn't confirm is never demoted by this script, flag or no flag.
+  // didn't confirm is never demoted by this script, flag or no flag. A
+  // hearted row is excluded outright, ahead of all other flags.
   const toDemote = findings.filter(
-    (f) => f.kind !== 'off_domain' || (INCLUDE_OFF_DOMAIN && f.confirmed),
+    (f) => !f.hearted && (f.kind !== 'off_domain' || (INCLUDE_OFF_DOMAIN && f.confirmed)),
   );
   if (!APPLY) {
     console.log(
