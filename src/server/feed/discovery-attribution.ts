@@ -129,7 +129,11 @@ export async function getDiscoveryAttributionForItems(
   // drop the rest before the (cheaper) flag/name lookups.
   const relationships = await getRelationships(viewerUserId, candidateIds);
   const strangerIds = new Set(
-    candidateIds.filter((id) => (relationships.get(id)?.state ?? 'none') === 'none'),
+    candidateIds.filter(
+      (id) =>
+        (relationships.get(id)?.state ?? 'none') === 'none' &&
+        !relationships.get(id)?.isBlocked,
+    ),
   );
   if (strangerIds.size === 0) return new Map();
 

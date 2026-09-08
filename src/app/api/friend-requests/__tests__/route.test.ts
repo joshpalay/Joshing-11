@@ -89,6 +89,23 @@ describe('POST /api/friend-requests', () => {
     expect(createOrReusePendingFriendshipRequestMock).toHaveBeenCalled()
   })
 
+  it('returns the same not_found shape for a blocked pair as for a nonexistent user (B-FRIENDS-SAFETY-01)', async () => {
+    // state 'none' would otherwise fall through to the happy path -- isBlocked
+    // must be checked as its own gate, independent of state.
+    getRelationshipMock.mockResolvedValueOnce({ state: 'none', friendshipId: null, isBlocked: true })
+    const blockedResponse = await createFriendRequest(buildRequest({ inviteeUserId: 'invitee-user' }))
+    const blockedBody = await blockedResponse.json()
+
+    getUserByIdMock.mockResolvedValueOnce(null)
+    const missingResponse = await createFriendRequest(buildRequest({ inviteeUserId: 'nonexistent-user' }))
+    const missingBody = await missingResponse.json()
+
+    expect(blockedResponse.status).toBe(404)
+    expect(blockedResponse.status).toBe(missingResponse.status)
+    expect(blockedBody).toEqual(missingBody)
+    expect(createOrReusePendingFriendshipRequestMock).not.toHaveBeenCalled()
+  })
+
   it('rejects unauthenticated callers', async () => {
     getSessionMock.mockResolvedValueOnce(null)
     const response = await createFriendRequest(

@@ -71,7 +71,7 @@ async function backfillMutualFeeds(userAId: string, userBId: string): Promise<vo
 // follow rows (referenceType 'follow') and frozen legacy friendship rows
 // (referenceType 'friendship') share the same edge-id space, so clear both
 // referenceTypes; build-stream also filters non-pending rows defensively.
-async function cleanupFollowRequestActivity(edgeId: string): Promise<void> {
+export async function cleanupFollowRequestActivity(edgeId: string): Promise<void> {
   await Promise.all([
     softDeleteActivityByReference({
       referenceType: 'follow',

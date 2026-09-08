@@ -1,10 +1,31 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   composeDiscoveryAttribution,
+  getDiscoveryAttributionForItems,
   type DiscoveryItemInput,
   type DiscoveryPerson,
 } from '@/server/feed/discovery-attribution';
+
+// getDiscoveryAttributionForItems (the DB-touching half, exercised by the
+// B-FRIENDS-SAFETY-01 block-gate test below) needs its collaborators mocked.
+const { getRelationshipsMock, getNicheMatchDiscoverableMock, getForwardDiscoverableMock, dbMock } = vi.hoisted(() => ({
+  getRelationshipsMock: vi.fn(),
+  getNicheMatchDiscoverableMock: vi.fn(async () => new Set<string>()),
+  getForwardDiscoverableMock: vi.fn(async () => new Set<string>()),
+  dbMock: {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({ where: vi.fn(async () => []) })),
+    })),
+  },
+}));
+
+vi.mock('@/server/db', () => ({ db: dbMock, users: { id: 'users.id', displayName: 'users.displayName' } }));
+vi.mock('@/server/db/queries/account', () => ({
+  getNicheMatchDiscoverable: getNicheMatchDiscoverableMock,
+  getForwardDiscoverable: getForwardDiscoverableMock,
+}));
+vi.mock('@/server/db/queries/friend-requests', () => ({ getRelationships: getRelationshipsMock }));
 
 const VIEWER = 'viewer';
 
@@ -92,5 +113,55 @@ describe('composeDiscoveryAttribution', () => {
       { strangers: [] },
     );
     expect(result.size).toBe(0);
+  });
+});
+
+describe('getDiscoveryAttributionForItems — B-FRIENDS-SAFETY-01 block gate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getNicheMatchDiscoverableMock.mockResolvedValue(new Set());
+    getForwardDiscoverableMock.mockResolvedValue(new Set());
+  });
+
+  // Done-When: "a blocked pair with no prior follow edge (state: 'none')
+  // does not appear in each other's ... forward discovery surface." A
+  // blocked stranger's relationship state is still 'none' (no follow edge),
+  // so the strangerIds filter must ALSO consult isBlocked, not just state.
+  it('excludes a blocked candidate from strangerIds even though state is none', async () => {
+    getRelationshipsMock.mockResolvedValue(
+      new Map([['blocked-author', { state: 'none', friendshipId: null, formedAt: null, isBlocked: true }]]),
+    );
+    // If the block gate were missing, this opt-in flag would let the author through.
+    getNicheMatchDiscoverableMock.mockResolvedValue(new Set(['blocked-author']));
+
+    const items: DiscoveryItemInput[] = [
+      { feedItemId: 'f1', authorUserId: 'blocked-author', viaUserId: null, isPublic: true },
+    ];
+    const result = await getDiscoveryAttributionForItems(VIEWER, items);
+
+    expect(result.size).toBe(0);
+    // strangerIds is empty once the blocked id is excluded, so the function
+    // short-circuits before the opt-in lookups run at all.
+    expect(getNicheMatchDiscoverableMock).not.toHaveBeenCalled();
+    expect(getForwardDiscoverableMock).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces an un-blocked, opted-in stranger', async () => {
+    getRelationshipsMock.mockResolvedValue(
+      new Map([['clean-author', { state: 'none', friendshipId: null, formedAt: null, isBlocked: false }]]),
+    );
+    getNicheMatchDiscoverableMock.mockResolvedValue(new Set(['clean-author']));
+    dbMock.select.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(async () => [{ id: 'clean-author', displayName: 'Clean Author' }]),
+      })),
+    });
+
+    const items: DiscoveryItemInput[] = [
+      { feedItemId: 'f1', authorUserId: 'clean-author', viaUserId: null, isPublic: true },
+    ];
+    const result = await getDiscoveryAttributionForItems(VIEWER, items);
+
+    expect(result.get('f1')?.author?.userId).toBe('clean-author');
   });
 });

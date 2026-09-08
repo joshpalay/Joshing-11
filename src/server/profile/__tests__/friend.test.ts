@@ -194,6 +194,20 @@ describe('friend portrait data', () => {
     ).resolves.toBeNull()
   })
 
+  it('returns null for a blocked pair — indistinguishable from a missing user (B-FRIENDS-SAFETY-01)', async () => {
+    // state 'none' on its own would fall through to a stranger portrait;
+    // isBlocked must short-circuit before that, same as the missing-user case.
+    getRelationshipMock.mockResolvedValueOnce({
+      state: 'none',
+      friendshipId: null,
+      formedAt: null,
+      isBlocked: true,
+    })
+    await expect(
+      getFriendPortraitData('friend-1', 'viewer-1')
+    ).resolves.toBeNull()
+  })
+
   it('returns a stranger portrait when no active friendship exists', async () => {
     getUserByIdMock.mockResolvedValueOnce({
       id: 'stranger-1',

@@ -23,6 +23,8 @@ export type TelemetryEventName =
   | 'friend_request_from_profile'
   | 'friend_request_cancelled'
   | 'friendship_removed'
+  | 'user_blocked'
+  | 'user_unblocked'
 
 type TelemetryValue = string | number | boolean | null | undefined
 export type TelemetryMetadata = Record<string, TelemetryValue>

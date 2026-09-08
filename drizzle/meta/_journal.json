@@ -995,6 +995,13 @@
       "when": 1788757200000,
       "tag": "0141_invite_link_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1788758200000,
+      "tag": "0142_user_block",
+      "breakpoints": true
     }
   ]
 }

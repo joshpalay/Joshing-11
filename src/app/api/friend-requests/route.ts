@@ -47,6 +47,15 @@ export async function POST(request: Request) {
   const now = new Date()
   const relationship = await getRelationship(session.userId, inviteeUserId)
 
+  // A blocked pair must not be distinguishable from a nonexistent user --
+  // reuse the same not_found response rather than a new error code.
+  if (relationship.isBlocked) {
+    return NextResponse.json(
+      { error: 'not_found', message: 'No such user.' },
+      { status: 404 }
+    )
+  }
+
   // Already following (mutual or one-directional) — nothing to do.
   if (relationship.state === 'friends' || relationship.state === 'following') {
     return NextResponse.json(

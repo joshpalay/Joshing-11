@@ -281,6 +281,7 @@ export async function notifyNicheMatch(
     // friend_answered_your_question + Lately, so firing for them is noise.
     const relationship = await getRelationship(answererId, creatorId);
     if (relationship.state !== 'none') return;
+    if (relationship.isBlocked) return;
 
     // Fire condition: the ASYMMETRIC two-flag gate. The flag of the party whose
     // identity a notification would EXPOSE gates that notification. Do NOT

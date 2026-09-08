@@ -33,8 +33,8 @@ const ANSWERER = 'answerer-1';
 const AUTHOR = 'author-1';
 const QUESTION = 'question-1';
 
-function relationship(state: RelationshipState) {
-  return { state, friendshipId: null, formedAt: null, isBlocked: false };
+function relationship(state: RelationshipState, isBlocked = false) {
+  return { state, friendshipId: null, formedAt: null, isBlocked };
 }
 
 // optedIn is the set the gate consults; default both parties opted in (the
@@ -127,6 +127,23 @@ describe('notifyNicheMatch — D-3 house discovery exclusion (Invariant H-3)', (
     await notifyNicheMatch(ANSWERER, QUESTION, HOUSE_CREATOR_ID, `daily:house-key:${ANSWERER}`);
 
     expect(getRelationshipMock).not.toHaveBeenCalled();
+    expect(getNicheMatchDiscoverableMock).not.toHaveBeenCalled();
+    expect(writeActivityMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('notifyNicheMatch — B-FRIENDS-SAFETY-01 block gate', () => {
+  // The doc's Done-When: "a blocked pair with no prior follow edge
+  // (state: 'none') does not appear in each other's niche-match ...
+  // discovery surface." state stays 'none' for a blocked pair with no follow
+  // edge, so the block check must run as a SEPARATE condition after the
+  // stranger gate, not fold into it.
+  it('writes nothing for a blocked pair even though the relationship state is none (stranger gate alone would pass)', async () => {
+    getRelationshipMock.mockResolvedValue(relationship('none', true));
+
+    await notifyNicheMatch(ANSWERER, QUESTION, AUTHOR);
+
+    expect(getRelationshipMock).toHaveBeenCalledWith(ANSWERER, AUTHOR);
     expect(getNicheMatchDiscoverableMock).not.toHaveBeenCalled();
     expect(writeActivityMock).not.toHaveBeenCalled();
   });

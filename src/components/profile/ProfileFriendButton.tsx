@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
+import { BlockUserButton } from '@/components/profile/BlockUserButton'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
 
 type ProfileFriendButtonProps = {
@@ -36,6 +37,7 @@ export function ProfileFriendButton({
         relationship={relationship ?? NO_RELATIONSHIP}
         onChange={() => router.refresh()}
       />
+      <BlockUserButton targetUserId={targetUserId} targetDisplayName={targetDisplayName} />
     </div>
   )
 }

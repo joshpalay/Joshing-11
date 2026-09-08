@@ -29,6 +29,13 @@ vi.mock('@/server/db', () => ({
   },
 }))
 
+// getRelationship also overrides isBlocked via a real lookup (B-FRIENDS-SAFETY-01)
+// — mocked out here since this file is only pinning the follow-edge resolution.
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  isBlockedBetween: vi.fn(async () => false),
+  blockedIdsAmong: vi.fn(async () => new Set()),
+}))
+
 import { getRelationship } from '@/server/db/queries/friend-requests'
 
 const VIEWER = 'viewer'

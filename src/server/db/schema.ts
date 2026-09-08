@@ -1620,6 +1620,31 @@ export const follows = pgTable(
   ],
 );
 
+// B-FRIENDS-SAFETY-01 Phase 1 — persistent blocking. Stored one-directional
+// (who pressed the button) but enforced bidirectionally on every read (see
+// isBlockedBetween / blockedIdsAmong in src/server/db/queries/user-blocks.ts).
+// Deliberately its own table rather than a `follows.state` member: a block
+// must be able to exist with no follow edge between the pair at all.
+export const userBlocks = pgTable(
+  'UserBlock',
+  {
+    id: id(),
+    blockerId: text('blockerId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    blockedId: text('blockedId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('UserBlock_blockerId_blockedId_key').on(table.blockerId, table.blockedId),
+    index('UserBlock_blockerId_idx').on(table.blockerId),
+    index('UserBlock_blockedId_idx').on(table.blockedId),
+    check('UserBlock_distinct_users', sql`${table.blockerId} <> ${table.blockedId}`),
+  ],
+);
+
 export const contactHashes = pgTable(
   'ContactHash',
   {

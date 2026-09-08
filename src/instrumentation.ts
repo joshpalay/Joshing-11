@@ -2767,6 +2767,34 @@ export async function register() {
       } catch {
         // DailyBuildMetric may not exist yet on a fresh database.
       }
+
+      // Migration 0142 (B-FRIENDS-SAFETY-01 Phase 1) adds UserBlock. Guard for
+      // preview/production databases that may have the migration recorded
+      // without the table present -- block reads/writes would 42P01 before
+      // app code can recover. CREATE TABLE/INDEX are all IF NOT EXISTS, so
+      // this block is safe to re-run.
+      try {
+        await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "UserBlock" (
+          "id" text PRIMARY KEY DEFAULT gen_random_uuid()::text NOT NULL,
+          "blockerId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "blockedId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+          "created_at" timestamptz NOT NULL DEFAULT now(),
+          CONSTRAINT "UserBlock_blockerId_blockedId_key" UNIQUE ("blockerId", "blockedId"),
+          CONSTRAINT "UserBlock_distinct_users" CHECK ("blockerId" <> "blockedId")
+        )
+      `);
+        await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "UserBlock_blockerId_idx" ON "UserBlock" ("blockerId")
+      `);
+        await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "UserBlock_blockedId_idx" ON "UserBlock" ("blockedId")
+      `);
+        await db.execute(sql`ALTER TABLE "UserBlock" ENABLE ROW LEVEL SECURITY`);
+      } catch {
+        // User may not exist yet on a fresh database -- migrate() creates it
+        // and applies 0142 in normal order.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 

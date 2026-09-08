@@ -1,4 +1,4 @@
-import { Brain, Flag, Globe, type LucideIcon, Pencil, RotateCcw, Users as UsersIcon } from 'lucide-react';
+import { Ban, Brain, Flag, Globe, type LucideIcon, Pencil, RotateCcw, Users as UsersIcon } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -265,6 +265,14 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
               subtitle="Who can see your friends."
               section="friends_list"
               visibility={portrait.sectionSettings.friends_list}
+            />
+          </SettingsGroup>
+          <SettingsGroup>
+            <SettingsRow
+              icon={<Ban className="size-5" />}
+              title="Blocked people"
+              subtitle="People you've blocked can't see your profile or find you."
+              href="/blocked"
             />
           </SettingsGroup>
         </section>

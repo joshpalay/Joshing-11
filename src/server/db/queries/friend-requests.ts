@@ -1,6 +1,7 @@
 import { and, eq, inArray, or } from 'drizzle-orm'
 
 import { db, follows } from '@/server/db'
+import { blockedIdsAmong, isBlockedBetween } from '@/server/db/queries/user-blocks'
 
 export type RelationshipState =
   | 'none'
@@ -19,10 +20,10 @@ export type RelationshipResult = {
   friendshipId: string | null
   // When the relevant approved edge formed (mutual or one-directional follow).
   formedAt: Date | null
-  // Retained for API/type compatibility with list surfaces that filter on it.
-  // Explicit blocking is not modelled under the follow model (an unwanted
-  // follower is handled by the approval gate / unfollow), so this is always
-  // false now.
+  // True iff either party has blocked the other (src/server/db/queries/
+  // user-blocks.ts is the source of truth). `resolve()` below always returns
+  // false here -- it stays pure/DB-free -- and getRelationship /
+  // getRelationships override it with a real lookup after calling resolve().
   isBlocked: boolean
 }
 
@@ -86,7 +87,9 @@ export async function getRelationship(
 
   const outbound = rows.find((row) => row.followerId === viewerId)
   const inbound = rows.find((row) => row.followerId === targetId)
-  return resolve(outbound, inbound)
+  const result = resolve(outbound, inbound)
+  result.isBlocked = await isBlockedBetween(viewerId, targetId)
+  return result
 }
 
 // Bulk lookup variant for list surfaces (search results, contact matches).
@@ -126,6 +129,12 @@ export async function getRelationships(
 
   for (const targetId of uniqueTargets) {
     result.set(targetId, resolve(outboundByTarget.get(targetId), inboundByTarget.get(targetId)))
+  }
+
+  const blockedIds = await blockedIdsAmong(viewerId, uniqueTargets)
+  for (const blockedId of blockedIds) {
+    const existing = result.get(blockedId)
+    if (existing) existing.isBlocked = true
   }
 
   return result

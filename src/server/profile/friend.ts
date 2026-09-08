@@ -97,6 +97,10 @@ export async function getFriendPortraitData(
     ? null
     : await getRelationship(normalizedViewerId, normalizedUserId)
 
+  // A blocked viewer must not be able to tell the difference between
+  // "blocked" and "this profile doesn't exist."
+  if (relationship?.isBlocked) return null
+
   const isActiveFriend = !isOwnerView && relationship?.state === 'friends'
   const realViewer: FriendProfileVisibility = isOwnerView
     ? 'self'
