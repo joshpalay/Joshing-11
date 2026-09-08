@@ -36,20 +36,6 @@ describe('NewTerritoryUndo (knowledge-preference thread card)', () => {
     expect(rendered).not.toContain('rounded-2xl');
   });
 
-  // B-DOMAIN-BONUS-ROTATION-01: on the daily +2 bonus surface the domain is NOT
-  // yet in rotation, so the control must open on "Never" (its true state) and any
-  // other tier is the explicit opt-in. The selected tier's helper hint is rendered
-  // in the markup, so it doubles as a witness for the initial selection.
-  it('opens on Never (opt-in) for a not-yet-adopted bonus domain', () => {
-    const bonus = renderToStaticMarkup(
-      <NewTerritoryUndo domain="zelda" category="The Legend of Zelda" adopted={false} />,
-    );
-    // Resting hint == initial selection is "Never" (apostrophe is HTML-escaped in
-    // the static markup, so match the unambiguous prefix).
-    expect(bonus).toContain('Stays on your map, but');
-    expect(bonus).not.toContain('Stays in normal rotation.');
-  });
-
   it('opens on Sometimes (default-add) when the domain is already adopted', () => {
     const adopted = renderToStaticMarkup(
       <NewTerritoryUndo domain="zelda" category="The Legend of Zelda" adopted />,
@@ -57,5 +43,23 @@ describe('NewTerritoryUndo (knowledge-preference thread card)', () => {
     // Sometimes hint == initial selection is "Sometimes" (the B-1 default).
     expect(adopted).toContain('Stays in normal rotation.');
     expect(adopted).not.toContain('Stays on your map, but');
+  });
+
+  // B-DOMAIN-BONUS-ROTATION-01 / ask-before-add: on the daily +2 bonus surface
+  // nothing is on the player's map yet, so this asks permission FIRST instead
+  // of announcing an already-done add.
+  it('asks before adding on the not-yet-adopted bonus surface, instead of announcing an already-done add', () => {
+    const bonus = renderToStaticMarkup(
+      <NewTerritoryUndo domain="zelda" category="The Legend of Zelda" adopted={false} />,
+    );
+    expect(bonus).toContain('Add');
+    expect(bonus).toContain('The Legend of Zelda');
+    expect(bonus).toContain('to your topics?');
+    expect(bonus).toContain('Yes, sometimes');
+    expect(bonus).toContain('Yes, often');
+    expect(bonus).toContain('Not now');
+    // No past-tense "already added" framing on first render.
+    expect(bonus).not.toContain('Added');
+    expect(bonus).not.toContain('Knowledge updated');
   });
 });
