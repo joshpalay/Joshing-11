@@ -2058,9 +2058,10 @@ export const friendInvitations = pgTable(
 // user, replacing the single evergreen users.invite_token. slot is the
 // identity a link carries: 0 = untagged (carries all 3 seed topics), 1-3 = a
 // specific slot in the user's standing invite_seed_interests. slot is an
-// INTEGER, not the topic label itself, so renaming a topic never orphans a
-// link or changes its color — the UI resolves slot -> topic -> category at
-// render time.
+// New links persist their own category JSON so two links remain isolated even
+// when the creator later edits another link. `slot` remains for legacy rows:
+// categories=NULL resolves through the former slot model until the creator
+// edits that link, at which point an exact category set is stored.
 //
 // Deletion is soft (deletedAt). A deleted link 404s immediately on
 // /u/<handle>/<token>, but never touches the Follow edge upsertInvitationFriendship
@@ -2081,15 +2082,16 @@ export const userInviteLinks = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     token: text('token').notNull(),
     slot: integer('slot').notNull().default(0),
+    categories: jsonb('categories'),
     createdAt: createdAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('UserInviteLink_token_key').on(table.token),
     index('UserInviteLink_user_id_idx').on(table.userId),
-    // A user can hold several untagged (slot 0) links at once, but at most one
-    // LIVE link per named slot — tagging a second link with the same topic
-    // would make "which link is Sondheim" ambiguous.
+    // Legacy untagged rows may share slot 0. New category-owning links allocate
+    // slots 1–3, so this existing index also makes the three-link cap robust to
+    // concurrent creates.
     uniqueIndex('UserInviteLink_user_id_slot_live_key')
       .on(table.userId, table.slot)
       .where(sql`${table.slot} <> 0 AND ${table.deletedAt} IS NULL`),
@@ -2192,7 +2194,9 @@ export const llmUsageEvent = pgTable(
     index('LlmUsageEvent_provider_created_at_idx').on(table.provider, table.createdAt),
     // Partial: only build-scoped calls are ever queried this way, and they're a
     // minority of the table.
-    index('LlmUsageEvent_build_id_idx').on(table.buildId).where(sql`build_id IS NOT NULL`),
+    index('LlmUsageEvent_build_id_idx')
+      .on(table.buildId)
+      .where(sql`build_id IS NOT NULL`),
   ],
 );
 

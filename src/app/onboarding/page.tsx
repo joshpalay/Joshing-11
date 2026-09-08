@@ -19,6 +19,7 @@ import { assessInterestAnswerability } from '@/server/llm/interests';
 import { convergeDomain } from '@/server/knowledge/converge-domain';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links';
 import { getReminderState } from '@/server/db/queries/account';
 import { shouldOfferReminderAcquisition } from '@/server/reminders/acquisition';
 
@@ -41,9 +42,7 @@ export default async function OnboardingPage() {
   }
 
   const reminderState = await getReminderState(session.userId);
-  const showReminderOffer = reminderState
-    ? shouldOfferReminderAcquisition(reminderState)
-    : false;
+  const showReminderOffer = reminderState ? shouldOfferReminderAcquisition(reminderState) : false;
 
   // Belt-and-suspenders invitation check: the middleware JWT gate runs first,
   // but this protects the onboarding route against any future session path
@@ -58,10 +57,12 @@ export default async function OnboardingPage() {
   const hasInvitation = await db
     .select({ id: friendInvitations.id })
     .from(friendInvitations)
-    .where(and(
-      eq(friendInvitations.inviteeUserId, session.userId),
-      isNotNull(friendInvitations.acceptedAt),
-    ))
+    .where(
+      and(
+        eq(friendInvitations.inviteeUserId, session.userId),
+        isNotNull(friendInvitations.acceptedAt),
+      ),
+    )
     .limit(1);
 
   if (hasInvitation.length === 0 && !(await hasInviteLinkFriendship(session.userId))) {
@@ -95,12 +96,17 @@ export default async function OnboardingPage() {
         (await getInviteLinkSeedTopics(inviter.inviterUserId));
       seeded = {
         interests: topics,
-        inviterName: normalizePersonName(inviter.inviterName),
+        inviterName: safeInviteName(normalizePersonName(inviter.inviterName)),
         inviteeDisplayName: seeded.inviteeDisplayName,
       };
       seedSource = 'link';
     }
   }
+
+  seeded = {
+    ...seeded,
+    interests: sanitizeInviteLinkCategories(seeded.interests),
+  };
 
   // Validate the inviter's free-text suggestions at the invitee's first login,
   // before the interests step renders. The inviter can seed anything ("your
@@ -124,7 +130,11 @@ export default async function OnboardingPage() {
       const { candidates } = await convergeDomain(interest.label);
       const exact = candidates.find((candidate) => candidate.kind === 'exact');
       return exact
-        ? { ...interest, label: exact.label, broadCategory: exact.broadCategory ?? interest.broadCategory }
+        ? {
+            ...interest,
+            label: exact.label,
+            broadCategory: exact.broadCategory ?? interest.broadCategory,
+          }
         : interest;
     }),
   );
@@ -153,7 +163,11 @@ export default async function OnboardingPage() {
     const broadCategories = [
       ...new Set(preSeededInterests.map((interest) => interest.broadCategory).filter(Boolean)),
     ];
-    const adjacent = await getCatalogSuggestions(broadCategories, seededKeys, 3 - preSeededInterests.length);
+    const adjacent = await getCatalogSuggestions(
+      broadCategories,
+      seededKeys,
+      3 - preSeededInterests.length,
+    );
     for (const suggestion of adjacent) {
       preSeededInterests.push({
         domain: suggestion.domain,
@@ -168,7 +182,7 @@ export default async function OnboardingPage() {
     <OnboardingFlow
       preSeededInterests={preSeededInterests}
       seedSource={seedSource}
-      inviterName={seeded.inviterName}
+      inviterName={safeInviteName(seeded.inviterName)}
       inviteeDisplayName={seeded.inviteeDisplayName}
       initialDisplayName={user.displayName}
       initialHandle={user.handle}

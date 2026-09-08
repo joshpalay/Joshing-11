@@ -43,6 +43,7 @@ export async function middleware(request: NextRequest) {
     pathname === '/privacy' ||
     pathname === '/sms-consent' ||
     pathname === '/dev/invite-login' ||
+    pathname.startsWith('/dev/invite-redesign/') ||
     pathname === '/dev/onboarding/intro' ||
     pathname === '/dev/welcome-tour' ||
     pathname.startsWith('/compliance/')

@@ -1,115 +1,78 @@
-// Per-user invite link handler (B-Friends-3).
-//
-// Lives at /u/[handle]/[token] rather than /invite/[handle]/[token] because
-// /invite/[token] already owns the /invite/<dynamic> slot — Next.js refuses
-// to build the route trie when two sibling dynamic segments use different
-// slug names ('handle' vs 'token'), and the resulting unhandled rejection
-// hangs every cold-start lambda until the 15-minute task timeout. See the
-// commit that moved this file.
-//
-// /invite/[token]/page.tsx still resolves FriendInvitation.token
-// (per-invitation, expires, may pre-seed interests). THIS route resolves
-// the inviter's evergreen users.invite_token, generated on demand at
-// /api/account/invite-token and rotatable from /account/privacy.
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
-import type { ReactNode } from 'react'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-
-import { AddFriendButton } from '@/components/friends/AddFriendButton'
-import { getSession } from '@/server/auth/session'
-import { getRelationship } from '@/server/db/queries/friend-requests'
-import { resolveInviteLink } from '@/server/friends/user-invite-token'
+import { AcceptInviteLinkButton } from '@/components/invite/AcceptInviteLinkButton';
+import {
+  InvitationLandingContent,
+  InvitationPageShell,
+} from '@/components/invite/InvitationLanding';
+import { safeInviteName } from '@/lib/invite-links';
+import { getSession } from '@/server/auth/session';
+import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
 type InvitePageProps = {
-  params: Promise<{ handle: string; token: string }>
-}
-
-function InviteShell({ children }: { children: ReactNode }) {
-  return (
-    <main className="bg-background text-foreground flex min-h-screen items-center justify-center px-4 py-10">
-      <section className="bg-card w-full max-w-sm rounded-[var(--radius-card)] border p-5 shadow-[var(--shadow-card)]">
-        {children}
-      </section>
-    </main>
-  )
-}
+  params: Promise<{ handle: string; token: string }>;
+};
 
 function loginHref(handle: string, token: string): string {
   const params = new URLSearchParams({
     inviteHandle: handle,
     inviteUserToken: token,
-  })
-  return `/login?${params.toString()}`
+  });
+  return `/login?${params.toString()}`;
 }
 
 export default async function UserInvitePage({ params }: InvitePageProps) {
-  const { handle, token } = await params
-  const inviter = await resolveInviteLink(handle, token)
+  const { handle, token } = await params;
+  const inviter = await resolveInviteLink(handle, token);
 
   if (!inviter) {
     return (
-      <InviteShell>
+      <InvitationPageShell>
         <div className="space-y-4 text-center">
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-            Link not valid
-          </p>
-          <h1 className="font-serif text-2xl font-semibold leading-tight">
-            This invite link is no longer valid.
+          <p className="text-muted-foreground text-sm font-medium">Invitation unavailable</p>
+          <h1 className="font-serif text-3xl leading-tight font-semibold text-balance">
+            This invitation link is no longer valid.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
-            Ask your friend for a fresh link.
+            Ask your friend for a fresh link, or continue to Joshing if you already have an account.
           </p>
-          <Link
-            href="/login"
-            className="inline-flex h-11 w-full items-center justify-center rounded-md border px-4 text-sm font-medium"
-          >
+          <Link href="/login" className="btn-ghost min-h-11 w-full">
             Go to login
           </Link>
         </div>
-      </InviteShell>
-    )
+      </InvitationPageShell>
+    );
   }
 
-  const session = await getSession()
-  const displayName = inviter.inviterDisplayName?.trim() || `@${inviter.inviterHandle}`
+  const session = await getSession();
+  if (session?.userId === inviter.inviterUserId) redirect('/friends');
 
-  // Logged-in as the inviter themselves — bounce to /friends.
-  if (session?.userId === inviter.inviterUserId) {
-    redirect('/friends')
-  }
+  const inviterName = safeInviteName(inviter.inviterDisplayName);
+  const continueLabel = inviterName ? `Continue with ${inviterName}` : 'Continue';
 
-  // Logged-in as someone else — render an inline send-friend-request UI.
-  if (session) {
-    const relationship = await getRelationship(session.userId, inviter.inviterUserId)
-    return (
-      <InviteShell>
-        <div className="space-y-5">
-          <div>
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-              You were invited
-            </p>
-            <h1 className="mt-2 font-serif text-3xl font-semibold leading-tight">
-              {displayName} invited you to connect on Joshing.
-            </h1>
-          </div>
-          <AddFriendButton
-            targetUserId={inviter.inviterUserId}
-            targetDisplayName={displayName}
-            relationship={relationship}
-          />
-          <Link
-            href={`/users/${inviter.inviterUserId}`}
-            className="text-muted-foreground inline-flex text-sm underline underline-offset-4"
-          >
-            View {displayName}&rsquo;s profile
-          </Link>
-        </div>
-      </InviteShell>
-    )
-  }
-
-  // Logged-out — skip the interstitial and drop the invitee straight onto the
-  // login screen, with the invite params attached so it shows the invite card.
-  redirect(loginHref(inviter.inviterHandle, token))
+  return (
+    <InvitationPageShell>
+      <InvitationLandingContent
+        inviterName={inviterName}
+        categories={inviter.seedTopics}
+        action={
+          session ? (
+            <AcceptInviteLinkButton
+              handle={inviter.inviterHandle}
+              token={token}
+              inviterName={inviterName}
+            />
+          ) : (
+            <Link
+              href={loginHref(inviter.inviterHandle, token)}
+              className="btn-primary min-h-11 w-full"
+            >
+              {continueLabel}
+            </Link>
+          )
+        }
+      />
+    </InvitationPageShell>
+  );
 }
