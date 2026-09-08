@@ -4,7 +4,7 @@ status: active
 opened: 2026-09-04
 last-reviewed: 2026-09-08
 owner: Josh
-related-pr: "#1620"
+related-pr: "#1620, #1626"
 ---
 
 > **2026-09-07: open question 5 is FIXED, MERGED, and deployed (#1620).** The
@@ -897,5 +897,47 @@ above is the actual mechanism, rather than leaving it ranked by plausibility.
 1. Watch for the first `outcome='lost_persist_race'` row and, when one
    lands, correlate its timing against the user's login/prewarm and
    page-load logs per the paragraph above.
+2. Everything else already listed above (Phase 3 population reading,
+   question 4 on the bonus's own cost) is unchanged.
+
+### 2026-09-08 (diagnosis-review) — no change; still n=3, still zero races
+
+Re-checked everything this doc depends on, read-only:
+
+- **`npm run check:build-latency`** — `DailyBuildMetric` totals now
+  `carry_forward=65, existing_queue=9, built=4` (`existing_queue` up from 6
+  at the last review; ordinary traffic, not investigated further). Still
+  **no new `outcome='built'` row** since 2026-09-07T17:05:14Z — today's
+  17:05 UTC cron result isn't in yet at review time, or fell through to
+  `existing_queue`/`carry_forward`. Phase 3 stays at **n=3**, same three
+  rows, same numbers: saved 1529/1362/2154ms, residual 1028/925/1627ms
+  (925–1627ms spread, still "wide; explain before relying on it" per the
+  script's own flag), median saving 1529ms.
+- **`outcome='lost_persist_race'` count, queried directly**: still **0**
+  rows in `DailyBuildMetric`. Confirms the 2026-09-08 entry above — no
+  change, still uninformative about real-world frequency rather than
+  evidence the race stopped happening (the one confirmed historical
+  occurrence lived on a since-deleted disposable fixture, so the surviving
+  telemetry structurally can't see it either way, per that entry).
+- **PR `#1620`** reconfirmed `MERGED` to `main`. **`#1626`** ("diagnosis:
+  name the trigger surface for the daily-build persist-race," the entry
+  already in this file above) also confirmed `MERGED` to `main`
+  (2026-09-08T00:51 UTC) — this file's content already matched `main`
+  exactly (verified by diff), only the frontmatter `related-pr` list was
+  missing it; corrected above.
+- **Code check**: `git log --oneline -5` on `queue-orchestrator.ts` and
+  `daily.ts` shows no commits past `#1620` — the check-and-skip fix is
+  still the last thing to touch this path, consistent with "nothing to
+  re-verify about the mechanism itself."
+
+**No open decision changed.** The five triggers named in the 2026-09-08
+entry above are still ranked by plausibility only; nothing new narrows them
+down, since that still needs an actual `lost_persist_race` row to
+correlate against.
+
+### Next steps
+1. Watch for the first `outcome='lost_persist_race'` row and, when one
+   lands, correlate its timing against the user's login/prewarm and
+   page-load logs per the 2026-09-08 entry above.
 2. Everything else already listed above (Phase 3 population reading,
    question 4 on the bonus's own cost) is unchanged.

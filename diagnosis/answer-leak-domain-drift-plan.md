@@ -4,7 +4,7 @@ status: active
 opened: 2026-09-05
 last-reviewed: 2026-09-08
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619, #1623"
+related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
@@ -989,10 +989,175 @@ indistinguishable from "nothing to catch that day." First run: no post-flip
 generation traffic yet, correctly reported as inconclusive rather than a
 false pass or fail.
 
+### 2026-09-08 (later still) — "why does Woolf keep generating Joyce" investigated and the historical damage cleaned up
+
+(Note: an earlier pass at this investigation was written up as an Update
+here, then lost to a concurrent edit of this file before it could be
+committed — re-summarizing it now since the "still not started" line above
+was stale.)
+
+**Two mechanisms, both confirmed against live prod data, not guessed:**
+
+1. **The content bug.** `canonical_subcategory` on a generated row is an
+   ECHO of whichever domain slot the model was answering in a batch
+   (`buildUserPrompt`'s numbered "Generate exactly one question for each of
+   the following N domains" list) — it is not independently verified.
+   `fact_key`, by contrast, is derived from what the model actually wrote.
+   This split is already called out in a comment at
+   `generate-questions.ts:876-882`. So every Joyce-under-Woolf row has
+   `canonical_subcategory = "Virginia Woolf's Novels and Essays"` but a
+   `fact_key` prefixed `james-joyce-irish-modernism-...` — the model was
+   asked for Woolf and genuinely wrote Joyce content. Not a bookkeeping bug;
+   a real generation-content mixup, most likely driven by how tightly Woolf
+   and Joyce are paired in training data (co-founders of stream-of-
+   consciousness modernism, landmark novels 3 years apart) — a prior the
+   static `SYSTEM_PROMPT` reinforces on every call by using both names as
+   its own back-to-back domain-labeling examples
+   (`generate-questions.ts:249,251,262`), independent of which domains a
+   given round even includes.
+
+2. **Why it's sustained, not a one-off (confirmed in code).**
+   `getRecentFactKeys` (`daily.ts:2569`) and `previousQuestionTexts`
+   (`generate-questions.ts:3094`) are scoped by `userId` only, across ALL a
+   user's domains, and — critically — **regardless of `is_duplicate`**. Both
+   render into every future prompt tagged `[canonical_subcategory]`. So once
+   one Joyce fact gets mislabeled `[Virginia Woolf's Novels and Essays]`,
+   every future Woolf-domain round sees it as an unintentional few-shot
+   precedent — AND demoting the row (`is_duplicate=true`, the only mitigation
+   applied on 2026-09-07) does NOT stop this, since the avoid-list queries
+   don't filter on duplicate status. This is consistent with what the data
+   showed: one user had this recur **24 times** across the full corpus (not
+   just the 22 the 2026-09-07 hand-verify pass caught), clustered almost
+   daily from 2026-05-03 to 2026-05-21, right after that user's separate
+   "Ulysses (Joyce Novel)" / "Dubliners & Joyce's Short Fiction" domains
+   stopped getting fresh generation.
+
+**Cleanup done today** (`scripts/refile-off-domain-rows-2026-09-08.ts`,
+dry-run verified then applied against prod, DB-verified after — not just
+script stdout): found and fixed **33 rows** across a full-corpus query (not
+limited to the previously-known 22), covering every off-domain cluster this
+doc has tracked — Joyce/Ulysses/Dubliners/Portrait-of-the-Artist under
+Woolf, E.M. Forster's Howards End under Woolf, "Rent" under Stephen Sondheim
+Musicals, Johannes Tinctoris under J.S. Bach & Baroque Counterpoint.
+
+- **14 re-filed AND restored to serving** — only where (a) the affected user
+  already has a real, established domain matching the true content (e.g.
+  "Ulysses (Joyce Novel)", "Dubliners & Joyce's Short Fiction", "Rent the
+  Musical" — all pre-existing, not invented), and (b) the row's own
+  `verification_reason` showed OFF_DOMAIN as the ONLY defect, with no
+  compounding FALSE_PREMISE / unsalvageable / likely-duplicate finding. One
+  of these (`6bdb3aa5`, "Michael Furey") was still **live and being served
+  under the wrong label at the moment this ran** — not just a historical
+  demoted row.
+- **19 relabeled only, left demoted** — either no existing target domain for
+  that user (Portrait of the Artist has no per-work domain for either
+  affected user; Forster; Rent for users without a Rent domain; Tinctoris —
+  none of these were invented as new servable domains, per Phase 3's caution
+  above), or the row carries an independent, separate defect besides the
+  filing (`cf0a6ed9`: unsalvageable answer-leak; `3f191608` and `00afdea4`:
+  false premise; `aad804c5`, `d21f6b62`: ambiguous/possible-duplicate
+  history; `ca2c1feb`: an explicit duplicate of the now-restored
+  `6fb3e187`). Relabeling these still closes the avoid-list feedback loop
+  even though the rows themselves never serve again.
+
+Verified after applying: **zero rows in the corpus remain filed under
+"Virginia Woolf's Novels and Essays"** whose `fact_key` names Joyce,
+Dubliners, or Forster content.
+
+**Not done / explicitly out of scope for today:** a full-corpus generalized
+audit for this same failure mode on OTHER tightly-paired domains (Proust,
+other same-movement author pairs, etc.) — this pass only covered the
+clusters already named in this doc's history. Also not built: a code-level
+fix to Mechanism 2 itself (e.g. excluding a domain's own already-flagged
+off-domain rows from that domain's avoid-list rendering going forward) — the
+relabeling done today fixes the SAME symptom for already-demoted rows going
+forward (a correctly-labeled row can't poison the wrong domain's avoid list
+anymore), but nothing yet stops a fresh future OFF_DOMAIN miss from doing
+the same thing again before it's caught and relabeled. With
+`DOMAIN_DRIFT_DROP_ENABLED` now on, fresh confirmed-off-domain rows are
+dropped before insert, which should prevent new instances of Mechanism 2
+from starting — today's cleanup was for the backlog that predates that flag.
+
+**Decision (Josh, 2026-09-08): hold the Mechanism 2 code fix pending
+diagnostics.** Deliberately NOT building the "exclude a domain's own
+flagged-off-domain rows from its future avoid-list" fix yet. `check:gate-flags`
+is the diagnostic this is waiting on — it needs to show
+`DOMAIN_DRIFT_DROP_ENABLED` actually catching fresh drift in real traffic
+first. If it's working, Mechanism 2 may simply not recur (nothing to fix);
+building the prevention code before that's confirmed risks solving a problem
+the drop flag already solves.
+
 ### Next steps
 1. **Run `npm run check:gate-flags`** once a day or two of real generation
-   traffic has passed since the flip, to confirm both flags are actually
-   doing something (or to catch a silent problem via the shared `quality`
-   gate health check).
-2. The "why does Woolf keep generating Joyce" investigation — still not
-   started.
+   traffic has passed since the flip — this is the blocking diagnostic for
+   the decision above, not just a health check.
+2. Only after that: revisit whether the Mechanism 2 code fix is still
+   needed, based on what the diagnostic shows.
+3. ~~The "why does Woolf keep generating Joyce" investigation~~ — done, see
+   above. Worth a follow-up only if the pattern recurs post-flip (it
+   shouldn't, now that `DOMAIN_DRIFT_DROP_ENABLED` is on) or if someone wants
+   the generalized full-corpus audit for other tightly-paired domains.
+
+### 2026-09-08 (diagnosis-review) — found a bug in `check:gate-flags` itself; real post-flip data already exists and reads clean so far
+
+This branch's copy of this file had fallen behind `main` by two merged PRs
+(`#1624`, `#1628`) — no local edits were lost (`git status` on this file was
+clean before syncing), just stale content from branching before they landed.
+Synced to `main`'s version verbatim before appending this entry; `related-pr`
+above updated to include both.
+
+**Re-verified `PARTIAL_ANSWER_LEAK_ENABLED` / `DOMAIN_DRIFT_DROP_ENABLED`**:
+absent from local `.env`, as every prior entry has found — expected, since
+these are Vercel-dashboard-only production env vars, not part of this repo's
+`.env`. Not informative about the production value either way; only
+`GateDropStat` telemetry is.
+
+**Ran `npm run check:gate-flags` (the blocking diagnostic Next step 1 above
+calls for) — it reported "NONE YET" for both gates, which is wrong.** Querying
+`GateDropStat` directly shows real post-flip traffic already exists:
+
+| gate | day | considered | dropped | failed_open |
+|---|---|---|---|---|
+| answer_leak_partial | 2026-09-08 | 14 | 0 | 0 |
+| domain_drift | 2026-09-08 | 14 | 0 | 0 |
+| quality | 2026-09-08 | 14 | 4 | 0 |
+
+**Root cause, confirmed by direct reproduction, not inferred:** the script's
+`postFlip` filter compares a `pg`-returned `DATE` column (a JS `Date` object,
+midnight UTC) against the literal string `'2026-09-07'` with plain `>`. JS's
+abstract relational comparison stringifies a `Date` via its *local-timezone*
+`toString()` before comparing, not an ISO date string — confirmed directly:
+`new Date('2026-09-08T00:00:00.000Z') > '2026-09-07'` evaluates to `false` in
+this machine's timezone. The comparison silently does the wrong thing instead
+of throwing, so the script has been reporting "no data" for a day that
+actually has 14 rows considered per gate. This is a bug in the verification
+script itself, not in the gates or the flags — flagging for a fix (compare
+`String(r.day) > FLIP_DAY` after normalizing to `YYYY-MM-DD`, or parse both
+as UTC dates) rather than fixing it myself mid-review.
+
+**Reading the real numbers by hand, applying the script's own stated
+methodology:** `2026-09-08` is 14/14 considered with **0 dropped** on both
+gates — at these gates' documented hit rates (partial-leak ~0.56%,
+domain-drift lower after the second-opinion filter) this is the
+script's own "[INCONCLUSIVE] — not unusual after only a few days" case, not
+a red flag. `quality`'s `failed_open: 0` on the same day says the shared
+Haiku plumbing under `domain_drift` is healthy, so a zero-drop day here reads
+as "nothing to catch," not "the check silently isn't running." **Still no
+resolution of the Mechanism 2 decision above** — that needs an actual drop
+(or several more clean days) to read either way, and one day of quiet
+traffic doesn't move it.
+
+**No other change since the last entry:** the three `ContentReport` rows,
+the 7 Phase 1 disagreement items, and the generalized cross-domain audit
+mentioned above are all still exactly where the last entry left them.
+
+### Next steps (revised)
+1. **Fix the date-comparison bug in `scripts/check-gate-flags.mjs`** so it
+   reports real data instead of a false "NONE YET" — low effort, and it's
+   actively hiding the one number this doc is waiting on.
+2. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop (or a few more clean, quality-healthy days) before
+   revisiting the Mechanism 2 code-fix decision.
+3. The 7 Phase 1 disagreement items are effectively closed (only the `model`
+   bug blocked a flag, and that shipped in #1623) — no outstanding action
+   there beyond what's already landed.
