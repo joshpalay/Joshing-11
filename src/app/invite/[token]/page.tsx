@@ -6,7 +6,7 @@ import {
   InvitationLandingContent,
   InvitationPageShell,
 } from '@/components/invite/InvitationLanding';
-import { safeInviteName } from '@/lib/invite-links';
+import { inviteAcceptanceLabel, safeInviteName } from '@/lib/invite-links';
 import { getSession } from '@/server/auth/session';
 import { getFriendInvitationLandingByToken } from '@/server/friends/invitations';
 
@@ -37,7 +37,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
               <AcceptFriendInvitationButton token={token} inviterName={inviterName} />
             ) : (
               <Link href={inviteLoginHref(token)} className="btn-primary min-h-11 w-full">
-                {inviterName ? `Continue with ${inviterName}` : 'Continue'}
+                {inviteAcceptanceLabel(inviterName)}
               </Link>
             )
           }

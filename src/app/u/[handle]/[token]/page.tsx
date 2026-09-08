@@ -6,7 +6,7 @@ import {
   InvitationLandingContent,
   InvitationPageShell,
 } from '@/components/invite/InvitationLanding';
-import { safeInviteName } from '@/lib/invite-links';
+import { inviteAcceptanceLabel, safeInviteName } from '@/lib/invite-links';
 import { getSession } from '@/server/auth/session';
 import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
@@ -49,7 +49,6 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
   if (session?.userId === inviter.inviterUserId) redirect('/friends');
 
   const inviterName = safeInviteName(inviter.inviterDisplayName);
-  const continueLabel = inviterName ? `Continue with ${inviterName}` : 'Continue';
 
   return (
     <InvitationPageShell>
@@ -68,7 +67,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
               href={loginHref(inviter.inviterHandle, token)}
               className="btn-primary min-h-11 w-full"
             >
-              {continueLabel}
+              {inviteAcceptanceLabel(inviterName)}
             </Link>
           )
         }

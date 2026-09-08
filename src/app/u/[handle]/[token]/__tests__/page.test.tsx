@@ -43,16 +43,18 @@ describe('/u/[handle]/[token] personalized invitation', () => {
   });
 
   it('uses the inviter identity and exact categories resolved from the server record', async () => {
-    resolveInviteLinkMock.mockResolvedValueOnce(resolution());
+    resolveInviteLinkMock.mockResolvedValueOnce(
+      resolution({ inviterDisplayName: 'Duo Prova' }),
+    );
 
     const html = await render();
 
     expect(resolveInviteLinkMock).toHaveBeenCalledWith('josh', 'safe-token');
-    expect(html).toContain('Josh invited you to Joshing');
-    expect(html).toContain('Play Josh’s greatest hits');
+    expect(html).toContain('Duo Prova invited you to Joshing');
+    expect(html).toContain('Play Duo Prova’s greatest hits');
     expect(html).toContain('Sondheim');
     expect(html).toContain('Jazz');
-    expect(html).toContain('Continue with Josh');
+    expect(html).toContain('Accept Duo Prova’s invitation');
     expect(html).toContain('inviteHandle=josh');
     expect(html).toContain('inviteUserToken=safe-token');
   });
@@ -91,7 +93,7 @@ describe('/u/[handle]/[token] personalized invitation', () => {
     const html = await render();
 
     expect(html).toContain('Josh invited you to Joshing');
-    expect(html).toContain('Continue with Josh');
+    expect(html).toContain('Accept Josh’s invitation');
     expect(html).not.toContain('inviteHandle=');
   });
 
@@ -114,6 +116,7 @@ describe('/u/[handle]/[token] personalized invitation', () => {
     expect(html).toContain('You’ve been invited to Joshing');
     expect(html).toContain('Play the greatest hits');
     expect(html).toContain('Someone picked a few categories to get you started.');
-    expect(html).toContain('>Continue<');
+    expect(html).toContain('>Accept invitation<');
+    expect(html).not.toContain('undefined');
   });
 });

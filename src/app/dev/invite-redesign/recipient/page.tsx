@@ -4,6 +4,7 @@ import {
   InvitationLandingContent,
   InvitationPageShell,
 } from '@/components/invite/InvitationLanding';
+import { inviteAcceptanceLabel } from '@/lib/invite-links';
 
 export default function InviteRecipientPreviewPage() {
   return (
@@ -16,7 +17,7 @@ export default function InviteRecipientPreviewPage() {
         ]}
         action={
           <Link href="#" className="btn-primary min-h-11 w-full">
-            Continue with Josh
+            {inviteAcceptanceLabel('Josh')}
           </Link>
         }
       />

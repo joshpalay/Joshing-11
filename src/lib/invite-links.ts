@@ -81,3 +81,9 @@ export function inviteGreatestHitsTitle(name: unknown, creatorView = false): str
   if (!safeName) return creatorView ? 'Play your greatest hits' : 'Play the greatest hits';
   return `Play ${safeName}’s greatest hits`;
 }
+
+/** Recipient-facing action copy; never interpolate account identifiers. */
+export function inviteAcceptanceLabel(name: unknown): string {
+  const safeName = safeInviteName(name);
+  return safeName ? `Accept ${safeName}’s invitation` : 'Accept invitation';
+}
