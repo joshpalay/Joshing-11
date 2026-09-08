@@ -10,7 +10,7 @@ import {
 } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import {
-  inviteGreatestHitsTitle,
+  inviteLinkCardTitle,
   MAX_INVITE_LINK_CATEGORIES,
   sanitizeInviteLinkCategories,
   type InviteLinkCategory,
@@ -30,7 +30,6 @@ export type InviteLinkRowData = {
 };
 
 type Props = {
-  creatorName?: string | null;
   initialTopics: InviteLinkTopic[];
   initialLinks: InviteLinkRowData[];
 };
@@ -96,7 +95,7 @@ function CategoryChip({ topic, onRemove }: { topic: InviteLinkTopic; onRemove?: 
   );
 }
 
-export function InviteLinksSection({ creatorName, initialTopics, initialLinks }: Props) {
+export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
   const suggestions = sanitizeInviteLinkCategories(initialTopics);
   const [links, setLinks] = useState<InviteLinkRowData[]>(() =>
     initialLinks.map((link) => ({
@@ -272,7 +271,7 @@ export function InviteLinksSection({ creatorName, initialTopics, initialLinks }:
                 style={{ background: accent.primary }}
               />
               <h3 className="font-serif text-xl leading-tight font-semibold break-words text-[var(--brand-navy)]">
-                {inviteGreatestHitsTitle(creatorName, true)}
+                {inviteLinkCardTitle(categories)}
               </h3>
               <p className="text-muted-foreground mt-1 text-sm leading-5">
                 We’ll recommend these categories to anyone who uses this link.
@@ -291,6 +290,14 @@ export function InviteLinksSection({ creatorName, initialTopics, initialLinks }:
               <p className="text-muted-foreground/80 mt-2 text-xs">
                 {joinedFriendsCopy(link.joinedCount)}
               </p>
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-muted text-muted-foreground hover:text-foreground mt-2 block rounded-md px-2 py-1.5 font-mono text-xs break-all underline decoration-transparent underline-offset-2 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+              >
+                {link.url}
+              </a>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
                 <button
                   type="button"

@@ -4,6 +4,7 @@ import {
   hasValidInviteLinkCategories,
   inviteAcceptanceLabel,
   inviteGreatestHitsTitle,
+  inviteLinkCardTitle,
   safeInviteName,
   sanitizeInviteLinkCategories,
 } from '@/lib/invite-links';
@@ -39,5 +40,16 @@ describe('invite-link presentation guards', () => {
     expect(inviteAcceptanceLabel('Duo Prova')).toBe('Accept Duo Prova’s invitation');
     expect(inviteAcceptanceLabel(null)).toBe('Accept invitation');
     expect(inviteAcceptanceLabel('+1 (734) 555-0123')).toBe('Accept invitation');
+  });
+
+  it('generates a per-link title from that link’s own categories', () => {
+    expect(inviteLinkCardTitle([{ label: 'Jazz' }])).toBe('Jazz');
+    expect(inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }])).toBe(
+      'Music, Star Wars & Joyce',
+    );
+    expect(inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }])).toBe(
+      'Music & Star Wars',
+    );
+    expect(inviteLinkCardTitle([])).toBe('Invitation link');
   });
 });
