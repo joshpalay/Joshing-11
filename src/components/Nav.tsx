@@ -25,13 +25,7 @@ function formatBadgeCount(count: number): string {
   return String(count);
 }
 
-function AccountIcon({
-  active,
-  initials,
-}: {
-  active: boolean;
-  initials: string | null;
-}) {
+function AccountIcon({ active, initials }: { active: boolean; initials: string | null }) {
   if (!initials) {
     return <User className="size-5" strokeWidth={active ? 2.4 : 1.8} />;
   }
@@ -93,7 +87,9 @@ export function Nav({
           if (!active || !data) return;
           setDisplayName(data.displayName ?? null);
           setBadgeCount(typeof data.bellBadgeCount === 'number' ? data.bellBadgeCount : 0);
-          setFriendRequests(typeof data.friendRequestCount === 'number' ? data.friendRequestCount : 0);
+          setFriendRequests(
+            typeof data.friendRequestCount === 'number' ? data.friendRequestCount : 0,
+          );
           setFriendsDot(Boolean(data.friendsDotVisible));
         },
       )
@@ -125,6 +121,7 @@ export function Nav({
     pathname.startsWith('/admin') ||
     pathname.startsWith('/knowledge') ||
     pathname === '/friends' ||
+    pathname === '/dev/invite-redesign/creator' ||
     isOtherUserProfilePath;
   const showCreateShortcut = !hidesCreateShortcut;
 
@@ -144,18 +141,21 @@ export function Nav({
   // `/dev/onboarding/` prefix now only matches the self-contained stage replays.
   const isOnboardingHarnessPreview =
     pathname === '/dev/welcome-tour' || pathname.startsWith('/dev/onboarding/');
+  const isInviteLanding =
+    pathname.startsWith('/invite/') ||
+    pathname.startsWith('/u/') ||
+    pathname === '/dev/invite-redesign/recipient';
 
   if (
     pathname === '/onboarding' ||
     pathname.startsWith('/daily') ||
     pathname === '/login' ||
-    pathname.startsWith('/invite/') ||
+    isInviteLanding ||
     isCeremonyScreen ||
     isOnboardingHarnessPreview
   ) {
     return null;
   }
-
 
   // The Profile tab is active for both the canonical /users/<self-id>
   // route and the /users/me alias before it redirects.
@@ -175,13 +175,13 @@ export function Nav({
     <>
       <header
         data-app-chrome
-        className="z-40 border-b bg-background/95 backdrop-blur"
+        className="bg-background/95 z-40 border-b backdrop-blur"
         aria-label="Primary header"
       >
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <Link
             href="/"
-            className="font-wordmark text-[22px] font-semibold uppercase leading-none tracking-[0.05em] text-foreground"
+            className="font-wordmark text-foreground text-[22px] leading-none font-semibold tracking-[0.05em] uppercase"
           >
             Joshing
           </Link>
@@ -193,12 +193,12 @@ export function Nav({
                   ? `Lately, ${badgeCount} new update${badgeCount === 1 ? '' : 's'}`
                   : 'Lately'
               }
-              className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               <Bell className="size-5" strokeWidth={1.9} />
               {showBadge ? (
                 <span
-                  className="absolute right-1 top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                  className="absolute top-1 right-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] leading-[14px] font-semibold text-[var(--brand-card)]"
                   style={{ backgroundColor: 'var(--destructive)' }}
                   aria-hidden="true"
                 >
@@ -210,7 +210,7 @@ export function Nav({
               href="/users/me"
               aria-label="Account and settings"
               aria-current={isProfileTabActive('/users/me') ? 'page' : undefined}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-md transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               <AccountIcon active={isProfileTabActive('/users/me')} initials={accountInitials} />
             </Link>
@@ -222,7 +222,7 @@ export function Nav({
           type="button"
           data-app-chrome
           className={[
-            'fixed bottom-24 right-5 z-50 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg',
+            'bg-primary text-primary-foreground fixed right-5 bottom-24 z-50 grid size-14 place-items-center rounded-full shadow-lg',
             // The dedicated add-a-question FAB shows on every viewport; the
             // generic Create chooser FAB stays mobile-only as before.
             isQuestionComposerShortcut ? '' : 'md:hidden',
@@ -239,7 +239,7 @@ export function Nav({
       ) : null}
       <nav
         data-app-chrome
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur"
+        className="bg-background/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur"
         aria-label="Primary navigation"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
@@ -277,7 +277,7 @@ export function Nav({
                   // Inactive tabs use a legible secondary navy (--brand-ink-700,
                   // ~7:1 on cream) rather than the old text-foreground/55, which
                   // dimmed to ~2.5:1 and failed AA.
-                  active ? 'text-foreground' : 'text-[var(--brand-ink-700)] hover:text-foreground',
+                  active ? 'text-foreground' : 'hover:text-foreground text-[var(--brand-ink-700)]',
                 ].join(' ')}
               >
                 <span aria-hidden="true" className="relative grid place-items-center">
@@ -297,7 +297,7 @@ export function Nav({
                       find — never both, so the tab corner stays uncluttered. */}
                   {showFriendRequests ? (
                     <span
-                      className="absolute -right-2 -top-1 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] font-semibold leading-[14px] text-[var(--brand-card)]"
+                      className="absolute -top-1 -right-2 grid min-w-[18px] items-center rounded-full px-1.5 text-center font-mono text-[9px] leading-[14px] font-semibold text-[var(--brand-card)]"
                       style={{ backgroundColor: 'var(--destructive)' }}
                       aria-hidden="true"
                     >
@@ -305,14 +305,14 @@ export function Nav({
                     </span>
                   ) : friendsDot && label === 'Friends' ? (
                     <span
-                      className="absolute -right-1 -top-1 size-2 rounded-full"
+                      className="absolute -top-1 -right-1 size-2 rounded-full"
                       style={{ backgroundColor: 'var(--brand-ink-400)' }}
                     />
                   ) : null}
                 </span>
                 <span
                   className={[
-                    'font-mono text-[10px] uppercase tracking-[0.06em]',
+                    'font-mono text-[10px] tracking-[0.06em] uppercase',
                     active ? 'font-semibold' : 'font-medium',
                   ].join(' ')}
                 >

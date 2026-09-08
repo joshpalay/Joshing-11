@@ -1,18 +1,18 @@
-import { randomBytes } from 'crypto'
+import { randomBytes } from 'crypto';
 
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 
-import { maskPhoneE164 } from '@/lib/phone-e164'
-import { activityItems, db, friendInvitations, users } from '@/server/db'
-import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
-import { upsertInvitationFriendship } from '@/server/friends/friendships'
-import { hashTelemetryValue, logTelemetry } from '@/server/telemetry'
+import { maskPhoneE164 } from '@/lib/phone-e164';
+import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links';
+import { activityItems, db, friendInvitations, users } from '@/server/db';
+import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed';
+import { upsertInvitationFriendship } from '@/server/friends/friendships';
+import { hashTelemetryValue, logTelemetry } from '@/server/telemetry';
 
-export const INVITATION_ACCEPTANCE_ERROR_MESSAGE =
-  'This invitation could not be accepted.'
+export const INVITATION_ACCEPTANCE_ERROR_MESSAGE = 'This invitation could not be accepted.';
 
 export const INVITE_REQUIRED_MESSAGE =
-  "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite."
+  "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.";
 
 // 30 days (was 14). Kept well inside the ~90-day window US carriers wait
 // before recycling an unused phone number — the risk a perpetual invite would
@@ -20,56 +20,53 @@ export const INVITE_REQUIRED_MESSAGE =
 // on their behalf. The friend-invitation-reminders cron fires at this same
 // 30-day mark for still-unaccepted invites, so expiry and "nudge the inviter"
 // land together.
-const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
+const DEFAULT_INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 
-export type FriendInvitation = typeof friendInvitations.$inferSelect
+export type FriendInvitation = typeof friendInvitations.$inferSelect;
 
-export type OutgoingFriendInvitationStatus =
-  | 'pending'
-  | 'accepted'
-  | 'expired'
-  | 'cancelled'
+export type OutgoingFriendInvitationStatus = 'pending' | 'accepted' | 'expired' | 'cancelled';
 
 export type OutgoingFriendInvitation = FriendInvitation & {
-  status: OutgoingFriendInvitationStatus
-  suggestedInterests: string[]
-}
+  status: OutgoingFriendInvitationStatus;
+  suggestedInterests: string[];
+};
 
 export type FriendInvitationLanding = {
-  status: 'valid' | 'expired' | 'accepted' | 'invalid'
-  inviterName: string
-  inviterUserId: string | null
-  inviterAvatarColor: string | null
-}
+  status: 'valid' | 'expired' | 'accepted' | 'invalid';
+  inviterName: string;
+  inviterUserId: string | null;
+  inviterAvatarColor: string | null;
+  categories: string[];
+};
 
 export type InvitePrefill = {
-  inviterName: string
-  inviterUserId: string
-  inviterAvatarColor: string | null
+  inviterName: string;
+  inviterUserId: string;
+  inviterAvatarColor: string | null;
   // Recipient's E.164 phone resolved from the invite token. Default posture is
   // server-only (surface `maskedPhone` instead). Deliberate exception
   // (D-AUTH-INVITE-PHONE-FIRST §2.3): the phone-first FriendInvitation login
   // path pre-fills this full number into an editable field, so `login/page.tsx`
   // crosses it to the client — but ONLY for that invite-token-gated case. The
   // invitee's own number is not a secret from them. Do not widen this exposure.
-  inviteePhone: string
-  maskedPhone: string
-}
+  inviteePhone: string;
+  maskedPhone: string;
+};
 
 export type CreateFriendInvitationInput = {
-  inviterUserId: string
-  inviteePhone: string
-  inviteeDisplayName: string
-  preSeededInterests?: unknown
-  personalMessage?: string | null
-  now?: Date
-  expiresAt?: Date
-}
+  inviterUserId: string;
+  inviteePhone: string;
+  inviteeDisplayName: string;
+  preSeededInterests?: unknown;
+  personalMessage?: string | null;
+  now?: Date;
+  expiresAt?: Date;
+};
 
 export type AcceptFriendInvitationResult =
   | { accepted: true }
   | {
-      accepted: false
+      accepted: false;
       reason:
         | 'missing'
         | 'expired'
@@ -77,19 +74,18 @@ export type AcceptFriendInvitationResult =
         | 'cancelled'
         | 'self'
         | 'phone_mismatch'
-        | 'claim_failed'
-    }
+        | 'claim_failed';
+    };
 
 function displayInviterName(value: string | null | undefined) {
-  const normalized = value?.trim().replace(/\s+/g, ' ')
-  return normalized ? normalized.slice(0, 80) : 'Someone'
+  return safeInviteName(value) ?? 'Someone';
 }
 
 export function parseInvitationInterests(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
+  if (!Array.isArray(value)) return [];
 
-  const seen = new Set<string>()
-  const interests: string[] = []
+  const seen = new Set<string>();
+  const interests: string[] = [];
 
   for (const item of value) {
     const rawLabel =
@@ -97,29 +93,34 @@ export function parseInvitationInterests(value: unknown): string[] {
         ? item
         : item && typeof item === 'object' && !Array.isArray(item)
           ? (item as Record<string, unknown>).label
-          : null
-    const label =
-      typeof rawLabel === 'string' ? rawLabel.trim().replace(/\s+/g, ' ') : ''
-    if (!label) continue
+          : null;
+    const label = typeof rawLabel === 'string' ? rawLabel.trim().replace(/\s+/g, ' ') : '';
+    if (!label) continue;
 
-    const key = label.toLocaleLowerCase('en-US')
-    if (seen.has(key)) continue
+    const key = label.toLocaleLowerCase('en-US');
+    if (seen.has(key)) continue;
 
-    seen.add(key)
-    interests.push(label.slice(0, 80))
-    if (interests.length === 3) break
+    seen.add(key);
+    interests.push(label.slice(0, 80));
+    if (interests.length === 3) break;
   }
 
-  return interests
+  return interests;
 }
 
 export async function getFriendInvitationLandingByToken(
   token: string,
-  now = new Date()
+  now = new Date(),
 ): Promise<FriendInvitationLanding> {
-  const normalizedToken = token.trim()
+  const normalizedToken = token.trim();
   if (!normalizedToken) {
-    return { status: 'invalid', inviterName: 'Someone', inviterUserId: null, inviterAvatarColor: null }
+    return {
+      status: 'invalid',
+      inviterName: 'Someone',
+      inviterUserId: null,
+      inviterAvatarColor: null,
+      categories: [],
+    };
   }
 
   const [row] = await db
@@ -135,36 +136,44 @@ export async function getFriendInvitationLandingByToken(
     .from(friendInvitations)
     .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
     .where(eq(friendInvitations.token, normalizedToken))
-    .limit(1)
+    .limit(1);
 
   if (!row || row.cancelledAt) {
     logTelemetry('friend_invite_link_opened', {
       status: 'invalid',
       invite_hash: hashTelemetryValue(normalizedToken),
-    })
-    return { status: 'invalid', inviterName: 'Someone', inviterUserId: null, inviterAvatarColor: null }
+    });
+    return {
+      status: 'invalid',
+      inviterName: 'Someone',
+      inviterUserId: null,
+      inviterAvatarColor: null,
+      categories: [],
+    };
   }
 
-  const inviterName = displayInviterName(row.inviterName)
-  // Pre-seeded interests are NEVER returned to the public landing payload:
-  // anyone with the link could otherwise view the inviter's notes for the
-  // intended recipient. The labels are still surfaced to the recipient
-  // post-OTP via getPreSeededInterestsForUser(). We count them here only
-  // for telemetry.
-  const interestCount = parseInvitationInterests(row.preSeededInterests).length
+  const inviterName = displayInviterName(row.inviterName);
+  // The invitation URL is the capability. Surface only the validated labels
+  // promised on the personalized landing page; descriptions/personal notes
+  // remain server-only and never cross this boundary.
+  const categories = sanitizeInviteLinkCategories(
+    parseInvitationInterests(row.preSeededInterests),
+  ).map((category) => category.label);
+  const interestCount = categories.length;
 
   if (row.acceptedAt) {
     logTelemetry('friend_invite_link_opened', {
       status: 'accepted',
       invite_hash: hashTelemetryValue(normalizedToken),
       suggested_interest_count: 0,
-    })
+    });
     return {
       status: 'accepted',
       inviterName,
       inviterUserId: row.inviterUserId,
       inviterAvatarColor: row.inviterAvatarColor,
-    }
+      categories: [],
+    };
   }
 
   if (row.expiresAt <= now) {
@@ -172,27 +181,29 @@ export async function getFriendInvitationLandingByToken(
       status: 'expired',
       invite_hash: hashTelemetryValue(normalizedToken),
       suggested_interest_count: 0,
-    })
+    });
     return {
       status: 'expired',
-      inviterName,
-      inviterUserId: row.inviterUserId,
-      inviterAvatarColor: row.inviterAvatarColor,
-    }
+      inviterName: 'Someone',
+      inviterUserId: null,
+      inviterAvatarColor: null,
+      categories: [],
+    };
   }
 
   logTelemetry('friend_invite_link_opened', {
     status: 'valid',
     invite_hash: hashTelemetryValue(normalizedToken),
     suggested_interest_count: interestCount,
-  })
+  });
 
   return {
     status: 'valid',
     inviterName,
     inviterUserId: row.inviterUserId,
     inviterAvatarColor: row.inviterAvatarColor,
-  }
+    categories,
+  };
 }
 
 /**
@@ -205,10 +216,10 @@ export async function getFriendInvitationLandingByToken(
  */
 export async function getInvitePrefillByToken(
   token: string,
-  now = new Date()
+  now = new Date(),
 ): Promise<InvitePrefill | null> {
-  const normalizedToken = token.trim()
-  if (!normalizedToken) return null
+  const normalizedToken = token.trim();
+  if (!normalizedToken) return null;
 
   const [row] = await db
     .select({
@@ -223,14 +234,14 @@ export async function getInvitePrefillByToken(
     .from(friendInvitations)
     .leftJoin(users, eq(friendInvitations.inviterUserId, users.id))
     .where(eq(friendInvitations.token, normalizedToken))
-    .limit(1)
+    .limit(1);
 
-  if (!row) return null
-  if (row.acceptedAt || row.cancelledAt) return null
-  if (row.expiresAt <= now) return null
+  if (!row) return null;
+  if (row.acceptedAt || row.cancelledAt) return null;
+  if (row.expiresAt <= now) return null;
 
-  const inviteePhone = row.inviteePhone?.trim()
-  if (!inviteePhone) return null
+  const inviteePhone = row.inviteePhone?.trim();
+  if (!inviteePhone) return null;
 
   return {
     inviterName: displayInviterName(row.inviterName),
@@ -238,19 +249,19 @@ export async function getInvitePrefillByToken(
     inviterAvatarColor: row.inviterAvatarColor,
     inviteePhone,
     maskedPhone: maskPhoneE164(inviteePhone),
-  }
+  };
 }
 
 function normalizeRequiredText(value: string, fieldName: string) {
-  const normalized = value.trim().replace(/\s+/g, ' ')
+  const normalized = value.trim().replace(/\s+/g, ' ');
   if (!normalized) {
-    throw new Error(`${fieldName} is required`)
+    throw new Error(`${fieldName} is required`);
   }
-  return normalized
+  return normalized;
 }
 
 function generateInvitationToken() {
-  return randomBytes(32).toString('base64url')
+  return randomBytes(32).toString('base64url');
 }
 
 export async function createFriendInvitation({
@@ -262,20 +273,17 @@ export async function createFriendInvitation({
   now = new Date(),
   expiresAt = new Date(now.getTime() + DEFAULT_INVITATION_TTL_MS),
 }: CreateFriendInvitationInput): Promise<FriendInvitation> {
-  const normalizedInviteePhone = normalizeRequiredText(
-    inviteePhone,
-    'inviteePhone'
-  )
+  const normalizedInviteePhone = normalizeRequiredText(inviteePhone, 'inviteePhone');
   const normalizedInviteeDisplayName = normalizeRequiredText(
     inviteeDisplayName,
-    'inviteeDisplayName'
-  )
+    'inviteeDisplayName',
+  );
 
   const existingInvitation = await getPendingInvitationForPhone({
     inviterUserId,
     inviteePhone: normalizedInviteePhone,
     now,
-  })
+  });
 
   if (existingInvitation) {
     const [updatedInvitation] = await db
@@ -291,12 +299,12 @@ export async function createFriendInvitation({
           eq(friendInvitations.id, existingInvitation.id),
           isNull(friendInvitations.acceptedAt),
           isNull(friendInvitations.cancelledAt),
-          gt(friendInvitations.expiresAt, now)
-        )
+          gt(friendInvitations.expiresAt, now),
+        ),
       )
-      .returning()
+      .returning();
 
-    if (updatedInvitation) return updatedInvitation
+    if (updatedInvitation) return updatedInvitation;
   }
 
   const [createdInvitation] = await db
@@ -311,37 +319,35 @@ export async function createFriendInvitation({
       sentAt: now,
       expiresAt,
     })
-    .returning()
+    .returning();
 
   if (!createdInvitation) {
-    throw new Error('Friend invitation could not be created')
+    throw new Error('Friend invitation could not be created');
   }
 
-  return createdInvitation
+  return createdInvitation;
 }
 
-export async function hasAcceptedInvitationForUser(
-  inviteeUserId: string
-): Promise<boolean> {
+export async function hasAcceptedInvitationForUser(inviteeUserId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: friendInvitations.id })
     .from(friendInvitations)
     .where(
       and(
         eq(friendInvitations.inviteeUserId, inviteeUserId),
-        isNotNull(friendInvitations.acceptedAt)
-      )
+        isNotNull(friendInvitations.acceptedAt),
+      ),
     )
-    .limit(1)
+    .limit(1);
 
-  return !!row
+  return !!row;
 }
 
 export async function getValidPendingInvitationForPhone(
   phoneNumber: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<FriendInvitation | null> {
-  if (!phoneNumber) return null
+  if (!phoneNumber) return null;
 
   const [invitation] = await db
     .select()
@@ -351,22 +357,22 @@ export async function getValidPendingInvitationForPhone(
         eq(friendInvitations.inviteePhone, phoneNumber),
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
-        gt(friendInvitations.expiresAt, now)
-      )
+        gt(friendInvitations.expiresAt, now),
+      ),
     )
     // Deterministic pick when the same number was invited more than once:
     // the invite that lives longest is the most recently sent one.
     .orderBy(desc(friendInvitations.expiresAt))
-    .limit(1)
+    .limit(1);
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 // Reuses the invitation TTL: the reminder fires at the same 30-day mark the
 // invite itself lapses at, so "nudge the inviter" and "this link stopped
 // working" land together instead of the inviter finding out only when Stan
 // tells them the link is dead.
-const REMINDER_THRESHOLD_MS = DEFAULT_INVITATION_TTL_MS
+const REMINDER_THRESHOLD_MS = DEFAULT_INVITATION_TTL_MS;
 
 // Candidates for the friend-invitation-reminders cron: sent >= 30 days ago,
 // still neither accepted nor cancelled, and not already reminded (a prior
@@ -376,9 +382,9 @@ const REMINDER_THRESHOLD_MS = DEFAULT_INVITATION_TTL_MS
 // marker). One-shot per invitation: resending creates a fresh row (see
 // createFriendInvitation), so a resent invite gets its own 30-day clock.
 export async function getInvitationsNeedingReminder(
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<FriendInvitation[]> {
-  const cutoff = new Date(now.getTime() - REMINDER_THRESHOLD_MS)
+  const cutoff = new Date(now.getTime() - REMINDER_THRESHOLD_MS);
 
   const candidates = await db
     .select()
@@ -387,11 +393,11 @@ export async function getInvitationsNeedingReminder(
       and(
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
-        lte(friendInvitations.sentAt, cutoff)
-      )
-    )
+        lte(friendInvitations.sentAt, cutoff),
+      ),
+    );
 
-  if (candidates.length === 0) return []
+  if (candidates.length === 0) return [];
 
   const alreadyReminded = await db
     .select({ referenceId: activityItems.referenceId })
@@ -402,20 +408,20 @@ export async function getInvitationsNeedingReminder(
         isNull(activityItems.deletedAt),
         inArray(
           activityItems.referenceId,
-          candidates.map((c) => c.id)
-        )
-      )
-    )
-  const remindedIds = new Set(alreadyReminded.map((r) => r.referenceId))
+          candidates.map((c) => c.id),
+        ),
+      ),
+    );
+  const remindedIds = new Set(alreadyReminded.map((r) => r.referenceId));
 
-  return candidates.filter((c) => !remindedIds.has(c.id))
+  return candidates.filter((c) => !remindedIds.has(c.id));
 }
 
 export async function hasValidPendingInvitationForPhone(
   phoneNumber: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<boolean> {
-  return Boolean(await getValidPendingInvitationForPhone(phoneNumber, now))
+  return Boolean(await getValidPendingInvitationForPhone(phoneNumber, now));
 }
 
 export async function getValidInvitationForPhone({
@@ -423,11 +429,11 @@ export async function getValidInvitationForPhone({
   verifiedPhone,
   now = new Date(),
 }: {
-  token: string
-  verifiedPhone: string
-  now?: Date
+  token: string;
+  verifiedPhone: string;
+  now?: Date;
 }): Promise<FriendInvitation | null> {
-  if (!token || !verifiedPhone) return null
+  if (!token || !verifiedPhone) return null;
 
   const [invitation] = await db
     .select()
@@ -438,26 +444,24 @@ export async function getValidInvitationForPhone({
         eq(friendInvitations.inviteePhone, verifiedPhone),
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
-        gt(friendInvitations.expiresAt, now)
-      )
+        gt(friendInvitations.expiresAt, now),
+      ),
     )
-    .limit(1)
+    .limit(1);
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
-export async function getInvitationByToken(
-  token: string
-): Promise<FriendInvitation | null> {
-  if (!token) return null
+export async function getInvitationByToken(token: string): Promise<FriendInvitation | null> {
+  if (!token) return null;
 
   const [invitation] = await db
     .select()
     .from(friendInvitations)
     .where(eq(friendInvitations.token, token))
-    .limit(1)
+    .limit(1);
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 export async function getPendingInvitationForPhone({
@@ -465,9 +469,9 @@ export async function getPendingInvitationForPhone({
   inviteePhone,
   now = new Date(),
 }: {
-  inviterUserId: string
-  inviteePhone: string
-  now?: Date
+  inviterUserId: string;
+  inviteePhone: string;
+  now?: Date;
 }): Promise<FriendInvitation | null> {
   const [invitation] = await db
     .select()
@@ -478,57 +482,54 @@ export async function getPendingInvitationForPhone({
         eq(friendInvitations.inviteePhone, inviteePhone),
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
-        gt(friendInvitations.expiresAt, now)
-      )
+        gt(friendInvitations.expiresAt, now),
+      ),
     )
     .orderBy(desc(friendInvitations.sentAt))
-    .limit(1)
+    .limit(1);
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 export function getOutgoingFriendInvitationStatus(
-  invitation: Pick<
-    FriendInvitation,
-    'acceptedAt' | 'cancelledAt' | 'expiresAt'
-  >,
-  now = new Date()
+  invitation: Pick<FriendInvitation, 'acceptedAt' | 'cancelledAt' | 'expiresAt'>,
+  now = new Date(),
 ): OutgoingFriendInvitationStatus {
-  if (invitation.cancelledAt) return 'cancelled'
-  if (invitation.acceptedAt) return 'accepted'
-  if (invitation.expiresAt <= now) return 'expired'
-  return 'pending'
+  if (invitation.cancelledAt) return 'cancelled';
+  if (invitation.acceptedAt) return 'accepted';
+  if (invitation.expiresAt <= now) return 'expired';
+  return 'pending';
 }
 
 export async function listOutgoingFriendInvitations({
   inviterUserId,
   now = new Date(),
 }: {
-  inviterUserId: string
-  now?: Date
+  inviterUserId: string;
+  now?: Date;
 }): Promise<OutgoingFriendInvitation[]> {
   const invitations = await db
     .select()
     .from(friendInvitations)
     .where(eq(friendInvitations.inviterUserId, inviterUserId))
-    .orderBy(desc(friendInvitations.sentAt))
+    .orderBy(desc(friendInvitations.sentAt));
 
   return invitations.map((invitation) => ({
     ...invitation,
     status: getOutgoingFriendInvitationStatus(invitation, now),
     suggestedInterests: parseInvitationInterests(invitation.preSeededInterests),
-  }))
+  }));
 }
 
 export type UpdateFriendInvitationInput = {
-  invitationId: string
-  inviterUserId: string
-  inviteePhone: string
-  inviteeDisplayName: string
-  preSeededInterests?: unknown
-  personalMessage?: string | null
-  now?: Date
-}
+  invitationId: string;
+  inviterUserId: string;
+  inviteePhone: string;
+  inviteeDisplayName: string;
+  preSeededInterests?: unknown;
+  personalMessage?: string | null;
+  now?: Date;
+};
 
 /**
  * Edit a still-pending outgoing invitation in place (B-Friends edit-before-click).
@@ -547,14 +548,11 @@ export async function updateFriendInvitation({
   personalMessage = null,
   now = new Date(),
 }: UpdateFriendInvitationInput): Promise<FriendInvitation | null> {
-  const normalizedInviteePhone = normalizeRequiredText(
-    inviteePhone,
-    'inviteePhone'
-  )
+  const normalizedInviteePhone = normalizeRequiredText(inviteePhone, 'inviteePhone');
   const normalizedInviteeDisplayName = normalizeRequiredText(
     inviteeDisplayName,
-    'inviteeDisplayName'
-  )
+    'inviteeDisplayName',
+  );
 
   const [invitation] = await db
     .update(friendInvitations)
@@ -570,12 +568,12 @@ export async function updateFriendInvitation({
         eq(friendInvitations.inviterUserId, inviterUserId),
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
-        gt(friendInvitations.expiresAt, now)
-      )
+        gt(friendInvitations.expiresAt, now),
+      ),
     )
-    .returning()
+    .returning();
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 export async function cancelFriendInvitation({
@@ -583,9 +581,9 @@ export async function cancelFriendInvitation({
   inviterUserId,
   now = new Date(),
 }: {
-  invitationId: string
-  inviterUserId: string
-  now?: Date
+  invitationId: string;
+  inviterUserId: string;
+  now?: Date;
 }): Promise<FriendInvitation | null> {
   const [invitation] = await db
     .update(friendInvitations)
@@ -596,20 +594,20 @@ export async function cancelFriendInvitation({
         eq(friendInvitations.inviterUserId, inviterUserId),
         isNull(friendInvitations.acceptedAt),
         isNull(friendInvitations.cancelledAt),
-        gt(friendInvitations.expiresAt, now)
-      )
+        gt(friendInvitations.expiresAt, now),
+      ),
     )
-    .returning()
+    .returning();
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 export async function deleteFriendInvitation({
   invitationId,
   inviterUserId,
 }: {
-  invitationId: string
-  inviterUserId: string
+  invitationId: string;
+  inviterUserId: string;
 }): Promise<FriendInvitation | null> {
   const [invitation] = await db
     .delete(friendInvitations)
@@ -617,12 +615,12 @@ export async function deleteFriendInvitation({
       and(
         eq(friendInvitations.id, invitationId),
         eq(friendInvitations.inviterUserId, inviterUserId),
-        isNotNull(friendInvitations.cancelledAt)
-      )
+        isNotNull(friendInvitations.cancelledAt),
+      ),
     )
-    .returning()
+    .returning();
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 export async function markInvitationAccepted({
@@ -631,10 +629,10 @@ export async function markInvitationAccepted({
   verifiedPhone,
   now = new Date(),
 }: {
-  invitationId: string
-  inviteeUserId: string
-  verifiedPhone: string
-  now?: Date
+  invitationId: string;
+  inviteeUserId: string;
+  verifiedPhone: string;
+  now?: Date;
 }): Promise<FriendInvitation | null> {
   const [invitation] = await db
     .update(friendInvitations)
@@ -648,13 +646,13 @@ export async function markInvitationAccepted({
         eq(friendInvitations.inviteePhone, verifiedPhone),
         or(
           eq(friendInvitations.inviteeUserId, inviteeUserId),
-          isNull(friendInvitations.inviteeUserId)
-        )
-      )
+          isNull(friendInvitations.inviteeUserId),
+        ),
+      ),
     )
-    .returning()
+    .returning();
 
-  return invitation ?? null
+  return invitation ?? null;
 }
 
 export async function acceptFriendInvitation({
@@ -663,31 +661,31 @@ export async function acceptFriendInvitation({
   verifiedPhone,
   now = new Date(),
 }: {
-  token: string
-  inviteeUserId: string
-  verifiedPhone: string
-  now?: Date
+  token: string;
+  inviteeUserId: string;
+  verifiedPhone: string;
+  now?: Date;
 }): Promise<AcceptFriendInvitationResult> {
-  const invitation = await getInvitationByToken(token)
+  const invitation = await getInvitationByToken(token);
 
   if (!invitation) {
-    return { accepted: false, reason: 'missing' }
+    return { accepted: false, reason: 'missing' };
   }
 
   if (invitation.acceptedAt) {
-    return { accepted: false, reason: 'accepted' }
+    return { accepted: false, reason: 'accepted' };
   }
 
   if (invitation.cancelledAt) {
-    return { accepted: false, reason: 'cancelled' }
+    return { accepted: false, reason: 'cancelled' };
   }
 
   if (invitation.expiresAt <= now) {
-    return { accepted: false, reason: 'expired' }
+    return { accepted: false, reason: 'expired' };
   }
 
   if (invitation.inviterUserId === inviteeUserId) {
-    return { accepted: false, reason: 'self' }
+    return { accepted: false, reason: 'self' };
   }
 
   if (invitation.inviteePhone !== verifiedPhone) {
@@ -695,8 +693,8 @@ export async function acceptFriendInvitation({
       invitation_id: invitation.id,
       inviter_user_id: invitation.inviterUserId,
       invitee_user_id: inviteeUserId,
-    })
-    return { accepted: false, reason: 'phone_mismatch' }
+    });
+    return { accepted: false, reason: 'phone_mismatch' };
   }
 
   const [claimedInvitation] = await db.transaction(async (tx) => {
@@ -712,25 +710,25 @@ export async function acceptFriendInvitation({
           eq(friendInvitations.inviteePhone, verifiedPhone),
           or(
             eq(friendInvitations.inviteeUserId, inviteeUserId),
-            isNull(friendInvitations.inviteeUserId)
-          )
-        )
+            isNull(friendInvitations.inviteeUserId),
+          ),
+        ),
       )
-      .returning({ id: friendInvitations.id })
+      .returning({ id: friendInvitations.id });
 
-    if (!updatedInvitation) return []
+    if (!updatedInvitation) return [];
 
     await upsertInvitationFriendship(tx, {
       inviterUserId: invitation.inviterUserId,
       inviteeUserId,
       formedAt: now,
-    })
+    });
 
-    return [updatedInvitation]
-  })
+    return [updatedInvitation];
+  });
 
   if (!claimedInvitation) {
-    return { accepted: false, reason: 'claim_failed' }
+    return { accepted: false, reason: 'claim_failed' };
   }
 
   logTelemetry('friend_invite_accepted', {
@@ -738,7 +736,7 @@ export async function acceptFriendInvitation({
     inviter_user_id: invitation.inviterUserId,
     invitee_user_id: inviteeUserId,
     suggested_interest_count: parseInvitationInterests(invitation.preSeededInterests).length,
-  })
+  });
 
   // One-time inviter feed backfill (B-HomeSeed-1). Runs AFTER the acceptance tx
   // commits and only on a successful claim, so it fires exactly once per
@@ -747,7 +745,7 @@ export async function acceptFriendInvitation({
   await backfillInviterFeedItems({
     inviterUserId: invitation.inviterUserId,
     inviteeUserId,
-  })
+  });
 
-  return { accepted: true }
+  return { accepted: true };
 }

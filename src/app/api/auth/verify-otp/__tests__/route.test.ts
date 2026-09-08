@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   acceptFriendInvitationMock,
@@ -11,13 +11,11 @@ const {
   getInvitePrefillByTokenMock,
   provisionUserInsertMock,
   verifyOtpMock,
+  acceptUserInviteLinkMock,
+  resolveInviteLinkMock,
 } = vi.hoisted(() => {
-  const findUserSelectMock = vi.fn(
-    async () => [] as Array<Record<string, unknown>>
-  )
-  const provisionUserInsertMock = vi.fn(
-    async () => [] as Array<Record<string, unknown>>
-  )
+  const findUserSelectMock = vi.fn(async () => [] as Array<Record<string, unknown>>);
+  const provisionUserInsertMock = vi.fn(async () => [] as Array<Record<string, unknown>>);
   const dbMock = {
     update: vi.fn(() => ({
       set: vi.fn(() => ({
@@ -38,7 +36,7 @@ const {
         })),
       })),
     })),
-  }
+  };
   return {
     acceptFriendInvitationMock: vi.fn(),
     createSessionMock: vi.fn(async () => 'session-token'),
@@ -49,19 +47,19 @@ const {
     getValidPendingInvitationForPhoneMock: vi.fn(async () => null as unknown),
     getInvitePrefillByTokenMock: vi.fn(async () => null as unknown),
     provisionUserInsertMock,
-    verifyOtpMock: vi.fn(async (phone: string, code: string) =>
-      code === '000000' ? phone : null
-    ),
-  }
-})
+    verifyOtpMock: vi.fn(async (phone: string, code: string) => (code === '000000' ? phone : null)),
+    acceptUserInviteLinkMock: vi.fn(async () => ({ accepted: true })),
+    resolveInviteLinkMock: vi.fn(async () => ({ inviterUserId: 'inviter-1' })),
+  };
+});
 
 vi.mock('@/server/auth', () => ({
   verifyOtp: verifyOtpMock,
-}))
+}));
 
 vi.mock('@/server/auth/session', () => ({
   createSession: createSessionMock,
-}))
+}));
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
@@ -75,7 +73,7 @@ vi.mock('@/server/db', () => ({
     phoneVerified: 'users.phoneVerified',
     updatedAt: 'users.updatedAt',
   },
-}))
+}));
 
 vi.mock('@/server/friends/invitations', () => ({
   acceptFriendInvitation: acceptFriendInvitationMock,
@@ -88,9 +86,14 @@ vi.mock('@/server/friends/invitations', () => ({
   // no token) path; mock must expose it or that branch throws.
   INVITE_REQUIRED_MESSAGE:
     "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
-}))
+}));
 
-import { POST } from '@/app/api/auth/verify-otp/route'
+vi.mock('@/server/friends/user-invite-token', () => ({
+  acceptUserInviteLink: acceptUserInviteLinkMock,
+  resolveInviteLink: resolveInviteLinkMock,
+}));
+
+import { POST } from '@/app/api/auth/verify-otp/route';
 
 const EXISTING_USER = {
   id: 'user-1',
@@ -99,7 +102,7 @@ const EXISTING_USER = {
   handle: null,
   timezone: 'America/New_York',
   onboardingComplete: false,
-}
+};
 
 const NEW_USER = {
   id: 'user-2',
@@ -108,7 +111,7 @@ const NEW_USER = {
   handle: null,
   timezone: 'America/New_York',
   onboardingComplete: false,
-}
+};
 
 const VALID_INVITATION = {
   id: 'inv-1',
@@ -123,166 +126,160 @@ const VALID_INVITATION = {
   acceptedAt: null,
   cancelledAt: null,
   expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-}
+};
 
 function jsonRequest(body: unknown) {
   return new Request('http://localhost/api/auth/verify-otp', {
     method: 'POST',
     body: JSON.stringify(body),
-  })
+  });
 }
 
 describe('/api/auth/verify-otp invitation gate', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    findUserSelectMock.mockReset()
-    provisionUserInsertMock.mockReset()
-    hasAcceptedInvitationForUserMock.mockReset()
-    getValidInvitationForPhoneMock.mockReset()
-    getValidPendingInvitationForPhoneMock.mockReset()
-    getInvitePrefillByTokenMock.mockReset()
-    acceptFriendInvitationMock.mockReset()
+    vi.clearAllMocks();
+    findUserSelectMock.mockReset();
+    provisionUserInsertMock.mockReset();
+    hasAcceptedInvitationForUserMock.mockReset();
+    getValidInvitationForPhoneMock.mockReset();
+    getValidPendingInvitationForPhoneMock.mockReset();
+    getInvitePrefillByTokenMock.mockReset();
+    acceptFriendInvitationMock.mockReset();
+    acceptUserInviteLinkMock.mockReset();
+    resolveInviteLinkMock.mockReset();
 
-    findUserSelectMock.mockResolvedValue([])
-    provisionUserInsertMock.mockResolvedValue([])
-    hasAcceptedInvitationForUserMock.mockResolvedValue(false)
-    getValidInvitationForPhoneMock.mockResolvedValue(null)
-    getValidPendingInvitationForPhoneMock.mockResolvedValue(null)
-    getInvitePrefillByTokenMock.mockResolvedValue(null)
-    acceptFriendInvitationMock.mockResolvedValue({ accepted: true })
-  })
+    findUserSelectMock.mockResolvedValue([]);
+    provisionUserInsertMock.mockResolvedValue([]);
+    hasAcceptedInvitationForUserMock.mockResolvedValue(false);
+    getValidInvitationForPhoneMock.mockResolvedValue(null);
+    getValidPendingInvitationForPhoneMock.mockResolvedValue(null);
+    getInvitePrefillByTokenMock.mockResolvedValue(null);
+    acceptFriendInvitationMock.mockResolvedValue({ accepted: true });
+    acceptUserInviteLinkMock.mockResolvedValue({ accepted: true });
+    resolveInviteLinkMock.mockResolvedValue({ inviterUserId: 'inviter-1' });
+  });
 
   describe('re-login (existing user)', () => {
     it('allows re-login with no token when the user has a prior accepted invitation', async () => {
-      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
+      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER]);
 
-      const response = await POST(
-        jsonRequest({ phone: '+15551234567', code: '000000' })
-      )
-      const body = await response.json()
+      const response = await POST(jsonRequest({ phone: '+15551234567', code: '000000' }));
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.user.id).toBe('user-1')
-      expect(body.user.handle).toBeNull()
-      expect(body.invitation).toEqual({ accepted: false })
+      expect(response.status).toBe(200);
+      expect(body.user.id).toBe('user-1');
+      expect(body.user.handle).toBeNull();
+      expect(body.invitation).toEqual({ accepted: false });
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-      expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
-    })
+      });
+      expect(acceptFriendInvitationMock).not.toHaveBeenCalled();
+    });
 
     it('allows re-login with no token even when the user has no prior accepted invitation (legacy/grandfathered account)', async () => {
-      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
+      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER]);
 
-      const response = await POST(
-        jsonRequest({ phone: '+15551234567', code: '000000' })
-      )
-      const body = await response.json()
+      const response = await POST(jsonRequest({ phone: '+15551234567', code: '000000' }));
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.user.id).toBe('user-1')
-      expect(body.invitation).toEqual({ accepted: false })
+      expect(response.status).toBe(200);
+      expect(body.user.id).toBe('user-1');
+      expect(body.invitation).toEqual({ accepted: false });
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-      expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled()
-    })
+      });
+      expect(hasAcceptedInvitationForUserMock).not.toHaveBeenCalled();
+    });
 
     it('mints the session with the user real onboardingComplete on re-login (B-ROOT-404: avoids the refresh-onboarding-claim redirect hop on /)', async () => {
       // A fully-onboarded user re-logging in must get onb:true straight away.
       // Previously the route hardcoded onboardingComplete:false, so the first
       // post-login GET / was bounced through /api/auth/refresh-onboarding-claim
       // to re-mint the claim — a redirect hop that intermittently 404'd on /.
-      findUserSelectMock.mockResolvedValueOnce([
-        { ...EXISTING_USER, onboardingComplete: true },
-      ])
+      findUserSelectMock.mockResolvedValueOnce([{ ...EXISTING_USER, onboardingComplete: true }]);
 
-      const response = await POST(
-        jsonRequest({ phone: '+15551234567', code: '000000' })
-      )
-      const body = await response.json()
+      const response = await POST(jsonRequest({ phone: '+15551234567', code: '000000' }));
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.user.onboardingComplete).toBe(true)
+      expect(response.status).toBe(200);
+      expect(body.user.onboardingComplete).toBe(true);
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
         onboardingComplete: true,
-      })
-    })
+      });
+    });
 
     it('allows re-login when accepting a new invitation', async () => {
-      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
-      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
+      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER]);
+      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true });
 
       const response = await POST(
         jsonRequest({
           phone: '+15551234567',
           code: '000000',
           invitationToken: 'invite-token',
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.invitation).toEqual({ accepted: true })
+      expect(response.status).toBe(200);
+      expect(body.invitation).toEqual({ accepted: true });
       expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
         token: 'invite-token',
         inviteeUserId: 'user-1',
         verifiedPhone: '+15551234567',
-      })
+      });
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-    })
+      });
+    });
 
     it('still logs in when a supplied invitation token fails to accept', async () => {
-      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER])
+      findUserSelectMock.mockResolvedValueOnce([EXISTING_USER]);
       acceptFriendInvitationMock.mockResolvedValueOnce({
         accepted: false,
         reason: 'expired',
-      })
+      });
 
       const response = await POST(
         jsonRequest({
           phone: '+15551234567',
           code: '000000',
           invitationToken: 'invite-token',
-        })
-      )
+        }),
+      );
 
-      expect(response.status).toBe(200)
+      expect(response.status).toBe(200);
       expect(createSessionMock).toHaveBeenCalledWith('user-1', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-    })
-  })
+      });
+    });
+  });
 
   describe('new signup', () => {
     it('rejects a brand new phone number with no invitation token', async () => {
-      findUserSelectMock.mockResolvedValueOnce([])
+      findUserSelectMock.mockResolvedValueOnce([]);
 
-      const response = await POST(
-        jsonRequest({ phone: '+15559876543', code: '000000' })
-      )
-      const body = await response.json()
+      const response = await POST(jsonRequest({ phone: '+15559876543', code: '000000' }));
+      const body = await response.json();
 
       // New signup with no token is gated by inviteRequiredRejection() →
       // 403 invite_required (not the 400 invalid_invitation used for bad/empty
       // tokens). This is the invite-only signup gate.
-      expect(response.status).toBe(403)
+      expect(response.status).toBe(403);
       expect(body).toEqual({
         error: 'invite_required',
         message:
           "Joshing is invite-only. Ask a friend who's already on Joshing to send you an invite.",
-      })
-      expect(createSessionMock).not.toHaveBeenCalled()
+      });
+      expect(createSessionMock).not.toHaveBeenCalled();
       // No user should be created.
-      expect(provisionUserInsertMock).not.toHaveBeenCalled()
-    })
+      expect(provisionUserInsertMock).not.toHaveBeenCalled();
+    });
 
     it('rejects an empty-string invitation token (closes the {"invitationToken": ""} bypass)', async () => {
       const response = await POST(
@@ -290,19 +287,19 @@ describe('/api/auth/verify-otp invitation gate', () => {
           phone: '+15559876543',
           code: '000000',
           invitationToken: '',
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(400)
+      expect(response.status).toBe(400);
       expect(body).toEqual({
         error: 'invalid_invitation',
         message: 'This invitation could not be accepted.',
-      })
-      expect(verifyOtpMock).not.toHaveBeenCalled()
-      expect(createSessionMock).not.toHaveBeenCalled()
-      expect(provisionUserInsertMock).not.toHaveBeenCalled()
-    })
+      });
+      expect(verifyOtpMock).not.toHaveBeenCalled();
+      expect(createSessionMock).not.toHaveBeenCalled();
+      expect(provisionUserInsertMock).not.toHaveBeenCalled();
+    });
 
     it('rejects a whitespace-only invitation token', async () => {
       const response = await POST(
@@ -310,159 +307,198 @@ describe('/api/auth/verify-otp invitation gate', () => {
           phone: '+15559876543',
           code: '000000',
           invitationToken: '   ',
-        })
-      )
+        }),
+      );
 
-      expect(response.status).toBe(400)
-      expect(createSessionMock).not.toHaveBeenCalled()
-      expect(provisionUserInsertMock).not.toHaveBeenCalled()
-    })
+      expect(response.status).toBe(400);
+      expect(createSessionMock).not.toHaveBeenCalled();
+      expect(provisionUserInsertMock).not.toHaveBeenCalled();
+    });
 
     it('rejects a new phone with a token that does not match an invitation', async () => {
-      findUserSelectMock.mockResolvedValueOnce([])
-      getValidInvitationForPhoneMock.mockResolvedValueOnce(null)
+      findUserSelectMock.mockResolvedValueOnce([]);
+      getValidInvitationForPhoneMock.mockResolvedValueOnce(null);
 
       const response = await POST(
         jsonRequest({
           phone: '+15559876543',
           code: '000000',
           invitationToken: 'bogus-token',
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(400)
-      expect(body.error).toBe('invalid_invitation')
-      expect(createSessionMock).not.toHaveBeenCalled()
-      expect(provisionUserInsertMock).not.toHaveBeenCalled()
-      expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
-    })
+      expect(response.status).toBe(400);
+      expect(body.error).toBe('invalid_invitation');
+      expect(createSessionMock).not.toHaveBeenCalled();
+      expect(provisionUserInsertMock).not.toHaveBeenCalled();
+      expect(acceptFriendInvitationMock).not.toHaveBeenCalled();
+    });
 
     it('rejects a new phone when the invitation token does not match the verified phone', async () => {
-      findUserSelectMock.mockResolvedValueOnce([])
+      findUserSelectMock.mockResolvedValueOnce([]);
       // Pre-validation rejects because phone doesn't match invitee phone.
-      getValidInvitationForPhoneMock.mockResolvedValueOnce(null)
+      getValidInvitationForPhoneMock.mockResolvedValueOnce(null);
 
       const response = await POST(
         jsonRequest({
           phone: '+15550000000',
           code: '000000',
           invitationToken: 'invite-token',
-        })
-      )
+        }),
+      );
 
-      expect(response.status).toBe(400)
-      expect(provisionUserInsertMock).not.toHaveBeenCalled()
-      expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
-    })
+      expect(response.status).toBe(400);
+      expect(provisionUserInsertMock).not.toHaveBeenCalled();
+      expect(acceptFriendInvitationMock).not.toHaveBeenCalled();
+    });
 
     it('provisions a user and accepts the invitation when token + phone match', async () => {
-      findUserSelectMock.mockResolvedValueOnce([])
-      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION)
-      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
-      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
+      findUserSelectMock.mockResolvedValueOnce([]);
+      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION);
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER]);
+      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true });
 
       const response = await POST(
         jsonRequest({
           phone: '+15559876543',
           code: '000000',
           invitationToken: 'invite-token',
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.user.id).toBe('user-2')
-      expect(body.user.handle).toBeNull()
-      expect(body.invitation).toEqual({ accepted: true })
-      expect(provisionUserInsertMock).toHaveBeenCalled()
+      expect(response.status).toBe(200);
+      expect(body.user.id).toBe('user-2');
+      expect(body.user.handle).toBeNull();
+      expect(body.invitation).toEqual({ accepted: true });
+      expect(provisionUserInsertMock).toHaveBeenCalled();
       expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
         token: 'invite-token',
         inviteeUserId: 'user-2',
         verifiedPhone: '+15559876543',
-      })
+      });
       expect(createSessionMock).toHaveBeenCalledWith('user-2', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-    })
+      });
+    });
 
     it('rejects new signup when accept races and fails after provisioning', async () => {
-      findUserSelectMock.mockResolvedValueOnce([])
-      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION)
-      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
+      findUserSelectMock.mockResolvedValueOnce([]);
+      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION);
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER]);
       acceptFriendInvitationMock.mockResolvedValueOnce({
         accepted: false,
         reason: 'claim_failed',
-      })
+      });
 
       const response = await POST(
         jsonRequest({
           phone: '+15559876543',
           code: '000000',
           invitationToken: 'invite-token',
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(400)
-      expect(body.error).toBe('invalid_invitation')
-      expect(createSessionMock).not.toHaveBeenCalled()
-    })
+      expect(response.status).toBe(400);
+      expect(body.error).toBe('invalid_invitation');
+      expect(createSessionMock).not.toHaveBeenCalled();
+    });
 
     it('provisions and accepts a phone-matched pending invite when no token or link rode along (B-AUTH-INVITE-PHONEMATCH)', async () => {
       // Contact-invited user who opened the app directly and typed their
       // number: request-otp let them through on the phone-match, so they must
       // clear verify-otp too even with no token/link in the request body.
-      findUserSelectMock.mockResolvedValueOnce([])
-      getValidPendingInvitationForPhoneMock.mockResolvedValueOnce(
-        VALID_INVITATION
-      )
-      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
-      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
+      findUserSelectMock.mockResolvedValueOnce([]);
+      getValidPendingInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION);
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER]);
+      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true });
 
-      const response = await POST(
-        jsonRequest({ phone: '+15559876543', code: '000000' })
-      )
-      const body = await response.json()
+      const response = await POST(jsonRequest({ phone: '+15559876543', code: '000000' }));
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.user.id).toBe('user-2')
-      expect(body.invitation).toEqual({ accepted: true })
-      expect(provisionUserInsertMock).toHaveBeenCalled()
+      expect(response.status).toBe(200);
+      expect(body.user.id).toBe('user-2');
+      expect(body.invitation).toEqual({ accepted: true });
+      expect(provisionUserInsertMock).toHaveBeenCalled();
       // Claims the resolved invitation by ITS token — the body carried none.
       expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
         token: 'invite-token',
         inviteeUserId: 'user-2',
         verifiedPhone: '+15559876543',
-      })
+      });
       expect(createSessionMock).toHaveBeenCalledWith('user-2', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-    })
+      });
+    });
 
     it('rejects the phone-match path when the accept races and fails after provisioning', async () => {
-      findUserSelectMock.mockResolvedValueOnce([])
-      getValidPendingInvitationForPhoneMock.mockResolvedValueOnce(
-        VALID_INVITATION
-      )
-      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
+      findUserSelectMock.mockResolvedValueOnce([]);
+      getValidPendingInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION);
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER]);
       acceptFriendInvitationMock.mockResolvedValueOnce({
         accepted: false,
         reason: 'claim_failed',
-      })
+      });
+
+      const response = await POST(jsonRequest({ phone: '+15559876543', code: '000000' }));
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body.error).toBe('invalid_invitation');
+      expect(createSessionMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('per-user invite-link signup', () => {
+    it('preserves the exact link through OTP and attributes the new user', async () => {
+      findUserSelectMock.mockResolvedValueOnce([]);
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER]);
+      resolveInviteLinkMock.mockResolvedValueOnce({ inviterUserId: 'inviter-1' });
+      acceptUserInviteLinkMock.mockResolvedValueOnce({ accepted: true });
 
       const response = await POST(
-        jsonRequest({ phone: '+15559876543', code: '000000' })
-      )
-      const body = await response.json()
+        jsonRequest({
+          phone: '+15559876543',
+          code: '000000',
+          userInvite: { handle: 'josh', token: 'link-token' },
+        }),
+      );
 
-      expect(response.status).toBe(400)
-      expect(body.error).toBe('invalid_invitation')
-      expect(createSessionMock).not.toHaveBeenCalled()
-    })
-  })
+      expect(response.status).toBe(200);
+      expect(resolveInviteLinkMock).toHaveBeenCalledWith('josh', 'link-token');
+      expect(acceptUserInviteLinkMock).toHaveBeenCalledWith({
+        handle: 'josh',
+        token: 'link-token',
+        inviteeUserId: 'user-2',
+      });
+      expect(createSessionMock).toHaveBeenCalledWith('user-2', {
+        invitationAccepted: true,
+        onboardingComplete: false,
+      });
+    });
+
+    it('does not provision a user when the link was invalidated before OTP verification', async () => {
+      findUserSelectMock.mockResolvedValueOnce([]);
+      resolveInviteLinkMock.mockResolvedValueOnce(null);
+
+      const response = await POST(
+        jsonRequest({
+          phone: '+15559876543',
+          code: '000000',
+          userInvite: { handle: 'josh', token: 'deleted-token' },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toBe('invalid_invitation');
+      expect(provisionUserInsertMock).not.toHaveBeenCalled();
+      expect(createSessionMock).not.toHaveBeenCalled();
+    });
+  });
 
   describe('invite-phone prefill (no phone sent)', () => {
     it('resolves the phone from the token, verifies, provisions, and accepts the invitation', async () => {
@@ -470,54 +506,54 @@ describe('/api/auth/verify-otp invitation gate', () => {
         inviterName: 'Alex',
         inviteePhone: '+15559876543',
         maskedPhone: '•••-•••-6543',
-      })
-      findUserSelectMock.mockResolvedValueOnce([])
-      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION)
-      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER])
-      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true })
+      });
+      findUserSelectMock.mockResolvedValueOnce([]);
+      getValidInvitationForPhoneMock.mockResolvedValueOnce(VALID_INVITATION);
+      provisionUserInsertMock.mockResolvedValueOnce([NEW_USER]);
+      acceptFriendInvitationMock.mockResolvedValueOnce({ accepted: true });
 
       const response = await POST(
         jsonRequest({
           code: '000000',
           invitationToken: 'invite-token',
           useInvitePhone: true,
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(200)
-      expect(body.invitation).toEqual({ accepted: true })
+      expect(response.status).toBe(200);
+      expect(body.invitation).toEqual({ accepted: true });
       // 000000 bypass works against the server-resolved phone.
-      expect(verifyOtpMock).toHaveBeenCalledWith('+15559876543', '000000')
+      expect(verifyOtpMock).toHaveBeenCalledWith('+15559876543', '000000');
       expect(acceptFriendInvitationMock).toHaveBeenCalledWith({
         token: 'invite-token',
         inviteeUserId: 'user-2',
         verifiedPhone: '+15559876543',
-      })
+      });
       expect(createSessionMock).toHaveBeenCalledWith('user-2', {
         invitationAccepted: true,
         onboardingComplete: false,
-      })
-    })
+      });
+    });
 
     it('rejects when the invite token no longer resolves to a phone', async () => {
-      getInvitePrefillByTokenMock.mockResolvedValue(null)
+      getInvitePrefillByTokenMock.mockResolvedValue(null);
 
       const response = await POST(
         jsonRequest({
           code: '000000',
           invitationToken: 'stale-token',
           useInvitePhone: true,
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(400)
-      expect(body.error).toBe('invalid_invitation')
-      expect(verifyOtpMock).not.toHaveBeenCalled()
-      expect(createSessionMock).not.toHaveBeenCalled()
-    })
-  })
+      expect(response.status).toBe(400);
+      expect(body.error).toBe('invalid_invitation');
+      expect(verifyOtpMock).not.toHaveBeenCalled();
+      expect(createSessionMock).not.toHaveBeenCalled();
+    });
+  });
 
   describe('OTP failure short-circuits', () => {
     it('rejects non-000000 OTP codes before any user lookup or invitation work', async () => {
@@ -526,15 +562,15 @@ describe('/api/auth/verify-otp invitation gate', () => {
           phone: '+15551234567',
           code: '123456',
           invitationToken: 'invite-token',
-        })
-      )
-      const body = await response.json()
+        }),
+      );
+      const body = await response.json();
 
-      expect(response.status).toBe(401)
-      expect(body).toEqual(expect.objectContaining({ error: 'invalid_code' }))
-      expect(findUserSelectMock).not.toHaveBeenCalled()
-      expect(acceptFriendInvitationMock).not.toHaveBeenCalled()
-      expect(createSessionMock).not.toHaveBeenCalled()
-    })
-  })
-})
+      expect(response.status).toBe(401);
+      expect(body).toEqual(expect.objectContaining({ error: 'invalid_code' }));
+      expect(findUserSelectMock).not.toHaveBeenCalled();
+      expect(acceptFriendInvitationMock).not.toHaveBeenCalled();
+      expect(createSessionMock).not.toHaveBeenCalled();
+    });
+  });
+});

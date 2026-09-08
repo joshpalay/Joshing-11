@@ -1,75 +1,91 @@
-import { eq } from 'drizzle-orm'
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { eq } from 'drizzle-orm';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock'
-import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch'
-import { InviteLinksSection } from '@/components/friends/InviteLinksSection'
-import { colorForUser, formatRelativeTime } from '@/components/feed/visual'
-import FriendsList from '@/components/FriendsList'
-import { getSession } from '@/server/auth/session'
-import { db, users } from '@/server/db'
+import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock';
+import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
+import { InviteLinksSection } from '@/components/friends/InviteLinksSection';
+import { colorForUser, formatRelativeTime } from '@/components/feed/visual';
+import FriendsList from '@/components/FriendsList';
+import { getSession } from '@/server/auth/session';
+import { db, users } from '@/server/db';
 import {
   getLastContactHashUpload,
   isRefreshDue,
   listContactMatches,
   markDiscoveryChecked,
-} from '@/server/db/queries/contact-hashes'
-import { listInviteReflections } from '@/server/db/queries/friend-invitations'
-import { listLiveInviteLinks } from '@/server/db/queries/invite-links'
-import { buildInviteUrl, getBaseUrl, getInviteLinkSeedTopics } from '@/server/friends/user-invite-token'
+} from '@/server/db/queries/contact-hashes';
+import { listInviteReflections } from '@/server/db/queries/friend-invitations';
+import { listLiveInviteLinks } from '@/server/db/queries/invite-links';
+import { sanitizeInviteLinkCategories } from '@/lib/invite-links';
+import {
+  buildInviteUrl,
+  getBaseUrl,
+  getInviteLinkSeedTopics,
+} from '@/server/friends/user-invite-token';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 function initialsFor(name: string | null, fallback: string): string {
-  const source = (name?.trim() || fallback).replace(/[^a-zA-Z]+/g, ' ').trim()
-  if (!source) return '??'
-  const parts = source.split(/\s+/)
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+  const source = (name?.trim() || fallback).replace(/[^a-zA-Z]+/g, ' ').trim();
+  if (!source) return '??';
+  const parts = source.split(/\s+/);
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
 export default async function FriendsPage() {
-  const session = await getSession()
-  if (!session) redirect('/login')
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   const [viewer] = await db
     .select({
       handle: users.handle,
+      displayName: users.displayName,
       discoverableByContacts: users.discoverableByContacts,
     })
     .from(users)
     .where(eq(users.id, session.userId))
-    .limit(1)
+    .limit(1);
 
-  if (!viewer) redirect('/login')
+  if (!viewer) redirect('/login');
 
   // Stamp the discovery threshold AS the user lands here — clears the
   // Nav-tab dot and the Invitations-tab passive row on next render.
-  await markDiscoveryChecked(session.userId)
+  await markDiscoveryChecked(session.userId);
 
-  const [reflections, contactMatches, lastContactUpload, resolvedTopics, liveLinks] = await Promise.all([
-    listInviteReflections(session.userId),
-    viewer.discoverableByContacts ? listContactMatches(session.userId) : Promise.resolve([]),
-    viewer.discoverableByContacts ? getLastContactHashUpload(session.userId) : Promise.resolve(null),
-    getInviteLinkSeedTopics(session.userId),
-    listLiveInviteLinks(session.userId),
-  ])
-  const contactRefreshDue = isRefreshDue(lastContactUpload)
+  const [reflections, contactMatches, lastContactUpload, resolvedTopics, liveLinks] =
+    await Promise.all([
+      listInviteReflections(session.userId),
+      viewer.discoverableByContacts ? listContactMatches(session.userId) : Promise.resolve([]),
+      viewer.discoverableByContacts
+        ? getLastContactHashUpload(session.userId)
+        : Promise.resolve(null),
+      getInviteLinkSeedTopics(session.userId),
+      listLiveInviteLinks(session.userId),
+    ]);
+  const contactRefreshDue = isRefreshDue(lastContactUpload);
 
-  const requestHeaders = await headers()
-  const baseUrl = getBaseUrl(requestHeaders)
+  const requestHeaders = await headers();
+  const baseUrl = getBaseUrl(requestHeaders);
+  const resolvedLinks = await Promise.all(
+    liveLinks.map(async (link) => ({
+      ...link,
+      categories: link.categories ?? (await getInviteLinkSeedTopics(session.userId, link.slot)),
+    })),
+  );
   const initialLinks = viewer.handle
-    ? liveLinks.map((link) => ({
+    ? resolvedLinks.map((link) => ({
         id: link.id,
         slot: link.slot,
+        categories: sanitizeInviteLinkCategories(link.categories),
         url: buildInviteUrl(baseUrl, viewer.handle!, link.token),
         createdAt: link.createdAt.toISOString(),
         joinedCount: link.joinedCount,
       }))
-    : []
+    : [];
 
-  const hasSuggestions = contactMatches.length > 0 || reflections.length > 0
+  const hasSuggestions = contactMatches.length > 0 || reflections.length > 0;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5 pb-28">
@@ -109,11 +125,14 @@ export default async function FriendsPage() {
           <h2 className="text-foreground font-serif text-xl font-semibold">Suggested</h2>
           <div className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
             {reflections.map((reflection) => {
-              const displayName = reflection.displayName?.trim() || `@${reflection.handle ?? ''}`
-              const initials = initialsFor(reflection.displayName, reflection.handle ?? '?')
-              const swatch = reflection.avatarColor || colorForUser(reflection.inviteeUserId)
+              const displayName = reflection.displayName?.trim() || `@${reflection.handle ?? ''}`;
+              const initials = initialsFor(reflection.displayName, reflection.handle ?? '?');
+              const swatch = reflection.avatarColor || colorForUser(reflection.inviteeUserId);
               return (
-                <article key={reflection.invitationId} className="flex items-start gap-3 border-b py-3 last:border-0 last:pb-0">
+                <article
+                  key={reflection.invitationId}
+                  className="flex items-start gap-3 border-b py-3 last:border-0 last:pb-0"
+                >
                   <span
                     aria-hidden
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
@@ -132,7 +151,7 @@ export default async function FriendsPage() {
                     </p>
                   </div>
                 </article>
-              )
+              );
             })}
           </div>
         </section>
@@ -141,7 +160,11 @@ export default async function FriendsPage() {
       {/* Invite via link. An action rather than a destination, so it sits above
           the roster but below the lookup. */}
       <div className="mb-5">
-        <InviteLinksSection initialTopics={resolvedTopics} initialLinks={initialLinks} />
+        <InviteLinksSection
+          creatorName={viewer.displayName}
+          initialTopics={resolvedTopics}
+          initialLinks={initialLinks}
+        />
       </div>
 
       {/* The roster is what people come back for, so it moves up: with the dead
@@ -149,5 +172,5 @@ export default async function FriendsPage() {
           first screen instead of the third. */}
       <FriendsList />
     </main>
-  )
+  );
 }

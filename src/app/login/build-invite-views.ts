@@ -6,6 +6,8 @@
  * are the already-resolved query results, not the queries themselves.
  */
 
+import { safeInviteName } from '@/lib/invite-links';
+
 export type InvitePrefillView = {
   inviterName: string;
   inviterUserId: string;
@@ -65,9 +67,7 @@ export function buildLoginInviteViews(
       }
     : userInviteResolution
       ? {
-          inviterName:
-            userInviteResolution.inviterDisplayName?.trim() ||
-            `@${userInviteResolution.inviterHandle}`,
+          inviterName: safeInviteName(userInviteResolution.inviterDisplayName) || 'A friend',
           inviterUserId: userInviteResolution.inviterUserId,
           inviterAvatarColor: userInviteResolution.inviterAvatarColor,
           topics: userInviteResolution.seedTopics,

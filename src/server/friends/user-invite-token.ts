@@ -1,23 +1,24 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm';
 
-import { domainKey } from '@/lib/knowledge/domain-key'
-import { db, follows, profileDomainVisibility, users } from '@/server/db'
-import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests'
-import { getDailyPreferences } from '@/server/db/queries/daily-preferences'
+import { domainKey } from '@/lib/knowledge/domain-key';
+import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links';
+import { db, follows, profileDomainVisibility, users } from '@/server/db';
+import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
+import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import {
   attributeInviteLinkJoin,
   findLiveInviteLinkByToken,
   getJoinedInviteLink,
-} from '@/server/db/queries/invite-links'
-import { parsePreSeededInterests, type PreSeededInterest } from '@/server/db/queries/users'
-import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed'
-import { upsertInvitationFriendship } from '@/server/friends/friendships'
+} from '@/server/db/queries/invite-links';
+import { parsePreSeededInterests, type PreSeededInterest } from '@/server/db/queries/users';
+import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed';
+import { upsertInvitationFriendship } from '@/server/friends/friendships';
 
-export { generateUserInviteToken } from '@/server/db/queries/invite-links'
+export { generateUserInviteToken } from '@/server/db/queries/invite-links';
 
 // Cap applies to both sources: a curated inviteSeedInterests set and the
 // automatic fallback below.
-const SEED_TOPIC_CAP = 3
+const SEED_TOPIC_CAP = 3;
 
 // Resolves the topics a per-user invite link carries: whatever the inviter
 // curated in users.invite_seed_interests, or — when that's empty — an
@@ -45,27 +46,35 @@ export async function getInviteLinkSeedTopics(
     .select({ inviteSeedInterests: users.inviteSeedInterests })
     .from(users)
     .where(eq(users.id, inviterUserId))
-    .limit(1)
+    .limit(1);
 
-  const curated = parsePreSeededInterests(row?.inviteSeedInterests).slice(0, SEED_TOPIC_CAP)
-  let resolved = curated
+  const curated = sanitizeInviteLinkCategories(
+    parsePreSeededInterests(row?.inviteSeedInterests),
+  ).slice(0, SEED_TOPIC_CAP);
+  let resolved = curated;
 
   if (resolved.length === 0) {
     const [declared, dailyPreferences] = await Promise.all([
       getActiveDeclaredInterests(inviterUserId),
       getDailyPreferences(inviterUserId),
-    ])
-    const often = declared.filter((interest) => dailyPreferences.domainPreferenceFrequency[interest.domain] === 'often')
-    const rest = declared.filter((interest) => dailyPreferences.domainPreferenceFrequency[interest.domain] !== 'often')
+    ]);
+    const often = declared.filter(
+      (interest) => dailyPreferences.domainPreferenceFrequency[interest.domain] === 'often',
+    );
+    const rest = declared.filter(
+      (interest) => dailyPreferences.domainPreferenceFrequency[interest.domain] !== 'often',
+    );
     resolved = [...often, ...rest].slice(0, SEED_TOPIC_CAP).map((interest) => ({
       label: interest.domain,
       broadCategory: interest.broadCategory,
-    }))
+    }));
   }
 
-  if (slot === 0) return resolved
-  const single = resolved[slot - 1]
-  return single ? [single] : []
+  resolved = sanitizeInviteLinkCategories(resolved);
+
+  if (slot === 0) return resolved;
+  const single = resolved[slot - 1];
+  return single ? [single] : [];
 }
 
 // Slot-aware resolution for an already-joined invitee: reads which specific
@@ -74,10 +83,13 @@ export async function getInviteLinkSeedTopics(
 // pre-migration accounts, named-invite joins, or the rare organic mutual
 // follow getInviterForUser's fallback window also catches — so the caller can
 // fall back to its own unslotted resolution.
-export async function getSeedTopicsForJoinedLink(inviteeUserId: string): Promise<PreSeededInterest[] | null> {
-  const joined = await getJoinedInviteLink(inviteeUserId)
-  if (!joined) return null
-  return getInviteLinkSeedTopics(joined.inviterUserId, joined.slot)
+export async function getSeedTopicsForJoinedLink(
+  inviteeUserId: string,
+): Promise<PreSeededInterest[] | null> {
+  const joined = await getJoinedInviteLink(inviteeUserId);
+  if (!joined) return null;
+  if (joined.categories != null) return joined.categories;
+  return getInviteLinkSeedTopics(joined.inviterUserId, joined.slot);
 }
 
 // The curated set only — no automatic-fallback resolution. This is what the
@@ -90,11 +102,11 @@ export async function getCuratedInviteSeedTopics(userId: string): Promise<string
     .select({ inviteSeedInterests: users.inviteSeedInterests })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1)
+    .limit(1);
 
-  return parsePreSeededInterests(row?.inviteSeedInterests)
+  return sanitizeInviteLinkCategories(parsePreSeededInterests(row?.inviteSeedInterests))
     .slice(0, SEED_TOPIC_CAP)
-    .map((interest) => interest.label)
+    .map((interest) => interest.label);
 }
 
 // Overwrites the curated set. Callers are responsible for validating each
@@ -102,17 +114,7 @@ export async function getCuratedInviteSeedTopics(userId: string): Promise<string
 // and just cleans/caps/persists. An empty array clears the curated set,
 // reverting the link to the automatic fallback.
 export async function setCuratedInviteSeedTopics(userId: string, topics: string[]): Promise<void> {
-  const seen = new Set<string>()
-  const cleaned: string[] = []
-  for (const raw of topics) {
-    const topic = raw.trim()
-    if (!topic) continue
-    const key = topic.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    cleaned.push(topic)
-    if (cleaned.length === SEED_TOPIC_CAP) break
-  }
+  const cleaned = sanitizeInviteLinkCategories(topics).map((topic) => topic.label);
 
   await db
     .update(users)
@@ -120,7 +122,7 @@ export async function setCuratedInviteSeedTopics(userId: string, topics: string[
       inviteSeedInterests: cleaned.map((label) => ({ label })),
       updatedAt: new Date(),
     })
-    .where(eq(users.id, userId))
+    .where(eq(users.id, userId));
 }
 
 // The bar for a visitor who is not yet a friend of the inviter: PUBLIC and
@@ -140,15 +142,15 @@ async function getPubliclyHiddenDomainKeys(userId: string): Promise<Set<string>>
       isVisible: profileDomainVisibility.isVisible,
     })
     .from(profileDomainVisibility)
-    .where(eq(profileDomainVisibility.userId, userId))
+    .where(eq(profileDomainVisibility.userId, userId));
 
-  const hidden = new Set<string>()
+  const hidden = new Set<string>();
   for (const row of rows) {
-    if (row.visibility === 'public' && row.isVisible) continue
-    const label = row.domain ?? row.canonicalSubcategory
-    if (label) hidden.add(domainKey(label))
+    if (row.visibility === 'public' && row.isVisible) continue;
+    const label = row.domain ?? row.canonicalSubcategory;
+    if (label) hidden.add(domainKey(label));
   }
-  return hidden
+  return hidden;
 }
 
 // Lifted from src/app/api/friend-invitations/route.ts:158-173 so invite-link
@@ -156,27 +158,27 @@ async function getPubliclyHiddenDomainKeys(userId: string): Promise<Set<string>>
 // a Request (route handlers) or a Headers map (server components reading
 // via next/headers).
 export function getBaseUrl(source?: Request | Headers): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL
-  if (configured) return configured.replace(/\/$/, '')
+  const configured = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL;
+  if (configured) return configured.replace(/\/$/, '');
 
-  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (vercelProd) return `https://${vercelProd.replace(/\/$/, '')}`
+  const vercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (vercelProd) return `https://${vercelProd.replace(/\/$/, '')}`;
 
   if (source) {
-    const headers = source instanceof Request ? source.headers : source
-    const host = headers.get('x-forwarded-host') ?? headers.get('host')
-    const protocol = headers.get('x-forwarded-proto') ?? 'https'
-    if (host) return `${protocol}://${host}`
-    if (source instanceof Request) return new URL(source.url).origin
+    const headers = source instanceof Request ? source.headers : source;
+    const host = headers.get('x-forwarded-host') ?? headers.get('host');
+    const protocol = headers.get('x-forwarded-proto') ?? 'https';
+    if (host) return `${protocol}://${host}`;
+    if (source instanceof Request) return new URL(source.url).origin;
   }
 
-  return 'http://localhost:3000'
+  return 'http://localhost:3000';
 }
 
 export function buildInviteUrl(baseUrl: string, handle: string, token: string): string {
   // Per-user invite URL — see src/app/u/[handle]/[token]/page.tsx for the
   // route handler and why this isn't under /invite/.
-  return `${baseUrl}/u/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`
+  return `${baseUrl}/u/${encodeURIComponent(handle)}/${encodeURIComponent(token)}`;
 }
 
 // Resolves /u/<handle>/<token>: looks up the inviter case-insensitively on
@@ -184,19 +186,22 @@ export function buildInviteUrl(baseUrl: string, handle: string, token: string): 
 // Returns null when the handle doesn't resolve, the link doesn't exist,
 // belongs to someone else, or was deleted (don't reveal which).
 export type InviteLinkResolution = {
-  inviterUserId: string
-  inviterHandle: string
-  inviterDisplayName: string | null
-  inviterAvatarColor: string | null
-  linkId: string
-  slot: number
+  inviterUserId: string;
+  inviterHandle: string;
+  inviterDisplayName: string | null;
+  inviterAvatarColor: string | null;
+  linkId: string;
+  slot: number;
   // The topics THIS link carries — all of the inviter's resolved set for an
   // untagged (slot 0) link, or just the one tagged topic — already filtered
   // to what a not-yet-friend visitor may see (getPubliclyHiddenDomainKeys).
-  seedTopics: string[]
-}
+  seedTopics: string[];
+};
 
-export async function resolveInviteLink(handle: string, token: string): Promise<InviteLinkResolution | null> {
+export async function resolveInviteLink(
+  handle: string,
+  token: string,
+): Promise<InviteLinkResolution | null> {
   const [row] = await db
     .select({
       id: users.id,
@@ -206,30 +211,32 @@ export async function resolveInviteLink(handle: string, token: string): Promise<
     })
     .from(users)
     .where(sql`LOWER(${users.handle}) = LOWER(${handle})`)
-    .limit(1)
+    .limit(1);
 
-  if (!row || !row.handle) return null
+  if (!row || !row.handle) return null;
 
-  const link = await findLiveInviteLinkByToken(row.id, token)
-  if (!link) return null
+  const link = await findLiveInviteLinkByToken(row.id, token);
+  if (!link) return null;
 
   const [topics, hiddenDomainKeys] = await Promise.all([
-    getInviteLinkSeedTopics(row.id, link.slot),
+    link.categories != null
+      ? Promise.resolve(link.categories)
+      : getInviteLinkSeedTopics(row.id, link.slot),
     getPubliclyHiddenDomainKeys(row.id),
-  ])
+  ]);
   const seedTopics = topics
     .filter((topic) => !hiddenDomainKeys.has(domainKey(topic.label)))
-    .map((topic) => topic.label)
+    .map((topic) => topic.label);
 
   return {
     inviterUserId: row.id,
     inviterHandle: row.handle,
-    inviterDisplayName: row.displayName,
+    inviterDisplayName: safeInviteName(row.displayName),
     inviterAvatarColor: row.avatarColor,
     linkId: link.id,
     slot: link.slot,
     seedTopics,
-  }
+  };
 }
 
 // True when someone follows `userId` on an approved edge — the footprint left
@@ -244,9 +251,9 @@ export async function hasInviteLinkFriendship(userId: string): Promise<boolean> 
     .select({ followerId: follows.followerId })
     .from(follows)
     .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved')))
-    .limit(1)
+    .limit(1);
 
-  return Boolean(row)
+  return Boolean(row);
 }
 
 // Called from verify-otp when the user arrives via /u/<handle>/<token>.
@@ -263,35 +270,35 @@ export async function acceptUserInviteLink({
   inviteeUserId,
   now = new Date(),
 }: {
-  handle: string
-  token: string
-  inviteeUserId: string
-  now?: Date
+  handle: string;
+  token: string;
+  inviteeUserId: string;
+  now?: Date;
 }): Promise<{ accepted: boolean }> {
-  const inviter = await resolveInviteLink(handle, token)
-  if (!inviter) return { accepted: false }
-  if (inviter.inviterUserId === inviteeUserId) return { accepted: false }
+  const inviter = await resolveInviteLink(handle, token);
+  if (!inviter) return { accepted: false };
+  if (inviter.inviterUserId === inviteeUserId) return { accepted: false };
 
   try {
     await upsertInvitationFriendship(db, {
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
       formedAt: now,
-    })
+    });
     // One-time inviter feed backfill (B-HomeSeed-1). Best-effort internally so
     // it can't throw — a backfill hiccup must never fail the link acceptance.
     await backfillInviterFeedItems({
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
-    })
+    });
     try {
-      await attributeInviteLinkJoin(inviteeUserId, inviter.linkId)
+      await attributeInviteLinkJoin(inviteeUserId, inviter.linkId);
     } catch {
       // Attribution is a nice-to-have (join counts, Suggested-friends
       // provenance) — never worth failing an otherwise-successful accept.
     }
-    return { accepted: true }
+    return { accepted: true };
   } catch {
-    return { accepted: false }
+    return { accepted: false };
   }
 }

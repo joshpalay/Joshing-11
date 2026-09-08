@@ -1,7 +1,13 @@
-import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { AcceptFriendInvitationButton } from '@/components/invite/AcceptFriendInvitationButton';
+import {
+  InvitationLandingContent,
+  InvitationPageShell,
+} from '@/components/invite/InvitationLanding';
+import { safeInviteName } from '@/lib/invite-links';
+import { getSession } from '@/server/auth/session';
 import { getFriendInvitationLandingByToken } from '@/server/friends/invitations';
 
 type InvitePageProps = {
@@ -12,87 +18,70 @@ function inviteLoginHref(token: string) {
   return `/login?invitationToken=${encodeURIComponent(token)}`;
 }
 
-function InviteShell({ children }: { children: ReactNode }) {
-  return (
-    <main className="bg-background text-foreground flex min-h-screen items-center justify-center px-4 py-10">
-      <section className="bg-card w-full max-w-sm rounded-[var(--radius-card)] border p-5 shadow-[var(--shadow-card)]">
-        {children}
-      </section>
-    </main>
-  );
-}
-
 export default async function InvitePage({ params }: InvitePageProps) {
   const { token } = await params;
   const invitation = await getFriendInvitationLandingByToken(token);
+  const session = await getSession();
 
   if (invitation.status === 'valid') {
-    // Skip the interstitial — drop the invitee straight onto the login screen,
-    // which carries the invite context (the reworded "verify your phone" card).
-    redirect(inviteLoginHref(token));
-  }
+    if (session?.userId === invitation.inviterUserId) redirect('/friends');
+    const inviterName = safeInviteName(invitation.inviterName);
 
-  if (invitation.status === 'expired') {
     return (
-      <InviteShell>
-        <div className="space-y-4 text-center">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Invitation expired
-          </p>
-          <h1 className="font-serif text-2xl leading-tight font-semibold">
-            This invitation has expired. Ask {invitation.inviterName} to send you a new one.
-          </h1>
-          <Link
-            href="/login"
-            className="btn-ghost w-full"
-          >
-            Go to login
-          </Link>
-        </div>
-      </InviteShell>
+      <InvitationPageShell>
+        <InvitationLandingContent
+          inviterName={inviterName}
+          categories={invitation.categories}
+          action={
+            session ? (
+              <AcceptFriendInvitationButton token={token} inviterName={inviterName} />
+            ) : (
+              <Link href={inviteLoginHref(token)} className="btn-primary min-h-11 w-full">
+                {inviterName ? `Continue with ${inviterName}` : 'Continue'}
+              </Link>
+            )
+          }
+        />
+      </InvitationPageShell>
     );
   }
 
   if (invitation.status === 'accepted') {
     return (
-      <InviteShell>
+      <InvitationPageShell>
         <div className="space-y-4 text-center">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Invitation already used
-          </p>
-          <h1 className="font-serif text-2xl leading-tight font-semibold">
+          <p className="text-muted-foreground text-sm font-medium">Invitation already used</p>
+          <h1 className="font-serif text-3xl leading-tight font-semibold">
             This invitation has already been used.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
-            Log in with your phone number to continue to Joshing.
+            Continue to Joshing with the account that accepted it.
           </p>
-          <Link href="/login" className="btn-primary w-full">
-            Go to login
+          <Link href={session ? '/' : '/login'} className="btn-primary min-h-11 w-full">
+            {session ? 'Continue to Joshing' : 'Go to login'}
           </Link>
         </div>
-      </InviteShell>
+      </InvitationPageShell>
     );
   }
 
+  const expired = invitation.status === 'expired';
   return (
-    <InviteShell>
+    <InvitationPageShell>
       <div className="space-y-4 text-center">
-        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Invalid invitation
+        <p className="text-muted-foreground text-sm font-medium">
+          {expired ? 'Invitation expired' : 'Invitation unavailable'}
         </p>
-        <h1 className="text-2xl font-semibold tracking-normal">
-          This invitation link is not valid.
+        <h1 className="font-serif text-3xl leading-tight font-semibold">
+          {expired ? 'This invitation has expired.' : 'This invitation link is not valid.'}
         </h1>
         <p className="text-muted-foreground text-sm leading-6">
           Ask your friend to send you a new Joshing invitation.
         </p>
-        <Link
-          href="/login"
-          className="inline-flex h-11 w-full items-center justify-center rounded-md border px-4 text-sm font-medium"
-        >
+        <Link href="/login" className="btn-ghost min-h-11 w-full">
           Go to login
         </Link>
       </div>
-    </InviteShell>
+    </InvitationPageShell>
   );
 }
