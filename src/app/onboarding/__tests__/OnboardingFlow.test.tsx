@@ -95,29 +95,56 @@ describe('OnboardingFlow invited interests', () => {
 // named invite's seeds do — a link may reach someone the inviter never had in
 // mind.
 describe('OnboardingFlow seedSource = link', () => {
-  it('renders link-sourced topics unselected, not pre-selected', () => {
+  it('shows Duo Prova’s suggestions above Add your own and leaves them unselected', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         seedSource="link"
-        inviterName="Josh"
+        inviterName="Duo Prova"
         initialDisplayName="Returning User"
         initialHandle="returninguser"
         preSeededInterests={[
-          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
-          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+          { domain: 'Great Lakes shipwrecks', broadCategory: 'History', rationale: null },
+          { domain: 'Renaissance Florence', broadCategory: 'History', rationale: null },
+          { domain: 'Final Fantasy', broadCategory: 'Games', rationale: null },
         ]}
       />
     )
 
-    // Counter reads 0 selected, not 2 — the topics are offered, not chosen.
+    // Counter reads 0 selected — the topics are offered, not chosen.
     expect(html).toContain('0 selected')
-    expect(html).not.toContain('2 selected')
+    expect(html).not.toContain('3 selected')
     // Still surfaced as suggestion chips the invitee can tap to add.
-    expect(html).toContain('Sondheim')
-    expect(html).toContain('Jazz')
-    // Link-specific framing, not the named-invite "we picked for you" copy.
-    expect(html).toContain('Here are a few from Josh')
+    expect(html).toContain('Great Lakes shipwrecks')
+    expect(html).toContain('Renaissance Florence')
+    expect(html).toContain('Final Fantasy')
+    expect(html).toContain('Suggested by Duo Prova')
+    expect(html).toContain('Duo Prova picked these for you. Take any that feel right.')
+    expect(html.indexOf('Suggested by Duo Prova')).toBeLessThan(html.indexOf('Add your own'))
+    expect(html.indexOf('Add your own')).toBeLessThan(
+      html.indexOf('Your trivia questions will come from these subjects')
+    )
+    // Link-specific welcome framing remains intact.
+    expect(html).toContain('Here are a few from Duo Prova')
     expect(html).not.toContain('Here are some topics we picked for you')
+  })
+
+  it('uses the nameless suggestion fallback without empty or undefined copy', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        seedSource="link"
+        inviterName={null}
+        initialDisplayName="Returning User"
+        initialHandle="returninguser"
+        preSeededInterests={[
+          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
+        ]}
+      />
+    )
+
+    expect(html).toContain('Suggested for you')
+    expect(html).not.toContain('picked these for you')
+    expect(html).not.toContain('Suggested by')
+    expect(html).not.toContain('undefined')
   })
 
   it('a named invite (default seedSource) still pre-selects, for contrast', () => {
@@ -135,6 +162,8 @@ describe('OnboardingFlow seedSource = link', () => {
 
     expect(html).toContain('2 selected · pick at least 1 more')
     expect(html).toContain('Here are some topics we picked for you')
+    expect(html).toContain('aria-label="Remove Sondheim"')
+    expect(html).toContain('aria-label="Remove Jazz"')
   })
 })
 
@@ -200,5 +229,27 @@ describe('OnboardingFlow display-name gate', () => {
     )
 
     expect(html).toContain('separated by commas')
+  })
+
+  it('keeps the standard non-invitation topic entry experience unchanged', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        preSeededInterests={[]}
+        initialDisplayName="Existing Name"
+        initialHandle="existingname"
+      />
+    )
+
+    expect(html).toContain(
+      "A trivia game built for you. Add a few topics you&#x27;d want questions about, and we&#x27;ll build your first round from them."
+    )
+    expect(html).toContain('Add your own')
+    expect(html).toContain('Add anything: a book, musician, team, era, show, place, person, or theory…')
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Add<\/button>/)
+    expect(html).not.toContain('Suggested by')
+    expect(html).not.toContain('Suggested for you')
+    expect(html.indexOf('Your trivia questions will come from these subjects')).toBeLessThan(
+      html.indexOf('Add your own')
+    )
   })
 })

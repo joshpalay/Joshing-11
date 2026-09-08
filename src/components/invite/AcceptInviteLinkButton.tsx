@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { safeInviteName } from '@/lib/invite-links';
+import { inviteAcceptanceLabel } from '@/lib/invite-links';
 
 export function AcceptInviteLinkButton({
   handle,
@@ -17,7 +17,7 @@ export function AcceptInviteLinkButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const name = safeInviteName(inviterName);
+  const actionLabel = inviteAcceptanceLabel(inviterName);
 
   async function continueInvite() {
     if (busy) return;
@@ -55,7 +55,7 @@ export function AcceptInviteLinkButton({
         disabled={busy}
         className="btn-primary min-h-11 w-full"
       >
-        {busy ? 'Continuing…' : name ? `Continue with ${name}` : 'Continue'}
+        {busy ? 'Continuing…' : actionLabel}
       </button>
       {error ? (
         <p className="text-destructive text-sm leading-5" role="alert">

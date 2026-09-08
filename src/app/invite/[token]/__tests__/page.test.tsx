@@ -34,7 +34,7 @@ describe('/invite/[token] landing QA states', () => {
   it('shows personalized context before a signed-out recipient continues to authentication', async () => {
     getFriendInvitationLandingByTokenMock.mockResolvedValueOnce({
       status: 'valid',
-      inviterName: 'Alex',
+      inviterName: 'Duo Prova',
       inviterUserId: 'u1',
       inviterAvatarColor: null,
       categories: ['Jazz', 'Poetry'],
@@ -42,12 +42,12 @@ describe('/invite/[token] landing QA states', () => {
 
     const html = await renderInvite('valid-token');
 
-    expect(html).toContain('Alex invited you to Joshing');
-    expect(html).toContain('Play Alex’s greatest hits');
-    expect(html).toContain('Alex picked a few categories');
+    expect(html).toContain('Duo Prova invited you to Joshing');
+    expect(html).toContain('Play Duo Prova’s greatest hits');
+    expect(html).toContain('Duo Prova picked a few categories');
     expect(html).toContain('Jazz');
     expect(html).toContain('Poetry');
-    expect(html).toContain('Continue with Alex');
+    expect(html).toContain('Accept Duo Prova’s invitation');
     expect(html).toContain('href="/login?invitationToken=valid-token"');
     expect(getFriendInvitationLandingByTokenMock).toHaveBeenCalledWith('valid-token');
   });
@@ -64,7 +64,7 @@ describe('/invite/[token] landing QA states', () => {
 
     const html = await renderInvite('valid-token');
 
-    expect(html).toContain('Continue with Alex');
+    expect(html).toContain('Accept Alex’s invitation');
     expect(html).not.toContain('href="/login?invitationToken=valid-token"');
   });
 
@@ -120,6 +120,8 @@ describe('/invite/[token] landing QA states', () => {
     expect(html).toContain('You’ve been invited to Joshing');
     expect(html).toContain('Play the greatest hits');
     expect(html).toContain('Someone picked a few categories to get you started.');
+    expect(html).toContain('Accept invitation');
     expect(html).not.toContain('734');
+    expect(html).not.toContain('undefined');
   });
 });

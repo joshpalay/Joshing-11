@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
 import { SmsReminderDisclosure } from '@/components/reminders/SmsReminderDisclosure'
+import { safeInviteName } from '@/lib/invite-links'
 
 // Condensed onboarding: name → handle → one interests screen (warm-up is an
 // optional expander there; the cultural-anchor/background step was removed).
@@ -296,9 +297,8 @@ export default function OnboardingFlow({
   const [error, setError] = useState<string | null>(null)
   const [savingReminder, setSavingReminder] = useState(false)
   const [reminderError, setReminderError] = useState<string | null>(null)
-  const displayInviterName = inviterName?.trim()
-    ? inviterName.trim()
-    : 'A friend'
+  const safeInviterName = safeInviteName(inviterName)
+  const displayInviterName = safeInviterName ?? 'A friend'
   // Whether the invitee arrived with any pre-seeded topics. Drives the welcome
   // copy: with seeds we frame the screen as "remove what doesn't fit"; without
   // any (e.g. invite-link signups) we frame it as "add a few to start".
@@ -688,6 +688,38 @@ export default function OnboardingFlow({
     }
   }
 
+  const selectedInterestsSummary = (
+    <div className="space-y-3">
+      <p className="font-serif text-2xl leading-tight font-semibold text-balance text-[var(--ink)] sm:text-3xl">
+        Your trivia questions will come from these subjects
+      </p>
+      {selectedInterests.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Nothing yet — add a few below.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {selectedInterests.map((interest) => (
+            <li key={selectedKey(interest)} className="flex items-center gap-3">
+              <span aria-hidden="true" className="text-muted-foreground text-xs">
+                ▸
+              </span>
+              <span className="text-base font-medium">{interest.domain}</span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive text-sm font-medium underline transition-colors"
+                onClick={() => removeSelectedInterest(interest)}
+                aria-label={`Remove ${interest.domain}`}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+
   return (
     <main className="bg-background text-foreground min-h-screen px-4 pt-8 pb-10 sm:px-6 sm:pt-12">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-2xl flex-col">
@@ -837,43 +869,23 @@ export default function OnboardingFlow({
                 </p>
               </div>
 
-              <div className="space-y-3">
-                <p className="font-serif text-2xl leading-tight font-semibold text-balance text-[var(--ink)] sm:text-3xl">
-                  Your trivia questions will come from these subjects
-                </p>
-                {selectedInterests.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    Nothing yet — add a few below.
+              {inviteSuggestions.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">
+                    {safeInviterName
+                      ? `Suggested by ${safeInviterName}`
+                      : 'Suggested for you'}
                   </p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {selectedInterests.map((interest) => (
-                      <li
-                        key={selectedKey(interest)}
-                        className="flex items-center gap-3"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="text-muted-foreground text-xs"
-                        >
-                          ▸
-                        </span>
-                        <span className="text-base font-medium">
-                          {interest.domain}
-                        </span>
-                        <button
-                          type="button"
-                          className="text-muted-foreground hover:text-destructive text-sm font-medium underline transition-colors"
-                          onClick={() => removeSelectedInterest(interest)}
-                          aria-label={`Remove ${interest.domain}`}
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                  {safeInviterName ? (
+                    <p className="text-muted-foreground text-sm leading-6">
+                      {`${safeInviterName} picked these for you. Take any that feel right.`}
+                    </p>
+                  ) : null}
+                  {renderSuggestionChips(inviteSuggestions, 'suggested')}
+                </div>
+              ) : null}
+
+              {inviteSuggestions.length === 0 ? selectedInterestsSummary : null}
 
               <AddTopicField
                 heading="Add your own"
@@ -890,12 +902,7 @@ export default function OnboardingFlow({
                 errorClassName="text-destructive mt-3 text-sm"
               />
 
-              {inviteSuggestions.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">Suggested for you</p>
-                  {renderSuggestionChips(inviteSuggestions, 'suggested')}
-                </div>
-              ) : null}
+              {inviteSuggestions.length > 0 ? selectedInterestsSummary : null}
 
               <div className="bg-background/95 sticky bottom-0 border-t py-4 backdrop-blur">
                 {error ? (
