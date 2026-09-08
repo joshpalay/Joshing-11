@@ -1,6 +1,6 @@
 ---
 name: answer-leak-domain-drift-plan
-status: needs-decision
+status: active
 opened: 2026-09-05
 last-reviewed: 2026-09-08
 owner: Josh
@@ -903,12 +903,96 @@ still worth Josh's judgment call before flipping, not an autonomous
 decision, but the evidence behind it is now substantially stronger than a
 single 92%-precision number on a small sample.
 
+### 2026-09-08 (later) — both flags flipped ON in production; a new diagnostic to confirm it
+
+Josh flipped both `PARTIAL_ANSWER_LEAK_ENABLED` and `DOMAIN_DRIFT_DROP_ENABLED`
+to on in Vercel production, via the dashboard. Confirmed important operational
+detail in the process: **saving an env var in Vercel's UI automatically
+creates a new deployment** — there's no separate "now go redeploy" step, and
+the PR #1623 deployment (which shipped the `model`-noun fix and the
+off-domain second opinion) landed essentially the same time as the flip, so
+the flags are running against the code that makes them safe, not the old code.
+
+**Added `npm run check:gate-flags`** (`scripts/check-gate-flags.mjs`) as the
+concrete answer to "how do we know this actually worked" — reads
+`GateDropStat` for `answer_leak_partial` and `domain_drift` since the flip
+day, reports whether either has produced a real drop yet, and separately
+checks the shared `quality` gate's `failed_open` count (since a Haiku outage
+on that shared call would show up there, not on `domain_drift`'s own
+counter, and would otherwise be mistaken for "nothing to catch"). First run,
+same day as the flip: **no post-flip generation traffic yet** — inconclusive
+by design, not a failure. The script's own header spells out why a
+`dropped: 0` day isn't evidence of anything at these gates' low hit rates.
+
 ### Next steps
-1. Open the PR for `claude/domain-drift-safety-net`.
-2. Josh: flip `PARTIAL_ANSWER_LEAK_ENABLED` (Vercel env var, production —
-   I can't set this myself, no MCP tool exposes env var writes). The one
-   blocking bug is fixed; the other 6 disagreement items don't block it.
-3. Josh: decide on `DOMAIN_DRIFT_DROP_ENABLED` now that the false-positive
-   mitigation is built and validated against the real 2026-09-07 case.
-4. The "why does Woolf keep generating Joyce" investigation — still not
+1. **Run `npm run check:gate-flags`** once a day or two of real generation
+   traffic has passed since the flip, to confirm both flags are actually
+   doing something (or to catch a silent problem — see the script's health
+   check on the shared `quality` gate).
+2. The "why does Woolf keep generating Joyce" investigation — still not
+   started.
+
+### 2026-09-08 (later) — `PARTIAL_ANSWER_LEAK_ENABLED` flipped in Vercel Production; redeploy pending
+
+Josh added `PARTIAL_ANSWER_LEAK_ENABLED` to the **Production** environment in
+Vercel (screenshot, added "just now"), resolving Next step 2 above. PR #1623
+(the `model`-noun fix, the blocker for this flag) confirmed `MERGED` to `main`
+via `gh pr view` — merged 2026-09-07T23:48:46Z.
+
+**Not yet in effect.** Vercel's own toast on that screen says it plainly: "A
+new deployment is needed for changes to take effect" — adding an env var
+doesn't touch already-running instances. Nothing to verify against
+`GateDropStat` until a new deploy ships; the `answer_leak_partial` gate will
+keep showing `dropped: 0` (measure-only) until then even though the flag is
+now set.
+
+Left the actual redeploy to Josh — he's already on that exact Vercel screen
+with the Redeploy button in front of him, and I have no standing MCP session
+into his mobile browser to click it from here. If he'd rather I trigger a
+fresh production deploy through the Vercel MCP tools instead, say so and I
+will, but tapping the button already on screen is simpler.
+
+**Once redeployed**, worth a follow-up check here: `GateDropStat` for
+`answer_leak_partial` should start showing `dropped > 0` instead of
+`dropped: 0, considered: N`, which is the confirmation that the flag is
+actually live, not just set.
+
+**Still open:** `DOMAIN_DRIFT_DROP_ENABLED` — untouched in this screenshot,
+still Josh's call, now backed by the merged second-opinion mitigation
+(#1623). The "why does Woolf keep generating Joyce" investigation — still
+not started.
+
+### 2026-09-08 (later still) — correction: both flags ARE flipped and live; the redeploy concern above didn't materialize
+
+The entry immediately above says a manual redeploy was still needed and
+that "adding an env var doesn't touch already-running instances." **That
+turned out to overstate the gap.** Josh's actual Vercel screenshot from this
+session shows a **"Deployment created" toast with a "View Deployment"
+button** right after saving an env var change — not the "a new deployment
+is needed" warning the prior entry describes. Vercel's dashboard
+auto-triggers a redeploy on save; there was no separate manual step for
+Josh to take. Confirmed independently via `list_deployments`: a production
+deployment landed within ~2 minutes of Josh's edit.
+
+Also confirmed since that entry: **Josh has flipped BOTH flags on**
+(`DOMAIN_DRIFT_DROP_ENABLED` and `PARTIAL_ANSWER_LEAK_ENABLED`), not just
+the one. Both open decisions from this doc are now resolved on Josh's side;
+`status` moved to `active` — what remains is verification, not a pending
+choice.
+
+Built `npm run check:gate-flags` (`scripts/check-gate-flags.mjs`) as that
+verification: reads `GateDropStat` for both gates since the flip day
+(2026-09-07), and separately checks the shared `quality` gate's
+`failed_open` count, since a Haiku outage on that shared call would surface
+there rather than on `domain_drift`'s own counter — otherwise
+indistinguishable from "nothing to catch that day." First run: no post-flip
+generation traffic yet, correctly reported as inconclusive rather than a
+false pass or fail.
+
+### Next steps
+1. **Run `npm run check:gate-flags`** once a day or two of real generation
+   traffic has passed since the flip, to confirm both flags are actually
+   doing something (or to catch a silent problem via the shared `quality`
+   gate health check).
+2. The "why does Woolf keep generating Joyce" investigation — still not
    started.
