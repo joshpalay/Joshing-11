@@ -1151,13 +1151,26 @@ traffic doesn't move it.
 the 7 Phase 1 disagreement items, and the generalized cross-domain audit
 mentioned above are all still exactly where the last entry left them.
 
+### 2026-09-08 (later) — `check:gate-flags` date bug fixed
+
+Fixed the bug found above: `dayStr()` now normalizes the `pg`-returned
+`Date` to a `YYYY-MM-DD` UTC string before comparing against `FLIP_DAY`,
+instead of letting `>`/`<=` coerce the `Date` through its local-timezone
+`toString()`. Applied to both the `preFlip`/`postFlip` filters and the
+display lines (which previously would have printed the same ugly
+local-time string once post-flip data existed).
+
+Re-ran `npm run check:gate-flags` after the fix — it now correctly shows
+the real 2026-09-08 data instead of "NONE YET": `answer_leak_partial` and
+`domain_drift` both 0 dropped / 14 considered, `quality` gate healthy
+(`failed_open: 0`). Matches the by-hand `GateDropStat` query from the
+earlier entry exactly. Lint clean.
+
 ### Next steps (revised)
-1. **Fix the date-comparison bug in `scripts/check-gate-flags.mjs`** so it
-   reports real data instead of a false "NONE YET" — low effort, and it's
-   actively hiding the one number this doc is waiting on.
-2. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
    for an actual drop (or a few more clean, quality-healthy days) before
-   revisiting the Mechanism 2 code-fix decision.
-3. The 7 Phase 1 disagreement items are effectively closed (only the `model`
+   revisiting the Mechanism 2 code-fix decision. `check:gate-flags` now
+   reports this correctly, so it's the tool to keep using.
+2. The 7 Phase 1 disagreement items are effectively closed (only the `model`
    bug blocked a flag, and that shipped in #1623) — no outstanding action
    there beyond what's already landed.
