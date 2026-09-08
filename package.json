@@ -19,6 +19,7 @@
     "check:typesize": "node scripts/check-typesize-ratchet.mjs",
     "check:binary": "node scripts/check-binary-sources.mjs",
     "check:build-latency": "node scripts/build-latency-check.mjs",
+    "check:gate-flags": "node scripts/check-gate-flags.mjs",
     "sweep:bank-quality": "tsx scripts/sweep-bank-quality.ts",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
     "smoke:question-vetting": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/question-vetting.smoke.mjs",

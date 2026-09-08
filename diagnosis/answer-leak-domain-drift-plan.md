@@ -1,6 +1,6 @@
 ---
 name: answer-leak-domain-drift-plan
-status: needs-decision
+status: active
 opened: 2026-09-05
 last-reviewed: 2026-09-08
 owner: Josh
@@ -903,14 +903,33 @@ still worth Josh's judgment call before flipping, not an autonomous
 decision, but the evidence behind it is now substantially stronger than a
 single 92%-precision number on a small sample.
 
+### 2026-09-08 (later) — both flags flipped ON in production; a new diagnostic to confirm it
+
+Josh flipped both `PARTIAL_ANSWER_LEAK_ENABLED` and `DOMAIN_DRIFT_DROP_ENABLED`
+to on in Vercel production, via the dashboard. Confirmed important operational
+detail in the process: **saving an env var in Vercel's UI automatically
+creates a new deployment** — there's no separate "now go redeploy" step, and
+the PR #1623 deployment (which shipped the `model`-noun fix and the
+off-domain second opinion) landed essentially the same time as the flip, so
+the flags are running against the code that makes them safe, not the old code.
+
+**Added `npm run check:gate-flags`** (`scripts/check-gate-flags.mjs`) as the
+concrete answer to "how do we know this actually worked" — reads
+`GateDropStat` for `answer_leak_partial` and `domain_drift` since the flip
+day, reports whether either has produced a real drop yet, and separately
+checks the shared `quality` gate's `failed_open` count (since a Haiku outage
+on that shared call would show up there, not on `domain_drift`'s own
+counter, and would otherwise be mistaken for "nothing to catch"). First run,
+same day as the flip: **no post-flip generation traffic yet** — inconclusive
+by design, not a failure. The script's own header spells out why a
+`dropped: 0` day isn't evidence of anything at these gates' low hit rates.
+
 ### Next steps
-1. Open the PR for `claude/domain-drift-safety-net`.
-2. Josh: flip `PARTIAL_ANSWER_LEAK_ENABLED` (Vercel env var, production —
-   I can't set this myself, no MCP tool exposes env var writes). The one
-   blocking bug is fixed; the other 6 disagreement items don't block it.
-3. Josh: decide on `DOMAIN_DRIFT_DROP_ENABLED` now that the false-positive
-   mitigation is built and validated against the real 2026-09-07 case.
-4. The "why does Woolf keep generating Joyce" investigation — still not
+1. **Run `npm run check:gate-flags`** once a day or two of real generation
+   traffic has passed since the flip, to confirm both flags are actually
+   doing something (or to catch a silent problem — see the script's health
+   check on the shared `quality` gate).
+2. The "why does Woolf keep generating Joyce" investigation — still not
    started.
 
 ### 2026-09-08 (later) — `PARTIAL_ANSWER_LEAK_ENABLED` flipped in Vercel Production; redeploy pending
