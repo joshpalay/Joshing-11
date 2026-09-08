@@ -2795,6 +2795,30 @@ export async function register() {
         // User may not exist yet on a fresh database -- migrate() creates it
         // and applies 0142 in normal order.
       }
+
+      // Migration 0143 (B-FRIENDS-SAFETY-01 Phase 2) adds 'declined' to
+      // FollowState plus Follow.declined_at. The enum addition must be
+      // pre-applied here for the same reason as the QuestionVisibility guards
+      // above: Postgres forbids referencing a newly-added enum value inside
+      // the same transaction that adds it, so a preview database where 0143
+      // is recorded-but-not-fully-applied would 22P02 the moment
+      // ignorePendingFriendshipRequest tries to write 'declined'.
+      try {
+        await db.execute(sql`
+        ALTER TYPE "public"."FollowState" ADD VALUE IF NOT EXISTS 'declined'
+      `);
+      } catch {
+        // FollowState may not exist yet on a fresh database — migrate()
+        // creates it before this migration runs.
+      }
+      try {
+        await db.execute(sql`
+        ALTER TABLE "Follow" ADD COLUMN IF NOT EXISTS "declinedAt" timestamptz
+      `);
+      } catch {
+        // Follow may not exist yet on a fresh database — migrate() creates it
+        // and applies 0143 in normal order.
+      }
     } // end if (runBootGuards)
     const guardChainMs = runBootGuards ? Date.now() - guardChainStartedAt : 0;
 
