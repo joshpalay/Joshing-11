@@ -52,9 +52,17 @@ try {
 
   console.log(`\n=== Gate-flag check (flip day: ${FLIP_DAY}) ===\n`);
 
+  // `day` comes back from `pg` as a JS Date (UTC midnight), not a string.
+  // Comparing a Date to FLIP_DAY with `<=`/`>` coerces the Date via its
+  // *local-timezone* toString(), not an ISO date string, so the comparison
+  // silently does the wrong thing instead of throwing. Normalize to a plain
+  // 'YYYY-MM-DD' UTC string first, which sorts identically to a real date
+  // compare and matches FLIP_DAY's own format.
+  const dayStr = (r) => (r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day));
+
   const byGate = (gate) => rows.filter((r) => r.gate === gate);
-  const preFlip = (r) => r.day <= FLIP_DAY;
-  const postFlip = (r) => r.day > FLIP_DAY;
+  const preFlip = (r) => dayStr(r) <= FLIP_DAY;
+  const postFlip = (r) => dayStr(r) > FLIP_DAY;
 
   for (const gate of ['answer_leak_partial', 'domain_drift']) {
     const gateRows = byGate(gate);
@@ -75,10 +83,10 @@ try {
     const postConsidered = post.reduce((s, r) => s + r.considered, 0);
     const postDropped = post.reduce((s, r) => s + r.dropped, 0);
     const rate = postConsidered > 0 ? ((postDropped / postConsidered) * 100).toFixed(2) : '0.00';
-    line('post-flip days', post.map((r) => r.day).join(', '));
+    line('post-flip days', post.map(dayStr).join(', '));
     line('post-flip totals', `${postDropped} dropped / ${postConsidered} considered (${rate}%)`);
     for (const r of post) {
-      console.log(`    ${r.day}  considered=${r.considered}  dropped=${r.dropped}  failed_open=${r.failed_open}`);
+      console.log(`    ${dayStr(r)}  considered=${r.considered}  dropped=${r.dropped}  failed_open=${r.failed_open}`);
     }
     if (postDropped > 0) {
       console.log(`  [EVIDENCE] The flag is doing something -- at least one real drop since the flip.`);

@@ -4,7 +4,7 @@ status: active
 opened: 2026-09-05
 last-reviewed: 2026-09-08
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619, #1623"
+related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
@@ -1097,3 +1097,80 @@ the drop flag already solves.
    above. Worth a follow-up only if the pattern recurs post-flip (it
    shouldn't, now that `DOMAIN_DRIFT_DROP_ENABLED` is on) or if someone wants
    the generalized full-corpus audit for other tightly-paired domains.
+
+### 2026-09-08 (diagnosis-review) — found a bug in `check:gate-flags` itself; real post-flip data already exists and reads clean so far
+
+This branch's copy of this file had fallen behind `main` by two merged PRs
+(`#1624`, `#1628`) — no local edits were lost (`git status` on this file was
+clean before syncing), just stale content from branching before they landed.
+Synced to `main`'s version verbatim before appending this entry; `related-pr`
+above updated to include both.
+
+**Re-verified `PARTIAL_ANSWER_LEAK_ENABLED` / `DOMAIN_DRIFT_DROP_ENABLED`**:
+absent from local `.env`, as every prior entry has found — expected, since
+these are Vercel-dashboard-only production env vars, not part of this repo's
+`.env`. Not informative about the production value either way; only
+`GateDropStat` telemetry is.
+
+**Ran `npm run check:gate-flags` (the blocking diagnostic Next step 1 above
+calls for) — it reported "NONE YET" for both gates, which is wrong.** Querying
+`GateDropStat` directly shows real post-flip traffic already exists:
+
+| gate | day | considered | dropped | failed_open |
+|---|---|---|---|---|
+| answer_leak_partial | 2026-09-08 | 14 | 0 | 0 |
+| domain_drift | 2026-09-08 | 14 | 0 | 0 |
+| quality | 2026-09-08 | 14 | 4 | 0 |
+
+**Root cause, confirmed by direct reproduction, not inferred:** the script's
+`postFlip` filter compares a `pg`-returned `DATE` column (a JS `Date` object,
+midnight UTC) against the literal string `'2026-09-07'` with plain `>`. JS's
+abstract relational comparison stringifies a `Date` via its *local-timezone*
+`toString()` before comparing, not an ISO date string — confirmed directly:
+`new Date('2026-09-08T00:00:00.000Z') > '2026-09-07'` evaluates to `false` in
+this machine's timezone. The comparison silently does the wrong thing instead
+of throwing, so the script has been reporting "no data" for a day that
+actually has 14 rows considered per gate. This is a bug in the verification
+script itself, not in the gates or the flags — flagging for a fix (compare
+`String(r.day) > FLIP_DAY` after normalizing to `YYYY-MM-DD`, or parse both
+as UTC dates) rather than fixing it myself mid-review.
+
+**Reading the real numbers by hand, applying the script's own stated
+methodology:** `2026-09-08` is 14/14 considered with **0 dropped** on both
+gates — at these gates' documented hit rates (partial-leak ~0.56%,
+domain-drift lower after the second-opinion filter) this is the
+script's own "[INCONCLUSIVE] — not unusual after only a few days" case, not
+a red flag. `quality`'s `failed_open: 0` on the same day says the shared
+Haiku plumbing under `domain_drift` is healthy, so a zero-drop day here reads
+as "nothing to catch," not "the check silently isn't running." **Still no
+resolution of the Mechanism 2 decision above** — that needs an actual drop
+(or several more clean days) to read either way, and one day of quiet
+traffic doesn't move it.
+
+**No other change since the last entry:** the three `ContentReport` rows,
+the 7 Phase 1 disagreement items, and the generalized cross-domain audit
+mentioned above are all still exactly where the last entry left them.
+
+### 2026-09-08 (later) — `check:gate-flags` date bug fixed
+
+Fixed the bug found above: `dayStr()` now normalizes the `pg`-returned
+`Date` to a `YYYY-MM-DD` UTC string before comparing against `FLIP_DAY`,
+instead of letting `>`/`<=` coerce the `Date` through its local-timezone
+`toString()`. Applied to both the `preFlip`/`postFlip` filters and the
+display lines (which previously would have printed the same ugly
+local-time string once post-flip data existed).
+
+Re-ran `npm run check:gate-flags` after the fix — it now correctly shows
+the real 2026-09-08 data instead of "NONE YET": `answer_leak_partial` and
+`domain_drift` both 0 dropped / 14 considered, `quality` gate healthy
+(`failed_open: 0`). Matches the by-hand `GateDropStat` query from the
+earlier entry exactly. Lint clean.
+
+### Next steps (revised)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop (or a few more clean, quality-healthy days) before
+   revisiting the Mechanism 2 code-fix decision. `check:gate-flags` now
+   reports this correctly, so it's the tool to keep using.
+2. The 7 Phase 1 disagreement items are effectively closed (only the `model`
+   bug blocked a flag, and that shipped in #1623) — no outstanding action
+   there beyond what's already landed.
