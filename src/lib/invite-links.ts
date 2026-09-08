@@ -82,6 +82,19 @@ export function inviteGreatestHitsTitle(name: unknown, creatorView = false): str
   return `Play ${safeName}’s greatest hits`;
 }
 
+/**
+ * A per-link title generated from that link's own categories (e.g. "Music,
+ * Star Wars & Joyce"), so a creator managing several links can tell them
+ * apart at a glance instead of seeing the same "greatest hits" line on every
+ * card. Falls back to a neutral label for the legacy no-category state.
+ */
+export function inviteLinkCardTitle(categories: InviteLinkCategory[]): string {
+  const labels = sanitizeInviteLinkCategories(categories).map((category) => category.label);
+  if (labels.length === 0) return 'Invitation link';
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(', ')} & ${labels[labels.length - 1]}`;
+}
+
 /** Recipient-facing action copy; never interpolate account identifiers. */
 export function inviteAcceptanceLabel(name: unknown): string {
   const safeName = safeInviteName(name);

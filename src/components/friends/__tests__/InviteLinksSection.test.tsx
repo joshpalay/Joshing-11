@@ -17,10 +17,9 @@ function link(id: string, categories: unknown, joinedCount = 0): InviteLinkRowDa
   };
 }
 
-function render(links: InviteLinkRowData[], creatorName: string | null = 'Josh') {
+function render(links: InviteLinkRowData[]) {
   return renderToStaticMarkup(
     <InviteLinksSection
-      creatorName={creatorName}
       initialTopics={[{ label: 'Sondheim', broadCategory: 'Theater' }]}
       initialLinks={links}
     />,
@@ -28,18 +27,18 @@ function render(links: InviteLinkRowData[], creatorName: string | null = 'Josh')
 }
 
 describe('InviteLinksSection', () => {
-  it('renders the dynamic creator title and required supporting copy', () => {
+  it('titles each card from its own categories and shows the actual link', () => {
     const html = render([link('one', [{ label: 'Jazz' }])]);
 
-    expect(html).toContain('Play Josh’s greatest hits');
+    expect(html).toContain('>Jazz<');
     expect(html).toContain('We’ll recommend these categories to anyone who uses this link.');
+    expect(html).toContain('https://example.com/u/josh/one');
   });
 
-  it('uses the creator fallback without exposing a phone-like value', () => {
-    const html = render([link('one', [{ label: 'Jazz' }])], '+1 (734) 555-0123');
+  it('joins multiple categories into a single generated title', () => {
+    const html = render([link('one', [{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }])]);
 
-    expect(html).toContain('Play your greatest hits');
-    expect(html).not.toContain('734');
+    expect(html).toContain('Music, Star Wars &amp; Joyce');
   });
 
   it('filters blank, sentinel, malformed, and duplicate categories', () => {
@@ -56,15 +55,16 @@ describe('InviteLinksSection', () => {
 
     expect(html).toContain('Jazz');
     expect(html).not.toContain('No category');
-    expect(html.match(/>Jazz</g) ?? []).toHaveLength(1);
+    expect(html.match(/Jazz/g) ?? []).toHaveLength(2);
   });
 
-  it('keeps each link’s categories separate', () => {
+  it('keeps each link’s title, categories, and url separate', () => {
     const html = render([link('one', [{ label: 'Jazz' }]), link('two', [{ label: 'Poetry' }])]);
 
-    expect(html).toContain('Jazz');
-    expect(html).toContain('Poetry');
-    expect(html.match(/Play Josh’s greatest hits/g) ?? []).toHaveLength(2);
+    expect(html).toContain('>Jazz<');
+    expect(html).toContain('>Poetry<');
+    expect(html).toContain('https://example.com/u/josh/one');
+    expect(html).toContain('https://example.com/u/josh/two');
   });
 
   it('pluralizes joined counts correctly', () => {
