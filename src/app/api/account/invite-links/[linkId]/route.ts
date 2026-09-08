@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { MAX_INVITE_LINK_CATEGORIES, sanitizeInviteLinkCategories } from '@/lib/invite-links';
+import {
+  MAX_INVITE_LINK_CATEGORIES,
+  MAX_INVITE_LINK_TITLE_LENGTH,
+  sanitizeInviteLinkCategories,
+  sanitizeInviteLinkTitle,
+} from '@/lib/invite-links';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { getSession } from '@/server/auth/session';
-import { updateInviteLinkCategories } from '@/server/db/queries/invite-links';
+import { updateInviteLink } from '@/server/db/queries/invite-links';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +22,7 @@ const categorySchema = z.union([
 ]);
 
 const bodySchema = z.object({
+  title: z.string().min(1).max(MAX_INVITE_LINK_TITLE_LENGTH),
   categories: z.array(categorySchema).min(1).max(MAX_INVITE_LINK_CATEGORIES),
 });
 
@@ -33,6 +39,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const categories = sanitizeInviteLinkCategories(parsed.data.categories);
+  const title = sanitizeInviteLinkTitle(parsed.data.title);
+  if (!title) {
+    return NextResponse.json(
+      { error: 'invalid_title', message: 'Add a title for this link.' },
+      { status: 400 },
+    );
+  }
   if (categories.length !== parsed.data.categories.length || categories.length === 0) {
     return NextResponse.json(
       { error: 'invalid_categories', message: 'Choose at least one valid category for this link.' },
@@ -52,15 +65,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const { linkId } = await params;
-  const result = await updateInviteLinkCategories(session.userId, linkId, categories);
+  const result = await updateInviteLink(session.userId, linkId, title, categories);
   if (!result.ok) {
     const status = result.error === 'not_found' ? 404 : 400;
     const message =
       result.error === 'not_found'
         ? 'That link is no longer available.'
-        : 'Choose at least one category for this link.';
+        : result.error === 'invalid_title'
+          ? 'Add a title for this link.'
+          : 'Choose at least one category for this link.';
     return NextResponse.json({ error: result.error, message }, { status });
   }
 
-  return NextResponse.json({ categories: result.categories });
+  return NextResponse.json({ title: result.title, categories: result.categories });
 }

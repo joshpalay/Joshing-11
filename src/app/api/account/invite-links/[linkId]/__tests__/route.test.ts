@@ -1,26 +1,30 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getSessionMock, updateInviteLinkCategoriesMock } = vi.hoisted(() => ({
+const { getSessionMock, updateInviteLinkMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
-  updateInviteLinkCategoriesMock: vi.fn(),
+  updateInviteLinkMock: vi.fn(),
 }));
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/db/queries/invite-links', () => ({
-  updateInviteLinkCategories: updateInviteLinkCategoriesMock,
+  updateInviteLink: updateInviteLinkMock,
 }));
 
 import { PATCH } from '@/app/api/account/invite-links/[linkId]/route';
 
-function request(categories: unknown) {
+function request(categories: unknown, title: unknown = 'Your greatest hits') {
   return new Request('https://example.com/api/account/invite-links/link-1', {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ categories }),
+    body: JSON.stringify({ title, categories }),
   });
 }
 
 const context = { params: Promise.resolve({ linkId: 'link-1' }) };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('PATCH /api/account/invite-links/[linkId]', () => {
   it('requires at least one valid category during edit', async () => {
@@ -30,21 +34,39 @@ describe('PATCH /api/account/invite-links/[linkId]', () => {
 
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe('invalid_categories');
-    expect(updateInviteLinkCategoriesMock).not.toHaveBeenCalled();
+    expect(updateInviteLinkMock).not.toHaveBeenCalled();
   });
 
-  it('updates only the requested link with the validated category set', async () => {
+  it('updates the requested link title while preserving its validated category set', async () => {
     getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
-    updateInviteLinkCategoriesMock.mockResolvedValueOnce({
+    updateInviteLinkMock.mockResolvedValueOnce({
       ok: true,
+      title: 'Late-night jazz',
       categories: [{ label: 'Jazz', broadCategory: 'Music', description: null }],
     });
 
-    const response = await PATCH(request([{ label: 'Jazz', broadCategory: 'Music' }]), context);
+    const response = await PATCH(
+      request([{ label: 'Jazz', broadCategory: 'Music' }], 'Late-night jazz'),
+      context,
+    );
 
     expect(response.status).toBe(200);
-    expect(updateInviteLinkCategoriesMock).toHaveBeenCalledWith('u1', 'link-1', [
+    expect(updateInviteLinkMock).toHaveBeenCalledWith('u1', 'link-1', 'Late-night jazz', [
       { label: 'Jazz', broadCategory: 'Music' },
     ]);
+    expect(await response.json()).toEqual({
+      title: 'Late-night jazz',
+      categories: [{ label: 'Jazz', broadCategory: 'Music', description: null }],
+    });
+  });
+
+  it('requires a nonblank title during edit', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
+
+    const response = await PATCH(request([{ label: 'Jazz' }], '   '), context);
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe('invalid_title');
+    expect(updateInviteLinkMock).not.toHaveBeenCalled();
   });
 });

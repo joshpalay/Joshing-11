@@ -11,6 +11,7 @@ const previewLinks = [
   {
     id: 'preview-history',
     slot: 1,
+    title: null,
     categories: [previewTopics[0]!, previewTopics[2]!],
     url: '/dev/invite-redesign/recipient',
     createdAt: '2026-09-01T12:00:00.000Z',
@@ -19,6 +20,7 @@ const previewLinks = [
   {
     id: 'preview-culture',
     slot: 2,
+    title: 'Culture club',
     categories: [previewTopics[1]!, previewTopics[3]!],
     url: '/dev/invite-redesign/recipient',
     createdAt: '2026-09-02T12:00:00.000Z',

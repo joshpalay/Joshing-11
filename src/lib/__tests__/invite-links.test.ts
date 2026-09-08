@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_INVITE_LINK_TITLE,
   hasValidInviteLinkCategories,
   inviteAcceptanceLabel,
   inviteGreatestHitsTitle,
@@ -42,14 +43,9 @@ describe('invite-link presentation guards', () => {
     expect(inviteAcceptanceLabel('+1 (734) 555-0123')).toBe('Accept invitation');
   });
 
-  it('generates a per-link title from that link’s own categories', () => {
-    expect(inviteLinkCardTitle([{ label: 'Jazz' }])).toBe('Jazz');
-    expect(inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }])).toBe(
-      'Music, Star Wars & Joyce',
-    );
-    expect(inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }])).toBe(
-      'Music & Star Wars',
-    );
-    expect(inviteLinkCardTitle([])).toBe('Invitation link');
+  it('sanitizes stored card titles and falls back for legacy links', () => {
+    expect(inviteLinkCardTitle('  Movie   night  ')).toBe('Movie night');
+    expect(inviteLinkCardTitle(null)).toBe(DEFAULT_INVITE_LINK_TITLE);
+    expect(inviteLinkCardTitle('   ')).toBe(DEFAULT_INVITE_LINK_TITLE);
   });
 });

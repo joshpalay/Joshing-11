@@ -78,6 +78,7 @@ describe('GET /api/account/invite-links', () => {
         id: 'lk1',
         token: 'tok1',
         slot: 0,
+        title: null,
         categories: [{ label: 'Jazz', broadCategory: 'Music' }],
         createdAt: new Date('2026-01-01T00:00:00Z'),
         joinedCount: 4,
@@ -89,6 +90,7 @@ describe('GET /api/account/invite-links', () => {
       {
         id: 'lk1',
         slot: 0,
+        title: 'Your greatest hits',
         categories: [{ label: 'Jazz', broadCategory: 'Music' }],
         url: 'https://example.com/u/joshp/tok1',
         createdAt: '2026-01-01T00:00:00.000Z',
@@ -116,7 +118,9 @@ describe('POST /api/account/invite-links', () => {
     getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
     mockHandleRow('joshp');
     createInviteLinkMock.mockResolvedValueOnce({ ok: false, error: 'limit_reached' });
-    const response = await POST(jsonRequest({ categories: [{ label: 'Sondheim' }] }));
+    const response = await POST(
+      jsonRequest({ title: 'Your greatest hits', categories: [{ label: 'Sondheim' }] }),
+    );
     expect(response.status).toBe(409);
     const body = await response.json();
     expect(body.error).toBe('limit_reached');
@@ -131,32 +135,76 @@ describe('POST /api/account/invite-links', () => {
         id: 'lk2',
         token: 'tok2',
         slot: 0,
+        title: 'Your greatest hits',
         categories: [{ label: 'Sondheim' }],
         createdAt: new Date('2026-01-02T00:00:00Z'),
         joinedCount: 0,
       },
     });
-    const response = await POST(jsonRequest({ categories: [{ label: 'Sondheim' }] }));
+    const response = await POST(
+      jsonRequest({ title: 'Your greatest hits', categories: [{ label: 'Sondheim' }] }),
+    );
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.link).toEqual({
       id: 'lk2',
       slot: 0,
+      title: 'Your greatest hits',
       categories: [{ label: 'Sondheim' }],
       url: 'https://example.com/u/joshp/tok2',
       createdAt: '2026-01-02T00:00:00.000Z',
       joinedCount: 0,
     });
-    expect(createInviteLinkMock).toHaveBeenCalledWith('u1', [
+    expect(createInviteLinkMock).toHaveBeenCalledWith('u1', 'Your greatest hits', [
       { label: 'Sondheim', broadCategory: null },
     ]);
+  });
+
+  it('creates a link with a custom title', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
+    mockHandleRow('joshp');
+    createInviteLinkMock.mockResolvedValueOnce({
+      ok: true,
+      link: {
+        id: 'lk-custom',
+        token: 'tok-custom',
+        slot: 0,
+        title: 'Family challenge',
+        categories: [{ label: 'Sondheim' }],
+        createdAt: new Date('2026-01-03T00:00:00Z'),
+        joinedCount: 0,
+      },
+    });
+
+    const response = await POST(
+      jsonRequest({ title: 'Family challenge', categories: [{ label: 'Sondheim' }] }),
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).link.title).toBe('Family challenge');
+    expect(createInviteLinkMock).toHaveBeenCalledWith('u1', 'Family challenge', [
+      { label: 'Sondheim', broadCategory: null },
+    ]);
+  });
+
+  it('requires a nonblank title', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
+    mockHandleRow('joshp');
+
+    const response = await POST(jsonRequest({ title: '   ', categories: [{ label: 'Sondheim' }] }));
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe('invalid_title');
+    expect(createInviteLinkMock).not.toHaveBeenCalled();
   });
 
   it('requires at least one valid category', async () => {
     getSessionMock.mockResolvedValueOnce({ userId: 'u1' });
     mockHandleRow('joshp');
 
-    const response = await POST(jsonRequest({ categories: ['No category'] }));
+    const response = await POST(
+      jsonRequest({ title: 'Your greatest hits', categories: ['No category'] }),
+    );
 
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe('invalid_categories');
@@ -171,6 +219,7 @@ describe('POST /api/account/invite-links', () => {
         id: 'a',
         token: 'ta',
         slot: 0,
+        title: 'Jazz friends',
         categories: [{ label: 'Jazz' }],
         createdAt: new Date(),
         joinedCount: 0,
@@ -179,6 +228,7 @@ describe('POST /api/account/invite-links', () => {
         id: 'b',
         token: 'tb',
         slot: 0,
+        title: 'Poetry friends',
         categories: [{ label: 'Poetry' }],
         createdAt: new Date(),
         joinedCount: 1,

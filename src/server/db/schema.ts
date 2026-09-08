@@ -2113,6 +2113,9 @@ export const userInviteLinks = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     token: text('token').notNull(),
     slot: integer('slot').notNull().default(0),
+    // Nullable only for links created before titles existed. New writes require
+    // a title, and creator-facing reads display the compatibility fallback.
+    title: text('title'),
     categories: jsonb('categories'),
     createdAt: createdAt(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

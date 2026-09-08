@@ -6,10 +6,16 @@ import {
   type InviteLinkRowData,
 } from '@/components/friends/InviteLinksSection';
 
-function link(id: string, categories: unknown, joinedCount = 0): InviteLinkRowData {
+function link(
+  id: string,
+  categories: unknown,
+  joinedCount = 0,
+  title: string | null = `Title ${id}`,
+): InviteLinkRowData {
   return {
     id,
     slot: 0,
+    title,
     categories: categories as InviteLinkRowData['categories'],
     url: `https://example.com/u/josh/${id}`,
     createdAt: '2026-09-07T00:00:00.000Z',
@@ -27,18 +33,33 @@ function render(links: InviteLinkRowData[]) {
 }
 
 describe('InviteLinksSection', () => {
-  it('titles each card from its own categories and shows the actual link', () => {
-    const html = render([link('one', [{ label: 'Jazz' }])]);
+  it('uses the stored title as the heading and shows categories and the actual link', () => {
+    const html = render([link('one', [{ label: 'Jazz' }], 0, 'Sunday standards')]);
 
-    expect(html).toContain('>Jazz<');
+    expect(html).toContain('>Sunday standards<');
     expect(html).toContain('We’ll recommend these categories to anyone who uses this link.');
+    expect(html).toContain('>Jazz<');
     expect(html).toContain('https://example.com/u/josh/one');
   });
 
-  it('joins multiple categories into a single generated title', () => {
-    const html = render([link('one', [{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }])]);
+  it('does not repeat multiple categories in the heading', () => {
+    const html = render([
+      link(
+        'one',
+        [{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }],
+        0,
+        'Trivia for the cousins',
+      ),
+    ]);
 
-    expect(html).toContain('Music, Star Wars &amp; Joyce');
+    expect(html).toContain('>Trivia for the cousins<');
+    expect(html).not.toContain('Music, Star Wars &amp; Joyce');
+  });
+
+  it('uses the backward-compatible title for a link without a stored title', () => {
+    expect(render([link('legacy', [{ label: 'Jazz' }], 0, null)])).toContain(
+      '>Your greatest hits<',
+    );
   });
 
   it('filters blank, sentinel, malformed, and duplicate categories', () => {
@@ -55,14 +76,14 @@ describe('InviteLinksSection', () => {
 
     expect(html).toContain('Jazz');
     expect(html).not.toContain('No category');
-    expect(html.match(/Jazz/g) ?? []).toHaveLength(2);
+    expect(html.match(/Jazz/g) ?? []).toHaveLength(1);
   });
 
   it('keeps each link’s title, categories, and url separate', () => {
     const html = render([link('one', [{ label: 'Jazz' }]), link('two', [{ label: 'Poetry' }])]);
 
-    expect(html).toContain('>Jazz<');
-    expect(html).toContain('>Poetry<');
+    expect(html).toContain('>Title one<');
+    expect(html).toContain('>Title two<');
     expect(html).toContain('https://example.com/u/josh/one');
     expect(html).toContain('https://example.com/u/josh/two');
   });

@@ -1,4 +1,6 @@
 export const MAX_INVITE_LINK_CATEGORIES = 3;
+export const DEFAULT_INVITE_LINK_TITLE = 'Your greatest hits';
+export const MAX_INVITE_LINK_TITLE_LENGTH = 80;
 
 export type InviteLinkCategory = {
   label: string;
@@ -63,6 +65,15 @@ export function hasValidInviteLinkCategories(value: unknown): boolean {
   return sanitizeInviteLinkCategories(value).length > 0;
 }
 
+export function sanitizeInviteLinkTitle(value: unknown): string {
+  return cleanText(value, MAX_INVITE_LINK_TITLE_LENGTH);
+}
+
+/** Legacy links have no stored title, so their creator-facing card stays useful. */
+export function inviteLinkCardTitle(value: unknown): string {
+  return sanitizeInviteLinkTitle(value) || DEFAULT_INVITE_LINK_TITLE;
+}
+
 /** A public display name only; never fall back to a handle, phone, or id. */
 export function safeInviteName(value: unknown): string | null {
   const name = cleanText(value, 80);
@@ -80,19 +91,6 @@ export function inviteGreatestHitsTitle(name: unknown, creatorView = false): str
   const safeName = safeInviteName(name);
   if (!safeName) return creatorView ? 'Play your greatest hits' : 'Play the greatest hits';
   return `Play ${safeName}’s greatest hits`;
-}
-
-/**
- * A per-link title generated from that link's own categories (e.g. "Music,
- * Star Wars & Joyce"), so a creator managing several links can tell them
- * apart at a glance instead of seeing the same "greatest hits" line on every
- * card. Falls back to a neutral label for the legacy no-category state.
- */
-export function inviteLinkCardTitle(categories: InviteLinkCategory[]): string {
-  const labels = sanitizeInviteLinkCategories(categories).map((category) => category.label);
-  if (labels.length === 0) return 'Invitation link';
-  if (labels.length === 1) return labels[0];
-  return `${labels.slice(0, -1).join(', ')} & ${labels[labels.length - 1]}`;
 }
 
 /** Recipient-facing action copy; never interpolate account identifiers. */

@@ -78,6 +78,7 @@ export default async function FriendsPage() {
     ? resolvedLinks.map((link) => ({
         id: link.id,
         slot: link.slot,
+        title: link.title,
         categories: sanitizeInviteLinkCategories(link.categories),
         url: buildInviteUrl(baseUrl, viewer.handle!, link.token),
         createdAt: link.createdAt.toISOString(),

@@ -10,9 +10,12 @@ import {
 } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import {
+  DEFAULT_INVITE_LINK_TITLE,
   inviteLinkCardTitle,
   MAX_INVITE_LINK_CATEGORIES,
+  MAX_INVITE_LINK_TITLE_LENGTH,
   sanitizeInviteLinkCategories,
+  sanitizeInviteLinkTitle,
   type InviteLinkCategory,
 } from '@/lib/invite-links';
 
@@ -23,6 +26,7 @@ export type InviteLinkTopic = InviteLinkCategory;
 export type InviteLinkRowData = {
   id: string;
   slot: number;
+  title?: string | null;
   categories: InviteLinkTopic[];
   url: string;
   createdAt: string;
@@ -35,7 +39,7 @@ type Props = {
 };
 
 type LinkResponse = { link?: InviteLinkRowData; message?: string };
-type EditResponse = { categories?: InviteLinkTopic[]; message?: string };
+type EditResponse = { title?: string; categories?: InviteLinkTopic[]; message?: string };
 type EditorState = { kind: 'create' } | { kind: 'edit'; linkId: string };
 
 function topicColor(topic: InviteLinkTopic | null): { primary: string; text: string } {
@@ -100,10 +104,12 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
   const [links, setLinks] = useState<InviteLinkRowData[]>(() =>
     initialLinks.map((link) => ({
       ...link,
+      title: inviteLinkCardTitle(link.title),
       categories: sanitizeInviteLinkCategories(link.categories),
     })),
   );
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
   const [draftCategories, setDraftCategories] = useState<InviteLinkTopic[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -118,17 +124,20 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
 
   function closeEditor() {
     setEditor(null);
+    setDraftTitle('');
     setDraftCategories([]);
     setSaveError(null);
   }
 
   function openCreate() {
+    setDraftTitle(DEFAULT_INVITE_LINK_TITLE);
     setDraftCategories([]);
     setSaveError(null);
     setEditor({ kind: 'create' });
   }
 
   function openEdit(link: InviteLinkRowData) {
+    setDraftTitle(inviteLinkCardTitle(link.title));
     setDraftCategories(sanitizeInviteLinkCategories(link.categories));
     setSaveError(null);
     setEditor({ kind: 'edit', linkId: link.id });
@@ -160,7 +169,12 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
     setDraftCategories((current) => current.filter((topic) => topic.label !== label));
   }
 
-  async function saveCategories() {
+  async function saveLink() {
+    const title = sanitizeInviteLinkTitle(draftTitle);
+    if (!title) {
+      setSaveError('Add a title before saving this link.');
+      return;
+    }
     const categories = sanitizeInviteLinkCategories(draftCategories);
     if (categories.length === 0) {
       setSaveError('Choose at least one category before saving this link.');
@@ -176,7 +190,7 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
           method: 'POST',
           credentials: 'include',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ categories }),
+          body: JSON.stringify({ title, categories }),
         });
         const body = (await response.json().catch(() => null)) as LinkResponse | null;
         if (!response.ok || !body?.link) {
@@ -185,7 +199,11 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
         }
         setLinks((current) => [
           ...current,
-          { ...body.link!, categories: sanitizeInviteLinkCategories(body.link!.categories) },
+          {
+            ...body.link!,
+            title: inviteLinkCardTitle(body.link!.title),
+            categories: sanitizeInviteLinkCategories(body.link!.categories),
+          },
         ]);
         flashToast('Link created.');
       } else {
@@ -193,17 +211,21 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ categories }),
+          body: JSON.stringify({ title, categories }),
         });
         const body = (await response.json().catch(() => null)) as EditResponse | null;
-        if (!response.ok || !body?.categories) {
-          setSaveError(body?.message ?? 'Could not save those categories.');
+        if (!response.ok || !body?.title || !body.categories) {
+          setSaveError(body?.message ?? 'Could not save that link.');
           return;
         }
         setLinks((current) =>
           current.map((link) =>
             link.id === editor.linkId
-              ? { ...link, categories: sanitizeInviteLinkCategories(body.categories) }
+              ? {
+                  ...link,
+                  title: inviteLinkCardTitle(body.title),
+                  categories: sanitizeInviteLinkCategories(body.categories),
+                }
               : link,
           ),
         );
@@ -271,7 +293,7 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
                 style={{ background: accent.primary }}
               />
               <h3 className="font-serif text-xl leading-tight font-semibold break-words text-[var(--brand-navy)]">
-                {inviteLinkCardTitle(categories)}
+                {inviteLinkCardTitle(link.title)}
               </h3>
               <p className="text-muted-foreground mt-1 text-sm leading-5">
                 We’ll recommend these categories to anyone who uses this link.
@@ -333,12 +355,30 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
         >
           <div>
             <h3 className="font-serif text-lg font-semibold">
-              {editor.kind === 'create' ? 'Choose categories' : 'Edit categories'}
+              {editor.kind === 'create' ? 'Create invitation link' : 'Edit invitation link'}
             </h3>
             <p className="text-muted-foreground mt-1 text-sm leading-5">
               Choose up to {MAX_INVITE_LINK_CATEGORIES}. Your friend can keep, change, or ignore
               them during setup.
             </p>
+          </div>
+
+          <div>
+            <label htmlFor="invite-link-title" className="text-sm font-medium">
+              Title
+            </label>
+            <input
+              id="invite-link-title"
+              type="text"
+              required
+              maxLength={MAX_INVITE_LINK_TITLE_LENGTH}
+              value={draftTitle}
+              onChange={(event) => {
+                setDraftTitle(event.target.value);
+                setSaveError(null);
+              }}
+              className="bg-background mt-1 min-h-11 w-full rounded-md border px-3 py-2 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+            />
           </div>
 
           {draftCategories.length > 0 ? (
@@ -401,8 +441,8 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => void saveCategories()}
-              disabled={draftCategories.length === 0 || saving}
+              onClick={() => void saveLink()}
+              disabled={!draftTitle.trim() || draftCategories.length === 0 || saving}
               className="btn-primary min-h-11 px-4 disabled:opacity-45"
             >
               {saving ? 'Saving…' : editor.kind === 'create' ? 'Create link' : 'Save changes'}

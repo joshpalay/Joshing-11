@@ -3,7 +3,11 @@ import { randomBytes } from 'node:crypto';
 import { and, count, eq, isNull } from 'drizzle-orm';
 
 import { db, userInviteLinks, users } from '@/server/db';
-import { sanitizeInviteLinkCategories, type InviteLinkCategory } from '@/lib/invite-links';
+import {
+  sanitizeInviteLinkCategories,
+  sanitizeInviteLinkTitle,
+  type InviteLinkCategory,
+} from '@/lib/invite-links';
 
 // B-FRIENDS-INVITE-LINKS-01 — up to 3 named links per user, replacing the
 // single evergreen users.invite_token. See the comment on userInviteLinks in
@@ -23,6 +27,8 @@ export type InviteLinkRow = {
   id: string;
   token: string;
   slot: number;
+  /** null means the link predates editable titles. */
+  title: string | null;
   /** null means a legacy slot-based link; [] means stored legacy junk was filtered. */
   categories: InviteLinkCategory[] | null;
   createdAt: Date;
@@ -37,6 +43,7 @@ export async function listLiveInviteLinks(userId: string): Promise<InviteLinkRow
       id: userInviteLinks.id,
       token: userInviteLinks.token,
       slot: userInviteLinks.slot,
+      title: userInviteLinks.title,
       categories: userInviteLinks.categories,
       createdAt: userInviteLinks.createdAt,
       joinedCount: count(users.id),
@@ -55,7 +62,7 @@ export async function listLiveInviteLinks(userId: string): Promise<InviteLinkRow
 
 export type CreateInviteLinkResult =
   | { ok: true; link: InviteLinkRow }
-  | { ok: false; error: 'limit_reached' | 'invalid_categories' };
+  | { ok: false; error: 'limit_reached' | 'invalid_categories' | 'invalid_title' };
 
 // New links own an exact category set. We still allocate one of slots 1–3 as a
 // concurrency-safe active-link position: the existing partial unique index
@@ -64,8 +71,11 @@ export type CreateInviteLinkResult =
 // on what occupies the creator's legacy global topic slot.
 export async function createInviteLink(
   userId: string,
+  inputTitle: unknown,
   inputCategories: unknown,
 ): Promise<CreateInviteLinkResult> {
+  const title = sanitizeInviteLinkTitle(inputTitle);
+  if (!title) return { ok: false, error: 'invalid_title' };
   const categories = sanitizeInviteLinkCategories(inputCategories);
   if (categories.length === 0) return { ok: false, error: 'invalid_categories' };
 
@@ -78,11 +88,12 @@ export async function createInviteLink(
   try {
     const [row] = await db
       .insert(userInviteLinks)
-      .values({ userId, token, slot: allocatedSlot, categories })
+      .values({ userId, token, slot: allocatedSlot, title, categories })
       .returning({
         id: userInviteLinks.id,
         token: userInviteLinks.token,
         slot: userInviteLinks.slot,
+        title: userInviteLinks.title,
         categories: userInviteLinks.categories,
         createdAt: userInviteLinks.createdAt,
       });
@@ -103,21 +114,24 @@ export async function createInviteLink(
   }
 }
 
-export type UpdateInviteLinkCategoriesResult =
-  | { ok: true; categories: InviteLinkCategory[] }
-  | { ok: false; error: 'invalid_categories' | 'not_found' };
+export type UpdateInviteLinkResult =
+  | { ok: true; title: string; categories: InviteLinkCategory[] }
+  | { ok: false; error: 'invalid_categories' | 'invalid_title' | 'not_found' };
 
-export async function updateInviteLinkCategories(
+export async function updateInviteLink(
   userId: string,
   linkId: string,
+  inputTitle: unknown,
   inputCategories: unknown,
-): Promise<UpdateInviteLinkCategoriesResult> {
+): Promise<UpdateInviteLinkResult> {
+  const title = sanitizeInviteLinkTitle(inputTitle);
+  if (!title) return { ok: false, error: 'invalid_title' };
   const categories = sanitizeInviteLinkCategories(inputCategories);
   if (categories.length === 0) return { ok: false, error: 'invalid_categories' };
 
   const [row] = await db
     .update(userInviteLinks)
-    .set({ categories })
+    .set({ title, categories })
     .where(
       and(
         eq(userInviteLinks.id, linkId),
@@ -125,10 +139,14 @@ export async function updateInviteLinkCategories(
         isNull(userInviteLinks.deletedAt),
       ),
     )
-    .returning({ categories: userInviteLinks.categories });
+    .returning({ title: userInviteLinks.title, categories: userInviteLinks.categories });
 
   if (!row) return { ok: false, error: 'not_found' };
-  return { ok: true, categories: sanitizeInviteLinkCategories(row.categories) };
+  return {
+    ok: true,
+    title: sanitizeInviteLinkTitle(row.title),
+    categories: sanitizeInviteLinkCategories(row.categories),
+  };
 }
 
 // Soft-deletes a live link the caller owns. No-op (returns false) if the link
