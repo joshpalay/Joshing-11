@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 owner: Josh
 related-pr: "#1620"
 ---
@@ -833,3 +833,69 @@ provisional until the doc says otherwise.
 **Not re-litigated:** the fix itself (§ above) is unaffected by any of this —
 it stops data corruption regardless of what the latency numbers turn out to
 say.
+
+### 2026-09-08 — a concrete hypothesis for why two builds race (still unconfirmed by production data)
+
+The 2026-09-07 entry above left "why does the race happen at all" explicitly
+out of scope. Picked it back up by reading the actual call graph — not
+guessing — to name the trigger surface precisely.
+
+**Five independent call sites can each try to build the same user's queue for
+the same day**, all converging on `fillDailyQueueForUser(userId)`:
+
+| Trigger | File | Fires when |
+|---|---|---|
+| Login pre-warm | `src/server/daily/prewarm.ts` via `src/app/api/auth/verify-otp/route.ts:235` | Every returning-user login, via `after()` — background, non-blocking |
+| Onboarding pre-warm | same `prewarmDailyQueue`, `trigger: 'onboarding'` | Onboarding completion |
+| Home-page prefetch | `src/components/TodaysFiveCard.tsx:237` | **Every mount** of the home-page card, if today's queue doesn't exist yet |
+| `/daily` page POST | `src/app/api/daily/queue/route.ts:153` | Whenever the player actually opens `/daily` |
+| Cron | `src/app/api/cron/daily-assignments/route.ts` | Three idempotent passes daily, 17:05 / 17:30 / 18:00 UTC |
+
+**Why `inFlightFills` doesn't catch it:** it's a plain in-memory `Map`
+(`queue-orchestrator.ts:218`), and `vercel.json` has `"fluid": true` —
+confirmed, not assumed. Fluid Compute reuses instances under steady load but
+scales out under concurrent requests, with no guarantee two near-simultaneous
+requests for the same user land on the same instance. The in-process map
+was always documented as a cost optimization, not the correctness boundary
+(see its own comment) — this just confirms the boundary it doesn't cover is
+real and reachable.
+
+**Leading hypothesis, ranked by how routine the timing is:** login and the
+home page are adjacent in the user's flow. OTP verifies, `after()` schedules
+the pre-warm in the background on *that* instance, the browser redirects to
+`/`, and `TodaysFiveCard` mounts immediately and fires its **own** independent
+POST to `/api/daily/queue` — a fresh HTTP request with no guarantee of
+landing on the pre-warm's instance. This isn't an edge case: it's the
+ordinary path for any returning user who logs in before that day's queue
+exists (early risers ahead of the 17:05 UTC cron, or anyone outside the
+cron's effective window entirely). The cron-vs-live-user overlap this doc
+already suspected is real too, but narrower — it only applies in the
+~17:00–18:05 UTC band, versus this pair's daily, per-user recurrence.
+
+**What production data does and doesn't say, checked directly:**
+- Zero `outcome='lost_persist_race'` rows since `#1620` deployed
+  (2026-09-07T19:31 UTC) — expected and not informative yet: there has been
+  no build traffic of any kind since the flip/fix window, per the
+  `check:build-latency` / `check:gate-flags` reads earlier today.
+- Zero historical same-user-same-day double-`built` rows in
+  `DailyBuildMetric` either. But the one *known* real occurrence of this race
+  (the anomaly that started this whole investigation) was on the disposable
+  `Rue Prova` test fixture, and that row was cascade-deleted when the fixture
+  was cleaned up (see the 2026-09-06 "later still" entry above). So the
+  surviving telemetry structurally can't see the one confirmed case — real
+  frequency is genuinely unmeasured, not zero.
+
+**Not built, on purpose — this is reconnaissance, not a fix:** confirming
+which pair of triggers actually collides in production needs a real
+`lost_persist_race` row to inspect. When one appears, cross-reference that
+user's `logLatency('daily_queue_prewarm', ...)` timestamp against their
+`/daily`-POST or home-page-prefetch server-timing log for the same
+few-second window — that would pin down which of the four candidate pairs
+above is the actual mechanism, rather than leaving it ranked by plausibility.
+
+### Next steps
+1. Watch for the first `outcome='lost_persist_race'` row and, when one
+   lands, correlate its timing against the user's login/prewarm and
+   page-load logs per the paragraph above.
+2. Everything else already listed above (Phase 3 population reading,
+   question 4 on the bonus's own cost) is unchanged.
