@@ -41,10 +41,10 @@ import { getRelationship } from '@/server/db/queries/friend-requests'
 const VIEWER = 'viewer'
 const TARGET = 'target'
 
-function outbound(stateValue: 'pending' | 'approved', approvedAt: Date | null = null) {
+function outbound(stateValue: 'pending' | 'approved' | 'declined', approvedAt: Date | null = null) {
   return { id: 'out', followerId: VIEWER, followeeId: TARGET, state: stateValue, approvedAt }
 }
-function inbound(stateValue: 'pending' | 'approved', approvedAt: Date | null = null) {
+function inbound(stateValue: 'pending' | 'approved' | 'declined', approvedAt: Date | null = null) {
   return { id: 'in', followerId: TARGET, followeeId: VIEWER, state: stateValue, approvedAt }
 }
 
@@ -105,6 +105,33 @@ describe('getRelationship over follow edges', () => {
     await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
       state: 'pending_inbound',
       friendshipId: 'in',
+    })
+  })
+
+  // B-FRIENDS-SAFETY-01 Phase 2: 'declined' must not count as a friend, a
+  // follower, or a pending request -- resolve() treats it as an absent edge.
+  it('returns none for a declined outbound edge (not pending_outbound)', async () => {
+    state.rows = [outbound('declined')]
+    await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
+      state: 'none',
+      friendshipId: null,
+    })
+  })
+
+  it('returns none for a declined inbound edge (not pending_inbound)', async () => {
+    state.rows = [inbound('declined')]
+    await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
+      state: 'none',
+      friendshipId: null,
+    })
+  })
+
+  it('falls back to the other direction when one side is declined', async () => {
+    // My outbound was declined, but they separately follow me -- still follows_you.
+    state.rows = [outbound('declined'), inbound('approved')]
+    await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
+      state: 'follows_you',
+      friendshipId: null,
     })
   })
 })

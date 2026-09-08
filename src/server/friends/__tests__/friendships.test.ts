@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Friend-add + mutual-accept wiring. These tests lock two things:
+// Friend-add + mutual-accept wiring. These tests lock:
 //  1. createOrReuse: a fresh auto-approved edge seeds the FOLLOWER's feed with
 //     the FOLLOWEE's recent activity (answerer = followee, recipient = follower).
 //  2. accept: approving a request makes the two MUTUAL friends — it upserts the
@@ -9,6 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //     each other's recent correct ANSWERS (only — authored questions are NOT
 //     backfilled). Getting the direction wrong would seed the wrong person, so it
 //     is the highest-value thing to pin.
+//  3. B-FRIENDS-SAFETY-01 Phase 2: decline transitions the edge to 'declined'
+//     (an UPDATE, not a delete) and createOrReuse enforces a re-request
+//     cooldown off declinedAt — no new/revived edge inside the cooldown
+//     window, a real upsert once it elapses.
 
 const { dbMock, state, writeActivityMock, softDeleteActivityMock, answerBackfillMock } = vi.hoisted(() => {
   const writeActivityMock = vi.fn(async () => undefined)
@@ -36,12 +40,18 @@ const { dbMock, state, writeActivityMock, softDeleteActivityMock, answerBackfill
   const dbMock = {
     _selectQueue: selectQueue,
     select: vi.fn(() => makeSelect()),
-    // values() must support BOTH .returning() (createOrReuse edge insert) and
-    // .onConflictDoUpdate() (accept reverse-edge upsert).
+    // values() must support BOTH .returning() (a fresh createOrReuse insert)
+    // and .onConflictDoUpdate() -- which itself must support both a bare
+    // await (ensureApprovedFollowEdge's reverse-edge upsert, fire-and-forget)
+    // AND a chained .returning() (createOrReuse's post-cooldown revival of a
+    // declined row). Thenable + chainable covers both call shapes.
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
         returning: vi.fn(async () => [state.returnedEdge]),
-        onConflictDoUpdate: vi.fn(async () => undefined),
+        onConflictDoUpdate: vi.fn(() => ({
+          returning: vi.fn(async () => [state.returnedEdge]),
+          then: (resolve: (value: undefined) => unknown) => resolve(undefined),
+        })),
       })),
     })),
     update: vi.fn(() => ({
@@ -94,6 +104,7 @@ beforeEach(() => {
   state.deleteReturnsEdge = true
   dbMock._selectQueue.length = 0
   dbMock.insert.mockClear()
+  dbMock.update.mockClear()
   dbMock.delete.mockClear()
   writeActivityMock.mockClear()
   softDeleteActivityMock.mockClear()
@@ -159,6 +170,54 @@ describe('createOrReusePendingFriendshipRequest', () => {
   })
 })
 
+describe('createOrReusePendingFriendshipRequest — B-FRIENDS-SAFETY-01 Phase 2 decline cooldown', () => {
+  const DECLINED_AT = new Date('2026-08-09T00:00:00.000Z') // 30-day default cooldown boundary is 2026-09-08
+
+  it('decline, re-request INSIDE the cooldown -> declined_cooldown, no new edge, no activity row', async () => {
+    dbMock._selectQueue.push([
+      { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'declined', declinedAt: DECLINED_AT },
+    ])
+    const now = new Date('2026-09-01T00:00:00.000Z') // 23 days after decline — inside the 30-day cooldown
+
+    const result = await createOrReusePendingFriendshipRequest({
+      inviterUserId: FOLLOWER,
+      inviteeUserId: FOLLOWEE,
+      now,
+    })
+
+    expect(result.state).toBe('declined_cooldown')
+    expect(result.friendship).toMatchObject({ id: 'edge-1', state: 'declined' })
+    // No new/revived edge -- only the pre-check select ran.
+    expect(dbMock.insert).not.toHaveBeenCalled()
+    expect(writeActivityMock).not.toHaveBeenCalled()
+    expect(answerBackfillMock).not.toHaveBeenCalled()
+  })
+
+  it('decline, re-request AFTER the cooldown -> revives the row into a new pending edge', async () => {
+    dbMock._selectQueue.push(
+      [{ id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'declined', declinedAt: DECLINED_AT }],
+      [{ followPrivacy: 'private' }],
+    )
+    state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'pending' }
+    const now = new Date('2026-09-09T00:00:01.000Z') // just past the 30-day cooldown
+
+    const result = await createOrReusePendingFriendshipRequest({
+      inviterUserId: FOLLOWER,
+      inviteeUserId: FOLLOWEE,
+      now,
+    })
+
+    expect(result.state).toBe('created')
+    expect(result.friendship.state).toBe('pending')
+    // Revival is an upsert on the SAME (followerId, followeeId) pair, not a
+    // second distinct row.
+    expect(dbMock.insert).toHaveBeenCalledTimes(1)
+    expect(writeActivityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: FOLLOWEE, type: 'follow_request', actorUserId: FOLLOWER }),
+    )
+  })
+})
+
 describe('acceptPendingFriendshipRequest', () => {
   it('makes the two mutual friends, writes both connection cards, and seeds both feeds', async () => {
     // The accepted edge is the requester (FOLLOWER) -> accepter (FOLLOWEE).
@@ -204,12 +263,20 @@ describe('acceptPendingFriendshipRequest', () => {
 })
 
 describe('ignore / cancel clean up the stale follow_request activity', () => {
-  it('soft-deletes the follow_request row when a pending request is declined', async () => {
-    state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'pending' }
+  it('transitions the edge to declined with a declinedAt timestamp (B-FRIENDS-SAFETY-01 Phase 2: UPDATE, not a delete)', async () => {
+    state.returnedEdge = { id: 'edge-1', followerId: FOLLOWER, followeeId: FOLLOWEE, state: 'declined' }
+    const now = new Date('2026-09-08T12:00:00.000Z')
 
-    const edge = await ignorePendingFriendshipRequest({ friendshipId: 'edge-1', userId: FOLLOWEE })
+    const edge = await ignorePendingFriendshipRequest({ friendshipId: 'edge-1', userId: FOLLOWEE, now })
 
     expect(edge).not.toBeNull()
+    expect(dbMock.update).toHaveBeenCalledTimes(1)
+    expect(dbMock.delete).not.toHaveBeenCalled()
+    // The mocked .set() isn't spied directly (it's rebuilt per call), so pin the
+    // real call shape via the mock factory's arguments instead of a jest-style
+    // toHaveBeenCalledWith on set() -- assert through the update() call itself.
+    const setArgFromMock = (dbMock.update.mock.results[0]?.value as { set: ReturnType<typeof vi.fn> }).set
+    expect(setArgFromMock).toHaveBeenCalledWith({ state: 'declined', declinedAt: now })
     expect(softDeleteActivityMock).toHaveBeenCalledWith(
       expect.objectContaining({ referenceType: 'follow', referenceId: 'edge-1', types: ['follow_request'] }),
     )
@@ -226,10 +293,21 @@ describe('ignore / cancel clean up the stale follow_request activity', () => {
     )
   })
 
-  it('does NOT touch activity when there is no matching edge to delete', async () => {
-    state.deleteReturnsEdge = false
+  it('does NOT touch activity when there is no matching pending edge to decline', async () => {
+    // B-FRIENDS-SAFETY-01 Phase 2: decline is now an UPDATE (pending -> declined),
+    // not a delete -- the "no match" case is gated by updateReturnsEdge.
+    state.updateReturnsEdge = false
 
     const edge = await ignorePendingFriendshipRequest({ friendshipId: 'missing', userId: FOLLOWEE })
+
+    expect(edge).toBeNull()
+    expect(softDeleteActivityMock).not.toHaveBeenCalled()
+  })
+
+  it('does NOT touch activity when there is no matching edge to cancel', async () => {
+    state.deleteReturnsEdge = false
+
+    const edge = await cancelPendingFriendshipRequest({ friendshipId: 'missing', userId: FOLLOWER })
 
     expect(edge).toBeNull()
     expect(softDeleteActivityMock).not.toHaveBeenCalled()
