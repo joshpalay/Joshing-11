@@ -28,6 +28,10 @@ type LoadingScreenProps = {
   loadingMoments?: ResolvedLoadingMoment[];
 };
 
+type LoadingBackdropProps = React.HTMLAttributes<HTMLDivElement> & {
+  fullScreen?: boolean;
+};
+
 type RotationItem =
   | { kind: "message"; text: string }
   | { kind: "moment"; moment: ResolvedLoadingMoment };
@@ -144,6 +148,66 @@ function buildTriangles(): Tri[] {
   return tris;
 }
 
+/**
+ * The animated tile field shared by the loader and surfaces that intentionally
+ * live inside the wait state (for example, the final onboarding reminder ask).
+ * Keeping the field here means its palette, grain, and motion cannot drift from
+ * the actual loading screen.
+ */
+export function LoadingBackdrop({
+  children,
+  className,
+  fullScreen = false,
+  ...props
+}: LoadingBackdropProps) {
+  const triangles = React.useMemo(() => buildTriangles(), []);
+  const wrapperClass = [
+    "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
+    fullScreen ? "fixed inset-0 z-[var(--z-takeover)]" : "relative h-full w-full min-h-[480px]",
+    className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={wrapperClass} {...props}>
+      <svg
+        className="absolute inset-0 h-full w-full"
+        viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+      >
+        <g>
+          {triangles.map((t, i) => (
+            <polygon
+              key={i}
+              className="triangle-loader-tri"
+              points={t.points}
+              style={
+                {
+                  fill: "var(--tri-color-a)",
+                  animation: `triangle-fade ${t.cycleDuration}s ease-in-out ${t.cycleDelay}s infinite, triangle-color-swap ${t.cycleDuration}s linear ${t.cycleDelay}s infinite`,
+                  ["--tri-color-a" as string]: t.colorA,
+                  ["--tri-color-b" as string]: t.colorB,
+                  ["--tri-opacity-low" as string]: String(t.opacityLow),
+                  ["--tri-opacity-high" as string]: String(t.opacityHigh),
+                } as React.CSSProperties
+              }
+            />
+          ))}
+        </g>
+      </svg>
+
+      <div
+        className="triangle-loader-grain pointer-events-none absolute inset-0"
+        aria-hidden="true"
+      />
+
+      {children}
+    </div>
+  );
+}
+
 export default function LoadingScreen({
   label,
   messages,
@@ -152,7 +216,6 @@ export default function LoadingScreen({
   loadingMoment = null,
   loadingMoments,
 }: LoadingScreenProps) {
-  const triangles = React.useMemo(() => buildTriangles(), []);
   const reducedMotion = usePrefersReducedMotion();
 
   // The rotation sequence. Three modes:
@@ -190,64 +253,19 @@ export default function LoadingScreen({
   // Whether the sequence contains any card — drives the taller, fixed-height
   // slot so the card never resizes the loader as items rotate.
   const hasMoment = sequence.some((item) => item.kind === "moment");
-  const ariaText =
-    currentItem.kind === "moment" ? currentItem.moment.artifact : currentItem.text;
-
-  const wrapperClass = [
-    "isolate flex items-center justify-center overflow-hidden bg-[var(--brand-cream-page)]",
-    fullScreen
-      ? "fixed inset-0 z-[var(--z-takeover)]"
-      : "relative h-full w-full min-h-[480px]",
-    className ?? "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const ariaText = currentItem.kind === "moment" ? currentItem.moment.artifact : currentItem.text;
 
   return (
-    <div
-      className={wrapperClass}
+    <LoadingBackdrop
+      className={className}
+      fullScreen={fullScreen}
       role="status"
       aria-live="polite"
       aria-busy="true"
       aria-label={hasMoment ? ariaText : `${ariaText}…`}
     >
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-        preserveAspectRatio="xMidYMid slice"
-        aria-hidden="true"
-      >
-        <g>
-          {triangles.map((t, i) => (
-            <polygon
-              key={i}
-              className="triangle-loader-tri"
-              points={t.points}
-              style={
-                {
-                  fill: "var(--tri-color-a)",
-                  animation: `triangle-fade ${t.cycleDuration}s ease-in-out ${t.cycleDelay}s infinite, triangle-color-swap ${t.cycleDuration}s linear ${t.cycleDelay}s infinite`,
-                  ["--tri-color-a" as string]: t.colorA,
-                  ["--tri-color-b" as string]: t.colorB,
-                  ["--tri-opacity-low" as string]: String(t.opacityLow),
-                  ["--tri-opacity-high" as string]: String(t.opacityHigh),
-                } as React.CSSProperties
-              }
-            />
-          ))}
-        </g>
-      </svg>
-
-      {/* Paper-grain overlay (Figma export) — matches the baked grain in the
-          Variant4 artwork so the live SVG field shares its texture. Multiply
-          blend over the triangles; degrades to nothing if the asset is absent. */}
-      <div
-        className="triangle-loader-grain pointer-events-none absolute inset-0"
-        aria-hidden="true"
-      />
-
       <div className="relative z-10 mx-6 w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-7 text-center shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5">
-        <p className="font-wordmark text-5xl font-bold leading-[52px] tracking-[4.8px] text-[var(--brand-ink-950)]">
+        <p className="font-wordmark text-5xl leading-[52px] font-bold tracking-[4.8px] text-[var(--brand-ink-950)]">
           JOSHING
         </p>
         <div
@@ -265,67 +283,60 @@ export default function LoadingScreen({
             <div
               key={index}
               className={`flex w-full flex-col items-center justify-center ${
-                rotating
-                  ? currentItem.kind === "moment"
-                    ? "loading-card"
-                    : "loading-message"
-                  : ""
+                rotating ? (currentItem.kind === "moment" ? "loading-card" : "loading-message") : ""
               }`}
             >
               {currentItem.kind === "moment" ? (
                 <>
-                  <p className="w-full font-sans text-[11px] font-medium tracking-[0.16em] uppercase text-[var(--warm-ink)]/60">
+                  <p className="w-full font-sans text-[11px] font-medium tracking-[0.16em] text-[var(--warm-ink)]/60 uppercase">
                     {currentItem.moment.label}
                   </p>
-                  <p className="mt-1.5 line-clamp-3 w-full break-words font-serif text-lg leading-snug text-[var(--brand-ink-950)]">
+                  <p className="mt-1.5 line-clamp-3 w-full font-serif text-lg leading-snug break-words text-[var(--brand-ink-950)]">
                     {currentItem.moment.artifact}
                   </p>
                 </>
               ) : (
-                <p className="w-full font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
+                <p className="w-full font-sans text-sm font-normal tracking-wider text-[var(--warm-ink)]/75 uppercase">
                   {currentItem.text}
                 </p>
               )}
             </div>
           </div>
         ) : (
-        <p className="relative mx-auto mt-4 flex h-6 items-baseline justify-center font-sans text-sm font-normal tracking-wider uppercase text-[var(--warm-ink)]/75">
-          {rotating ? (
-            <span
-              key={index}
-              className="loading-message inline-flex items-baseline gap-1"
-            >
-              {currentItem.kind === "message" ? currentItem.text : ""}
-            </span>
-          ) : (
-            <span className="inline-flex items-baseline gap-1">
-              <span>{currentItem.kind === "message" ? currentItem.text : ""}</span>
-              <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
-                <span
-                  className="triangle-loader-dot inline-block"
-                  style={{ animation: "loading-dot 1.2s ease-in-out 0s infinite" }}
-                >
-                  .
-                </span>
-                <span
-                  className="triangle-loader-dot inline-block"
-                  style={{ animation: "loading-dot 1.2s ease-in-out 0.2s infinite" }}
-                >
-                  .
-                </span>
-                <span
-                  className="triangle-loader-dot inline-block"
-                  style={{ animation: "loading-dot 1.2s ease-in-out 0.4s infinite" }}
-                >
-                  .
+          <p className="relative mx-auto mt-4 flex h-6 items-baseline justify-center font-sans text-sm font-normal tracking-wider text-[var(--warm-ink)]/75 uppercase">
+            {rotating ? (
+              <span key={index} className="loading-message inline-flex items-baseline gap-1">
+                {currentItem.kind === "message" ? currentItem.text : ""}
+              </span>
+            ) : (
+              <span className="inline-flex items-baseline gap-1">
+                <span>{currentItem.kind === "message" ? currentItem.text : ""}</span>
+                <span className="ml-0.5 inline-flex gap-0.5" aria-hidden="true">
+                  <span
+                    className="triangle-loader-dot inline-block"
+                    style={{ animation: "loading-dot 1.2s ease-in-out 0s infinite" }}
+                  >
+                    .
+                  </span>
+                  <span
+                    className="triangle-loader-dot inline-block"
+                    style={{ animation: "loading-dot 1.2s ease-in-out 0.2s infinite" }}
+                  >
+                    .
+                  </span>
+                  <span
+                    className="triangle-loader-dot inline-block"
+                    style={{ animation: "loading-dot 1.2s ease-in-out 0.4s infinite" }}
+                  >
+                    .
+                  </span>
                 </span>
               </span>
-            </span>
-          )}
-        </p>
+            )}
+          </p>
         )}
       </div>
-    </div>
+    </LoadingBackdrop>
   );
 }
 

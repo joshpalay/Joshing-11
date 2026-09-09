@@ -2,18 +2,21 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import OnboardingFlow, { OnboardingReminderStep } from '@/app/onboarding/OnboardingFlow'
+import OnboardingFlow, {
+  OnboardingReminderScreen,
+  OnboardingReminderStep
+} from '@/app/onboarding/OnboardingFlow'
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() })
 }))
 
 describe('Onboarding reminder choice', () => {
   it('offers the SMS reminder primary action and the decline button', () => {
     const html = renderToStaticMarkup(
       <OnboardingReminderStep
+        displayName="Kiki"
         phoneNumber="+17345550123"
-        topics={['Sondheim', 'Jazz']}
         saving={false}
         error={null}
         onContinueWithReminders={vi.fn()}
@@ -21,17 +24,34 @@ describe('Onboarding reminder choice', () => {
       />
     )
 
-    expect(html).toContain('We’re writing your first five.')
+    expect(html).toContain('Kiki, we’re writing your first five.')
     expect(html).toContain('Text me when they open')
     expect(html).toContain('I’ll check back on my own')
     expect(html).toContain('(734) 555-0123')
     expect(html).toContain('automated Joshing reminder texts')
-    expect(html).toContain('Sondheim')
-    expect(html).toContain('Jazz')
+    expect(html).not.toContain('<ul')
     expect(html).not.toContain('Email me')
     // No duration claim — the crafting screen that follows proves the wait
     // rather than the copy asserting a length for it.
     expect(html).not.toMatch(/minute|second/i)
+  })
+
+  it('places the reminder choice on the animated loading tile field', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingReminderScreen
+        displayName="Kiki"
+        phoneNumber="+17345550123"
+        saving={false}
+        error={null}
+        onContinueWithReminders={vi.fn()}
+        onContinueWithoutReminders={vi.fn()}
+      />
+    )
+
+    expect(html).toContain('triangle-loader-tri')
+    expect(html).toContain('triangle-loader-grain')
+    expect(html).toContain('Kiki, we’re writing your first five.')
+    expect(html).toContain('Text me when they open')
   })
 })
 
@@ -42,9 +62,7 @@ describe('OnboardingFlow invited interests', () => {
         inviterName="Alex Inviter"
         initialDisplayName="Returning User"
         initialHandle="returninguser"
-        preSeededInterests={[
-          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
-        ]}
+        preSeededInterests={[{ domain: 'Sondheim', broadCategory: 'Theater', rationale: null }]}
       />
     )
 
@@ -63,7 +81,7 @@ describe('OnboardingFlow invited interests', () => {
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
           { domain: 'Jazz', broadCategory: 'Music', rationale: null },
-          { domain: 'Poetry', broadCategory: 'Literature', rationale: null },
+          { domain: 'Poetry', broadCategory: 'Literature', rationale: null }
         ]}
       />
     )
@@ -105,7 +123,7 @@ describe('OnboardingFlow seedSource = link', () => {
         preSeededInterests={[
           { domain: 'Great Lakes shipwrecks', broadCategory: 'History', rationale: null },
           { domain: 'Renaissance Florence', broadCategory: 'History', rationale: null },
-          { domain: 'Final Fantasy', broadCategory: 'Games', rationale: null },
+          { domain: 'Final Fantasy', broadCategory: 'Games', rationale: null }
         ]}
       />
     )
@@ -135,9 +153,7 @@ describe('OnboardingFlow seedSource = link', () => {
         inviterName={null}
         initialDisplayName="Returning User"
         initialHandle="returninguser"
-        preSeededInterests={[
-          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
-        ]}
+        preSeededInterests={[{ domain: 'Sondheim', broadCategory: 'Theater', rationale: null }]}
       />
     )
 
@@ -155,7 +171,7 @@ describe('OnboardingFlow seedSource = link', () => {
         initialHandle="returninguser"
         preSeededInterests={[
           { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
-          { domain: 'Jazz', broadCategory: 'Music', rationale: null },
+          { domain: 'Jazz', broadCategory: 'Music', rationale: null }
         ]}
       />
     )
@@ -171,9 +187,7 @@ describe('OnboardingFlow display-name gate', () => {
   it('renders the setup step first when no displayName is set', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
-        preSeededInterests={[
-          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
-        ]}
+        preSeededInterests={[{ domain: 'Sondheim', broadCategory: 'Theater', rationale: null }]}
         inviterName="Alex Inviter"
       />
     )
@@ -198,9 +212,7 @@ describe('OnboardingFlow display-name gate', () => {
   })
 
   it('uses the generic subtitle when no inviteeDisplayName is provided', () => {
-    const html = renderToStaticMarkup(
-      <OnboardingFlow preSeededInterests={[]} inviterName={null} />
-    )
+    const html = renderToStaticMarkup(<OnboardingFlow preSeededInterests={[]} inviterName={null} />)
 
     expect(html).toContain('Set up your profile')
     expect(html).toContain('Pick the name friends see')
@@ -241,10 +253,12 @@ describe('OnboardingFlow display-name gate', () => {
     )
 
     expect(html).toContain(
-      "A trivia game built for you. Add a few topics you&#x27;d want questions about, and we&#x27;ll build your first round from them."
+      'A trivia game built for you. Add a few topics you&#x27;d want questions about, and we&#x27;ll build your first round from them.'
     )
     expect(html).toContain('Add your own')
-    expect(html).toContain('Add anything: a book, musician, team, era, show, place, person, or theory…')
+    expect(html).toContain(
+      'Add anything: a book, musician, team, era, show, place, person, or theory…'
+    )
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Add<\/button>/)
     expect(html).not.toContain('Suggested by')
     expect(html).not.toContain('Suggested for you')

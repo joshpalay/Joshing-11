@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
+import { LoadingBackdrop } from '@/components/LoadingScreen'
 import { SmsReminderDisclosure } from '@/components/reminders/SmsReminderDisclosure'
 import { safeInviteName } from '@/lib/invite-links'
 
@@ -130,28 +131,21 @@ function toSelected(interest: ProposedInterest): SelectedInterest | null {
   return {
     domain,
     broadCategory:
-      normalizeDomain(interest.broadCategory || 'General Knowledge') || 'General Knowledge',
+      normalizeDomain(interest.broadCategory || 'General Knowledge') || 'General Knowledge'
   }
 }
 
-function isSelected(
-  selectedInterests: SelectedInterest[],
-  interest: ProposedInterest
-) {
+function isSelected(selectedInterests: SelectedInterest[], interest: ProposedInterest) {
   const selected = toSelected(interest)
   return selected
-    ? selectedInterests.some(
-        (item) => selectedKey(item) === selectedKey(selected)
-      )
+    ? selectedInterests.some((item) => selectedKey(item) === selectedKey(selected))
     : false
 }
 
 function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="space-y-2">
-      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
-        {title}
-      </h1>
+      <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">{title}</h1>
       <p className="text-muted-foreground text-base leading-7">{subtitle}</p>
     </div>
   )
@@ -166,20 +160,22 @@ function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
 // No duration is claimed here; the crafting screen that follows proves the
 // "written from your topics" claim rather than asserting a wait length.
 export function OnboardingReminderStep({
+  displayName,
   phoneNumber,
-  topics,
   saving,
   error,
   onContinueWithReminders,
-  onContinueWithoutReminders,
+  onContinueWithoutReminders
 }: {
+  displayName?: string | null
   phoneNumber?: string | null
-  topics: string[]
   saving: boolean
   error: string | null
   onContinueWithReminders: () => void
   onContinueWithoutReminders: () => void
 }) {
+  const name = displayName?.trim()
+
   return (
     <div className="flex flex-1 flex-col justify-center gap-8">
       <div className="space-y-3">
@@ -187,23 +183,10 @@ export function OnboardingReminderStep({
           Joshing
         </p>
         <StepHeader
-          title="We’re writing your first five."
+          title={name ? `${name}, we’re writing your first five.` : 'We’re writing your first five.'}
           subtitle="Made from your topics, not pulled off a shelf. A new five lands every afternoon."
         />
       </div>
-
-      {topics.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {topics.map((topic) => (
-            <li
-              key={topic}
-              className="bg-[var(--brand-card)] border-[var(--brand-border)] rounded-full border px-3 py-1.5 text-sm"
-            >
-              {topic}
-            </li>
-          ))}
-        </ul>
-      ) : null}
 
       <div className="space-y-4">
         <button
@@ -214,11 +197,12 @@ export function OnboardingReminderStep({
         >
           {saving ? 'Turning on…' : 'Text me when they open'}
         </button>
-        <SmsReminderDisclosure
-          phoneNumber={phoneNumber}
-          actionLabel="Text me when they open"
-        />
-        {error ? <p className="text-destructive text-sm" role="alert">{error}</p> : null}
+        <SmsReminderDisclosure phoneNumber={phoneNumber} actionLabel="Text me when they open" />
+        {error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
         <button
           type="button"
           className="btn-ghost h-12 w-full"
@@ -232,6 +216,18 @@ export function OnboardingReminderStep({
   )
 }
 
+export function OnboardingReminderScreen(props: ComponentProps<typeof OnboardingReminderStep>) {
+  return (
+    <main className="min-h-dvh">
+      <LoadingBackdrop className="min-h-dvh px-4 py-8 sm:px-6 sm:py-12">
+        <section className="relative z-10 mx-auto w-full max-w-2xl rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-6 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5 sm:px-10 sm:py-10">
+          <OnboardingReminderStep {...props} />
+        </section>
+      </LoadingBackdrop>
+    </main>
+  )
+}
+
 export default function OnboardingFlow({
   preSeededInterests,
   seedSource = 'named',
@@ -242,7 +238,7 @@ export default function OnboardingFlow({
   phoneNumber,
   showReminderOffer = true,
   previewMode = false,
-  previewNextHref = '/dev/welcome-tour',
+  previewNextHref = '/dev/welcome-tour'
 }: OnboardingFlowProps) {
   const router = useRouter()
   const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
@@ -254,9 +250,7 @@ export default function OnboardingFlow({
     return 'review'
   })
   const [displayName, setDisplayName] = useState<string>(() =>
-    (initialDisplayName ?? inviteeDisplayName ?? '')
-      .trim()
-      .slice(0, DISPLAY_NAME_MAX)
+    (initialDisplayName ?? inviteeDisplayName ?? '').trim().slice(0, DISPLAY_NAME_MAX)
   )
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false)
   const [displayNameError, setDisplayNameError] = useState<string | null>(null)
@@ -280,9 +274,7 @@ export default function OnboardingFlow({
   const inviteInterests: PreSeededInterest[] = preSeededInterests
   // Link-sourced seeds may reach someone the inviter never had in mind, so they
   // must NOT pre-populate the selection — only a named invite's topics do.
-  const [selectedInterests, setSelectedInterests] = useState<
-    SelectedInterest[]
-  >(() =>
+  const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(() =>
     seedSource === 'named'
       ? preSeededInterests
           .filter((interest) => !interest.fromCatalog)
@@ -323,12 +315,8 @@ export default function OnboardingFlow({
           type="button"
           onClick={() => toggleInterest(interest)}
           disabled={atSelectionCap}
-          title={
-            atSelectionCap
-              ? `${MAX_INTERESTS} max — remove one to add another`
-              : undefined
-          }
-          className="bg-card inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-45"
+          title={atSelectionCap ? `${MAX_INTERESTS} max — remove one to add another` : undefined}
+          className="bg-card hover:bg-muted inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-45"
         >
           <span aria-hidden="true" className="text-muted-foreground">
             +
@@ -358,17 +346,13 @@ export default function OnboardingFlow({
     }, 0)
 
     const debounced = window.setTimeout(async () => {
-      if (
-        candidate.length < HANDLE_MIN ||
-        !HANDLE_FORMAT.test(candidate)
-      ) {
+      if (candidate.length < HANDLE_MIN || !HANDLE_FORMAT.test(candidate)) {
         return
       }
       try {
-        const response = await fetch(
-          `/api/handle/check?handle=${encodeURIComponent(candidate)}`,
-          { signal: controller.signal },
-        )
+        const response = await fetch(`/api/handle/check?handle=${encodeURIComponent(candidate)}`, {
+          signal: controller.signal
+        })
         const data = await response.json().catch(() => ({}))
         if (!response.ok) return
         if (data?.available === true) {
@@ -376,13 +360,11 @@ export default function OnboardingFlow({
         } else if (typeof data?.reason === 'string') {
           setHandleStatus({
             state: 'unavailable',
-            reason: data.reason as 'format' | 'reserved' | 'taken',
+            reason: data.reason as 'format' | 'reserved' | 'taken'
           })
         }
       } catch (fetchError) {
-        if (
-          !(fetchError instanceof DOMException && fetchError.name === 'AbortError')
-        ) {
+        if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
           setHandleStatus({ state: 'idle' })
         }
       }
@@ -400,13 +382,8 @@ export default function OnboardingFlow({
     if (!selected) return
 
     setSelectedInterests((current) => {
-      const exists = current.some(
-        (item) => selectedKey(item) === selectedKey(selected)
-      )
-      if (exists)
-        return current.filter(
-          (item) => selectedKey(item) !== selectedKey(selected)
-        )
+      const exists = current.some((item) => selectedKey(item) === selectedKey(selected))
+      if (exists) return current.filter((item) => selectedKey(item) !== selectedKey(selected))
       if (current.length >= MAX_INTERESTS) return current
       return [...current, selected]
     })
@@ -416,7 +393,7 @@ export default function OnboardingFlow({
   async function addSelectedInterest(topic: { label: string; broadCategory?: string | null }) {
     const selected = toSelected({
       domain: topic.label,
-      broadCategory: topic.broadCategory ?? 'General Knowledge',
+      broadCategory: topic.broadCategory ?? 'General Knowledge'
     })
     if (!selected) throw new Error('Enter a topic name.')
     if (selectedInterests.length >= MAX_INTERESTS) {
@@ -433,7 +410,7 @@ export default function OnboardingFlow({
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: selected.domain }),
+      body: JSON.stringify({ topic: selected.domain })
     })
     const checkBody = await check.json().catch(() => null)
     if (check.ok && checkBody?.ok === false) {
@@ -442,9 +419,7 @@ export default function OnboardingFlow({
         broad.code = 'too_broad'
         throw broad
       }
-      throw new Error(
-        checkBody.message ?? 'We could not find real questions for that topic.'
-      )
+      throw new Error(checkBody.message ?? 'We could not find real questions for that topic.')
     }
 
     setError(null)
@@ -496,7 +471,7 @@ export default function OnboardingFlow({
       const nameResponse = await fetch('/api/account', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: trimmedName }),
+        body: JSON.stringify({ displayName: trimmedName })
       })
       const nameData = await nameResponse.json().catch(() => ({}))
       if (!nameResponse.ok) {
@@ -513,7 +488,7 @@ export default function OnboardingFlow({
       const handleResponse = await fetch('/api/account/handle', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: candidate }),
+        body: JSON.stringify({ handle: candidate })
       })
       const handleData = await handleResponse.json().catch(() => ({}))
       if (!handleResponse.ok) {
@@ -545,9 +520,7 @@ export default function OnboardingFlow({
     const inviteSelectedCount = inviteInterests.filter((interest) => {
       const selected = toSelected(interest)
       return selected
-        ? cleanSelected.some(
-            (item) => selectedKey(item) === selectedKey(selected)
-          )
+        ? cleanSelected.some((item) => selectedKey(item) === selectedKey(selected))
         : false
     }).length
 
@@ -576,9 +549,9 @@ export default function OnboardingFlow({
           interests: cleanSelected,
           telemetry: {
             inviteInterestCount: inviteInterests.length,
-            inviteSelectedCount,
-          },
-        }),
+            inviteSelectedCount
+          }
+        })
       })
       const data = await response.json().catch(() => ({}))
 
@@ -596,7 +569,7 @@ export default function OnboardingFlow({
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
-        keepalive: true,
+        keepalive: true
       }).catch(() => {})
 
       // Onboarding is complete and the first queue is warming. Close setup with
@@ -642,7 +615,7 @@ export default function OnboardingFlow({
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interstitialSeen: true }),
+      body: JSON.stringify({ interstitialSeen: true })
     }).catch(() => {})
   }
 
@@ -664,8 +637,8 @@ export default function OnboardingFlow({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           smsOptIn: 'opted_in',
-          smsConsentSource: 'onboarding_web_form',
-        }),
+          smsConsentSource: 'onboarding_web_form'
+        })
       })
       const data = await response.json().catch(() => ({}))
 
@@ -673,7 +646,7 @@ export default function OnboardingFlow({
         setReminderError(
           typeof data?.message === 'string'
             ? data.message
-            : "We couldn't turn on reminders. Try again or continue without them.",
+            : "We couldn't turn on reminders. Try again or continue without them."
         )
         return
       }
@@ -694,9 +667,7 @@ export default function OnboardingFlow({
         Your trivia questions will come from these subjects
       </p>
       {selectedInterests.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          Nothing yet — add a few below.
-        </p>
+        <p className="text-muted-foreground text-sm">Nothing yet — add a few below.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {selectedInterests.map((interest) => (
@@ -719,6 +690,19 @@ export default function OnboardingFlow({
       )}
     </div>
   )
+
+  if (currentStep === 'reminders') {
+    return (
+      <OnboardingReminderScreen
+        displayName={displayName}
+        phoneNumber={phoneNumber}
+        saving={savingReminder}
+        error={reminderError}
+        onContinueWithReminders={() => void continueWithSmsReminders()}
+        onContinueWithoutReminders={declineReminders}
+      />
+    )
+  }
 
   return (
     <main className="bg-background text-foreground min-h-screen px-4 pt-8 pb-10 sm:px-6 sm:pt-12">
@@ -752,7 +736,7 @@ export default function OnboardingFlow({
                   <span className="text-sm font-medium">Your name</span>
                   <input
                     type="text"
-                    className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+                    className="placeholder:text-muted-foreground/70 mt-2 h-12 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-base transition outline-none focus:border-[var(--brand-navy)]"
                     placeholder="Your name"
                     autoFocus
                     autoComplete="name"
@@ -779,7 +763,7 @@ export default function OnboardingFlow({
                     <span className="text-muted-foreground text-base">@</span>
                     <input
                       type="text"
-                      className="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] h-12 w-full rounded-md border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+                      className="placeholder:text-muted-foreground/70 h-12 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-base transition outline-none focus:border-[var(--brand-navy)]"
                       placeholder="yourhandle"
                       autoCapitalize="none"
                       autoCorrect="off"
@@ -792,7 +776,7 @@ export default function OnboardingFlow({
                           e.target.value
                             .toLowerCase()
                             .replace(/[^a-z0-9_]/g, '')
-                            .slice(0, HANDLE_MAX),
+                            .slice(0, HANDLE_MAX)
                         )
                         if (handleError) setHandleError(null)
                       }}
@@ -872,9 +856,7 @@ export default function OnboardingFlow({
               {inviteSuggestions.length > 0 ? (
                 <div className="space-y-3">
                   <p className="text-sm font-medium">
-                    {safeInviterName
-                      ? `Suggested by ${safeInviterName}`
-                      : 'Suggested for you'}
+                    {safeInviterName ? `Suggested by ${safeInviterName}` : 'Suggested for you'}
                   </p>
                   {safeInviterName ? (
                     <p className="text-muted-foreground text-sm leading-6">
@@ -924,37 +906,17 @@ export default function OnboardingFlow({
               </div>
             </div>
           ) : null}
-
-          {currentStep === 'reminders' ? (
-            <OnboardingReminderStep
-              phoneNumber={phoneNumber}
-              topics={selectedInterests.map((interest) => interest.domain)}
-              saving={savingReminder}
-              error={reminderError}
-              onContinueWithReminders={() => void continueWithSmsReminders()}
-              onContinueWithoutReminders={declineReminders}
-            />
-          ) : null}
-
         </div>
       </section>
     </main>
   )
 }
 
-function ErrorPanel({
-  message,
-  actions,
-}: {
-  message: string
-  actions?: ReactNode
-}) {
+function ErrorPanel({ message, actions }: { message: string; actions?: ReactNode }) {
   return (
     <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm">
       <p>{message}</p>
-      {actions ? (
-        <div className="mt-3 flex flex-wrap gap-2">{actions}</div>
-      ) : null}
+      {actions ? <div className="mt-3 flex flex-wrap gap-2">{actions}</div> : null}
     </div>
   )
 }
