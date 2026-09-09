@@ -85,7 +85,12 @@ export default async function FriendsPage() {
       }))
     : [];
 
-  const hasSuggestions = contactMatches.length > 0 || reflections.length > 0;
+  // B-FRIENDS-SAFETY-01 Phase 3: narrowed from `contactMatches.length > 0 ||
+  // reflections.length > 0` -- the gated section body only ever maps
+  // `reflections` (ContactMatchBlock above renders unconditionally, outside
+  // this gate), so a contact-match-only viewer with zero reflections used to
+  // get an empty "Suggested" section body under a visible heading.
+  const hasSuggestions = reflections.length > 0;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5 pb-28">

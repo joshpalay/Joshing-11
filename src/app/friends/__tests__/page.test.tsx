@@ -102,6 +102,30 @@ describe('/friends page sections', () => {
     expect(html).toContain('data-stub="friends-list"');
   });
 
+  it('omits the Suggested section when only contact matches exist and reflections are empty (B-FRIENDS-SAFETY-01 Phase 3)', async () => {
+    // ContactMatchBlock renders unconditionally above this gate (its own
+    // "data-stub" always appears), but the Suggested section's BODY only ever
+    // maps `reflections` -- contactMatches never render inside it. Before this
+    // fix, hasSuggestions included contactMatches.length > 0, so a viewer with
+    // contact matches but zero reflections got a visible "Suggested" heading
+    // over an empty card.
+    listContactMatchesMock.mockResolvedValue([
+      {
+        id: 'u3',
+        handle: 'maria',
+        displayName: 'Maria',
+        avatarColor: null,
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+        relationship: { state: 'none', friendshipId: null, formedAt: null, isBlocked: false },
+      },
+    ]);
+    listInviteReflectionsMock.mockResolvedValue([]);
+
+    const html = await render();
+    expect(html).not.toContain('Suggested');
+    expect(html).toContain('data-stub="contact-match"');
+  });
+
   it('renders the Suggested section WITH its heading when reflections exist', async () => {
     // The guard must hide an empty section, not delete the label -- otherwise
     // users who DO have suggestions get an unlabelled block. This is the case
