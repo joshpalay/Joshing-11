@@ -13,7 +13,9 @@ import { Bell, Brain, Home, MoreHorizontal, Pencil, SlidersHorizontal, Star, Use
  * intro card ("here's a quick look around"), then a scroll-driven spotlight walks
  * five beats — customize, the friends section (which uses the
  * inviter's name so it isn't empty), and arrows down to the Knowledge and
- * Questions tabs in the nav — and ends on a choice: Play Now, or explore first.
+ * Questions tabs in the nav. The first-run post-game version ends by returning
+ * the player to Home; the reusable pre-game version still offers Play Now or
+ * exploring first.
  *
  * Self-contained so the For-You sample and the nav targets are guaranteed to
  * exist; the spotlight box draws the dim + ring at each target's computed rect.
@@ -93,7 +95,7 @@ type WelcomeTourScreenProps = {
   storageKey?: string;
   /** "Play Now" destination (into the round). */
   playHref?: string;
-  /** "I'll explore more first" destination (the homepage). */
+  /** Home/explore destination. */
   exploreHref?: string;
   /** Live first-player flow: the player has already completed their first five. */
   postGame?: boolean;
@@ -161,6 +163,7 @@ export default function WelcomeTourScreen({
   const [started, setStarted] = useState(false);
   const [stepIndex, setStepIndex] = useState(-1);
   const [atEnd, setAtEnd] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const serverSeenWrittenRef = useRef(false);
 
   const colRef = useRef<HTMLDivElement | null>(null);
@@ -376,11 +379,15 @@ export default function WelcomeTourScreen({
   };
 
   const finish = (href: string) => {
+    // The live post-game tour is already mounted at `/`, so pushing `/` alone
+    // is not guaranteed to remount Home. Hide locally first; the durable seen
+    // write then prevents the overlay on later visits and other devices.
+    setDismissed(true);
     markSeen();
     router.push(href);
   };
 
-  if (!isClient || (!forced && seen)) return null;
+  if (!isClient || dismissed || (!forced && seen)) return null;
 
   return (
     <div className="wts-root">
@@ -666,15 +673,17 @@ export default function WelcomeTourScreen({
                 className="btn-primary mt-5 w-full"
                 onClick={() => finish(postGame ? exploreHref : playHref)}
               >
-                {postGame ? 'Explore Home →' : 'Play Now →'}
+                {postGame ? 'Go to Home →' : 'Play Now →'}
               </button>
-              <button
-                type="button"
-                className="mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
-                onClick={() => finish(exploreHref)}
-              >
-                I&apos;ll explore more first
-              </button>
+              {!postGame ? (
+                <button
+                  type="button"
+                  className="mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
+                  onClick={() => finish(exploreHref)}
+                >
+                  I&apos;ll explore more first
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
