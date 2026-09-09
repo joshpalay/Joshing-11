@@ -135,19 +135,79 @@ function toSelected(interest: ProposedInterest): SelectedInterest | null {
   }
 }
 
-function isSelected(selectedInterests: SelectedInterest[], interest: ProposedInterest) {
-  const selected = toSelected(interest)
-  return selected
-    ? selectedInterests.some((item) => selectedKey(item) === selectedKey(selected))
-    : false
-}
-
 function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="space-y-2">
       <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">{title}</h1>
       <p className="text-muted-foreground text-base leading-7">{subtitle}</p>
     </div>
+  )
+}
+
+/**
+ * A topic chip in the onboarding topic picker that toggles in place rather
+ * than jumping between a separate "suggested" list and a "your topics" list —
+ * 'selected' and 'removed' render the same slot the topic already occupies,
+ * so nothing reflows when you tap it.
+ */
+function InterestToggleChip({
+  interest,
+  state,
+  onToggle,
+  disabled
+}: {
+  interest: ProposedInterest
+  state: 'selected' | 'removed' | 'available'
+  onToggle: () => void
+  disabled?: boolean
+}) {
+  if (state === 'selected') {
+    return (
+      <span className="bg-card inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium">
+        {interest.domain}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="text-muted-foreground hover:text-destructive ml-0.5 inline-flex size-5 items-center justify-center rounded-full text-base leading-none"
+          aria-label={`Remove ${interest.domain}`}
+        >
+          ×
+        </button>
+      </span>
+    )
+  }
+
+  if (state === 'removed') {
+    return (
+      <span className="text-muted-foreground inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1.5 text-sm">
+        <span className="line-through">{interest.domain}</span>
+        <span className="text-[10px] font-semibold tracking-wide uppercase">Removed</span>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          className="font-semibold text-[var(--brand-navy)] underline disabled:opacity-50"
+          aria-label={`Undo removing ${interest.domain}`}
+        >
+          Undo
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      title={disabled ? `${MAX_INTERESTS} max — remove one to add another` : undefined}
+      className="bg-card hover:bg-muted inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-45"
+    >
+      <span aria-hidden="true" className="text-muted-foreground">
+        +
+      </span>
+      {interest.domain}
+    </button>
   )
 }
 
@@ -272,18 +332,28 @@ export default function OnboardingFlow({
   // invitee keeps, ignores, or removes them (and adds their own), but never edits
   // the wording inline — so this is a stable value, not state.
   const inviteInterests: PreSeededInterest[] = preSeededInterests
-  // Link-sourced seeds may reach someone the inviter never had in mind, so they
-  // must NOT pre-populate the selection — only a named invite's topics do.
+  // The topic-picker's chip list, in a fixed order for the life of this screen:
+  // every pre-seeded topic (named or link-sourced alike), then any custom topic
+  // the invitee types in, appended as they add it. Toggling a topic on/off never
+  // reorders this list — see InterestToggleChip.
+  const [slots, setSlots] = useState<ProposedInterest[]>(preSeededInterests)
+  // Every real inviter-picked topic (never a catalog top-up — see fromCatalog)
+  // starts pre-selected, whether it rode a named invite or a link: the invitee
+  // keeps, removes, or adds to it, but doesn't have to tap each one just to
+  // accept the defaults.
   const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>(() =>
-    seedSource === 'named'
-      ? preSeededInterests
-          .filter((interest) => !interest.fromCatalog)
-          .flatMap((interest) => {
-            const selected = toSelected(interest)
-            return selected ? [selected] : []
-          })
-          .slice(0, MAX_INTERESTS)
-      : []
+    preSeededInterests
+      .filter((interest) => !interest.fromCatalog)
+      .flatMap((interest) => {
+        const selected = toSelected(interest)
+        return selected ? [selected] : []
+      })
+      .slice(0, MAX_INTERESTS)
+  )
+  // Keys ever selected this session, so an unchecked topic shows as "Removed …
+  // Undo" (it was on) rather than a plain "+" suggestion (it never was).
+  const [everSelectedKeys, setEverSelectedKeys] = useState<Set<string>>(
+    () => new Set(selectedInterests.map(selectedKey))
   )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -295,37 +365,14 @@ export default function OnboardingFlow({
   // copy: with seeds we frame the screen as "remove what doesn't fit"; without
   // any (e.g. invite-link signups) we frame it as "add a few to start".
   const hasSeeds = inviteInterests.length > 0
-
-  // The merged "suggested for you" list: pre-seeded topics the invitee removed
-  // from their selection, offered back as one re-addable group. (Selected topics
-  // live in the chips above and drop out of this list automatically.)
-  const inviteSuggestions = inviteInterests.filter(
-    (interest) => !isSelected(selectedInterests, interest)
-  )
   const atSelectionCap = selectedInterests.length >= MAX_INTERESTS
 
-  // Compact, tappable suggestion chips (not large cards): just the area name with
-  // a "+" affordance. Tapping adds it back to Your topics. No rationale
-  // paragraphs or category labels — keeps the screen scannable on mobile.
-  const renderSuggestionChips = (list: ProposedInterest[], keyPrefix: string) => (
-    <div className="flex flex-wrap gap-2">
-      {list.map((interest) => (
-        <button
-          key={`${keyPrefix}-${interest.domain}`}
-          type="button"
-          onClick={() => toggleInterest(interest)}
-          disabled={atSelectionCap}
-          title={atSelectionCap ? `${MAX_INTERESTS} max — remove one to add another` : undefined}
-          className="bg-card hover:bg-muted inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-45"
-        >
-          <span aria-hidden="true" className="text-muted-foreground">
-            +
-          </span>
-          {interest.domain}
-        </button>
-      ))}
-    </div>
-  )
+  function slotState(interest: ProposedInterest): 'selected' | 'removed' | 'available' {
+    const key = selectedKey(interest)
+    if (selectedInterests.some((item) => selectedKey(item) === key)) return 'selected'
+    if (everSelectedKeys.has(key)) return 'removed'
+    return 'available'
+  }
 
   useEffect(() => {
     if (currentStep !== 'setup') return
@@ -380,13 +427,15 @@ export default function OnboardingFlow({
   function toggleInterest(interest: ProposedInterest) {
     const selected = toSelected(interest)
     if (!selected) return
+    const key = selectedKey(selected)
 
     setSelectedInterests((current) => {
-      const exists = current.some((item) => selectedKey(item) === selectedKey(selected))
-      if (exists) return current.filter((item) => selectedKey(item) !== selectedKey(selected))
+      const exists = current.some((item) => selectedKey(item) === key)
+      if (exists) return current.filter((item) => selectedKey(item) !== key)
       if (current.length >= MAX_INTERESTS) return current
       return [...current, selected]
     })
+    setEverSelectedKeys((current) => (current.has(key) ? current : new Set(current).add(key)))
   }
 
   // Stage a chosen topic (from the add-topic field) into the selected list.
@@ -423,17 +472,16 @@ export default function OnboardingFlow({
     }
 
     setError(null)
+    const key = selectedKey(selected)
+    setSlots((current) =>
+      current.some((item) => selectedKey(item) === key) ? current : [...current, selected]
+    )
     setSelectedInterests((current) =>
-      current.some((item) => selectedKey(item) === selectedKey(selected))
+      current.some((item) => selectedKey(item) === key)
         ? current
         : [...current, selected].slice(0, MAX_INTERESTS)
     )
-  }
-
-  function removeSelectedInterest(target: SelectedInterest) {
-    setSelectedInterests((current) =>
-      current.filter((item) => selectedKey(item) !== selectedKey(target))
-    )
+    setEverSelectedKeys((current) => new Set(current).add(key))
   }
 
   // Name + call sign now save together from one "setup" screen. Name persists
@@ -661,32 +709,36 @@ export default function OnboardingFlow({
     }
   }
 
-  const selectedInterestsSummary = (
+  // One stable-position picker: the heading, an optional attribution line,
+  // then every topic as a toggle chip — selecting or removing one never moves
+  // it or reflows the list (see InterestToggleChip).
+  const topicPicker = (
     <div className="space-y-3">
       <p className="font-serif text-2xl leading-tight font-semibold text-balance text-[var(--ink)] sm:text-3xl">
         Your trivia questions will come from these subjects
       </p>
-      {selectedInterests.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nothing yet — add a few below.</p>
+      {hasSeeds ? (
+        <p className="text-muted-foreground text-sm leading-6">
+          {`${displayInviterName} picked these for you. Take any that feel right, or remove what doesn't fit.`}
+        </p>
+      ) : null}
+      {slots.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {slots.map((interest) => {
+            const state = slotState(interest)
+            return (
+              <InterestToggleChip
+                key={interest.domain}
+                interest={interest}
+                state={state}
+                onToggle={() => toggleInterest(interest)}
+                disabled={state !== 'selected' && atSelectionCap}
+              />
+            )
+          })}
+        </div>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {selectedInterests.map((interest) => (
-            <li key={selectedKey(interest)} className="flex items-center gap-3">
-              <span aria-hidden="true" className="text-muted-foreground text-xs">
-                ▸
-              </span>
-              <span className="text-base font-medium">{interest.domain}</span>
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-destructive text-sm font-medium underline transition-colors"
-                onClick={() => removeSelectedInterest(interest)}
-                aria-label={`Remove ${interest.domain}`}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+        <p className="text-muted-foreground text-sm">Nothing yet — add a few below.</p>
       )}
     </div>
   )
@@ -853,21 +905,7 @@ export default function OnboardingFlow({
                 </p>
               </div>
 
-              {inviteSuggestions.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">
-                    {safeInviterName ? `Suggested by ${safeInviterName}` : 'Suggested for you'}
-                  </p>
-                  {safeInviterName ? (
-                    <p className="text-muted-foreground text-sm leading-6">
-                      {`${safeInviterName} picked these for you. Take any that feel right.`}
-                    </p>
-                  ) : null}
-                  {renderSuggestionChips(inviteSuggestions, 'suggested')}
-                </div>
-              ) : null}
-
-              {inviteSuggestions.length === 0 ? selectedInterestsSummary : null}
+              {topicPicker}
 
               <AddTopicField
                 heading="Add your own"
@@ -883,8 +921,6 @@ export default function OnboardingFlow({
                 mutedClassName="text-muted-foreground text-sm"
                 errorClassName="text-destructive mt-3 text-sm"
               />
-
-              {inviteSuggestions.length > 0 ? selectedInterestsSummary : null}
 
               <div className="bg-background/95 sticky bottom-0 border-t py-4 backdrop-blur">
                 {error ? (
