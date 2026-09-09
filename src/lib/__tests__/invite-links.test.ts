@@ -4,6 +4,7 @@ import {
   hasValidInviteLinkCategories,
   inviteAcceptanceLabel,
   inviteGreatestHitsTitle,
+  inviteLinkBroadCategorySummary,
   inviteLinkCardTitle,
   safeInviteName,
   sanitizeInviteLinkCategories,
@@ -42,14 +43,29 @@ describe('invite-link presentation guards', () => {
     expect(inviteAcceptanceLabel('+1 (734) 555-0123')).toBe('Accept invitation');
   });
 
-  it('generates a per-link title from that link’s own categories', () => {
-    expect(inviteLinkCardTitle([{ label: 'Jazz' }])).toBe('Jazz');
-    expect(inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }])).toBe(
-      'Music, Star Wars & Joyce',
+  it('summarizes a link’s categories by their broad group, deduped', () => {
+    expect(inviteLinkBroadCategorySummary([{ label: 'Jazz' }])).toBe('Jazz');
+    expect(
+      inviteLinkBroadCategorySummary([
+        { label: 'Ulysses (Joyce Novel)', broadCategory: 'Literature' },
+        { label: 'Hamlet', broadCategory: 'Literature' },
+        { label: 'Bach', broadCategory: 'Music' },
+      ]),
+    ).toBe('Literature & Music');
+    expect(inviteLinkBroadCategorySummary([])).toBe('Invitation link');
+  });
+
+  it('titles the default link with the greatest-hits phrase and other links by broad category', () => {
+    expect(
+      inviteLinkCardTitle([{ label: 'Jazz' }], { isDefaultLink: true, creatorName: 'Josh' }),
+    ).toBe('Josh’s greatest hits');
+    expect(inviteLinkCardTitle([{ label: 'Jazz' }], { isDefaultLink: true })).toBe(
+      'Your greatest hits',
     );
-    expect(inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }])).toBe(
-      'Music & Star Wars',
-    );
-    expect(inviteLinkCardTitle([])).toBe('Invitation link');
+    expect(
+      inviteLinkCardTitle([{ label: 'Music' }, { label: 'Star Wars' }], {
+        isDefaultLink: false,
+      }),
+    ).toBe('Music & Star Wars');
   });
 });

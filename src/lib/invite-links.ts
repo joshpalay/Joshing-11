@@ -82,17 +82,52 @@ export function inviteGreatestHitsTitle(name: unknown, creatorView = false): str
   return `Play ${safeName}’s greatest hits`;
 }
 
+function joinWithAmpersand(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0]!;
+  return `${items.slice(0, -1).join(', ')} & ${items[items.length - 1]}`;
+}
+
+/** The creator's own card title for their default (first) invite link. */
+export function inviteLinkGreatestHitsCardTitle(creatorName: unknown): string {
+  const safeName = safeInviteName(creatorName);
+  return safeName ? `${safeName}’s greatest hits` : 'Your greatest hits';
+}
+
 /**
- * A per-link title generated from that link's own categories (e.g. "Music,
- * Star Wars & Joyce"), so a creator managing several links can tell them
- * apart at a glance instead of seeing the same "greatest hits" line on every
- * card. Falls back to a neutral label for the legacy no-category state.
+ * A per-link title generated from that link's own categories' broad groups
+ * (e.g. "Literature & Music"), deduped, so a creator managing several links
+ * can tell them apart at a glance without repeating exact category names
+ * already shown as chips on the card. Falls back to a neutral label for the
+ * legacy no-category state.
  */
-export function inviteLinkCardTitle(categories: InviteLinkCategory[]): string {
-  const labels = sanitizeInviteLinkCategories(categories).map((category) => category.label);
-  if (labels.length === 0) return 'Invitation link';
-  if (labels.length === 1) return labels[0];
-  return `${labels.slice(0, -1).join(', ')} & ${labels[labels.length - 1]}`;
+export function inviteLinkBroadCategorySummary(categories: InviteLinkCategory[]): string {
+  const sanitized = sanitizeInviteLinkCategories(categories);
+  if (sanitized.length === 0) return 'Invitation link';
+
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const category of sanitized) {
+    const group = category.broadCategory || category.label;
+    const key = group.toLocaleLowerCase('en-US');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    groups.push(group);
+  }
+  return joinWithAmpersand(groups);
+}
+
+/**
+ * The creator's card title for one invite link: the default (first) link
+ * always reads as "{name}'s greatest hits"; every other link is titled by
+ * the broad categories it covers, so links stay distinguishable.
+ */
+export function inviteLinkCardTitle(
+  categories: InviteLinkCategory[],
+  options: { isDefaultLink: boolean; creatorName?: unknown },
+): string {
+  if (options.isDefaultLink) return inviteLinkGreatestHitsCardTitle(options.creatorName);
+  return inviteLinkBroadCategorySummary(categories);
 }
 
 /** Recipient-facing action copy; never interpolate account identifiers. */
