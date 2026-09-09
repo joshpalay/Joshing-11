@@ -18,7 +18,7 @@ import LoginPanel from '@/app/login/LoginPanel';
  *   - Screen 1 — the named (FriendInvitation) phone-first confirm-your-number
  *     screen
  *   - Screen 1b — its warm "not my number" dead-end
- *   - Screen 1c — the per-user invite-LINK's card, with topic chips (Stage 2)
+ *   - Screen 1c — the per-user invite-LINK's personalized card
  *     — this path never carries a `invitePrefill`, only `inviteContext`, so
  *     the phone field never renders here
  * It is look-only: the synthetic data doesn't resolve server-side, so the
@@ -43,7 +43,6 @@ const PREVIEW_LINK_CONTEXT = {
   inviterName: 'Robyn Sample',
   inviterUserId: 'dev-preview-link-inviter',
   inviterAvatarColor: null,
-  topics: ['Jazz', 'Chess Openings', '1990s Sitcoms'],
 };
 
 type PreviewScreen = 'phone' | 'deadEnd' | 'linkCard' | 'code' | 'profile';

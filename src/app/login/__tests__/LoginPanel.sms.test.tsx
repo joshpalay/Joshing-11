@@ -54,14 +54,12 @@ describe('LoginPanel OTP request disclosure', () => {
   });
 });
 
-// Stage 2 (invite-link seed topics): the per-user invite-link card shows up
-// to 3 topics; the named FriendInvitation path never carries them.
-describe('LoginPanel invite context topics', () => {
+describe('LoginPanel invite context', () => {
   beforeEach(() => {
     searchParamsMock.delete('invitationToken');
   });
 
-  it('renders topics on the per-user invite-link card', () => {
+  it('highlights the inviter name without rendering category chips', () => {
     const html = renderToStaticMarkup(
       <LoginPanel
         inviteContext={{
@@ -73,12 +71,14 @@ describe('LoginPanel invite context topics', () => {
       />,
     );
 
-    expect(html).toContain('Jaime invited you to Joshing');
-    expect(html).toContain('Jazz');
-    expect(html).toContain('Poetry');
+    expect(html).toContain(
+      '<strong class="font-semibold text-[var(--brand-navy)]">Jaime</strong> invited you to Joshing',
+    );
+    expect(html).not.toContain('Jazz');
+    expect(html).not.toContain('Poetry');
   });
 
-  it('renders no topic chips for the named-invitation path (topics absent)', () => {
+  it('renders the named-invitation path without topic chips', () => {
     const html = renderToStaticMarkup(
       <LoginPanel
         inviteContext={{
@@ -89,24 +89,7 @@ describe('LoginPanel invite context topics', () => {
       />,
     );
 
-    expect(html).toContain('Alex invited you to Joshing');
-    // No chip markup at all — the wrapping div is conditional on topics.length.
-    expect(html).not.toContain('rounded-full border border-[var(--accent-gold)]/40 bg-white/70');
-  });
-
-  it('renders no topic chips when topics resolved to an empty array', () => {
-    const html = renderToStaticMarkup(
-      <LoginPanel
-        inviteContext={{
-          inviterName: 'Robyn',
-          inviterUserId: 'inviter-3',
-          inviterAvatarColor: null,
-          topics: [],
-        }}
-      />,
-    );
-
-    expect(html).toContain('Robyn invited you to Joshing');
+    expect(html).toContain('>Alex</strong> invited you to Joshing');
     expect(html).not.toContain('rounded-full border border-[var(--accent-gold)]/40 bg-white/70');
   });
 });

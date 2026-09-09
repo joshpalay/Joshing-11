@@ -39,7 +39,7 @@ async function render(handle = 'josh', token = 'safe-token') {
 describe('/u/[handle]/[token] personalized invitation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getSessionMock.mockResolvedValue(null);
+    getSessionMock.mockResolvedValue({ userId: 'recipient-1' });
   });
 
   it('uses the inviter identity and exact categories resolved from the server record', async () => {
@@ -55,8 +55,15 @@ describe('/u/[handle]/[token] personalized invitation', () => {
     expect(html).toContain('Sondheim');
     expect(html).toContain('Jazz');
     expect(html).toContain('Accept Duo Prova’s invitation');
-    expect(html).toContain('inviteHandle=josh');
-    expect(html).toContain('inviteUserToken=safe-token');
+  });
+
+  it('takes a signed-out recipient directly to the invite-aware phone screen', async () => {
+    getSessionMock.mockResolvedValueOnce(null);
+    resolveInviteLinkMock.mockResolvedValueOnce(resolution());
+
+    await expect(render()).rejects.toThrow(
+      'NEXT_REDIRECT:/login?inviteHandle=josh&inviteUserToken=safe-token',
+    );
   });
 
   it('cannot spoof the inviter name through URL query data', async () => {
@@ -87,7 +94,6 @@ describe('/u/[handle]/[token] personalized invitation', () => {
   });
 
   it('shows personalized context to a signed-in recipient without a login link', async () => {
-    getSessionMock.mockResolvedValueOnce({ userId: 'recipient-1' });
     resolveInviteLinkMock.mockResolvedValueOnce(resolution());
 
     const html = await render();

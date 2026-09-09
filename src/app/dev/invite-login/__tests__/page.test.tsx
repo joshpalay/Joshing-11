@@ -11,8 +11,7 @@ vi.mock('next/navigation', () => ({
 import DevInviteLoginPage from '@/app/dev/invite-login/page'
 
 // Stage 6: the ?screen=linkCard param (linked from the Growth dev-tools
-// group) must land directly on the invite-LINK preview tab — no phone field,
-// synthetic topic chips instead.
+// group) must land directly on the invite-LINK preview tab.
 describe('DevInviteLoginPage', () => {
   it('defaults to the named phone-first tab when no ?screen param is set', () => {
     searchParams.delete('screen')
@@ -25,15 +24,15 @@ describe('DevInviteLoginPage', () => {
     expect(html).toContain('(734) 555-6819')
   })
 
-  it('lands on the invite-link card tab via ?screen=linkCard, with topic chips and no known number to confirm', () => {
+  it('lands on the category-free invite-link card via ?screen=linkCard', () => {
     searchParams.set('screen', 'linkCard')
     const html = renderToStaticMarkup(<DevInviteLoginPage />)
 
     // inviterFirstName() truncates to the first token.
-    expect(html).toContain('Robyn invited you to Joshing')
-    expect(html).toContain('Jazz')
-    expect(html).toContain('Chess Openings')
-    expect(html).toContain('1990s Sitcoms')
+    expect(html).toContain('>Robyn</strong> invited you to Joshing')
+    expect(html).not.toContain('Jazz')
+    expect(html).not.toContain('Chess Openings')
+    expect(html).not.toContain('1990s Sitcoms')
     // No invitePrefill on this tab, so the number-to-confirm screen never
     // renders — only the generic phone-entry form does (a link visitor's
     // number isn't known ahead of time, unlike a named invite).

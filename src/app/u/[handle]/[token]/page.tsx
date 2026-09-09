@@ -6,7 +6,7 @@ import {
   InvitationLandingContent,
   InvitationPageShell,
 } from '@/components/invite/InvitationLanding';
-import { inviteAcceptanceLabel, safeInviteName } from '@/lib/invite-links';
+import { safeInviteName } from '@/lib/invite-links';
 import { getSession } from '@/server/auth/session';
 import { resolveInviteLink } from '@/server/friends/user-invite-token';
 
@@ -48,6 +48,11 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
   const session = await getSession();
   if (session?.userId === inviter.inviterUserId) redirect('/friends');
 
+  // Preserve old /u links already in circulation, but take signed-out invitees
+  // directly to the invite-aware phone screen instead of adding an extra
+  // acceptance screen before authentication.
+  if (!session) redirect(loginHref(inviter.inviterHandle, token));
+
   const inviterName = safeInviteName(inviter.inviterDisplayName);
 
   return (
@@ -56,20 +61,11 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
         inviterName={inviterName}
         categories={inviter.seedTopics}
         action={
-          session ? (
-            <AcceptInviteLinkButton
-              handle={inviter.inviterHandle}
-              token={token}
-              inviterName={inviterName}
-            />
-          ) : (
-            <Link
-              href={loginHref(inviter.inviterHandle, token)}
-              className="btn-primary min-h-11 w-full"
-            >
-              {inviteAcceptanceLabel(inviterName)}
-            </Link>
-          )
+          <AcceptInviteLinkButton
+            handle={inviter.inviterHandle}
+            token={token}
+            inviterName={inviterName}
+          />
         }
       />
     </InvitationPageShell>
