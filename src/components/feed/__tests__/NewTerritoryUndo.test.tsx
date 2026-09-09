@@ -62,4 +62,19 @@ describe('NewTerritoryUndo (knowledge-preference thread card)', () => {
     expect(bonus).not.toContain('Added');
     expect(bonus).not.toContain('Knowledge updated');
   });
+
+  it('presents Not now as the default action on the bonus prompt', () => {
+    const bonus = renderToStaticMarkup(
+      <NewTerritoryUndo domain="zelda" category="The Legend of Zelda" adopted={false} />,
+    );
+    const sometimesButton = bonus.match(/<button[^>]*>Yes, sometimes<\/button>/)?.[0];
+    const notNowButton = bonus.match(/<button[^>]*>Not now<\/button>/)?.[0];
+
+    expect(sometimesButton).toBeDefined();
+    expect(notNowButton).toBeDefined();
+    expect(sometimesButton).not.toContain('background-color');
+    expect(notNowButton).toContain(
+      'background-color:color-mix(in srgb, var(--accent-gold) 20%, var(--brand-card))',
+    );
+  });
 });

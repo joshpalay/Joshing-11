@@ -140,12 +140,8 @@ function BonusAskCard({ domain, category }: { domain: string; category?: string 
             <button
               type="button"
               onClick={() => void confirm('sometimes')}
-              className={`${pillButton} font-semibold`}
-              style={{
-                color: GOLD_INK,
-                backgroundColor: 'color-mix(in srgb, var(--accent-gold) 20%, var(--brand-card))',
-                borderColor: 'color-mix(in srgb, var(--accent-gold) 55%, var(--brand-border))',
-              }}
+              className={`${pillButton} font-medium`}
+              style={{ color: 'var(--text-muted)', borderColor: 'var(--brand-rule)' }}
             >
               Yes, sometimes
             </button>
@@ -160,8 +156,12 @@ function BonusAskCard({ domain, category }: { domain: string; category?: string 
             <button
               type="button"
               onClick={() => setPhase({ step: 'declined' })}
-              className={`${pillButton} font-medium`}
-              style={{ color: 'var(--text-muted)', borderColor: 'var(--brand-rule)' }}
+              className={`${pillButton} font-semibold`}
+              style={{
+                color: GOLD_INK,
+                backgroundColor: 'color-mix(in srgb, var(--accent-gold) 20%, var(--brand-card))',
+                borderColor: 'color-mix(in srgb, var(--accent-gold) 55%, var(--brand-border))',
+              }}
             >
               Not now
             </button>
