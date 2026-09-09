@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { EditorialCarousel } from '@/components/feed/EditorialCarousel';
+import { EditorialCarousel, type EditorialCarouselHandle } from '@/components/feed/EditorialCarousel';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import {
@@ -48,25 +48,30 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
  * suggestion-rotation.ts), which remembers what was shown last time and
  * prefers fresh candidates.
  */
-export function TopicSuggestionCarousel({
-  suggestions,
-  addedKeys,
-  onAdd,
-  trailingSlide,
-}: {
-  suggestions: NearbyTerritory[];
-  /** Domain keys (domainKey-normalized) already added — rendered as the checked "Added" state. */
-  addedKeys: ReadonlySet<string>;
-  /** Persist the add; resolve true on success so the caller can add the key to `addedKeys`. */
-  onAdd: (territory: NearbyTerritory) => Promise<boolean>;
-  /**
-   * An extra page appended after the suggestion pages — e.g. an "Add your
-   * own" CTA on a surface with no other create-your-own affordance visible.
-   * Rendered centered in the same three-column footprint as a suggestion
-   * page so the carousel doesn't jump in height on the last swipe.
-   */
-  trailingSlide?: ReactNode;
-}) {
+export const TopicSuggestionCarousel = forwardRef<
+  EditorialCarouselHandle,
+  {
+    suggestions: NearbyTerritory[];
+    /** Domain keys (domainKey-normalized) already added — rendered as the checked "Added" state. */
+    addedKeys: ReadonlySet<string>;
+    /** Persist the add; resolve true on success so the caller can add the key to `addedKeys`. */
+    onAdd: (territory: NearbyTerritory) => Promise<boolean>;
+    /**
+     * An extra page appended after the suggestion pages — e.g. an "Add your
+     * own" CTA on a surface with no other create-your-own affordance visible.
+     * Rendered centered in the same three-column footprint as a suggestion
+     * page so the carousel doesn't jump in height on the last swipe.
+     */
+    trailingSlide?: ReactNode;
+    /** Suppress the built-in dots row — the caller renders its own (see `ref`/`onActiveIndexChange`/`onSlideCountChange`). */
+    hideDots?: boolean;
+    onActiveIndexChange?: (index: number) => void;
+    onSlideCountChange?: (count: number) => void;
+  }
+>(function TopicSuggestionCarousel(
+  { suggestions, addedKeys, onAdd, trailingSlide, hideDots, onActiveIndexChange, onSlideCountChange },
+  ref,
+) {
   // Purely transient UI state — which circle is mid-request. Not part of the
   // caller's `addedKeys` truth.
   const [addingKey, setAddingKey] = useState<string | null>(null);
@@ -127,5 +132,14 @@ export function TopicSuggestionCarousel({
 
   if (slides.length === 0) return null;
 
-  return <EditorialCarousel ariaLabel="Suggested topics" slides={slides} />;
-}
+  return (
+    <EditorialCarousel
+      ref={ref}
+      ariaLabel="Suggested topics"
+      slides={slides}
+      hideDots={hideDots}
+      onActiveIndexChange={onActiveIndexChange}
+      onSlideCountChange={onSlideCountChange}
+    />
+  );
+});

@@ -1,29 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Check, Plus } from 'lucide-react';
 
+import { CarouselDots, type EditorialCarouselHandle } from '@/components/feed/EditorialCarousel';
 import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
 
 // The final carousel page, in place of a separate "+ Add your own" link
 // below the card: a tile matching GhostTerritoryCircle's footprint (same
-// size-16 circle, dashed border, quiet caption) but neutral-toned and a real
+// size-11 circle, dashed border, quiet caption) but neutral-toned and a real
 // link, since it navigates to the full manage surface rather than adding.
 function AddYourOwnTile() {
   return (
     <Link
       href="/daily/setup"
       aria-label="Add your own topic"
-      className="flex w-full flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center opacity-70 transition hover:opacity-100"
+      className="flex w-full flex-col items-center gap-1.5 rounded-[var(--radius-3xl)] p-1 text-center opacity-70 transition hover:opacity-100"
     >
       <div
-        className="grid size-16 place-items-center rounded-full border border-dashed border-[var(--border-warm)] text-[var(--ink)]"
+        className="grid size-11 place-items-center rounded-full border border-dashed border-[var(--border-warm)] text-[var(--ink)]"
         style={{ background: 'color-mix(in srgb, var(--brand-card) 55%, transparent)' }}
       >
-        <Plus className="size-5" aria-hidden="true" />
+        <Plus className="size-4" aria-hidden="true" />
       </div>
       <span className="max-w-full px-1 font-serif text-quiet leading-tight text-[var(--ink)]">
         Add your own
@@ -52,6 +53,12 @@ export function AddTopicHomeCard() {
   const [undoing, setUndoing] = useState(false);
   const [pool, setPool] = useState<NearbyTerritory[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Pagination state lifted out of TopicSuggestionCarousel so the dots can
+  // render inline in the header row (upper-right, next to "Add a topic")
+  // instead of costing their own row below the circles.
+  const carouselRef = useRef<EditorialCarouselHandle>(null);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [slideCount, setSlideCount] = useState(0);
 
   // Auto-dismiss the confirmation so the card returns to its resting state.
   useEffect(() => {
@@ -147,9 +154,18 @@ export function AddTopicHomeCard() {
 
   return (
     <section className="card px-5 py-4" aria-label="Suggested topics">
-      <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
-        Add a topic
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
+          Add a topic
+        </p>
+        {slideCount > 1 ? (
+          <CarouselDots
+            count={slideCount}
+            activeIndex={activeSlide}
+            onGoTo={(i) => carouselRef.current?.goTo(i)}
+          />
+        ) : null}
+      </div>
       <p
         className="mt-1 mb-3 text-sm leading-6 text-[var(--text-muted-warm)]"
         style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
@@ -159,10 +175,14 @@ export function AddTopicHomeCard() {
       </p>
       {pool.length > 0 ? (
         <TopicSuggestionCarousel
+          ref={carouselRef}
           suggestions={pool}
           addedKeys={addedKeys}
           onAdd={addSuggestion}
           trailingSlide={<AddYourOwnTile />}
+          hideDots
+          onActiveIndexChange={setActiveSlide}
+          onSlideCountChange={setSlideCount}
         />
       ) : null}
       {added ? (

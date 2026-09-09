@@ -49,7 +49,7 @@ export function GhostTerritoryCircle({
       type="button"
       aria-label={added ? `${territory.domain} — added` : `Add ${territory.domain}`}
       aria-pressed={added}
-      className={`flex w-full flex-col items-center gap-2 rounded-[var(--radius-3xl)] p-1 text-center transition ${
+      className={`flex w-full flex-col items-center gap-1.5 rounded-[var(--radius-3xl)] p-1 text-center transition ${
         busy ? 'opacity-40' : 'opacity-100'
       }`}
       style={style}
@@ -57,18 +57,18 @@ export function GhostTerritoryCircle({
       onClick={onAdd}
     >
       <div
-        className={`grid size-16 place-items-center rounded-full border text-[var(--territory-text)] ${
+        className={`grid size-11 place-items-center rounded-full border text-[var(--territory-text)] ${
           added ? 'border-solid border-[var(--territory-text)]' : 'border-dashed border-[var(--territory-border)]'
         }`}
         style={{ background: 'color-mix(in srgb, var(--brand-card) 55%, transparent)' }}
       >
         {added ? (
-          <Check className="size-7" aria-hidden="true" />
+          <Check className="size-5" aria-hidden="true" />
         ) : (
           // Forest green (--game-correct) — the same "Play Missed Questions"
           // accent, not the category tint, so the tap target itself pops
           // rather than blending into the dashed outline.
-          <Plus className="size-7 text-[var(--game-correct)]" aria-hidden="true" />
+          <Plus className="size-5 text-[var(--game-correct)]" aria-hidden="true" />
         )}
       </div>
       <span className="max-w-full px-1 font-serif text-quiet leading-tight break-words text-[var(--territory-text)]">
