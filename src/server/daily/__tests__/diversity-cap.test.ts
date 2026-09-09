@@ -108,6 +108,13 @@ function authoredPick(id: string, subcategory: string) {
   } as never;
 }
 
+// Minimal stand-in for a friend-domain candidate — the orchestrator only
+// reads .domain (to request generation) before handing the mocked result
+// straight to buildBotSlot.
+function friendDomain(name: string) {
+  return { domain: name } as never;
+}
+
 // Minimal stand-in for a house pick (pickHouseQuestions) — distinct answerText
 // per id so the (empty by default) answer-cooldown gate never collides across
 // picks, matching authoredPick's shape plus the fields the answer/subject
@@ -462,6 +469,111 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
       expect(trailCall).toBeDefined();
       const payload = trailCall?.[1] as { deflections: Record<string, number> };
       expect(payload.deflections['authored:Hamlet:diversity_cap']).toBe(1);
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  // B-FRIENDS-SAFETY-01 product-review follow-up: the friend-domain CORE
+  // BACKFILL (queue-orchestrator.ts's "Daily Five +2" short-core backstop) used
+  // to be the one path into the core five with NO diversity-cap gate at all —
+  // a single friend whose declared topics all shared one subcategory could take
+  // more than the cap of the five. It now shares the SAME `backfillGate` as the
+  // authored/house/generated reserves.
+  it('caps friend-domain core backfill at the diversity limit and borrows another domain for the freed slot', async () => {
+    // Own supply reaches the floor (3: Hamlet + Jazz + Astronomy) but is short
+    // by 2 of the full five. The shared cap already has one Hamlet counted from
+    // OWN supply, so of the two Hamlet friend-domain candidates offered for the
+    // shortfall, only one more clears the cap — the other is deflected and the
+    // freed slot is filled by borrowing a non-Hamlet bonus domain instead.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('h0', 'Hamlet'),
+      genq('j1', 'Jazz'),
+      genq('a1', 'Astronomy'),
+    ]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('friend-hamlet-1'),
+      friendDomain('friend-hamlet-2'),
+      friendDomain('friend-other-1'),
+      friendDomain('friend-other-2'),
+    ]);
+    let nextId = 0;
+    mocks.generateBonusQuestionsForDomains.mockImplementation(async (_userId: string, domains: string[]) =>
+      domains.map((domain) => {
+        nextId += 1;
+        const subcategory = domain.startsWith('friend-hamlet') ? 'Hamlet' : 'Astronomy';
+        return { domain, question: genq(`f${nextId}`, subcategory) };
+      }),
+    );
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      await fillDailyQueueForUser(USER);
+
+      expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE);
+      const domains = persistedGeneratedDomains();
+      // Hamlet holds at the cap (own h0 + one friend pick) — the 2nd friend
+      // Hamlet candidate was deflected, not silently promoted, and the freed
+      // slot was filled by borrowing a non-Hamlet bonus domain instead.
+      expect(domains.filter((d) => d === 'Hamlet').length).toBe(DAILY_QUEUE_MAX_PER_SUBCATEGORY);
+      // All the candidates in this test are generated (bot) slots, which carry
+      // generated_question_id rather than question_id (that field is only set
+      // on authored/house slots).
+      const questionIds = persistedSlots().map((slot) => slot.generated_question_id);
+      expect(questionIds).toContain('f1'); // 1st friend Hamlet candidate — admitted
+      expect(questionIds).not.toContain('f2'); // 2nd friend Hamlet candidate — capped out
+      expect(questionIds).toContain('f3'); // borrowed non-Hamlet domain filled the freed slot
+
+      const call = infoSpy.mock.calls.find(
+        (c) => c[0] === '[daily/queue-orchestrator] backfilled short core from friend domains',
+      );
+      expect(call).toBeDefined();
+      const payload = call?.[1] as {
+        promotedToCore: number;
+        deflectedForDiversityCap: number;
+        deflectedSubcategories: Record<string, number>;
+      };
+      expect(payload.deflectedForDiversityCap).toBe(1);
+      expect(payload.deflectedSubcategories).toEqual({ Hamlet: 1 });
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('logs the friend-domain deflection trail even when every candidate is capped out (zero promotions)', async () => {
+    // Own supply reaches the floor (3) but not the full five: 2 Botany (already
+    // AT the cap) + 1 Jazz authored. Every friend-domain candidate this build
+    // finds also happens to land in Botany, so none can be promoted.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('b1', 'Botany'),
+      genq('b2', 'Botany'),
+    ]);
+    mocks.pickEligibleAuthoredQuestions.mockResolvedValue([authoredPick('j1', 'Jazz')]);
+    mocks.getFriendDomainsForBonus.mockResolvedValue([
+      friendDomain('fb-1'),
+      friendDomain('fb-2'),
+      friendDomain('fb-3'),
+      friendDomain('fb-4'),
+    ]);
+    mocks.generateBonusQuestionsForDomains.mockImplementation(async (_userId: string, domains: string[]) =>
+      domains.map((domain) => ({ domain, question: genq(`q-${domain}`, 'Botany') })),
+    );
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      await fillDailyQueueForUser(USER);
+
+      // Persists short (3, above the floor) rather than repeating Botany a 3rd time.
+      const core = persistedSlots().filter((slot) => !slot.presence_source_id);
+      expect(core).toHaveLength(3);
+
+      const call = infoSpy.mock.calls.find(
+        (c) => c[0] === '[daily/queue-orchestrator] backfilled short core from friend domains',
+      );
+      expect(call).toBeDefined();
+      const payload = call?.[1] as { promotedToCore: number; deflectedForDiversityCap: number };
+      expect(payload.promotedToCore).toBe(0);
+      expect(payload.deflectedForDiversityCap).toBeGreaterThan(0);
     } finally {
       infoSpy.mockRestore();
     }

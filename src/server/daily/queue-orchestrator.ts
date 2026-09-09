@@ -1239,7 +1239,13 @@ async function buildDailyQueueForUser(
   //      genuinely count toward the set per isBonusSlot). This is what stops a dry
   //      own-palette from serving a 3- or 4-question "Daily Five": a friend-world
   //      question fills the gap instead. Accessible tier is acceptable here — a
-  //      served five beats a short one.
+  //      served five beats a short one. Gated by the SAME shared `backfillGate`
+  //      (B-DIVERSITY-BACKFILL-CAP-01) as the authored/house/generated reserves
+  //      above, so a single friend's questions can't silently take more than the
+  //      per-subcategory cap of the five — a capped candidate is dropped (logged
+  //      in the deflection trail below) and the borrow-back loop pulls another
+  //      domain instead. A build that can't reach five under the cap stays short
+  //      rather than repetitive, same as every other core source.
   //   2. +2 BONUS: any remaining friend domains (up to DAILY_BONUS_SLOT_MAX) append
   //      as additive presence-attributed bonus slots exactly as before ("from
   //      {Name}'s world"), never counted toward the five.
@@ -1312,6 +1318,16 @@ async function buildDailyQueueForUser(
       // the five. See the borrow loop below.
       const remainingForBonus = [...bonusDomains];
       let promotedToCore = 0;
+      // Per-pick deflection trail for THIS backfill path, mirroring the reserve
+      // deflection trail above (B-DIVERSITY-BACKFILL-CAP-01) — see the review
+      // note this responds to: a friend-domain promotion used to be the one
+      // path into the core five with NO diversity-cap gate at all, so a single
+      // friend whose declared topics all shared one subcategory could silently
+      // take 2+ of the five core slots. `backfillGate` is the SAME shared gate
+      // already seeded by authored/house/generated core+backfill above (Josh
+      // 2026-09-02: two per subcategory is the max he wants to see for ANY
+      // domain, full stop) -- a friend-domain pick is no exception.
+      const friendBackfillDeflections: string[] = [];
       for (const { question } of generatedFriend) {
         // Promotion only. Bonus slots no longer land here -- they are appended
         // by the deferred continuation, after persist. A generated question
@@ -1326,7 +1342,12 @@ async function buildDailyQueueForUser(
         // user's next build faster. That property depends on
         // BANK_INCLUDE_OWN_UNUSED, which defaults ON. Turning it off makes every
         // dropped question here pure waste: generated, gated, never served.
+        // The same holds for a diversity-cap deflection below.
         if (slots.length >= DAILY_QUEUE_SIZE) break;
+        if (!backfillGate.admit(question.canonicalSubcategory)) {
+          friendBackfillDeflections.push(question.canonicalSubcategory ?? '(blank)');
+          continue;
+        }
         slots.push(buildBotSlot(question, position));
         generatedQuestionIds.push(question.id);
         position += 1;
@@ -1364,6 +1385,10 @@ async function buildDailyQueueForUser(
         });
         for (const { question } of recovered) {
           if (slots.length >= DAILY_QUEUE_SIZE) break;
+          if (!backfillGate.admit(question.canonicalSubcategory)) {
+            friendBackfillDeflections.push(question.canonicalSubcategory ?? '(blank)');
+            continue;
+          }
           slots.push(buildBotSlot(question, position));
           generatedQuestionIds.push(question.id);
           position += 1;
@@ -1376,7 +1401,16 @@ async function buildDailyQueueForUser(
         deferredBonusPlan = { candidates: remainingForBonus };
       }
 
-      if (promotedToCore > 0) {
+      // Fires on a deflection even with zero promotions -- mirroring the
+      // reserve deflection trail's own lesson (the incident it exists to catch
+      // built a FULL, successful-looking queue). A friend-domain build where
+      // every candidate got capped out leaves the queue short with nothing
+      // else in the logs to explain why.
+      if (promotedToCore > 0 || friendBackfillDeflections.length > 0) {
+        const deflectedBySubcategory = new Map<string, number>();
+        for (const subcategory of friendBackfillDeflections) {
+          deflectedBySubcategory.set(subcategory, (deflectedBySubcategory.get(subcategory) ?? 0) + 1);
+        }
         console.info('[daily/queue-orchestrator] backfilled short core from friend domains', {
           userId,
           coreShortfall,
@@ -1385,6 +1419,8 @@ async function buildDailyQueueForUser(
           // present at this point is core.
           coreAfter: slots.length,
           deferredBonusDomains: deferredBonusPlan?.candidates.length ?? 0,
+          deflectedForDiversityCap: friendBackfillDeflections.length,
+          deflectedSubcategories: Object.fromEntries(deflectedBySubcategory),
         });
       }
     }
