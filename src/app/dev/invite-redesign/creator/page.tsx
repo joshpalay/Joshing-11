@@ -34,7 +34,11 @@ export default function InviteCreatorPreviewPage() {
       </header>
 
       <div className="mb-5">
-        <InviteLinksSection initialTopics={previewTopics} initialLinks={previewLinks} />
+        <InviteLinksSection
+          initialTopics={previewTopics}
+          initialLinks={previewLinks}
+          creatorName="Josh"
+        />
       </div>
 
       <section aria-label="Friends list preview" className="space-y-3">

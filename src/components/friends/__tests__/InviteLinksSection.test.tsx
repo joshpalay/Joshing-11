@@ -17,26 +17,31 @@ function link(id: string, categories: unknown, joinedCount = 0): InviteLinkRowDa
   };
 }
 
-function render(links: InviteLinkRowData[]) {
+function render(links: InviteLinkRowData[], creatorName: string | null = 'Josh') {
   return renderToStaticMarkup(
     <InviteLinksSection
       initialTopics={[{ label: 'Sondheim', broadCategory: 'Theater' }]}
       initialLinks={links}
+      creatorName={creatorName}
     />,
   );
 }
 
 describe('InviteLinksSection', () => {
-  it('titles each card from its own categories and shows the actual link', () => {
+  it('titles the default (first) link with the creator’s greatest hits', () => {
     const html = render([link('one', [{ label: 'Jazz' }])]);
 
+    expect(html).toContain('Josh’s greatest hits');
     expect(html).toContain('>Jazz<');
     expect(html).toContain('We’ll recommend these categories to anyone who uses this link.');
     expect(html).toContain('https://example.com/u/josh/one');
   });
 
-  it('joins multiple categories into a single generated title', () => {
-    const html = render([link('one', [{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }])]);
+  it('joins a non-default link’s categories into a broad-category title', () => {
+    const html = render([
+      link('default', [{ label: 'Sondheim' }]),
+      link('one', [{ label: 'Music' }, { label: 'Star Wars' }, { label: 'Joyce' }]),
+    ]);
 
     expect(html).toContain('Music, Star Wars &amp; Joyce');
   });
@@ -53,9 +58,9 @@ describe('InviteLinksSection', () => {
       ]),
     ]);
 
-    expect(html).toContain('Jazz');
+    expect(html).toContain('>Jazz<');
     expect(html).not.toContain('No category');
-    expect(html.match(/Jazz/g) ?? []).toHaveLength(2);
+    expect(html.match(/Jazz/g) ?? []).toHaveLength(1);
   });
 
   it('keeps each link’s title, categories, and url separate', () => {
