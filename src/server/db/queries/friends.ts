@@ -330,8 +330,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
     if (edge.state === 'approved') {
       if (outboundEdge) followingIds.add(other)
       else followerIds.add(other)
-    } else {
-      // pending
+    } else if (edge.state === 'pending') {
       if (outboundEdge) {
         outbound.push({ id: edge.id, recipientId: other, personalNote: edge.personalNote, createdAt: edge.createdAt })
       } else {
@@ -344,6 +343,8 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
         })
       }
     }
+    // 'declined' (B-FRIENDS-SAFETY-01 Phase 2): not a friend, a follower, or a
+    // pending request -- fully skipped, same as if the edge didn't exist.
   }
 
   const personIds = Array.from(new Set<string>([...followingIds, ...followerIds]))

@@ -49,6 +49,12 @@ const {
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
         returning: vi.fn(async () => [state.insertedFriendship]),
+        // B-FRIENDS-SAFETY-01 Phase 2: createOrReusePendingFriendshipRequest's
+        // create/revive insert is now an upsert (onConflictDoUpdate) so a
+        // post-cooldown declined row can be revived in the same statement.
+        onConflictDoUpdate: vi.fn(() => ({
+          returning: vi.fn(async () => [state.insertedFriendship]),
+        })),
       })),
     })),
   }

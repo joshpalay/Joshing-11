@@ -31,15 +31,19 @@ type EdgeRow = {
   id: string
   followerId: string
   followeeId: string
-  state: 'pending' | 'approved'
+  state: 'pending' | 'approved' | 'declined'
   approvedAt: Date | null
 }
 
 // Resolve the relationship from the viewer's two directional edges.
 //   outbound = viewer -> target, inbound = target -> viewer
 function resolve(outbound: EdgeRow | undefined, inbound: EdgeRow | undefined): RelationshipResult {
-  const out = outbound?.state
-  const inb = inbound?.state
+  // B-FRIENDS-SAFETY-01 Phase 2 — a 'declined' edge is not a relationship of
+  // any kind: not a friend, a follower, or a pending request. Treat it
+  // exactly as if the edge didn't exist on that side, rather than letting it
+  // fall through the branches below by accident.
+  const out = outbound?.state === 'declined' ? undefined : outbound?.state
+  const inb = inbound?.state === 'declined' ? undefined : inbound?.state
 
   if (out === 'approved' && inb === 'approved') {
     return { state: 'friends', friendshipId: outbound!.id, formedAt: outbound!.approvedAt, isBlocked: false }

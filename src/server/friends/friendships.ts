@@ -13,9 +13,22 @@ export type FriendshipRequestState =
   | 'auto_approved' // new approved follow — target is public
   | 'already_following' // an approved edge already exists
   | 'pending_existing' // a pending request already exists
+  // B-FRIENDS-SAFETY-01 Phase 2 — a prior request was declined and the
+  // re-request cooldown hasn't elapsed. No edge is created or revived. The
+  // requester's UI must render this identically to 'created'/'pending_existing'
+  // ("Request sent") — the decliner is never exposed.
+  | 'declined_cooldown'
 
 export type FriendshipRequestContext = {
   suggestedInterests?: string[]
+}
+
+// Env-tunable re-request cooldown after a decline. Default 30 days.
+const DEFAULT_DECLINE_COOLDOWN_DAYS = 30
+function declineCooldownMs(): number {
+  const configured = Number(process.env.FRIEND_REQUEST_DECLINE_COOLDOWN_DAYS)
+  const days = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_DECLINE_COOLDOWN_DAYS
+  return days * 24 * 60 * 60 * 1000
 }
 
 // Structural type for a Drizzle transaction/db handle that can upsert a follow.
@@ -123,6 +136,20 @@ export async function createOrReusePendingFriendshipRequest({
   if (existing?.state === 'pending') {
     return { friendship: existing, state: 'pending_existing' }
   }
+  if (existing?.state === 'declined') {
+    // declinedAt should always be set on a declined edge (ignorePendingFriendshipRequest
+    // stamps it in the same update) — fall back to createdAt defensively so a
+    // gap here fails toward the cooldown rather than an immediate re-request.
+    const declinedAt = existing.declinedAt ?? existing.createdAt
+    const cooldownElapsed = now.getTime() - declinedAt.getTime() >= declineCooldownMs()
+    if (!cooldownElapsed) {
+      // No edge created or revived — the decliner is never exposed, and the
+      // requester's UI renders this exactly like a fresh send.
+      return { friendship: existing, state: 'declined_cooldown' }
+    }
+    // Cooldown elapsed: fall through and revive the existing row below (the
+    // insert becomes an upsert specifically to handle this case).
+  }
 
   const [target] = await db
     .select({ followPrivacy: users.followPrivacy })
@@ -136,6 +163,11 @@ export async function createOrReusePendingFriendshipRequest({
   const ALLOW_PUBLIC_AUTO_APPROVE: boolean = false
   const autoApprove = ALLOW_PUBLIC_AUTO_APPROVE && target?.followPrivacy === 'public'
 
+  // An upsert rather than a plain insert: the only row this can conflict with
+  // is a same-pair edge already handled above (approved / pending / declined
+  // within cooldown all returned early), so reaching here means either no row
+  // exists yet, or a declined row past its cooldown that we're reviving —
+  // onConflictDoUpdate handles both in one statement.
   const [edge] = await db
     .insert(follows)
     .values({
@@ -143,8 +175,19 @@ export async function createOrReusePendingFriendshipRequest({
       followeeId,
       state: autoApprove ? 'approved' : 'pending',
       approvedAt: autoApprove ? now : null,
+      declinedAt: null,
       personalNote: trimmedNote,
       requestContext,
+    })
+    .onConflictDoUpdate({
+      target: [follows.followerId, follows.followeeId],
+      set: {
+        state: autoApprove ? 'approved' : 'pending',
+        approvedAt: autoApprove ? now : null,
+        declinedAt: null,
+        personalNote: trimmedNote,
+        requestContext,
+      },
     })
     .returning()
 
@@ -259,18 +302,26 @@ export async function acceptPendingFriendshipRequest({
 }
 
 /**
- * Decline a pending follow request targeting `userId` — hard-deletes the edge
- * (no terminal state). `friendshipId` is the pending follow edge id.
+ * Decline a pending follow request targeting `userId` — B-FRIENDS-SAFETY-01
+ * Phase 2: transitions the edge to 'declined' with a declinedAt timestamp
+ * (was a hard delete, which let the sender re-request immediately). The edge
+ * stays a durable boundary: createOrReusePendingFriendshipRequest reads
+ * declinedAt to enforce a cooldown before a new request can land, and
+ * resolve() treats 'declined' as no relationship at all. `friendshipId` is
+ * the pending follow edge id.
  */
 export async function ignorePendingFriendshipRequest({
   friendshipId,
   userId,
+  now = new Date(),
 }: {
   friendshipId: string
   userId: string
+  now?: Date
 }): Promise<Follow | null> {
   const [edge] = await db
-    .delete(follows)
+    .update(follows)
+    .set({ state: 'declined', declinedAt: now })
     .where(
       and(
         eq(follows.id, friendshipId),

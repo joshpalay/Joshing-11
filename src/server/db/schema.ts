@@ -76,7 +76,10 @@ export const questionScopeEnum = pgEnum('QuestionScope', ['private', 'friends_on
 // `state` on a follow edge: a follow targeting an approval_required user lands
 // as `pending` (a request the followee approves); a follow targeting a public
 // user lands `approved` immediately. Invites create approved edges directly.
-export const followStateEnum = pgEnum('FollowState', ['pending', 'approved']);
+// B-FRIENDS-SAFETY-01 Phase 2 — 'declined' added so "not now" can be a
+// durable boundary (see ignorePendingFriendshipRequest) instead of a hard
+// delete that let the sender re-request immediately.
+export const followStateEnum = pgEnum('FollowState', ['pending', 'approved', 'declined']);
 // Per-user gate on *new* followers. Default approval_required (opt into public).
 export const followPrivacyEnum = pgEnum('FollowPrivacy', ['public', 'approval_required']);
 export const publicStatusEnum = pgEnum('PublicStatus', [
@@ -1599,6 +1602,9 @@ export const follows = pgTable(
     requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
     createdAt: createdAt(),
     approvedAt: timestamp('approvedAt', { withTimezone: true }),
+    // B-FRIENDS-SAFETY-01 Phase 2 — when a 'declined' edge was declined. Drives
+    // the re-request cooldown in createOrReusePendingFriendshipRequest.
+    declinedAt: timestamp('declinedAt', { withTimezone: true }),
   },
   (table) => [
     unique('Follow_followerId_followeeId_key').on(table.followerId, table.followeeId),
