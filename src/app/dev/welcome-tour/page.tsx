@@ -26,6 +26,7 @@ export default async function DevWelcomeTourPage({
     <WelcomeTourScreen
       forced
       inviterName="Maya"
+      postGame={!walk}
       playHref={walk ? '/dev/onboarding/building?walk=1' : '/daily'}
       exploreHref="/users/me"
     />

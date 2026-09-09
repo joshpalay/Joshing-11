@@ -23,20 +23,16 @@ import { timeServerWork } from '@/server/lib/server-timing'
 import { hasEligibleReturnCandidates } from '@/server/db/queries/missed-return'
 import { isMissedReturnEnabled } from '@/server/daily/missed-return'
 import WelcomeTourScreen from '@/components/welcome/WelcomeTourScreen'
+import { shouldShowWelcomeTour } from '@/server/welcome-tour'
 
 const FEED_PAGE_SIZE = 20
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ welcome?: string }>
-}) {
+export default async function Home() {
   const session = await getSession()
-  // First-run welcome tour — coach-marks over this real home. Activated by the
-  // `?welcome=1` param onboarding routes to (client-side; the tour self-
-  // suppresses via localStorage once seen). Signed-in only.
-  const params = await searchParams
-  const tourActive = params?.welcome === '1' && Boolean(session)
+  // First-player orientation is earned by completing the first Daily Five.
+  // Eligibility and seen-state are durable and account-scoped, so the tour
+  // survives missed redirects without leaking between test accounts/devices.
+  const tourActive = session ? await shouldShowWelcomeTour(session.userId) : false
   // Personalize the first-run overview with the inviter's name (the For-You
   // sample reads it), falling back to "a friend" when there's no invitation.
   // Only queried on the one-time welcome path so the normal home render is
@@ -150,11 +146,15 @@ export default async function Home({
         </section>
       </div>
     </main>
-    {/* First-run welcome tour — the self-contained "first time experience"
-        overview (its own mock home + intro + dual end), shown as a fixed overlay.
-        Activated by the `?welcome=1` param onboarding routes to; it self-
-        suppresses via localStorage once seen. Renders only while active. */}
-    {tourActive ? <WelcomeTourScreen inviterName={welcomeInviterName} /> : null}
+    {/* Post-first-game orientation. The real recap remains the first celebration;
+        this appears only after the player continues Home. */}
+    {tourActive && session ? (
+      <WelcomeTourScreen
+        inviterName={welcomeInviterName}
+        storageKey={`joshing.welcomeTourSeenAt:${session.userId}`}
+        postGame
+      />
+    ) : null}
     </>
   )
 }

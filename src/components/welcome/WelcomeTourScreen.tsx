@@ -11,7 +11,7 @@ import { Bell, Brain, Home, MoreHorizontal, Pencil, SlidersHorizontal, Star, Use
  * overlaying the real (often-empty) home, the tour runs over a faithful, always
  * populated MOCK home rendered inside a phone-width column. It opens with a short
  * intro card ("here's a quick look around"), then a scroll-driven spotlight walks
- * five beats — the daily five, customize, the friends section (which uses the
+ * five beats — customize, the friends section (which uses the
  * inviter's name so it isn't empty), and arrows down to the Knowledge and
  * Questions tabs in the nav — and ends on a choice: Play Now, or explore first.
  *
@@ -95,6 +95,8 @@ type WelcomeTourScreenProps = {
   playHref?: string;
   /** "I'll explore more first" destination (the homepage). */
   exploreHref?: string;
+  /** Live first-player flow: the player has already completed their first five. */
+  postGame?: boolean;
 };
 
 export default function WelcomeTourScreen({
@@ -103,11 +105,12 @@ export default function WelcomeTourScreen({
   storageKey = WELCOME_TOUR_STORAGE_KEY,
   playHref = '/daily',
   exploreHref = '/',
+  postGame = false,
 }: WelcomeTourScreenProps) {
   const router = useRouter();
   const isClient = useSyncExternalStore(subscribeNoop, getClientSnapshot, getServerSnapshot);
-  // Self-suppress once seen (live mount via `?welcome=1`). `forced` (dev replay)
-  // bypasses and never reads the flag.
+  // Self-suppress once seen. `forced` (dev replay) bypasses and never reads the
+  // flag or writes the durable server marker.
   const seen = useSyncExternalStore(
     subscribeNoop,
     () => {
@@ -124,11 +127,6 @@ export default function WelcomeTourScreen({
 
   const beats: Beat[] = useMemo(
     () => [
-      {
-        target: 'five',
-        label: "Today's Five",
-        copy: 'Your five questions for the day live here — tap <b>Play</b> to start. A fresh set lands every afternoon.',
-      },
       {
         target: 'customize',
         label: 'Customize',
@@ -163,6 +161,7 @@ export default function WelcomeTourScreen({
   const [started, setStarted] = useState(false);
   const [stepIndex, setStepIndex] = useState(-1);
   const [atEnd, setAtEnd] = useState(false);
+  const serverSeenWrittenRef = useRef(false);
 
   const colRef = useRef<HTMLDivElement | null>(null);
   const homeRef = useRef<HTMLDivElement | null>(null);
@@ -192,6 +191,14 @@ export default function WelcomeTourScreen({
       window.localStorage.setItem(storageKey, new Date().toISOString());
     } catch {
       // best-effort
+    }
+    if (!serverSeenWrittenRef.current) {
+      serverSeenWrittenRef.current = true;
+      void fetch('/api/welcome-tour/seen', {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+      }).catch(() => undefined);
     }
   };
 
@@ -623,7 +630,9 @@ export default function WelcomeTourScreen({
                 A quick look around
               </h2>
               <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-                Here&apos;s where everything lives. About 20 seconds — then you&apos;re playing.
+                {postGame
+                  ? 'That was the daily game. Here’s where everything else lives.'
+                  : 'Here’s where everything lives. About 20 seconds — then you’re playing.'}
               </p>
               <button type="button" className="btn-primary mt-5 w-full" onClick={startTour}>
                 Start the tour
@@ -645,13 +654,19 @@ export default function WelcomeTourScreen({
           <div className="wts-sheet wts-end">
             <div className="w-full max-w-[18rem] rounded-[var(--radius-md)] border border-[var(--brand-border)] bg-[var(--brand-cream-card)] px-7 py-8 text-center shadow-[var(--shadow-overlay)]">
               <h2 className="font-serif text-3xl font-semibold leading-tight text-[var(--brand-ink)]">
-                That&apos;s the tour.
+                {postGame ? 'You’re all set.' : 'That’s the tour.'}
               </h2>
               <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-                Your five are ready whenever you are. Scroll up to look again.
+                {postGame
+                  ? 'Home brings the daily game, your friends, and your progress together.'
+                  : 'Your five are ready whenever you are. Scroll up to look again.'}
               </p>
-              <button type="button" className="btn-primary mt-5 w-full" onClick={() => finish(playHref)}>
-                Play Now →
+              <button
+                type="button"
+                className="btn-primary mt-5 w-full"
+                onClick={() => finish(postGame ? exploreHref : playHref)}
+              >
+                {postGame ? 'Explore Home →' : 'Play Now →'}
               </button>
               <button
                 type="button"
