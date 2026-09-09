@@ -8,7 +8,7 @@ describe('buildLoginInviteViews', () => {
     expect(result).toEqual({ invitePrefill: null, inviteContext: null });
   });
 
-  it('the named (FriendInvitation) prefill builds both invitePrefill and a topic-free inviteContext', () => {
+  it('the named (FriendInvitation) prefill builds both invitePrefill and inviteContext', () => {
     const prefill = {
       inviterName: 'Alex Inviter',
       inviterUserId: 'inviter-1',
@@ -24,12 +24,9 @@ describe('buildLoginInviteViews', () => {
       inviterUserId: 'inviter-1',
       inviterAvatarColor: '#abc',
     });
-    // Boundary-level check per the Stage 4 audit's rule ("Do not touch the
-    // named path"): the named path never carries topics.
-    expect(result.inviteContext).not.toHaveProperty('topics');
   });
 
-  it('the per-user invite-link resolution builds only inviteContext, with its seedTopics as topics', () => {
+  it('the per-user invite-link resolution builds topic-free inviter context', () => {
     const userInviteResolution = {
       inviterDisplayName: 'Jaime Rivera',
       inviterHandle: 'jaime',
@@ -45,7 +42,6 @@ describe('buildLoginInviteViews', () => {
       inviterName: 'Jaime Rivera',
       inviterUserId: 'inviter-2',
       inviterAvatarColor: '#def',
-      topics: ['Jazz', 'Poetry'],
     });
   });
 
@@ -61,7 +57,6 @@ describe('buildLoginInviteViews', () => {
     const result = buildLoginInviteViews(null, userInviteResolution);
 
     expect(result.inviteContext?.inviterName).toBe('A friend');
-    expect(result.inviteContext?.topics).toEqual([]);
   });
 
   it('the named prefill wins over a simultaneous link resolution', () => {
@@ -83,6 +78,5 @@ describe('buildLoginInviteViews', () => {
 
     expect(result.invitePrefill?.inviterUserId).toBe('inviter-1');
     expect(result.inviteContext?.inviterUserId).toBe('inviter-1');
-    expect(result.inviteContext).not.toHaveProperty('topics');
   });
 });

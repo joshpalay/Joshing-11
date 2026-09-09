@@ -19,7 +19,6 @@ export type InviteContextView = {
   inviterName: string;
   inviterUserId: string;
   inviterAvatarColor: string | null;
-  topics?: string[];
 };
 
 type PrefillInput = {
@@ -40,9 +39,8 @@ type UserInviteResolutionInput = {
 /**
  * The named (FriendInvitation) prefill wins when present — it already knows
  * the invitee's phone number. Otherwise, a per-user invite-LINK resolution
- * builds inviteContext with its seedTopics (Stage 2); the named path never
- * carries topics here — it has its own separate pre-seeded-interests flow
- * inside onboarding.
+ * builds inviteContext from the inviter's identity. Topic seeding still happens
+ * after acceptance, but categories are intentionally not shown during login.
  */
 export function buildLoginInviteViews(
   prefill: PrefillInput,
@@ -70,7 +68,6 @@ export function buildLoginInviteViews(
           inviterName: safeInviteName(userInviteResolution.inviterDisplayName) || 'A friend',
           inviterUserId: userInviteResolution.inviterUserId,
           inviterAvatarColor: userInviteResolution.inviterAvatarColor,
-          topics: userInviteResolution.seedTopics,
         }
       : null;
 

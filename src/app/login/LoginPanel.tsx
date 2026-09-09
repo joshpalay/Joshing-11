@@ -87,11 +87,6 @@ type InviteContext = {
   inviterName: string;
   inviterUserId: string;
   inviterAvatarColor: string | null;
-  // Per-user invite-link topics only (up to 3), already filtered to what a
-  // not-yet-friend visitor may see (resolveInviteLink). Absent/empty for the
-  // named FriendInvitation path, which has its own separate seeded-interests
-  // flow inside onboarding rather than a pre-login preview.
-  topics?: string[];
 };
 
 // Phone-first invite path: the full invited number crosses to the client so
@@ -185,25 +180,15 @@ function LoadingLabel({ verb }: { verb: string }) {
 }
 
 function InviteContextCard({ invite }: { invite: InviteContext }) {
-  const topics = invite.topics?.filter((topic) => topic.trim().length > 0) ?? [];
   return (
-    <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
+    <div className="rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
       <p className="text-[15px] leading-6 text-black/75">
-        {inviterFirstName(invite.inviterName)} invited you to Joshing, a trivia game built for you. We just
-        need to verify your phone number and then you can start playing.
+        <strong className="font-semibold text-[var(--brand-navy)]">
+          {inviterFirstName(invite.inviterName)}
+        </strong>{' '}
+        invited you to Joshing, a trivia game built for you. We just need to verify your phone number
+        and then you can start playing.
       </p>
-      {topics.length > 0 ? (
-        <div className="flex flex-wrap justify-center gap-2">
-          {topics.map((topic) => (
-            <span
-              key={topic}
-              className="rounded-full border border-[var(--accent-gold)]/40 bg-white/70 px-3 py-1 text-xs font-medium text-black/70"
-            >
-              {topic}
-            </span>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -660,8 +645,11 @@ export default function LoginPanel({
             <>
               <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
                 <p className="text-[15px] leading-6 text-black/75">
-                  {inviterFirstName(invitePrefill.inviterName)} invited you to Joshing, a trivia
-                  game built for you. We just need to send a text to confirm it’s you:
+                  <strong className="font-semibold text-[var(--brand-navy)]">
+                    {inviterFirstName(invitePrefill.inviterName)}
+                  </strong>{' '}
+                  invited you to Joshing, a trivia game built for you. We just need to send a text to
+                  confirm it’s you:
                 </p>
                 <p className="text-[20px] leading-7 font-semibold tracking-wide text-[var(--brand-navy)]">
                   {formatUsPhoneInput(invitePrefill.inviteePhone)}
