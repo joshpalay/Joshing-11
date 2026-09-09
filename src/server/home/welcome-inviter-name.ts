@@ -11,9 +11,8 @@ import { normalizePersonName } from '@/server/db/queries/users';
  * (buildHomeEdition, daily queue, ceremony, missed-return, friend requests,
  * ...) is otherwise disproportionate to mock just to cover this line.
  *
- * `tourActive` already encodes "session present AND ?welcome=1" at the call
- * site; `userId` is null whenever there's no session, which this short-
- * circuits on identically to the inline check it replaced.
+ * `tourActive` already encodes the account's durable post-first-game tour
+ * eligibility at the call site; `userId` is null whenever there's no session.
  */
 export async function getWelcomeInviterName(
   tourActive: boolean,

@@ -1009,6 +1009,13 @@
       "when": 1788759200000,
       "tag": "0143_follow_declined_state",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1788969600000,
+      "tag": "0144_post_game_welcome_tour",
+      "breakpoints": true
     }
   ]
 }

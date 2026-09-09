@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic';
  * real one.
  *
  * In `?walk=1` (full-walkthrough) mode, "Play Now" chains into the building
- * state; otherwise it goes to the round. "Explore" returns to the profile's
- * dev-tools section.
+ * state. The post-game replay finishes at Home; the full walkthrough keeps
+ * "Explore" returning to the profile's dev-tools section.
  */
 export default async function DevWelcomeTourPage({
   searchParams,
@@ -26,8 +26,9 @@ export default async function DevWelcomeTourPage({
     <WelcomeTourScreen
       forced
       inviterName="Maya"
+      postGame={!walk}
       playHref={walk ? '/dev/onboarding/building?walk=1' : '/daily'}
-      exploreHref="/users/me"
+      exploreHref={walk ? '/users/me' : '/'}
     />
   );
 }

@@ -335,6 +335,10 @@ export const users = pgTable(
     // until the user sees the cinematic recap that fires after their first ever
     // completed Daily Five; set once so re-entry/refresh/catch-up never re-fire it.
     firstSessionRecapSeenAt: timestamp('first_session_recap_seen_at', { withTimezone: true }),
+    // First-player orientation runs only after the first completed Daily Five.
+    // This account-scoped marker keeps the tour one-time across devices and
+    // avoids one browser's localStorage suppressing it for another test account.
+    welcomeTourSeenAt: timestamp('welcome_tour_seen_at', { withTimezone: true }),
     // B-FirstGameRecap-1: timestamp the one-time first-game recap was shown.
     // Separate from firstSessionRecapSeenAt so Daily Five and Joshing game
     // onboarding ceremonies never suppress each other.
