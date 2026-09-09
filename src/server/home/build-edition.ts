@@ -39,10 +39,10 @@ const HOME_FEED_FETCH_LIMIT = 30
 // the subpage title still reports the accurate total from meta.
 const PENDING_QUEUE_FETCH_LIMIT = 50
 
-// The weekly reflection has its own editorial marker (CeremonyPin) above the
-// feed; drop the redundant 'ceremony_ready' activity so it doesn't double up
-// on the home surfaces. Shared by the home edition and the overflow subpages
-// so both read the same activity pool.
+// The weekly reflection is no longer surfaced on Home (B-CEREMONY-PLACEMENT-01);
+// drop the 'ceremony_ready' activity so it doesn't appear on the home surfaces.
+// Shared by the home edition and the overflow subpages so both read the same
+// activity pool.
 function isHomeActivityItem(item: StreamItem): boolean {
   return !(item.action?.kind === 'link' && item.action.href.startsWith('/ceremony/'))
 }

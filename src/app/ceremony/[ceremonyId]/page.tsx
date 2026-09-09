@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Share2, X } from 'lucide-react';
 
 import { ShareCard } from '@/components/ShareCard';
@@ -530,6 +530,8 @@ export default function CeremonyPage() {
   const router = useRouter();
   const params = useParams<{ ceremonyId: string }>();
   const ceremonyId = params.ceremonyId;
+  const searchParams = useSearchParams();
+  const then = searchParams.get('then');
   const reduced = usePrefersReducedMotion();
 
   const [ceremony, setCeremony] = useState<CeremonyRow | null>(null);
@@ -617,7 +619,7 @@ export default function CeremonyPage() {
           onShare={share}
           onDone={(e) => {
             e.stopPropagation();
-            router.push('/');
+            router.replace(then === 'summary' ? '/daily/summary' : '/');
           }}
           onReplay={(e) => {
             e.stopPropagation();
@@ -627,10 +629,10 @@ export default function CeremonyPage() {
       ),
     });
     return list;
-    // share/router are stable enough for this memo; shareLoading is the only
-    // value the closer reads that changes, and it's in the deps.
+    // share/router are stable enough for this memo; shareLoading and then are
+    // the only values the closers read that change, and both are in the deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, reduced, shareLoading]);
+  }, [payload, reduced, shareLoading, then]);
 
   const index = Math.min(currentIndex, Math.max(rooms.length - 1, 0));
   const isLast = index >= rooms.length - 1;
