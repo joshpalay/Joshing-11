@@ -14,10 +14,94 @@ const bodySchema = z.object({
   personalNote: z.string().trim().max(160).optional(),
 })
 
+// B-FRIENDS-SAFETY-01 Phase 3 — rate limiting, same shape as the search
+// route's in-memory sliding window (src/app/api/friends/search/route.ts,
+// D-FRIEND-SEARCH-PRIVACY-01 Decision A1): an unbounded POST here lets one
+// account fan out friend requests to an arbitrary number of people. Two
+// windows — a tight daily one and a looser weekly one that catches a slow
+// drip that never trips the daily cap. Both env-tunable.
+// NOTE: in-memory means per-instance — on multi-instance serverless the
+// effective ceiling scales with instance count. This is the documented
+// Phase-1 posture; a durable (Redis/KV-backed) limiter is the Phase-2
+// infrastructure upgrade under D-FRIEND-SEARCH-PRIVACY-01, not attempted here.
+const FRIEND_REQUEST_DAILY_WINDOW_MS = 1000 * 60 * 60 * 24
+const FRIEND_REQUEST_WEEKLY_WINDOW_MS = FRIEND_REQUEST_DAILY_WINDOW_MS * 7
+const FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT = Number(
+  process.env.FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT ?? 20
+)
+const FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT = Number(
+  process.env.FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT ?? 60
+)
+
+// One sliding-window array per account, kept pruned to the LONGER (weekly)
+// window — the daily count is derived by re-filtering that same array to the
+// shorter window, so one store serves both checks.
+const friendRequestAttemptsByAccount = new Map<string, number[]>()
+
+function pruneWindow(values: number[], nowMs: number, windowMs: number): number[] {
+  return values.filter((value) => nowMs - value < windowMs)
+}
+
+function retryAfterFor(values: number[], nowMs: number, windowMs: number): number {
+  const oldest = values.length ? Math.min(...values) : nowMs
+  return Math.max(1, Math.ceil((oldest + windowMs - nowMs) / 1000))
+}
+
+type RateLimitVerdict = { reason: 'daily_window' | 'weekly_window'; retryAfterSeconds: number }
+
+function checkFriendRequestRateLimit(userId: string, now = new Date()): RateLimitVerdict | null {
+  if (process.env.FRIEND_REQUEST_THROTTLE_DISABLED === '1') return null
+
+  const nowMs = now.getTime()
+  const weeklyAttempts = pruneWindow(
+    friendRequestAttemptsByAccount.get(userId) ?? [],
+    nowMs,
+    FRIEND_REQUEST_WEEKLY_WINDOW_MS
+  )
+  const dailyAttempts = weeklyAttempts.filter((t) => nowMs - t < FRIEND_REQUEST_DAILY_WINDOW_MS)
+
+  if (dailyAttempts.length >= FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT) {
+    return {
+      reason: 'daily_window',
+      retryAfterSeconds: retryAfterFor(dailyAttempts, nowMs, FRIEND_REQUEST_DAILY_WINDOW_MS),
+    }
+  }
+  if (weeklyAttempts.length >= FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT) {
+    return {
+      reason: 'weekly_window',
+      retryAfterSeconds: retryAfterFor(weeklyAttempts, nowMs, FRIEND_REQUEST_WEEKLY_WINDOW_MS),
+    }
+  }
+  return null
+}
+
+function recordFriendRequestAttempt(userId: string, now = new Date()): void {
+  const nowMs = now.getTime()
+  const weeklyAttempts = pruneWindow(
+    friendRequestAttemptsByAccount.get(userId) ?? [],
+    nowMs,
+    FRIEND_REQUEST_WEEKLY_WINDOW_MS
+  )
+  weeklyAttempts.push(nowMs)
+  friendRequestAttemptsByAccount.set(userId, weeklyAttempts)
+}
+
+export function resetFriendRequestRateLimitForTests(): void {
+  friendRequestAttemptsByAccount.clear()
+}
+
 export async function POST(request: Request) {
   const session = await getSession()
   if (!session)
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const limited = checkFriendRequestRateLimit(session.userId)
+  if (limited) {
+    return NextResponse.json(
+      { error: 'rate_limited', reason: limited.reason },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfterSeconds) } }
+    )
+  }
 
   const json = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(json)
@@ -35,6 +119,12 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+
+  // Count only attempts that actually run a lookup against another real
+  // account — invalid input and a self-request short-circuit above without
+  // consuming the budget (matching the search route's philosophy: they leak
+  // nothing about another user).
+  recordFriendRequestAttempt(session.userId)
 
   const invitee = await getUserById(inviteeUserId)
   if (!invitee) {
