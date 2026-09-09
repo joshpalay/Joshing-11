@@ -1621,7 +1621,7 @@ function SessionCloseRow({
       <SessionCloseMessage scoreLine={scoreLine} interpretiveLine={interpretiveLine} />
       {summaryHref ? (
         <div className="pt-3">
-          <Link href={summaryHref} className="btn-primary inline-flex">
+          <Link href={summaryHref} replace className="btn-primary inline-flex">
             See my recap →
           </Link>
         </div>

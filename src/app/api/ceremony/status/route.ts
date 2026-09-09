@@ -6,14 +6,8 @@ import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/querie
 export const dynamic = 'force-dynamic';
 
 /**
- * Drives the top-of-feed ceremony row. Three states the client renders:
- *   - latestUnviewed present                  → pinned card "Ceremony ready"
- *   - day of week is Sunday (UTC)             → hidden (cron is firing now)
- *   - otherwise                               → countdown "Ceremony in N days"
- *
- * nextFireAt is always returned so the client can compute "N days" without
- * an extra round-trip; the server computes it the same way to avoid timezone
- * drift between client clocks and the cron schedule.
+ * Returns the current user's ceremony viewing status: whether an unviewed
+ * ceremony exists, and when the next one fires.
  */
 export async function GET() {
   const session = await getSession();
