@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 
 import {
@@ -32,6 +32,7 @@ export type InviteLinkRowData = {
 type Props = {
   initialTopics: InviteLinkTopic[];
   initialLinks: InviteLinkRowData[];
+  creatorName: string | null;
 };
 
 type LinkResponse = { link?: InviteLinkRowData; message?: string };
@@ -95,7 +96,7 @@ function CategoryChip({ topic, onRemove }: { topic: InviteLinkTopic; onRemove?: 
   );
 }
 
-export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
+export function InviteLinksSection({ initialTopics, initialLinks, creatorName }: Props) {
   const suggestions = sanitizeInviteLinkCategories(initialTopics);
   const [links, setLinks] = useState<InviteLinkRowData[]>(() =>
     initialLinks.map((link) => ({
@@ -110,6 +111,15 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editor) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') closeEditor();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [editor]);
 
   function flashToast(message: string) {
     setToast(message);
@@ -237,6 +247,8 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
   }
 
   const pendingDeleteLink = links.find((link) => link.id === pendingDeleteId) ?? null;
+  const editingLinkIndex =
+    editor?.kind === 'edit' ? links.findIndex((link) => link.id === editor.linkId) : -1;
   const availableSuggestions = suggestions.filter(
     (suggestion) =>
       !draftCategories.some(
@@ -256,7 +268,7 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
       </p>
 
       <div className="mt-4 space-y-3">
-        {links.map((link) => {
+        {links.map((link, index) => {
           const categories = sanitizeInviteLinkCategories(link.categories);
           const accent = topicColor(categories[0] ?? null);
           return (
@@ -270,8 +282,11 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
                 className="absolute top-0 left-0 h-full w-[5px]"
                 style={{ background: accent.primary }}
               />
+              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                Link {index + 1}
+              </p>
               <h3 className="font-serif text-xl leading-tight font-semibold break-words text-[var(--brand-navy)]">
-                {inviteLinkCardTitle(categories)}
+                {inviteLinkCardTitle(categories, { isDefaultLink: index === 0, creatorName })}
               </h3>
               <p className="text-muted-foreground mt-1 text-sm leading-5">
                 We’ll recommend these categories to anyone who uses this link.
@@ -328,88 +343,104 @@ export function InviteLinksSection({ initialTopics, initialLinks }: Props) {
 
       {editor ? (
         <div
-          className="mt-4 space-y-3 rounded-[var(--radius-card)] border p-3"
-          style={{ borderColor: 'var(--brand-border)' }}
+          className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center px-0 pb-0 sm:items-center sm:px-4 sm:pb-4"
+          style={{ background: 'var(--scrim)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invite-link-editor-title"
         >
-          <div>
-            <h3 className="font-serif text-lg font-semibold">
-              {editor.kind === 'create' ? 'Choose categories' : 'Edit categories'}
-            </h3>
-            <p className="text-muted-foreground mt-1 text-sm leading-5">
-              Choose up to {MAX_INVITE_LINK_CATEGORIES}. Your friend can keep, change, or ignore
-              them during setup.
-            </p>
-          </div>
-
-          {draftCategories.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {draftCategories.map((topic) => (
-                <CategoryChip
-                  key={topic.label}
-                  topic={topic}
-                  onRemove={() => removeDraftTopic(topic.label)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-destructive text-sm" role="status">
-              Choose at least one category to save.
-            </p>
-          )}
-
-          {availableSuggestions.length > 0 &&
-          draftCategories.length < MAX_INVITE_LINK_CATEGORIES ? (
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close"
+            onClick={closeEditor}
+          />
+          <div
+            className="bg-card text-card-foreground relative max-h-[85vh] w-full space-y-3 overflow-y-auto rounded-t-2xl border p-4 shadow-xl sm:max-w-md sm:rounded-2xl"
+            style={{ borderColor: 'var(--brand-border)' }}
+          >
             <div>
-              <p className="text-muted-foreground mb-2 text-xs font-medium">Your categories</p>
+              <h3 id="invite-link-editor-title" className="font-serif text-lg font-semibold">
+                {editor.kind === 'create'
+                  ? 'Choose categories'
+                  : `Edit categories for Link ${editingLinkIndex + 1}`}
+              </h3>
+              <p className="text-muted-foreground mt-1 text-sm leading-5">
+                Choose up to {MAX_INVITE_LINK_CATEGORIES}. Your friend can keep, change, or ignore
+                them during setup.
+              </p>
+            </div>
+
+            {draftCategories.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {availableSuggestions.map((topic) => (
-                  <button
+                {draftCategories.map((topic) => (
+                  <CategoryChip
                     key={topic.label}
-                    type="button"
-                    onClick={() => addSuggestedTopic(topic)}
-                    className="hover:bg-muted inline-flex min-h-9 max-w-full items-center gap-1 rounded-full border px-3 py-1 text-left text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
-                  >
-                    <Plus className="size-3.5 shrink-0" aria-hidden />
-                    <span style={{ overflowWrap: 'anywhere' }}>{topic.label}</span>
-                  </button>
+                    topic={topic}
+                    onRemove={() => removeDraftTopic(topic.label)}
+                  />
                 ))}
               </div>
+            ) : (
+              <p className="text-destructive text-sm" role="status">
+                Choose at least one category to save.
+              </p>
+            )}
+
+            {availableSuggestions.length > 0 &&
+            draftCategories.length < MAX_INVITE_LINK_CATEGORIES ? (
+              <div>
+                <p className="text-muted-foreground mb-2 text-xs font-medium">Your categories</p>
+                <div className="flex flex-wrap gap-2">
+                  {availableSuggestions.map((topic) => (
+                    <button
+                      key={topic.label}
+                      type="button"
+                      onClick={() => addSuggestedTopic(topic)}
+                      className="hover:bg-muted inline-flex min-h-9 max-w-full items-center gap-1 rounded-full border px-3 py-1 text-left text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+                    >
+                      <Plus className="size-3.5 shrink-0" aria-hidden />
+                      <span style={{ overflowWrap: 'anywhere' }}>{topic.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {draftCategories.length < MAX_INVITE_LINK_CATEGORIES ? (
+              <AddTopicField
+                heading="Add a different category"
+                onAdd={handleAddTopic}
+                existingLabels={draftCategories.map((topic) => topic.label)}
+                convergeBeforeAdd
+                placeholder="e.g. Byzantine Coinage"
+                multiAddHint={false}
+              />
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                You’ve chosen the maximum of {MAX_INVITE_LINK_CATEGORIES} categories.
+              </p>
+            )}
+
+            {saveError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {saveError}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void saveCategories()}
+                disabled={draftCategories.length === 0 || saving}
+                className="btn-primary min-h-11 px-4 disabled:opacity-45"
+              >
+                {saving ? 'Saving…' : editor.kind === 'create' ? 'Create link' : 'Save changes'}
+              </button>
+              <button type="button" onClick={closeEditor} className="btn-ghost min-h-11 px-3">
+                Cancel
+              </button>
             </div>
-          ) : null}
-
-          {draftCategories.length < MAX_INVITE_LINK_CATEGORIES ? (
-            <AddTopicField
-              heading="Add a different category"
-              onAdd={handleAddTopic}
-              existingLabels={draftCategories.map((topic) => topic.label)}
-              convergeBeforeAdd
-              placeholder="e.g. Byzantine Coinage"
-              multiAddHint={false}
-            />
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              You’ve chosen the maximum of {MAX_INVITE_LINK_CATEGORIES} categories.
-            </p>
-          )}
-
-          {saveError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {saveError}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void saveCategories()}
-              disabled={draftCategories.length === 0 || saving}
-              className="btn-primary min-h-11 px-4 disabled:opacity-45"
-            >
-              {saving ? 'Saving…' : editor.kind === 'create' ? 'Create link' : 'Save changes'}
-            </button>
-            <button type="button" onClick={closeEditor} className="btn-ghost min-h-11 px-3">
-              Cancel
-            </button>
           </div>
         </div>
       ) : null}

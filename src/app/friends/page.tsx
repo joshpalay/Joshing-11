@@ -165,7 +165,11 @@ export default async function FriendsPage() {
       {/* Invite via link. An action rather than a destination, so it sits above
           the roster but below the lookup. */}
       <div className="mb-5">
-        <InviteLinksSection initialTopics={resolvedTopics} initialLinks={initialLinks} />
+        <InviteLinksSection
+          initialTopics={resolvedTopics}
+          initialLinks={initialLinks}
+          creatorName={viewer.displayName}
+        />
       </div>
 
       {/* The roster is what people come back for, so it moves up: with the dead
