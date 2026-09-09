@@ -19,10 +19,9 @@ export const dynamic = 'force-dynamic';
  * carries the walkthrough flag onward.
  *
  * `?seedSource=link` (Stage 2 of the invite-link build): swaps in the
- * per-user invite-link experience — the same mock topics arrive UNSELECTED as
- * suggestion chips instead of pre-selected, with the "here are a few from
- * {inviter}" copy — since a link may reach someone the inviter never had in
- * mind. Default (omitted) stays the named-invite experience: pre-selected.
+ * per-user invite-link experience — the "here are a few from {inviter}" copy
+ * instead of the named-invite copy. The mock topics still arrive pre-selected
+ * either way; only the welcome framing differs by seedSource now.
  */
 
 const MOCK_INTERESTS: PreSeededInterest[] = [

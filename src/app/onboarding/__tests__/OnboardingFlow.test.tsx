@@ -108,12 +108,13 @@ describe('OnboardingFlow invited interests', () => {
   })
 })
 
-// Stage 2 (invite-link seed topics): link-sourced seeds must render as
-// unselected suggestion chips, never pre-populate the selection the way a
-// named invite's seeds do — a link may reach someone the inviter never had in
-// mind.
+// Stage 2 (invite-link seed topics): link-sourced seeds now pre-select just
+// like a named invite's — the invitee shouldn't have to tap every suggestion
+// just to accept the defaults. They're still ordinary toggle chips (see
+// InterestToggleChip), so removing one shows "Removed … Undo" in place rather
+// than moving it to a separate list.
 describe('OnboardingFlow seedSource = link', () => {
-  it('shows Duo Prova’s suggestions above Add your own and leaves them unselected', () => {
+  it('pre-selects Duo Prova’s link-sourced topics too, above Add your own', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         seedSource="link"
@@ -128,25 +129,25 @@ describe('OnboardingFlow seedSource = link', () => {
       />
     )
 
-    // Counter reads 0 selected — the topics are offered, not chosen.
-    expect(html).toContain('0 selected')
-    expect(html).not.toContain('3 selected')
-    // Still surfaced as suggestion chips the invitee can tap to add.
+    // Counter reads 3 selected — the topics arrive pre-chosen, not just offered.
+    expect(html).toContain('3 selected · add up to 9 more')
+    expect(html).not.toContain('0 selected')
     expect(html).toContain('Great Lakes shipwrecks')
     expect(html).toContain('Renaissance Florence')
     expect(html).toContain('Final Fantasy')
-    expect(html).toContain('Suggested by Duo Prova')
-    expect(html).toContain('Duo Prova picked these for you. Take any that feel right.')
-    expect(html.indexOf('Suggested by Duo Prova')).toBeLessThan(html.indexOf('Add your own'))
-    expect(html.indexOf('Add your own')).toBeLessThan(
-      html.indexOf('Your trivia questions will come from these subjects')
+    expect(html).toContain(
+      'Duo Prova picked these for you. Take any that feel right, or remove what doesn&#x27;t fit.'
+    )
+    expect(html).toContain('aria-label="Remove Great Lakes shipwrecks"')
+    expect(html.indexOf('Your trivia questions will come from these subjects')).toBeLessThan(
+      html.indexOf('Add your own')
     )
     // Link-specific welcome framing remains intact.
     expect(html).toContain('Here are a few from Duo Prova')
     expect(html).not.toContain('Here are some topics we picked for you')
   })
 
-  it('uses the nameless suggestion fallback without empty or undefined copy', () => {
+  it('falls back to "A friend" when no inviter name is available', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         seedSource="link"
@@ -157,13 +158,12 @@ describe('OnboardingFlow seedSource = link', () => {
       />
     )
 
-    expect(html).toContain('Suggested for you')
-    expect(html).not.toContain('picked these for you')
-    expect(html).not.toContain('Suggested by')
+    expect(html).toContain('A friend picked these for you')
+    expect(html).toContain('1 selected')
     expect(html).not.toContain('undefined')
   })
 
-  it('a named invite (default seedSource) still pre-selects, for contrast', () => {
+  it('a named invite (default seedSource) also pre-selects', () => {
     const html = renderToStaticMarkup(
       <OnboardingFlow
         inviterName="Josh"
