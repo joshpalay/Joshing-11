@@ -5,6 +5,10 @@ import { redirect } from 'next/navigation';
 import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock';
 import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
 import { InviteLinksSection } from '@/components/friends/InviteLinksSection';
+import {
+  MutualFriendSuggestionsSection,
+  type MutualFriendSuggestionRow,
+} from '@/components/friends/MutualFriendSuggestionsSection';
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual';
 import FriendsList from '@/components/FriendsList';
 import { getSession } from '@/server/auth/session';
@@ -15,7 +19,9 @@ import {
   listContactMatches,
   markDiscoveryChecked,
 } from '@/server/db/queries/contact-hashes';
+import { getActiveDeclaredInterestsBulk } from '@/server/db/queries/declared-interests';
 import { listInviteReflections } from '@/server/db/queries/friend-invitations';
+import { getMutualFriendSuggestions } from '@/server/db/queries/friends';
 import { listLiveInviteLinks } from '@/server/db/queries/invite-links';
 import { sanitizeInviteLinkCategories } from '@/lib/invite-links';
 import {
@@ -25,6 +31,19 @@ import {
 } from '@/server/friends/user-invite-token';
 
 export const dynamic = 'force-dynamic';
+
+// B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2a. Default-visible is 5 (the approved
+// mockup's "3-5 shown by default"); this over-fetches to 10 so "See more"
+// reveals real additional rows from the SAME query result instead of being a
+// no-op -- the component never refetches, it just expands what it already has.
+const MUTUAL_FRIEND_SUGGESTIONS_FETCH_LIMIT = 10;
+
+// "Into X, Y, Z" -- same first-3/comma-join convention as the home page's
+// incoming-request card (FriendRequestsSection.tsx's interestPreview).
+function interestsPreviewFor(domains: string[]): string | null {
+  const cleaned = domains.map((domain) => domain.trim()).filter(Boolean).slice(0, 3);
+  return cleaned.length > 0 ? cleaned.join(', ') : null;
+}
 
 function initialsFor(name: string | null, fallback: string): string {
   const source = (name?.trim() || fallback).replace(/[^a-zA-Z]+/g, ' ').trim();
@@ -54,7 +73,7 @@ export default async function FriendsPage() {
   // Nav-tab dot and the Invitations-tab passive row on next render.
   await markDiscoveryChecked(session.userId);
 
-  const [reflections, contactMatches, lastContactUpload, resolvedTopics, liveLinks] =
+  const [reflections, contactMatches, lastContactUpload, resolvedTopics, liveLinks, mutualFriendSuggestionsRaw] =
     await Promise.all([
       listInviteReflections(session.userId),
       viewer.discoverableByContacts ? listContactMatches(session.userId) : Promise.resolve([]),
@@ -63,8 +82,32 @@ export default async function FriendsPage() {
         : Promise.resolve(null),
       getInviteLinkSeedTopics(session.userId),
       listLiveInviteLinks(session.userId),
+      getMutualFriendSuggestions(session.userId, MUTUAL_FRIEND_SUGGESTIONS_FETCH_LIMIT),
     ]);
   const contactRefreshDue = isRefreshDue(lastContactUpload);
+
+  // A person can qualify for both the invite-reflection list and the
+  // mutual-friend list (someone you invited who also shares mutual friends
+  // with you). The invite reflection is the warmer, more specific signal, so
+  // it wins on overlap -- drop them from the mutual-friend list rather than
+  // showing twice.
+  const reflectionIds = new Set(reflections.map((r) => r.inviteeUserId));
+  const mutualFriendCandidates = mutualFriendSuggestionsRaw.filter(
+    (s) => !reflectionIds.has(s.id),
+  );
+  const interestsById = await getActiveDeclaredInterestsBulk(
+    mutualFriendCandidates.map((s) => s.id),
+  );
+  const mutualFriendSuggestions: MutualFriendSuggestionRow[] = mutualFriendCandidates.map(
+    (s) => ({
+      id: s.id,
+      displayName: s.displayName,
+      mutualFriendCount: s.mutualFriendCount,
+      interestsPreview: interestsPreviewFor(
+        (interestsById.get(s.id) ?? []).map((interest) => interest.domain),
+      ),
+    }),
+  );
 
   const requestHeaders = await headers();
   const baseUrl = getBaseUrl(requestHeaders);
@@ -176,6 +219,15 @@ export default async function FriendsPage() {
           contact card and the empty Suggested section gone, it now starts on the
           first screen instead of the third. */}
       <FriendsList />
+
+      {/* B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2a: below the existing friend
+          list/pending-requests block, per the settled placement decision --
+          this is a colder, more algorithmic signal than the roster above it,
+          so it sits after the people the viewer already knows. Renders
+          nothing when there's nothing to suggest (handled inside the
+          component itself, not here, so the empty-state rule lives in one
+          place). */}
+      <MutualFriendSuggestionsSection initialSuggestions={mutualFriendSuggestions} />
     </main>
   );
 }
