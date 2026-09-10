@@ -22,6 +22,11 @@ export function isTierGatingEnabled(): boolean {
   return boolEnv('VERIFICATION_TIER_GATING_ENABLED', false);
 }
 
+/** Default-off hold for rows a later verifier could not check. */
+export function isUnverifiableHoldEnabled(): boolean {
+  return boolEnv('VERIFICATION_UNVERIFIABLE_HOLD_ENABLED', false);
+}
+
 export type TrustTier = 'unverified' | 'machine_verified' | 'human_validated' | 'author_confirmed';
 
 /** Self-practice floor: anything that has earned at least machine_verified. */
@@ -71,6 +76,32 @@ export function applyTierGate<T>(
       eligible: kept.length,
       wouldFilter,
       allowed,
+    });
+  }
+
+  return {
+    rows: enforced ? kept : rows,
+    enforced,
+    wouldFilter,
+    candidateCount: rows.length,
+  };
+}
+
+export function applyVerificationVerdictGate<
+  T extends { verificationVerdict?: string | null },
+>(surface: string, rows: T[]): TierGateResult<T> {
+  const enforced = isUnverifiableHoldEnabled();
+  const kept = rows.filter((row) => row.verificationVerdict !== 'unverifiable');
+  const wouldFilter = rows.length - kept.length;
+
+  if (wouldFilter > 0) {
+    console.info('[verification-verdict-gating]', {
+      surface,
+      enforced,
+      candidateCount: rows.length,
+      eligible: kept.length,
+      wouldFilter,
+      heldVerdict: 'unverifiable',
     });
   }
 

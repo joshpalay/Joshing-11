@@ -94,32 +94,27 @@ describe('gradeAnswerWithLLM', () => {
     expect(createMessageMock).toHaveBeenCalledOnce()
   })
 
-  it('retries once on a malformed reply, then returns the clean verdict (no fallback)', async () => {
-    createMessageMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'not json at all' }], usage: {} })
-      .mockResolvedValueOnce(
-        anthropicTextResponse({ result: 'correct', confidence: 0.9, reason: 'ok', consolation: null }),
-      )
-
-    const gradeAnswerWithLLM = await importGrader()
-    const outcome = await gradeAnswerWithLLM('q', 'canonical', 'submitted', 'factual')
-
-    expect(outcome.status).toBe('scored')
-    if (outcome.status !== 'scored') throw new Error('expected scored')
-    expect(outcome.result).toBe('correct')
-    expect(createMessageMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('falls back only after the retry also fails', async () => {
-    createMessageMock
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'nope' }], usage: {} })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'still nope' }], usage: {} })
+  it('returns an unscored result after one malformed reply so the browser owns retry', async () => {
+    createMessageMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'not json at all' }],
+      usage: {},
+    })
 
     const gradeAnswerWithLLM = await importGrader()
     const outcome = await gradeAnswerWithLLM('q', 'canonical', 'submitted', 'factual')
 
     expect(outcome.status).toBe('unscored')
-    expect(createMessageMock).toHaveBeenCalledTimes(2)
+    expect(createMessageMock).toHaveBeenCalledOnce()
+  })
+
+  it('returns unscored after one request failure', async () => {
+    createMessageMock.mockRejectedValueOnce(new Error('timeout'))
+
+    const gradeAnswerWithLLM = await importGrader()
+    const outcome = await gradeAnswerWithLLM('q', 'canonical', 'submitted', 'factual')
+
+    expect(outcome.status).toBe('unscored')
+    expect(createMessageMock).toHaveBeenCalledOnce()
   })
 
   it('does not retry (or call the model) when there is no usable client', async () => {

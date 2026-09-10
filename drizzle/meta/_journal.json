@@ -1016,6 +1016,13 @@
       "when": 1788969600000,
       "tag": "0144_post_game_welcome_tour",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1788973200000,
+      "tag": "0145_gate_drop_scope",
+      "breakpoints": true
     }
   ]
 }

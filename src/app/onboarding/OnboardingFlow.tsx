@@ -161,10 +161,17 @@ function InterestToggleChip({
   onToggle: () => void
   disabled?: boolean
 }) {
+  const sourceLabel = interest.fromCatalog ? (
+    <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+      From Joshing
+    </span>
+  ) : null
+
   if (state === 'selected') {
     return (
       <span className="bg-card inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium">
         {interest.domain}
+        {sourceLabel}
         <button
           type="button"
           onClick={onToggle}
@@ -181,6 +188,7 @@ function InterestToggleChip({
     return (
       <span className="text-muted-foreground inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1.5 text-sm">
         <span className="line-through">{interest.domain}</span>
+        {sourceLabel}
         <span className="text-[10px] font-semibold tracking-wide uppercase">Removed</span>
         <button
           type="button"
@@ -207,6 +215,7 @@ function InterestToggleChip({
         +
       </span>
       {interest.domain}
+      {sourceLabel}
     </button>
   )
 }
@@ -365,6 +374,8 @@ export default function OnboardingFlow({
   // copy: with seeds we frame the screen as "remove what doesn't fit"; without
   // any (e.g. invite-link signups) we frame it as "add a few to start".
   const hasSeeds = inviteInterests.length > 0
+  const hasInviterSeeds = inviteInterests.some((interest) => !interest.fromCatalog)
+  const hasCatalogSeeds = inviteInterests.some((interest) => interest.fromCatalog)
   const atSelectionCap = selectedInterests.length >= MAX_INTERESTS
 
   function slotState(interest: ProposedInterest): 'selected' | 'removed' | 'available' {
@@ -719,7 +730,11 @@ export default function OnboardingFlow({
       </p>
       {hasSeeds ? (
         <p className="text-muted-foreground text-sm leading-6">
-          {`${displayInviterName} picked these for you. Take any that feel right, or remove what doesn't fit.`}
+          {hasInviterSeeds && hasCatalogSeeds
+            ? `${displayInviterName} picked the preselected topics. Extra ideas from Joshing are labeled.`
+            : hasInviterSeeds
+              ? `${displayInviterName} picked these for you. Take any that feel right, or remove what doesn't fit.`
+              : 'Joshing added these starting ideas. Pick any that feel right.'}
         </p>
       ) : null}
       {slots.length > 0 ? (

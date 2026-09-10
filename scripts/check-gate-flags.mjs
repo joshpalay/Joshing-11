@@ -43,14 +43,27 @@ function line(label, value) {
 }
 
 try {
+  const { rows: scopeRows } = await pool.query(
+    `select exists (
+       select 1 from information_schema.columns
+       where table_name = 'GateDropStat' and column_name = 'scope'
+     ) as has_scope`,
+  );
+  const hasScope = scopeRows[0]?.has_scope === true;
   const { rows } = await pool.query(
     `select day, gate, considered, dropped, failed_open
        from "GateDropStat"
       where gate in ('answer_leak_partial', 'domain_drift', 'quality')
+        ${hasScope ? "and scope = 'daily_build'" : ''}
       order by day asc, gate asc`,
   );
 
   console.log(`\n=== Gate-flag check (flip day: ${FLIP_DAY}) ===\n`);
+  console.log(
+    hasScope
+      ? '  Scope: real Daily Five builds only (maintenance excluded).\n'
+      : '  Scope column not migrated yet: results may still include maintenance traffic.\n',
+  );
 
   // `day` comes back from `pg` as a JS Date (UTC midnight), not a string.
   // Comparing a Date to FLIP_DAY with `<=`/`>` coerces the Date via its

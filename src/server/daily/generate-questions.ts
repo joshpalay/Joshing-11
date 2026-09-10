@@ -101,7 +101,7 @@ import {
 } from '@/server/questions/self-answering';
 import { embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
 import { resolveDailyBasePoints } from './types';
-import { STYLE_EXEMPLAR_BLOCK } from './exemplars';
+import { SINGLE_ANSWER_STYLE_EXEMPLAR_BLOCK, STYLE_EXEMPLAR_BLOCK } from './exemplars';
 import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 import { enrichAcceptableVariants, mergeVariants } from './enrich-variants';
 import { noteBankAttempt, noteGenerateCall } from '@/server/daily/build-context';
@@ -155,7 +155,7 @@ export type GeneratedQuestionRow = typeof generatedQuestions.$inferSelect;
 
 export const SYSTEM_PROMPT = `You are generating trivia questions for Joshing, a social trivia game played among friends.
 Questions must be:
-- Factual with a single objectively correct answer, or — for the "name_multiple" shape only — a small fixed set of correct answers (typically 2–4)
+- Factual with one main objectively correct answer
 - Drawn from the intellectual and cultural world of the domain, not biographical trivia
 - Calibrated to the difficulty instruction below: at easier tiers, lean on well-known, recognizable facts that anyone interested in the domain would have encountered; save specific, surprising deep cuts for higher difficulty tiers
 - Recall questions, not selection questions: the player must produce the answer from memory
@@ -218,7 +218,7 @@ The answer must be a single short, checkable response — a name, a title, a wor
 
 SINGLE ASK (Rule 3b — ALL tiers):
 Ask for exactly ONE thing. A question poses ONE question with ONE answer. NEVER bundle two distinct asks into a single question — no "what is X — and what is Y?", no "who did A, and where did it happen?", no compound joined by "and". If a setup tempts you to ask two things, keep the single better one and cut the other. This is the most common way a question goes wrong: it reads as one sentence but secretly demands two separate facts, so it has no clean single answer.
-- This is NOT the name_multiple shape. name_multiple makes ONE ask for several items of the SAME kind ("name the three Norns") — that is allowed. The ban is on asking for two DIFFERENT facts.
+- Do not ask the player for a list. The current grader is designed for one main answer.
 - BAD (two asks): "In 'Götterdämmerung,' what vulnerability lets Hagen kill Siegfried with a single thrust — and what is the precise location of that vulnerability on his body?"
 - GOOD (one ask): "In 'Götterdämmerung,' Siegfried's bath in the dragon's blood left one spot unprotected. Where on his body is it?"
 
@@ -238,7 +238,7 @@ CALIBRATION PAIRS (generic → fan-salient; study these — concrete pairs calib
 STYLE EXEMPLARS (match this register, specificity, and concision):
 These are gold-standard Joshing questions. Mimic their tone — literate, confident, and specific. Pull from comparable depth (named characters, named works, technical terms, specific years, named figures) rather than vague appreciation or "explain why" questions. Notice how they assume a cultured audience without condescension.
 
-${STYLE_EXEMPLAR_BLOCK}
+${SINGLE_ANSWER_STYLE_EXEMPLAR_BLOCK}
 
 Do NOT copy these questions or their underlying facts. Use them only as a model for how a Joshing question should feel.
 
@@ -295,8 +295,6 @@ Trivia gets monotonous when every question follows the same template ("What is t
 - "what_happens_next": asks what immediately follows a described scene/event
 - "fill_in_blank": gives a short line with one word elided and asks the player to supply it (e.g. "Fill in the blank in this line from Don Giovanni: Don Giovanni a …… teco")
 - "complete_the_quote": gives the opening of a well-known quote and asks for the remainder (e.g. "Complete the Shakespeare quote: 'A horse, a horse, ……'")
-- "name_multiple": asks for a small fixed set of items — only use when the canonical answer is a closed enumeration of 2–4 items (e.g. "Name the four operas that make up Wagner's Ring Cycle."). For this shape, emit the canonical answers in the "answer" field as a semicolon-delimited list (e.g. "Das Rheingold; Die Walküre; Siegfried; Götterdämmerung"). NOTE: do not emit "name_multiple" until further notice — the grading path does not yet handle multi-answer questions. Choose another shape instead.
-
 Rules:
 - Within a single batch of questions, no two questions may share the same question_shape unless the batch has more questions than there are shapes in the catalog.
 - "identification" is the most over-used shape — use it sparingly.
@@ -324,7 +322,7 @@ Return format:
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
       "subject_entity": "string, the single primary subject the question is about (see above) — coarser than fact_key",
       "sub_angles": ["1-3 short tags identifying the facets of the domain covered (see above)"],
-      "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next | fill_in_blank | complete_the_quote | name_multiple (held back — do not emit)"
+      "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next | fill_in_blank | complete_the_quote"
     }
   ]
 }${INSTRUCTION_USER_INPUT_GUIDANCE}`;
@@ -339,7 +337,6 @@ const QUESTION_SHAPES = [
   'what_happens_next',
   'fill_in_blank',
   'complete_the_quote',
-  'name_multiple',
 ] as const;
 type QuestionShape = (typeof QUESTION_SHAPES)[number];
 
@@ -687,6 +684,26 @@ function parseBaseQuestion(item: unknown): LlmQuestion | null {
       rawValue: typeof factKeyRaw === 'string' ? factKeyRaw.slice(0, 120) : null,
       questionPreview: questionText.slice(0, 80),
     });
+    return null;
+  }
+  const subjectEntity = normalizeSubjectEntity(rec.subject_entity);
+  const subAngles = normalizeSubAngles(rec.sub_angles);
+  const questionShape = asQuestionShape(rec.question_shape);
+  if (!questionShape) {
+    console.warn('[daily/generate-questions] required question metadata missing or invalid', {
+      domain: canonical,
+      rawQuestionShape: typeof rec.question_shape === 'string' ? rec.question_shape : null,
+      questionPreview: questionText.slice(0, 80),
+    });
+    return null;
+  }
+  if (!subjectEntity || subAngles.length === 0) {
+    console.warn('[daily/generate-questions] optional question metadata missing', {
+      domain: canonical,
+      hasSubjectEntity: Boolean(subjectEntity),
+      subAngleCount: subAngles.length,
+      questionPreview: questionText.slice(0, 80),
+    });
   }
   return {
     canonical_subcategory: canonical,
@@ -696,9 +713,9 @@ function parseBaseQuestion(item: unknown): LlmQuestion | null {
     explainer,
     difficulty_estimate: difficulty,
     fact_key: factKey,
-    subject_entity: normalizeSubjectEntity(rec.subject_entity),
-    sub_angles: normalizeSubAngles(rec.sub_angles),
-    question_shape: asQuestionShape(rec.question_shape),
+    subject_entity: subjectEntity,
+    sub_angles: subAngles,
+    question_shape: questionShape,
   };
 }
 
@@ -782,7 +799,9 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
     }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.duplicate_indices;
-    if (!Array.isArray(rawList)) return new Set();
+    if (!parsed || !Array.isArray(rawList)) {
+      throw new Error('invalid_batch_dedupe_response');
+    }
     const valid = new Set<number>();
     for (const value of rawList) {
       if (
@@ -899,6 +918,15 @@ export async function findQualityFailures(generated: LlmQuestion[]): Promise<{
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.drop_indices;
     const rawReasons = parsed?.reasons;
+    if (
+      !parsed ||
+      !Array.isArray(rawList) ||
+      !rawReasons ||
+      typeof rawReasons !== 'object' ||
+      Array.isArray(rawReasons)
+    ) {
+      throw new Error('invalid_quality_gate_response');
+    }
     const toDrop = new Set<number>();
     if (Array.isArray(rawList)) {
       for (const value of rawList) {
@@ -1160,6 +1188,16 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
         '[daily/generate-questions] factual gate verdict hit max_tokens but parsed — raise FACTUAL_GATE_MAX_TOKENS',
         { batchSize: generated.length, maxTokens: FACTUAL_GATE_MAX_TOKENS },
       );
+    }
+    const parsed = parseJsonObject(raw);
+    if (
+      !parsed ||
+      !Array.isArray(parsed.drop_indices) ||
+      !parsed.reasons ||
+      typeof parsed.reasons !== 'object' ||
+      Array.isArray(parsed.reasons)
+    ) {
+      throw new Error('invalid_factual_gate_response');
     }
     return parseFactualGateResponse(raw, generated.length);
   } catch (err) {
@@ -1497,7 +1535,9 @@ Which NEW indices duplicate any RECENT entry?`;
     }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
     const parsed = parseJsonObject(extractTextContent(response.content));
     const rawList = parsed?.duplicate_indices;
-    if (!Array.isArray(rawList)) return new Set();
+    if (!parsed || !Array.isArray(rawList)) {
+      throw new Error('invalid_history_dedupe_response');
+    }
     const valid = new Set<number>();
     for (const value of rawList) {
       if (
@@ -3265,6 +3305,8 @@ async function pickBankPicksForDomains(
           // (n_answered / empirical_correct_rate) are deliberately NOT copied
           // — they accrue per row.
           insideJoke: source.insideJoke,
+          subjectEntity: source.subjectEntity,
+          embedding: source.embedding,
           trustTier: source.trustTier,
           askToAnswerVerified: source.askToAnswerVerified,
           acceptableVariants: source.acceptableVariants,

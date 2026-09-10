@@ -66,6 +66,8 @@ const BANK_SOURCE = {
   basePoints: 100,
   factKey: 'tosca-scarpia-villain-opera',
   subAngles: ['Scarpia', 'Tosca Act I'],
+  subjectEntity: 'Baron Scarpia',
+  embedding: [0.12, -0.34, 0.56],
   insideJoke: 'Between us — Scarpia never stood a chance.',
   trustTier: 'machine_verified' as const,
   askToAnswerVerified: true,
@@ -95,6 +97,8 @@ describe('bank-pick serving copy preserves earned quality fields (Q4)', () => {
       trustTier: 'machine_verified',
       askToAnswerVerified: true,
       acceptableVariants: ['Floria Tosca'],
+      subjectEntity: 'Baron Scarpia',
+      embedding: [0.12, -0.34, 0.56],
       sourceRefs: BANK_SOURCE.sourceRefs,
       perishable: false,
       // BP-7 / C5: every pool write carries the folded lookup key.
@@ -114,9 +118,9 @@ describe('bank-pick serving copy preserves earned quality fields (Q4)', () => {
     // Play stats accrue per row — a copy must start fresh, not inherit them.
     expect(values).not.toHaveProperty('nAnswered');
     expect(values).not.toHaveProperty('empiricalCorrectRate');
-    // Embedding-dedup bookkeeping is also per-row, never copied.
+    // Suppression bookkeeping is per row. The semantic embedding describes
+    // the question itself, so it should carry across an exact serving copy.
     expect(values).not.toHaveProperty('isDuplicate');
     expect(values).not.toHaveProperty('suppressedBy');
-    expect(values).not.toHaveProperty('embedding');
   });
 });

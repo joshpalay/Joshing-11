@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
         canonicalId: null,
         questionText: row.questionText,
         answer: repairedAnswer,
-        acceptedAlternatives: [],
+        acceptedAlternatives: row.acceptableVariants ?? [],
         domain: row.canonicalSubcategory,
         broadCategory: row.broadCategory,
         basePoints: Math.round(row.basePoints),

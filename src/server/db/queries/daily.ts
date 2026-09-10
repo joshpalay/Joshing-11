@@ -58,6 +58,7 @@ import {
   FRIEND_FACING_TIERS,
   SELF_PRACTICE_TIERS,
   applyTierGate,
+  applyVerificationVerdictGate,
   type TrustTier,
 } from '@/server/daily/verification-gating';
 import {
@@ -2015,6 +2016,8 @@ export type BankSource = {
   basePoints: number;
   factKey: string;
   subAngles: string[];
+  subjectEntity: string | null;
+  embedding: number[] | null;
   // Quality/verification fields earned once at generation time (PRD-D-5
   // "verify-once-reuse-many"). Carried so the per-viewer serving copy keeps
   // the aside, the right-but-rephrased grading leniency (acceptable_variants
@@ -2218,6 +2221,7 @@ export async function pickBankSource(
     (row) => row.trustTier as TrustTier,
     SELF_PRACTICE_TIERS,
   ).rows;
+  candidates = applyVerificationVerdictGate('self-practice/bank', candidates).rows;
 
   // Q5: dud-excluded, trust-ranked, shuffled within rank (see helper above).
   // BANK_RECENCY_WINDOW stays 50: duds should be rare, the window is per
@@ -2246,6 +2250,8 @@ export async function pickBankSource(
       basePoints: row.basePoints,
       factKey: row.factKey,
       subAngles: Array.isArray(row.subAngles) ? row.subAngles : [],
+      subjectEntity: row.subjectEntity ?? null,
+      embedding: row.embedding ?? null,
       insideJoke: row.insideJoke ?? null,
       trustTier: row.trustTier as TrustTier,
       askToAnswerVerified: row.askToAnswerVerified ?? false,

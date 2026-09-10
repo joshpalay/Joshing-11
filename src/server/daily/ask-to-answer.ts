@@ -64,6 +64,8 @@ export interface AskToAnswerItem {
 }
 
 export interface AskToAnswerResult {
+  /** Whether this check ran and produced a structurally valid verdict. */
+  checkStatus: 'completed' | 'not_run' | 'unavailable' | 'invalid';
   /** Indices to drop: the cold attempts clearly did NOT support the stored
    *  answer (disagreed with each other or converged on something else). */
   toDrop: Set<number>;
@@ -168,15 +170,16 @@ export async function askToAnswerBatch(
   items: AskToAnswerItem[],
   config: AskToAnswerConfig = getAskToAnswerConfig(),
 ): Promise<AskToAnswerResult> {
-  const empty: AskToAnswerResult = {
+  const empty = (checkStatus: AskToAnswerResult['checkStatus']): AskToAnswerResult => ({
+    checkStatus,
     toDrop: new Set(),
     verified: new Set(),
     variantsByIndex: new Map(),
     reasons: {},
-  };
-  if (!config.enabled || items.length === 0) return empty;
+  });
+  if (!config.enabled || items.length === 0) return empty('not_run');
   const client = getAnthropicClient();
-  if (!client) return empty;
+  if (!client) return empty('unavailable');
 
   // Cold attempts: items × samples, all in parallel.
   const coldByItem = await Promise.all(
@@ -191,7 +194,7 @@ export async function askToAnswerBatch(
 
   // If every cold attempt failed (full outage), fail open — don't drop anything.
   const anyColdSucceeded = coldByItem.some((attempts) => attempts.some((a) => a !== null));
-  if (!anyColdSucceeded) return empty;
+  if (!anyColdSucceeded) return empty('unavailable');
 
   const body = items
     .map((item, i) => {
@@ -215,8 +218,22 @@ export async function askToAnswerBatch(
       },
       { timeoutMs: HAIKU_GATE_TIMEOUT_MS },
     );
-    const parsed = parseJudgeResponse(extractTextContent(response.content), items.length);
+    const raw = extractTextContent(response.content);
+    const structure = parseJsonObject(raw);
+    if (
+      !structure ||
+      !Array.isArray(structure.pass_indices) ||
+      !Array.isArray(structure.drop_indices) ||
+      !structure.reasons ||
+      typeof structure.reasons !== 'object' ||
+      Array.isArray(structure.reasons)
+    ) {
+      console.warn('[daily/ask-to-answer] judge returned an invalid verdict shape');
+      return empty('invalid');
+    }
+    const parsed = parseJudgeResponse(raw, items.length);
     return {
+      checkStatus: 'completed',
       ...parsed,
       variantsByIndex: extractVariants(parsed.verified, items, coldByItem),
     };
@@ -225,7 +242,7 @@ export async function askToAnswerBatch(
     console.warn('[daily/ask-to-answer] judge call failed', {
       error: err instanceof Error ? err.message : String(err),
     });
-    return empty;
+    return empty('unavailable');
   }
 }
 

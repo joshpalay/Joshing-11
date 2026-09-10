@@ -24,7 +24,7 @@
  * SALVAGE_GENERATED_ON_DEMOTE_ENABLED=false to revert to hard-suppress without a
  * deploy.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db, generatedQuestions, questions } from '@/server/db';
 import { proposeSalvage, type SalvageProposal } from '@/server/quality/salvage-question';
@@ -127,6 +127,7 @@ export async function salvageOrSuppressGeneratedDemote(
         verificationVerdict: 'ok',
         verifiedAt: now,
         verificationReason: `salvaged: ${proposal.note}`.slice(0, 500),
+        trustTier: sql`case when ${generatedQuestions.trustTier} = 'unverified' then 'machine_verified' else ${generatedQuestions.trustTier} end`,
       })
       .where(eq(generatedQuestions.id, row.id));
 

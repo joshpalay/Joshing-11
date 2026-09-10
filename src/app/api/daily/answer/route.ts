@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
     // Give-up is a deliberate, real wrong — a genuine scored verdict, not an infra
     // failure — so it's constructed as a scored outcome and never held for retry.
     const grade: GradeOutcome = parsed.gaveUp
-      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact', gradedProvider: null }
+      ? { status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact', gradedProvider: null, reasonCode: 'empty_submission' }
       : await gradeAnswer(
           parsed.submittedAnswer,
           canonicalAnswer,
@@ -509,17 +509,28 @@ export async function POST(request: NextRequest) {
     });
 
     const propagationKey = question.generatedId ?? question.canonicalId ?? canonicalQuestionId;
-    // The slot write (marks the slot answered) and the mastery-event write are
-    // independent — masteryDelta is returned in the response but is never written
-    // into nextSlots — so run them concurrently to shave a DB round-trip off the
-    // user-blocking answer path. Both are still awaited before the verdict returns.
-    // recordAnswerSideEffects swallows its own errors (null masteryDelta on
-    // failure), so the slot update is the only call here that can reject; the
-    // mastery event's sourceId ON CONFLICT dedup keeps a client retry after such a
-    // rejection from double-counting.
-    const [, masteryDelta] = await Promise.all([
-      db.update(dailyQueues).set({ slots: nextSlots }).where(eq(dailyQueues.id, queue.id)),
-      recordAnswerSideEffects({
+    // Do not overwrite a newer queue snapshot after a bonus append or another
+    // answer. A zero-row update means the client must reload the fresh slots.
+    const committed = await db
+      .update(dailyQueues)
+      .set({ slots: nextSlots })
+      .where(and(
+        eq(dailyQueues.id, queue.id),
+        eq(dailyQueues.userId, session.userId),
+        eq(dailyQueues.slots, queue.slots),
+      ))
+      .returning({ id: dailyQueues.id });
+    if (committed.length === 0) {
+      console.info('[daily/answer] queue compare-and-set conflict', { slotIndex: parsed.slotIndex });
+      const [freshQueue] = await db
+        .select({ slots: dailyQueues.slots })
+        .from(dailyQueues)
+        .where(and(eq(dailyQueues.id, queue.id), eq(dailyQueues.userId, session.userId)))
+        .limit(1);
+      return slotChangedResponse(asQueueSlots(freshQueue?.slots ?? []));
+    }
+
+    const masteryDelta = await recordAnswerSideEffects({
       userId: session.userId,
       isCorrect,
       // A return answered WRONG records nothing new (the player was already
@@ -576,8 +587,7 @@ export async function POST(request: NextRequest) {
             feedSourceId: `daily:${propagationKey}:${session.userId}`,
           }
         : null,
-      }),
-    ]);
+      });
     marks.mastery = Date.now();
 
     // D-MISSED-RETURN-01 §7-A1 — the author push. Fires only when a WRONG-scope

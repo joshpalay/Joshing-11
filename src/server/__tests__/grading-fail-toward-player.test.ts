@@ -60,6 +60,22 @@ describe('gradeAnswer — acceptable variants (B4 Phase 4)', () => {
     await gradeAnswer('Vitamin', 'Vitamin A', [], 'q');
     expect(llmMock.gradeAnswerWithLLM).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ['language marker', 'C', 'C++'],
+    ['musical accidental', 'C major', 'C# major'],
+    ['negative sign', '5', '-5'],
+    ['decimal point', '1 5', '1.5'],
+  ])('does not erase a meaningful %s', async (_label, submitted, canonical) => {
+    llmMock.gradeAnswerWithLLM.mockResolvedValue({
+      status: 'scored', result: 'wrong', confidence: 1, consolation: null,
+    });
+    const result = await gradeAnswer(submitted, canonical, [], 'q', 'factual');
+    expect(result.status).toBe('scored');
+    if (result.status !== 'scored') throw new Error('expected scored');
+    expect(result.result).toBe('wrong');
+    expect(result.gradedVia).toBe('llm');
+  });
 });
 
 describe('gradeAnswer — fail toward the player on outage (Drift Risk 2)', () => {

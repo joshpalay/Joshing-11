@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db, generatedQuestions, questions } from '@/server/db';
@@ -202,7 +202,12 @@ async function stampQuestion(rowId: string, verdict: VerificationVerdict, now: D
 async function stampGenerated(rowId: string, verdict: VerificationVerdict, now: Date, reason?: string) {
   await db
     .update(generatedQuestions)
-    .set(verdictToGeneratedPatch(verdict, now, reason))
+    .set({
+      ...verdictToGeneratedPatch(verdict, now, reason),
+      ...(verdict === 'ok'
+        ? { trustTier: sql`case when ${generatedQuestions.trustTier} = 'unverified' then 'machine_verified' else ${generatedQuestions.trustTier} end` }
+        : {}),
+    })
     .where(eq(generatedQuestions.id, rowId));
 }
 
