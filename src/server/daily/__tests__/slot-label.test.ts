@@ -15,8 +15,8 @@ function slot(overrides: Partial<QueueSlot>): QueueSlot {
 }
 
 describe('slotCategoryLabel', () => {
-  it('prefers a specific broad_category', () => {
-    expect(slotCategoryLabel(slot({ broad_category: 'History' }))).toBe('History');
+  it('keeps the specific chosen topic ahead of a broad category', () => {
+    expect(slotCategoryLabel(slot({ broad_category: 'History' }))).toBe('Renaissance Florence');
   });
 
   // The regression this function exists for. Caught live: a new player's first
@@ -41,7 +41,7 @@ describe('slotCategoryLabel', () => {
 
   it('falls back to the mapped category when broad_category is generic but category is not', () => {
     expect(
-      slotCategoryLabel(slot({ broad_category: 'Other', category: 'pop_culture' })),
+        slotCategoryLabel(slot({ domain: '', broad_category: 'Other', category: 'pop_culture' })),
     ).toBe('Pop Culture');
   });
 
@@ -51,6 +51,17 @@ describe('slotCategoryLabel', () => {
 
   it('returns the domain when nothing else is present', () => {
     expect(slotCategoryLabel(slot({}))).toBe('Renaissance Florence');
+  });
+
+  it('trims a specific domain before displaying it', () => {
+    expect(slotCategoryLabel(slot({ domain: '  Renaissance Florence  ', broad_category: 'History' })))
+      .toBe('Renaissance Florence');
+  });
+
+  it('uses a meaningful category when the domain is generic or missing', () => {
+    expect(slotCategoryLabel(slot({ domain: 'General Knowledge', broad_category: 'History' })))
+      .toBe('History');
+    expect(slotCategoryLabel(slot({ domain: '', broad_category: 'History' }))).toBe('History');
   });
 
   // Callers render no badge for an empty label rather than a blank chip, so the

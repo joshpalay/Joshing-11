@@ -24,6 +24,8 @@ import type { QueueSlot } from '@/server/daily/types';
  * badge" rather than rendering a blank chip.
  */
 export function slotCategoryLabel(slot: QueueSlot): string {
+  const domain = slot.domain?.trim();
+  if (domain && !isGenericSubcategory(categoryLabel(domain))) return domain;
   const broad = slot.broad_category?.trim();
   if (broad && !isGenericSubcategory(broad)) return broad;
   const mapped = slot.category ? categoryLabel(slot.category) : '';
