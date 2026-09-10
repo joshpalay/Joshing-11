@@ -79,7 +79,17 @@ export async function GET() {
   }
 
   const slots = asQueueSlots(queue.slots);
-  const answered = slots.filter((slot) => slot.answered).length;
+  // A1 finding F3 (end-to-end-gameplay-ux-audit.md): count only CORE answers
+  // here. Bonus (+2) and missed-question-return slots are additive and never
+  // count toward the five (D-F3 canon, bonus.ts), but this used to count
+  // every answered slot before clamping to DAILY_QUEUE_SIZE below — so a
+  // player who answered 3 of 5 core questions plus both bonus slots got
+  // questionsAnswered: 5 / questionsRemaining: 0 here (looking complete)
+  // while isComplete (isRoundComplete, already core-scoped) correctly still
+  // said false. slotOutcomes/bonusOutcomes already derive from
+  // getCoreSlots/getBonusSlots below; this brings the raw count in line with
+  // them instead of leaking bonus/return answers into the "of 5" status.
+  const answered = getCoreSlots(slots).filter((slot) => slot.answered).length;
   const total = DAILY_QUEUE_SIZE;
   const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE);
   // Completion follows "no slot left to play", not "5 answered" — a skipped

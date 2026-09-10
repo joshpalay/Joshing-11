@@ -14,7 +14,7 @@ import { getHomeFriendRequests } from '@/server/db/queries/friends'
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { getWelcomeInviterName } from '@/server/home/welcome-inviter-name'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
-import { getBonusSlots } from '@/server/daily/bonus'
+import { getBonusSlots, getCoreSlots } from '@/server/daily/bonus'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
@@ -318,7 +318,10 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
   }
 
   const slots: QueueSlot[] = Array.isArray(queue.slots) ? (queue.slots as QueueSlot[]) : []
-  const answered = slots.filter((slot) => slot.answered).length
+  // F3 (end-to-end-gameplay-ux-audit.md) — mirrors the identical fix in
+  // /api/daily/status/route.ts: count only CORE answers, never bonus/return,
+  // so this SSR snapshot can't disagree with the client's later status fetch.
+  const answered = getCoreSlots(slots).filter((slot) => slot.answered).length
   const questionsAnswered = Math.min(answered, DAILY_QUEUE_SIZE)
   // Mirror the /api/daily/status predicate: a round is complete when no slot is
   // pending (answered or skipped), not when 5 are answered. Skipped slots whose
