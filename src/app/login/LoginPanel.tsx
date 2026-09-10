@@ -544,7 +544,7 @@ export default function LoginPanel({
     }
 
     if (!trimmedHandle) {
-      setError('Enter your call sign.');
+      setError('Enter your username.');
       return;
     }
 
@@ -554,17 +554,17 @@ export default function LoginPanel({
     }
 
     if (handleStatus.state === 'checking') {
-      setError('Please wait while we check that call sign.');
+      setError('Please wait while we check that username.');
       return;
     }
 
     if (handleStatus.state === 'unavailable') {
-      setError('Choose an available call sign.');
+      setError('Choose an available username.');
       return;
     }
 
     if (trimmedHandle !== currentHandle && handleStatus.state !== 'available') {
-      setError('Please wait until we confirm that call sign is available.');
+      setError('Please wait until we confirm that username is available.');
       return;
     }
 
@@ -594,7 +594,7 @@ export default function LoginPanel({
         const handleData = await handleResponse.json().catch(() => ({}));
 
         if (!handleResponse.ok) {
-          setError(handleData?.message ?? 'Unable to save your call sign.');
+          setError(handleData?.message ?? 'Unable to save your username.');
           setLoading(false);
           return;
         }
@@ -812,7 +812,7 @@ export default function LoginPanel({
             Finish your profile
           </p>
           <p className="text-center text-[15px] leading-6 text-black/70">
-            Pick the name friends will see and the call sign they can use to find you.
+            Pick the name friends will see and the username they can use to find you.
           </p>
           <div className="space-y-2">
             <label
@@ -841,7 +841,7 @@ export default function LoginPanel({
           </div>
           <div className="space-y-2">
             <label className="block text-center text-sm font-medium text-black" htmlFor="handle">
-              Call sign / handle
+              Username
             </label>
             <input
               id="handle"
@@ -872,16 +872,16 @@ export default function LoginPanel({
               {handle.length < HANDLE_MIN
                 ? 'Use 3–20 characters: lowercase letters, numbers, or underscores. Start with a letter.'
                 : handleStatus.state === 'checking'
-                  ? 'Checking call sign…'
+                  ? 'Checking username…'
                   : handleStatus.state === 'available'
                     ? `@${handle} is available.`
                     : handleStatus.state === 'unavailable'
                       ? handleStatus.reason === 'taken'
-                        ? 'That call sign is already taken.'
+                        ? 'That username is already taken.'
                         : handleStatus.reason === 'reserved'
-                          ? 'That call sign is reserved.'
+                          ? 'That username is reserved.'
                           : 'Use 3–20 lowercase letters, numbers, or underscores. Start with a letter.'
-                      : 'We’ll check whether this call sign is available.'}
+                      : 'We’ll check whether this username is available.'}
             </p>
           </div>
           <button

@@ -83,12 +83,12 @@ export function AddFriendButton({
 
   function handleAccept() {
     if (!relationship.friendshipId) return
-    void runAction('accept', relationship.friendshipId, 'Approved.')
+    void runAction('accept', relationship.friendshipId, 'You’re now friends.')
   }
 
   function handleIgnore() {
     if (!relationship.friendshipId) return
-    void runAction('ignore', relationship.friendshipId, 'Set aside.')
+    void runAction('ignore', relationship.friendshipId, 'Request declined.')
   }
 
   const removeCopy =
@@ -172,7 +172,7 @@ export function AddFriendButton({
               onClick={handleAccept}
               disabled={pendingAction !== null}
             >
-              {pendingAction === 'accept' ? 'Approving…' : 'Approve'}
+              {pendingAction === 'accept' ? 'Accepting…' : 'Accept'}
             </button>
             <button
               type="button"
@@ -180,7 +180,7 @@ export function AddFriendButton({
               onClick={handleIgnore}
               disabled={pendingAction !== null}
             >
-              {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
+              {pendingAction === 'ignore' ? 'Declining…' : 'Decline'}
             </button>
           </>
         ) : null}

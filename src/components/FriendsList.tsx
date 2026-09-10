@@ -346,7 +346,7 @@ function requestTiming(value: string) {
   return formatRelativeTime(value);
 }
 
-function IncomingRequestCard({
+export function IncomingRequestCard({
   request,
   pendingRequestId,
   onApprove,
@@ -363,12 +363,16 @@ function IncomingRequestCard({
     <article className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-foreground font-medium">{request.requesterName}</h3>
+          <h3 className="text-foreground font-medium break-words">{request.requesterName}</h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            Wants to follow you · {requestTiming(request.createdAt)}
+            Wants to be friends · {requestTiming(request.createdAt)}
           </p>
         </div>
       </div>
+
+      <p className="text-muted-foreground mt-2 text-sm">
+        Share questions and see what you’re each exploring. Declining won’t notify them.
+      </p>
 
       {request.personalNote ? (
         <p className="text-muted-foreground mt-3 text-sm leading-6">“{request.personalNote}”</p>
@@ -393,16 +397,18 @@ function IncomingRequestCard({
           className="btn-primary flex flex-1 items-center justify-center"
           onClick={() => onApprove(request)}
           disabled={busy}
+          aria-label={`Accept friend request from ${request.requesterName}`}
         >
-          {busy ? 'Working…' : 'Approve'}
+          {busy ? 'Working…' : 'Accept'}
         </button>
         <button
           type="button"
           className="text-muted-foreground min-h-11 px-4 text-sm"
           onClick={() => onIgnore(request)}
           disabled={busy}
+          aria-label={`Decline friend request from ${request.requesterName}`}
         >
-          Ignore
+          Decline
         </button>
       </div>
     </article>
@@ -660,11 +666,11 @@ export default function FriendsList() {
   }
 
   function approveRequest(request: IncomingRequest) {
-    void actOnRequest(request.id, 'accept', 'Could not approve this request.');
+    void actOnRequest(request.id, 'accept', 'Could not accept this request.');
   }
 
   function ignoreRequest(request: IncomingRequest) {
-    void actOnRequest(request.id, 'ignore', 'Could not ignore this request.');
+    void actOnRequest(request.id, 'ignore', 'Could not decline this request.');
   }
 
   function cancelRequest(request: OutboundRequest) {
@@ -685,7 +691,7 @@ export default function FriendsList() {
             id="follow-requests"
             className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
           >
-            Follow Requests
+            Friend Requests
           </h2>
           <div className="space-y-3">
             {incomingRequests.map((request) => (

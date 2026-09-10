@@ -149,7 +149,7 @@ export async function POST(request: Request) {
   // Already following (mutual or one-directional) — nothing to do.
   if (relationship.state === 'friends' || relationship.state === 'following') {
     return NextResponse.json(
-      { error: 'already_following', message: 'You already follow this person.' },
+      { error: 'already_following', message: 'You’re already connected to this person.' },
       { status: 409 }
     )
   }
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: 'already_pending',
-        message: 'You already requested to follow this person.',
+        message: 'You already sent this person a friend request.',
       },
       { status: 409 }
     )
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: 'inbound_exists',
-        message: 'They requested to follow you — approve it instead.',
+        message: 'They sent you a friend request — accept it instead.',
         friendshipId: relationship.friendshipId,
       },
       { status: 409 }

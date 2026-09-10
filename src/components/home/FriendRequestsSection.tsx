@@ -136,7 +136,7 @@ function RequestCard({
           onClick={() => onAccept(request)}
           disabled={disabled}
           aria-busy={busy}
-          aria-label={`Accept follow request from ${request.requesterName}`}
+          aria-label={`Accept friend request from ${request.requesterName}`}
         >
           {busy ? 'Working…' : 'Accept'}
         </button>
@@ -146,7 +146,7 @@ function RequestCard({
           onClick={() => onDecline(request)}
           disabled={disabled}
           aria-busy={busy}
-          aria-label={`Decline follow request from ${request.requesterName}`}
+          aria-label={`Decline friend request from ${request.requesterName}`}
         >
           Decline
         </button>
