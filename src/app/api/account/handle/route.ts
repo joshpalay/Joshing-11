@@ -37,7 +37,7 @@ export async function PATCH(request: Request) {
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'invalid_body', message: 'Handle must be 3–20 characters.' },
+      { error: 'invalid_body', message: 'Username must be 3–20 characters.' },
       { status: 400 },
     );
   }
@@ -47,14 +47,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       {
         error: 'invalid_format',
-        message: 'Handle must start with a letter and use only lowercase letters, numbers, and underscores.',
+        message: 'Username must start with a letter and use only lowercase letters, numbers, and underscores.',
       },
       { status: 400 },
     );
   }
   if (isReservedHandle(normalized)) {
     return NextResponse.json(
-      { error: 'reserved', message: 'That handle is reserved.' },
+      { error: 'reserved', message: 'That username is reserved.' },
       { status: 400 },
     );
   }
@@ -63,12 +63,12 @@ export async function PATCH(request: Request) {
   if (!verdict.ok) {
     if (verdict.reason === 'taken') {
       return NextResponse.json(
-        { error: 'taken', message: 'That handle is already taken.' },
+        { error: 'taken', message: 'That username is already taken.' },
         { status: 409 },
       );
     }
     return NextResponse.json(
-      { error: verdict.reason, message: 'That handle is not available.' },
+      { error: verdict.reason, message: 'That username is not available.' },
       { status: 400 },
     );
   }
@@ -78,7 +78,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       {
         error: 'rate_limited',
-        message: 'You can change your handle once every 30 days.',
+        message: 'You can change your username once every 30 days.',
         retryAfter: result.retryAfter.toISOString(),
       },
       { status: 429 },

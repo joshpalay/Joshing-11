@@ -65,8 +65,8 @@ describe('FriendRequestsSection render', () => {
     expect(html).toContain('Requester b')
     expect(html).toContain('Requester c')
     // One Accept + one Decline per card.
-    expect(html.match(/Accept follow request from/g)).toHaveLength(3)
-    expect(html.match(/Decline follow request from/g)).toHaveLength(3)
+    expect(html.match(/Accept friend request from/g)).toHaveLength(3)
+    expect(html.match(/Decline friend request from/g)).toHaveLength(3)
     // Overflow line is honest about the full pending count and routes to /friends.
     expect(html).toContain('See all (5)')
     expect(html).toContain('href="/friends"')

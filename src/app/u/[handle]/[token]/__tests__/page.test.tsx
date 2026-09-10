@@ -121,7 +121,10 @@ describe('/u/[handle]/[token] personalized invitation', () => {
 
     expect(html).toContain('You’ve been invited to Joshing');
     expect(html).toContain('Play the greatest hits');
-    expect(html).toContain('Someone picked a few categories to get you started.');
+    // Reusable link: honest provenance never claims a person "picked" these,
+    // named or not — it says they came with the invitation.
+    expect(html).toContain('These topics come with this invitation. During setup, you can keep, remove, or add your own.');
+    expect(html).not.toContain('picked');
     expect(html).toContain('>Accept invitation<');
     expect(html).not.toContain('undefined');
   });

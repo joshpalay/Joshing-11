@@ -56,7 +56,7 @@ export function InlineHandleField({
     }
     if (cooldownInfo.locked) {
       setError(
-        `You can change your handle again on ${cooldownInfo.unlockDate.toLocaleDateString()}.`,
+        `You can change your username again on ${cooldownInfo.unlockDate.toLocaleDateString()}.`,
       );
       return;
     }
@@ -102,7 +102,7 @@ export function InlineHandleField({
           className="flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
           value={draft}
           maxLength={20}
-          placeholder="handle"
+          placeholder="username"
           onChange={(e) => setDraft(e.target.value.toLowerCase())}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -117,7 +117,7 @@ export function InlineHandleField({
       </div>
       {confirming ? (
         <div className="mt-3 rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning)]">
-          <p>You can change your handle once every {cooldownDays} days. Continue?</p>
+          <p>You can change your username once every {cooldownDays} days. Continue?</p>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
@@ -152,7 +152,7 @@ export function InlineHandleField({
         {variant === 'card' ? (
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Handle
+              Username
             </p>
             <SaveStatusIndicator status={status} />
           </div>
@@ -169,18 +169,18 @@ export function InlineHandleField({
       {variant === 'card' ? (
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-            Handle
+            Username
           </p>
           <SaveStatusIndicator status={status} />
         </div>
       ) : null}
       <button
         type="button"
-        aria-label="Edit handle"
+        aria-label="Edit username"
         className="group/edit flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-muted/40"
         onClick={beginEdit}
       >
-        <span>{trimmed.length > 0 ? `@${trimmed}` : 'Pick a handle'}</span>
+        <span>{trimmed.length > 0 ? `@${trimmed}` : 'Pick a username'}</span>
         <Pencil className="size-3.5 shrink-0" aria-hidden="true" />
       </button>
       {variant === 'plain' && status !== 'idle' ? (
@@ -195,7 +195,7 @@ export function InlineHandleField({
           </p>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
-            You can change your handle once every {cooldownDays} days.
+            You can change your username once every {cooldownDays} days.
           </p>
         )
       ) : null}

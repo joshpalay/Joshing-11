@@ -43,14 +43,13 @@ export type PreSeededInterest = ProposedInterest
 type OnboardingFlowProps = {
   preSeededInterests: PreSeededInterest[]
   /**
-   * Where preSeededInterests came from — controls both pre-selection and copy.
+   * Where preSeededInterests came from — controls attribution copy.
    * 'named': the inviter chose these topics FOR this specific person
    * (AddFriendInvite) — they arrive pre-selected, as today.
    * 'link': the topics rode a per-user invite link (curated or auto-fallback
    * from the inviter's declared interests) that may reach anyone, not someone
-   * the inviter had in mind — they arrive UNSELECTED, offered only as
-   * suggestion chips. Defaults to 'named' so every existing caller (the dev
-   * preview harness included) keeps today's pre-selecting behavior unchanged.
+   * the inviter had in mind. Non-catalog topics start selected in both paths;
+   * the player can remove them before saving. Catalog additions are unselected.
    */
   seedSource?: 'named' | 'link'
   inviterName?: string | null
@@ -313,7 +312,7 @@ export default function OnboardingFlow({
   const hasInitialDisplayName = Boolean(initialDisplayName?.trim())
   const hasInitialHandle = Boolean(initialHandle?.trim())
   const [currentStep, setCurrentStep] = useState<CurrentStep>(() => {
-    // Name and call sign now share one "setup" screen; only skip it when both
+    // Name and username now share one "setup" screen; only skip it when both
     // are already on file.
     if (!hasInitialDisplayName || !hasInitialHandle) return 'setup'
     return 'review'
@@ -495,7 +494,7 @@ export default function OnboardingFlow({
     setEverSelectedKeys((current) => new Set(current).add(key))
   }
 
-  // Name + call sign now save together from one "setup" screen. Name persists
+  // Name + username now save together from one "setup" screen. Name persists
   // first, then handle; a handle failure surfaces under the handle field while
   // the (already-saved) name is kept, so retrying only re-runs the handle PATCH.
   async function submitSetup() {
@@ -509,7 +508,7 @@ export default function OnboardingFlow({
     const candidate = handle.trim().toLowerCase()
     if (!HANDLE_FORMAT.test(candidate)) {
       setHandleError(
-        'Handle must be 3–20 characters, start with a letter, and use only lowercase letters, numbers, and underscores.'
+        'Username must be 3–20 characters, start with a letter, and use only lowercase letters, numbers, and underscores.'
       )
       return
     }
@@ -730,7 +729,9 @@ export default function OnboardingFlow({
       </p>
       {hasSeeds ? (
         <p className="text-muted-foreground text-sm leading-6">
-          {hasInviterSeeds && hasCatalogSeeds
+          {hasInviterSeeds && seedSource === 'link'
+            ? `These starting topics come from ${displayInviterName}’s invitation. Keep what fits, remove what doesn’t, or add your own.${hasCatalogSeeds ? ' Extra ideas from Joshing are labeled.' : ''}`
+            : hasInviterSeeds && hasCatalogSeeds
             ? `${displayInviterName} picked the preselected topics. Extra ideas from Joshing are labeled.`
             : hasInviterSeeds
               ? `${displayInviterName} picked these for you. Take any that feel right, or remove what doesn't fit.`
@@ -787,8 +788,8 @@ export default function OnboardingFlow({
                 />
                 <p className="text-muted-foreground text-sm leading-6">
                   {inviteeDisplayName?.trim()
-                    ? `${displayInviterName} added you as "${inviteeDisplayName.trim()}". Set your name and call sign — friends use your @ to find you.`
-                    : 'Pick the name friends see and your call sign — your @ on Joshing.'}
+                    ? `${displayInviterName} added you as "${inviteeDisplayName.trim()}". Set your name and username — friends use your @ to find you.`
+                    : 'Pick the name friends see and your username — your @ on Joshing.'}
                 </p>
               </div>
 
@@ -813,7 +814,7 @@ export default function OnboardingFlow({
                       const next = e.target.value.slice(0, DISPLAY_NAME_MAX)
                       setDisplayName(next)
                       if (displayNameError) setDisplayNameError(null)
-                      // Seed the call sign from the name until the user edits it.
+                      // Seed the username from the name until the user edits it.
                       if (!handleTouched && !hasInitialHandle) {
                         setHandle(sanitizeForHandle(next))
                       }
@@ -825,13 +826,13 @@ export default function OnboardingFlow({
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium">Your call sign</span>
+                  <span className="text-sm font-medium">Your username</span>
                   <div className="mt-2 flex items-center gap-2">
                     <span className="text-muted-foreground text-base">@</span>
                     <input
                       type="text"
                       className="placeholder:text-muted-foreground/70 h-12 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-base transition outline-none focus:border-[var(--brand-navy)]"
-                      placeholder="yourhandle"
+                      placeholder="yourusername"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
@@ -865,9 +866,9 @@ export default function OnboardingFlow({
                           ? `@${handle} is available.`
                           : handleStatus.state === 'unavailable'
                             ? handleStatus.reason === 'taken'
-                              ? 'That call sign is already taken.'
+                              ? 'That username is already taken.'
                               : handleStatus.reason === 'reserved'
-                                ? 'That call sign is reserved.'
+                                ? 'That username is reserved.'
                                 : 'Use only lowercase letters, numbers, and underscores. Start with a letter.'
                             : null}
                     </p>
@@ -878,7 +879,7 @@ export default function OnboardingFlow({
                 </label>
 
                 <p className="text-muted-foreground text-xs leading-5">
-                  {`${DISPLAY_NAME_MIN}–${DISPLAY_NAME_MAX} characters for your name. Call sign is ${HANDLE_MIN}–${HANDLE_MAX} characters — lowercase letters, numbers, and underscores, starting with a letter.`}
+                  {`${DISPLAY_NAME_MIN}–${DISPLAY_NAME_MAX} characters for your name. Username is ${HANDLE_MIN}–${HANDLE_MAX} characters — lowercase letters, numbers, and underscores, starting with a letter.`}
                 </p>
 
                 <button
