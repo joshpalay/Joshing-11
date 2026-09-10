@@ -71,6 +71,13 @@ function questionBadges(slot: QueueSlot): Array<{ label: string; tone?: 'muted' 
  * improved: it is that something one person knew is now something two people
  * know. That is the sequel to the existing wrong-answer line, "This one belongs
  * to {Creator}'s world — now it's in yours too."
+ *
+ * F6 (2026-09-10 audit) — this used to read "It stuck. {author} would be
+ * glad," which attributes a feeling to the author the system has no basis for
+ * (it never asked them, and can't know). Fixed to state only what actually
+ * happened: the question was theirs, and now the player has it too. Same
+ * provenance-in-words principle as CreatorNote — carried in the sentence, not
+ * implied through an emotion.
  */
 function returnRecoveryNote(slot: QueueSlot): string | null {
   if (slot.return_scope !== 'wrong') return null;
@@ -83,7 +90,7 @@ function returnRecoveryNote(slot: QueueSlot): string | null {
     slot.answer_state === 'correct' || slot.catchup_answer_state === 'correct';
   if (!answeredCorrect) return null;
   const author = slot.author_name?.trim();
-  return author ? `It stuck. ${author} would be glad.` : 'It stuck.';
+  return author ? `It stuck. ${author}'s world, now yours too.` : 'It stuck.';
 }
 
 /**
@@ -94,6 +101,9 @@ function returnRecoveryNote(slot: QueueSlot): string | null {
  * WRONG SCOPE ONLY. The expired scope has never been seen by the player, so it
  * gets no return framing at all and reads as a normal question arriving late
  * (§2). Do not "fix" that asymmetry — it is the whole point of the split.
+ *
+ * Bonus banner reference above is "FROM {NAME}'S WORLD" (fixed 2026-09-10,
+ * F6 — was "FROM {NAME}'S KNOWLEDGE").
  */
 function returnBannerLastSeen(slot: QueueSlot): string | null {
   if (slot.return_scope !== 'wrong') return null;
