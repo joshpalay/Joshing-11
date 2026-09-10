@@ -12,6 +12,7 @@ import {
   users,
 } from '@/server/db';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
+import { resolveDisplayName } from '@/server/lib/display-name';
 
 export type User = typeof users.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
@@ -65,10 +66,6 @@ export type FriendsHub = {
   outboundRequests: OutboundFollowRequest[]
   // My own gate on new followers.
   followPrivacy: 'public' | 'approval_required'
-}
-
-function displayName(name: string | null, fallback: string): string {
-  return name?.trim() || fallback
 }
 
 function normalizeSuggestedInterests(value: unknown): string[] {
@@ -355,7 +352,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   const userRows = allIds.length === 0
     ? []
     : await db
-      .select({ id: users.id, displayName: users.displayName, phoneNumber: users.phoneNumber })
+      .select({ id: users.id, displayName: users.displayName, handle: users.handle })
       .from(users)
       .where(inArray(users.id, allIds))
   const usersById = new Map(userRows.map((row) => [row.id, row] as const))
@@ -394,7 +391,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
 
   function toPerson(id: string): HubPerson {
     const user = usersById.get(id)
-    const name = displayName(user?.displayName ?? null, user?.phoneNumber ?? '')
+    const name = resolveDisplayName({ displayName: user?.displayName, handle: user?.handle })
     const personInterests = interestsByUser.get(id) ?? []
     return {
       id,
@@ -420,7 +417,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
         return {
           id: request.id,
           requesterId: request.requesterId,
-          requesterName: displayName(user?.displayName ?? null, user?.phoneNumber ?? ''),
+          requesterName: resolveDisplayName({ displayName: user?.displayName, handle: user?.handle }),
           suggestedInterests: request.suggestedInterests,
           personalNote: request.personalNote,
           createdAt: request.createdAt,
@@ -433,7 +430,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
         return {
           id: request.id,
           recipientId: request.recipientId,
-          recipientName: displayName(user?.displayName ?? null, user?.phoneNumber ?? ''),
+          recipientName: resolveDisplayName({ displayName: user?.displayName, handle: user?.handle }),
           personalNote: request.personalNote,
           createdAt: request.createdAt,
         }

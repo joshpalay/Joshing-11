@@ -12,7 +12,7 @@ const { dbMock, state } = vi.hoisted(() => {
   function makeSelect() {
     const rows = state.selectQueue.shift() ?? []
     const chain: Record<string, unknown> = {}
-    for (const method of ['from', 'where', 'orderBy']) {
+    for (const method of ['from', 'where', 'orderBy', 'groupBy']) {
       chain[method] = vi.fn(() => chain)
     }
     chain.limit = vi.fn(async () => rows)
@@ -42,6 +42,7 @@ vi.mock('@/server/db', () => ({
   users: {
     id: 'users.id',
     displayName: 'users.displayName',
+    handle: 'users.handle',
     phoneNumber: 'users.phoneNumber',
     followPrivacy: 'users.followPrivacy',
   },
@@ -109,5 +110,47 @@ describe('getFriendsHub — declined edges are fully excluded', () => {
     expect(hub.incomingRequests.some((r) => r.requesterId === 'declined-user')).toBe(false)
     expect(hub.following.some((p) => p.id === 'declined-user')).toBe(false)
     expect(hub.followers.some((p) => p.id === 'declined-user')).toBe(false)
+  })
+})
+
+// F8 (2026-09-10 audit) — the Friends hub display path used to fall back to
+// the raw phone number for a person row with no display name. This exercises
+// the full getFriendsHub path (not just the pure resolver) for a legacy
+// nameless, handle-less approved follow.
+describe('getFriendsHub — display name never falls back to a phone number', () => {
+  it('a nameless, handle-less followee shows the generic placeholder, not their phone', async () => {
+    const now = new Date('2026-09-08T00:00:00.000Z')
+    const edges = [
+      {
+        id: 'e-following',
+        followerId: VIEWER,
+        followeeId: 'nameless-friend',
+        state: 'approved',
+        personalNote: null,
+        requestContext: null,
+        createdAt: now,
+      },
+    ]
+    // Queue order: edges, users(allIds), interests, then the parallel
+    // getLastActiveByUserId (responseRows, masteryRows) and
+    // getFriendQuestionCounts (authoredRows, answeredRows) selects — in that
+    // order, since Promise.all evaluates its array synchronously
+    // left-to-right — then me.
+    state.selectQueue.push(
+      edges,
+      [{ id: 'nameless-friend', displayName: null, handle: null }],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [{ followPrivacy: 'approval_required' }],
+    )
+
+    const hub = await getFriendsHub(VIEWER)
+
+    expect(hub.following).toHaveLength(1)
+    expect(hub.following[0]?.displayName).toBe('Joshing friend')
+    expect(JSON.stringify(hub)).not.toMatch(/\+1\d{10}/)
   })
 })

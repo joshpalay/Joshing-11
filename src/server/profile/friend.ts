@@ -4,6 +4,7 @@ import { db, declaredInterests } from '@/server/db'
 import { areFriends, getFriends } from '@/server/db/queries/friends'
 import { getRelationship, type RelationshipResult } from '@/server/db/queries/friend-requests'
 import { getUserById } from '@/server/db/queries/users'
+import { resolveDisplayName } from '@/server/lib/display-name'
 import type { PreviewAs } from '@/server/profile/preview'
 import {
   canViewSection,
@@ -65,13 +66,6 @@ export type FriendPortraitData = {
   // no preview is active. Pages use this to show the preview banner
   // and hide owner-only controls during preview.
   previewedAs: 'stranger' | 'friend' | null
-}
-
-function profileDisplayName(
-  name: string | null,
-  fallback: string | null = 'Joshing friend'
-) {
-  return name?.trim() || fallback?.trim() || 'Joshing friend'
 }
 
 // Match interests regardless of case, punctuation, or whitespace so that
@@ -203,7 +197,7 @@ export async function getFriendPortraitData(
       .filter((user) => viewerFriendIds.has(user.id))
       .map((user) => ({
         id: user.id,
-        displayName: profileDisplayName(user.displayName, user.phoneNumber),
+        displayName: resolveDisplayName(user),
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName))
     mutualFriends = mutuals.slice(0, MUTUAL_FRIENDS_LIMIT)
@@ -225,10 +219,7 @@ export async function getFriendPortraitData(
   return {
     user: {
       id: viewedUser.id,
-      displayName: profileDisplayName(
-        viewedUser.displayName,
-        viewedUser.phoneNumber
-      ),
+      displayName: resolveDisplayName(viewedUser),
       handle: viewedUser.handle?.trim() ? viewedUser.handle.trim() : null,
       memberSince: viewedUser.createdAt,
     },
