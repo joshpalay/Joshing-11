@@ -225,6 +225,21 @@ function sessionCloseLines(slots: QueueSlot[]): {
   return buildSessionCloseLines(summaries);
 }
 
+// B-CEREMONY-PLACEMENT-01 — checked before either summary-bound hop (resume
+// and session-close) so an unviewed ceremony intercepts the player on the way
+// to /daily/summary. Resolves to null on any failure so a ceremony-status
+// check never blocks reaching the summary.
+async function fetchLatestUnviewedCeremonyId(): Promise<string | null> {
+  try {
+    const response = await fetch('/api/ceremony/status', { credentials: 'include' });
+    if (!response.ok) return null;
+    const body = await response.json().catch(() => null);
+    return body?.latestUnviewed?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function DailyPage() {
   const router = useRouter();
   const [queue, setQueue] = useState<QueueResponse | null>(null);
@@ -269,6 +284,21 @@ export default function DailyPage() {
   const [pendingGiveUp, setPendingGiveUp] = useState(false);
   const [openedTerritoryBySlot, setOpenedTerritoryBySlot] = useState<Record<number, string>>({});
   const [showFirstRunIntro, setShowFirstRunIntro] = useState(false);
+  // B-CEREMONY-PLACEMENT-01 — fetched once on mount, independent of `allDone`,
+  // so the check has resolved well before the player finishes the round. Falls
+  // back to null (→ '/daily/summary') if it hasn't resolved yet by the time
+  // the session-close row renders; an accepted race, not a loading state to
+  // build around.
+  const [ceremonyRedirectId, setCeremonyRedirectId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchLatestUnviewedCeremonyId().then((id) => {
+      if (!cancelled) setCeremonyRedirectId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const answerInputRef = useRef<HTMLInputElement>(null);
   // Guards the one-shot end-of-round revalidation below (B-DAILY-PARTIAL-QUEUE-01).
   const revalidatedEndRef = useRef(false);
@@ -443,7 +473,8 @@ export default function DailyPage() {
 
       const slots = Array.isArray(body.slots) ? body.slots : [];
       if (slots.length > 0 && !currentPendingSlot(slots)) {
-        router.replace('/daily/summary');
+        const ceremonyId = await fetchLatestUnviewedCeremonyId();
+        router.replace(ceremonyId ? `/ceremony/${ceremonyId}?then=summary` : '/daily/summary');
         return;
       }
 
@@ -729,7 +760,9 @@ export default function DailyPage() {
         kind: 'session_close',
         scoreLine,
         interpretiveLine,
-        summaryHref: '/daily/summary',
+        summaryHref: ceremonyRedirectId
+          ? `/ceremony/${ceremonyRedirectId}?then=summary`
+          : '/daily/summary',
       });
     }
 
@@ -745,6 +778,7 @@ export default function DailyPage() {
     answer,
     pendingGiveUp,
     openedTerritoryBySlot,
+    ceremonyRedirectId,
   ]);
 
   const results = useMemo(() => {

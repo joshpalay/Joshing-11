@@ -5,7 +5,6 @@ import TodaysFiveCard, {
   type DailyStatus,
   type SlotOutcome,
 } from '@/components/TodaysFiveCard'
-import { CeremonyPin } from '@/components/home/CeremonyPin'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
 import { AddTopicHomeCard } from '@/components/home/AddTopicHomeCard'
@@ -17,7 +16,6 @@ import { getWelcomeInviterName } from '@/server/home/welcome-inviter-name'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
 import { getBonusSlots } from '@/server/daily/bonus'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
-import { getLatestUnviewedCeremony, getNextCeremonyAt } from '@/server/db/queries/ceremony'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
 import { hasEligibleReturnCandidates } from '@/server/db/queries/missed-return'
@@ -81,7 +79,7 @@ export default async function Home() {
 
       {/* Pending follow requests — a quiet "Wants to connect" section at the head
           of the social content (below the daily-five + reminder block, above the
-          ceremony pin and feed). Signed-in only; renders nothing at zero state,
+          feed). Signed-in only; renders nothing at zero state,
           so a frequently-empty section needs no skeleton (fallback={null}). */}
       {session ? (
         <Suspense fallback={null}>
@@ -123,12 +121,6 @@ export default async function Home() {
             <img src="/images/Variant4-DUO.png" alt="" className="block w-[70px] max-w-none -scale-x-100" />
           </span>
         </div>
-
-        {session ? (
-          <Suspense fallback={null}>
-            <CeremonyPinSection userId={session.userId} />
-          </Suspense>
-        ) : null}
 
         {/* Add a topic — a lightweight seed-a-Daily-Five entry point, placed
             just above the activity feed (Recent activity lives in the feed).
@@ -219,20 +211,6 @@ async function FriendRequestsHomeSection({ userId }: { userId: string }) {
           createdAt: request.createdAt.toISOString(),
         })),
         totalCount,
-      }}
-    />
-  )
-}
-
-async function CeremonyPinSection({ userId }: { userId: string }) {
-  const latestUnviewed = await getLatestUnviewedCeremony(userId)
-  return (
-    <CeremonyPin
-      status={{
-        nextFireAt: getNextCeremonyAt().toISOString(),
-        latestUnviewed: latestUnviewed
-          ? { id: latestUnviewed.id, firedAt: latestUnviewed.firedAt.toISOString() }
-          : null,
       }}
     />
   )
