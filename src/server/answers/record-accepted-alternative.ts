@@ -64,45 +64,69 @@ export async function recordAcceptedAlternative(params: {
   if (!candidate || candidate.length > MAX_ALTERNATIVE_LENGTH) return;
 
   try {
-    if (params.canonicalQuestionId) {
-      const [row] = await db
-        .select({
-          answerText: questions.answerText,
-          acceptedAlternatives: questions.acceptedAlternatives,
-        })
-        .from(questions)
-        .where(eq(questions.id, params.canonicalQuestionId))
-        .limit(1);
-      if (row) {
-        const next = withAlternative(row.answerText, row.acceptedAlternatives ?? [], candidate);
-        if (next) {
-          await db
-            .update(questions)
-            .set({ acceptedAlternatives: next, updatedAt: new Date() })
-            .where(eq(questions.id, params.canonicalQuestionId));
-        }
-      }
-    }
+    await db.transaction(async (tx) => {
+      let canonicalQuestionId = params.canonicalQuestionId ?? null;
+      let generatedQuestionId = params.generatedQuestionId ?? null;
 
-    if (params.generatedQuestionId) {
-      const [row] = await db
-        .select({
-          answer: generatedQuestions.answer,
-          acceptableVariants: generatedQuestions.acceptableVariants,
-        })
-        .from(generatedQuestions)
-        .where(eq(generatedQuestions.id, params.generatedQuestionId))
-        .limit(1);
-      if (row) {
-        const next = withAlternative(row.answer, row.acceptableVariants ?? [], candidate);
-        if (next) {
-          await db
-            .update(generatedQuestions)
-            .set({ acceptableVariants: next })
-            .where(eq(generatedQuestions.id, params.generatedQuestionId));
+      if (canonicalQuestionId && !generatedQuestionId) {
+        const [link] = await tx
+          .select({ generatedQuestionId: questions.generatedQuestionId })
+          .from(questions)
+          .where(eq(questions.id, canonicalQuestionId))
+          .limit(1);
+        generatedQuestionId = link?.generatedQuestionId ?? null;
+      }
+      if (generatedQuestionId && !canonicalQuestionId) {
+        const [link] = await tx
+          .select({ id: questions.id })
+          .from(questions)
+          .where(eq(questions.generatedQuestionId, generatedQuestionId))
+          .limit(1);
+        canonicalQuestionId = link?.id ?? null;
+      }
+
+      if (generatedQuestionId) {
+        const [row] = await tx
+          .select({
+            answer: generatedQuestions.answer,
+            acceptableVariants: generatedQuestions.acceptableVariants,
+          })
+          .from(generatedQuestions)
+          .where(eq(generatedQuestions.id, generatedQuestionId))
+          .limit(1)
+          .for('update');
+        if (row) {
+          const next = withAlternative(row.answer, row.acceptableVariants ?? [], candidate);
+          if (next) {
+            await tx
+              .update(generatedQuestions)
+              .set({ acceptableVariants: next })
+              .where(eq(generatedQuestions.id, generatedQuestionId));
+          }
         }
       }
-    }
+
+      if (canonicalQuestionId) {
+        const [row] = await tx
+          .select({
+            answerText: questions.answerText,
+            acceptedAlternatives: questions.acceptedAlternatives,
+          })
+          .from(questions)
+          .where(eq(questions.id, canonicalQuestionId))
+          .limit(1)
+          .for('update');
+        if (row) {
+          const next = withAlternative(row.answerText, row.acceptedAlternatives ?? [], candidate);
+          if (next) {
+            await tx
+              .update(questions)
+              .set({ acceptedAlternatives: next, updatedAt: new Date() })
+              .where(eq(questions.id, canonicalQuestionId));
+          }
+        }
+      }
+    });
   } catch (error) {
     // Best-effort: the player already saw their answer accepted. A failed
     // write-back just means the next player with the same answer appeals again —

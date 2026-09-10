@@ -8,6 +8,7 @@
  */
 
 import { gradeAnswerWithLLM } from '@/lib/llm';
+import { normalizeForMatch } from '@/server/answers/match-normalization';
 import type { LlmProvider } from '@/server/llm/provider';
 import { getProviderSettings } from '@/server/llm/settings';
 
@@ -38,6 +39,8 @@ export type ScoredGrade = {
   // provenance stamping (MASTERY_EVENTS.llm_provider). null for the exact-match
   // fast-path and the empty/give-up wrong — no LLM was involved.
   gradedProvider: LlmProvider | null;
+  // Safe to log: this explains the path without storing the player's answer.
+  reasonCode: 'empty_submission' | 'canonical_match' | 'accepted_alternative' | 'llm_judgment';
 };
 
 // The grader could not reach a verdict (timeout, parse error, no client). This
@@ -62,16 +65,7 @@ export type GradeOutcome = ScoredGrade | UnscoredGrade;
  * article is dropped (e.g. "The Eroica" ≡ "Eroica") but interior articles are
  * kept so distinct answers like "Vitamin A" don't collapse onto "Vitamin".
  */
-export function normalizeForMatch(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // strip diacritics: "Beyoncé" → "Beyonce"
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ') // punctuation → space: "J.S. Bach" → "j s bach"
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^(the|a|an) /, ''); // drop a single leading article
-}
+export { normalizeForMatch } from '@/server/answers/match-normalization';
 
 /**
  * Fast-path exact match before calling the LLM. Returns true if the submission
@@ -84,11 +78,13 @@ function exactMatch(
   submitted: string,
   canonicalAnswer: string,
   acceptedAlternatives: string[]
-): boolean {
+): 'canonical_match' | 'accepted_alternative' | null {
   const normalized = normalizeForMatch(submitted);
-  if (!normalized) return false;
-  if (normalized === normalizeForMatch(canonicalAnswer)) return true;
-  return acceptedAlternatives.some((alt) => normalizeForMatch(alt) === normalized);
+  if (!normalized) return null;
+  if (normalized === normalizeForMatch(canonicalAnswer)) return 'canonical_match';
+  return acceptedAlternatives.some((alt) => normalizeForMatch(alt) === normalized)
+    ? 'accepted_alternative'
+    : null;
 }
 
 /**
@@ -110,6 +106,7 @@ function logGrade(
       empty,
       status: outcome.status,
       result: outcome.status === 'scored' ? outcome.result : undefined,
+      reason_code: outcome.status === 'scored' ? outcome.reasonCode : outcome.reason,
       duration_ms: Date.now() - startedAt,
     });
   } catch {
@@ -138,15 +135,16 @@ export async function gradeAnswer(
   if (!submitted.trim()) {
     return logGrade(startedAt, 'exact', true, {
       status: 'scored', result: 'wrong', consolation: null, confidence: 1, gradedVia: 'exact',
-      gradedProvider: null,
+      gradedProvider: null, reasonCode: 'empty_submission',
     });
   }
 
   // Fast-path: skip the LLM for obvious exact matches and accepted alternatives
-  if (exactMatch(submitted, canonicalAnswer, acceptedAlternatives)) {
+  const deterministicMatch = exactMatch(submitted, canonicalAnswer, acceptedAlternatives);
+  if (deterministicMatch) {
     return logGrade(startedAt, 'exact', false, {
       status: 'scored', result: 'correct', consolation: null, confidence: 1, gradedVia: 'exact',
-      gradedProvider: null,
+      gradedProvider: null, reasonCode: deterministicMatch,
     });
   }
 
@@ -183,5 +181,6 @@ export async function gradeAnswer(
     confidence: llmResult.confidence,
     gradedVia: 'llm',
     gradedProvider: gradeProvider,
+    reasonCode: 'llm_judgment',
   });
 }

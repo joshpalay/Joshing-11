@@ -224,28 +224,34 @@ export async function adminEditQuestion(
   }
   values.updatedAt = new Date();
 
-  await db.update(questions).set(values).where(eq(questions.id, id));
-
-  // Mirror grading-adjacent content onto the linked GeneratedQuestion twin.
-  // Daily/bonus/catch-up serving reads the stem/answer/explainer LIVE from the
-  // GeneratedQuestion (daily.ts:833), so an admin edit that stops at the Question
-  // row never reaches the copy players are served (B-TWIN-DRIFT-01). Only the
-  // three served fields are mirrored, and only when they actually changed; the
-  // GeneratedQuestion's verification stamp is left to the batch-verify sweep.
-  if (contentChanged && existing.generatedQuestionId) {
-    const genValues: Partial<typeof generatedQuestions.$inferInsert> = {};
-    if (input.questionText !== undefined) genValues.questionText = input.questionText;
-    if (input.answerText !== undefined) genValues.answer = input.answerText;
-    // explainer is non-null in the generated store; only overwrite when a
-    // non-empty one is supplied (a cleared explainer is not mirrored across).
-    if (input.factualExplanation) genValues.explainer = input.factualExplanation;
-    if (Object.keys(genValues).length > 0) {
-      await db
-        .update(generatedQuestions)
-        .set(genValues)
-        .where(eq(generatedQuestions.id, existing.generatedQuestionId));
+  await db.transaction(async (tx) => {
+    // Keep the generated-then-canonical lock order used by accepted-alternative
+    // updates. A consistent order avoids deadlocks when both happen at once.
+    // Daily/bonus/catch-up serving reads these fields from GeneratedQuestion.
+    if (contentChanged && existing.generatedQuestionId) {
+      const genValues: Partial<typeof generatedQuestions.$inferInsert> = {};
+      if (input.questionText !== undefined) genValues.questionText = input.questionText;
+      if (input.answerText !== undefined) genValues.answer = input.answerText;
+      if (input.acceptedAlternatives !== undefined) {
+        genValues.acceptableVariants = input.acceptedAlternatives;
+      }
+      if (input.factualExplanation !== undefined) {
+        genValues.explainer = input.factualExplanation || '';
+      }
+      if (Object.keys(genValues).length > 0) {
+        genValues.verifiedAt = null;
+        genValues.verificationVerdict = null;
+        genValues.verificationReason = null;
+        genValues.trustTier = 'human_validated';
+        await tx
+          .update(generatedQuestions)
+          .set(genValues)
+          .where(eq(generatedQuestions.id, existing.generatedQuestionId));
+      }
     }
-  }
+
+    await tx.update(questions).set(values).where(eq(questions.id, id));
+  });
   return { ok: true };
 }
 

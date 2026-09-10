@@ -135,6 +135,7 @@ describe('askToAnswerBatch (checkpoint)', () => {
 
     expect([...result.verified]).toEqual([0]);
     expect([...result.toDrop]).toEqual([1]);
+    expect(result.checkStatus).toBe('completed');
     // 3 samples × 2 questions cold calls + 1 judge call.
     expect(llmMock.loggedMessagesCreate).toHaveBeenCalledTimes(7);
   });
@@ -144,6 +145,7 @@ describe('askToAnswerBatch (checkpoint)', () => {
     const result = await askToAnswerBatch([{ questionText: 'q', answer: 'a' }], CONFIG);
     expect(result.toDrop.size).toBe(0);
     expect(result.verified.size).toBe(0);
+    expect(result.checkStatus).toBe('unavailable');
     expect(llmMock.loggedMessagesCreate).not.toHaveBeenCalled();
   });
 
@@ -152,6 +154,7 @@ describe('askToAnswerBatch (checkpoint)', () => {
     const result = await askToAnswerBatch([{ questionText: 'q', answer: 'a' }], CONFIG);
     expect(result.toDrop.size).toBe(0);
     expect(result.verified.size).toBe(0);
+    expect(result.checkStatus).toBe('unavailable');
     // Judge is never reached when all cold attempts fail.
     expect(llmMock.loggedMessagesCreate).toHaveBeenCalledTimes(CONFIG.samples);
   });

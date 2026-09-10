@@ -9,9 +9,10 @@
  * failure can never block generation. Callers fire-and-forget:
  * `void recordGateDrops([...])`.
  */
-import { gte, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { db, gateDropStat } from '@/server/db';
+import { currentBuildId } from '@/server/daily/build-context';
 
 /** Gate names, in gate-chain order. Shared by the writer and the digest. */
 export const GATE_NAMES = [
@@ -65,11 +66,13 @@ const utcDay = () => new Date().toISOString().slice(0, 10);
 
 export async function recordGateDrops(entries: GateDropEntry[]): Promise<void> {
   const day = utcDay();
+  const scope = currentBuildId() ? 'daily_build' : 'non_player';
   const rows = entries
     .filter((e) => e.considered > 0 || (e.failedOpen ?? 0) > 0)
     .map((e) => ({
       day,
       gate: e.gate,
+      scope,
       considered: Math.max(0, Math.round(e.considered)),
       dropped: Math.max(0, Math.round(e.dropped)),
       failedOpen: Math.max(0, Math.round(e.failedOpen ?? 0)),
@@ -80,7 +83,7 @@ export async function recordGateDrops(entries: GateDropEntry[]): Promise<void> {
       .insert(gateDropStat)
       .values(rows)
       .onConflictDoUpdate({
-        target: [gateDropStat.day, gateDropStat.gate],
+        target: [gateDropStat.day, gateDropStat.gate, gateDropStat.scope],
         set: {
           considered: sql`${gateDropStat.considered} + excluded.considered`,
           dropped: sql`${gateDropStat.dropped} + excluded.dropped`,
@@ -118,7 +121,7 @@ export async function readGateDropStats(windowDays: number): Promise<GateDropSum
       failedOpen: sql<number>`sum(${gateDropStat.failedOpen})::int`,
     })
     .from(gateDropStat)
-    .where(gte(gateDropStat.day, start))
+    .where(and(gte(gateDropStat.day, start), eq(gateDropStat.scope, 'daily_build')))
     .groupBy(gateDropStat.gate);
   const order = new Map<string, number>(GATE_NAMES.map((g, i) => [g, i]));
   return rows.sort(

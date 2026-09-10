@@ -181,6 +181,26 @@ describe('OnboardingFlow seedSource = link', () => {
     expect(html).toContain('aria-label="Remove Sondheim"')
     expect(html).toContain('aria-label="Remove Jazz"')
   })
+
+  it('labels catalog top-ups so they are not attributed to the inviter', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingFlow
+        inviterName="Josh"
+        initialDisplayName="Returning User"
+        initialHandle="returninguser"
+        preSeededInterests={[
+          { domain: 'Sondheim', broadCategory: 'Theater', rationale: null },
+          { domain: 'Cole Porter', broadCategory: 'Music', rationale: null, fromCatalog: true }
+        ]}
+      />
+    )
+
+    expect(html).toContain('Josh picked the preselected topics.')
+    expect(html).toContain('Extra ideas from Joshing are labeled.')
+    expect(html).toContain('Cole Porter')
+    expect(html).toContain('From Joshing')
+    expect(html).not.toContain('Josh picked these for you.')
+  })
 })
 
 describe('OnboardingFlow display-name gate', () => {

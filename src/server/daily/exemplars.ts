@@ -74,3 +74,11 @@ export const STYLE_EXEMPLARS: readonly StyleExemplar[] = [
 export const STYLE_EXEMPLAR_BLOCK: string = STYLE_EXEMPLARS
   .map((e) => `- [${e.shape}] ${e.q} (A: ${e.a})`)
   .join('\n');
+
+// List questions remain useful review examples, but the current free-text
+// grader has no reliable partly-correct-list rule. Do not prime generation to
+// produce them until that scoring rule exists.
+export const SINGLE_ANSWER_STYLE_EXEMPLAR_BLOCK: string = STYLE_EXEMPLARS
+  .filter((e) => e.shape !== 'name_multiple')
+  .map((e) => `- [${e.shape}] ${e.q} (A: ${e.a})`)
+  .join('\n');

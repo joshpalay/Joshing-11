@@ -2515,6 +2515,7 @@ export const gateDropStat = pgTable(
     id: id(),
     day: date('day').notNull(),
     gate: text('gate').notNull(),
+    scope: text('scope').notNull().default('unknown'),
     /** Questions the gate saw (batch sizes summed across runs). */
     considered: integer('considered').notNull().default(0),
     /** Questions the gate dropped. */
@@ -2523,7 +2524,7 @@ export const gateDropStat = pgTable(
     failedOpen: integer('failed_open').notNull().default(0),
     updatedAt: updatedAt(),
   },
-  (table) => [unique('GateDropStat_day_gate_unique').on(table.day, table.gate)],
+  (table) => [unique('GateDropStat_day_gate_scope_unique').on(table.day, table.gate, table.scope)],
 );
 
 // D-MASTERY-FINEST-NODE-01 observability — one daily snapshot of the mastery-v2

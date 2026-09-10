@@ -54,6 +54,7 @@ const {
       broadCategory: 'humanities',
       category: 'humanities',
     },
+    committedRows: [{ id: 'queue-1' }],
   }
 
   // Drizzle chain mock: db.select().from().where().limit() — returns canned rows
@@ -76,7 +77,9 @@ const {
     }),
     update: vi.fn(() => ({
       set: () => ({
-        where: vi.fn(async () => undefined),
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => dbState.committedRows),
+        })),
       }),
     })),
   }
@@ -123,7 +126,7 @@ vi.mock('@/server/auth/session', () => ({
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
-  dailyQueues: { id: 'q.id', userId: 'q.userId' },
+  dailyQueues: { id: 'q.id', userId: 'q.userId', slots: 'q.slots' },
   generatedQuestions: { id: 'g.id', userId: 'g.userId', answer: 'g.answer' },
   questions: {
     id: 'q.id',
@@ -199,6 +202,7 @@ const VALID_BODY = {
 describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    dbState.committedRows = [{ id: 'queue-1' }]
     readPriorAnswersForQuestionMock.mockResolvedValue([])
     persistGeneratedQuestionMock.mockResolvedValue({
       questionId: 'canonical-q-1',
@@ -212,6 +216,19 @@ describe('POST /api/daily/answer mastery scoring (F2.1)', () => {
       tierChanged: false,
       openedNewTerritory: false,
     })
+  })
+
+  it('does not overwrite a queue that changed after it was read', async () => {
+    setupDbChain()
+    selectCallChain.push(async () => [dbState.queue])
+    dbState.committedRows = []
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'correct', consolation: null })
+
+    const res = await POST(jsonRequest(VALID_BODY) as never)
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('slot_changed')
+    expect(writeMasteryEventMock).not.toHaveBeenCalled()
   })
 
   it('first-time correct: writes first_correct with full base points and canonical eventQuestionId', async () => {

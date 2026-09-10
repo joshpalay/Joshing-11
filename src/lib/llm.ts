@@ -217,10 +217,9 @@ export const DEFAULT_LLM_TIMEOUT_MS = 20_000;
 // Aggressive timeout on the live grading path — answer endpoint is a
 // user-blocking request and any wait above ~8s feels broken.
 export const GRADE_TIMEOUT_MS = 8_000;
-// One retry on a malformed/failed grade before conceding to the deterministic
-// fallback. Each attempt is bounded by GRADE_TIMEOUT_MS, so worst case stays
-// within the user-blocking budget. Bumping this trades latency for resilience.
-const MAX_GRADE_ATTEMPTS = 2;
+// The browser already retries a transparent 503 with backoff. Keep one model
+// attempt per request so the two retry layers do not multiply each other.
+const MAX_GRADE_ATTEMPTS = 1;
 // Generation batches are 2000-token Sonnet replies and tolerate more latency.
 export const GENERATION_TIMEOUT_MS = 35_000;
 // Single-purpose Haiku gates over a small batch — fast in the happy case.
@@ -780,11 +779,8 @@ Return only valid JSON with keys: result, confidence, consolation. Put result fi
     return fallbackGrading('no_client');
   }
 
-  // Grading is the user-blocking answer path, so a single hiccup (a malformed
-  // reply, a truncated socket) shouldn't surface the "answer-checker is taking a
-  // breather" 503 — the caller treats any `unscored` result as an outage and
-  // refuses to score. Give the model one clean retry before conceding; only a
-  // genuinely unusable result twice in a row falls back.
+  // A malformed or failed attempt becomes an unscored 503. The browser owns
+  // the bounded backoff and can resubmit without recording a wrong answer.
   let lastReason = 'request_failed';
   for (let attempt = 1; attempt <= MAX_GRADE_ATTEMPTS; attempt += 1) {
     try {

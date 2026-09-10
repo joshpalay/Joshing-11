@@ -4,6 +4,7 @@ import {
   FRIEND_FACING_TIERS,
   SELF_PRACTICE_TIERS,
   applyTierGate,
+  applyVerificationVerdictGate,
   isTierGatingEnabled,
   type TrustTier,
 } from '@/server/daily/verification-gating';
@@ -19,6 +20,7 @@ const tierOf = (r: Row) => r.tier;
 
 afterEach(() => {
   delete process.env.VERIFICATION_TIER_GATING_ENABLED;
+  delete process.env.VERIFICATION_UNVERIFIABLE_HOLD_ENABLED;
 });
 
 describe('isTierGatingEnabled', () => {
@@ -66,5 +68,26 @@ describe('tier bands', () => {
     expect(SELF_PRACTICE_TIERS).not.toContain('unverified');
     expect(SELF_PRACTICE_TIERS).toContain('machine_verified');
     expect(FRIEND_FACING_TIERS).toEqual(['human_validated', 'author_confirmed']);
+  });
+});
+
+describe('later verification verdict', () => {
+  const verdictRows = [
+    { id: 'a', verificationVerdict: 'ok' },
+    { id: 'b', verificationVerdict: 'unverifiable' },
+    { id: 'c', verificationVerdict: null },
+  ];
+
+  it('measures unverifiable rows without changing supply by default', () => {
+    const result = applyVerificationVerdictGate('self-practice/bank', verdictRows);
+    expect(result.enforced).toBe(false);
+    expect(result.wouldFilter).toBe(1);
+    expect(result.rows).toHaveLength(3);
+  });
+
+  it('holds unverifiable rows only when the separate flag is enabled', () => {
+    process.env.VERIFICATION_UNVERIFIABLE_HOLD_ENABLED = 'true';
+    const result = applyVerificationVerdictGate('self-practice/bank', verdictRows);
+    expect(result.rows.map((row) => row.id)).toEqual(['a', 'c']);
   });
 });
