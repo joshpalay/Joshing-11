@@ -24,14 +24,21 @@ const bodySchema = z.object({
 // effective ceiling scales with instance count. This is the documented
 // Phase-1 posture; a durable (Redis/KV-backed) limiter is the Phase-2
 // infrastructure upgrade under D-FRIEND-SEARCH-PRIVACY-01, not attempted here.
+// F9 (2026-09-10 audit) — same guard as friends/search/route.ts's intEnv: a
+// misconfigured limit env var (unparseable, empty, zero, negative) used to
+// become NaN/0 and silently pass every `>=` check below, disabling the cap
+// rather than failing closed.
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw.trim() === '') return fallback
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 const FRIEND_REQUEST_DAILY_WINDOW_MS = 1000 * 60 * 60 * 24
 const FRIEND_REQUEST_WEEKLY_WINDOW_MS = FRIEND_REQUEST_DAILY_WINDOW_MS * 7
-const FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT = Number(
-  process.env.FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT ?? 20
-)
-const FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT = Number(
-  process.env.FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT ?? 60
-)
+const FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT = intEnv('FRIEND_REQUEST_PER_ACCOUNT_DAILY_LIMIT', 20)
+const FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT = intEnv('FRIEND_REQUEST_PER_ACCOUNT_WEEKLY_LIMIT', 60)
 
 // One sliding-window array per account, kept pruned to the LONGER (weekly)
 // window — the daily count is derived by re-filtering that same array to the
@@ -97,6 +104,8 @@ export async function POST(request: Request) {
 
   const limited = checkFriendRequestRateLimit(session.userId)
   if (limited) {
+    // F9 abuse signal — count and coarse reason only, no identifiers.
+    logTelemetry('friend_request_rate_limited', { reason: limited.reason })
     return NextResponse.json(
       { error: 'rate_limited', reason: limited.reason },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfterSeconds) } }

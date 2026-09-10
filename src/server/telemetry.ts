@@ -25,6 +25,14 @@ export type TelemetryEventName =
   | 'friendship_removed'
   | 'user_blocked'
   | 'user_unblocked'
+  // F9 (2026-09-10 audit) — privacy-preserving abuse signal for the exact
+  // friend-search / friend-request lookup paths: counts, coarse buckets, and
+  // outcome only. NEVER carry the query string, a resolved username, a
+  // phone number, or any other queried identifier — the point is to see
+  // enumeration PRESSURE, not who was looked for.
+  | 'friend_search_performed'
+  | 'friend_search_rate_limited'
+  | 'friend_request_rate_limited'
 
 type TelemetryValue = string | number | boolean | null | undefined
 export type TelemetryMetadata = Record<string, TelemetryValue>
