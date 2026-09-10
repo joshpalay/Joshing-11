@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, ne, notInArray, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import {
@@ -11,6 +11,7 @@ import {
   questions,
   users,
 } from '@/server/db';
+import { getRelationships, type RelationshipResult } from '@/server/db/queries/friend-requests';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 
 export type User = typeof users.$inferSelect;
@@ -535,4 +536,216 @@ export async function getFriendAndFoFUserIds(userId: string): Promise<{
   }
 
   return { direct, extended }
+}
+
+// --- B-MUTUAL-FRIEND-SUGGESTIONS-01 — friends-of-friends candidate query ---
+//
+// Backend only, Phase 1: this function is not called from any route or
+// component yet (the surface decision -- where/how a suggestion renders --
+// is still open). See _docs/A-FRIENDS-DISCOVERY-VERIFY-01-AUDIT.md claim 28
+// for the prior state (no FoF candidate-enumeration query existed at all).
+
+export type MutualFriendSuggestion = {
+  id: string
+  displayName: string
+  mutualFriendCount: number
+}
+
+// Raw per-candidate row from the FoF group-by query: a candidate id and how
+// many of the requester's direct friends are also mutual friends with them.
+export type MutualFriendCandidateRow = {
+  candidateId: string
+  mutualFriendCount: number
+}
+
+// The candidate-side profile fields the pure composer needs: display name
+// (+ phone fallback, matching the toPerson()/displayName() convention above)
+// and the candidate's OWN opt-in flag -- both parties must opt in for a
+// suggestion to surface (see composeMutualFriendSuggestions doc).
+export type MutualFriendCandidateUserRow = {
+  id: string
+  displayName: string | null
+  phoneNumber: string | null
+  discoverableByMutualFriends: boolean
+}
+
+// Over-fetch cap for the FoF candidate scan, applied at the SQL level before
+// relationship/opt-in filtering narrows the set down to `limit`. Mirrors the
+// over-read-before-cap pattern used elsewhere in this codebase (e.g.
+// MASTERY_SCAN_LIMIT in backfill-inviter-feed.ts) so a very well-connected
+// requester's fan-out can't turn an unbounded number of candidates into an
+// unbounded amount of downstream relationship/opt-in work. Generous relative
+// to any realistic `limit` this phase would be called with.
+const MUTUAL_SUGGESTION_CANDIDATE_SCAN_LIMIT = 200
+
+/**
+ * Pure composition for getMutualFriendSuggestions: given the requester's own
+ * opt-in flag, the raw FoF candidate+count rows (already scoped in SQL to
+ * the requester's direct friends' mutual follows, excluding the requester
+ * and their existing direct friends), each candidate's relationship to the
+ * requester, and each candidate's own profile row, produce the final
+ * sorted + capped suggestion list.
+ *
+ * DB-free so every exclusion/ordering rule is unit-testable without a
+ * database -- mirrors composeDiscoveryAttribution (src/server/feed/
+ * discovery-attribution.ts) and resolve() (friend-requests.ts).
+ *
+ * Exclusion rule: a candidate qualifies only when the requester's
+ * relationship to them is exactly 'none' (getRelationship's stranger state)
+ * AND they are not blocked in either direction. 'none' transitively excludes
+ * an existing friendship, a pending request in EITHER direction, and a
+ * one-directional follow in either direction (following / follows_you) --
+ * all of these mean the two are already connected in some way, so
+ * "suggesting" the candidate as someone new would be wrong. This is a
+ * superset of (but consistent with) the task's literal exclusion list
+ * (existing friends, pending either direction, blocked either direction).
+ *
+ * Opt-in rule: BOTH sides must have discoverableByMutualFriends on --
+ * requesterOptedIn gates the whole call (checked first: an opted-out
+ * requester sees nothing, regardless of candidates), and each candidate's
+ * own flag (on their MutualFriendCandidateUserRow) gates whether THEY can
+ * be suggested to anyone. This isn't the asymmetric single-flag-gates-the-
+ * exposed-party shape used by discoverableByNicheMatch/discoverableByForward
+ * (see notifyNicheMatch / discovery-attribution.ts) -- both parties are
+ * gating the SAME direction of exposure here (both would see each other as
+ * a suggestion), so there's no asymmetric split to preserve.
+ */
+export function composeMutualFriendSuggestions(params: {
+  requesterOptedIn: boolean
+  candidateRows: MutualFriendCandidateRow[]
+  relationships: Map<string, RelationshipResult>
+  candidateUsers: MutualFriendCandidateUserRow[]
+  limit: number
+}): MutualFriendSuggestion[] {
+  const { requesterOptedIn, candidateRows, relationships, candidateUsers, limit } = params
+  if (!requesterOptedIn || limit <= 0) return []
+
+  const countById = new Map(candidateRows.map((row) => [row.candidateId, row.mutualFriendCount]))
+  const candidateById = new Map(candidateUsers.map((row) => [row.id, row]))
+
+  const eligibleIds = candidateRows
+    .map((row) => row.candidateId)
+    .filter((id) => {
+      const relationship = relationships.get(id)
+      // No relationship row at all resolves to the same as an explicit
+      // 'none' -- getRelationships only populates entries for ids it found
+      // an edge for; an id with no edge and no block is a stranger.
+      const state = relationship?.state ?? 'none'
+      const blocked = relationship?.isBlocked ?? false
+      if (state !== 'none' || blocked) return false
+
+      const candidate = candidateById.get(id)
+      // No profile row (e.g. deleted account) or opted-out candidate: never
+      // suggested, regardless of mutual count.
+      return Boolean(candidate?.discoverableByMutualFriends)
+    })
+
+  return eligibleIds
+    .map((id) => {
+      const candidate = candidateById.get(id)!
+      return {
+        id,
+        displayName: displayName(candidate.displayName, candidate.phoneNumber ?? ''),
+        mutualFriendCount: countById.get(id) ?? 0,
+      }
+    })
+    .sort((a, b) => b.mutualFriendCount - a.mutualFriendCount)
+    .slice(0, limit)
+}
+
+/**
+ * Friends-of-friends candidate suggestions: people who share at least one
+ * mutual friend with `userId` but aren't already connected to them (see
+ * composeMutualFriendSuggestions for the full exclusion/opt-in rules).
+ *
+ * Backend only -- not called from any route or component yet. The surface
+ * (where/how this renders) is a separate, still-open decision.
+ *
+ * Query shape: a fixed number of round-trips regardless of friend/candidate
+ * count (no N+1). The FoF group-by join reuses the SAME mutual-follow join
+ * shape getFriendAndFoFUserIds already uses for its "extended" (2nd-degree)
+ * set -- indexed by Follow_followerId_state_idx / the unique
+ * (followerId, followeeId[, state]) indexes on `follows` -- extended here to
+ * tally a per-candidate mutual-friend COUNT rather than just membership.
+ */
+export async function getMutualFriendSuggestions(
+  userId: string,
+  limit: number,
+): Promise<MutualFriendSuggestion[]> {
+  if (limit <= 0) return []
+
+  const [requester] = await db
+    .select({ discoverableByMutualFriends: users.discoverableByMutualFriends })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+  const requesterOptedIn = Boolean(requester?.discoverableByMutualFriends)
+  // Short-circuit before touching friends/candidates at all: an opted-out
+  // requester sees nothing, so there's no reason to do any further work.
+  if (!requesterOptedIn) return []
+
+  const directFriends = await getFriends(userId)
+  if (directFriends.length === 0) return []
+  const directIds = directFriends.map((friend) => friend.id)
+
+  // FoF candidates + per-candidate mutual count, in one query: for each
+  // approved edge (requester's direct friend -> followee), the followee
+  // qualifies as a candidate when a matching back-edge (followee -> that
+  // friend, approved) exists too -- i.e. the followee is a MUTUAL friend of
+  // that direct friend, not just someone they follow one-directionally.
+  // Self and existing direct friends are excluded in SQL so the tally only
+  // ever reflects genuine FoF candidates.
+  const back = alias(follows, 'suggestion_back')
+  const candidateRows: MutualFriendCandidateRow[] = await db
+    .select({
+      candidateId: follows.followeeId,
+      mutualFriendCount: sql<number>`count(distinct ${follows.followerId})::int`.as('mutual_friend_count'),
+    })
+    .from(follows)
+    .innerJoin(
+      back,
+      and(
+        eq(back.followerId, follows.followeeId),
+        eq(back.followeeId, follows.followerId),
+        eq(back.state, 'approved'),
+      ),
+    )
+    .where(
+      and(
+        eq(follows.state, 'approved'),
+        inArray(follows.followerId, directIds),
+        ne(follows.followeeId, userId),
+        notInArray(follows.followeeId, directIds),
+      ),
+    )
+    .groupBy(follows.followeeId)
+    .orderBy(desc(sql`count(distinct ${follows.followerId})`))
+    .limit(MUTUAL_SUGGESTION_CANDIDATE_SCAN_LIMIT)
+
+  if (candidateRows.length === 0) return []
+  const candidateIds = candidateRows.map((row) => row.candidateId)
+
+  // Relationship/block exclusions and candidate profile+opt-in, batched --
+  // one call each regardless of candidate count (getRelationships batches
+  // internally too, see friend-requests.ts).
+  const [relationships, candidateUsers] = await Promise.all([
+    getRelationships(userId, candidateIds),
+    db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        phoneNumber: users.phoneNumber,
+        discoverableByMutualFriends: users.discoverableByMutualFriends,
+      })
+      .from(users)
+      .where(inArray(users.id, candidateIds)),
+  ])
+
+  return composeMutualFriendSuggestions({
+    requesterOptedIn,
+    candidateRows,
+    relationships,
+    candidateUsers,
+    limit,
+  })
 }
