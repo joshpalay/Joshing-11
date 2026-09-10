@@ -26,7 +26,9 @@ import {
 } from '@/server/daily/verification-gating';
 import { db, feedItems, follows, masteryEvents, milestoneDismissed, questions, users } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
+import { getForwardDiscoverable } from '@/server/db/queries/account';
 import { approvedFollowExists, mutualFollowApproved } from '@/server/db/queries/follow-visibility';
+import { getRelationships } from '@/server/db/queries/friend-requests';
 import { ALWAYS_VISIBLE_MAIN_FEED_SOURCE_TYPES, SOCIAL_FEED_SOURCE_TYPE, notBlocked, notBlockedForViewer } from '@/server/feed/visibility';
 
 export type LatelyDirection = 'they_got_you' | 'you_got_them';
@@ -523,13 +525,47 @@ export async function getFriendActivity(
     .orderBy(desc(feedItems.sourceEventAt))
     .limit(500);
 
+  // Gate via-exposure with the SAME two checks discovery-attribution.ts's
+  // composeDiscoveryAttribution applies to its own "via" signal (D-4): the
+  // viewer's relationship to the via-person must be 'none' (stranger, not
+  // blocked) AND the via-person must have discoverableByForward on. Before
+  // this, the From-Friends via-attribution named a relay source with no
+  // check at all — the one place in the app doing that. Batched (one
+  // relationship query, one opt-in query) regardless of row count, mirroring
+  // getDiscoveryAttributionForItems's stranger-first-then-opt-in ordering so
+  // the opt-in lookup only ever runs against ids that already cleared the
+  // stranger gate.
+  const viaCandidateIds = [
+    ...new Set(
+      rows
+        .map((row) => row.viaUserId)
+        .filter((id): id is string => Boolean(id) && id !== userId),
+    ),
+  ];
+  let viaGateOk = new Set<string>();
+  if (viaCandidateIds.length > 0) {
+    const relationships = await getRelationships(userId, viaCandidateIds);
+    const strangerIds = viaCandidateIds.filter(
+      (id) => (relationships.get(id)?.state ?? 'none') === 'none' && !relationships.get(id)?.isBlocked,
+    );
+    const forwardOptedIn =
+      strangerIds.length > 0 ? await getForwardDiscoverable(strangerIds) : new Set<string>();
+    viaGateOk = new Set(strangerIds.filter((id) => forwardOptedIn.has(id)));
+  }
+
   // Relay source per (friend, question) — keyed so two friends who both relayed
   // the same question keep their own "via". Rows arrive newest-first, so the
   // first write per key is the most-recent relay. A "via you" is dropped (the
-  // viewer discovering themselves as the source is pointless).
+  // viewer discovering themselves as the source is pointless). A via-person
+  // who fails the gate above is dropped the same way: the (friend, question)
+  // pair simply gets no entry here, so the card still renders — just without
+  // "via {name}" for that question — never a dropped row (mirrors
+  // composeDiscoveryAttribution omitting `attribution.via` per item rather
+  // than dropping the whole feed item).
   const viaByFriendQuestion = new Map<string, { userId: string; name: string }>();
   for (const row of rows) {
     if (!row.questionId || !row.viaUserId || row.viaUserId === userId) continue;
+    if (!viaGateOk.has(row.viaUserId)) continue;
     const key = `${row.friendId}:${row.questionId}`;
     if (!viaByFriendQuestion.has(key)) {
       viaByFriendQuestion.set(key, {
