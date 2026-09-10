@@ -58,6 +58,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
   return (
     <InvitationPageShell>
       <InvitationLandingContent
+        seedSource="link"
         inviterName={inviterName}
         categories={inviter.seedTopics}
         action={

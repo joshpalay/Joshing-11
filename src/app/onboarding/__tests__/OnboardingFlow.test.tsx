@@ -135,9 +135,12 @@ describe('OnboardingFlow seedSource = link', () => {
     expect(html).toContain('Great Lakes shipwrecks')
     expect(html).toContain('Renaissance Florence')
     expect(html).toContain('Final Fantasy')
+    // Honest provenance: a reusable link never claims topics were picked
+    // specifically for this recipient, only that they came from the invitation.
     expect(html).toContain(
-      'Duo Prova picked these for you. Take any that feel right, or remove what doesn&#x27;t fit.'
+      'These starting topics come from Duo Prova’s invitation. Keep what fits, remove what doesn’t, or add your own.'
     )
+    expect(html).not.toContain('picked these for you')
     expect(html).toContain('aria-label="Remove Great Lakes shipwrecks"')
     expect(html.indexOf('Your trivia questions will come from these subjects')).toBeLessThan(
       html.indexOf('Add your own')
@@ -158,7 +161,8 @@ describe('OnboardingFlow seedSource = link', () => {
       />
     )
 
-    expect(html).toContain('A friend picked these for you')
+    expect(html).toContain('These starting topics come from A friend’s invitation')
+    expect(html).not.toContain('picked these for you')
     expect(html).toContain('1 selected')
     expect(html).not.toContain('undefined')
   })

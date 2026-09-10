@@ -18,16 +18,20 @@ export function InvitationLandingContent({
   inviterName: inputName,
   categories,
   action,
+  seedSource = 'named',
 }: {
   inviterName?: string | null;
   categories: unknown;
   action: ReactNode;
+  seedSource?: 'named' | 'link';
 }) {
   const inviterName = safeInviteName(inputName);
   const invitationLine = inviterName
     ? `${inviterName} invited you to Joshing`
     : 'You’ve been invited to Joshing';
-  const explanation = inviterName
+  const explanation = seedSource === 'link'
+    ? 'These topics come with this invitation. During setup, you can keep, remove, or add your own.'
+    : inviterName
     ? `${inviterName} picked a few categories to get you started. We’ll recommend them during setup—you can keep, change, or ignore them.`
     : 'Someone picked a few categories to get you started.';
 
