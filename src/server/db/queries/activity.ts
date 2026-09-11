@@ -900,7 +900,14 @@ async function hydrateActivityRows(
       referenceType: row.referenceType,
       read: row.read,
       createdAt: row.createdAt,
-      actor: row.actorUserId ? actorsById.get(row.actorUserId) ?? null : null,
+      // Prefer the live join (reflects a display-name change since the row
+      // was written); if the actor's account is gone (actorUserId SET NULL
+      // on delete) or was never resolvable, fall back to the name snapshot
+      // taken at write time so the row doesn't collapse to "Someone" just
+      // because the account no longer exists.
+      actor:
+        (row.actorUserId ? actorsById.get(row.actorUserId) : undefined) ??
+        (row.actorNameSnapshot ? { displayName: row.actorNameSnapshot } : null),
       reference: {
         friendshipRequest: (row.referenceType === 'friendship' || row.referenceType === 'follow') && row.referenceId
           ? friendshipRequestsById.get(row.referenceId)
