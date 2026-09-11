@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decideTrustOnPlay } from '@/server/db/queries/trust-promotion';
+import { decideTrustOnPlay, empiricalPlayPatch } from '@/server/db/queries/trust-promotion';
 
 const MIN_CORRECT = 3;
 const MIN_HOLDERS = 5;
@@ -69,5 +69,43 @@ describe('decideTrustOnPlay', () => {
       MIN_HOLDERS,
     );
     expect(d.nobodyCorrectFlag).toBe(false);
+  });
+});
+
+// R8 (2026-09-11). GeneratedQuestion.n_answered / empirical_correct_rate were
+// only ever written when a promotion, a "nobody got it" flag, or an empirical
+// difficulty recompute was already in reach — thresholds of 3 and 5 distinct
+// humans. At this product's scale almost every question is answered once or
+// twice, so the columns stayed null on 2,161 of 2,191 live bank rows and no
+// tier label could be checked against real play.
+describe('empiricalPlayPatch', () => {
+  it('records a SINGLE answerer — the case the old threshold exit skipped', () => {
+    expect(empiricalPlayPatch({ distinctCorrect: 1, distinctAnswerers: 1 })).toEqual({
+      nAnswered: 1,
+      empiricalCorrectRate: 1,
+    });
+  });
+
+  it('records a lone wrong answer as a measured zero, not as missing data', () => {
+    expect(empiricalPlayPatch({ distinctCorrect: 0, distinctAnswerers: 1 })).toEqual({
+      nAnswered: 1,
+      empiricalCorrectRate: 0,
+    });
+  });
+
+  it('computes the rate over distinct humans', () => {
+    expect(empiricalPlayPatch({ distinctCorrect: 3, distinctAnswerers: 4 })).toEqual({
+      nAnswered: 4,
+      empiricalCorrectRate: 0.75,
+    });
+  });
+
+  it('writes nothing when nobody has answered yet', () => {
+    expect(empiricalPlayPatch({ distinctCorrect: 0, distinctAnswerers: 0 })).toBeNull();
+  });
+
+  it('is idempotent — the patch is a recompute, never an increment', () => {
+    const agg = { distinctCorrect: 2, distinctAnswerers: 3 };
+    expect(empiricalPlayPatch(agg)).toEqual(empiricalPlayPatch(agg));
   });
 });

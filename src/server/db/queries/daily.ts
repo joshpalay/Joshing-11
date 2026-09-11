@@ -2508,10 +2508,44 @@ export async function getRecentSkipCountsByDomain(
 // with the deduped sub-angle tag list (newest-first up to the per-domain
 // cap). An empty Map is returned if the column is missing on a preview DB
 // that hasn't run migration 0055.
+/**
+ * Fold a sub-angle tag for DEDUPE purposes only (R7, 2026-09-11).
+ *
+ * Tags are free text, so one facet arrives under several spellings and each
+ * spelling claimed its own slot in the capped list shown back to the model:
+ * "fugue structure", "fugue terminology" and "Fugue Structure" were three
+ * entries for one covered facet, in a window only 20 entries deep. Lower-casing,
+ * dropping punctuation and articles, and collapsing whitespace merges those into
+ * one. The ORIGINAL text is still what gets displayed — this key is only used to
+ * decide whether a tag has already been counted.
+ *
+ * The second `.replace` strips combining diacritical marks (U+0300–U+036F) left
+ * behind by the NFKD decomposition, so "Götterdämmerung" and "Gotterdammerung"
+ * fold together. That class is written as literal characters and is therefore
+ * vulnerable to an editor or a bad re-encode silently mangling it; the
+ * Götterdämmerung case in subject-coverage-hint.test.ts exists to fail loudly if
+ * that ever happens.
+ */
+export function subAngleDedupeKey(tag: string): string {
+  return tag
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(the|a|an|of|in|on|and|to|for)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function getRecentSubAnglesByDomain(
   userId: string,
   domains: string[],
-  perDomainLimit = 20,
+  // Raised 20 -> 60 (R7). A domain with 70+ live rows carries ~200 tags; showing
+  // the model 20 of them meant most covered facets were invisible, so the
+  // "pick a NEW facet" instruction was being given incomplete information. The
+  // dedupe fold above is what keeps a 60-entry window from filling with
+  // spelling variants of the same handful of facets.
+  perDomainLimit = 60,
   rowLimit = 200,
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
@@ -2559,12 +2593,158 @@ export async function getRecentSubAnglesByDomain(
       if (typeof angle !== 'string') continue;
       const trimmed = angle.trim();
       if (!trimmed) continue;
-      const key = trimmed.toLowerCase();
-      if (seen.has(key)) continue;
+      const key = subAngleDedupeKey(trimmed);
+      if (!key || seen.has(key)) continue;
       seen.add(key);
       bucket.push(trimmed);
       if (bucket.length >= perDomainLimit) break;
     }
+  }
+  return result;
+}
+
+/**
+ * Subjects (works, characters, people) this user's generated questions have
+ * already covered per domain, most-covered first (R7, 2026-09-11).
+ *
+ * The sub-angle hints tell the model which FACETS are taken, and it reads that
+ * as an instruction to find an uncovered facet — of the same headline work. In a
+ * multi-work domain that concentrates hard: "Virginia Woolf's Novels and Essays"
+ * put Mrs Dalloway at the centre of 19 of 47 rows, and "Shakespearean Tragedy"
+ * reached Hamlet 10 times and Macbeth 6 before touching anything else. The fix
+ * is to show coverage at the SUBJECT level too, so "pick something new" can mean
+ * a different play rather than a different scene of the same one.
+ *
+ * `subject_entity` is already written on every generated row and, until now, was
+ * read by nothing except a short answered-subject cooldown. Counts are included
+ * because the signal the model needs is "Hamlet is saturated", not merely
+ * "Hamlet has appeared".
+ */
+/**
+ * Question shapes this user's recent generated questions have already used,
+ * most-used first (R4, 2026-09-11).
+ *
+ * The prompt's variety rule is scoped to a single batch ("no two questions in
+ * this batch share a shape"), and a batch is three questions — so it is
+ * satisfiable forever by identification plus two others, which is roughly what
+ * happened: ~77% of live rows are identification and three of the nine offered
+ * shapes have one row each across 2,191. Showing the model what it has actually
+ * been reaching for lifts the rule from per-batch to per-domain.
+ *
+ * Counts, not a bare list, for the same reason as the subject block: "you have
+ * used identification 40 times here" is actionable where "identification has
+ * been used" is not.
+ */
+export async function getRecentShapesByDomain(
+  userId: string,
+  domains: string[],
+  rowLimit = 300,
+): Promise<Map<string, Array<{ shape: string; count: number }>>> {
+  const result = new Map<string, Array<{ shape: string; count: number }>>();
+  if (domains.length === 0) return result;
+
+  let rows: { domain: string; questionShape: string | null }[];
+  try {
+    rows = await db
+      .select({
+        domain: generatedQuestions.canonicalSubcategory,
+        questionShape: generatedQuestions.questionShape,
+      })
+      .from(generatedQuestions)
+      .where(
+        and(
+          eq(generatedQuestions.userId, userId),
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+        ),
+      )
+      .orderBy(sql`${generatedQuestions.createdAt} desc`)
+      .limit(rowLimit);
+  } catch (error) {
+    // question_shape lands in migration 0147; tolerate a database that predates
+    // it rather than failing the build, as the sibling reads above do.
+    if (pgErrorCode(error) === '42703') return result;
+    throw error;
+  }
+
+  const perDomain = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    if (!row.domain) continue;
+    const shape = row.questionShape?.trim();
+    // Rows generated before 0147 carry no shape and are skipped rather than
+    // bucketed as "unknown" — a guessed denominator would be worse than none.
+    if (!shape) continue;
+    let bucket = perDomain.get(row.domain);
+    if (!bucket) {
+      bucket = new Map();
+      perDomain.set(row.domain, bucket);
+    }
+    bucket.set(shape, (bucket.get(shape) ?? 0) + 1);
+  }
+
+  for (const [domain, bucket] of perDomain) {
+    const ranked = [...bucket.entries()]
+      .map(([shape, count]) => ({ shape, count }))
+      .sort((a, b) => b.count - a.count || a.shape.localeCompare(b.shape));
+    if (ranked.length > 0) result.set(domain, ranked);
+  }
+  return result;
+}
+
+export async function getRecentSubjectsByDomain(
+  userId: string,
+  domains: string[],
+  perDomainLimit = 12,
+  rowLimit = 300,
+): Promise<Map<string, Array<{ subject: string; count: number }>>> {
+  const result = new Map<string, Array<{ subject: string; count: number }>>();
+  if (domains.length === 0) return result;
+
+  let rows: { domain: string; subjectEntity: string | null }[];
+  try {
+    rows = await db
+      .select({
+        domain: generatedQuestions.canonicalSubcategory,
+        subjectEntity: generatedQuestions.subjectEntity,
+      })
+      .from(generatedQuestions)
+      .where(
+        and(
+          eq(generatedQuestions.userId, userId),
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+        ),
+      )
+      .orderBy(sql`${generatedQuestions.createdAt} desc`)
+      .limit(rowLimit);
+  } catch (error) {
+    // subject_entity is additive; tolerate a DB that predates it rather than
+    // failing the build, exactly as the sub-angle read above does.
+    if (pgErrorCode(error) === '42703') return result;
+    throw error;
+  }
+
+  // Count per domain, folding spelling variants onto the first spelling seen.
+  const perDomain = new Map<string, Map<string, { subject: string; count: number }>>();
+  for (const row of rows) {
+    if (!row.domain) continue;
+    const subject = row.subjectEntity?.trim();
+    if (!subject) continue;
+    const key = subAngleDedupeKey(subject);
+    if (!key) continue;
+    let bucket = perDomain.get(row.domain);
+    if (!bucket) {
+      bucket = new Map();
+      perDomain.set(row.domain, bucket);
+    }
+    const existing = bucket.get(key);
+    if (existing) existing.count += 1;
+    else bucket.set(key, { subject, count: 1 });
+  }
+
+  for (const [domain, bucket] of perDomain) {
+    const ranked = [...bucket.values()]
+      .sort((a, b) => b.count - a.count || a.subject.localeCompare(b.subject))
+      .slice(0, perDomainLimit);
+    if (ranked.length > 0) result.set(domain, ranked);
   }
   return result;
 }

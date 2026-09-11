@@ -21,6 +21,7 @@ import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 import {
   focusDomainMinDifficulty,
   getDomainDifficultyOverrides,
+  isDeclaredDomainFloorEnabled,
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
@@ -38,6 +39,8 @@ import {
   getRecentFactKeys,
   getRecentSkipCountsByDomain,
   getRecentSubAnglesByDomain,
+  getRecentShapesByDomain,
+  getRecentSubjectsByDomain,
   normalizeQuestionText,
   pickBankSource,
   type AnsweredCanonicalTextEntry,
@@ -48,7 +51,11 @@ import {
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { confirmOffDomain } from '@/server/quality/off-domain-second-opinion';
-import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
+import {
+  recordGateDrops,
+  recordGateFailedOpen,
+  tallyQualityDefects,
+} from '@/server/db/queries/gate-drop-stats';
 import {
   coCalibrateRaisedEstimates,
   getCappedDomainKeys,
@@ -206,6 +213,16 @@ Before emitting, mentally remove the work's title from the question. If what rem
 - PASSES: "In American Psycho, what color is Paul Allen's business card?" — strip the title and the angle is still specific to the work.
 - FAILS: "In Gilmore Girls, what is the name of Rory's first boyfriend?" — strip the title and it is generic teen-romance trivia.
 
+STRIP-THE-FIELD TEST (Rule 2c — the same floor for DISCIPLINE domains):
+Rule 2 is written for works, and a discipline domain has no title to remove — UX Design, Calculus, Counterpoint, Food Chemistry, Parliamentary Procedure, Mock Trial. So the test above passes vacuously there, and what survives is a textbook definition with the term blanked out. That is the most common way a field question goes generic.
+TEST: remove the FIELD name instead. If what remains is a dictionary definition of a term, it is too generic, however technical the term sounds.
+FIX: anchor the term to something a practitioner would actually trade — the person whose name is on it, the argument about it, the famous failure that produced it, the specific case where it decided something, the rule of thumb everyone quotes. A field has fans too; ask what THEY would be delighted to be asked.
+- FAILS (definition with the label removed): "In UX design, what term describes the visual cues that suggest to a user how an object should be used?" → strip "UX design" and it is a glossary entry.
+- PASSES (same field, real angle): "In UX design, the ten usability heuristics every design review still cites are named after which researcher?" → Jakob Nielsen.
+- FAILS: "In Western music theory, what term describes a chord built by stacking two intervals of a third?" → a definition of "triad".
+- PASSES: "What is the name of the famously unresolved chord that opens Wagner's Tristan und Isolde?" → the Tristan chord — a term, but attached to the argument fans actually have about it.
+This does NOT mean field questions must be hard. An accessible field question is fine; it just may not be a definition (see Rule 3c).
+
 NAME THE SOURCE (Rule 2b — self-containment, hard floor, ALL tiers):
 The player is shown ONLY your question_text and a BROAD category label (e.g. "Film & Television") — NEVER the specific domain / canonical_subcategory you are generating for. So a question that leans on a specific work, franchise, series, character, or fictional world MUST name that source inside the question_text itself. A reader who has never heard of the domain must still know WHICH work you are asking about. Do not write for a reader who already knows the domain is set — you are the only one who sees it.
 - FAILS (source never named): "At the start of most episodes, Candace notices the boys' project and reaches for her phone. Whom does she call to try to get them busted?" — nothing tells the player this is Phineas and Ferb, so it is unanswerable out of context.
@@ -249,6 +266,17 @@ These are gold-standard Joshing questions. Mimic their tone — literate, confid
 ${SINGLE_ANSWER_STYLE_EXEMPLAR_BLOCK}
 
 Do NOT copy these questions or their underlying facts. Use them only as a model for how a Joshing question should feel.
+
+THE EXAMPLES IN THESE INSTRUCTIONS ARE NOT A QUESTION BANK (hard floor, ALL tiers):
+Every illustration above and below — the exemplars, the GOOD/BAD pairs, the calibration pairs, the rule demonstrations — is built on a REAL fact about a real work. They are here to show you the SHAPE of a good question, never to supply its content. Reaching for one is the laziest possible failure: you would be handing back the instruction sheet.
+This applies with special force to the BAD examples. A fact used to demonstrate a defect is still off limits when you fix the defect — the fact was never the point.
+Never build a question around any of these subjects, which appear as examples somewhere in these instructions:
+- Mrs. Lovett's pie filling; Neville Longbottom's house points at the end-of-year feast; Candace calling her mother to report her brothers; Big Ben's chimes in Mrs. Dalloway; Sally Seton at Bourton; Septimus Warren Smith; the madeleine in Proust
+- Siegfried tasting the dragon's blood and understanding the birds; Siegfried's one unprotected spot; Hagen summoning the Gibichung vassals; the Macbeth witches agreeing when to meet again
+- Paul Allen's business card in American Psycho; Lorelai's dog; the Dragonfly Inn; Rory's first boyfriend; Captain Picard's civilian brother; the Water Temple sage in Tears of the Kingdom; the hero's name in Zelda
+- the Razumovsky quartets' dedicatee; the Diabelli Variations' publisher; Bach's works for unaccompanied violin and cello; the cantus firmus; the "love" score in tennis; the Nineteenth Amendment; Brunelleschi's dome; the region Florence is the capital of
+- every fact in the STYLE EXEMPLARS list above
+If a domain's best fact happens to be one of these, pick its second-best fact instead. There is always another.
 
 GRANULARITY RULES:
 Domain labels identify a body of knowledge — a work, an artist, a period, a discipline. They never identify a facet, aspect, or angle on that knowledge.
@@ -299,7 +327,7 @@ Trivia gets monotonous when every question follows the same template ("What is t
 - "in_which_work": asks which work, scene, chapter, movement, or section something appears in
 - "who_did_what": asks which character/person performs a specific act (e.g. "Who kills Polonius?")
 - "sequence_or_order": asks for ordering of events, items, or steps
-- "technique_or_term": asks for the technical term for a described concept (e.g. "What is it called when Venice floods?")
+- "technique_or_term": asks for the term a field uses for something — but reached through a concrete instance, a named person, or a famous case, NOT by reciting its definition and asking for the label (that is Rule 3c's DEFINITION_SUPPLIED failure, and in a discipline domain it is also Rule 2c's). Good: "What is it called when Venice floods?" (acqua alta) — a real situation, not a glossary gloss.
 - "what_happens_next": asks what immediately follows a described scene/event
 - "fill_in_blank": gives a short line with one word elided and asks the player to supply it (e.g. "Fill in the blank in this line from Don Giovanni: Don Giovanni a …… teco")
 - "complete_the_quote": gives the opening of a well-known quote and asks for the remainder (e.g. "Complete the Shakespeare quote: 'A horse, a horse, ……'")
@@ -453,6 +481,16 @@ export function buildUserPrompt(
   // a soft "prefer facts in the passage" instruction (decision A2, not a hard
   // extractive constraint). Absent unless GENERATION_WIKI_ANCHOR_ENABLED.
   domainReferences?: DomainReferences,
+  // R7: subjects (works, characters, people) already covered per domain, with
+  // counts, most-covered first. Distinct from sub-angles, which name FACETS —
+  // that block pushes the model to a new scene of the same headline work, which
+  // is how one Woolf domain ended up 40% Mrs Dalloway. See
+  // getRecentSubjectsByDomain.
+  subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>,
+  // R4: shapes already used per domain, with counts. The batch-scoped variety
+  // rule below is satisfiable forever by identification plus two others; this
+  // lifts it to per-domain. See getRecentShapesByDomain.
+  shapesByDomain?: ReadonlyMap<string, ReadonlyArray<{ shape: string; count: number }>>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -586,6 +624,43 @@ ${perDomain.join('\n')}`;
     }
   }
 
+  // R7 — subject-level coverage. Deliberately rendered AFTER the sub-angle block
+  // and phrased as the stronger of the two instructions: a new facet of a
+  // saturated subject is what the sub-angle block alone kept producing.
+  let subjectsHint = '';
+  if (subjectsByDomain && subjectsByDomain.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const subjects = subjectsByDomain.get(domain);
+      if (subjects && subjects.length > 0) {
+        perDomain.push(
+          `- ${domain}: ${subjects.map((s) => `${s.subject} (${s.count})`).join(' | ')}`,
+        );
+      }
+    }
+    if (perDomain.length > 0) {
+      subjectsHint = `\n\nSubjects already covered for these domains, with how many questions each has taken. A domain is not one work — prefer a subject that is NOT on this list: a different play, novel, album, episode, character, figure, or period inside the same domain. Only return to a listed subject when the domain genuinely has nothing else left, and never to one of the highest-count entries:
+${perDomain.join('\n')}`;
+    }
+  }
+
+  // R4 — shape coverage. Paired with the batch-level variety rule in the system
+  // prompt, which on its own only ever sees three questions at a time.
+  let shapesHint = '';
+  if (shapesByDomain && shapesByDomain.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const shapes = shapesByDomain.get(domain);
+      if (shapes && shapes.length > 0) {
+        perDomain.push(`- ${domain}: ${shapes.map((s) => `${s.shape} (${s.count})`).join(' | ')}`);
+      }
+    }
+    if (perDomain.length > 0) {
+      shapesHint = `\n\nQuestion shapes already used for these domains, with how many questions each has taken. Reach for a shape that is under-used here — especially one with no count at all — rather than the one already at the top of the list. "identification" is almost always the over-used entry; treat a high identification count as a reason to pick something else:
+${perDomain.join('\n')}`;
+    }
+  }
+
   let examplesHint = '';
   if (domainExamples && domainExamples.size > 0) {
     const perDomain: string[] = [];
@@ -624,7 +699,7 @@ ${wrapUserInput('reference_passages', perDomain.join('\n\n'))}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${examplesHint}${referenceHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${subjectsHint}${shapesHint}${examplesHint}${referenceHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -840,7 +915,7 @@ const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-gene
 3. FALSE_PREMISE — the setup contains a factual error or assumes something incorrect. Verify embedded factual claims, not just the overall framing: counts ("six works"), dates, attributions/authorship, and "N of which M" / "X of Y" relationships must hold up. A false claim of this kind is a defect however fluently it is phrased — it is NOT one of the "subtle wordsmithing" concerns excluded below. E.g. "Bach composed six works for unaccompanied strings — three for solo violin and three for solo cello" is FALSE_PREMISE (he wrote six of each, not three), even though the question reads cleanly and its answer is correct.
 4. SELF_ANSWERING — the question names the answer in its own text ("Who wrote the 1922 poem 'The Waste Land' by T. S. Eliot?"). This INCLUDES the eponym trap, which is easy to miss because the stem reads naturally: the setup names a work, award, law, instrument, or event after a person or place, and then asks who or what it was named for. The name is right there in the title. E.g. "Beethoven dedicated his three 'Razumovsky' string quartets, Op. 59, to a Russian patron who was also the Russian ambassador to Vienna. What was that patron's name?" — the answer is Razumovsky, and the stem quotes it. Same for "the 'Kreutzer' Sonata … what is the dedicatee's surname?" or "the Higgs boson … which physicist is it named after?". A question of this shape is only acceptable when it asks for something the eponym does NOT give away — a first name, a date, a reason — e.g. "Beethoven's 'Diabelli' Variations answer a challenge from a Viennese publisher. What was that publisher's FIRST name?" (Anton) is fine.
 5. GENERIC_AT_TIER — tier-graded. Never flag any item merely for resembling a simply-phrased question; plain phrasing is not genericness.
-   At moderate/specialist, a question is defective when it is generic trivia: mentally remove the work/domain title from the question — if what remains could appear in any generic trivia app (name-the-character/title/location roster questions, what-year/what-number lookups with no significance to a fan), it does not clear the tier's bar. E.g. "In Gilmore Girls, what is the name of Rory's first boyfriend?" at specialist is GENERIC_AT_TIER. A question probing a specific scene, running joke, exact wording, object, technique, or second-order fact is NOT generic, however plainly it is phrased — "In American Psycho, what color is Paul Allen's business card?" passes. Flag ONLY clear-cut cases; when uncertain, do not flag — at these tiers a missed generic question is cheaper than suppressing a good one.
+   At moderate/specialist, a question is defective when it is generic trivia: mentally remove the work/domain title from the question — if what remains could appear in any generic trivia app (name-the-character/title/location roster questions, what-year/what-number lookups with no significance to a fan), it does not clear the tier's bar. For a DISCIPLINE domain (a field rather than a work — UX Design, Calculus, Counterpoint, Food Chemistry, Parliamentary Procedure) there is no title to remove, so strip the FIELD name instead: if what remains is a dictionary definition of a term, that is generic at these tiers however technical the term sounds. A field question anchored to a named person, a famous dispute, a landmark case or a specific failure is NOT generic. E.g. "In Gilmore Girls, what is the name of Rory's first boyfriend?" at specialist is GENERIC_AT_TIER. A question probing a specific scene, running joke, exact wording, object, technique, or second-order fact is NOT generic, however plainly it is phrased — "In American Psycho, what color is Paul Allen's business card?" passes. Flag ONLY clear-cut cases; when uncertain, do not flag — at these tiers a missed generic question is cheaper than suppressing a good one.
    At ACCESSIBLE the bar is NARROWER, not absent: an accessible question is allowed to be EASY, so do not flag it for being easy, widely known, or simply phrased. Flag it ONLY when it is the encyclopedia's first-line lead for the work — a character's name asked for by role alone (the hero, the villain, the sidekick, the boyfriend: "what is the name of Rory's first boyfriend?"), the title of the work itself, the principal location or planet or city it is set in, or "who composed/wrote/directed it" — with no fan angle at all. E.g. "In A New Hope, what is the name of the desert planet where Luke grows up?" at accessible IS GENERIC_AT_TIER (principal-location lead); "In The Simpsons, what does Homer say when something goes wrong?" at accessible is NOT (easy, but the catchphrase is a fan angle). If the accessible item has ANY specific hook — an object, a line, a scene, a gag, a nickname — do not flag it.
 6. MULTI_PART — the question bundles two DISTINCT asks into one, so it has no single clean answer. Tells: an "— and what…/who…/where…?" tail, or any setup that demands two separate facts (a thing AND its location, a name AND a date). E.g. "What vulnerability lets Hagen kill Siegfried — and what is the precise location of it on his body?" is MULTI_PART. This is NOT the name_multiple style (ONE ask for several items of the SAME kind, e.g. "name the three Norns"), which is fine — flag only a question asking for two DIFFERENT facts.
 7. MISLEADING_SETUP — a clause in the setup most naturally describes a DIFFERENT answer than the intended one, so a player who knows the topic is steered toward the wrong response. The intended answer may be technically defensible, but the wording conflates two things (or attaches a clue that points elsewhere), so the reader can't tell which answer is wanted. This is distinct from OPINION_OR_VAGUE (there the answer is genuinely open) — here a single answer exists but the phrasing misdirects. E.g. "In tennis, a player who has won zero points in a game is said to have this score, which is also used to describe a set won without the opponent taking a single game. What is this term for a scoreless result?" (intended answer: Love) is MISLEADING_SETUP — the clause "a set won without the opponent taking a single game" describes a *love set* (or a "bagel"), so the setup points a knowledgeable player at a different answer than the single word "love." Flag only when the misdirection is clear — never for a question that is merely wordy or that simply requires thought.
@@ -1462,10 +1537,19 @@ export function findUnderDifficultyQuestions(
   generated: LlmQuestion[],
   domainDifficultyOverrides: ReadonlyMap<string, string> | undefined,
   difficultyPreference: string | undefined,
+  // R5: domains that get NO shortfall tolerance. The one-rung slack below is what
+  // lets a 'moderate' request come back 'accessible' and pass, which would defeat
+  // the declared-domain floor entirely — the floor moves the request, and this is
+  // what makes the request stick. Empty/undefined while the flag is off, so the
+  // global tolerance applies to everything exactly as before.
+  strictDomains?: ReadonlySet<string>,
 ): { toDrop: Set<number>; reasons: Record<number, string> } {
   const toDrop = new Set<number>();
   const reasons: Record<number, string> = {};
   const maxShortfall = maxTierShortfall();
+  const strictKeys = new Set(
+    [...(strictDomains ?? [])].map((domain) => domain.trim().toLowerCase()),
+  );
 
   // Normalize override keys so a returned canonical_subcategory differing only by
   // case/whitespace from the requested domain still resolves its override.
@@ -1488,7 +1572,8 @@ export function findUnderDifficultyQuestions(
     if (estimateIdx < 0) continue; // unrecognized estimate — not ours to judge.
 
     const shortfall = requestedIdx - estimateIdx;
-    if (shortfall > maxShortfall) {
+    const allowedShortfall = strictKeys.has(normalize(q.canonical_subcategory)) ? 0 : maxShortfall;
+    if (shortfall > allowedShortfall) {
       toDrop.add(i);
       reasons[i] =
         `difficulty "${q.difficulty_estimate}" is ${shortfall} tiers below requested "${DIFFICULTY_TIER_LADDER[requestedIdx]}" for ${q.canonical_subcategory}`.slice(
@@ -1766,6 +1851,8 @@ async function callLlmOnce(
   provider: LlmProvider = 'anthropic',
   domainExamples?: DomainExamples,
   domainReferences?: DomainReferences,
+  subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>,
+  shapesByDomain?: ReadonlyMap<string, ReadonlyArray<{ shape: string; count: number }>>,
 ): Promise<LlmQuestion[]> {
   const userPrompt = buildUserPrompt(
     domains,
@@ -1782,6 +1869,8 @@ async function callLlmOnce(
     culturalAnchor,
     domainExamples,
     domainReferences,
+    subjectsByDomain,
+    shapesByDomain,
   );
 
   // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
@@ -1889,6 +1978,10 @@ export async function generateDailyQuestions(
     provider?: LlmProvider;
     domainExamples?: DomainExamples;
     domainReferences?: DomainReferences;
+    /** R7: subjects already covered per domain, with counts. See buildUserPrompt. */
+    subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>;
+    /** R4: question shapes already used per domain, with counts. */
+    shapesByDomain?: ReadonlyMap<string, ReadonlyArray<{ shape: string; count: number }>>;
   } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
@@ -1899,6 +1992,8 @@ export async function generateDailyQuestions(
   const provider: LlmProvider = options.provider ?? 'anthropic';
   const domainExamples = options.domainExamples;
   const domainReferences = options.domainReferences;
+  const subjectsByDomain = options.subjectsByDomain;
+  const shapesByDomain = options.shapesByDomain;
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -1975,6 +2070,8 @@ export async function generateDailyQuestions(
         provider,
         domainExamples,
         domainReferences,
+        subjectsByDomain,
+        shapesByDomain,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -1996,6 +2093,8 @@ export async function generateDailyQuestions(
         provider,
         domainExamples,
         domainReferences,
+        subjectsByDomain,
+        shapesByDomain,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -2195,10 +2294,21 @@ export async function generateDailyQuestions(
   // prompt hint, and difficulty_estimate is the model's own label of what it
   // wrote. Drop questions that came back more than one tier below what was asked
   // for (the "specialist Sesame Street → accessible 'what color is Elmo'" case).
+  // R5: declared domains get no shortfall slack when the floor is enabled. The
+  // territory map is already threaded in for the prompt's register hint, so the
+  // declared set costs no extra query. Undefined while the flag is off.
+  const strictDifficultyDomains = isDeclaredDomainFloorEnabled() && domainTerritoryTypes
+    ? new Set(
+        [...domainTerritoryTypes.entries()]
+          .filter(([, territory]) => territory === 'declared')
+          .map(([domain]) => domain),
+      )
+    : undefined;
   const underDifficulty = findUnderDifficultyQuestions(
     generated,
     domainDifficultyOverrides,
     difficultyPreference,
+    strictDifficultyDomains,
   );
   // Under-difficulty is a SOFT gate, unlike every hard drop above: these are
   // good, factually-correct, novel questions — only easier than the requested
@@ -2260,6 +2370,14 @@ export async function generateDailyQuestions(
     { gate: 'answer_shape', considered: generated.length, dropped: answerShape.toDrop.size },
     { gate: 'domain_drift', considered: generated.length, dropped: offDomain.size },
     { gate: 'difficulty_floor', considered: generated.length, dropped: underDifficulty.toDrop.size },
+    // Per-defect split of the `quality` row above (R8). The aggregate counter
+    // says how many candidates the gate removed but not WHICH rule fired, so a
+    // prompt change aimed at one defect (R1's GENERIC_AT_TIER, R2's
+    // DEFINITION_SUPPLIED) could not be told apart from the gate simply going
+    // quiet. Tallied from the same `reasons` map the caller already routes on;
+    // OFF_DOMAIN reasons survive in that map even though their indices are held
+    // out of toDrop, so the measure-only defect is counted here too.
+    ...tallyQualityDefects(qualityResult.reasons, generated.length),
   ]);
 
   const allDrops = new Set<number>([
@@ -2451,6 +2569,10 @@ export async function generateDailyQuestions(
         insideJoke: insideJokeByQuestion.get(question) ?? null,
         // B-LLM-PROVIDER-AB-SWITCH B3: stamp the provider that generated this row.
         generatedByProvider: provider,
+        // R4: keep the shape the model reported. Until now this was validated,
+        // warned about, and then thrown away, so no surface could tell whether
+        // the shape-variety instruction was landing.
+        questionShape: question.question_shape,
         trustTier,
         askToAnswerVerified,
         // Union the ask-to-answer rephrasings (judge-verified equivalent) with the
@@ -2791,7 +2913,15 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     });
   }
 
-  const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
+  // Facet coverage (sub-angles) and SUBJECT coverage (R7) are fetched together —
+  // the second is what stops "pick a new facet" being satisfied by another scene
+  // from the same over-used work. Both are advisory prompt context and both fail
+  // soft: a miss just means that block is absent this round.
+  const [subAnglesByDomain, subjectsByDomain, shapesByDomain] = await Promise.all([
+    getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined),
+    getRecentSubjectsByDomain(userId, domainsForRound).catch(() => undefined),
+    getRecentShapesByDomain(userId, domainsForRound).catch(() => undefined),
+  ]);
 
   // Admin-authored example questions per domain — ground-truth anchors fed into
   // the generation prompt so the model writes from real canon instead of inventing
@@ -3021,6 +3151,8 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         provider: genProvider,
         domainExamples,
         domainReferences,
+        subjectsByDomain,
+        shapesByDomain,
       },
     );
 

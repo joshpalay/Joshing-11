@@ -226,6 +226,55 @@ export function focusDomainMinDifficulty(): ServedDifficulty {
   return raw === 'moderate' || raw === 'specialist' || raw === 'accessible' ? raw : 'accessible';
 }
 
+/**
+ * R5 (D-doc pending) — DECLARED-domain difficulty floor. DEFAULT OFF.
+ *
+ * The philosophy holds that declaring an interest buys a head start to the
+ * engaged-fan rung. It does not currently: 42% of live generated rows in a
+ * user's DECLARED domains are accessible-tier, against 41% in domains they never
+ * chose — declaring buys nothing measurable. Four constructs stack to produce
+ * that (audits/2026-09-11-Fable-QUESTION-DRIFT-PIPELINE-01.md §3.8): this floor
+ * defaults off, 15 of 27 users sit at adaptive level 1.0 which seeds every new
+ * domain at accessible, the difficulty gate tolerates a one-rung miss, and the
+ * prompt's territory hint and difficulty hint contradict each other.
+ *
+ * WHY THIS IS FLAGGED OFF RATHER THAN SIMPLY TURNED ON: the previous attempt at
+ * a floor was a BLANKET one (focusDomainMinDifficulty pinned every focus domain,
+ * declared or merely played, to >= moderate) and it did real harm — it buried
+ * genuinely good easy questions in the under-difficulty reserve and pressured the
+ * generator into inventing "deep cut" facts for naturally shallow topics, a
+ * documented driver of hallucinated canon. It was recalibrated off on 2026-06-28.
+ * This version differs in three ways: it applies ONLY to domains the player
+ * explicitly declared (never to demonstrated territory), it moves the floor for
+ * the request rather than forcing the model to write harder, and it can be
+ * reverted by clearing one env var with no deploy.
+ *
+ * Sequencing: do NOT enable while the R1/R2/R3/R6/R9 batch is still being
+ * measured — this stacks on R1 and would make that window unreadable. See
+ * diagnosis/question-drift-r1-r2-tracking.md.
+ */
+export function isDeclaredDomainFloorEnabled(): boolean {
+  const raw = process.env.DECLARED_DOMAIN_FLOOR_ENABLED?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+/** The rung a DECLARED domain may not fall below while the floor is enabled.
+ *  Defaults to the engaged-fan rung; override with DECLARED_DOMAIN_FLOOR. */
+export function declaredDomainFloor(): ServedDifficulty {
+  const raw = process.env.DECLARED_DOMAIN_FLOOR?.trim();
+  return raw === 'moderate' || raw === 'specialist' || raw === 'accessible' ? raw : 'moderate';
+}
+
+/**
+ * The erosion / request floor to apply to one domain. Declared domains take the
+ * R5 floor when it is enabled; everything else keeps the existing global focus
+ * floor, so with the flag off this is byte-for-byte the old behaviour.
+ */
+export function floorForDomain(isDeclared: boolean): ServedDifficulty {
+  if (isDeclared && isDeclaredDomainFloorEnabled()) return declaredDomainFloor();
+  return isDeclared ? focusDomainMinDifficulty() : 'accessible';
+}
+
 export function applyFocusFloor(
   difficulty: ServedDifficulty,
   isFocusDomain: boolean,
@@ -413,9 +462,7 @@ export async function updateDomainDifficultyOnAnswer(
   // Erosion floor is declared-only: declared domains carry the engaged-fan
   // floor, demonstrated domains step down freely (default 'accessible' floor).
   const declaredDomains = await getDeclaredDomainSet(userId, [canonicalSubcategory]);
-  const floor: ServedDifficulty = declaredDomains.has(canonicalSubcategory)
-    ? focusDomainMinDifficulty()
-    : 'accessible';
+  const floor: ServedDifficulty = floorForDomain(declaredDomains.has(canonicalSubcategory));
   const next = computeDomainDifficultyStep(existing, isCorrect, floor);
 
   await db
@@ -559,9 +606,7 @@ export async function recalibrateDomainDifficultyToSupply(
 
   for (const domain of domains) {
     const delivered = deliveredByDomain.get(domain)!;
-    const floor: ServedDifficulty = declaredDomains.has(domain)
-      ? focusDomainMinDifficulty()
-      : 'accessible';
+    const floor: ServedDifficulty = floorForDomain(declaredDomains.has(domain));
     const floorIdx = DIFFICULTY_LADDER.indexOf(floor);
     const target = DIFFICULTY_LADDER[Math.max(floorIdx, DIFFICULTY_LADDER.indexOf(delivered))];
 
@@ -663,9 +708,9 @@ export async function relaxDomainDifficultyOnStarvation(
 
   for (const existing of rows) {
     if (isFrozen(existing.freezeUntil, now)) continue;
-    const floor: ServedDifficulty = declaredDomains.has(existing.canonicalSubcategory)
-      ? focusDomainMinDifficulty()
-      : 'accessible';
+    const floor: ServedDifficulty = floorForDomain(
+      declaredDomains.has(existing.canonicalSubcategory),
+    );
     const relaxed = computeStarvationStepDown(
       existing.servedDifficulty as ServedDifficulty,
       floor,
@@ -915,17 +960,29 @@ export async function getDomainDifficultyOverrides(
   // (its sole job is flooring their first-contact seed; the erosion-floor split is
   // applied later, on answer).
   const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
-  const [seedLevel, focusDomains] = await Promise.all([
+  // R5: the declared set is read for ALL requested domains, not just the unseeded
+  // ones, because the floor has to lift a domain that has already eroded down —
+  // that is the case the philosophy actually cares about (a player who declared
+  // an interest, missed a couple, and got pushed back to tourist level). Skipped
+  // entirely while the flag is off so this stays a no-op query-wise.
+  const [seedLevel, focusDomains, declaredDomains] = await Promise.all([
     readCurrentAdaptiveLevel(userId),
     getFocusDomainSet(userId, domainsNeedingSeed),
+    isDeclaredDomainFloorEnabled()
+      ? getDeclaredDomainSet(userId, domains)
+      : Promise.resolve(new Set<string>()),
   ]);
   const globalSkillTier = seedDifficultyFromAdaptiveLevel(seedLevel);
 
   for (const domain of domains) {
     const row = known.get(domain);
-    const served = row
+    const base = row
       ? liftServedToGlobalSkill(row.served, globalSkillTier, row.consecutiveIncorrect)
       : applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
+    // Raise to the declared floor when enabled. applyFocusFloor is a max, so a
+    // domain already at or above the floor is untouched and a player who has
+    // climbed past it keeps their earned tier.
+    const served = applyFocusFloor(base, declaredDomains.has(domain), floorForDomain(true));
     overrides.set(domain, SERVED_TO_PREFERENCE[served]);
   }
 

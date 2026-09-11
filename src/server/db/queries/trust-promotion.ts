@@ -15,7 +15,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/server/db';
-import { masteryEvents, questions } from '@/server/db/schema';
+import { generatedQuestions, masteryEvents, questions } from '@/server/db/schema';
 import { empiricalMinSamples, resolveEffectiveDifficulty } from '@/server/daily/empirical-difficulty';
 
 function numEnv(name: string, fallback: number): number {
@@ -93,6 +93,56 @@ export async function readPlayAggregate(questionId: string): Promise<PlayAggrega
 }
 
 /**
+ * Persist the measured play aggregate onto the GENERATED bank row behind a
+ * canonical question (R8, 2026-09-11).
+ *
+ * `GeneratedQuestion.n_answered` / `empirical_correct_rate` have existed since
+ * the pool substrate landed and are read in two places — the dud exclusion in
+ * rankAndFilterBankCandidates and resolveEffectiveDifficulty — but nothing on
+ * the answer path ever WROTE them for machine rows, so they sat null on all but
+ * 30 of 2,191 live rows. That left every tier self-label unchecked against real
+ * play: there was no way to ask whether "accessible" is actually answered at the
+ * ~78% the difficulty hint targets. See
+ * audits/2026-09-11-Fable-QUESTION-DRIFT-PIPELINE-01.md §3.10.
+ *
+ * Idempotent by construction: both values are recomputed from the full
+ * MASTERY_EVENTS history for the question and overwritten, never incremented,
+ * so concurrent answers and re-runs converge instead of double-counting.
+ * Best-effort — a telemetry write must never surface on an answer.
+ */
+export function empiricalPlayPatch(
+  agg: PlayAggregate,
+): { nAnswered: number; empiricalCorrectRate: number } | null {
+  // One answerer is enough to record. The bug this replaces treated a single
+  // play as "not worth writing", which is how the columns stayed empty on a
+  // corpus where most questions are answered once or twice.
+  if (agg.distinctAnswerers <= 0) return null;
+  return {
+    nAnswered: agg.distinctAnswerers,
+    empiricalCorrectRate: agg.distinctCorrect / agg.distinctAnswerers,
+  };
+}
+
+async function persistEmpiricalPlay(
+  generatedQuestionId: string | null,
+  agg: PlayAggregate,
+): Promise<void> {
+  const patch = empiricalPlayPatch(agg);
+  if (!generatedQuestionId || !patch) return;
+  try {
+    await db
+      .update(generatedQuestions)
+      .set(patch)
+      .where(eq(generatedQuestions.id, generatedQuestionId));
+  } catch (error) {
+    console.warn('[trust-promotion] empirical play write failed (telemetry only)', {
+      generatedQuestionId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
  * Evaluate + apply trust promotion / "nobody got it" flag for a question after a
  * scored answer. Best-effort and idempotent: the promotion UPDATE is guarded on
  * the current tier so a re-run never re-promotes, and the flag converges to the
@@ -100,11 +150,34 @@ export async function readPlayAggregate(questionId: string): Promise<PlayAggrega
  */
 export async function evaluateQuestionTrustOnPlay(questionId: string): Promise<void> {
   const agg = await readPlayAggregate(questionId);
+  // Nothing scored yet — no aggregate to record and no threshold in reach.
+  if (agg.distinctAnswerers <= 0) return;
+
   const minCorrect = humanValidatedMinCorrect();
   const minHolders = nobodyCorrectMinHolders();
   const minSamples = empiricalMinSamples();
 
-  // Cheap exit: nothing to do until a promotion, a flag, or an empirical
+  const [current] = await db
+    .select({
+      trustTier: questions.trustTier,
+      nobodyCorrectFlag: questions.nobodyCorrectFlag,
+      calibratedDifficulty: questions.calibratedDifficulty,
+      difficultyEstimate: questions.difficultyEstimate,
+      generatedQuestionId: questions.generatedQuestionId,
+    })
+    .from(questions)
+    .where(eq(questions.id, questionId))
+    .limit(1);
+  if (!current) return;
+
+  // Record the measured aggregate on EVERY scored answer, before the threshold
+  // checks below. This used to sit behind the same "is a promotion/flag/recompute
+  // in reach" exit as everything else, which is precisely why the counters were
+  // empty: a question answered by one or two people — i.e. nearly all of them at
+  // this scale — never reached any threshold and so was never recorded at all.
+  await persistEmpiricalPlay(current.generatedQuestionId, agg);
+
+  // Cheap exit: nothing further to do until a promotion, a flag, or an empirical
   // difficulty recompute is in reach.
   if (
     agg.distinctCorrect < minCorrect &&
@@ -113,18 +186,6 @@ export async function evaluateQuestionTrustOnPlay(questionId: string): Promise<v
   ) {
     return;
   }
-
-  const [current] = await db
-    .select({
-      trustTier: questions.trustTier,
-      nobodyCorrectFlag: questions.nobodyCorrectFlag,
-      calibratedDifficulty: questions.calibratedDifficulty,
-      difficultyEstimate: questions.difficultyEstimate,
-    })
-    .from(questions)
-    .where(eq(questions.id, questionId))
-    .limit(1);
-  if (!current) return;
 
   const decision = decideTrustOnPlay(
     agg,

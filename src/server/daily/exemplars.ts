@@ -69,7 +69,72 @@ export const STYLE_EXEMPLARS: readonly StyleExemplar[] = [
   { q: "What was the name of the evil business tycoon in the animated series Gargoyles?", a: "David Xanatos", shape: 'identification' },
   { q: "What chords make up a plagal cadence?", a: "IV to I", shape: 'technique_or_term' },
   { q: "What is the main character's name in the Metroid video game series?", a: "Samus Aran", shape: 'identification' },
+  // ---------------------------------------------------------------------------
+  // Gap-filling additions (R3, 2026-09-11) — see
+  // audits/2026-09-11-Fable-QUESTION-DRIFT-PIPELINE-01.md §2 P5 and §3.5.
+  //
+  // A hand-read of 220 live machine questions found ~77% were name-this-thing
+  // identification, and three shapes the generator is explicitly offered had
+  // produced ONE row each across 2,191: what_happens_next, sequence_or_order and
+  // a meaningful year_or_date. The catalogue names those shapes but this list
+  // demonstrated none of them, so the model had no model to copy. Two further
+  // gaps showed up in the same read: discipline domains (UX, counterpoint,
+  // food science) collapsed into bare glossary definitions because every
+  // technique_or_term exemplar here is pure term-recall, and fandom questions
+  // came out in the same long literate register as the opera ones because
+  // nothing here shows a short fandom question.
+  //
+  // These are ADDITIONS only. Nothing hand-curated above was removed — see the
+  // RETIREMENT CANDIDATES note at the foot of this file for the entries the
+  // audit flagged, left for the product owner to judge.
+
+  // what_happens_next — the beat AFTER a setup, not the name of a thing in it.
+  { q: "In Raiders of the Lost Ark, a swordsman theatrically flourishes his scimitar in the Cairo marketplace. What does Indy do instead of reaching for his whip?", a: "shoots him", shape: 'what_happens_next' },
+  { q: "In The Godfather, Jack Woltz refuses Tom Hagen's request and goes to bed pleased with himself. What does he find under the sheets the next morning?", a: "the severed head of his racehorse", shape: 'what_happens_next' },
+
+  // sequence_or_order — ordering is the ask; the answer stays a single item, so
+  // it never becomes the list shape the grader cannot score.
+  { q: "In The Wizard of Oz, which companion does Dorothy meet first on the yellow brick road?", a: "the Scarecrow", shape: 'sequence_or_order' },
+  { q: "Das Rheingold opens Wagner's Ring Cycle. Which opera closes it?", a: "Götterdämmerung", shape: 'sequence_or_order' },
+
+  // year_or_date — only when the date IS the point. Here the juxtaposition is
+  // the fact; "in what year was X written" remains a filler question.
+  { q: "Bach and Handel were born in the same year, a few hundred miles apart. Which year?", a: "1685", shape: 'year_or_date' },
+
+  // Discipline domains with a fan angle — a named person, a famous argument, a
+  // landmark book. The point is that a field question can be about something a
+  // practitioner would actually trade, not a definition with the label removed.
+  { q: "In UX design, the ten usability heuristics every design review still cites are named after which researcher?", a: "Jakob Nielsen", shape: 'identification' },
+  { q: "Which 1984 book made food science legible to cooks and is still the reference on every serious kitchen shelf?", a: "On Food and Cooking (Harold McGee)", shape: 'in_which_work' },
+  { q: "What is the name of the famously unresolved chord that opens Wagner's Tristan und Isolde and is still argued over?", a: "the Tristan chord", shape: 'technique_or_term' },
+
+  // Short fandom register — easy, specific, and nine words long. Counterweight
+  // to the 31-word two-sentence setups the live corpus drifted into.
+  { q: "In The Simpsons, what does Homer say when something goes wrong?", a: "D'oh!", shape: 'identification' },
+  { q: "What is Optimus Prime's alt mode?", a: "a semi truck", shape: 'identification' },
 ];
+
+/**
+ * RETIREMENT CANDIDATES — flagged by the 2026-09-11 drift audit, NOT removed.
+ *
+ * These are hand-curated taste calibration, so the audit recommends rather than
+ * applies. Each is an encyclopedia-lead fact: the thing a reference work states
+ * first, with no angle of its own. Keeping them models the exact pattern R1 now
+ * forbids at the accessible tier.
+ *
+ *   "What was the name of Alexander the Great's horse?"        (roster lead)
+ *   "What is the title of Beethoven's Third Symphony?"         (title lead)
+ *   "What is the name of the most famous opera house in Venice?" (superlative lead)
+ *   "Clovis, Clotaire, and Chilperic were all kings of which Frankish dynasty?"
+ *   "What is the plural of \"focus\"?"                           (dictionary lookup)
+ *   "What is the name of the rope that raises or lowers a sail on a sailboat?"
+ *
+ * Separately, five exemplar facts are reproduced in live generated stock despite
+ * the "do NOT copy" instruction — tintinnabuli/Arvo Pärt (including one verbatim
+ * question), Eroica, "embiggens", the plagal cadence, and Xanatos. R6 addresses
+ * that by forbidding example facts in the prompt itself; no edit here is needed
+ * unless the owner wants them gone for taste reasons too.
+ */
 
 export const STYLE_EXEMPLAR_BLOCK: string = STYLE_EXEMPLARS
   .map((e) => `- [${e.shape}] ${e.q} (A: ${e.a})`)

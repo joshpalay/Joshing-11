@@ -80,6 +80,9 @@ describe('quality gate — GENERIC_AT_TIER plumbing', () => {
     expect(system).toContain('roster-lead-only bar at accessible');
     expect(system).toContain('At ACCESSIBLE the bar is NARROWER, not absent');
     expect(system).toContain('when uncertain, do not flag');
+    // R9 (2026-09-11): a discipline domain has no title to strip, so the gate
+    // is told to strip the FIELD name and reject bare glossary definitions.
+    expect(system).toContain('strip the FIELD name instead');
   });
 
   it('parses drop indices and reasons from the gate verdict', async () => {
