@@ -42,7 +42,19 @@ traced to prompt text, not to model or gate failures. Josh asked for R2 first
 R1 and R2 shipped in the **same window**, so their effects on the aggregate
 gate-drop rate cannot be separated. The two hand-read metrics below are
 disjoint by construction (definition-supplied → R2; roster-lead → R1), which is
-what makes attribution possible at Phase 2.
+what makes attribution possible at Phase 2. The R8 per-defect gate counters
+(shipped the same day) do the same job mechanically.
+
+**Scope widened 2026-09-11 — this window now measures a five-item batch.**
+R3, R6 and R9 shipped into the same window on purpose. The reasoning is volume,
+not convenience: generation runs at roughly 10–20 questions/day, so a 14-day
+window yields 150–300 rows. That is barely one readable hand-read sample.
+Running R1/R2, then R3/R6/R9, then R5 as three sequential windows would cost six
+weeks and give each window a sample too thin to read. Per-item attribution is
+not affordable at this size, so the batch is measured together, with the
+per-defect counters and the disjoint hand-read metrics carrying whatever
+attribution is available. R5 stays out (see §2 decision 5) because it is the one
+item that deliberately makes questions harder.
 
 Grading invariant: this is a generation-side change. **No grading flag or
 grader model may flip until Phase 2 closes** (`PARTIAL_ANSWER_LEAK_ENABLED`,
@@ -172,6 +184,37 @@ lead is acceptable at accessible").
 ---
 
 ## Updates
+
+### 2026-09-11 — R3 / R6 / R9 prompt batch shipped (separate PR, stacked on R8)
+Three more prescriptions, all prompt-and-exemplar text, folded into the SAME
+measurement window as R1/R2 for the volume reason recorded at the top of this
+doc. What changed:
+
+- **R3 — exemplar gap-filling.** Ten exemplars added to `exemplars.ts`: two
+  `what_happens_next`, two `sequence_or_order`, one meaningful `year_or_date`
+  (the three shapes the catalogue offered but the list never demonstrated, each
+  of which had produced exactly ONE live row in 2,191), three discipline-domain
+  exemplars with a real angle rather than a glossary gloss, and two short-register
+  fandom exemplars as a counterweight to the 31-word house style. **Nothing
+  curated was deleted** — the six encyclopedia-lead identification exemplars the
+  audit flagged are listed as RETIREMENT CANDIDATES in a comment for Josh to
+  judge, since that list is his taste calibration. identification therefore only
+  falls from 54.5% to 50.0%; actioning the retirements would take it to ~44%.
+- **R6 — the prompt's examples are not a question bank.** ~86 live rows (3.9%)
+  reproduced a fact used as an illustration somewhere in the instructions,
+  including facts from the BAD examples (Mrs Lovett's pies ×6, Candace calling
+  her mother ×5, Neville's points ×2). A new hard-floor rule names the leaked
+  subjects explicitly and extends the ban to defect-demonstration facts.
+- **R9 — a strip test discipline domains can fail.** Rule 2 strips the work's
+  title, which is vacuous for UX Design or Counterpoint, so those domains
+  collapsed into glossary definitions (10.4% of machine rows use "what term…"
+  phrasing versus 0% of human ones). New Rule 2c strips the FIELD name instead,
+  with the same rule mirrored into the quality gate's GENERIC_AT_TIER. The
+  `technique_or_term` catalogue entry no longer describes itself as
+  define-then-label.
+
+Deliberately NOT in this batch: R7 (subject-entity feedback) needs real query
+plumbing and goes separately; R5 stays gated; R4 needs a migration.
 
 ### 2026-09-11 — R8 telemetry shipped (separate PR, stacked on R1/R2)
 Two measurement gaps closed, both **zero change to generated output** so neither
