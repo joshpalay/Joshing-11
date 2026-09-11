@@ -56,7 +56,7 @@ vi.mock('@/server/db', () => ({
   questions: {},
   users: {
     id: 'users.id',
-    phoneNumber: 'users.phoneNumber',
+    handle: 'users.handle',
     displayName: 'users.displayName',
     discoverableByMutualFriends: 'users.discoverableByMutualFriends',
   },
@@ -78,9 +78,9 @@ describe('composeMutualFriendSuggestions', () => {
     { candidateId: 'mid', mutualFriendCount: 2 },
   ]
   const baseCandidateUsers = [
-    { id: 'low', displayName: 'Low Mutual', phoneNumber: '+1000', discoverableByMutualFriends: true },
-    { id: 'high', displayName: 'High Mutual', phoneNumber: '+1001', discoverableByMutualFriends: true },
-    { id: 'mid', displayName: 'Mid Mutual', phoneNumber: '+1002', discoverableByMutualFriends: true },
+    { id: 'low', displayName: 'Low Mutual', handle: 'low', discoverableByMutualFriends: true },
+    { id: 'high', displayName: 'High Mutual', handle: 'high', discoverableByMutualFriends: true },
+    { id: 'mid', displayName: 'Mid Mutual', handle: 'mid', discoverableByMutualFriends: true },
   ]
   const noRelationships = new Map<string, { state: string; isBlocked: boolean; friendshipId: null; formedAt: null }>()
 
@@ -213,15 +213,44 @@ describe('composeMutualFriendSuggestions', () => {
     expect(result.map((r) => r.id)).toEqual(['high', 'mid'])
   })
 
-  it('falls back to phone number when displayName is null', () => {
+  // F8: a suggestion shows one user's name to a stranger, so the fallback chain
+  // is display name -> @username -> a neutral generic. The phone number is not
+  // in that chain at any step. This test previously asserted the opposite —
+  // that a nameless candidate surfaced as their raw phone number — which is the
+  // leak F8 closed everywhere else.
+  it('falls back to @username when displayName is null', () => {
     const result = composeMutualFriendSuggestions({
       requesterOptedIn: true,
       candidateRows: [{ candidateId: 'anon', mutualFriendCount: 1 }],
       relationships: new Map(),
-      candidateUsers: [{ id: 'anon', displayName: null, phoneNumber: '+15551234567', discoverableByMutualFriends: true }],
+      candidateUsers: [{ id: 'anon', displayName: null, handle: 'anon_user', discoverableByMutualFriends: true }],
       limit: 10,
     })
-    expect(result[0]?.displayName).toBe('+15551234567')
+    expect(result[0]?.displayName).toBe('@anon_user')
+  })
+
+  it('falls back to a neutral generic when there is no name and no username', () => {
+    const result = composeMutualFriendSuggestions({
+      requesterOptedIn: true,
+      candidateRows: [{ candidateId: 'anon', mutualFriendCount: 1 }],
+      relationships: new Map(),
+      candidateUsers: [{ id: 'anon', displayName: null, handle: null, discoverableByMutualFriends: true }],
+      limit: 10,
+    })
+    expect(result[0]?.displayName).toBe('Joshing friend')
+  })
+
+  it('never surfaces anything phone-shaped for a nameless candidate', () => {
+    // Regression guard for the leak itself, independent of the exact fallback
+    // wording: whatever we render, it must not look like a phone number.
+    const result = composeMutualFriendSuggestions({
+      requesterOptedIn: true,
+      candidateRows: [{ candidateId: 'anon', mutualFriendCount: 1 }],
+      relationships: new Map(),
+      candidateUsers: [{ id: 'anon', displayName: null, handle: null, discoverableByMutualFriends: true }],
+      limit: 10,
+    })
+    expect(result[0]?.displayName).not.toMatch(/\+?\d{7,}/)
   })
 
   it('a minimum of 1 shared friend qualifies (no higher floor)', () => {
@@ -283,8 +312,8 @@ describe('getMutualFriendSuggestions (DB wiring)', () => {
         { candidateId: 'cand-high', mutualFriendCount: 2 },
       ], // FoF candidate group-by
       [
-        { id: 'cand-low', displayName: 'Cand Low', phoneNumber: '+2', discoverableByMutualFriends: true },
-        { id: 'cand-high', displayName: 'Cand High', phoneNumber: '+3', discoverableByMutualFriends: true },
+        { id: 'cand-low', displayName: 'Cand Low', handle: 'cand_low', discoverableByMutualFriends: true },
+        { id: 'cand-high', displayName: 'Cand High', handle: 'cand_high', discoverableByMutualFriends: true },
       ], // candidateUsers
     ]
 

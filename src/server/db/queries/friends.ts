@@ -556,13 +556,20 @@ export type MutualFriendCandidateRow = {
 }
 
 // The candidate-side profile fields the pure composer needs: display name
-// (+ phone fallback, matching the toPerson()/displayName() convention above)
-// and the candidate's OWN opt-in flag -- both parties must opt in for a
-// suggestion to surface (see composeMutualFriendSuggestions doc).
+// (+ USERNAME fallback, via resolveDisplayName -- never the phone number; see
+// src/server/lib/display-name.ts) and the candidate's OWN opt-in flag -- both
+// parties must opt in for a suggestion to surface (see
+// composeMutualFriendSuggestions doc).
+//
+// `handle`, not `phoneNumber`, is deliberate. A mutual-friend suggestion is the
+// definition of showing one user's name to ANOTHER user who is NOT yet
+// connected to them, which is exactly the surface F8 closed: a nameless
+// account's phone number must never reach a stranger's response body. Carrying
+// the phone on this row at all would make that leak one careless line away.
 export type MutualFriendCandidateUserRow = {
   id: string
   displayName: string | null
-  phoneNumber: string | null
+  handle: string | null
   discoverableByMutualFriends: boolean
 }
 
@@ -642,7 +649,10 @@ export function composeMutualFriendSuggestions(params: {
       const candidate = candidateById.get(id)!
       return {
         id,
-        displayName: displayName(candidate.displayName, candidate.phoneNumber ?? ''),
+        displayName: resolveDisplayName({
+          displayName: candidate.displayName,
+          handle: candidate.handle,
+        }),
         mutualFriendCount: countById.get(id) ?? 0,
       }
     })
@@ -731,7 +741,7 @@ export async function getMutualFriendSuggestions(
       .select({
         id: users.id,
         displayName: users.displayName,
-        phoneNumber: users.phoneNumber,
+        handle: users.handle,
         discoverableByMutualFriends: users.discoverableByMutualFriends,
       })
       .from(users)
