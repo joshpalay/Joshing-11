@@ -66,7 +66,7 @@ grader model may flip until Phase 2 closes** (`PARTIAL_ANSWER_LEAK_ENABLED`,
 2. **Keep R2-c (gate softener specialist-only), or restore it for moderate?** Decide at Phase 1 if the quality-gate drop rate exceeds 45%.
 3. **Accept the accessible-tier correct-rate dip?** R2 removes giveaways, so the easy tier gets a little less easy. Today this is unmeasurable (`empirical_correct_rate` populated on 30 of 2,191 rows) — decision 4 is a prerequisite.
 4. ~~**Ship R8 (write `n_answered` / `empirical_correct_rate` on every answer path; per-defect split in `GateDropStat`) before Phase 2?**~~ **RESOLVED 2026-09-11 — shipped.** See the Updates entry. Phase 3 is unblocked for rows answered from the R8 deploy onward; rows answered before it stay unmeasured (the write is not backfilled).
-5. **When to ship R5 (declared-domain floor)?** Not before Phase 2 closes — it stacks on R1 and the June recalibration shows real harm from a blanket floor.
+5. **When to ENABLE R5 (declared-domain floor)?** The code shipped 2026-09-11 **switched off** (`DECLARED_DOMAIN_FLOOR_ENABLED` unset). Do not set it before Phase 2 closes — it stacks on R1, and the June recalibration shows real harm from a blanket floor. Enabling is one env var, no deploy; reverting is clearing it.
 
 ## 3. What we know so far — baselines (pre-change, measured 2026-09-11)
 
@@ -184,6 +184,35 @@ lead is acceptable at accessible").
 ---
 
 ## Updates
+
+### 2026-09-11 — R5 declared-domain floor shipped SWITCHED OFF (separate PR)
+Built, tested, and deliberately inert. `DECLARED_DOMAIN_FLOOR_ENABLED` is unset,
+and with it unset every code path is byte-for-byte the previous behaviour — that
+property has its own tests rather than being asserted in a comment.
+
+What it does when enabled:
+- **Floors the REQUEST**, not the writing. A declared domain's requested tier is
+  raised to the engaged-fan rung (`DECLARED_DOMAIN_FLOOR`, default `moderate`)
+  in `getDomainDifficultyOverrides`, for already-played domains as well as
+  first-contact ones — a player who declared an interest, missed twice and got
+  pushed back to tourist level is exactly the case that matters.
+- **Makes the request stick.** The difficulty gate tolerates a one-rung miss, so
+  a `moderate` request happily accepts `accessible` output; that alone would have
+  defeated the floor. Declared domains now get zero tolerance, derived from the
+  territory map already threaded in for the prompt, so it costs no extra query.
+- **Never touches demonstrated territory**, flag on or off.
+
+Why flagged rather than simply enabled: the 2026-06-28 recalibration turned OFF a
+BLANKET floor that had pinned every focus domain (declared or merely played) to
+≥ moderate. It buried good easy questions in the under-difficulty reserve and
+pressured the generator into inventing deep cuts for shallow topics, a documented
+driver of hallucinated canon. This version is declared-only, moves the request
+rather than the writing, and reverts by clearing one env var with no deploy.
+
+**Enable only after Phase 2 closes**, and then as its own window — it stacks on
+R1. Tripwire on enabling: demote rate and short-queue rate on thin declared
+domains (Spy School, Tears of the Kingdom). If either rises, the floor is right
+but the supply is not, and the answer is grounding, not difficulty.
 
 ### 2026-09-11 — R7 subject coverage shipped (separate PR, stacked on the prompt batch)
 The last of the generation-side prescriptions, in the same window as the rest.
