@@ -31,6 +31,11 @@ dev-stderr.txt
 
 # Local Claude overrides & scratch
 .claude/settings.local.json
+# Git worktrees for other branches are created in here. They are working
+# copies, never source: committing one would duplicate the entire repo, and
+# vitest already has to exclude the directory to avoid collecting every test
+# file once per branch (see vitest.config.ts).
+.claude/worktrees/
 audits/
 supabase/
 _scratch/
