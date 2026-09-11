@@ -2620,6 +2620,76 @@ export async function getRecentSubAnglesByDomain(
  * because the signal the model needs is "Hamlet is saturated", not merely
  * "Hamlet has appeared".
  */
+/**
+ * Question shapes this user's recent generated questions have already used,
+ * most-used first (R4, 2026-09-11).
+ *
+ * The prompt's variety rule is scoped to a single batch ("no two questions in
+ * this batch share a shape"), and a batch is three questions — so it is
+ * satisfiable forever by identification plus two others, which is roughly what
+ * happened: ~77% of live rows are identification and three of the nine offered
+ * shapes have one row each across 2,191. Showing the model what it has actually
+ * been reaching for lifts the rule from per-batch to per-domain.
+ *
+ * Counts, not a bare list, for the same reason as the subject block: "you have
+ * used identification 40 times here" is actionable where "identification has
+ * been used" is not.
+ */
+export async function getRecentShapesByDomain(
+  userId: string,
+  domains: string[],
+  rowLimit = 300,
+): Promise<Map<string, Array<{ shape: string; count: number }>>> {
+  const result = new Map<string, Array<{ shape: string; count: number }>>();
+  if (domains.length === 0) return result;
+
+  let rows: { domain: string; questionShape: string | null }[];
+  try {
+    rows = await db
+      .select({
+        domain: generatedQuestions.canonicalSubcategory,
+        questionShape: generatedQuestions.questionShape,
+      })
+      .from(generatedQuestions)
+      .where(
+        and(
+          eq(generatedQuestions.userId, userId),
+          inArray(generatedQuestions.canonicalSubcategory, domains),
+        ),
+      )
+      .orderBy(sql`${generatedQuestions.createdAt} desc`)
+      .limit(rowLimit);
+  } catch (error) {
+    // question_shape lands in migration 0146; tolerate a database that predates
+    // it rather than failing the build, as the sibling reads above do.
+    if (pgErrorCode(error) === '42703') return result;
+    throw error;
+  }
+
+  const perDomain = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    if (!row.domain) continue;
+    const shape = row.questionShape?.trim();
+    // Rows generated before 0146 carry no shape and are skipped rather than
+    // bucketed as "unknown" — a guessed denominator would be worse than none.
+    if (!shape) continue;
+    let bucket = perDomain.get(row.domain);
+    if (!bucket) {
+      bucket = new Map();
+      perDomain.set(row.domain, bucket);
+    }
+    bucket.set(shape, (bucket.get(shape) ?? 0) + 1);
+  }
+
+  for (const [domain, bucket] of perDomain) {
+    const ranked = [...bucket.entries()]
+      .map(([shape, count]) => ({ shape, count }))
+      .sort((a, b) => b.count - a.count || a.shape.localeCompare(b.shape));
+    if (ranked.length > 0) result.set(domain, ranked);
+  }
+  return result;
+}
+
 export async function getRecentSubjectsByDomain(
   userId: string,
   domains: string[],

@@ -39,6 +39,7 @@ import {
   getRecentFactKeys,
   getRecentSkipCountsByDomain,
   getRecentSubAnglesByDomain,
+  getRecentShapesByDomain,
   getRecentSubjectsByDomain,
   normalizeQuestionText,
   pickBankSource,
@@ -486,6 +487,10 @@ export function buildUserPrompt(
   // is how one Woolf domain ended up 40% Mrs Dalloway. See
   // getRecentSubjectsByDomain.
   subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>,
+  // R4: shapes already used per domain, with counts. The batch-scoped variety
+  // rule below is satisfiable forever by identification plus two others; this
+  // lifts it to per-domain. See getRecentShapesByDomain.
+  shapesByDomain?: ReadonlyMap<string, ReadonlyArray<{ shape: string; count: number }>>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -639,6 +644,23 @@ ${perDomain.join('\n')}`;
     }
   }
 
+  // R4 — shape coverage. Paired with the batch-level variety rule in the system
+  // prompt, which on its own only ever sees three questions at a time.
+  let shapesHint = '';
+  if (shapesByDomain && shapesByDomain.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const shapes = shapesByDomain.get(domain);
+      if (shapes && shapes.length > 0) {
+        perDomain.push(`- ${domain}: ${shapes.map((s) => `${s.shape} (${s.count})`).join(' | ')}`);
+      }
+    }
+    if (perDomain.length > 0) {
+      shapesHint = `\n\nQuestion shapes already used for these domains, with how many questions each has taken. Reach for a shape that is under-used here — especially one with no count at all — rather than the one already at the top of the list. "identification" is almost always the over-used entry; treat a high identification count as a reason to pick something else:
+${perDomain.join('\n')}`;
+    }
+  }
+
   let examplesHint = '';
   if (domainExamples && domainExamples.size > 0) {
     const perDomain: string[] = [];
@@ -677,7 +699,7 @@ ${wrapUserInput('reference_passages', perDomain.join('\n\n'))}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${subjectsHint}${examplesHint}${referenceHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${subjectsHint}${shapesHint}${examplesHint}${referenceHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -1830,6 +1852,7 @@ async function callLlmOnce(
   domainExamples?: DomainExamples,
   domainReferences?: DomainReferences,
   subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>,
+  shapesByDomain?: ReadonlyMap<string, ReadonlyArray<{ shape: string; count: number }>>,
 ): Promise<LlmQuestion[]> {
   const userPrompt = buildUserPrompt(
     domains,
@@ -1847,6 +1870,7 @@ async function callLlmOnce(
     domainExamples,
     domainReferences,
     subjectsByDomain,
+    shapesByDomain,
   );
 
   // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
@@ -1956,6 +1980,8 @@ export async function generateDailyQuestions(
     domainReferences?: DomainReferences;
     /** R7: subjects already covered per domain, with counts. See buildUserPrompt. */
     subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>;
+    /** R4: question shapes already used per domain, with counts. */
+    shapesByDomain?: ReadonlyMap<string, ReadonlyArray<{ shape: string; count: number }>>;
   } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
@@ -1967,6 +1993,7 @@ export async function generateDailyQuestions(
   const domainExamples = options.domainExamples;
   const domainReferences = options.domainReferences;
   const subjectsByDomain = options.subjectsByDomain;
+  const shapesByDomain = options.shapesByDomain;
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -2044,6 +2071,7 @@ export async function generateDailyQuestions(
         domainExamples,
         domainReferences,
         subjectsByDomain,
+        shapesByDomain,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -2066,6 +2094,7 @@ export async function generateDailyQuestions(
         domainExamples,
         domainReferences,
         subjectsByDomain,
+        shapesByDomain,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -2540,6 +2569,10 @@ export async function generateDailyQuestions(
         insideJoke: insideJokeByQuestion.get(question) ?? null,
         // B-LLM-PROVIDER-AB-SWITCH B3: stamp the provider that generated this row.
         generatedByProvider: provider,
+        // R4: keep the shape the model reported. Until now this was validated,
+        // warned about, and then thrown away, so no surface could tell whether
+        // the shape-variety instruction was landing.
+        questionShape: question.question_shape,
         trustTier,
         askToAnswerVerified,
         // Union the ask-to-answer rephrasings (judge-verified equivalent) with the
@@ -2884,9 +2917,10 @@ export async function generateDailyQuestionsFromKnowledgeBase(
   // the second is what stops "pick a new facet" being satisfied by another scene
   // from the same over-used work. Both are advisory prompt context and both fail
   // soft: a miss just means that block is absent this round.
-  const [subAnglesByDomain, subjectsByDomain] = await Promise.all([
+  const [subAnglesByDomain, subjectsByDomain, shapesByDomain] = await Promise.all([
     getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined),
     getRecentSubjectsByDomain(userId, domainsForRound).catch(() => undefined),
+    getRecentShapesByDomain(userId, domainsForRound).catch(() => undefined),
   ]);
 
   // Admin-authored example questions per domain — ground-truth anchors fed into
@@ -3118,6 +3152,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         domainExamples,
         domainReferences,
         subjectsByDomain,
+        shapesByDomain,
       },
     );
 

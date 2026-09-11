@@ -875,6 +875,21 @@ export const generatedQuestions = pgTable(
     // B-LLM-PROVIDER-AB-SWITCH B3: which provider GENERATED this row
     // ('anthropic'|'openai'). Nullable — historical rows stay null (no backfill).
     generatedByProvider: text('generated_by_provider'),
+    // R4 (2026-09-11): the question_shape the generator reported for this row —
+    // 'identification' | 'year_or_date' | 'in_which_work' | 'who_did_what' |
+    // 'sequence_or_order' | 'technique_or_term' | 'what_happens_next' |
+    // 'fill_in_blank' | 'complete_the_quote'.
+    //
+    // The generation prompt has asked for this field, and enforced a
+    // no-two-alike rule on it, since the shape catalogue was written — but the
+    // value was only ever console.warn'd and then discarded at persist, so
+    // nothing downstream could see it. A hand read put ~77% of live rows in
+    // 'identification' and found three offered shapes with ONE row each across
+    // 2,191, and the only reason that took a hand read is that the column did
+    // not exist. Text rather than an enum so a catalogue change never needs a
+    // migration; nullable with no backfill, so historical rows stay honestly
+    // unknown rather than being guessed at from phrasing.
+    questionShape: text('question_shape'),
   },
   (table) => [
     index('GeneratedQuestion_user_id_idx').on(table.userId),

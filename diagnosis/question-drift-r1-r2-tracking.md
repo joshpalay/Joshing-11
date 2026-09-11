@@ -185,6 +185,41 @@ lead is acceptable at accessible").
 
 ## Updates
 
+### 2026-09-11 — R4 question-shape persistence shipped (separate PR, needs a migration)
+The last prescription. Migration **0146** adds `GeneratedQuestion.question_shape`
+(text, nullable, no backfill).
+
+The generator has been asked for a `question_shape`, and held to a no-two-alike
+rule on it, since the shape catalogue was written — but the value was validated,
+`console.warn`'d, and then dropped at persist. Nothing downstream could see
+whether the variety instruction was landing. It was not: ~77% of live rows are
+`identification` and three of the nine offered shapes have ONE row each across
+2,191. The only reason that took a hand read is that the column did not exist.
+
+Two compounding causes, both addressed:
+- **Nothing was stored.** The column now persists what the model reported. Text
+  rather than an enum, so a catalogue change never needs another migration.
+  Nullable with no backfill — rows generated before 0146 stay honestly unknown
+  rather than being guessed at from phrasing, and the new read skips them rather
+  than bucketing them as "unknown".
+- **The variety rule is batch-scoped**, and a batch is three questions
+  (`GENERATION_CHUNK_SIZE`), so "no two alike" is satisfiable forever by
+  identification plus two others. `getRecentShapesByDomain` now feeds per-domain
+  shape counts back into the prompt, lifting the rule from per-batch to
+  per-domain and naming identification as the one to steer away from.
+
+**The migration has NOT been run.** `npm run db:migrate` when ready. Journal entry
+added by hand and verified with `node scripts/reconcile-drizzle.mjs` in
+report-only mode; `--apply` was deliberately NOT used, as it also marks
+migrations applied in `__drizzle_migrations` and this database currently has 18
+migrations pending in tracking. An idempotent `ADD COLUMN IF NOT EXISTS` guard is
+in `instrumentation.ts` alongside the `empirical_correct_rate` precedent.
+
+Note for whoever reads this next: this landed while another session was working
+in the same tree on a design audit and an activity-actor change (migration 0147).
+Numbering is coordinated — 0146 then 0147, both journaled in order — but the two
+workstreams are otherwise independent.
+
 ### 2026-09-11 — R5 declared-domain floor shipped SWITCHED OFF (separate PR)
 Built, tested, and deliberately inert. `DECLARED_DOMAIN_FLOOR_ENABLED` is unset,
 and with it unset every code path is byte-for-byte the previous behaviour — that
