@@ -21,6 +21,7 @@ import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
 import {
   focusDomainMinDifficulty,
   getDomainDifficultyOverrides,
+  isDeclaredDomainFloorEnabled,
   mapAdaptiveLevelToDifficultyHint,
   updateAdaptiveLevel,
 } from '@/server/adaptive-difficulty';
@@ -1514,10 +1515,19 @@ export function findUnderDifficultyQuestions(
   generated: LlmQuestion[],
   domainDifficultyOverrides: ReadonlyMap<string, string> | undefined,
   difficultyPreference: string | undefined,
+  // R5: domains that get NO shortfall tolerance. The one-rung slack below is what
+  // lets a 'moderate' request come back 'accessible' and pass, which would defeat
+  // the declared-domain floor entirely — the floor moves the request, and this is
+  // what makes the request stick. Empty/undefined while the flag is off, so the
+  // global tolerance applies to everything exactly as before.
+  strictDomains?: ReadonlySet<string>,
 ): { toDrop: Set<number>; reasons: Record<number, string> } {
   const toDrop = new Set<number>();
   const reasons: Record<number, string> = {};
   const maxShortfall = maxTierShortfall();
+  const strictKeys = new Set(
+    [...(strictDomains ?? [])].map((domain) => domain.trim().toLowerCase()),
+  );
 
   // Normalize override keys so a returned canonical_subcategory differing only by
   // case/whitespace from the requested domain still resolves its override.
@@ -1540,7 +1550,8 @@ export function findUnderDifficultyQuestions(
     if (estimateIdx < 0) continue; // unrecognized estimate — not ours to judge.
 
     const shortfall = requestedIdx - estimateIdx;
-    if (shortfall > maxShortfall) {
+    const allowedShortfall = strictKeys.has(normalize(q.canonical_subcategory)) ? 0 : maxShortfall;
+    if (shortfall > allowedShortfall) {
       toDrop.add(i);
       reasons[i] =
         `difficulty "${q.difficulty_estimate}" is ${shortfall} tiers below requested "${DIFFICULTY_TIER_LADDER[requestedIdx]}" for ${q.canonical_subcategory}`.slice(
@@ -2254,10 +2265,21 @@ export async function generateDailyQuestions(
   // prompt hint, and difficulty_estimate is the model's own label of what it
   // wrote. Drop questions that came back more than one tier below what was asked
   // for (the "specialist Sesame Street → accessible 'what color is Elmo'" case).
+  // R5: declared domains get no shortfall slack when the floor is enabled. The
+  // territory map is already threaded in for the prompt's register hint, so the
+  // declared set costs no extra query. Undefined while the flag is off.
+  const strictDifficultyDomains = isDeclaredDomainFloorEnabled() && domainTerritoryTypes
+    ? new Set(
+        [...domainTerritoryTypes.entries()]
+          .filter(([, territory]) => territory === 'declared')
+          .map(([domain]) => domain),
+      )
+    : undefined;
   const underDifficulty = findUnderDifficultyQuestions(
     generated,
     domainDifficultyOverrides,
     difficultyPreference,
+    strictDifficultyDomains,
   );
   // Under-difficulty is a SOFT gate, unlike every hard drop above: these are
   // good, factually-correct, novel questions — only easier than the requested
