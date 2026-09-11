@@ -48,7 +48,11 @@ import {
 } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { confirmOffDomain } from '@/server/quality/off-domain-second-opinion';
-import { recordGateDrops, recordGateFailedOpen } from '@/server/db/queries/gate-drop-stats';
+import {
+  recordGateDrops,
+  recordGateFailedOpen,
+  tallyQualityDefects,
+} from '@/server/db/queries/gate-drop-stats';
 import {
   coCalibrateRaisedEstimates,
   getCappedDomainKeys,
@@ -2260,6 +2264,14 @@ export async function generateDailyQuestions(
     { gate: 'answer_shape', considered: generated.length, dropped: answerShape.toDrop.size },
     { gate: 'domain_drift', considered: generated.length, dropped: offDomain.size },
     { gate: 'difficulty_floor', considered: generated.length, dropped: underDifficulty.toDrop.size },
+    // Per-defect split of the `quality` row above (R8). The aggregate counter
+    // says how many candidates the gate removed but not WHICH rule fired, so a
+    // prompt change aimed at one defect (R1's GENERIC_AT_TIER, R2's
+    // DEFINITION_SUPPLIED) could not be told apart from the gate simply going
+    // quiet. Tallied from the same `reasons` map the caller already routes on;
+    // OFF_DOMAIN reasons survive in that map even though their indices are held
+    // out of toDrop, so the measure-only defect is counted here too.
+    ...tallyQualityDefects(qualityResult.reasons, generated.length),
   ]);
 
   const allDrops = new Set<number>([
