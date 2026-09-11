@@ -2607,8 +2607,11 @@ export async function generateDailyQuestions(
       origin: 'machine' as const,
       questionText: row.questionText,
       // fact_key lets the dedup keep DISTINCT facts about the same work instead of
-      // collapsing them on shared vocabulary (the false-suppression bug).
+      // collapsing them on shared vocabulary (the false-suppression bug). subject_entity
+      // corroborates a same-fact match even when fact_key text drifted across
+      // separate generation calls (B-DEDUP-FACTKEY-DRIFT-01).
       factKey: row.factKey ?? null,
+      subjectEntity: row.subjectEntity ?? null,
     })),
   );
 

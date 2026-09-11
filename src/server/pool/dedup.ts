@@ -65,26 +65,47 @@ export type CollisionDecision =
   | { action: 'suppress_incoming'; survivorId: string }
   | { action: 'suppress_existing'; existingId: string; existingOrigin: PoolOrigin; survivorId: string };
 
+/** Case-insensitive, trimmed subject_entity match. Both generation-time
+ *  normalization (normalizeSubjectEntity) and LLM casing drift mean an exact
+ *  `===` would miss same-subject pairs that differ only in case. */
+function sameSubjectEntity(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 /**
  * Pure collision matrix. `incomingId` is the row just inserted; `nearest` is the
  * closest existing pool row (excluding self), or null if none within reach.
  */
 export function resolveCollision(
-  incoming: { id: string; origin: PoolOrigin; factKey?: string | null },
+  incoming: { id: string; origin: PoolOrigin; factKey?: string | null; subjectEntity?: string | null },
   nearest: NearestPoolMatch | null,
   threshold: number,
   differentFactThreshold: number = getDifferentFactCosineThreshold(),
 ): CollisionDecision {
   if (!nearest) return { action: 'none' };
 
-  // When BOTH rows have a fact_key and the keys differ, fact_key is the
-  // authoritative signal that these are distinct facts — only the embedding's
-  // near-identical-text backstop should still suppress, so raise the bar. When
-  // either fact_key is absent (or they match), use the base semantic threshold.
+  // When BOTH rows have a fact_key and the keys differ, fact_key is normally
+  // treated as authoritative evidence that these are distinct facts — only the
+  // embedding's near-identical-text backstop should still suppress, so raise
+  // the bar. BUT fact_key is an LLM-invented label re-minted fresh on every
+  // generation call, not a stable identifier: the same real fact ("Alberich
+  // turns into a toad" in Wagner's Ring Cycle) produced 4 different fact_keys
+  // across 4 separate generation calls spanning 4 months, so "the keys differ"
+  // is nearly always true even for genuine repeats, silently defeating this
+  // guard (B-DEDUP-FACTKEY-DRIFT-01, 2026-09-11). subject_entity is a second,
+  // coarser signal from the SAME generation call — when it also matches, that
+  // corroborates same-fact well enough to skip the raised bar and fall back to
+  // the base threshold, without reopening the cross-subject false-suppression
+  // bug the raised bar exists to prevent (that bug was measured across
+  // DIFFERENT subjects sharing one work's vocabulary; matching subject_entity
+  // rules that case out). subject_entity itself isn't always populated
+  // consistently either, so this narrows the gap rather than closing it.
   const factKeysDiffer =
     incoming.factKey != null &&
     nearest.factKey != null &&
-    incoming.factKey !== nearest.factKey;
+    incoming.factKey !== nearest.factKey &&
+    !sameSubjectEntity(incoming.subjectEntity, nearest.subjectEntity);
   // fact_key is an LLM-generation artifact — a human-authored Question row
   // never carries one (src/server/questions/fact-key.ts), so a human-vs-human
   // collision can NEVER reach the factKeysDiffer branch above and always fell
@@ -131,6 +152,7 @@ export async function embedAndResolveDuplicate(args: {
   origin: PoolOrigin;
   questionText: string;
   factKey?: string | null;
+  subjectEntity?: string | null;
 }): Promise<void> {
   if (!isEmbeddingEnabled()) return;
   try {
@@ -141,7 +163,7 @@ export async function embedAndResolveDuplicate(args: {
 
     const nearest = await findNearestInPool(embedding, args.id);
     const decision = resolveCollision(
-      { id: args.id, origin: args.origin, factKey: args.factKey ?? null },
+      { id: args.id, origin: args.origin, factKey: args.factKey ?? null, subjectEntity: args.subjectEntity ?? null },
       nearest,
       getDedupCosineThreshold(),
     );
@@ -173,7 +195,7 @@ export async function embedAndResolveDuplicate(args: {
 /**
  * Batched variant of {@link embedAndResolveDuplicate} for a freshly-generated
  * pool batch (B-DEDUP-EMBED-RELIABILITY). Embeds every row's text in ONE Voyage
- * call instead of one-call-per-row, which is what made the daily generation
+ * call instead of one-call-per-row, which is what made the concurrent generation
  * cron burst dozens of concurrent single-item requests and get rate-limited
  * (~20-50% of rows landed embedding-less). Storage + the collision pass stay
  * per-row and interleaved (store row i, then resolve it against the pool, which
@@ -183,7 +205,13 @@ export async function embedAndResolveDuplicate(args: {
  * gate then can't see them) but never blocks generation.
  */
 export async function embedAndResolveDuplicatesBatch(
-  rows: Array<{ id: string; origin: PoolOrigin; questionText: string; factKey?: string | null }>,
+  rows: Array<{
+    id: string;
+    origin: PoolOrigin;
+    questionText: string;
+    factKey?: string | null;
+    subjectEntity?: string | null;
+  }>,
 ): Promise<void> {
   if (!isEmbeddingEnabled() || rows.length === 0) return;
   try {
@@ -198,7 +226,7 @@ export async function embedAndResolveDuplicatesBatch(
 
       const nearest = await findNearestInPool(embedding, row.id);
       const decision = resolveCollision(
-        { id: row.id, origin: row.origin, factKey: row.factKey ?? null },
+        { id: row.id, origin: row.origin, factKey: row.factKey ?? null, subjectEntity: row.subjectEntity ?? null },
         nearest,
         threshold,
       );

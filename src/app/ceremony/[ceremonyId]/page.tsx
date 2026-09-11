@@ -7,6 +7,7 @@ import { Share2, X } from 'lucide-react';
 import { ShareCard } from '@/components/ShareCard';
 import { Eyebrow, Reveal, Shell, roomTheme, type RoomTheme } from '@/components/ceremony/room';
 import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMotion';
+import { markCeremonyViewed } from '@/lib/mark-ceremony-viewed';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
 
@@ -559,7 +560,14 @@ export default function CeremonyPage() {
         if (!cancelled) setError(caught instanceof Error ? caught.message : 'Could not load this ceremony.');
       });
 
-    fetch(`/api/ceremony/${ceremonyId}/viewed`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
+    // Retries transient failures (B-CEREMONY-VIEWED-RETRY-01) so a network blip
+    // doesn't leave this ceremony "unviewed" and redirect the player back into
+    // it on a later day. Never blocks rendering — logged, not surfaced.
+    void markCeremonyViewed(ceremonyId).then((ok) => {
+      if (!ok) {
+        console.warn('[ceremony] failed to mark ceremony viewed after retries', { ceremonyId });
+      }
+    });
     return () => {
       cancelled = true;
     };
