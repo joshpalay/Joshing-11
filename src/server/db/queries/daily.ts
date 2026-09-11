@@ -2670,7 +2670,7 @@ export async function getRecentShapesByDomain(
   for (const row of rows) {
     if (!row.domain) continue;
     const shape = row.questionShape?.trim();
-    // Rows generated before 0146 carry no shape and are skipped rather than
+    // Rows generated before 0147 carry no shape and are skipped rather than
     // bucketed as "unknown" — a guessed denominator would be worse than none.
     if (!shape) continue;
     let bucket = perDomain.get(row.domain);
