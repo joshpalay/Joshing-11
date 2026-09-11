@@ -38,6 +38,7 @@ import {
   getRecentFactKeys,
   getRecentSkipCountsByDomain,
   getRecentSubAnglesByDomain,
+  getRecentSubjectsByDomain,
   normalizeQuestionText,
   pickBankSource,
   type AnsweredCanonicalTextEntry,
@@ -478,6 +479,12 @@ export function buildUserPrompt(
   // a soft "prefer facts in the passage" instruction (decision A2, not a hard
   // extractive constraint). Absent unless GENERATION_WIKI_ANCHOR_ENABLED.
   domainReferences?: DomainReferences,
+  // R7: subjects (works, characters, people) already covered per domain, with
+  // counts, most-covered first. Distinct from sub-angles, which name FACETS —
+  // that block pushes the model to a new scene of the same headline work, which
+  // is how one Woolf domain ended up 40% Mrs Dalloway. See
+  // getRecentSubjectsByDomain.
+  subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>,
 ): string {
   const prevBlock = prev.length > 0
     ? prev
@@ -611,6 +618,26 @@ ${perDomain.join('\n')}`;
     }
   }
 
+  // R7 — subject-level coverage. Deliberately rendered AFTER the sub-angle block
+  // and phrased as the stronger of the two instructions: a new facet of a
+  // saturated subject is what the sub-angle block alone kept producing.
+  let subjectsHint = '';
+  if (subjectsByDomain && subjectsByDomain.size > 0) {
+    const perDomain: string[] = [];
+    for (const domain of domains) {
+      const subjects = subjectsByDomain.get(domain);
+      if (subjects && subjects.length > 0) {
+        perDomain.push(
+          `- ${domain}: ${subjects.map((s) => `${s.subject} (${s.count})`).join(' | ')}`,
+        );
+      }
+    }
+    if (perDomain.length > 0) {
+      subjectsHint = `\n\nSubjects already covered for these domains, with how many questions each has taken. A domain is not one work — prefer a subject that is NOT on this list: a different play, novel, album, episode, character, figure, or period inside the same domain. Only return to a listed subject when the domain genuinely has nothing else left, and never to one of the highest-count entries:
+${perDomain.join('\n')}`;
+    }
+  }
+
   let examplesHint = '';
   if (domainExamples && domainExamples.size > 0) {
     const perDomain: string[] = [];
@@ -649,7 +676,7 @@ ${wrapUserInput('reference_passages', perDomain.join('\n\n'))}`;
     }
   }
 
-  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${examplesHint}${referenceHint}
+  return `${domainSection}${calibration}${difficultyHint}${territoryHint}${strengthHint}${anchorHint}${subAnglesHint}${subjectsHint}${examplesHint}${referenceHint}
 
 Previously generated questions to avoid repeating (do not re-ask any of these facts, even rephrased). Each entry is prefixed with [<source domain>]. The user's domains may overlap in subject matter — for example, a fact about Mrs. Dalloway already asked under "Virginia Woolf's Novels and Essays" is still off limits when generating for "Mrs. Dalloway", and vice versa. A fact already covered under ANY of the user's domains must not be re-asked under ANY domain:
 ${wrapUserInput('recent_questions', prevBlock)}
@@ -1791,6 +1818,7 @@ async function callLlmOnce(
   provider: LlmProvider = 'anthropic',
   domainExamples?: DomainExamples,
   domainReferences?: DomainReferences,
+  subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>,
 ): Promise<LlmQuestion[]> {
   const userPrompt = buildUserPrompt(
     domains,
@@ -1807,6 +1835,7 @@ async function callLlmOnce(
     culturalAnchor,
     domainExamples,
     domainReferences,
+    subjectsByDomain,
   );
 
   // OpenAI branch (B-LLM-PROVIDER-AB-SWITCH B1): same prompt text, only the
@@ -1914,6 +1943,8 @@ export async function generateDailyQuestions(
     provider?: LlmProvider;
     domainExamples?: DomainExamples;
     domainReferences?: DomainReferences;
+    /** R7: subjects already covered per domain, with counts. See buildUserPrompt. */
+    subjectsByDomain?: ReadonlyMap<string, ReadonlyArray<{ subject: string; count: number }>>;
   } = {},
 ): Promise<GeneratedQuestionRow[]> {
   if (count <= 0 || domains.length === 0) return [];
@@ -1924,6 +1955,7 @@ export async function generateDailyQuestions(
   const provider: LlmProvider = options.provider ?? 'anthropic';
   const domainExamples = options.domainExamples;
   const domainReferences = options.domainReferences;
+  const subjectsByDomain = options.subjectsByDomain;
 
   // Avoid list ordering: newest first so the slice in buildUserPrompt keeps
   // recency. extraAvoidTexts (caller-supplied, e.g. same-batch peers) goes
@@ -2000,6 +2032,7 @@ export async function generateDailyQuestions(
         provider,
         domainExamples,
         domainReferences,
+        subjectsByDomain,
       );
       if (out.length > 0) return out;
       console.warn('[daily/generate-questions] chunk returned no usable questions, retrying', {
@@ -2021,6 +2054,7 @@ export async function generateDailyQuestions(
         provider,
         domainExamples,
         domainReferences,
+        subjectsByDomain,
       );
     } catch (err) {
       // A single chunk failing (timeout / aborted) must not sink the batch —
@@ -2824,7 +2858,14 @@ export async function generateDailyQuestionsFromKnowledgeBase(
     });
   }
 
-  const subAnglesByDomain = await getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined);
+  // Facet coverage (sub-angles) and SUBJECT coverage (R7) are fetched together —
+  // the second is what stops "pick a new facet" being satisfied by another scene
+  // from the same over-used work. Both are advisory prompt context and both fail
+  // soft: a miss just means that block is absent this round.
+  const [subAnglesByDomain, subjectsByDomain] = await Promise.all([
+    getRecentSubAnglesByDomain(userId, domainsForRound).catch(() => undefined),
+    getRecentSubjectsByDomain(userId, domainsForRound).catch(() => undefined),
+  ]);
 
   // Admin-authored example questions per domain — ground-truth anchors fed into
   // the generation prompt so the model writes from real canon instead of inventing
@@ -3054,6 +3095,7 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         provider: genProvider,
         domainExamples,
         domainReferences,
+        subjectsByDomain,
       },
     );
 
