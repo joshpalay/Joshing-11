@@ -10,6 +10,8 @@ const {
   getLastContactHashUploadMock,
   listLiveInviteLinksMock,
   getInviteLinkSeedTopicsMock,
+  getMutualFriendSuggestionsMock,
+  getActiveDeclaredInterestsBulkMock,
   redirectMock,
 } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
@@ -19,6 +21,8 @@ const {
   getLastContactHashUploadMock: vi.fn(async () => null),
   listLiveInviteLinksMock: vi.fn(async () => [] as unknown[]),
   getInviteLinkSeedTopicsMock: vi.fn(async () => [] as unknown[]),
+  getMutualFriendSuggestionsMock: vi.fn(async () => [] as unknown[]),
+  getActiveDeclaredInterestsBulkMock: vi.fn(async () => new Map()),
   redirectMock: vi.fn(() => {
     throw new Error('__REDIRECT__');
   }),
@@ -43,6 +47,12 @@ vi.mock('@/server/db/queries/friend-invitations', () => ({
 vi.mock('@/server/db/queries/invite-links', () => ({
   listLiveInviteLinks: listLiveInviteLinksMock,
 }));
+vi.mock('@/server/db/queries/friends', () => ({
+  getMutualFriendSuggestions: getMutualFriendSuggestionsMock,
+}));
+vi.mock('@/server/db/queries/declared-interests', () => ({
+  getActiveDeclaredInterestsBulk: getActiveDeclaredInterestsBulkMock,
+}));
 vi.mock('@/server/friends/user-invite-token', () => ({
   getInviteLinkSeedTopics: getInviteLinkSeedTopicsMock,
   buildInviteUrl: (base: string, handle: string, token: string) => `${base}/u/${handle}/${token}`,
@@ -60,6 +70,15 @@ vi.mock('@/components/friends/InviteLinksSection', () => ({
   InviteLinksSection: () => <div data-stub="invite-links" />,
 }));
 vi.mock('@/components/FriendsList', () => ({ default: () => <div data-stub="friends-list" /> }));
+// Captures the props the page computed (dedup + interests preview) as a JSON
+// blob in the DOM, so the test can assert on them without needing the real
+// client component's own interactive behavior (that's covered by
+// MutualFriendSuggestionsSection.test.tsx).
+vi.mock('@/components/friends/MutualFriendSuggestionsSection', () => ({
+  MutualFriendSuggestionsSection: ({ initialSuggestions }: { initialSuggestions: unknown }) => (
+    <div data-stub="mutual-friend-suggestions" data-props={JSON.stringify(initialSuggestions)} />
+  ),
+}));
 
 import FriendsPage from '@/app/friends/page';
 
@@ -86,6 +105,8 @@ describe('/friends page sections', () => {
     getLastContactHashUploadMock.mockResolvedValue(null);
     listLiveInviteLinksMock.mockResolvedValue([]);
     getInviteLinkSeedTopicsMock.mockResolvedValue([]);
+    getMutualFriendSuggestionsMock.mockResolvedValue([]);
+    getActiveDeclaredInterestsBulkMock.mockResolvedValue(new Map());
     getSessionMock.mockResolvedValue({ userId: 'u1' });
     mockViewer();
   });
@@ -161,5 +182,87 @@ describe('/friends page sections', () => {
   it('redirects a signed-out visitor', async () => {
     getSessionMock.mockResolvedValue(null);
     await expect(render()).rejects.toThrow('__REDIRECT__');
+  });
+
+  // B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2a: the page's own responsibilities
+  // are (1) calling the query, (2) deduping against invite reflections, and
+  // (3) computing the interests preview -- all BEFORE handing off to
+  // MutualFriendSuggestionsSection, whose own rendering/interaction logic is
+  // covered separately in MutualFriendSuggestionsSection.test.tsx.
+  describe('mutual-friend suggestions wiring', () => {
+    it('always renders the section (its empty state lives inside the component, not the page)', async () => {
+      getMutualFriendSuggestionsMock.mockResolvedValue([]);
+      const html = await render();
+      expect(html).toContain('data-stub="mutual-friend-suggestions"');
+      expect(html).toContain('data-props="[]"');
+    });
+
+    it('passes displayName and mutualFriendCount through unchanged', async () => {
+      getMutualFriendSuggestionsMock.mockResolvedValue([
+        { id: 'u5', displayName: 'Devon', mutualFriendCount: 2 },
+      ]);
+      const html = await render();
+      expect(html).toContain('&quot;id&quot;:&quot;u5&quot;');
+      expect(html).toContain('&quot;displayName&quot;:&quot;Devon&quot;');
+      expect(html).toContain('&quot;mutualFriendCount&quot;:2');
+    });
+
+    it('sets interestsPreview to null when the candidate has no active declared interests', async () => {
+      getMutualFriendSuggestionsMock.mockResolvedValue([
+        { id: 'u5', displayName: 'Devon', mutualFriendCount: 2 },
+      ]);
+      getActiveDeclaredInterestsBulkMock.mockResolvedValue(new Map());
+      const html = await render();
+      expect(html).toContain('&quot;interestsPreview&quot;:null');
+    });
+
+    it('computes interestsPreview as the first 3 domains, comma-joined', async () => {
+      getMutualFriendSuggestionsMock.mockResolvedValue([
+        { id: 'u5', displayName: 'Devon', mutualFriendCount: 2 },
+      ]);
+      getActiveDeclaredInterestsBulkMock.mockResolvedValue(
+        new Map([
+          [
+            'u5',
+            [
+              { domain: 'Astronomy' },
+              { domain: 'Baking' },
+              { domain: 'Chess' },
+              { domain: 'Dance' },
+            ],
+          ],
+        ]),
+      );
+      const html = await render();
+      expect(html).toContain('Astronomy, Baking, Chess');
+      expect(html).not.toContain('Dance');
+    });
+
+    it('dedupes: a candidate already present as an invite reflection is excluded from the mutual-friend list', async () => {
+      listInviteReflectionsMock.mockResolvedValue([
+        {
+          invitationId: 'inv-1',
+          inviteeUserId: 'u2',
+          handle: 'robyn',
+          displayName: 'Robyn',
+          avatarColor: '#7d2c3f',
+          joinedAt: new Date('2026-09-01T00:00:00Z'),
+          invitedAt: new Date('2026-08-30T00:00:00Z'),
+          acceptedAt: new Date('2026-09-01T00:00:00Z'),
+          relationship: { state: 'none', friendshipId: null, formedAt: null, isBlocked: false },
+        },
+      ]);
+      getMutualFriendSuggestionsMock.mockResolvedValue([
+        { id: 'u2', displayName: 'Robyn', mutualFriendCount: 5 }, // same id as the reflection
+        { id: 'u5', displayName: 'Devon', mutualFriendCount: 2 },
+      ]);
+
+      const html = await render();
+      // The reflection's own row still renders normally...
+      expect(html).toContain('Joined from your invite');
+      // ...but u2 is excluded from what's handed to the mutual-friend section.
+      expect(html).not.toContain('&quot;id&quot;:&quot;u2&quot;');
+      expect(html).toContain('&quot;id&quot;:&quot;u5&quot;');
+    });
   });
 });

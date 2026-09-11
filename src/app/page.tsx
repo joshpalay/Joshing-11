@@ -10,7 +10,8 @@ import FriendRequestsSection from '@/components/home/FriendRequestsSection'
 import { AddTopicHomeCard } from '@/components/home/AddTopicHomeCard'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
-import { getHomeFriendRequests } from '@/server/db/queries/friends'
+import { MutualFriendSuggestionsTeaser } from '@/components/home/MutualFriendSuggestionsTeaser'
+import { getHomeFriendRequests, getMutualFriendSuggestions } from '@/server/db/queries/friends'
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { getWelcomeInviterName } from '@/server/home/welcome-inviter-name'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
@@ -84,6 +85,16 @@ export default async function Home() {
       {session ? (
         <Suspense fallback={null}>
           <FriendRequestsHomeSection userId={session.userId} />
+        </Suspense>
+      ) : null}
+
+      {/* B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2c: a quiet teaser alongside the
+          other passive social nudges above. No inline list -- tapping goes
+          straight to the Friends page section built in Phase 2a. Renders
+          nothing at zero state, same convention as FriendRequestsHomeSection. */}
+      {session ? (
+        <Suspense fallback={null}>
+          <MutualFriendSuggestionsHomeSection userId={session.userId} />
         </Suspense>
       ) : null}
 
@@ -214,6 +225,25 @@ async function FriendRequestsHomeSection({ userId }: { userId: string }) {
       }}
     />
   )
+}
+
+// B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2c. Kept in step with the Friends
+// page's own fetch limit (Phase 2a) so the home teaser's count can never
+// read higher than what the Friends page itself would actually list.
+const MUTUAL_FRIEND_SUGGESTIONS_HOME_LIMIT = 10
+
+async function MutualFriendSuggestionsHomeSection({ userId }: { userId: string }) {
+  // Reuses the SAME Phase 1 query as the Friends page section -- no separate
+  // count-only query was built for this. The card only ever shows a count, so
+  // nothing here re-derives interests or dedupes against invite reflections
+  // (that dedup only affects which NAMES render on /friends, not how many
+  // people would qualify overall).
+  const suggestions = await timeServerWork(
+    'home/mutual-friend-suggestions',
+    'mutual_friend_suggestions',
+    () => getMutualFriendSuggestions(userId, MUTUAL_FRIEND_SUGGESTIONS_HOME_LIMIT),
+  )
+  return <MutualFriendSuggestionsTeaser count={suggestions.length} />
 }
 
 async function FromYourFriendsSection({ userId }: { userId: string }) {
