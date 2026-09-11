@@ -260,6 +260,14 @@ export interface NearestPoolMatch {
    *  fact_key; human Question rows return null). Lets the collision matrix treat
    *  a DIFFERENT fact_key as authoritative evidence the rows are distinct facts. */
   factKey: string | null;
+  /** The match's normalized subject_entity, when it has one. A fact_key is an
+   *  LLM-invented label that rarely comes out byte-identical for the same real
+   *  fact across separate generation calls (measured: the same "Alberich turns
+   *  into a toad" fact got 4 different fact_keys over 4 months — B-DEDUP-
+   *  FACTKEY-DRIFT-01). subject_entity gives the collision matrix a second,
+   *  coarser signal to corroborate a same-fact match even when fact_key text
+   *  drifted. */
+  subjectEntity: string | null;
 }
 
 /**
@@ -276,7 +284,12 @@ export async function findNearestInPool(
 
   const [machineNearest, humanNearest] = await Promise.all([
     db
-      .select({ id: generatedQuestions.id, distance: machineDistance, factKey: generatedQuestions.factKey })
+      .select({
+        id: generatedQuestions.id,
+        distance: machineDistance,
+        factKey: generatedQuestions.factKey,
+        subjectEntity: generatedQuestions.subjectEntity,
+      })
       .from(generatedQuestions)
       .where(and(
         isNotNull(generatedQuestions.embedding),
@@ -286,7 +299,7 @@ export async function findNearestInPool(
       .orderBy(machineDistance)
       .limit(1),
     db
-      .select({ id: questions.id, distance: humanDistance })
+      .select({ id: questions.id, distance: humanDistance, subjectEntity: questions.subjectEntity })
       .from(questions)
       .where(and(
         isNotNull(questions.embedding),
@@ -300,12 +313,24 @@ export async function findNearestInPool(
 
   const candidates: NearestPoolMatch[] = [];
   if (machineNearest[0]) {
-    candidates.push({ id: machineNearest[0].id, origin: 'machine', similarity: 1 - Number(machineNearest[0].distance), factKey: machineNearest[0].factKey ?? null });
+    candidates.push({
+      id: machineNearest[0].id,
+      origin: 'machine',
+      similarity: 1 - Number(machineNearest[0].distance),
+      factKey: machineNearest[0].factKey ?? null,
+      subjectEntity: machineNearest[0].subjectEntity ?? null,
+    });
   }
   if (humanNearest[0]) {
     // Human Question rows carry no fact_key column → null (falls back to the base
     // threshold in the collision matrix).
-    candidates.push({ id: humanNearest[0].id, origin: 'human', similarity: 1 - Number(humanNearest[0].distance), factKey: null });
+    candidates.push({
+      id: humanNearest[0].id,
+      origin: 'human',
+      similarity: 1 - Number(humanNearest[0].distance),
+      factKey: null,
+      subjectEntity: humanNearest[0].subjectEntity ?? null,
+    });
   }
   if (!candidates.length) return null;
   return candidates.reduce((best, c) => (c.similarity > best.similarity ? c : best));

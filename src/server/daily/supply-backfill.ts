@@ -438,7 +438,7 @@ async function buildDomain(
   const trustTier = resolveMachineTrustTier({ askToAnswerVerified: false, corroborated: false });
   let persisted = 0;
   const persistedKeys: string[] = [];
-  const embedCandidates: { id: string; origin: 'machine'; questionText: string; factKey: string | null }[] = [];
+  const embedCandidates: { id: string; origin: 'machine'; questionText: string; factKey: string | null; subjectEntity: string | null }[] = [];
   for (const q of survivors) {
     try {
       const taggedDomain = await resolveFinestNode(q.canonical_subcategory);
@@ -466,7 +466,7 @@ async function buildDomain(
         .returning();
       persisted += 1;
       persistedKeys.push(domainKey(taggedDomain));
-      embedCandidates.push({ id: row.id, origin: 'machine', questionText: row.questionText, factKey });
+      embedCandidates.push({ id: row.id, origin: 'machine', questionText: row.questionText, factKey, subjectEntity: row.subjectEntity ?? null });
     } catch (err) {
       console.warn('[supply-backfill] persist failed', { domain: p.label, error: err instanceof Error ? err.message : String(err) });
     }

@@ -13,6 +13,7 @@ const near = (over: Partial<NearestPoolMatch> & Pick<NearestPoolMatch, 'origin'>
   id: 'existing-1',
   similarity: 0.99,
   factKey: null,
+  subjectEntity: null,
   ...over,
 });
 
@@ -117,6 +118,59 @@ describe('resolveCollision — fact_key-aware threshold (false-suppression fix)'
       DT,
     );
     expect(d).toEqual({ action: 'suppress_incoming', survivorId: 'old-h' });
+  });
+});
+
+describe('resolveCollision — subject_entity corroborates a drifted fact_key (B-DEDUP-FACTKEY-DRIFT-01)', () => {
+  // The bug: fact_key is invented fresh by the LLM on every generation call, so
+  // the SAME real fact gets a different fact_key string almost every time — even
+  // "the keys differ" is essentially meaningless as a same/different-fact signal.
+  // Observed in production: "Alberich turns into a toad" in Wagner's Ring Cycle
+  // got 4 different fact_keys across 4 separate generations, none caught as a
+  // duplicate, because the raised bar (differentFactThreshold) required
+  // near-identical TEXT once the labels didn't match. subject_entity is a second
+  // signal from the same generation call; when it also matches, that's enough
+  // corroboration to fall back to the base threshold instead.
+  it('suppresses a fact_key-drifted paraphrase when subject_entity matches', () => {
+    const d = resolveCollision(
+      { id: 'new-m', origin: 'machine', factKey: 'rheingold-alberich-toad-transformation-capture', subjectEntity: 'Das Rheingold' },
+      near({
+        id: 'old-m',
+        origin: 'machine',
+        similarity: 0.95,
+        factKey: 'ring-cycle-rheingold-loge-trick-toad-capture-mechanism',
+        subjectEntity: 'das rheingold', // case drift from a separate generation call
+      }),
+      T,
+      DT,
+    );
+    expect(d).toEqual({ action: 'suppress_incoming', survivorId: 'old-m' });
+  });
+
+  it('still protects genuinely distinct facts when subject_entity ALSO differs', () => {
+    const d = resolveCollision(
+      { id: 'new-m', origin: 'machine', factKey: 'rheingold-alberich-toad-transformation-capture', subjectEntity: 'Alberich' },
+      near({
+        id: 'old-m',
+        origin: 'machine',
+        similarity: 0.95,
+        factKey: 'rheingold-wotan-castle-payment',
+        subjectEntity: 'Wotan',
+      }),
+      T,
+      DT,
+    );
+    expect(d).toEqual({ action: 'none' });
+  });
+
+  it('still protects genuinely distinct facts when subject_entity is absent on either side', () => {
+    const d = resolveCollision(
+      { id: 'new-m', origin: 'machine', factKey: 'pl-mulciber-pandaemonium', subjectEntity: null },
+      near({ id: 'old-m', origin: 'machine', similarity: 0.95, factKey: 'pl-satan-spear-simile', subjectEntity: 'Satan' }),
+      T,
+      DT,
+    );
+    expect(d).toEqual({ action: 'none' });
   });
 });
 
