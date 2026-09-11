@@ -185,6 +185,34 @@ lead is acceptable at accessible").
 
 ## Updates
 
+### 2026-09-11 — R7 subject coverage shipped (separate PR, stacked on the prompt batch)
+The last of the generation-side prescriptions, in the same window as the rest.
+
+The sub-angle hints name covered FACETS, and the model satisfies "pick a new
+facet" with another scene from the same headline work. Measured: Woolf's domain
+put Mrs Dalloway at the centre of 19 of 47 rows; Shakespearean Tragedy reached
+Hamlet 10 times and Macbeth 6 before anything else. `subject_entity` was written
+on every generated row and read by nothing except a 14-day answered-subject
+cooldown.
+
+- **New `getRecentSubjectsByDomain`** returns covered subjects per domain with
+  counts, most-covered first, threaded into the prompt as its own block after the
+  sub-angle one and phrased as the stronger instruction ("a domain is not one
+  work — prefer a different play, novel, album, episode, character, figure, or
+  period"). Counts are included deliberately: the useful signal is "Hamlet is
+  saturated", not "Hamlet has appeared".
+- **Sub-angle window widened 20 → 60.** A domain with 70+ live rows carries ~200
+  tags, so a 20-entry window left most covered facets invisible to the very
+  instruction that depends on seeing them.
+- **Tags are folded before dedupe** (`subAngleDedupeKey`): case, punctuation,
+  articles and diacritics. "Fugue Structure" / "fugue structure" used to claim
+  two of those scarce slots; 541 tags were duplicated this way across 1,211 rows.
+
+Threaded through `generateDailyQuestions`'s options object rather than as another
+positional parameter (`buildUserPrompt` already takes 15). The other four
+`buildUserPrompt` callers — crafter drafts, retrieval-grounded, supply-backfill —
+are unchanged and simply pass no subject block.
+
 ### 2026-09-11 — R3 / R6 / R9 prompt batch shipped (separate PR, stacked on R8)
 Three more prescriptions, all prompt-and-exemplar text, folded into the SAME
 measurement window as R1/R2 for the volume reason recorded at the top of this
