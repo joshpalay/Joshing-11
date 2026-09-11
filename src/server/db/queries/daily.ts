@@ -2660,7 +2660,7 @@ export async function getRecentShapesByDomain(
       .orderBy(sql`${generatedQuestions.createdAt} desc`)
       .limit(rowLimit);
   } catch (error) {
-    // question_shape lands in migration 0146; tolerate a database that predates
+    // question_shape lands in migration 0147; tolerate a database that predates
     // it rather than failing the build, as the sibling reads above do.
     if (pgErrorCode(error) === '42703') return result;
     throw error;

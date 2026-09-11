@@ -186,7 +186,7 @@ lead is acceptable at accessible").
 ## Updates
 
 ### 2026-09-11 — R4 question-shape persistence shipped (separate PR, needs a migration)
-The last prescription. Migration **0146** adds `GeneratedQuestion.question_shape`
+The last prescription. Migration **0147** adds `GeneratedQuestion.question_shape`
 (text, nullable, no backfill).
 
 The generator has been asked for a `question_shape`, and held to a no-two-alike
@@ -199,7 +199,7 @@ whether the variety instruction was landing. It was not: ~77% of live rows are
 Two compounding causes, both addressed:
 - **Nothing was stored.** The column now persists what the model reported. Text
   rather than an enum, so a catalogue change never needs another migration.
-  Nullable with no backfill — rows generated before 0146 stay honestly unknown
+  Nullable with no backfill — rows generated before 0147 stay honestly unknown
   rather than being guessed at from phrasing, and the new read skips them rather
   than bucketing them as "unknown".
 - **The variety rule is batch-scoped**, and a batch is three questions
@@ -217,8 +217,9 @@ in `instrumentation.ts` alongside the `empirical_correct_rate` precedent.
 
 Note for whoever reads this next: this landed while another session was working
 in the same tree on a design audit and an activity-actor change (migration 0147).
-Numbering is coordinated — 0146 then 0147, both journaled in order — but the two
-workstreams are otherwise independent.
+Their activity migration reached `main` first and took 0146 — the number this
+change originally used — so this was renumbered to 0147 when the stack was
+merged up. Both are journaled in order.
 
 ### 2026-09-11 — R5 declared-domain floor shipped SWITCHED OFF (separate PR)
 Built, tested, and deliberately inert. `DECLARED_DOMAIN_FLOOR_ENABLED` is unset,

@@ -265,9 +265,16 @@ function wrongNamedSubLabel(
   return WRONG_NAMED_SUBLABEL[variant % WRONG_NAMED_SUBLABEL.length]!(firstName);
 }
 
+// F6 (2026-09-10 audit) — this label used to say "FROM {NAME}'S KNOWLEDGE",
+// but the underlying source (friend-presence-domains.ts) is a domain the
+// friend has DECLARED or is ACTIVE in — never a specific fact they're known
+// to have answered. "Knowledge" claims a certainty the data doesn't support;
+// "world" (already the established register — see WRONG_NAMED_SUBLABEL above
+// and returnRecoveryNote in daily/page.tsx) says only that the topic is
+// theirs, which is all the signal actually shows.
 function bonusSourceLabel(sourceName: string, extraCount: number): string {
   const source = firstNameFrom(sourceName).toUpperCase();
-  return extraCount > 0 ? `FROM ${source} + OTHERS’ KNOWLEDGE` : `FROM ${source}’S KNOWLEDGE`;
+  return extraCount > 0 ? `FROM ${source} + OTHERS’ WORLDS` : `FROM ${source}’S WORLD`;
 }
 
 /**

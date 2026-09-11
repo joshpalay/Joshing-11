@@ -174,17 +174,39 @@ describe('friend portrait data', () => {
     expect(portrait?.friendSoloInterests).toEqual(['Star Wars'])
   })
 
-  it('falls back to the verified phone number when a friend has no display name yet', async () => {
+  // F8 (2026-09-10 audit) — this used to fall back to the raw phone number
+  // when a friend had no display name yet, which could put another
+  // person's phone number on-screen. Fixed to go through the shared
+  // resolveDisplayName precedence instead: handle, then a neutral
+  // placeholder. The phone number must never appear.
+  it('falls back to the handle when a friend has no display name yet', async () => {
     getUserByIdMock.mockResolvedValueOnce({
       id: 'friend-1',
       displayName: null,
+      handle: 'friendone',
       phoneNumber: '+15550101010',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     })
 
     const portrait = await getFriendPortraitData('friend-1', 'viewer-1')
 
-    expect(portrait?.user.displayName).toBe('+15550101010')
+    expect(portrait?.user.displayName).toBe('@friendone')
+    expect(portrait?.user.displayName).not.toContain('+1')
+  })
+
+  it('falls back to a neutral placeholder — never the phone number — for a legacy nameless, handle-less account', async () => {
+    getUserByIdMock.mockResolvedValueOnce({
+      id: 'friend-1',
+      displayName: null,
+      handle: null,
+      phoneNumber: '+15550101010',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+
+    const portrait = await getFriendPortraitData('friend-1', 'viewer-1')
+
+    expect(portrait?.user.displayName).toBe('Joshing friend')
+    expect(portrait?.user.displayName).not.toContain('+1')
   })
 
   it('returns null for missing users', async () => {

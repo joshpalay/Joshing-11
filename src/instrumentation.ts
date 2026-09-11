@@ -1107,7 +1107,7 @@ export async function register() {
         await db.execute(
           sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "suppressed_by" text`,
         );
-        // 0146 (R4). Additive, nullable, no default — same shape as the
+        // 0147 (R4). Additive, nullable, no default — same shape as the
         // empirical_correct_rate guard above, and defensive for the same reason:
         // a preview/production database whose migration row was recorded without
         // the statement landing would otherwise fail every persist, since the
