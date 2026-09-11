@@ -1107,6 +1107,14 @@ export async function register() {
         await db.execute(
           sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "suppressed_by" text`,
         );
+        // 0146 (R4). Additive, nullable, no default — same shape as the
+        // empirical_correct_rate guard above, and defensive for the same reason:
+        // a preview/production database whose migration row was recorded without
+        // the statement landing would otherwise fail every persist, since the
+        // insert names this column unconditionally.
+        await db.execute(
+          sql`ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "question_shape" text`,
+        );
         // Grandfather-promote the pre-existing machine backlog — but ONLY while the
         // database is still pre-B4. Once migration 0066 adds ask_to_answer_verified,
         // we are in the B4 world where fresh rows are promoted explicitly by the

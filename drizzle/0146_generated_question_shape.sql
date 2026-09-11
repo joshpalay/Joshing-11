@@ -1,0 +1,16 @@
+-- Record the question_shape the generator reported for each generated question.
+-- The generation prompt has asked for this field, and enforced a no-two-alike
+-- rule on it, since the shape catalogue was written, but the value was only
+-- logged and then dropped at persist — so nothing downstream could see whether
+-- the variety instruction was being honoured. A 2026-09-11 hand read put ~77%
+-- of live rows in 'identification' and found three offered shapes with one row
+-- each across 2,191; the only reason that needed a hand read is this column.
+-- Text rather than an enum so a catalogue change never needs another migration.
+-- Nullable with no backfill: rows generated before this stay honestly unknown
+-- rather than being guessed at from their phrasing.
+--
+-- Rollback: ALTER TABLE "GeneratedQuestion" DROP COLUMN "question_shape";
+-- Nothing reads the column as a hard dependency — the prompt block that
+-- consumes it treats an absent value as "no coverage recorded" — so dropping it
+-- degrades variety feedback without breaking generation.
+ALTER TABLE "GeneratedQuestion" ADD COLUMN IF NOT EXISTS "question_shape" text;
