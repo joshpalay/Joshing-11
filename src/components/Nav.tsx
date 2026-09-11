@@ -218,24 +218,39 @@ export function Nav({
         </div>
       </header>
       {showCreateShortcut ? (
-        <button
-          type="button"
+        // The FAB is pinned to the right edge of the SAME max-w-2xl column the
+        // header, nav and every page container use — not to the right edge of
+        // the window. Anchoring it to the viewport (`fixed right-5`) was fine
+        // while the FAB was mobile-only, but the dedicated add-a-question FAB
+        // now shows on desktop too, where it stranded the button hundreds of
+        // pixels away from the content it acts on. The wrapper is a full-width
+        // fixed strip that ignores pointer events so it can't shadow the bottom
+        // nav; only the button itself is clickable. Below the column's width
+        // this resolves to exactly the old `right-5` inset (canon §3.8).
+        <div
           data-app-chrome
-          className={[
-            'bg-primary text-primary-foreground fixed right-5 bottom-24 z-50 grid size-14 place-items-center rounded-full shadow-lg',
-            // The dedicated add-a-question FAB shows on every viewport; the
-            // generic Create chooser FAB stays mobile-only as before.
-            isQuestionComposerShortcut ? '' : 'md:hidden',
-          ].join(' ')}
-          aria-label={isQuestionComposerShortcut ? 'Add a question' : 'Create'}
-          onClick={() =>
-            isQuestionComposerShortcut
-              ? router.push('/questions?create=1')
-              : setCreateChooserOpen(true)
-          }
+          className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center"
         >
-          <Plus className="size-6" />
-        </button>
+          <div className="flex w-full max-w-2xl justify-end px-5">
+            <button
+              type="button"
+              className={[
+                'bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-lg',
+                // The dedicated add-a-question FAB shows on every viewport; the
+                // generic Create chooser FAB stays mobile-only as before.
+                isQuestionComposerShortcut ? '' : 'md:hidden',
+              ].join(' ')}
+              aria-label={isQuestionComposerShortcut ? 'Add a question' : 'Create'}
+              onClick={() =>
+                isQuestionComposerShortcut
+                  ? router.push('/questions?create=1')
+                  : setCreateChooserOpen(true)
+              }
+            >
+              <Plus className="size-6" />
+            </button>
+          </div>
+        </div>
       ) : null}
       <nav
         data-app-chrome

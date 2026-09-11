@@ -247,10 +247,19 @@ today's recap". 49 sites on `main`.
 
 ### 3.8 FAB — RATIFIED as a type (Phase 2 ruling 3); spec RATIFIED (Phase 4, amended shadow)
 
-`Nav.tsx:225`: `fixed right-5 bottom-24 size-14 rounded-full bg-primary
-text-primary-foreground grid place-items-center`. **One FAB in the app** (the composer).
-Its shadow moves from `shadow-lg` to `var(--shadow-card-strong)` (§2.2, Phase 4 amendment);
-its z-index is `--z-nav` (it is chrome). Never a second FAB, never a FAB inside a sheet.
+`Nav.tsx`: `size-14 rounded-full bg-primary text-primary-foreground grid place-items-center`,
+fixed at `bottom-24`. **One FAB in the app** (the composer). Its shadow moves from `shadow-lg`
+to `var(--shadow-card-strong)` (§2.2, Phase 4 amendment); its z-index is `--z-nav` (it is
+chrome). Never a second FAB, never a FAB inside a sheet.
+
+**Amended 2026-09-11 (horizontal anchor).** The spec previously read `fixed right-5`, pinning
+the FAB to the right edge of the *window*. That was written while the FAB was mobile-only
+(`md:hidden`), where window edge and column edge coincide; the dedicated add-a-question FAB
+shows on every viewport, and on desktop `right-5` stranded it far outside the `max-w-2xl`
+column it acts on. The FAB is now right-aligned inside that same column (a
+`pointer-events-none` fixed strip wrapping a `max-w-2xl px-5` row), which resolves to exactly
+`right-5` below the column's width — the ratified mobile rendering is unchanged. **Rule: app
+chrome aligns to the content column, not the viewport.**
 
 ### 3.9 Invisible hit target — RATIFIED (Phase 4, 2026-09-11)
 
