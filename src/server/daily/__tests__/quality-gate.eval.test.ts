@@ -55,10 +55,29 @@ describe.skipIf(!evalsEnabled)('quality gate GENERIC_AT_TIER (live)', () => {
   );
 
   it(
-    'does NOT flag the same question at accessible tier (defect is tier-gated)',
+    'ALSO flags the same roster question at accessible tier (R1: roster-lead bar applies at accessible)',
     async () => {
+      // R1 (2026-09-11, audits/2026-09-11-Fable-QUESTION-DRIFT-PIPELINE-01.md):
+      // accessible is allowed to be easy, not to be the roster lead. "Name of
+      // Rory's first boyfriend" is a character-by-role name with no hook.
       const result = await findQualityFailures([
         q(ROSTER_GENERIC, 'Dean Forester', 'accessible', 'Gilmore Girls'),
+      ]);
+      expect([...result.toDrop]).toEqual([0]);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it(
+    'does NOT flag an easy accessible question that carries a fan hook (catchphrase)',
+    async () => {
+      const result = await findQualityFailures([
+        q(
+          'In The Simpsons, what does Homer say when something goes wrong?',
+          "D'oh!",
+          'accessible',
+          'The Simpsons',
+        ),
       ]);
       expect(result.toDrop.size).toBe(0);
     },
@@ -174,9 +193,12 @@ describe.skipIf(!evalsEnabled)('quality gate FALSE_PREMISE (live)', () => {
 
   // DEFINITION_SUPPLIED (added 2026-09-06). The 19th Amendment row below was
   // generated and served in production on 2026-09-06: it passed the gate
-  // because the one defect that describes it, GENERIC_AT_TIER, is explicitly
-  // forbidden from flagging accessible-tier items. The new defect applies at
-  // every tier. See diagnosis/answer-leak-domain-drift-plan.md.
+  // because the one defect that then described it, GENERIC_AT_TIER, was at the
+  // time forbidden from flagging accessible-tier items (relaxed by R1 on
+  // 2026-09-11). The new defect applies at every tier, and since R2 (2026-09-11)
+  // the same strike-the-interrogative test is also in the GENERATION prompt as
+  // Rule 3c. See diagnosis/answer-leak-domain-drift-plan.md and
+  // diagnosis/question-drift-r1-r2-tracking.md.
   it(
     'flags a stem that supplies the full definition and asks only for the name (accessible tier)',
     async () => {

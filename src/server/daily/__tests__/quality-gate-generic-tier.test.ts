@@ -74,7 +74,11 @@ describe('quality gate — GENERIC_AT_TIER plumbing', () => {
 
     const system = request.system as string;
     expect(system).toContain('GENERIC_AT_TIER');
-    expect(system).toContain('NEVER flag an accessible-tier item');
+    // R1 (2026-09-11): accessible is no longer exempt — it carries a narrower
+    // roster/title/location-lead-only bar. Moderate/specialist keep the full bar
+    // and the "when uncertain, do not flag" posture.
+    expect(system).toContain('roster-lead-only bar at accessible');
+    expect(system).toContain('At ACCESSIBLE the bar is NARROWER, not absent');
     expect(system).toContain('when uncertain, do not flag');
   });
 
