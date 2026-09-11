@@ -85,16 +85,24 @@ function recoveryNote(s: QueueSlot): string | null {
   const answeredCorrect = s.answer_state === 'correct' || s.catchup_answer_state === 'correct';
   if (!answeredCorrect) return null;
   const author = s.author_name?.trim();
-  return author ? `It stuck. ${author} would be glad.` : 'It stuck.';
+  return author ? `It stuck. ${author}'s world, now yours too.` : 'It stuck.';
 }
 
 describe('the correct-on-return acknowledgment (§6)', () => {
-  it('names the author when there is one', () => {
-    expect(
-      recoveryNote(slot({ return_scope: 'wrong', answer_state: 'correct', author_name: 'Robyn' })),
-    ).toBe('It stuck. Robyn would be glad.');
+  // F6 (2026-09-10 audit) — "friend-authored source": the slot carries
+  // author_name, so provenance is real and gets carried in words (matching
+  // CreatorNote's human/editorial split), never as an attributed feeling.
+  it('names the author when there is one, without claiming how they feel', () => {
+    const note = recoveryNote(
+      slot({ return_scope: 'wrong', answer_state: 'correct', author_name: 'Robyn' }),
+    );
+    expect(note).toBe("It stuck. Robyn's world, now yours too.");
+    expect(note).not.toMatch(/would be|glad|happy|proud|excited/i);
   });
 
+  // F6 — "generated/house source": no author_name means the question has no
+  // human provenance to name, so the note stands alone rather than inventing
+  // an attribution.
   it('stands alone for an LLM-origin question with no author', () => {
     expect(recoveryNote(slot({ return_scope: 'wrong', answer_state: 'correct' }))).toBe('It stuck.');
   });
@@ -105,6 +113,8 @@ describe('the correct-on-return acknowledgment (§6)', () => {
     expect(recoveryNote(persisted)).toBe(recoveryNote({ ...persisted }));
   });
 
+  // F6 — "missing/unknown source": scope/verdict combinations that don't
+  // qualify as a recovered return say nothing at all, rather than guessing.
   it('says nothing on a wrong return', () => {
     expect(recoveryNote(slot({ return_scope: 'wrong', answer_state: 'incorrect' }))).toBeNull();
   });

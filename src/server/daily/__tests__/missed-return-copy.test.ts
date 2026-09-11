@@ -43,7 +43,7 @@ function assertClean(label: string, copy: string) {
 // The player-facing strings, mirrored here from their render sites so a change
 // there without a change here fails the suite.
 const RETURN_BADGE = 'from March 4';
-const RECOVERY_NOTE_WITH_AUTHOR = 'It stuck. Robyn would be glad.';
+const RECOVERY_NOTE_WITH_AUTHOR = "It stuck. Robyn's world, now yours too.";
 const RECOVERY_NOTE_ANON = 'It stuck.';
 const AUTHOR_PUSH =
   'Robyn came back to one of your questions and got it. ' +

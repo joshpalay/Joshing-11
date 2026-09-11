@@ -69,7 +69,7 @@ describe('GameplayChat returning-question banner', () => {
       }),
     ]);
     expect(rendered).toContain('Bonus item');
-    expect(rendered).toContain('FROM SARAH’S KNOWLEDGE');
+    expect(rendered).toContain('FROM SARAH’S WORLD');
     expect(rendered).not.toContain('Second look');
   });
 

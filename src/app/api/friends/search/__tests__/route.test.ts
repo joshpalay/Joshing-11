@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getSessionMock, searchMock } = vi.hoisted(() => ({
+const { getSessionMock, searchMock, logTelemetryMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   searchMock: vi.fn(),
+  logTelemetryMock: vi.fn(),
 }))
 
 vi.mock('@/server/auth/session', () => ({
@@ -11,6 +12,10 @@ vi.mock('@/server/auth/session', () => ({
 
 vi.mock('@/server/db/queries/friend-search', () => ({
   searchFriendByHandleOrPhone: searchMock,
+}))
+
+vi.mock('@/server/telemetry', () => ({
+  logTelemetry: logTelemetryMock,
 }))
 
 import { GET, resetFriendSearchRateLimitForTests } from '../route'
@@ -26,6 +31,7 @@ describe('GET /api/friends/search rate limiting', () => {
     resetFriendSearchRateLimitForTests()
     getSessionMock.mockReset()
     searchMock.mockReset()
+    logTelemetryMock.mockReset()
     getSessionMock.mockResolvedValue({ userId: 'viewer-1' })
     searchMock.mockResolvedValue(null)
     delete process.env.FRIEND_SEARCH_THROTTLE_DISABLED
@@ -88,5 +94,54 @@ describe('GET /api/friends/search rate limiting', () => {
       expect(res.status).toBe(200)
     }
     expect(searchMock).toHaveBeenCalledTimes(50)
+  })
+})
+
+// F9 (2026-09-10 audit) — the durable, privacy-preserving abuse signal:
+// counts, coarse buckets, and outcome only. Never the query string, never a
+// resolved identifier.
+describe('GET /api/friends/search abuse-signal telemetry', () => {
+  beforeEach(() => {
+    resetFriendSearchRateLimitForTests()
+    getSessionMock.mockReset()
+    searchMock.mockReset()
+    logTelemetryMock.mockReset()
+    getSessionMock.mockResolvedValue({ userId: 'viewer-1' })
+    delete process.env.FRIEND_SEARCH_THROTTLE_DISABLED
+  })
+
+  it('logs outcome only on a match, never the query or the matched identity', async () => {
+    searchMock.mockResolvedValueOnce({ id: 'friend-1', handle: 'alice', displayName: 'Alice' })
+    await GET(searchRequest('@alice'))
+
+    expect(logTelemetryMock).toHaveBeenCalledWith('friend_search_performed', { outcome: 'match' })
+    const loggedText = JSON.stringify(logTelemetryMock.mock.calls)
+    expect(loggedText).not.toContain('alice')
+    expect(loggedText).not.toContain('friend-1')
+  })
+
+  it('logs outcome only on no match', async () => {
+    searchMock.mockResolvedValueOnce(null)
+    await GET(searchRequest('4155551234'))
+
+    expect(logTelemetryMock).toHaveBeenCalledWith('friend_search_performed', { outcome: 'no_match' })
+    expect(JSON.stringify(logTelemetryMock.mock.calls)).not.toContain('4155551234')
+  })
+
+  it('logs a coarse rate-limit reason with no identifiers when throttled', async () => {
+    for (let i = 0; i < 8; i++) await GET(searchRequest('@alice'))
+    logTelemetryMock.mockClear()
+
+    await GET(searchRequest('@alice'))
+
+    expect(logTelemetryMock).toHaveBeenCalledWith('friend_search_rate_limited', {
+      reason: 'account_window',
+    })
+    expect(JSON.stringify(logTelemetryMock.mock.calls)).not.toContain('alice')
+  })
+
+  it('does not log anything for invalid input (never ran a lookup)', async () => {
+    await GET(searchRequest(''))
+    expect(logTelemetryMock).not.toHaveBeenCalled()
   })
 })

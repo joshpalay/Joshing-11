@@ -2,12 +2,9 @@ import { NextResponse } from 'next/server';
 
 import { getSession } from '@/server/auth/session';
 import { getFriends } from '@/server/db/queries/friends';
+import { resolveDisplayName } from '@/server/lib/display-name';
 
 export const dynamic = 'force-dynamic';
-
-function displayName(name: string | null, fallback: string): string {
-  return name?.trim() || fallback;
-}
 
 export async function GET() {
   const session = await getSession();
@@ -18,7 +15,7 @@ export async function GET() {
   return NextResponse.json(
     rows.map((user) => ({
       id: user.id,
-      displayName: displayName(user.displayName, user.phoneNumber),
+      displayName: resolveDisplayName(user),
     })),
   );
 }

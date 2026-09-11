@@ -9,7 +9,13 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// Public (no auth) so the signup handle picker can hit it before login.
+// F9 (2026-09-10 audit) — this comment used to claim "Public (no auth)", but
+// this route is NOT excluded from src/proxy.ts's matcher, so an
+// unauthenticated request is rejected (401) by the proxy before this handler
+// ever runs. It is reachable only for an authenticated session with an
+// accepted invitation. Fixed the comment; deliberately NOT adding a proxy
+// exemption to make it actually public — that's a separate, unasked-for
+// change to the auth boundary.
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const raw = url.searchParams.get('handle') ?? '';
