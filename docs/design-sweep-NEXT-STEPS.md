@@ -1,7 +1,10 @@
 # Design token sweep — status
 
-Full audit context lives in `audits/design-audit-2026-05-30.md` (findings C1–C8,
-gitignored). This file tracks what's been applied on `claude/design-audit-fixes`.
+Full audit context lives in `audits/design-audit-2026-05-30.md` (findings C1–C8;
+force-added to the repo on 2026-09-11 — the `audits/` folder is gitignored, so it had
+existed only locally). This file tracks what's been applied on `claude/design-audit-fixes`.
+**The reconciled ruleset now lives in `_docs/DESIGN-SYSTEM.md`** (rewritten 2026-09-11);
+this file is history.
 
 ---
 
@@ -45,16 +48,17 @@ ramp (now `--warm-ink*` in globals.css), and the game summary pills.
 - ✅ **Token-enforcement lint rule** (audit's top cross-cutting recommendation):
   `no-restricted-syntax` in `eslint.config.mjs` flags Tailwind palette colors /
   `bg-white`/`text-black` / arbitrary `[#hex]` in `className` under
-  `src/components/**`. It's a **ratchet** — 23 backlog files are grandfathered to
+  `src/components/**`. It's a **ratchet** — the backlog files are grandfathered to
   `warn` (build stays green) while new/cleaned files are held at `error`. The
   grandfather list in `eslint.config.mjs` should shrink over time; don't add to it.
+  (23 at the time; **12** as of 2026-09-11, with `--max-warnings 16` in `package.json`.)
 - ✅ **Portrait circles restored** — the C8 rework had shrunk PortraitCircles'
   mastery circles to 168px; reverted to the original 304–384px hero sizes (the
   portrait free-wraps and never overflowed — only the grid did).
 
 ## Not done (deliberately out of scope / future)
 
-- **Work down the lint grandfather list** — 23 components still carry off-system
+- **Work down the lint grandfather list** — 12 components (was 23) still carry off-system
   colors in className (now visible as warnings). Tokenizing them removes each from
   the grandfather list and flips it to enforced.
 - **Pre-existing lint errors:** `npm run lint` shows 5 `react-hooks/react` errors
