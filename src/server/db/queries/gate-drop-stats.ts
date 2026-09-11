@@ -41,16 +41,85 @@ export const GATE_NAMES = [
   'difficulty_floor',
   'thin_declared',
 ] as const;
-export type GateName = (typeof GATE_NAMES)[number];
+/**
+ * Defect classes the quality gate can return, mirroring the numbered list in
+ * QUALITY_GATE_SYSTEM_PROMPT (generate-questions.ts). The gate is instructed to
+ * prefix every reason with one of these plus a colon ("OFF_DOMAIN: ..."), and
+ * the caller already routes on that prefix — which is what makes a per-defect
+ * tally possible with no schema change.
+ *
+ * Why this exists (R8, 2026-09-11): the `quality` counter alone says 31% of
+ * candidates were dropped but not WHICH rule fired, so there was no way to tell
+ * a prompt change that reduced generic questions from one that merely made the
+ * gate quieter. See audits/2026-09-11-Fable-QUESTION-DRIFT-PIPELINE-01.md §3.3.
+ */
+export const QUALITY_DEFECTS = [
+  'ANSWER_LEAKED',
+  'OPINION_OR_VAGUE',
+  'FALSE_PREMISE',
+  'SELF_ANSWERING',
+  'GENERIC_AT_TIER',
+  'MULTI_PART',
+  'MISLEADING_SETUP',
+  'OFF_DOMAIN',
+  'DEFINITION_SUPPLIED',
+] as const;
+export type QualityDefect = (typeof QUALITY_DEFECTS)[number];
+
+/** Synthetic gate name for one quality-gate defect class. `gate` is a plain text
+ *  column, so these need no migration; they sort after the real gates. */
+export type QualityDefectGate = `quality:${QualityDefect}`;
+
+export function qualityDefectGate(defect: QualityDefect): QualityDefectGate {
+  return `quality:${defect}`;
+}
+
+export type GateName = (typeof GATE_NAMES)[number] | QualityDefectGate;
 
 /** Gates whose implementation is an LLM call that fails open on error — a
- * sustained drop-rate of zero here is suspicious, not reassuring. */
+ * sustained drop-rate of zero here is suspicious, not reassuring. Deliberately
+ * excludes the per-defect counters: an individual defect legitimately sits at
+ * zero for long stretches, so it must never raise the silently-disabled alarm. */
 export const FAIL_OPEN_LLM_GATES: ReadonlySet<GateName> = new Set([
   'quality',
   'factual',
   'recent_history',
   'batch_dedup',
 ]);
+
+/**
+ * Read the defect name off a gate reason ("OFF_DOMAIN: question is about Joyce")
+ * — null when the reason carries no recognised prefix (an older row, or a model
+ * that ignored the format instruction).
+ */
+export function parseQualityDefect(reason: string): QualityDefect | null {
+  const head = reason.split(':', 1)[0]?.trim().toUpperCase() ?? '';
+  return (QUALITY_DEFECTS as readonly string[]).includes(head) ? (head as QualityDefect) : null;
+}
+
+/**
+ * Tally a quality-gate `reasons` map into one entry per defect class. Emits an
+ * entry for EVERY known defect, including the ones that did not fire, so a
+ * defect stuck at zero reads as a measured zero rather than as missing data —
+ * that distinction is the whole point of the counter. `considered` is the batch
+ * size, so each defect row carries the same denominator as the parent `quality`
+ * row and the rates are directly comparable.
+ */
+export function tallyQualityDefects(
+  reasons: Record<number, string>,
+  considered: number,
+): GateDropEntry[] {
+  const counts = new Map<QualityDefect, number>(QUALITY_DEFECTS.map((defect) => [defect, 0]));
+  for (const reason of Object.values(reasons)) {
+    const defect = parseQualityDefect(reason);
+    if (defect) counts.set(defect, (counts.get(defect) ?? 0) + 1);
+  }
+  return [...counts].map(([defect, dropped]) => ({
+    gate: qualityDefectGate(defect),
+    considered,
+    dropped,
+  }));
+}
 
 export type GateDropEntry = {
   gate: GateName;
