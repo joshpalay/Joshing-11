@@ -1,410 +1,569 @@
-# Joshing — Design System Reference
+# Joshing — Design Canon
 
-A consolidated inventory of every design token, font, component variant, and brand cue currently shipped in the Joshing web app. Use this as the source-of-truth when recreating the system in Figma (variables, styles, components).
+**This file is the one authoritative design ruleset.** It replaced the 2026-05-19 "Design
+System Reference" in place on 2026-09-11 (`B-FABLE-DESIGN-CANON-01`, Fork B3). The old
+inventory documented a `<Button>` component that had been deleted, a 10px card that had become
+4px, and a font stack that had been swapped; nothing from it survives here unverified.
 
-Last verified against the codebase on 2026-05-19.
+**Status contract.** Every rule carries one of two markers:
 
-**Source files (single source of truth):**
-- Tokens: `src/app/globals.css`
-- Fonts: `src/app/layout.tsx`
-- Buttons: `src/components/ui/button.tsx`
-- Custom icons: `src/components/icons/domain-icons.tsx`
-- shadcn config: `components.json`
+- **RATIFIED** — a decision that has been made, with its source named. Do not reopen without
+  cause. Sources are `DECISIONS.md`, a ratified `D-*` doc, `_docs/STYLE-GUIDE-*.md`, or the
+  Phase 2 rulings of 2026-09-11 (recorded in `_docs/DESIGN-CANON-CONFLICTS.md` §4).
+- **PROPOSED** — a rule written where no rule existed, justified against canon and live usage.
+  Not enforced until ratified. **As of 2026-09-11 every rule in this document is RATIFIED**:
+  the Phase 3 proposals were ratified individually in Phase 4 (recorded in
+  `_docs/DESIGN-CANON-CONFLICTS.md` §5), with one amendment — the FAB sits on
+  `--shadow-card-strong`, not `--shadow-overlay`. Future additions start as PROPOSED again —
+  the first is §4.3 (selectable chips), surfaced by the conformance script the same day.
+
+**Sources of truth for values.** Tokens live in `src/app/globals.css` (the only place a colour,
+radius, shadow, or z-index value is defined). Button recipes live in the `@layer components`
+block of the same file. Primitives live in `src/components/ui/`. Where this document and
+`globals.css` disagree, `globals.css` is right and this document has a bug — fix the document.
+
+**Standing rules inherited, not restated.** No new design token without an explicit decision
+(`D-CONSISTENCY-AUDIT-DISPOSITION-01`). Grading colours are reserved and never the sole signal
+(`STYLE-GUIDE-COLOR` §1). The content is loud, the interface is quiet (`STYLE-GUIDE-TYPE`).
+Provenance is honest (`PRODUCT-CANON` §5.3). Colour rules are **out of this document's scope**
+(Fork D1) — see §10.
+
+**Grep expressions** are given where a rule can be checked mechanically. They are the input to
+the Phase 5 lint selectors and `scripts/audit-design-conformance.mjs`; they match violations,
+so a clean codebase returns zero.
 
 ---
 
-## 1. Colors
+## 1. Geometry
 
-All colors are authored in **OKLCh** (perceptually uniform). Hex approximations are provided for Figma input where OKLCh isn't supported; prefer OKLCh in Figma variables if you can.
+### 1.1 The radius scale — RATIFIED (`globals.css:45-52`)
 
-### 1.1 Semantic tokens — Light mode (`:root`)
+This app overrides Tailwind's scale. Use these numbers, not Tailwind's defaults.
 
-| Token | OKLCh | Hex (approx) | Used for |
+| Token | Value | Tailwind class |
+|---|---|---|
+| `--radius-xs` | 4px | `rounded-[var(--radius-xs)]` |
+| `--radius-card` | **4px** (alias of `--radius-xs`) | `rounded-[var(--radius-card)]` |
+| `--radius-sm` | 6px | `rounded-sm` |
+| `--radius-md` | 8px | `rounded-md` |
+| `--radius-lg` | 10px | `rounded-lg` |
+| `--radius-xl` | 14px | `rounded-xl` |
+| `--radius-2xl` | **18px** (not 16) | `rounded-2xl` |
+| `--radius-3xl` | **22px** (not 24) | `rounded-3xl` |
+| `--radius-4xl` | 26px | `rounded-4xl` |
+| — | 9999px | `rounded-full` |
+
+Literal arbitrary radii (`rounded-[4px]`, `rounded-[2rem]`) are banned in components; the
+radius ratchet holds them at zero (`scripts/check-radius-ratchet.mjs`). The `.btn-*` recipes
+write `rounded-[4px]` inside `globals.css`, which is exempt.
+
+### 1.2 Cards — RATIFIED (Phase 2 ruling 1; `globals.css:378-385`; commit `5b873477`)
+
+**Every content card has a 4px corner, spelled `--radius-card`.** One value, one name.
+
+- `--radius-card` is for anything that *is* a card: feed cards, section cards, settings rows
+  that render as cards, skeleton stand-ins for cards.
+- `--radius-xs` (the same 4px) is reserved for **non-card controls**: inputs, the login field,
+  small chrome. Do not use it on a card; the card rule must stay greppable by its own name.
+- `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl` on a card-shaped container are drift.
+  The Phase 2 migration (`5b873477`) covered the friends/profile/invite section cards; the
+  conformance script (`check:design` R3) then found **about forty more** card containers still
+  on `rounded-lg`/`rounded-xl` — the daily summary and catch-up panels, `ExpandDomainOfferCard`,
+  `FirstSessionPanel`, `knowledge/[domain]` sections, every settings form section
+  (`NotificationsForm`, `PrivacyForm`, `AccountActions`, the LLM readouts), `BlockedList` rows,
+  `InlineEditableField`/`InlineHandleField` card variants, `SendQuestionDrawer:173` — plus the
+  four on `rounded-2xl` (`NotForMeSheet.tsx:157`, `HiddenQuestions.tsx:69`,
+  `daily/summary/page.tsx:328`, `users/[id]/page.tsx:582`). All codemod work, not exceptions.
+
+Grep (cards on a non-card radius, approximate — pairs a card fill with a named radius):
+`rg -n 'rounded-(lg|xl|2xl|3xl)\b[^"]*(bg-card|bg-\[var\(--brand-card\)\]|border-\[var\(--brand-rule\)\])|(bg-card|bg-\[var\(--brand-card\)\])[^"]*rounded-(lg|xl|2xl|3xl)\b' src --glob '*.tsx'`
+
+### 1.3 Sheets, modals and popovers — RATIFIED (Phase 4, 2026-09-11)
+
+These are **not cards** and do not take the card radius. Live usage has converged on one shape
+(`CreateChooser.tsx:65`, `AddAreaModal.tsx:47`, `AskFriendForDomain.tsx:215`,
+`InviteLinksSection.tsx:359,470`):
+
+- Bottom sheet: `rounded-t-2xl` (18px, top corners only), full width on mobile.
+- The same component centered on `md:`: `md:rounded-2xl`, `md:max-w-md`.
+- Centered modal: `rounded-2xl`.
+- Anchored action menu (`FeedActions.tsx:158`, `AnsweredRowActions.tsx:70`,
+  `daily/summary/page.tsx:990`): today `rounded-3xl` (22px). Ratified (Phase 4): **`rounded-2xl`**, so
+  every overlay shares one corner.
+
+Grep (overlay on a non-2xl radius): `rg -n 'role="dialog"' -A3 src --glob '*.tsx' | rg 'rounded-(3xl|xl|lg)\b'`
+
+### 1.4 Round things — RATIFIED (Phase 2 ruling 3; inputs Phase 4)
+
+`rounded-full` is for **chips, badges, avatars, the FAB, and circular icon hit-areas** only.
+
+- **RATIFIED:** a primary or secondary action is never a pill. The onboarding "Add" pill
+  (`OnboardingFlow.tsx:881`) becomes a standard button (§3.1). Commit `e68aebde` already
+  stripped the other `rounded-full` overrides from `.btn-*` sites; none remain on `main`.
+- **RATIFIED (Phase 4):** inputs are never pills either (`OnboardingFlow.tsx:880` `rounded-full` input →
+  `--radius-xs`, matching `LoginPanel.tsx:27` and `KnowledgeFlatClient.tsx:914`).
+
+Grep (a button or input that is a pill):
+`rg -n '<(button|input)\b' -A5 src --glob '*.tsx' | rg 'rounded-full' | rg -v 'size-(9|10|11|12|14)|aria-label'`
+
+### 1.5 Inputs — RATIFIED (Phase 4, 2026-09-11)
+
+Two recipes exist (`LoginPanel.tsx:27` at 44px; `KnowledgeFlatClient.tsx:914` at 48px). Ratified (Phase 4)
+floor: `min-h-11` (44px), `rounded-[var(--radius-xs)]`, `bg-[var(--brand-field)]` (white, per
+`globals.css:88`), hairline `border`, `text-base`. Height beyond 44 is a surface choice.
+
+---
+
+## 2. Elevation
+
+### 2.1 The registers — RATIFIED (`D-CONSISTENCY-AUDIT-DISPOSITION-01` §"Register assignment", Option B; `globals.css:386-399`)
+
+Two intentional registers plus a focus idiom. Tailwind `shadow-sm/md/lg/xl/2xl` are
+**off-register** everywhere in components (the old DESIGN-SYSTEM §5.1 table that sanctioned
+them is withdrawn).
+
+| Register | Token | Value | Belongs to |
 |---|---|---|---|
-| `--background` | `oklch(1 0 0)` | `#ffffff` | App background |
-| `--foreground` | `oklch(0.145 0 0)` | `#252525` | Body text |
-| `--card` | `oklch(1 0 0)` | `#ffffff` | Card surface |
-| `--card-foreground` | `oklch(0.145 0 0)` | `#252525` | Text on cards |
-| `--popover` | `oklch(1 0 0)` | `#ffffff` | Popover/menu surface |
-| `--popover-foreground` | `oklch(0.145 0 0)` | `#252525` | Text in popovers |
-| `--primary` | `oklch(0.205 0 0)` | `#343434` | Primary fill (buttons, etc.) |
-| `--primary-foreground` | `oklch(0.985 0 0)` | `#fbfbfb` | Text on primary |
-| `--secondary` | `oklch(0.97 0 0)` | `#f6f6f6` | Secondary fill |
-| `--secondary-foreground` | `oklch(0.205 0 0)` | `#343434` | Text on secondary |
-| `--muted` | `oklch(0.97 0 0)` | `#f6f6f6` | Muted surface |
-| `--muted-foreground` | `oklch(0.556 0 0)` | `#8a8a8a` | Muted text |
-| `--accent` | `oklch(0.97 0 0)` | `#f6f6f6` | Accent fill (hover states) |
-| `--accent-foreground` | `oklch(0.205 0 0)` | `#343434` | Text on accent |
-| `--destructive` | `oklch(0.577 0.245 27.325)` | `#dc2626` | Errors, destructive actions |
-| `--border` | `oklch(0.922 0 0)` | `#e7e7e7` | Default borders |
-| `--input` | `oklch(0.922 0 0)` | `#e7e7e7` | Input borders |
-| `--ring` | `oklch(0.708 0 0)` | `#b5b5b5` | Focus rings |
+| Soft — rest | `--shadow-paper-rest` | `0 1px 2px /0.05` | inputs, inline paper lift |
+| Soft — card | `--shadow-card` | `0 4px 12px rgba(40,32,30,.04)` | every resting card (`.card`, `FeedCardShell`, section cards) |
+| Soft — card-strong | `--shadow-card-strong` | `0 4px 12px /0.1` | elevated / playable cards (`FeedCardShell` elevated, `ActivityStreamItem` playable rows) |
+| Soft — overlay | `--shadow-overlay` | `0 12px 28px rgba(26,18,8,.16)` | centered modals (`QuickAddQuestionModal`, `AddFriendRequestModal`), and per §2.2 every sheet |
+| Flat letterpress | `--shadow-stamp` / `--shadow-stamp-sm` | `4px 4px 0 ink` / `2px 2px 0 ink` | `OverlapMap`, `KnowledgeOverviewClient`, `ShareCard` (see §2.3) |
+| Focus / selection ring | `0 0 0 2px <color>` | literal | selected-state cards (`AnsweredByYouCard`, catch-up, summary, `DomainCircle`) — a *selection* idiom, distinct from keyboard focus (§9) |
 
-### 1.2 Semantic tokens — Dark mode (`.dark`)
+Grep (Tailwind shadow utility in a component): `rg -n '\bshadow-(sm|md|lg|xl|2xl)\b' src --glob '*.tsx'` — 35 on `main` (11 `shadow-sm`, 24 `lg/xl/2xl`).
 
-| Token | OKLCh | Hex (approx) |
-|---|---|---|
-| `--background` | `oklch(0.145 0 0)` | `#252525` |
-| `--foreground` | `oklch(0.985 0 0)` | `#fbfbfb` |
-| `--card` | `oklch(0.205 0 0)` | `#343434` |
-| `--card-foreground` | `oklch(0.985 0 0)` | `#fbfbfb` |
-| `--popover` | `oklch(0.205 0 0)` | `#343434` |
-| `--popover-foreground` | `oklch(0.985 0 0)` | `#fbfbfb` |
-| `--primary` | `oklch(0.922 0 0)` | `#e7e7e7` |
-| `--primary-foreground` | `oklch(0.205 0 0)` | `#343434` |
-| `--secondary` | `oklch(0.269 0 0)` | `#444444` |
-| `--secondary-foreground` | `oklch(0.985 0 0)` | `#fbfbfb` |
-| `--muted` | `oklch(0.269 0 0)` | `#444444` |
-| `--muted-foreground` | `oklch(0.708 0 0)` | `#b5b5b5` |
-| `--accent` | `oklch(0.269 0 0)` | `#444444` |
-| `--accent-foreground` | `oklch(0.985 0 0)` | `#fbfbfb` |
-| `--destructive` | `oklch(0.704 0.191 22.216)` | `#ef4444` |
-| `--border` | `oklch(1 0 0 / 10%)` | `rgba(255,255,255,0.10)` |
-| `--input` | `oklch(1 0 0 / 15%)` | `rgba(255,255,255,0.15)` |
-| `--ring` | `oklch(0.556 0 0)` | `#8a8a8a` |
+### 2.2 Sheets, drawers, popovers and the FAB sit on `--shadow-overlay` — RATIFIED (Phase 4, 2026-09-11)
 
-### 1.3 Brand palette — "Ink on Cream" editorial register
+The disposition doc assigned `--shadow-overlay` to the two centered modals only; 30 sites now
+use it, including bottom sheets. Ratified: **one overlay register** for every floating surface
+(sheet, drawer, anchored menu, toast). The remaining `shadow-2xl/xl` sheets
+(`FeedActions.tsx:158`, `AnsweredRowActions.tsx:70`, `AddAreaModal.tsx:47`,
+`daily/summary/page.tsx:990`) migrate. **Exception, by Phase 4 amendment:** the FAB
+(`Nav.tsx:225`) moves from `shadow-lg` to **`--shadow-card-strong`** — the heavy overlay blur
+under a 56px circle reads as a stain; if it looks fine in practice, overlay is acceptable.
 
-Defined in `globals.css` lines 96-103. Hex approximations are authored as comments in source — use them directly in Figma.
+### 2.3 Letterpress is tokenised — RATIFIED (Phase 4, 2026-09-11) (E-2)
 
-| Token | OKLCh | Hex | Role |
-|---|---|---|---|
-| `--ink` | `oklch(0.14 0.018 55)` | `#1a1208` | Warm near-black (primary editorial ink) |
-| `--cream` | `oklch(0.976 0.010 80)` | `#fdfbf6` | Off-white page surface |
-| `--cream-warm` | `oklch(0.962 0.018 80)` | `#f5f0e8` | Slightly deeper warm surface |
-| `--cream-accent` | `oklch(0.930 0.030 80)` | `#f0e6c8` | Highlight / accent fill |
-| `--border-warm` | `oklch(0.876 0.016 80)` | `#ddd6c7` | Warm border on cream |
-| `--border-light` | `oklch(0.905 0.010 80)` | `#e8e2d6` | Inner / lighter border |
-| `--text-muted-warm` | `oklch(0.600 0.020 60)` | `#696257` | Muted editorial body text |
+The disposition text says "literal, not tokenized"; `globals.css:398-399` has since tokenised
+it and `OverlapMap`/`KnowledgeOverviewClient` consume the tokens. Ratified (Phase 4): the tokens are the
+register's canonical form; `ShareCard.tsx:134` (live DOM) migrates to `var(--shadow-stamp)`;
+`SharePortraitCard.tsx` (html2canvas raster) stays literal, exempt.
 
-### 1.4 Functional / status colors
+### 2.4 Exemptions — RATIFIED (disposition doc §"Register assignment" and §"Deferred")
 
-| Token | Value | Use |
-|---|---|---|
-| `--success` | `#178245` | Correct answers, positive confirmations |
-| `--danger` | `var(--destructive)` | Aliased to destructive |
-| `--wrong` | `var(--destructive)` | Wrong-answer signal |
-| `--user-bubble` (light) | `oklch(0.62 0.18 250)` | User chat bubble fill |
-| `--user-bubble` (dark) | `oklch(0.58 0.18 250)` | User chat bubble fill (dark) |
-| `--user-bubble-foreground` | `oklch(0.99 0 0)` | Text in user bubble |
-
-### 1.5 Chart scale (grayscale, 5 stops)
-
-| Token | OKLCh |
-|---|---|
-| `--chart-1` | `oklch(0.87 0 0)` |
-| `--chart-2` | `oklch(0.556 0 0)` |
-| `--chart-3` | `oklch(0.439 0 0)` |
-| `--chart-4` | `oklch(0.371 0 0)` |
-| `--chart-5` | `oklch(0.269 0 0)` |
-
-### 1.6 Sidebar tokens
-
-| Token | Light | Dark |
-|---|---|---|
-| `--sidebar` | `oklch(0.985 0 0)` | `oklch(0.205 0 0)` |
-| `--sidebar-foreground` | `oklch(0.145 0 0)` | `oklch(0.985 0 0)` |
-| `--sidebar-primary` | `oklch(0.205 0 0)` | `oklch(0.488 0.243 264.376)` *(violet)* |
-| `--sidebar-primary-foreground` | `oklch(0.985 0 0)` | `oklch(0.985 0 0)` |
-| `--sidebar-accent` | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` |
-| `--sidebar-accent-foreground` | `oklch(0.205 0 0)` | `oklch(0.985 0 0)` |
-| `--sidebar-border` | `oklch(0.922 0 0)` | `oklch(1 0 0 / 10%)` |
-| `--sidebar-ring` | `oklch(0.708 0 0)` | `oklch(0.556 0 0)` |
-
-### 1.7 Tailwind utility colors actually used in components
-
-Worth holding as named Figma swatches because they appear directly in component classes:
-
-`stone-50, stone-100, stone-200, stone-800, stone-950`  
-`sky-200`
-
-**Now tokenized** (no longer reach for the raw utility): the amber/warning and the
-success/error status colors below resolved into semantic tokens in `globals.css :root`.
-
-| Was (raw utility) | Now (token) |
-|---|---|
-| `amber-50/100` fills, `amber-300` borders, `amber-700/800/900/950` text | `--warning-surface` / `--warning-border` / `--warning` |
-| `emerald-600/700` text | `--success` |
-| `emerald-50` fill, `emerald-200` border | `--success-surface` / `--success-border` |
-| `red-700 / rose-700` text | `--destructive` |
-| `red-50 / rose-50` fill, `red-200 / rose-200` border | `--destructive-surface` / `--destructive-border` |
+- Bespoke tinted glows: `GameplayChat` navy glow, ceremony gem radial glow + inset.
+- Deferred "raised" register: `TerritorySetupClient` (`0 12px 28px`, `0 24px 60px`,
+  `drop-shadow-lg`) and `PortraitCircles` (`0 1px 3px`). Left as literals until a
+  `--shadow-raised` token is decided. Not drift; not to be "fixed" by a sweep.
+- Dev-only CSS: the `data-shadow` / `data-flat` blocks at `globals.css:720-762` are testing
+  chrome; `PaletteToggle` is unmounted (`layout.tsx:10`).
 
 ---
 
-## 2. Typography
+## 3. Buttons — the whole tree
 
-### 2.1 Font families
+**RATIFIED (Phase 2 rulings 2–3; `globals.css:488-510`; commit `8df528f8`, 2026-05-30):
+there is no React `<Button>`. The `.btn-*` utility family is the button primitive.** Do not
+reintroduce a component wrapper; add a recipe to `globals.css` under an explicit decision.
 
-Loaded via `next/font/google` in `src/app/layout.tsx`. Each is exposed as a CSS variable so it can be referenced from Tailwind utilities and CSS classes.
+Shared by every type below: `type="button"` unless it submits; the Interface voice (sans,
+sentence case — `STYLE-GUIDE-TYPE` §3); the focus ring of §9; `disabled:pointer-events-none
+disabled:opacity-45`; the 44px touch floor of §9. **No per-site overrides of height, radius,
+weight, or fill on a `.btn-*` class** — if a surface needs a different button, it needs a
+different type, decided here.
 
-| Family | CSS variable | Style | Register / purpose |
-|---|---|---|---|
-| **Montserrat** | `--font-sans-body` (consumed as `--font-sans`) | Regular weights | Body text, UI labels, default everywhere. (PRD §typography spec'd Inter; Montserrat is the intentional shipped choice — see comment at `layout.tsx:9-10`.) |
-| **Caveat** | `--font-handwriting` | Regular | Handwriting register — Personal Record, annotations, signature-style microcopy (F5.1) |
-| **Playfair Display** | `--font-display` (also via `--font-literata`) | Italic only | Editorial italic — category names (Categories on Portrait, PortraitCircles labels) (F5.2) |
-| System mono | `--font-mono` | — | `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace` |
-| System sans fallback | `--font-neutral` | — | `ui-sans-serif, system-ui, -apple-system, sans-serif` |
+Grep (a `.btn-*` site overriding the recipe):
+`rg -n 'btn-(primary|ghost|danger|icon)[^"'\''`]*\b(min-h-|h-1|rounded-|text-(xs|sm|base|lg)|font-(medium|semibold|bold)|bg-\[)' src --glob '*.tsx'` — 8 on `main`, all `min-h-11` (moot once §3.1 lands) except `InviteLinksSection.tsx:501`.
 
-### 2.2 Type scale
+### 3.1 Primary CTA — `.btn-primary` — RATIFIED (Phase 2 ruling 2)
 
-Tailwind defaults; these are the sizes used in components. Add them as Figma text styles.
+**Height is 44px (`min-h-11`).** Josh chose the invite-screen override over the 48px recipe.
+Everything else in the recipe stands: `rounded-[4px]`, `bg-[var(--btn-primary-bg)]` (navy),
+`text-base font-bold tracking-[0.04em] text-white`, `px-4 py-2`, `hover:opacity-90`.
 
-| Token | rem | px |
-|---|---|---|
-| `text-xs` | 0.75rem | 12px |
-| `text-sm` | 0.875rem | 14px |
-| `text-base` | 1rem | 16px |
-| `text-lg` | 1.125rem | 18px |
-| `text-xl` | 1.25rem | 20px |
-| `text-2xl` | 1.5rem | 24px |
-| `text-3xl` | 1.875rem | 30px |
-| `text-4xl` | 2.25rem | 36px |
-| `text-5xl` | 3rem | 48px |
+- **Pending recipe edit** (this job may not touch `globals.css`; see §12): `globals.css:497`
+  `min-h-12` → `min-h-11`; the header comment's "48px-tall" and "brand-link fill" both
+  corrected. Once landed, the eight `btn-primary min-h-11` overrides are redundant and the
+  codemod strips them.
+- **One per view.** A primary CTA is the single most important action on the surface. Two
+  side by side is a design error, not a layout problem.
+- **Use it for:** starting or resuming play, submitting a form, accepting an invitation,
+  the one "yes" in a confirm. **Not for:** anything destructive (§3.3), anything in a list row
+  (§3.6), anything that merely navigates (use a link or §3.7).
 
-Plus one inline non-standard size from `button.tsx`: **`text-[0.8rem]` = 12.8px** (small-button label).
+### 3.2 Secondary — `.btn-ghost` — RATIFIED (`globals.css:500-502`)
 
-### 2.3 Font weights in use
+44px, `rounded-[4px]`, hairline `border`, `bg-background`, `text-sm font-medium
+text-foreground`, `hover:bg-muted`. The "no" or "later" beside a primary; a self-contained
+low-emphasis action ("Change number", "Cancel", "Not now"). Reads as a step quieter than
+primary by weight and size, never by colour.
 
-| Token | Weight |
-|---|---|
-| `font-medium` | 500 |
-| `font-semibold` | 600 |
-| `font-bold` | 700 |
+### 3.3 Destructive — `.btn-danger` — RATIFIED (`globals.css:504-506`; Phase 2 ruling 2)
 
-Regular (400) is the implicit default and is heavily used.
+44px, `rounded-[4px]`, `bg-destructive`, `text-sm font-medium text-white`. **The only button
+that may be red.** `InviteLinksSection.tsx:501` (a `.btn-primary` repainted
+`bg-[var(--destructive)]`) is a `.btn-danger` wearing the wrong class — codemod. Always paired
+with an inline confirm (`.btn-danger` + `.btn-ghost`), never `window.confirm()`
+(`design-sweep-NEXT-STEPS` item 5).
 
----
+### 3.4 Icon button — `.btn-icon` — RATIFIED recipe (`globals.css:508-510`); adoption RATIFIED (Phase 4)
 
-## 3. Spacing
+`size-11` (44×44), `rounded-[4px]`, `text-foreground`, `hover:bg-muted`. One consumer on
+`main`; ~30 icon buttons hand-roll `inline-flex size-11 items-center justify-center
+rounded-full …` (`AnswerFeedbackSheet.tsx:201,210,428`, sheet close buttons, "More actions").
 
-Tailwind 4px base scale. These are the increments actually referenced in components — Figma spacing variables only need to cover this range.
+**RATIFIED (Phase 4):** every icon-only button uses `.btn-icon`. A **circular** icon button is allowed
+in exactly two places — a sheet/modal close control and the FAB — via an added `rounded-full`
+(the one sanctioned override of the family, because the circle is the affordance there).
+Icon-only buttons **must** carry `aria-label`. The glyph is lucide at `size-5` (20px).
 
-| Token | rem | px |
-|---|---|---|
-| `0` | 0 | 0 |
-| `0.5` | 0.125rem | 2 |
-| `1` | 0.25rem | 4 |
-| `1.5` | 0.375rem | 6 |
-| `2` | 0.5rem | 8 |
-| `2.5` | 0.625rem | 10 |
-| `3` | 0.75rem | 12 |
-| `4` | 1rem | 16 |
-| `5` | 1.25rem | 20 |
-| `6` | 1.5rem | 24 |
-| `7` | 1.75rem | 28 |
-| `8` | 2rem | 32 |
-| `12` | 3rem | 48 |
-| `14` | 3.5rem | 56 |
-| `16` | 4rem | 64 |
-| `20` | 5rem | 80 |
-| `24` | 6rem | 96 |
-| `28` | 7rem | 112 |
+Grep (hand-rolled icon button): `rg -n '<button\b' -A5 src --glob '*.tsx' | rg 'size-(9|10|11|12) [^"]*rounded-full' | rg -v 'btn-icon'`
 
-### 3.1 Common element heights
+### 3.5 Tab — RATIFIED (Phase 4, 2026-09-11)
 
-| Token | px | Use |
-|---|---|---|
-| `h-6` | 24 | Button size `xs`, `icon-xs` |
-| `h-7` | 28 | Button size `sm`, `icon-sm` |
-| `h-8` | 32 | Button size `default`, `icon` |
-| `h-9` | 36 | Button size `lg`, `icon-lg` |
-| `h-10` (`min-h-10`) | 40 | `.btn-primary`, `.btn-ghost` recipes |
-| `h-11` | 44 | Touch-target alt height |
-| `h-12` | 48 | Large surfaces |
+Live: `FeedList.tsx:717` (`role="tab"`, `aria-selected`, `px-4 py-2.5 text-sm font-medium`),
+`Nav.tsx` bottom tabs (active = `bg-foreground`). Ratified (Phase 4) recipe: `min-h-11 px-4 text-sm
+font-medium`, `role="tab"` + `aria-selected` + roving `tabIndex` mandatory, selected state
+carried by **ink fill or a 2px underline in `--foreground`**, never by hue alone. No radius
+on inline tab strips; bottom-nav tabs keep their own chrome (`Nav.tsx` is a named surface).
 
-### 3.2 Breakpoints
+### 3.6 List-row button — RATIFIED (Phase 4, 2026-09-11)
 
-| Token | Min width |
-|---|---|
-| `sm:` | 640px |
-| `md:` | 768px (the most common breakpoint in this codebase) |
-| `lg:` | 1024px |
-| `xl:` | 1280px |
-| `2xl:` | 1536px |
+A whole row that is tappable (`daily/summary/page.tsx:1002`, `NotForMeSheet.tsx:157`,
+`HiddenQuestions.tsx:69`, 18 sites). Ratified (Phase 4) recipe: `flex w-full min-h-11 items-center
+gap-3 px-3 text-left text-sm rounded-[var(--radius-card)] hover:bg-muted transition`. Rows
+inside a `divide-y` list take **no radius and no border of their own** (the list rule
+separates them, §6); rows that stand alone take the card radius. Never `rounded-xl/2xl`.
 
-Mobile-first: styles without a prefix apply at all sizes; `md:*` upgrades the layout on tablet/desktop.
+### 3.7 Inline text action — RATIFIED (`STYLE-GUIDE-TYPE` §3, "one recipe"; `FeedActionLink.tsx`)
 
----
+`inline-flex min-h-11 items-center text-[color:var(--brand-link)] underline underline-offset-4`,
+size `lg` = `text-sm font-medium`, size `sm` = `text-quiet font-medium tracking-[0.04em]`.
+Canonical implementation `FeedActionLink`; satellites match it by hand. Sans, never serif
+(exception: a person's name as subject, `STYLE-GUIDE-TYPE` §5). It is a link register, not a
+heading — never the old 18px serif. Use for "Answer →", "Try again →", "View N more", "See
+today's recap". 49 sites on `main`.
 
-## 4. Radius
+### 3.8 FAB — RATIFIED as a type (Phase 2 ruling 3); spec RATIFIED (Phase 4, amended shadow)
 
-Defined in `globals.css` `@theme inline` block as `calc()` multiples of `--radius` (`0.625rem` / 10px).
+`Nav.tsx:225`: `fixed right-5 bottom-24 size-14 rounded-full bg-primary
+text-primary-foreground grid place-items-center`. **One FAB in the app** (the composer).
+Its shadow moves from `shadow-lg` to `var(--shadow-card-strong)` (§2.2, Phase 4 amendment);
+its z-index is `--z-nav` (it is chrome). Never a second FAB, never a FAB inside a sheet.
 
-| Token | Formula | rem | px |
-|---|---|---|---|
-| `--radius-sm` | `--radius × 0.6` | 0.375rem | 6 |
-| `--radius-md` | `--radius × 0.8` | 0.5rem | 8 |
-| `--radius-lg` | `--radius × 1.0` | 0.625rem | 10 |
-| `--radius-xl` | `--radius × 1.4` | 0.875rem | 14 |
-| `--radius-2xl` | `--radius × 1.8` | 1.125rem | 18 |
-| `--radius-3xl` | `--radius × 2.2` | 1.375rem | 22 |
-| `--radius-4xl` | `--radius × 2.6` | 1.625rem | 26 |
-| `rounded-full` | — | — | 9999 |
+### 3.9 Invisible hit target — RATIFIED (Phase 4, 2026-09-11)
 
----
+The scrim-tap-to-close button (`CreateChooser.tsx:64`, `questions/page.tsx:599`,
+`daily/summary/page.tsx:984`, 14 sites): `<button type="button" className="absolute inset-0
+cursor-default" aria-label="Close …" onClick={onClose} />`. Rules: always `type="button"`,
+always an `aria-label` naming what it closes, never carries a visible child, never the only way
+to close (a visible close control must exist). It is the one button exempt from the 44px
+floor because it *is* the whole backdrop.
 
-## 5. Shadows & Effects
+### 3.10 Choosing — the decision rule
 
-### 5.1 Shadows
+> Is it the one thing this screen wants me to do? → **primary.** Is it the quiet alternative
+> next to that? → **ghost.** Does it delete or revoke? → **danger.** Is it a glyph with no
+> words? → **icon.** Does it switch what I'm looking at without leaving? → **tab.** Is the whole
+> row the button? → **list-row.** Is it a sentence-level "do this →"? → **inline text.** Is it
+> the composer, floating over everything? → **FAB.** Is it the backdrop? → **invisible.**
 
-| Token | Value | Use |
-|---|---|---|
-| `--shadow-paper-rest` | `0 1px 2px rgb(0 0 0 / 0.05)` | Resting "paper" lift on cream surfaces |
-| `shadow-sm` (Tailwind) | `0 1px 2px 0 rgb(0 0 0 / 0.05)` | `.card` recipe |
-| `shadow-lg` | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` | Floating elements |
-| `shadow-xl` | `0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)` | Modals, popovers |
-| `shadow-2xl` | `0 25px 50px -12px rgb(0 0 0 / 0.25)` | Heavy elevation |
-
-### 5.2 Focus / interaction conventions
-
-| Pattern | Class | Effect |
-|---|---|---|
-| Focus ring | `focus-visible:ring-3 focus-visible:ring-ring/50` | 3px ring at 50% `--ring` opacity |
-| Invalid input | `aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20` | Destructive border + 20% ring |
-| Press-down | `active:translate-y-px` | 1px downward shift on click |
-| Hover dim | `hover:opacity-90` | 90% opacity on primary buttons |
-| Disabled | `disabled:pointer-events-none disabled:opacity-50` (buttons) / `opacity-45` (custom recipes) | Greyed + non-interactive |
-
-### 5.3 Transitions
-
-Default `transition-all` / `transition-colors` / `transition-transform`, using Tailwind's default duration (150ms) for most cases.
+Anything that fits none of these is a new type and needs a decision before it ships.
 
 ---
 
-## 6. Component Patterns
+## 4. Chips and badges
 
-### 6.1 Button — variants
+### 4.1 Chip — RATIFIED (Phase 2 ruling 4; `src/components/ui/Chip.tsx`; commit `9b9820b0`)
 
-From `src/components/ui/button.tsx`. Base classes include: `rounded-lg`, `text-sm`, `font-medium`, `border border-transparent`, `bg-clip-padding`, `transition-all`.
+**`<Chip>` is the one chip/tag primitive, and `md` is the chip.** `md` = `px-2.5 py-1 text-xs
+font-medium leading-none rounded-full`; `neutral` (`bg-muted`) or `outline`; `uppercase`
+adds the System-voice signature (`tracking-[0.08em]`). A label is required — a chip never
+signals by colour alone. Surface *colour* stays a caller concern (audit CH-2, out of scope
+here); callers pass hue via `className`/`style` **in addition to** the label.
 
-| Variant | Fill | Text | Hover | Notes |
-|---|---|---|---|---|
-| `default` | `bg-primary` | `text-primary-foreground` | `bg-primary/80` (when rendered as `<a>`) | The standard CTA |
-| `outline` | `bg-background` + `border-border` | inherit | `bg-muted` + `text-foreground` | Dark mode: `bg-input/30` → `bg-input/50` |
-| `secondary` | `bg-secondary` | `text-secondary-foreground` | `bg-secondary/80` | |
-| `ghost` | transparent | inherit | `bg-muted` + `text-foreground` | Dark mode hover: `bg-muted/50` |
-| `destructive` | `bg-destructive/10` | `text-destructive` | `bg-destructive/20` | Destructive ring on focus |
-| `link` | transparent | `text-primary` | `underline` (offset-4) | |
+- **RATIFIED (Phase 4):** retire Chip `sm` (`text-[10px]`). Its only real job was the difficulty label
+  (`MyQuestionCard.tsx:65`), which is `md` + `uppercase`; the count-badge job moves to §4.2.
+- **RATIFIED (Phase 4):** callers may **not re-pad or re-size** a Chip. `PeopleYouInvited.tsx:299`
+  (`className="px-3"`) is drift. Colour overrides remain allowed until the palette pass.
 
-### 6.2 Button — sizes
+Grep (chip geometry override): `rg -n '<Chip\b[^>]*className="[^"]*\b(p[xy]-|text-(xs|sm|\[)|rounded-)' src --glob '*.tsx'`
+Grep (hand-rolled chip): `rg -n 'rounded-full[^"]*\b(px-2|px-2\.5|px-3)\b[^"]*\b(text-xs|text-\[10px\]|text-sm)' src --glob '*.tsx' | rg -v 'Chip|<button|<input'`
 
-| Size | Height | Padding-X | Text | Icon size | Radius |
-|---|---|---|---|---|---|
-| `xs` | h-6 (24) | px-2 (8) | `text-xs` (12) | size-3 (12) | `min(--radius-md, 10px)` |
-| `sm` | h-7 (28) | px-2.5 (10) | `text-[0.8rem]` (12.8) | size-3.5 (14) | `min(--radius-md, 12px)` |
-| `default` | h-8 (32) | px-2.5 (10) | `text-sm` (14) | size-4 (16) | `rounded-lg` (10) |
-| `lg` | h-9 (36) | px-2.5 (10) | `text-sm` (14) | size-4 (16) | `rounded-lg` (10) |
-| `icon` | size-8 (32×32) | — | — | size-4 (16) | `rounded-lg` (10) |
-| `icon-xs` | size-6 (24×24) | — | — | size-3 (12) | `min(--radius-md, 10px)` |
-| `icon-sm` | size-7 (28×28) | — | — | size-4 (16) | `min(--radius-md, 12px)` |
-| `icon-lg` | size-9 (36×36) | — | — | size-4 (16) | `rounded-lg` (10) |
+### 4.2 Badge — RATIFIED (Phase 4, 2026-09-11) (Phase 2 ruling 4 asked for a suggestion)
 
-Buttons inside `[data-slot=button-group]` revert to `rounded-lg` regardless of size (so groups align cleanly).
+A **count badge** (the unread number on the bell, `Nav.tsx:201,300`; the count on a tab,
+`FeedList.tsx:733`) is a separate primitive, not a Chip: it carries a number, not a label,
+and sits *on* another control. Ratified (Phase 4) `<Badge>` in `src/components/ui/`:
 
-### 6.3 Card recipe
+- Geometry: `min-w-[18px] h-[18px] px-1.5 rounded-full grid place-items-center`.
+- Type: **10px**, `font-semibold`, `tabular-nums`, `leading-none`. This is the single
+  sanctioned use of 10px; it is a primitive-internal size, not a new step on the type scale
+  (`STYLE-GUIDE-TYPE` §3 stays as written: 9/10/11/15 remain arbitrary elsewhere).
+- Content: a number or a dot (`size-2`, no text) for "unread, uncounted". Never words.
+- Colour: out of scope (the bell uses `--destructive`, the tab uses `--primary` — audit B-2
+  flags the latter; resolved in the palette pass, not here).
+- Position: `absolute top-1 right-1` on its host, or inline after a label with `gap-2`.
 
-```css
-.card {
-  @apply rounded-lg border bg-card text-card-foreground shadow-sm;
-}
+---
+
+### 4.3 Selectable chip (filter / toggle pill) — PROPOSED (surfaced by `check:design` R4, 2026-09-11; not yet ratified)
+
+Roughly a dozen pills are **buttons**, not labels: interest pickers (`OnboardingFlow.tsx:171-211`,
+`AddTopicField.tsx:58`, `QuestionForm.tsx:1057`), the daily-summary filter row
+(`daily/summary/page.tsx:903-927`, `min-h-9`), knowledge-map filters
+(`KnowledgePeaksView.tsx:461,1034,1062`, `KnowledgeNodeCard.tsx:267`), `InviteCategoryChips`.
+They share `rounded-full border px-3 py-1(.5) text-sm|text-xs` and hand-roll a selected state.
+Neither `Chip` (a `span`) nor any button type in §3 covers them. Proposed: a `selectable`
+variant on `Chip` rendered as a `<button type="button" aria-pressed>` — `md` geometry,
+`min-h-9` visual with a 44px hit area via padding, selected state carried by ink fill
+(`bg-foreground text-background`) **and** `aria-pressed`, never by hue alone. Until ratified,
+the R4 count includes them; new filter pills should copy `daily/summary/page.tsx:910`.
+
+## 5. Cards and containers
+
+### 5.1 The card recipe — RATIFIED (Phase 2 ruling 1; `globals.css:484-486`; `FeedCardShell.tsx`)
+
+```
+rounded-[var(--radius-card)] border bg-card text-card-foreground shadow-[var(--shadow-card)]
 ```
 
-In Figma terms:
-- Radius: 10px (`--radius-lg`)
-- Stroke: 1px `--border`
-- Fill: `--card`
-- Text: `--card-foreground`
-- Shadow: `shadow-sm` (`0 1px 2px 0 rgb(0 0 0 / 0.05)`)
+That is `.card`. `FeedCardShell` is the same recipe with a configurable 2px category accent
+bar and an `elevated` variant on `--shadow-card-strong` over `--feed-card-elevated`. Section
+cards on friends/profile/settings were migrated onto it by commit `5b873477`. Border colour is
+`--brand-border` (hairline) resting, `--brand-rule` for dividers.
 
-### 6.4 Standalone button recipes (used outside the `<Button>` component)
+- **Chromes that survive:** exactly one. The "four coexisting chromes" of the June audit
+  (feed 4px / `.card` 10px / section 16px / 24px) are collapsed; `D-CONSISTENCY-AUDIT-DISPOSITION-01`
+  items #2/#4 ("card unification is NOT-APPLICABLE, deferred") are **superseded for
+  geometry** by ruling 1. Card *tiers* (which cards are louder, and by what colour) remain
+  deferred to the palette pass.
+- **Section cards** are cards. A settings group, a friends block, an invite panel all take
+  the recipe. The old `rounded-2xl + shadow-sm` section chrome is gone.
+- **A sheet is not a card** (§1.3). **A full-bleed editorial band is not a card**
+  (`--editorial-*` washes, `--interlude-*` grounds, ceremony rooms) — no border, no radius,
+  no shadow.
 
-```css
-.btn-primary {
-  /* inline-flex, min-h-10 (40px), rounded-md (8px), bg-primary,
-     px-4 py-2, text-sm, font-medium, text-primary-foreground,
-     transition, hover:opacity-90, disabled:opacity-45 */
-}
+### 5.2 Category accent bar — canon-watch, carried from the June audit §2
 
-.btn-ghost {
-  /* inline-flex, min-h-10 (40px), rounded-md (8px), border,
-     bg-background, px-4 py-2, text-sm, font-medium,
-     text-foreground, transition, hover:bg-muted,
-     disabled:opacity-45 */
-}
-```
+`FeedCardShell.tsx:70-78` renders a 2px hue bar whose only variable is category colour. Where
+no category text accompanies it, that is a colour-alone signal. Out of scope here (colour), but
+any new card that shows the bar must also show the category as text.
 
----
+### 5.3 Exemptions — RATIFIED (disposition doc §"Canon guardrails"; NEXT-STEPS items 1–2)
 
-## 7. Iconography
-
-### 7.1 Library
-
-**lucide-react** (set in `components.json` → `"iconLibrary": "lucide"`). All standard UI icons come from lucide.
-
-Common lucide icons in use, grouped:
-- **Navigation:** `Home`, `Menu`, `X`, `User`, `Brain`, `Rss`, `Pencil`
-- **Actions:** `Send`, `Bookmark`, `Search`, `Settings`, `Plus`, `Edit`, `Trash`
-- **Status:** `CheckCircle2`, `Check`, `ThumbsUp`, `ThumbsDown`, `Heart`, `Flag`
-- **UI:** `ChevronLeft`, `ChevronRight`, `MoreHorizontal`, `Lock`, `Loader`, `MessageCircleQuestion`, `Clock`
-- **Gameplay:** `Gamepad2`, `Sparkles`
-
-Within buttons icons default to **16×16** (`size-4`), 12×12 (`size-3`) in `xs`, 14×14 (`size-3.5`) in `sm`.
-
-### 7.2 Custom domain icons
-
-Hand-drawn SVGs in `src/components/icons/domain-icons.tsx`. All share the same stroke convention:
-
-- `viewBox="0 0 24 24"`
-- `fill: none`
-- `stroke-width: 1.8`
-- `stroke-linecap: round`
-- `stroke-linejoin: round`
-- Stroke color is parameterized (defaults to `currentColor` via the `color` prop)
-
-| Export | Trivia category |
-|---|---|
-| `LiteraturePoetryIcon` | Literature → Poetry |
-| `LiteratureNovelIcon` | Literature → Novel |
-| `ClassicalMusicIcon` | Classical music |
-| `OperaIcon` | Opera |
-| `HistoryCampaignsIcon` | History → Campaigns |
-| `HistoryGeneralIcon` | History → General |
-| `PhilosophyIcon` | Philosophy |
-| `ScienceIcon` | Science |
-| `LanguageIcon` | Language |
-| `PopCultureIcon` | Pop culture |
-| `FilmTvIcon` | Film & TV |
-| `SportIcon` | Sport |
-| `DomainInitialIcon` | Generic — letter-in-circle fallback when a domain has no custom glyph |
-
-For Figma: rebuild each as a 24×24 component with a 1.8px round stroke, no fill, and a single color override. Recreate `DomainInitialIcon` as a variant with a configurable letter property.
+Bespoke primitives that are *not* cards and are not to be swept: `LoadingScreen` (triangle
+loader), `OverlapMap` (letterpress, radius 0 by agreed scope), `ShareCard` and
+`SharePortraitCard` (share surfaces; the latter is a raster), ceremony rooms, `TerritorySetup`.
 
 ---
 
-## 8. Brand Register / Voice
+## 6. Lists and rows
 
-Cues sourced from comments and structure in `globals.css` and `layout.tsx`.
+### 6.1 The list rule — RATIFIED (Phase 4, 2026-09-11)
 
-**Surface:** "Ink on Cream" editorial register. The default monochrome shadcn surfaces (white/gray) coexist with a warmer brand palette built around `--ink` (warm near-black) on `--cream` / `--cream-warm` / `--cream-accent` surfaces, separated by `--border-warm` / `--border-light` strokes. Reach for the cream palette on long-form / editorial surfaces; use the neutral shadcn semantics for interactive chrome.
+A list of like items is a `divide-y divide-border` (or `border-[var(--brand-rule)]`) stack of
+rows with **no per-row chrome** — the rule separates them. Rows are `py-3`/`py-4`, `gap-3`,
+and if tappable use §3.6. This is what the authored tab of `/questions` already does
+(`MyQuestionCard.tsx:40` inside `questions/page.tsx:451-464`).
 
-**Three typographic registers:**
-1. **Body (Montserrat)** — every UI label, paragraph, button. The workhorse.
-2. **Handwriting (Caveat)** — applied sparingly: Personal Record, marginal annotations, signature-style microcopy. Suggests a hand on a page.
-3. **Editorial italic (Playfair Display)** — italic-only, reserved for category names on Portrait and PortraitCircles labels. Signals "editorial / archival."
+### 6.2 The `/questions` two-layout problem (Q-1) — RATIFIED (Phase 4, 2026-09-11)
 
-**Color space:** OKLCh throughout. Tokens declare lightness + chroma + hue separately, which keeps hue consistent as lightness shifts (important for the warm cream tints). When porting to Figma, prefer entering OKLCh values directly if your Figma version supports it; otherwise use the hex approximations in §1.
-
-**Tone:** quietly editorial, not flashy. Press-state translates by a single pixel (`active:translate-y-px`); hover dims by 10%; the standard shadow is a 5%-alpha 1px lift. Restraint over animation.
+`AnsweredQuestionsList.tsx:68,83` renders a 5-column `sm:grid` table; the authored tab renders
+`divide-y` rows. Ratified (Phase 4): **the answered tab adopts the row layout** (one row primitive, both
+tabs), and the grid header goes. Grid tables are admin-only chrome (`/admin/*`), never a
+player surface. Correctness stays paired with strikethrough/italic (audit Q-2, already
+compliant).
 
 ---
 
-## 9. Quick reference — files to open while building in Figma
+## 7. Loading and skeletons
 
-| What | File |
-|---|---|
-| All color, radius, shadow tokens | `src/app/globals.css` |
-| Font loading + family choices | `src/app/layout.tsx` |
-| Button variants + sizes | `src/components/ui/button.tsx` |
-| Custom domain SVG icons | `src/components/icons/domain-icons.tsx` |
-| shadcn / Radix base config | `components.json` |
-| Component examples (for screenshots) | `src/components/` (62 files) |
+### 7.1 Skeleton — RATIFIED (Phase 4, 2026-09-11; `src/components/ui/Skeleton.tsx`; commit `edf6dda6`)
+
+`<Skeleton className="h-… w-…" />` is the one loading placeholder: `.skeleton` shimmer
+(`globals.css:627-638`, muted base + light sweep from existing surface tokens, no colour
+meaning, honours `prefers-reduced-motion`), default radius `--radius-card` so a block matches
+the card it stands in for, `aria-hidden` with an sr-only status from the caller. Adopted on
+for-you, from-friends, activities, home, knowledge. **`animate-pulse` outside `Skeleton` is
+drift**: `/questions` (`questions/page.tsx:128-132,566`), `CreationSurface.tsx:233`, and the
+admin loaders are codemod work.
+
+Grep: `rg -n 'animate-pulse' src --glob '*.tsx' | rg -v 'ui/Skeleton|KnowledgeBubbleMap'`
+
+### 7.2 Exemptions
+
+`LoadingScreen` (the branded full-screen triangle loader and its `LoadingMoment` card) is a
+bespoke primitive, not a skeleton; inline `Loader2 animate-spin` for in-button waits is fine.
+Toasts sit **below** takeovers on the z-scale (`--z-toast` 70 < `--z-takeover` 80) — a toast
+fired while `LoadingScreen` is `fullScreen` is painted behind it; gate the toast on the loading
+state (CLAUDE.md, `check:zindex`).
+
+---
+
+## 8. Type — RATIFIED (`_docs/STYLE-GUIDE-TYPE.md`; `DECISIONS.md` Playfair entry; `globals.css:9-13,57,366,373`)
+
+Not re-derived here. The rule set is the four voices on two faces:
+
+| Voice | Face | Token | Treatment |
+|---|---|---|---|
+| Editorial | Cormorant Garamond | `--font-serif` | the content; sentence case; italic only as inline emphasis |
+| System | Josefin Sans | `--font-mono` (resolves to the sans on purpose) | UPPERCASE + tracking, small, quiet; labels, stamps, counts |
+| Interface | Josefin Sans | `--font-sans` | sentence case; everything with a tap target |
+| Brand | Montserrat | `--font-wordmark` | the "Joshing" wordmark only |
+
+Sizes: Tailwind scale plus **`text-quiet` (13px)**, the ratified secondary Interface size
+(114 sites, zero `text-[13px]` remain). 9/10/11/15px stay arbitrary until a surface earns
+them a name (§4.2 proposes the one 10px exception, inside `Badge`). The type-size ratchet
+(`check:typesize`) counts raw `text-[Npx]`; the font ratchet (`check:fonts`) holds off-system
+font-family declarations at zero. Two stale sentences still say "Montserrat" for the System
+voice (`STYLE-GUIDE-TYPE.md:51`, `globals.css:361`); the header of the same guide is right.
+
+---
+
+## 9. Touch targets and focus
+
+### 9.1 The 44px floor — RATIFIED (Phase 4, 2026-09-11) as a hard rule (grounded in `design-sweep-NEXT-STEPS` item 5, every `.btn-*` recipe, `FeedActionLink`)
+
+Every tappable element has a **minimum 44×44px hit area**: `min-h-11` on buttons, rows and
+inline actions; `size-11` on icon buttons; `min-h-11` on inputs. Visual size may be smaller
+(a 20px glyph, a 13px link) inside a 44px box. The one exemption is §3.9. On `main`, 52 of the
+369 non-`.btn-*` buttons declare a ≥44px dimension; the rest are the codemod's largest bucket.
+
+### 9.2 The focus ring — RATIFIED (Phase 4, 2026-09-11) as universal (recipe RATIFIED for `.btn-*`, `globals.css:497-509`)
+
+`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+focus-visible:ring-offset-2` (`--ring` = navy) on **every** interactive element, not just the
+recipes. The old `ring-3 ring-ring/50` idiom has zero uses and is withdrawn. Never remove the
+ring without replacing it with an equally visible focus state; `LoginPanel.tsx:29` ships
+without one and gains it when it folds into `.btn-primary` (§12).
+
+Grep (button with no focus state): `rg -n '<button\b' -A6 src --glob '*.tsx' | rg -v 'focus-visible|btn-' | rg 'className'` — heuristic; 318 hits on `main`.
+
+---
+
+## 10. Colour — out of scope (Fork D1)
+
+This document sets **no colour rule**. Colour authority is `_docs/STYLE-GUIDE-COLOR.md` (the
+five jobs, grading reserved, gold once per view, category = top-level domain) and the token
+block of `globals.css`. Two facts the reader needs: the de-collided palette **is** the live
+default (`DECISIONS.md`, built 2026-06-13; `--game-wrong-strong #c1121f`, `--cat-literature
+#7d2c3f`), and the remaining colour fix-list (one cream, one category scale for all five
+systems, one gold, the triangle decision) is still open. Where a structural rule above touches a
+fill (chip surface, skeleton fill, badge colour, accent bar), it says so and defers.
+
+---
+
+## 11. Exemptions register (consolidated)
+
+| Surface | Exempt from | Source |
+|---|---|---|
+| `LoadingScreen` | cards, skeletons, radius | disposition #2; NEXT-STEPS |
+| `OverlapMap`, `KnowledgeOverviewClient` | soft elevation (use stamp) | disposition register table |
+| `ShareCard` | soft elevation (stamp; §2.3 proposes token) | NEXT-STEPS item 2 |
+| `SharePortraitCard` | all tokens (html2canvas raster) | STYLE-GUIDE-TYPE §6; NEXT-STEPS |
+| `GameplayChat` glow, ceremony gem | elevation registers | disposition |
+| `TerritorySetupClient`, `PortraitCircles` "raised" | elevation registers, pending `--shadow-raised` | disposition §Deferred |
+| Ceremony rooms, `--interlude-*`, `--editorial-*` bands | card recipe | §5.1 |
+| `Nav.tsx` bottom tabs | §3.5 tab recipe | §3.5 |
+| `/admin/*` | list rule (grid tables allowed), token lint scope | §6.2 |
+| `data-flat` / `data-shadow` CSS, `PaletteToggle` | everything (testing chrome, unmounted) | `globals.css:720-762` |
+| Scrim-tap button | 44px floor | §3.9 |
+
+---
+
+## 12. Pending edits this job may not make (for the next build)
+
+`globals.css` and components are untouched by `B-FABLE-DESIGN-CANON-01`. The rulings imply:
+
+| Edit | Where | Ruling |
+|---|---|---|
+| `.btn-primary` `min-h-12` → `min-h-11`; header comment "48px-tall" → "44px"; "brand-link fill" → "navy fill" | `globals.css:490-497` | 3.1, B-3 |
+| Strip the 8 `min-h-11` overrides once the recipe changes | `invite/[token]`, `sms-consent`, `InviteLinksSection`, `Accept*Button`, dev page | 3.1 |
+| `InviteLinksSection.tsx:501` → `.btn-danger` | component | 3.3 |
+| `LoginPanel.tsx:29` `SUBMIT_CLASS` → `btn-primary w-full` (identical look at 44px; gains the focus ring) | component | ruling 3 |
+| `OnboardingFlow.tsx:881` pill → `btn-primary`; `:880` input → `--radius-xs` | component | 1.4 |
+| Stale comment "content cards use rounded-md" | `globals.css:185-186` | 1.2 |
+| Duplicate `--radius-xs…lg` literal block | `globals.css:374-377` | 1.1 |
+| Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
+| Four leftover `rounded-2xl` rows/tiles → `--radius-card` | §1.2 list | 1.2 |
+| `FeedCardShell.tsx:16` `--radius-xs` → `--radius-card` (same value, canonical name) | component | 1.2 |
+| Chip: drop `sm`; add `Badge`; migrate Nav/FeedList badges and `MyQuestionCard` label | `ui/` | 4.1–4.2 |
+| `/questions` skeleton, `CreationSurface` → `<Skeleton>` | components | 7.1 |
+| Sheet shadows → `--shadow-overlay`; FAB → `--shadow-card-strong`; menus `rounded-3xl` → `2xl` | components | 1.3, 2.2, 3.8 |
+
+---
+
+## 13. Enforcement map (built in Phase 5, 2026-09-11)
+
+Two vehicles, both report-only for existing code and blocking for regressions:
+
+- **`eslint.config.mjs` → `DESIGN_LINT_RULES`** — `no-restricted-syntax` selectors at `warn`
+  over `src/**/*.tsx` (tests, `src/app/dev/`, `src/app/feed/debug/` excluded). They match
+  string-literal `className`s only; template strings and `cn()` calls are covered by the script.
+  `npm run lint` pins `--max-warnings` at the combined baseline of the colour lane and this lane;
+  the number only goes down.
+- **`scripts/audit-design-conformance.mjs`** (`npm run check:design`) — per-rule violation
+  counts with a recorded baseline per rule; `--check` (the npm script) fails if any rule rises
+  above its baseline, `--verbose` lists every offender. Lower a baseline after a cleanup; never
+  raise one.
+
+Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · radius 0 · z-index 0
+· type-size 213. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
+`[#hex]` in `className` under `src/components/**`, 12 grandfathered files at `warn`,
+`--max-warnings 16`. **Do not add to the grandfather list.**
+
+| Rule | Check | Vehicle |
+|---|---|---|
+| Rule | Script id · baseline (2026-09-11) | Lint selector |
+|---|---|---|
+| 1.2 card radius | R3 · 41 | — |
+| 1.4 no pill buttons/inputs | R8 · 34 | yes |
+| 2.1 no Tailwind shadow utilities | R1 · 35 | yes |
+| 3 no `.btn-*` overrides | R2 · 15 (11 are `min-h-11`, moot once §3.1's recipe edit lands) | yes |
+| 3.4 hand-rolled icon buttons | R6 · 23 | yes |
+| 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
+| 7.1 `animate-pulse` outside Skeleton | R7 · 11 | yes |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 321 / R9 · 333 (heuristic, count only) | — |
+
+Lint lane baseline: **98** `canon/restricted-syntax` warnings (29 shadow · 28 pill · 15
+btn-override · 11 icon · 11 animate-pulse · 4 Chip); `--max-warnings 103` = 5 pre-existing
+(4 colour-lane + 1 unused-var; the old ceiling of 16 had slack) + 98.
+
+---
+
+## 14. Carried inventory (verified 2026-09-11)
+
+### 14.1 Custom domain icons — `src/components/icons/domain-icons.tsx`
+
+All share `viewBox="0 0 24 24"`, `fill: none`, `stroke-width: 1.8`, round caps and joins,
+stroke parameterised via `color` (defaults `currentColor`). Exports on `main`:
+`ClassicalMusicIcon`, `FilmTvIcon`, `HistoryCampaignsIcon`, `HistoryGeneralIcon`,
+`LanguageIcon`, `LiteratureNovelIcon`, `LiteraturePoetryIcon`, `OperaIcon`, `PhilosophyIcon`,
+`PopCultureIcon`, `ScienceIcon`, `SportIcon`, and `DomainInitialIcon` (letter-in-circle
+fallback). UI icons are lucide (`components.json`), default `size-4` (16px) in text, `size-5`
+(20px) in icon buttons.
+
+### 14.2 Breakpoints
+
+Tailwind defaults, mobile-first: `sm` 640 · `md` 768 (the common one) · `lg` 1024 · `xl` 1280.
+
+### 14.3 Z-scale — RATIFIED (`globals.css:408-421`; CLAUDE.md)
+
+`--z-nav` 40 < `--z-sheet` 50 < `--z-modal` 60 < `--z-toast` 70 < `--z-takeover` 80. Raw
+`z-[N]` is held at zero by `check:zindex`.
+
+### 14.4 Dropped from the old inventory
+
+§1.5 chart scale and §1.6 sidebar tokens (shadcn leftovers, 0 consumers — §12 proposes
+removal); §1.1/§1.2 semantic-token hex tables (all repointed to brand tokens, read
+`globals.css:194-211`); §2.1 font table (superseded by §8); §6.1–6.2 `<Button>` matrix
+(component deleted); §6.3–6.4 card and button recipes (wrong on every value; see §3, §5).
+
+---
+
+*Read alongside: `_docs/DESIGN-CANON-CONFLICTS.md` (why each rule says what it says),
+`_docs/STYLE-GUIDE-TYPE.md`, `_docs/STYLE-GUIDE-COLOR.md`, `D-CONSISTENCY-AUDIT-DISPOSITION-01.md`,
+`D-DESIGN-DEBT-STRUCTURAL-AUDIT-01-FINDINGS.md` (stale on cards/chips/skeletons — the register
+says where).*
