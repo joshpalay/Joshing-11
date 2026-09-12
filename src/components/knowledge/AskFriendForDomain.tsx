@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 
-import { formatUsPhoneInput } from '@/lib/phone-e164'
+import { formatUsPhoneInput, looksLikeUsPhone } from '@/lib/phone-e164'
 
 type FriendOption = {
   id: string
@@ -44,13 +44,6 @@ export function normalizeInterestList(values: string[]) {
   }
 
   return result
-}
-
-function looksLikeUsPhone(phone: string) {
-  const digits = phone.replace(/\D/g, '')
-  return (
-    digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
-  )
 }
 
 export function buildDomainAskMessage(

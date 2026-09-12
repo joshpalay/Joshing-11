@@ -2,6 +2,7 @@
 // out of the component so the result-state branches can be unit-tested without
 // rendering (the hub lookup and the FriendsList empty-filter hand-off both
 // import from here, so the classification stays in one place).
+import { looksLikeUsPhone } from '@/lib/phone-e164'
 import type { RelationshipState } from '@/server/db/queries/friend-requests'
 
 // The friends-filter empty state hands off to the hub's "Add someone" lookup.
@@ -23,12 +24,6 @@ export type QueryClassification = 'empty' | 'handle' | 'phone' | 'name'
 // search endpoint will route it.
 const HANDLE_QUERY_PATTERN = /^@?[a-z][a-z0-9_]{2,19}$/i
 
-// Mirrors looksLikeUsMobileNumber in AddFriendInvite and the server-side
-// isUsPhoneNumber: 10 digits, or 11 digits starting with a US country code.
-function looksLikeUsPhone(value: string): boolean {
-  const digits = value.replace(/\D/g, '')
-  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
-}
 
 // Classify a typed lookup term. Handle is checked before phone to match the
 // server's branch order (a bare digit string can't satisfy the handle pattern's

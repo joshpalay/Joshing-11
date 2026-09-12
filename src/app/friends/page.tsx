@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock';
 import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
 import { InviteLinksSection } from '@/components/friends/InviteLinksSection';
+import { PersonalInviteFlow } from '@/components/friends/PersonalInviteFlow';
 import {
   MutualFriendSuggestionsSection,
   type MutualFriendSuggestionRow,
@@ -158,6 +159,14 @@ export default async function FriendsPage() {
           }))}
           initialRefreshDue={contactRefreshDue}
         />
+      </div>
+
+      {/* Text a specific person directly, distinct from the generic
+          shareable link below. Its own anchor (#personal-invite) so the
+          no-match state above, and any future "resend" action, can link or
+          hand off straight into it. */}
+      <div className="mb-5">
+        <PersonalInviteFlow />
       </div>
 
       {/* Suggested: passive scanning. Every row carries a provenance chip so a

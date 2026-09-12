@@ -69,6 +69,9 @@ vi.mock('@/components/friends/FindFriendsSearch', () => ({
 vi.mock('@/components/friends/InviteLinksSection', () => ({
   InviteLinksSection: () => <div data-stub="invite-links" />,
 }));
+vi.mock('@/components/friends/PersonalInviteFlow', () => ({
+  PersonalInviteFlow: () => <div data-stub="personal-invite" />,
+}));
 vi.mock('@/components/FriendsList', () => ({ default: () => <div data-stub="friends-list" /> }));
 // Captures the props the page computed (dedup + interests preview) as a JSON
 // blob in the DOM, so the test can assert on them without needing the real

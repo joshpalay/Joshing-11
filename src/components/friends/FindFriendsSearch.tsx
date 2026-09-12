@@ -4,9 +4,28 @@ import { useEffect, useRef, useState } from 'react'
 
 import { AddFriendButton } from '@/components/friends/AddFriendButton'
 import { createFriendSearchRequest } from '@/components/friends/search-request'
-import { ADD_SOMEONE_FOCUS_EVENT, resolveAddSomeoneOutcome } from '@/components/friends/add-someone'
+import {
+  ADD_SOMEONE_FOCUS_EVENT,
+  resolveAddSomeoneOutcome,
+  type QueryClassification,
+} from '@/components/friends/add-someone'
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual'
 import type { RelationshipResult } from '@/server/db/queries/friend-requests'
+
+// Hands a failed lookup off to the personal-invite flow (#personal-invite),
+// prefilling whichever field the typed query actually looks like. A "handle"
+// classification isn't a phone or a free-text name, so it's left blank rather
+// than guessed into the wrong field.
+function sendPersonalInviteHandoff(query: string, classification: QueryClassification) {
+  const trimmed = query.trim()
+  const detail =
+    classification === 'phone'
+      ? { phone: trimmed }
+      : classification === 'name'
+        ? { inviteeDisplayName: trimmed }
+        : {}
+  window.dispatchEvent(new CustomEvent('friend-invitations:create-new', { detail }))
+}
 
 type Match = {
   id: string
@@ -168,7 +187,15 @@ export function FindFriendsSearch() {
           </article>
         ) : outcome.kind === 'no_match' ? (
           <p className="text-muted-foreground text-sm">
-            No matching player found. Check the full username or phone number, or{' '}
+            No matching player found. Check the full username or phone number,{' '}
+            <a
+              href="#personal-invite"
+              className="underline underline-offset-2"
+              onClick={() => sendPersonalInviteHandoff(query, outcome.classification)}
+            >
+              send them a personal invite
+            </a>
+            , or{' '}
             <a href="#invite-links" className="underline underline-offset-2">
               share an invite link
             </a>
