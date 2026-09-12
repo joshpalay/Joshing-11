@@ -985,7 +985,7 @@ function KnowledgePageContent({
       )}
 
       {hasAnything && (
-        <section className="bg-[var(--brand-card)] border border-[var(--border-warm)] p-4" aria-label="Knowledge progression">
+        <section className="border-t border-[var(--border-warm)] px-1 pt-4" aria-label="Knowledge progression">
           <div className="mb-2">
             <p className="m-0 text-quiet [font-variant:small-caps] text-[var(--ink)] font-[var(--font-neutral)] tracking-[0.06em]">{isManage ? 'YOUR TOPICS' : 'YOUR KNOWLEDGE'}</p>
             <p className="mt-0.5 text-[10px] [font-variant:small-caps] text-[var(--text-muted-warm)] tracking-[0.06em] font-[var(--font-neutral)]">
