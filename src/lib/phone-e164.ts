@@ -32,6 +32,16 @@ export function formatUsPhoneInput(raw: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
+// Cheap client-side shape check ("does this look like a US mobile number"),
+// used to gate a submit or filter a contact's numbers before hitting the
+// server's authoritative isUsPhoneNumber. Not validation — just the same
+// digit-count heuristic every caller of this field independently re-derived
+// (add-someone.ts, AskFriendForDomain, PersonalInviteFlow) before it moved here.
+export function looksLikeUsPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '')
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
+}
+
 // Mask a US E.164 number for display as "•••-•••-1234" (only the last four
 // digits are shown). Used to surface an invite's target phone without leaking
 // the full number to the client. Falls back to a fully masked placeholder when
