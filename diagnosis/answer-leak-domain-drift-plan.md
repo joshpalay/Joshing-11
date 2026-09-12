@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-12
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628"
 ---
@@ -1174,3 +1174,47 @@ earlier entry exactly. Lint clean.
 2. The 7 Phase 1 disagreement items are effectively closed (only the `model`
    bug blocked a flag, and that shipped in #1623) — no outstanding action
    there beyond what's already landed.
+
+### 2026-09-12 (diagnosis-review) — no decision-resolving change; this session cannot read `GateDropStat` or Vercel env vars
+
+**Environment note, worth recording once:** this review ran from a scheduled
+cloud session with no `.env`/`.env.local` present at all (no `DATABASE_URL`,
+no `ANTHROPIC_API_KEY`) and no connected Supabase project via the MCP tool
+(`list_projects` returned empty). Unlike every session that wrote an entry
+above, this run cannot query `GateDropStat`, `ContentReport`, or any other
+production counter, and cannot see the Vercel-only flag values directly.
+Everything below is verified from git/GitHub only — flagging this so a
+"nothing changed" reading here isn't mistaken for a clean DB check.
+
+Re-verified what's checkable without DB/API access:
+- PRs #1611, #1613, #1618, #1619, #1623, #1624, #1628 all reconfirmed
+  `MERGED` to `main`. #1611 doesn't turn up by grepping `git log --oneline`
+  for "#1611" (its squash commit message doesn't literally contain the
+  number) — confirmed merged instead via the GitHub API directly:
+  `merged: true`, `merged_at: 2026-09-06T12:29:48Z`.
+- No commits since 2026-09-08 touch `self-answering.ts`'s
+  `GENERIC_HEAD_NOUNS`, `off-domain-second-opinion.ts`, or the Mechanism-2
+  avoid-list rendering (`getRecentFactKeys` / `previousQuestionTexts`) — the
+  Mechanism 2 code-fix decision (held pending `check:gate-flags` diagnostics,
+  per Josh's 2026-09-08 call) is exactly where it was left.
+- A new, unrelated dedup fix landed 2026-09-11 (`#1667`, "Fix repeated
+  questions (fact_key drift)") — it touches `src/server/pool/dedup.ts` and
+  threads `subjectEntity` into embedding dedup, not the domain-drift
+  avoid-list path. Noted only so it isn't mistaken for progress on
+  Mechanism 2; it is not.
+- The `claude/domain-drift-safety-net` branch (this doc's WIP items) is
+  confirmed fully merged as `#1623`; its remote ref still exists but is
+  entirely contained in `main` — nothing further to track there.
+
+**No new evidence exists to act on `PARTIAL_ANSWER_LEAK_ENABLED` /
+`DOMAIN_DRIFT_DROP_ENABLED` (already flipped on) or the generalized
+cross-domain audit.** Status stays `active`. The next thing that can move
+this doc needs `GateDropStat` access this session doesn't have.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop (or a few more clean, quality-healthy days) — needs a
+   session with DB access.
+2. The 7 Phase 1 disagreement items remain closed, no outstanding action.
+3. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.

@@ -2,8 +2,9 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-09
+last-reviewed: 2026-09-12
 owner: Josh
+related-pr: "#1646"
 ---
 
 # Diagnosis: question lifecycle quality and grading fairness
@@ -221,3 +222,46 @@ implementation. Added a read-only aggregate diagnostic and an offline grading
 comparison. Recorded the initial database baseline and the complete test-to-
 metric map above. No production data was changed and no live model comparison
 was run.
+
+### 2026-09-12 (diagnosis-review) — Phase 0/1 code merged as #1646; readings still unavailable this session
+
+**Environment note:** this session has no `.env`/`.env.local` (no
+`DATABASE_URL`, no `ANTHROPIC_API_KEY`) and no connected Supabase project via
+the MCP tool, so `npm run check:question-lifecycle` and
+`npm run check:gate-flags` could not be run, and no aggregate counter could
+be re-read. Everything below is from git/GitHub only.
+
+What git/GitHub confirm:
+- **PR #1646, "Improve question quality, grading fairness, and lifecycle
+  tracking," merged to `main` 2026-09-10T10:23:28Z** — this is the
+  implementation this doc was opened to track (its description matches this
+  file almost verbatim, including migration `0145_gate_drop_scope` and
+  `check:question-lifecycle`). Recorded in this file's `related-pr`
+  frontmatter now, since it wasn't captured when the doc was opened one day
+  before the PR merged.
+- This doc's own header names the working branch as
+  `codex/post-game-welcome-tour`; the PR that actually shipped this work has
+  head ref `codex/question-lifecycle-quality`. `post-game-welcome-tour` is a
+  different change (migration `0144`) — the header's branch name looks like
+  a copy-paste slip from adjacent work. Not correcting the header text
+  itself (not rewriting history above the Updates log), just flagging it
+  here so a future reader isn't sent to the wrong branch.
+- Migration `0145_gate_drop_scope.sql` is present and correctly journaled
+  (`drizzle/meta/_journal.json` idx 145, `when` value in sequence after
+  0144) — confirmed by reading the journal directly, not by trusting the PR
+  description.
+- No commits since `#1646` touch `verification-gating.ts`,
+  `check-question-lifecycle`, or the answer-normalizer paths named in this
+  doc's test map.
+
+**Phase 1's exit criteria (no new short builds, no sustained grading outage,
+`GateDropStat.scope` present and excluding maintenance traffic) cannot be
+checked from here** — that needs the live DB reading this session doesn't
+have. Status stays `active`; nothing here resolves an open decision.
+
+### Next steps
+1. Run `npm run check:question-lifecycle` and `npm run check:gate-flags` for
+   the Phase 1/2 readings once a session with `DATABASE_URL` access is
+   available.
+2. Everything else (Phase 2 comparison, Phase 3 verification-hold decision,
+   Phase 4 labeled set) unchanged.

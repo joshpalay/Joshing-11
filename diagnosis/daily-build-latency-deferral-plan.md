@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-12
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -941,3 +941,35 @@ correlate against.
    page-load logs per the 2026-09-08 entry above.
 2. Everything else already listed above (Phase 3 population reading,
    question 4 on the bonus's own cost) is unchanged.
+
+### 2026-09-12 (diagnosis-review) — no new Phase 3 data readable this session; later PRs confirmed NOT to touch the persist-race fix
+
+**Same environment note as the other diagnosis files reviewed today:** no
+`DATABASE_URL`/`ANTHROPIC_API_KEY` in this session and no connected Supabase
+project, so `npm run check:build-latency` could not be run and
+`DailyBuildMetric` / `outcome='lost_persist_race'` could not be queried.
+Phase 3 stays at the last known reading (n=3, median saving 1529ms, residual
+925–1627ms).
+
+Checked what git can confirm instead:
+- `git log -- src/server/daily/queue-orchestrator.ts src/server/db/queries/daily.ts`
+  shows three commits since the last review touching one of the two files:
+  `#1635` (friend-domain backfill diversity cap, `queue-orchestrator.ts`
+  only, +38/-2, unrelated to persist logic), `#1646` (the question-lifecycle
+  PR, `daily.ts` +6/-0), and `#1662` (the R3–R9 prompt batch, `daily.ts`
+  +183/-3 — the 3 deletions are the sub-angle-dedupe rewrite, nowhere near
+  the persist-race code). **None touch `persistDailyQueue`'s
+  `{ row, won }` contract or the orchestrator's bail-on-loss check** —
+  confirmed by re-reading both directly: the `PersistDailyQueueResult` type,
+  its three return sites, and the `if (!persistResult.won)` check are
+  byte-identical to what `#1620` shipped.
+- PRs `#1620` and `#1626` reconfirmed `MERGED` to `main`.
+
+**No decision-resolving change.** Status stays `active`. Open question 5
+stays fixed/closed; questions 3 and 4 stay open and untouched; the
+`lost_persist_race` watch and the Phase 3 population reading both need a
+session with DB access to advance.
+
+### Next steps (unchanged)
+1. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+2. Phase 3 population reading, question 4 (bonus cost) — unchanged.

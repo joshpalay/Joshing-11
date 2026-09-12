@@ -64,10 +64,10 @@ Revisit once diagnosis docs settle on `main` as their normal home.
 
 | File | Status | Opened | Last reviewed | Related PR |
 |---|---|---|---|---|
-| [answer-leak-domain-drift-plan.md](answer-leak-domain-drift-plan.md) | active | 2026-09-05 | 2026-09-08 | #1611, #1613, #1618, #1619, #1623, #1624, #1628 |
-| [daily-build-latency-deferral-plan.md](daily-build-latency-deferral-plan.md) | active | 2026-09-04 | 2026-09-08 | #1620, #1626 |
-| [question-lifecycle-quality-plan.md](question-lifecycle-quality-plan.md) | active | 2026-09-09 | 2026-09-09 | — |
-| [question-drift-r1-r2-tracking.md](question-drift-r1-r2-tracking.md) | active | 2026-09-11 | 2026-09-11 | — |
+| [answer-leak-domain-drift-plan.md](answer-leak-domain-drift-plan.md) | active | 2026-09-05 | 2026-09-12 | #1611, #1613, #1618, #1619, #1623, #1624, #1628 |
+| [daily-build-latency-deferral-plan.md](daily-build-latency-deferral-plan.md) | active | 2026-09-04 | 2026-09-12 | #1620, #1626 |
+| [question-lifecycle-quality-plan.md](question-lifecycle-quality-plan.md) | active | 2026-09-09 | 2026-09-12 | #1646 |
+| [question-drift-r1-r2-tracking.md](question-drift-r1-r2-tracking.md) | active | 2026-09-11 | 2026-09-12 | #1654, #1662, #1666 |
 
 Keep this table in sync by hand when you add/close a file, or let
 `/diagnosis-review` do it — it rewrites this table from each file's

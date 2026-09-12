@@ -2,8 +2,9 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 owner: Josh
+related-pr: "#1654, #1662, #1666"
 ---
 
 # Diagnosis: Question drift — impact of R1 (accessible fan-salience) and R2 (no self-defining setups)
@@ -384,3 +385,43 @@ need `ANTHROPIC_API_KEY` and an evals flag). Typecheck carries one pre-existing 
 branch's earlier uncommitted work — not from these changes. **Not yet
 committed or deployed; deploy timestamp still to be recorded.** Baselines in
 §3 are from the audit run the same day.
+
+### 2026-09-12 (diagnosis-review) — deploy+~17h; Phase 1 SQL still unrun (no DB access this session); code confirmed unchanged since deploy
+
+**Environment note:** no `DATABASE_URL`/`ANTHROPIC_API_KEY`/Supabase project
+in this session, so none of the Phase 1 SQL above (`GateDropStat` gate
+behaviour, register/tier mix of new rows, the starvation tripwire) could
+actually be run. This doc's own windows are deploy+7 days (~2026-09-18) for
+Phase 1 and deploy+14 days or 200 post-deploy rows for Phase 2, so a reading
+this soon wasn't due regardless — recording the blocker for the record
+rather than treating it as a missed check.
+
+What git/GitHub confirm instead:
+- `DECLARED_DOMAIN_FLOOR_ENABLED` (R5) is still read with the same
+  default-off semantics in `src/server/adaptive-difficulty.ts:257` — no code
+  change since 2026-09-11 flips its default or removes the gate.
+- `PARTIAL_ANSWER_LEAK_ENABLED` / `DOMAIN_DRIFT_DROP_ENABLED` /
+  `VERIFICATION_UNVERIFIABLE_HOLD_ENABLED` (the flags this window's grading
+  invariant says must not move) are all still plain env reads, unchanged.
+- One new commit landed in `generate-questions.ts` since the 19:14:09Z
+  deploy: `#1667` ("Fix repeated questions (fact_key drift)"), merged
+  2026-09-11T20:16:22Z. It threads `subjectEntity` into the embedding-dedup
+  call and touches `pool/dedup.ts` / `db/queries/pool.ts`. **It does not
+  touch `SYSTEM_PROMPT`, `QUALITY_GATE_SYSTEM_PROMPT`, or any of the
+  R1/R2/R3/R5/R6/R7/R9 code this doc tracks** — confirmed by reading its
+  diff and changed-file list. Noted so it isn't mistaken for an eighth
+  prescription landing in this window.
+- The remaining PRs that landed after this doc's Phase 0 table (`#1665`
+  mutual-friend fallback, `#1666` this doc's own deploy-timestamp
+  correction, `#1668` a nav alignment fix) are unrelated follow-ups — none
+  touch generation or the quality gate. Added `#1654`, `#1662`, `#1666` to
+  this file's `related-pr` frontmatter, which had none set until now.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-11 left them.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Run this doc's own Phase 1 SQL once a session with production DB access
+   is available — due at deploy+7 days (~2026-09-18), sooner is fine once
+   access exists.
+2. Everything else in §2/§4 unchanged.
