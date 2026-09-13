@@ -17,7 +17,13 @@ export function AnsweredRowActions({
   onReportSubmitted,
 }: {
   target: ReportReasonTarget;
-  surface?: 'round_recap' | 'lately_result' | 'answered_list' | 'catchup_thread' | 'recovered';
+  surface?:
+    | 'round_recap'
+    | 'lately_result'
+    | 'answered_list'
+    | 'catchup_thread'
+    | 'daily_five'
+    | 'recovered';
   // Optional: fires once on a successful report so a surface can react (e.g. the
   // round-recap hides a card reported as inappropriate, matching daily-summary).
   // The answered-list caller omits it and the menu just closes, as before.
