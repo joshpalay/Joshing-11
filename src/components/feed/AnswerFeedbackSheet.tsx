@@ -198,7 +198,7 @@ export function AnswerFeedbackSheet({
                 onClick={() => setIsMenuOpen(true)}
                 aria-label="More actions"
                 aria-expanded={isMenuOpen}
-                className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="btn-icon rounded-full"
               >
                 <MoreHorizontal className="size-5" />
               </button>
@@ -207,7 +207,7 @@ export function AnswerFeedbackSheet({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="btn-icon rounded-full"
             >
               <X className="size-4" />
             </button>
@@ -425,7 +425,7 @@ export function AnswerFeedbackSheet({
                 type="button"
                 aria-label="Close menu"
                 onClick={() => setIsMenuOpen(false)}
-                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+                className="btn-icon rounded-full"
               >
                 <X className="size-4" />
               </button>

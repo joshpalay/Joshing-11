@@ -73,7 +73,7 @@ export function AnswerSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className="btn-icon rounded-full"
           >
             <X className="size-4" />
           </button>
