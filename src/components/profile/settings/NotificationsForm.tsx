@@ -274,7 +274,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
 
   return (
     <div className="space-y-4">
-      <section className="bg-card text-card-foreground rounded-xl border p-5">
+      <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <h3 className="font-serif text-lg font-semibold">SMS reminders</h3>
@@ -335,7 +335,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
                       setPhoneCode(event.target.value.replace(/\D/g, '').slice(0, 6));
                       setSmsError(null);
                     }}
-                    className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--accent-gold)] bg-[var(--brand-card)] px-3 text-center tracking-[0.25em]"
+                    className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-card)] px-3 text-center tracking-[0.25em]"
                     aria-describedby="sms-reminder-consent"
                   />
                   <button
@@ -371,7 +371,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
         ) : null}
       </section>
 
-      <section className="bg-card text-card-foreground rounded-xl border p-5">
+      <section className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <h3 className="font-serif text-lg font-semibold">Email reminders</h3>

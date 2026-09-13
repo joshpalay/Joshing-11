@@ -13,7 +13,7 @@ export function MutualFriendSuggestionsTeaser({ count }: { count: number }) {
   return (
     <Link
       href="/friends"
-      className="bg-card text-card-foreground flex items-center justify-between gap-3 rounded-[var(--radius-xs)] border border-[var(--brand-border)] px-3 py-4"
+      className="bg-card text-card-foreground flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--brand-border)] px-3 py-4"
       aria-label={label}
     >
       <p className="font-serif text-base leading-[24px] font-semibold tracking-[0.04em] text-[var(--brand-ink)]">

@@ -471,7 +471,7 @@ export function AccountActions({
           />
         </SettingsGroup>
         {confirmingLogout ? (
-          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-xl border p-4">
+          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-[var(--radius-card)] border p-4">
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
             <div className="mt-3 flex gap-2">
               <button

@@ -89,7 +89,7 @@ export function LlmCostReportReadout({ data }: { data: CostReportData }) {
       {report == null ? (
         <p className="text-destructive text-xs">Couldn&apos;t build the cost &amp; latency report.</p>
       ) : (
-        <div className="bg-card text-card-foreground flex flex-col gap-6 rounded-xl border p-4">
+        <div className="bg-card text-card-foreground flex flex-col gap-6 rounded-[var(--radius-card)] border p-4">
           {/* ── Total + week-over-week ── */}
           <div>
             <h3 className="text-sm font-semibold">

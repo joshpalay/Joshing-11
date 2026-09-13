@@ -51,7 +51,7 @@ export function FirstSessionPanel({
   }, [])
 
   return (
-    <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
+    <section className="mt-6 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
       {/* Deliberately does NOT claim the round is finished. This panel is gated
           on "first session with at least one answer" (computeReminderPromptState:
           todayAnswered > 0 and no prior day with an answered slot), which a

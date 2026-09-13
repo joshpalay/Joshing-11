@@ -923,7 +923,7 @@ function KnowledgePageContent({
           ) : null}
           {addedTopic ? (
             <div
-              className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+              className="mt-4 flex items-start gap-2 rounded-[var(--radius-card)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
               role="status"
               aria-live="polite"
             >
@@ -1023,7 +1023,7 @@ function KnowledgePageContent({
               ) : null}
               {addedTopic ? (
                 <div
-                  className="mt-4 flex items-start gap-2 rounded-[var(--radius-xs)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
+                  className="mt-4 flex items-start gap-2 rounded-[var(--radius-card)] border border-[var(--border-warm)] bg-[var(--cream-warm)] px-3 py-2"
                   role="status"
                   aria-live="polite"
                 >

@@ -98,7 +98,7 @@ export function LlmExperimentReadout({ data }: { data: LlmExperimentData }) {
         sparse.
       </p>
 
-      <div className="bg-card text-card-foreground flex flex-col gap-6 rounded-xl border p-4">
+      <div className="bg-card text-card-foreground flex flex-col gap-6 rounded-[var(--radius-card)] border p-4">
         {/* ── Grading quality (north-star) ── */}
         <div>
           <h3 className="mb-2 text-sm font-semibold">Grading — wrong-answer rate by grader</h3>

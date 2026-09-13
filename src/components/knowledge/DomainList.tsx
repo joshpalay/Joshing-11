@@ -20,7 +20,7 @@ export function DomainList({ domains, onDomainSelect }: DomainListProps) {
   if (domains.length === 0) return null;
 
   return (
-    <div className="mt-4 divide-y rounded-lg border bg-card text-card-foreground">
+    <div className="mt-4 divide-y rounded-[var(--radius-card)] border bg-card text-card-foreground">
       {domains.map((domain) => (
         <button
           key={domain.domain}

@@ -37,7 +37,7 @@ import { join, relative } from 'node:path';
 const BASELINE = {
   R1: 35, // Tailwind shadow utility (§2.1) — 8 of these are the bottom toasts on shadow-lg
   R2: 0, // .btn-* recipe overridden at the call site (§3) — CLOSED 2026-09-13: recipe went 48→44px, the 11 redundant height overrides were stripped, the red primary became .btn-danger, and login folded onto .btn-primary. Enforced in full; a new override is now a regression.
-  R3: 41, // card fill paired with a non-card radius (§1.2) — settings sections, daily panels, knowledge/[domain]
+  R3: 0, // card fill paired with a non-card radius (§1.2) — CLOSED 2026-09-13: 38 card containers moved onto --radius-card (settings sections, daily summary/catch-up panels, knowledge/[domain], the inline-field card variants), one input onto --radius-xs. Enforced in full.
   R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3
   R5: 1, // <Chip> geometry override (§4.1)
   R6: 23, // hand-rolled round icon button, not .btn-icon (§3.4)
@@ -83,7 +83,10 @@ const LINE_RULES = [
     section: '§1.2',
     title: 'card fill paired with a non-card radius',
     re: /\brounded-(?:lg|xl|2xl|3xl)\b[^"'`}]*(?:\bbg-card\b|bg-\[var\(--brand-card\)\])|(?:\bbg-card\b|bg-\[var\(--brand-card\)\])[^"'`}]*\brounded-(?:lg|xl|2xl|3xl)\b/g,
-    skipLine: (l) => /animate-pulse|<input|<textarea/.test(l), // skeletons are R7; inputs are §1.5
+    // skeletons are R7; inputs are §1.5; `rounded-t-*` is a bottom sheet, whose
+    // 18px corner is correct per §1.3 — a sheet that happens to paint `bg-card`
+    // is not a card, and flagging it would make R3 permanently un-closable.
+    skipLine: (l) => /animate-pulse|<input|<textarea|rounded-t-/.test(l),
   },
   {
     id: 'R4',
