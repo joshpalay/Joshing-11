@@ -432,13 +432,15 @@ export async function updateDomainDifficultyOnAnswer(
     .limit(1);
 
   if (!existing) {
-    // Seed floor is for any opted-in (focus) domain — declared or demonstrated.
-    const [level, focusDomains] = await Promise.all([
-      readCurrentAdaptiveLevel(userId),
-      getFocusDomainSet(userId, [canonicalSubcategory]),
-    ]);
+    // First contact always seeds accessible regardless of the player's global
+    // skill (never MIN_ADAPTIVE_LEVEL's caller-visible level) — a strong overall
+    // player hitting a topic for the first time (e.g. a bonus question in a
+    // domain they've never played) should not be handed a specialist-tier
+    // question on zero domain-specific signal. The focus floor still applies for
+    // any opted-in (focus) domain — declared or demonstrated.
+    const focusDomains = await getFocusDomainSet(userId, [canonicalSubcategory]);
     const seed = applyFocusFloor(
-      seedDifficultyFromAdaptiveLevel(level),
+      seedDifficultyFromAdaptiveLevel(MIN_ADAPTIVE_LEVEL),
       focusDomains.has(canonicalSubcategory),
     );
     await db.insert(userDomainDifficulties).values({
@@ -950,15 +952,19 @@ export async function getDomainDifficultyOverrides(
     });
   }
 
-  // Read the global adaptive level for BOTH jobs: the first-contact seed (domains
-  // with no persisted row) AND the earned-skill lift on ALREADY-PLAYED domains
-  // (D-DIFFICULTY-SIZE-COMPLETION-01, Phase 0). A persisted per-domain row used to
-  // FULLY override the global level, so a player who demonstrably levelled up kept
-  // being served their old (often accessible) first-contact tier on domains they
-  // had already played — the "aces every question but it never gets harder"
-  // disconnect (Marcellus). The focus-set lookup only needs the unseeded domains
-  // (its sole job is flooring their first-contact seed; the erosion-floor split is
-  // applied later, on answer).
+  // Read the global adaptive level for the earned-skill lift on ALREADY-PLAYED
+  // domains (D-DIFFICULTY-SIZE-COMPLETION-01, Phase 0). A persisted per-domain
+  // row used to FULLY override the global level, so a player who demonstrably
+  // levelled up kept being served their old (often accessible) first-contact
+  // tier on domains they had already played — the "aces every question but it
+  // never gets harder" disconnect (Marcellus). This does NOT feed the
+  // first-contact seed below: a topic with zero domain-specific signal always
+  // seeds accessible regardless of the player's overall skill (a strong player
+  // hitting a topic for the first time, e.g. a bonus question in a domain
+  // they've never played, should not be handed a specialist-tier question on
+  // zero domain-specific signal). The focus-set lookup only needs the unseeded
+  // domains (its sole job is flooring their first-contact seed; the
+  // erosion-floor split is applied later, on answer).
   const domainsNeedingSeed = domains.filter((domain) => !known.has(domain));
   // R5: the declared set is read for ALL requested domains, not just the unseeded
   // ones, because the floor has to lift a domain that has already eroded down —
@@ -978,7 +984,7 @@ export async function getDomainDifficultyOverrides(
     const row = known.get(domain);
     const base = row
       ? liftServedToGlobalSkill(row.served, globalSkillTier, row.consecutiveIncorrect)
-      : applyFocusFloor(seedDifficultyFromAdaptiveLevel(seedLevel), focusDomains.has(domain));
+      : applyFocusFloor(seedDifficultyFromAdaptiveLevel(MIN_ADAPTIVE_LEVEL), focusDomains.has(domain));
     // Raise to the declared floor when enabled. applyFocusFloor is a max, so a
     // domain already at or above the floor is untouched and a player who has
     // climbed past it keeps their earned tier.
