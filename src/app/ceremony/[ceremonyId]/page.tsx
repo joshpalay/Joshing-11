@@ -768,7 +768,7 @@ export default function CeremonyPage() {
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full bg-stone-100 px-4 py-2 text-sm font-medium text-stone-950 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full bg-stone-100 px-4 py-2 text-sm font-medium text-stone-950 shadow-[var(--shadow-overlay)]">
           {toast}
         </div>
       ) : null}

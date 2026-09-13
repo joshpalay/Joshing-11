@@ -45,7 +45,7 @@ export default async function SmsConsentPage() {
             this number. Message and data rates may apply. Reply STOP to unsubscribe or HELP for
             help. Consent is not a condition of purchase. Terms and Privacy.”
           </blockquote>
-          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-sm">
+          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-[var(--shadow-card)]">
             {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -61,7 +61,7 @@ export default async function SmsConsentPage() {
               a code.
             </figcaption>
           </figure>
-          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-sm">
+          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-[var(--shadow-card)]">
             {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -97,7 +97,7 @@ export default async function SmsConsentPage() {
             Reminder frequency is up to one message per day. Consent is not a condition of purchase.
             You can turn reminders off at any time in your profile or by replying STOP.
           </p>
-          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-sm">
+          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-[var(--shadow-card)]">
             {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -113,7 +113,7 @@ export default async function SmsConsentPage() {
               opt anyone in.
             </figcaption>
           </figure>
-          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-sm">
+          <figure className="bg-card mt-5 overflow-hidden rounded-[var(--radius-md)] border shadow-[var(--shadow-card)]">
             {/* Twilio requires a visible, unoptimized screenshot evidence image. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

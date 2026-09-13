@@ -235,7 +235,7 @@ export function Nav({
             <button
               type="button"
               className={[
-                'bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-lg',
+                'bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-[var(--shadow-card-strong)]',
                 // The dedicated add-a-question FAB shows on every viewport; the
                 // generic Create chooser FAB stays mobile-only as before.
                 isQuestionComposerShortcut ? '' : 'md:hidden',

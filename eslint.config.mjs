@@ -41,7 +41,10 @@ const TOKEN_LINT_RULE = {
 // design-canon warnings from DESIGN_LINT_RULES below (its baseline, measured at
 // the Phase 5 build: 29 shadow, 28 pill, 15 btn-override, 11 icon, 11
 // animate-pulse, 4 Chip). **88 (2026-09-13)** = 103 − the 15 btn-override
-// warnings, closed by the button codemod. When you clean a file
+// warnings, closed by the button codemod. **63 (2026-09-13)** = 88 − 25 of the
+// 29 shadow warnings, closed by the shadow codemod (the other 4 were in
+// template strings the selector never saw; `check:design` R1 counts those).
+// When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
 const TOKEN_LINT_GRANDFATHERED = [

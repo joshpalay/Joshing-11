@@ -269,7 +269,7 @@ export function AdminReportsClient({
           aria-live="polite"
         >
           <div
-            className="flex max-w-full items-center gap-3 rounded-full border px-4 py-2.5 text-sm shadow-lg"
+            className="flex max-w-full items-center gap-3 rounded-full border px-4 py-2.5 text-sm shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--border)' }}
           >
             {toastError ? (
