@@ -366,9 +366,21 @@ export function AddTopicField({
     [runQueue],
   );
 
+  // Comma/newline splitting only makes sense when the field is actually
+  // inviting several topics at once (multiAddHint shown). Surfaces that pass
+  // multiAddHint={false} mean one topic per add, and a canonical domain name
+  // can legitimately contain a comma (e.g. "Rights, Wrongs & Moral
+  // Responsibility") — splitting it there silently keeps only the tail
+  // fragment instead of the name the user typed.
+  const allowMultiAdd = multiAddHint !== false;
+
   const submit = useCallback(async () => {
     if (busy || disabled) return;
-    const tokens = parseTopicTokens(value);
+    const tokens = allowMultiAdd
+      ? parseTopicTokens(value)
+      : value.trim()
+        ? [value.trim()]
+        : [];
     if (tokens.length === 0) return;
     // One topic: keep the classic behavior — the value clears on a successful
     // add (persistTopic) and survives an error so it can be corrected.
@@ -387,7 +399,7 @@ export function AddTopicField({
     setError(null);
     setQueue(fresh);
     await runQueue();
-  }, [busy, disabled, value, isDuplicate, processToken, setQueue, runQueue]);
+  }, [busy, disabled, value, allowMultiAdd, isDuplicate, processToken, setQueue, runQueue]);
 
   return (
     <div className={className}>
