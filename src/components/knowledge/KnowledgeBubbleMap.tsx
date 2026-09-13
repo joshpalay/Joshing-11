@@ -315,7 +315,7 @@ export function KnowledgeBubbleMap({
               type="button"
               role="listitem"
               onClick={() => focusLeaf(leaf)}
-              className="flex flex-none items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex flex-none items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
             >
               <span

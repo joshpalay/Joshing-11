@@ -931,8 +931,11 @@ export default function OnboardingFlow({
                 disabled={selectedInterests.length >= MAX_INTERESTS}
                 existingLabels={selectedInterests.map((item) => item.domain)}
                 onAdd={addSelectedInterest}
-                inputClassName="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] h-12 min-w-0 flex-1 rounded-full border border-[var(--accent-gold)] px-4 text-base outline-none transition disabled:opacity-60"
-                buttonClassName="bg-[var(--brand-navy)] h-12 rounded-full px-5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                inputClassName="bg-[var(--brand-field)] placeholder:text-muted-foreground/70 focus:border-[var(--brand-navy)] h-12 min-w-0 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] px-4 text-base outline-none transition disabled:opacity-60"
+                // Add is the SECONDARY action here — Continue is the screen's
+                // primary (§3.1, one per view) — so it drops its navy pill and
+                // takes the same .btn-ghost every other AddTopicField uses.
+                buttonClassName="btn-ghost"
                 chipClassName="rounded-full border border-[var(--border-warm)] bg-[var(--brand-card)] px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
                 mutedClassName="text-muted-foreground text-sm"
                 errorClassName="text-destructive mt-3 text-sm"
