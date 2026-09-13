@@ -330,7 +330,7 @@ function RoundSummary({
         ))}
       </div>
 
-      <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
+      <section className="mt-8 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-6 text-center">
         <p className="text-[1.05rem] leading-7 text-[var(--brand-ink-700)]">
           {hasMore
             ? `${remainingCount} still waiting whenever you’re ready.`
@@ -436,7 +436,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
   if (isHidden) return null;
 
   return (
-    <article className="relative overflow-hidden rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
+    <article className="relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
       <div className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: accentColor }} />
 
       <div className="flex items-start justify-between gap-3 pl-1">

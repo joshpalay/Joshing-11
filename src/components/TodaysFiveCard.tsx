@@ -284,7 +284,7 @@ export default function TodaysFiveCard({
   return (
     <div
       data-tour="five"
-      className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
+      className="text-card-foreground w-full rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-quiet font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">

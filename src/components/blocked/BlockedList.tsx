@@ -63,7 +63,7 @@ export function BlockedList({ initialItems }: { initialItems: BlockedListItem[] 
         return (
           <div
             key={item.id}
-            className="bg-card text-card-foreground flex items-center gap-3 rounded-xl border p-3"
+            className="bg-card text-card-foreground flex items-center gap-3 rounded-[var(--radius-card)] border p-3"
           >
             <span
               aria-hidden

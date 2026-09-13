@@ -424,7 +424,7 @@ export default function WelcomeTourScreen({
             {/* Today's Five — `five` + `customize` */}
             <div
               data-tour="five"
-              className="text-card-foreground w-full rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
+              className="text-card-foreground w-full rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] px-4 py-4 shadow-[var(--shadow-card)]"
             >
               <div className="flex items-center justify-between gap-2">
                 <p className="text-quiet font-bold tracking-[0.12em] text-[var(--brand-ink-700)] uppercase">
@@ -461,7 +461,7 @@ export default function WelcomeTourScreen({
               {/* For You — mirrors SparkleEnvelope (the real directed-send card):
                   sans signal + overflow, a short rule, the serif question with
                   faded quotes, Dismiss / Answer. */}
-              <article className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-3.5">
+              <article className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-3.5">
                 <div className="flex w-full items-start justify-between gap-3">
                   <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
                     <span className="font-semibold">{inviter}</span> sent you a question they wrote
@@ -489,7 +489,7 @@ export default function WelcomeTourScreen({
               <p className="mt-4 mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
                 From Friends
               </p>
-              <div className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
+              <div className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-serif text-[1.1rem] font-semibold text-[var(--brand-ink)]">
                     {inviter}

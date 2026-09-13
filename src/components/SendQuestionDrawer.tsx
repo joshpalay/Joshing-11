@@ -170,7 +170,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
           </header>
 
           <div className="flex-1 overflow-y-auto p-5">
-            <section className="rounded-lg border bg-card p-4">
+            <section className="rounded-[var(--radius-card)] border bg-card p-4">
               <Chip className="bg-secondary text-secondary-foreground">{question.domain}</Chip>
               <p className="mt-3 text-sm font-medium leading-6 text-card-foreground">{question.text}</p>
             </section>

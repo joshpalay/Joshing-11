@@ -231,7 +231,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
 
         {showingHandoff ? (
           <div className="mt-6 space-y-4">
-            <div className="bg-card rounded-xl border p-4">
+            <div className="bg-card rounded-[var(--radius-card)] border p-4">
               <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">
                 For {handoffName}
               </p>
@@ -354,7 +354,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   </label>
                 </div>
 
-                <div className="bg-card space-y-3 rounded-xl border p-4">
+                <div className="bg-card space-y-3 rounded-[var(--radius-card)] border p-4">
                   <p className="text-sm font-medium">A few ideas</p>
                   {interests.map((interest, index) => (
                     <label

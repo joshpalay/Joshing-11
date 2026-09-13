@@ -66,14 +66,22 @@ write `rounded-[4px]` inside `globals.css`, which is exempt.
 - `--radius-xs` (the same 4px) is reserved for **non-card controls**: inputs, the login field,
   small chrome. Do not use it on a card; the card rule must stay greppable by its own name.
 - `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl` on a card-shaped container are drift.
-  The Phase 2 migration (`5b873477`) covered the friends/profile/invite section cards; the
-  conformance script (`check:design` R3) then found **about forty more** card containers still
-  on `rounded-lg`/`rounded-xl` — the daily summary and catch-up panels, `ExpandDomainOfferCard`,
-  `FirstSessionPanel`, `knowledge/[domain]` sections, every settings form section
-  (`NotificationsForm`, `PrivacyForm`, `AccountActions`, the LLM readouts), `BlockedList` rows,
-  `InlineEditableField`/`InlineHandleField` card variants, `SendQuestionDrawer:173` — plus the
-  four on `rounded-2xl` (`NotForMeSheet.tsx:157`, `HiddenQuestions.tsx:69`,
-  `daily/summary/page.tsx:328`, `users/[id]/page.tsx:582`). All codemod work, not exceptions.
+  **Closed 2026-09-13.** The Phase 2 migration (`5b873477`) had covered only the
+  friends/profile/invite section cards; the conformance script (R3) then found ~40 more — the
+  daily summary and catch-up panels, `ExpandDomainOfferCard`, `FirstSessionPanel`,
+  `knowledge/[domain]`, every settings form section (`NotificationsForm`, `PrivacyForm`,
+  `AccountActions`, the LLM readouts), `BlockedList` rows, the
+  `InlineEditableField`/`InlineHandleField` card variants, `SendQuestionDrawer`, `DomainList`,
+  `AskFriendForDomain`, `unsubscribe`, `verify-email`. All 38 moved onto `--radius-card`;
+  **R3 is enforced at 0.**
+- **One value, one name.** Twelve cards spelled the same 4px as `--radius-xs` (including
+  `FeedCardShell`, `TodaysFiveCard`, `MissedQuestionsCard`, the welcome-tour cards); they were
+  renamed to `--radius-card` on 2026-09-13, so every remaining `--radius-xs` site is a control
+  (three inputs, five buttons) and the card rule is greppable by its own token.
+- **Not cards, and not R3's business:** a bottom sheet that paints `bg-card` keeps its 18px
+  corner (§1.3) — `rounded-t-*` is excluded from the rule for that reason. Inputs take
+  `--radius-xs` (§1.5); `NotificationsForm`'s SMS-code field was also below the touch floor at
+  `h-10` and moved to `min-h-11` in the same pass.
 
 Grep (cards on a non-card radius, approximate — pairs a card fill with a named radius):
 `rg -n 'rounded-(lg|xl|2xl|3xl)\b[^"]*(bg-card|bg-\[var\(--brand-card\)\]|border-\[var\(--brand-rule\)\])|(bg-card|bg-\[var\(--brand-card\)\])[^"]*rounded-(lg|xl|2xl|3xl)\b' src --glob '*.tsx'`
@@ -487,22 +495,24 @@ fill (chip surface, skeleton fill, badge colour, accent bar), it says so and def
 
 `globals.css` and components are untouched by `B-FABLE-DESIGN-CANON-01`. The rulings imply:
 
-**Done 2026-09-13 (PR "design-codemod: buttons"):** the `.btn-primary` recipe is `min-h-11`
-with its comment corrected; all fifteen call-site overrides stripped;
+**Done 2026-09-13 — buttons (R2 closed at 0):** the `.btn-primary` recipe is `min-h-11` with
+its comment corrected; all fifteen call-site overrides stripped;
 `InviteLinksSection.tsx:501` → `.btn-danger`; `LoginPanel.tsx` `SUBMIT_CLASS` →
-`btn-primary w-full`. R2 closed at 0.
+`btn-primary w-full`.
+
+**Done 2026-09-13 — cards (R3 closed at 0):** 38 containers onto `--radius-card`, 12 cards
+renamed off `--radius-xs`, the SMS-code input onto `--radius-xs` + `min-h-11`, and the stale
+"content cards use `rounded-md`" convention comment in `globals.css` corrected.
 
 | Edit | Where | Ruling |
 |---|---|---|
 | Add-a-topic control joins the system: `AddTopicField` `DEFAULT_INPUT_CLASS` `rounded-full` → `--radius-xs` (5 consumers), and `OnboardingFlow.tsx:934-935`'s pill input + navy pill button fold onto that default + `.btn-ghost` (the screen's primary is Continue, so Add is secondary — §3.1 one-per-view) | `interests/AddTopicField.tsx`, `OnboardingFlow.tsx` | 1.4, 1.5, 3.2 |
-| Stale comment "content cards use rounded-md" | `globals.css:185-186` | 1.2 |
 | Duplicate `--radius-xs…lg` literal block | `globals.css:374-377` | 1.1 |
 | Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
-| Four leftover `rounded-2xl` rows/tiles → `--radius-card` | §1.2 list | 1.2 |
-| `FeedCardShell.tsx:16` `--radius-xs` → `--radius-card` (same value, canonical name) | component | 1.2 |
 | Chip: drop `sm`; add `Badge`; migrate Nav/FeedList badges and `MyQuestionCard` label | `ui/` | 4.1–4.2 |
 | `/questions` skeleton, `CreationSurface` → `<Skeleton>` | components | 7.1 |
 | Sheet shadows → `--shadow-overlay`; FAB → `--shadow-card-strong`; menus `rounded-3xl` → `2xl` | components | 1.3, 2.2, 3.8 |
+| `HiddenQuestions.tsx:69` (row) and `users/[id]/page.tsx:582` (avatar tile) — the two `rounded-2xl` sites R3 never flagged because neither paints a card fill; decide row-vs-avatar per §3.6 / §1.4 | components | 1.2, 1.4 |
 
 ---
 
@@ -529,7 +539,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 |---|---|---|
 | Rule | Script id · baseline (2026-09-11) | Lint selector |
 |---|---|---|
-| 1.2 card radius | R3 · 41 | — |
+| 1.2 card radius | R3 · **0 — closed 2026-09-13** | — |
 | 1.4 no pill buttons/inputs | R8 · 34 | yes |
 | 2.1 no Tailwind shadow utilities | R1 · 35 | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
