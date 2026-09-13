@@ -22,6 +22,7 @@ import { askToAnswerBatch, resolveMachineTrustTier } from '@/server/daily/ask-to
 import { enrichAcceptableVariants, mergeVariants } from '@/server/daily/enrich-variants';
 import { runBudgetedConcurrent } from '@/server/daily/budgeted-concurrency';
 import { getMonthToDateLlmSpendUsd } from '@/server/db/queries/llm-provider-experiment';
+import { recordGateDrops } from '@/server/db/queries/gate-drop-stats';
 import { assessCorroboration, getReputationLists } from '@/server/daily/source-reputation';
 import { resolveDailyBasePoints } from '@/server/daily/types';
 import {
@@ -234,6 +235,13 @@ async function refillDomain(
   );
 
   const seenFactKeys = new Set<string>();
+  // Telemetry only (2026-09-12, see the gate's comment in gate-drop-stats.ts):
+  // counts rows that enter machine_verified purely on corroboration despite the
+  // independent cold-solve failing to reproduce the stored answer. Never gates
+  // anything — trustTier below is unchanged — it just makes the combination
+  // visible instead of silently invisible, since that combination is exactly
+  // what happened on the "Suspension" question a confusing-stem report caught.
+  let trustAskMismatch = 0;
   for (let i = 0; i < screened.length; i += 1) {
     const q = screened[i];
     if (askResult.toDrop.has(i)) continue;
@@ -249,6 +257,13 @@ async function refillDomain(
     // row enters machine_verified regardless of the ask-to-answer outcome; the
     // ask-to-answer flag is still recorded for provenance.
     const askToAnswerVerified = askResult.verified.has(i);
+    if (!askToAnswerVerified) {
+      trustAskMismatch += 1;
+      console.warn(
+        '[pool-refill] corroborated question trusted despite failed cold-solve (measuring only)',
+        { domain, questionPreview: q.question_text.slice(0, 120), answer: q.answer.slice(0, 80) },
+      );
+    }
     const trustTier = resolveMachineTrustTier({ askToAnswerVerified, corroborated: true });
     try {
       // B-KNOWLEDGE-TAXONOMY-01 P3: normalize to the finest existing
@@ -296,6 +311,11 @@ async function refillDomain(
       });
     }
   }
+
+  // Fire-and-forget; telemetry can never block the refill (see recordGateDrops).
+  void recordGateDrops([
+    { gate: 'grounded_trust_ask_mismatch', considered: screened.length, dropped: trustAskMismatch },
+  ]);
 
   return result;
 }

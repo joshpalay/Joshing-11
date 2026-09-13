@@ -379,6 +379,45 @@ export function questionPartiallyLeaksAnswer(text: string, answer: string): bool
   return tokens.some((t) => shows(t) && !GENERIC_HEAD_NOUNS.has(t));
 }
 
+// --- SINGLE-WORD leak detection (the "Venus" class) --------------------------
+//
+// isDiscriminating (above) only credits a form as a genuine tell when it has
+// 3+ substantive words, or a second capitalized word after the first — which
+// means a ONE-WORD primary form can never qualify, no matter how squarely it
+// sits in the stem. That is a real hole, not a narrow edge case: found live in
+// production (2026-09-12) on
+//   Q: "...the dissonant 'leaning' tone that gives suspension counterpoint
+//       much of its expressive tension?"                A: "Suspension"
+//   Q: "Botticelli's 'The Birth of Venus'... Which mythological figure
+//       emerges fully grown from the sea...?"            A: "Venus (Aphrodite)"
+//   Q: "...What is this signature feature called — the same word used in the
+//       show's title?" (show: 'The Snorks')               A: "Snorks (...)"
+// all served despite the exact answer word sitting in the question.
+//
+// Deliberately its own function, gated by its own flag (mirrors
+// questionPartiallyLeaksAnswer / PARTIAL_ANSWER_LEAK_ENABLED) rather than
+// folded into isDiscriminating: a single substantive word is a much weaker
+// signal than a multi-word conjunction (nothing else has to line up), so it
+// carries real false-positive risk on generic single nouns that legitimately
+// co-occur with their question — e.g. an essay literally titled "Host" whose
+// stem must call its subject "the host" to describe him at all, or a question
+// naming two duel participants by name and asking which one is NOT the one
+// already excluded. Ship measure-only until the hit sample says otherwise.
+export function singleWordAnswerLeaks(text: string, answer: string): boolean {
+  const normalizedQuestion = normalize(text);
+  if (!normalizedQuestion) return false;
+  if (COUNTING_ASK.test(normalizedQuestion)) return false;
+
+  const [primary] = acceptedForms(answer);
+  if (!primary) return false;
+  const tokens = substantiveTokens(primary);
+  if (tokens.length !== 1) return false; // multi-word forms are the gates above
+  const [word] = tokens;
+  if (isNumeric(word)) return false; // a counting question wearing a different stem
+
+  return ` ${normalizedQuestion} `.includes(` ${word} `);
+}
+
 export function textContainsAnswer(
   text: string,
   answer: string,
