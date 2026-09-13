@@ -80,7 +80,7 @@ export function KnowledgeNodeCard({
     return (
       <section
         aria-label={`${name} actions`}
-        className="rounded-xl border p-4 shadow-lg"
+        className="rounded-xl border p-4 shadow-[var(--shadow-overlay)]"
         style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
       >
         {phase.step === 'confirm' ? (
@@ -176,7 +176,7 @@ export function KnowledgeNodeCard({
   return (
     <section
       aria-label={`${node.name} actions`}
-      className="rounded-xl border p-4 shadow-lg"
+      className="rounded-xl border p-4 shadow-[var(--shadow-overlay)]"
       style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
     >
       <div className="flex items-start justify-between gap-3">

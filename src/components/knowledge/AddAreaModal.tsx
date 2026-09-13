@@ -44,7 +44,7 @@ export function AddAreaModal({
       aria-labelledby="add-area-title"
     >
       <button className="absolute inset-0 cursor-default" type="button" aria-label="Close add area" onClick={onClose} />
-      <section className="relative w-full rounded-t-2xl bg-background p-5 shadow-xl md:max-w-md md:rounded-2xl">
+      <section className="relative w-full rounded-t-2xl bg-background p-5 shadow-[var(--shadow-overlay)] md:max-w-md md:rounded-2xl">
         <h2 id="add-area-title" className="font-serif text-2xl font-semibold">
           Add a knowledge area
         </h2>

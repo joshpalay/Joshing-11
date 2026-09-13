@@ -308,7 +308,7 @@ export default function PeopleYouInvited() {
                 {acceptedProfileHref ? (
                   <Link
                     href={acceptedProfileHref}
-                    className="hover:border-foreground/30 -m-3 mb-0 block rounded-xl p-3 transition hover:shadow-sm"
+                    className="hover:border-foreground/30 -m-3 mb-0 block rounded-xl p-3 transition hover:shadow-[var(--shadow-card)]"
                   >
                     {header}
                   </Link>

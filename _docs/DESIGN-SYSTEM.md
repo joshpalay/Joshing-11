@@ -139,17 +139,34 @@ them is withdrawn).
 | Flat letterpress | `--shadow-stamp` / `--shadow-stamp-sm` | `4px 4px 0 ink` / `2px 2px 0 ink` | `OverlapMap`, `KnowledgeOverviewClient`, `ShareCard` (see §2.3) |
 | Focus / selection ring | `0 0 0 2px <color>` | literal | selected-state cards (`AnsweredByYouCard`, catch-up, summary, `DomainCircle`) — a *selection* idiom, distinct from keyboard focus (§9) |
 
-Grep (Tailwind shadow utility in a component): `rg -n '\bshadow-(sm|md|lg|xl|2xl)\b' src --glob '*.tsx'` — 35 on `main` (11 `shadow-sm`, 24 `lg/xl/2xl`).
+Grep (Tailwind shadow utility in a component): `rg -n '(?<![\w-])shadow-(sm|md|lg|xl|2xl)\b' src --glob '*.tsx'`
+— 35 at the Phase 5 build, **6 after 2026-09-13**, and all six are chips (see §2.2a). The
+lookbehind matters: `drop-shadow-*` is a filter, not an elevation register, and is not drift.
 
 ### 2.2 Sheets, drawers, popovers and the FAB sit on `--shadow-overlay` — RATIFIED (Phase 4, 2026-09-11)
 
 The disposition doc assigned `--shadow-overlay` to the two centered modals only; 30 sites now
 use it, including bottom sheets. Ratified: **one overlay register** for every floating surface
-(sheet, drawer, anchored menu, toast). The remaining `shadow-2xl/xl` sheets
-(`FeedActions.tsx:158`, `AnsweredRowActions.tsx:70`, `AddAreaModal.tsx:47`,
-`daily/summary/page.tsx:990`) migrate. **Exception, by Phase 4 amendment:** the FAB
-(`Nav.tsx:225`) moves from `shadow-lg` to **`--shadow-card-strong`** — the heavy overlay blur
-under a 56px circle reads as a stain; if it looks fine in practice, overlay is acceptable.
+(sheet, drawer, anchored menu, toast). **Landed 2026-09-13**: ten toasts and floating pills,
+four anchored menus (the responsive `sm:shadow-xl` step dropped with them — one register means
+one value at every width), three sheets, and the three knowledge cards that float over the
+bubble map all read `--shadow-overlay`. The four `sms-consent` screenshot figures are resting
+cards and took `--shadow-card`, as did `PeopleYouInvited`'s hover lift.
+**Exception, by Phase 4 amendment:** the FAB (`Nav.tsx`) took **`--shadow-card-strong`**, not
+overlay — a 12px/28px blur under a 56px circle reads as a stain.
+
+### 2.2a Chips and pills carry no elevation — PROPOSED (2026-09-13)
+
+The shadow sweep left exactly six `shadow-sm` sites and every one is a chip or pill:
+`KnowledgeBubbleMap.tsx:318`, `KnowledgePeaksView.tsx:1034,1062` (a `hover:shadow-sm` lift), and
+three on `TerritorySetupClient` (`:738` label chip, `:980,:998` the size-14 territory circles).
+§2.1 named this gap — "chips/pills currently have no elevation rule" — and never filled it.
+
+Proposed: **a chip is a label, not a surface. It sits on the page and casts nothing.** The
+`Chip` primitive already ships with no shadow, so this only ratifies what the primitive does.
+Not applied here, because restyling every chip is a visible change that deserves its own yes.
+Note that `TerritorySetupClient`'s three also sit on the deferred "raised" register (§11), so
+they may resolve with that instead.
 
 ### 2.3 Letterpress is tokenised — RATIFIED (Phase 4, 2026-09-11) (E-2)
 
@@ -511,7 +528,8 @@ renamed off `--radius-xs`, the SMS-code input onto `--radius-xs` + `min-h-11`, a
 | Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
 | Chip: drop `sm`; add `Badge`; migrate Nav/FeedList badges and `MyQuestionCard` label | `ui/` | 4.1–4.2 |
 | `/questions` skeleton, `CreationSurface` → `<Skeleton>` | components | 7.1 |
-| Sheet shadows → `--shadow-overlay`; FAB → `--shadow-card-strong`; menus `rounded-3xl` → `2xl` | components | 1.3, 2.2, 3.8 |
+| Anchored menus `rounded-3xl` → `rounded-2xl` (`FeedActions`, `AnsweredRowActions`, `daily/summary`) — their *shadows* landed 2026-09-13, the radius did not | components | 1.3 |
+| Ratify §2.2a (chips carry no elevation), then strip the last 6 `shadow-sm` | components | 2.2a |
 | `HiddenQuestions.tsx:69` (row) and `users/[id]/page.tsx:582` (avatar tile) — the two `rounded-2xl` sites R3 never flagged because neither paints a card fill; decide row-vs-avatar per §3.6 / §1.4 | components | 1.2, 1.4 |
 
 ---
@@ -541,16 +559,17 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 |---|---|---|
 | 1.2 card radius | R3 · **0 — closed 2026-09-13** | — |
 | 1.4 no pill buttons/inputs | R8 · 34 | yes |
-| 2.1 no Tailwind shadow utilities | R1 · 35 | yes |
+| 2.1 no Tailwind shadow utilities | R1 · **6** (was 35; the remainder are chips, blocked on §2.2a) | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
 | 3.4 hand-rolled icon buttons | R6 · 23 | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · 11 | yes |
 | 9.1 / 9.2 touch floor and focus ring | R10 · 321 / R9 · 333 (heuristic, count only) | — |
 
-Lint lane baseline: **83** `canon/restricted-syntax` warnings (29 shadow · 28 pill · 11 icon ·
-11 animate-pulse · 4 Chip; btn-override closed 2026-09-13); `--max-warnings 88` = 5
-pre-existing (4 colour-lane + 1 unused-var) + 83. It was 103 at the Phase 5 build.
+Lint lane baseline: **58** `canon/restricted-syntax` warnings (28 pill · 11 icon · 11
+animate-pulse · 4 Chip · 4 shadow-in-template-string); `--max-warnings 63` = 5 pre-existing
+(4 colour-lane + 1 unused-var) + 58. It was 103 at the Phase 5 build, then 88 after the
+button codemod. Both closures ratcheted the ceiling down the same day.
 
 ---
 
