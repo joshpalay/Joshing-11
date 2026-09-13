@@ -11,6 +11,7 @@ import {
   type ChatMessage,
   type RecheckActionResult,
 } from '@/components/play/GameplayChat';
+import { type ReportReasonTarget } from '@/components/report/ReportReasonSheet';
 import { pickOpenedTerritoryDomain } from '@/components/feed/territory';
 import {
   ANSWER_GRADER_RETRY_MESSAGE,
@@ -652,6 +653,16 @@ export default function DailyPage() {
       bonusIndex: bonusOrder.get(slot.slot_index),
       bonusTotal: bonusOrder.has(slot.slot_index) ? bonusTotal : undefined,
     });
+    // The ⋯ menu's report target — same id space the skip/hide path already
+    // reads (slot.generated_question_id for bot-sourced slots, slot.question_id
+    // for friend/house). Null for a slot that somehow carries neither, which
+    // just hides the menu (AnsweredRowActions renders nothing without a target).
+    const reportTargetFor = (slot: QueueSlot): ReportReasonTarget | null =>
+      slot.generated_question_id
+        ? { generatedQuestionId: slot.generated_question_id }
+        : slot.question_id
+          ? { questionId: slot.question_id }
+          : null;
     for (const slot of queue.slots) {
       if (slot.answered) {
         const gaveUp = slot.answer_state === 'incorrect' && !slot.submitted_answer;
@@ -671,6 +682,7 @@ export default function DailyPage() {
           // appends past the five and is never in the denominator (R3).
           numberMarker: markerFor(slot),
           badges: questionBadges(slot),
+          reportTarget: reportTargetFor(slot),
         });
         if (slot.submitted_answer) {
           rows.push({ id: `u-${slot.slot_index}`, kind: 'user', text: slot.submitted_answer });
@@ -714,6 +726,7 @@ export default function DailyPage() {
             slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
               ? { onSubmit: () => requestRecheck(slot.slot_index) }
               : null,
+          reportTarget: reportTargetFor(slot),
         });
         continue;
       }
@@ -749,6 +762,7 @@ export default function DailyPage() {
           // appends past the five and is never in the denominator (R3).
           numberMarker: markerFor(slot),
           badges: questionBadges(slot),
+          reportTarget: reportTargetFor(slot),
         });
         if (submitting && answer.trim()) {
           rows.push({ id: 'u-pending', kind: 'user', text: answer.trim() });
@@ -1121,6 +1135,7 @@ export default function DailyPage() {
             giveUpDisabled={submitting}
             onNotForMe={() => setNotForMeOpen(true)}
             notForMeDisabled={submitting}
+            reportSurface="daily_five"
           />
         )}
       </section>

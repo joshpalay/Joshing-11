@@ -445,6 +445,7 @@ function QuestionRow({
   onNotForMe,
   notForMeDisabled = false,
   reportTarget = null,
+  reportSurface = 'catchup_thread',
   onReportedInappropriate,
 }: {
   subhead?: string | null;
@@ -473,6 +474,9 @@ function QuestionRow({
   // Bonus slots only (D-4 §B): "This is {Name}'s bag but not mine" — rests the
   // slot's domain so the category stops surfacing, and closes this question.
   reportTarget?: ReportReasonTarget | null;
+  // Which content-report surface the ⋯ menu attributes to — the catch-up thread
+  // and the Daily Five live thread share this component but log distinct surfaces.
+  reportSurface?: 'catchup_thread' | 'daily_five';
   // Reporting the ACTIVE question as inappropriate also removes it from the
   // round (the card vanishing is the feedback, matching the recap surfaces).
   // Wired to the same dismiss path as the "Dismiss" link, so undo still works.
@@ -780,7 +784,7 @@ function QuestionRow({
               <span style={reportMenuFontResetStyle}>
                 <AnsweredRowActions
                   target={reportTarget}
-                  surface="catchup_thread"
+                  surface={reportSurface}
                   onReportSubmitted={(category) => {
                     if (category === 'inappropriate') onReportedInappropriate?.();
                   }}
@@ -1280,6 +1284,7 @@ function ResultRow({
   openedTerritoryDomain,
   openedTerritoryAdopted = true,
   reportTarget = null,
+  reportSurface = 'catchup_thread',
   domId,
 }: {
   result: 'correct' | 'wrong' | 'expired' | 'gave_up';
@@ -1305,6 +1310,8 @@ function ResultRow({
   openedTerritoryDomain?: string | null;
   openedTerritoryAdopted?: boolean;
   reportTarget?: ReportReasonTarget | null;
+  // Which content-report surface the ⋯ menu attributes to (see question variant).
+  reportSurface?: 'catchup_thread' | 'daily_five';
   /** DOM id for the reveal root so the page can scroll a freshly-revealed result into view (MISC-4). */
   domId?: string;
 }) {
@@ -1394,7 +1401,7 @@ function ResultRow({
             "flag the question" both land a ContentReport on this question. */}
         {reportTarget ? (
           <div style={{ ...reportMenuFontResetStyle, float: 'right', margin: '-4px -6px 6px 8px' }}>
-            <AnsweredRowActions target={reportTarget} surface="catchup_thread" />
+            <AnsweredRowActions target={reportTarget} surface={reportSurface} />
           </div>
         ) : null}
         {expired ? (
@@ -1779,6 +1786,7 @@ export function GameplayChatThread({
   onNotForMe,
   notForMeDisabled,
   onSlotClosed,
+  reportSurface = 'catchup_thread',
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
@@ -1792,6 +1800,10 @@ export function GameplayChatThread({
    *  inappropriate report, where the card vanishing IS the feedback. */
   onSlotClosed?: () => void;
   // Bonus-slot opt-out (D-4 §B). Wired only to the active bonus question.
+  // Which content-report surface question/result cards attribute their ⋯ menu
+  // to. The catch-up page leaves this at its default; the Daily Five live
+  // thread (src/app/daily/page.tsx) passes 'daily_five'.
+  reportSurface?: 'catchup_thread' | 'daily_five';
 }) {
   // "Show me the answer" and "Dismiss" belong only under the active (still-
   // unanswered) question — the last question message with no result after it.
@@ -1836,6 +1848,7 @@ export function GameplayChatThread({
                 onNotForMe={onNotForMe && m.id === activeQuestionId ? onNotForMe : undefined}
                 notForMeDisabled={notForMeDisabled}
                 reportTarget={m.reportTarget}
+                reportSurface={reportSurface}
                 onReportedInappropriate={
                   onSlotClosed && m.id === activeQuestionId ? onSlotClosed : undefined
                 }
@@ -1872,6 +1885,7 @@ export function GameplayChatThread({
                 openedTerritoryDomain={m.openedTerritoryDomain}
                 openedTerritoryAdopted={m.openedTerritoryAdopted}
                 reportTarget={m.reportTarget}
+                reportSurface={reportSurface}
               />
             );
           case 'session_complete':

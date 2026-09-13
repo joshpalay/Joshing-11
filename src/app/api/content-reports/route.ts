@@ -23,6 +23,16 @@ const target = {
   generatedQuestionId: z.string().trim().min(1).optional(),
 };
 
+const surfaceSchema = z.enum([
+  'round_recap',
+  'lately_result',
+  'answered_list',
+  'feed',
+  'catchup_thread',
+  'daily_five',
+  'recovered',
+]);
+
 // "incorrect": which part is wrong (incorrectKind), a required note, and an optional
 // "the answer should be ___" (suggestedAnswer).
 const incorrectSchema = z.object({
@@ -30,7 +40,7 @@ const incorrectSchema = z.object({
   incorrectKind: z.enum(['answer_key', 'premise']),
   note: z.string().trim().min(1),
   suggestedAnswer: z.string().trim().min(1).optional(),
-  surface: z.enum(['round_recap', 'lately_result', 'answered_list', 'feed', 'catchup_thread', 'recovered']),
+  surface: surfaceSchema,
   ...target,
 });
 
@@ -42,7 +52,7 @@ const inappropriateSchema = z.object({
   incorrectKind: z.undefined().optional(),
   suggestedAnswer: z.undefined().optional(),
   note: z.string().trim().min(1),
-  surface: z.enum(['round_recap', 'lately_result', 'answered_list', 'feed', 'catchup_thread', 'recovered']),
+  surface: surfaceSchema,
   ...target,
 });
 
