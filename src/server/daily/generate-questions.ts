@@ -104,6 +104,7 @@ import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import {
   questionPartiallyLeaksAnswer,
+  singleWordAnswerLeaks,
   textContainsAnswer,
 } from '@/server/questions/self-answering';
 import { embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
@@ -1312,6 +1313,7 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
   const toDrop = new Set<number>();
   const reasons: Record<number, string> = {};
   const partialEnabled = isPartialAnswerLeakEnabled();
+  const singleWordEnabled = isSingleWordAnswerLeakEnabled();
   for (let i = 0; i < generated.length; i += 1) {
     const q = generated[i];
     if (textContainsAnswer(q.question_text, q.answer)) {
@@ -1326,11 +1328,27 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
       if (partialEnabled) {
         toDrop.add(i);
         reasons[i] = `question gives away answer "${q.answer}"`.slice(0, 200);
+        continue;
       } else {
         console.warn('[daily/generate-questions] partial answer leak (measuring, not dropping)', {
           answer: q.answer.slice(0, 80),
           questionPreview: q.question_text.slice(0, 120),
         });
+      }
+    }
+    // Single-word leak (the "Venus" class, 2026-09-12): a one-word answer whose
+    // exact word sits in the stem. textContainsAnswer's acceptedFormLeaks never
+    // catches this — see isDiscriminating in self-answering.ts — so this is the
+    // only check that does. Always MEASURED; only DROPS when enabled.
+    if (singleWordAnswerLeaks(q.question_text, q.answer)) {
+      if (singleWordEnabled) {
+        toDrop.add(i);
+        reasons[i] = `question gives away single-word answer "${q.answer}"`.slice(0, 200);
+      } else {
+        console.warn(
+          '[daily/generate-questions] single-word answer leak (measuring, not dropping)',
+          { answer: q.answer.slice(0, 80), questionPreview: q.question_text.slice(0, 120) },
+        );
       }
     }
   }
@@ -1357,6 +1375,31 @@ export function countPartialAnswerLeaks(generated: LlmQuestion[]): number {
       !textContainsAnswer(q.question_text, q.answer) &&
       questionPartiallyLeaksAnswer(q.question_text, q.answer)
     ) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
+/**
+ * SINGLE_WORD_ANSWER_LEAK_ENABLED — default OFF, own flag from
+ * PARTIAL_ANSWER_LEAK_ENABLED (a one-word match is a different, weaker-evidence
+ * shape — see singleWordAnswerLeaks). Hits are logged and counted under the
+ * `answer_leak_single_word` gate; nothing is dropped until this is set. Also
+ * governs the bank RE-SERVE rejection in findBankSourceDefect, mirroring
+ * PARTIAL_ANSWER_LEAK_ENABLED's precedent: a rule not trusted to drop at
+ * generation time is not trusted to reject a re-serve either.
+ */
+export function isSingleWordAnswerLeakEnabled(): boolean {
+  const raw = process.env.SINGLE_WORD_ANSWER_LEAK_ENABLED?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+/** Hits the single-word-leak rule found, whether or not the flag lets it drop. */
+export function countSingleWordAnswerLeaks(generated: LlmQuestion[]): number {
+  let n = 0;
+  for (const q of generated) {
+    if (!textContainsAnswer(q.question_text, q.answer) && singleWordAnswerLeaks(q.question_text, q.answer)) {
       n += 1;
     }
   }
@@ -1452,8 +1495,8 @@ export function findAnswerShapeFailures(generated: LlmQuestion[]): {
 //
 // Flag posture deliberately MIRRORS the generation path: a rule not trusted to
 // drop at generation time is not trusted to reject a re-serve either, so one
-// flag governs both. Flipping PARTIAL_ANSWER_LEAK_ENABLED therefore also arms
-// the partial-leak rule here.
+// flag per rule governs both sides. Flipping PARTIAL_ANSWER_LEAK_ENABLED /
+// SINGLE_WORD_ANSWER_LEAK_ENABLED therefore also arms that rule here.
 export function findBankSourceDefect(source: {
   questionText: string;
   answer: string;
@@ -1469,6 +1512,9 @@ export function findBankSourceDefect(source: {
   if (shape.toDrop.size > 0) return shape.reasons[0];
   if (isPartialAnswerLeakEnabled() && questionPartiallyLeaksAnswer(questionText, answer)) {
     return `question gives away answer "${answer}"`;
+  }
+  if (isSingleWordAnswerLeakEnabled() && singleWordAnswerLeaks(questionText, answer)) {
+    return `question gives away single-word answer "${answer}"`;
   }
   return null;
 }
@@ -2366,6 +2412,13 @@ export async function generateDailyQuestions(
       gate: 'answer_leak_partial',
       considered: generated.length,
       dropped: countPartialAnswerLeaks(generated),
+    },
+    // Measure-only until SINGLE_WORD_ANSWER_LEAK_ENABLED is set — see
+    // singleWordAnswerLeaks / the gate name's comment in gate-drop-stats.ts.
+    {
+      gate: 'answer_leak_single_word',
+      considered: generated.length,
+      dropped: countSingleWordAnswerLeaks(generated),
     },
     { gate: 'answer_shape', considered: generated.length, dropped: answerShape.toDrop.size },
     { gate: 'domain_drift', considered: generated.length, dropped: offDomain.size },

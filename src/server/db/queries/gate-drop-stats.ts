@@ -29,6 +29,11 @@ export const GATE_NAMES = [
   // are set: `dropped` counts what each rule WOULD remove, so the flags get
   // flipped on evidence. See findAnswerLeaks / findQualityFailures.
   'answer_leak_partial',
+  // Measure-only until SINGLE_WORD_ANSWER_LEAK_ENABLED is set (2026-09-12): a
+  // one-word answer whose exact word sits in the stem (the "Venus" class) —
+  // isDiscriminating in self-answering.ts never credits a lone word as a tell,
+  // so acceptedFormLeaks can't catch this shape. See singleWordAnswerLeaks.
+  'answer_leak_single_word',
   'answer_shape',
   'domain_drift',
   // Bank RE-SERVE path, not generation. Every gate above runs only on freshly
@@ -40,6 +45,19 @@ export const GATE_NAMES = [
   'bank_pick_quality',
   'difficulty_floor',
   'thin_declared',
+  // Retrieval-grounded path only (2026-09-12): corroboration alone earns
+  // machine_verified there regardless of the ask-to-answer cold-solve outcome
+  // (see resolveMachineTrustTier's `corroborated: true` call in
+  // retrieval-grounded.ts) — a deliberate choice, since ask-to-answer's real
+  // job on that path is to catch outright CONTRADICTIONS (those already drop
+  // via askResult.toDrop before this counts). But a cold solver that reads the
+  // question fresh and can't land on the stored answer without contradicting
+  // it is also weak evidence the STEM itself is unclear, not just that the
+  // fact is shaky — the live "Suspension" incident was exactly this
+  // combination. `dropped` here means "trusted despite a failed cold solve",
+  // not "removed" — nothing is demoted by this counter; it exists so the
+  // combination is visible for review instead of silently invisible.
+  'grounded_trust_ask_mismatch',
 ] as const;
 /**
  * Defect classes the quality gate can return, mirroring the numbered list in
