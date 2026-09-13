@@ -28,7 +28,12 @@ const {
   }),
 }));
 
-vi.mock('next/navigation', () => ({ redirect: redirectMock }));
+vi.mock('next/navigation', () => ({
+  redirect: redirectMock,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => '/friends',
+  useSearchParams: () => new URLSearchParams(''),
+}));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }));
 vi.mock('@/server/db', () => ({
