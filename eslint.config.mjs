@@ -44,7 +44,8 @@ const TOKEN_LINT_RULE = {
 // warnings, closed by the button codemod. **63 (2026-09-13)** = 88 − 25 of the
 // 29 shadow warnings, closed by the shadow codemod (the other 4 were in
 // template strings the selector never saw; `check:design` R1 counts those).
-// When you clean a file
+// **52 (2026-09-13)** = 63 − 10 icon buttons folded onto .btn-icon − 1 ceremony
+// file now exempt. When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
 const TOKEN_LINT_GRANDFATHERED = [
@@ -95,8 +96,11 @@ const DESIGN_LINT_RULES = [
     message: "Loading placeholders use <Skeleton> (DESIGN-SYSTEM §7.1), not animate-pulse boxes.",
   },
   {
-    // §1.4 — a button or input is never a pill (sized round icon buttons are §3.4's business).
-    selector: `JSXOpeningElement[name.name=/^(?:button|input)$/] > ${CLS}[value=/^(?!.*\\bsize-(?:9|10|11|12|14)\\b).*\\brounded-full\\b/]`,
+    // §1.4 — a button or input is never a pill (sized round icon buttons are
+    // §3.4's business). `btn-icon rounded-full` is the sanctioned circular icon
+    // button and is excluded: its size-11 comes from the recipe, so the
+    // size-N lookahead alone would not spare it.
+    selector: `JSXOpeningElement[name.name=/^(?:button|input)$/] > ${CLS}[value=/^(?!.*\\bbtn-icon\\b)(?!.*\\bsize-(?:9|10|11|12|14)\\b).*\\brounded-full\\b/]`,
     message:
       "Buttons and inputs are never pills (DESIGN-SYSTEM §1.4). Use the .btn-* recipe or --radius-xs; rounded-full is for chips, badges, avatars, the FAB and close controls.",
   },
@@ -125,6 +129,12 @@ const DESIGN_LINT_EXEMPT = [
   "src/**/*.test.tsx",
   "src/app/dev/**",
   "src/app/feed/debug/**",
+  // The weekly ceremony renders as full-bleed saturated "rooms" with reversed
+  // type — an immersive surface exempted by DESIGN-SYSTEM §11. Its chrome is
+  // tuned to the room (the Exit control takes its colour from the beat's theme
+  // and hovers on white/10), so the neutral recipes do not apply. Kept in step
+  // with RULE_EXEMPT.R6 in scripts/audit-design-conformance.mjs.
+  "src/app/ceremony/**",
 ];
 
 const eslintConfig = defineConfig([

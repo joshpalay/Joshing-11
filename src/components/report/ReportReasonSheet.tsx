@@ -126,7 +126,7 @@ export function ReportReasonSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="btn-icon rounded-full"
           >
             <X className="size-4" />
           </button>

@@ -501,6 +501,7 @@ fill (chip surface, skeleton fill, badge colour, accent bar), it says so and def
 | `GameplayChat` glow, ceremony gem | elevation registers | disposition |
 | `TerritorySetupClient`, `PortraitCircles` "raised" | elevation registers, pending `--shadow-raised` | disposition §Deferred |
 | Ceremony rooms, `--interlude-*`, `--editorial-*` bands | card recipe | §5.1 |
+| Ceremony rooms — **and their chrome** (the Exit control takes its colour from the beat's theme and hovers on `white/10`; the neutral `.btn-icon` ink would be invisible on a saturated ground) | button recipes | §3.4, added 2026-09-13 |
 | `Nav.tsx` bottom tabs | §3.5 tab recipe | §3.5 |
 | `/admin/*` | list rule (grid tables allowed), token lint scope | §6.2 |
 | `data-flat` / `data-shadow` CSS, `PaletteToggle` | everything (testing chrome, unmounted) | `globals.css:720-762` |
@@ -561,15 +562,21 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 1.4 no pill buttons/inputs | R8 · 34 | yes |
 | 2.1 no Tailwind shadow utilities | R1 · **6** (was 35; the remainder are chips, blocked on §2.2a) | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
-| 3.4 hand-rolled icon buttons | R6 · 23 | yes |
+| 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · 11 | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 321 / R9 · 333 (heuristic, count only) | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 320 / R9 · 329 (heuristic, count only) | — |
 
-Lint lane baseline: **58** `canon/restricted-syntax` warnings (28 pill · 11 icon · 11
-animate-pulse · 4 Chip · 4 shadow-in-template-string); `--max-warnings 63` = 5 pre-existing
-(4 colour-lane + 1 unused-var) + 58. It was 103 at the Phase 5 build, then 88 after the
-button codemod. Both closures ratcheted the ceiling down the same day.
+Lint lane baseline: **47** `canon/restricted-syntax` warnings (28 pill · 11 animate-pulse ·
+4 Chip · 4 shadow-in-template-string); `--max-warnings 52` = 5 pre-existing (4 colour-lane +
+1 unused-var) + 47. Trajectory: **103** at the Phase 5 build → 88 (buttons) → 63 (shadows) →
+52 (icon buttons). Every closure ratchets the ceiling down the same day.
+
+**Where the two lanes disagree, and why that is fine.** The script reads whole lines and
+7-line `<button>` blocks; the lint selectors read one string literal. So a shadow inside a
+template string is counted by R1 and invisible to lint, and `check:design` can exempt a file
+per-rule (`RULE_EXEMPT`) where lint can only exempt a file from the whole lane. Keep the two
+exemption lists in step by hand — `src/app/ceremony/**` is in both.
 
 ---
 
