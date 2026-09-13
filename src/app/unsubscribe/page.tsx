@@ -32,7 +32,7 @@ export default async function UnsubscribePage({
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-4 py-16">
-      <div className="w-full rounded-xl border bg-card p-8 text-card-foreground">
+      <div className="w-full rounded-[var(--radius-card)] border bg-card p-8 text-card-foreground">
         {success ? (
           <>
             <h1 className="font-serif text-2xl font-semibold">You&apos;re unsubscribed</h1>

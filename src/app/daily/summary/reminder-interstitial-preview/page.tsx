@@ -51,7 +51,7 @@ export default function ReminderInterstitialPreviewPage() {
         <button
           type="button"
           onClick={() => setPreview('sms')}
-          className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-left transition hover:bg-[var(--brand-cream-page)]"
+          className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-left transition hover:bg-[var(--brand-cream-page)]"
         >
           <span className="block text-sm font-semibold text-[var(--brand-ink)]">
             Preview SMS reminder

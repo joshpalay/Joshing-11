@@ -51,7 +51,7 @@ function ToggleRow({
   onToggle?: () => void;
 }) {
   return (
-    <section className="rounded-xl border bg-card p-5 text-card-foreground">
+    <section className="rounded-[var(--radius-card)] border bg-card p-5 text-card-foreground">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
           <h3 className="font-serif text-lg font-semibold">{title}</h3>
@@ -141,7 +141,7 @@ export function PrivacyForm({ initialState }: Props) {
         <p className="text-sm text-destructive">{errorMessage}</p>
       ) : null}
 
-      <section className="rounded-xl border bg-card p-5 text-card-foreground">
+      <section className="rounded-[var(--radius-card)] border bg-card p-5 text-card-foreground">
         <h3 className="font-serif text-lg font-semibold">Invite links</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Create, tag, and delete your invite links — and edit the topics they carry — from the

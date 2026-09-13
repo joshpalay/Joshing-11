@@ -116,7 +116,7 @@ function RequestCard({
   const interests = interestPreview(request.suggestedInterests)
 
   return (
-    <article className="rounded-[var(--radius-xs)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-4 shadow-[var(--shadow-card)]">
+    <article className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-4 shadow-[var(--shadow-card)]">
       {/* Requester is always a real human (requesterName) — no house/LLM author
           can reach this surface by construction. */}
       <h3 className="font-semibold text-[var(--brand-ink)]">{request.requesterName}</h3>
