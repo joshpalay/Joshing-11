@@ -48,7 +48,7 @@ const BASELINE = {
   R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3
   R5: 1, // <Chip> geometry override (§4.1)
   R6: 0, // hand-rolled round icon button (§3.4) — CLOSED 2026-09-13: 10 sheet/menu close and "more actions" controls folded onto .btn-icon. The other 13 the rule used to report were never icon buttons (see the note above LINE_RULES).
-  R7: 11, // animate-pulse outside <Skeleton> (§7.1)
+  R7: 0, // animate-pulse placeholder outside <Skeleton> (§7.1) — CLOSED 2026-09-13: the /questions loaders, CreationSurface's drafting cards and the admin rerun bars all render <Skeleton>. The 4 the rule used to report were pulsing text labels, not placeholders.
   R8: 34, // button or input rendered as a pill (§1.4) — overlaps R4's selectable pills
   R9: 329, // heuristic: <button> block with no focus-visible and not .btn-* (§9.2) — was 333; 4 closed by the icon-button fold
   R10: 320, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — was 321; daily/summary's size-10 "More actions" reached 44px via the recipe
@@ -124,8 +124,14 @@ const LINE_RULES = [
   {
     id: 'R7',
     section: '§7.1',
-    title: 'animate-pulse outside <Skeleton>',
+    title: 'animate-pulse placeholder outside <Skeleton>',
     re: /\banimate-pulse\b/g,
+    // §7.1 governs PLACEHOLDER BLOCKS — the empty grey boxes that stand in for
+    // content. A pulsing *text label* ("Loading questions…", a rotating status
+    // phrase) is a different pattern: real text that breathes while it waits,
+    // with nothing for <Skeleton> to stand in for. `text-` on the same element
+    // separates the two cleanly.
+    skipLine: (l) => /\btext-/.test(l),
   },
 ];
 

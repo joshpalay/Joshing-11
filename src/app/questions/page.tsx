@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
 import { AnsweredQuestionsList, type AnsweredQuestionItem } from '@/components/questions/AnsweredQuestionsList';
+import { Skeleton } from '@/components/ui/Skeleton';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
@@ -125,11 +126,11 @@ function initialValues(question: QuestionView): QuestionFormValues {
 function LoadingSkeleton() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24">
-      <div className="mb-5 h-20 animate-pulse rounded-lg bg-muted" />
-      <div className="mb-5 h-14 animate-pulse rounded-lg bg-muted" />
+      <Skeleton className="mb-5 h-20" />
+      <Skeleton className="mb-5 h-14" />
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-36 animate-pulse rounded-lg border bg-card" />
+          <Skeleton key={index} className="h-36" />
         ))}
       </div>
     </main>
@@ -563,7 +564,7 @@ function QuestionsPageContent() {
           {answeredLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-16 animate-pulse rounded-lg border bg-card" />
+                <Skeleton key={index} className="h-16" />
               ))}
             </div>
           ) : answeredError ? (
