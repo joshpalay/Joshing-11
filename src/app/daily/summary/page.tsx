@@ -807,7 +807,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           aria-haspopup="menu"
           aria-expanded={isOverflowOpen}
           onClick={() => setIsOverflowOpen((open) => !open)}
-          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:ring-ring -mr-2 -mt-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
+          className="btn-icon rounded-full -mr-2 -mt-2"
         >
           <MoreHorizontal className="size-5" />
         </button>
@@ -994,7 +994,7 @@ function QuestionCardOverflowMenu({
             type="button"
             aria-label="Close menu"
             onClick={onClose}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+            className="btn-icon rounded-full"
           >
             <X className="size-4" />
           </button>

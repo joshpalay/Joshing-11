@@ -516,8 +516,20 @@
     @apply inline-flex min-h-11 items-center justify-center rounded-[4px] bg-destructive px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
+  /* Icon-only buttons are QUIET controls — a close X, a "more actions" ellipsis
+     — so the glyph rests in muted ink and darkens to full ink on hover, rather
+     than sitting at full strength all the time. The recipe originally said
+     `text-foreground`; when the ten hand-rolled icon buttons were folded in on
+     2026-09-13 every one of them turned out to render muted, so the recipe was
+     corrected to describe its consumers instead of the other way round (it had
+     exactly one consumer at the time, and a quiet exit control at that). Any
+     icon button that genuinely needs full-strength ink is a different type and
+     needs a decision, not a call-site override.
+     A CIRCULAR icon button is the one sanctioned override of this family
+     (DESIGN-SYSTEM §3.4): add `rounded-full` on a sheet/modal close control or
+     the FAB, where the circle is the affordance. */
   .btn-icon {
-    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 }
 

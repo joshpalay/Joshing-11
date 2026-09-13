@@ -165,7 +165,7 @@ export function FeedOverflowMenu({
                 type="button"
                 aria-label="Close menu"
                 onClick={closeMenu}
-                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+                className="btn-icon rounded-full"
               >
                 <X className="size-4" />
               </button>
