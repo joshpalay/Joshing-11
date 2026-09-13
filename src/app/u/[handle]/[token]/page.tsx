@@ -37,7 +37,7 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-sm leading-6">
             Ask your friend for a fresh link, or continue to Joshing if you already have an account.
           </p>
-          <Link href="/login" className="btn-ghost min-h-11 w-full">
+          <Link href="/login" className="btn-ghost w-full">
             Go to login
           </Link>
         </div>

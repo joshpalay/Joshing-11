@@ -25,8 +25,14 @@ const CARD_CLASS =
   'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5';
 const INPUT_CLASS =
   'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
-const SUBMIT_CLASS =
-  'h-11 w-full rounded-[var(--radius-xs)] bg-[var(--btn-primary-bg)] px-4 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 disabled:opacity-60';
+// The login submit IS the canonical primary CTA — it always shared
+// --btn-primary-bg, the bold base type and the 0.04em tracking with
+// `.btn-primary`, and diverged only on height (44 vs the old recipe's 48).
+// Now that the recipe is 44 app-wide (DESIGN-SYSTEM §3.1) the two are the same
+// button, so login routes through the recipe instead of restating it. Visually
+// identical; it also picks up the focus-visible ring this parallel definition
+// never had (§9.2).
+const SUBMIT_CLASS = 'btn-primary w-full';
 // Quiet secondary action (e.g. "this number is not correct" / "go back"): a
 // muted, sentence-case text link. Deliberately understated so it doesn't
 // compete with the primary button or flood the card with orange caps.

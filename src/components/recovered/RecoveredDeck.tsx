@@ -285,7 +285,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
                 <>
                   <button
                     type="button"
-                    className="btn-ghost min-h-12"
+                    className="btn-ghost"
                     onClick={() => setRevealed((r) => !r)}
                   >
                     {revealed ? 'Hide answer' : 'Show answer'}
@@ -298,7 +298,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
                 <>
                   <button
                     type="button"
-                    className="btn-ghost min-h-12"
+                    className="btn-ghost"
                     onClick={goAgain}
                     disabled={deck.length === 0}
                   >

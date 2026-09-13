@@ -259,7 +259,7 @@ export function OnboardingReminderStep({
       <div className="space-y-4">
         <button
           type="button"
-          className="btn-primary h-12 w-full"
+          className="btn-primary w-full"
           onClick={onContinueWithReminders}
           disabled={saving}
         >
@@ -273,7 +273,7 @@ export function OnboardingReminderStep({
         ) : null}
         <button
           type="button"
-          className="btn-ghost h-12 w-full"
+          className="btn-ghost w-full"
           onClick={onContinueWithoutReminders}
           disabled={saving}
         >

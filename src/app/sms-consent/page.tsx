@@ -156,7 +156,7 @@ export default async function SmsConsentPage() {
       </div>
 
       <div className="bg-card mt-10 rounded-[var(--radius-md)] border p-5">
-        <Link href={manageHref} className="btn-primary inline-flex min-h-11 items-center">
+        <Link href={manageHref} className="btn-primary">
           {manageLabel}
         </Link>
         <p className="text-muted-foreground mt-4 text-xs leading-5">

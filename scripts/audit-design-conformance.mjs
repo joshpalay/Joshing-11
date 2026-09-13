@@ -36,7 +36,7 @@ import { join, relative } from 'node:path';
 // enforced in full.
 const BASELINE = {
   R1: 35, // Tailwind shadow utility (§2.1) — 8 of these are the bottom toasts on shadow-lg
-  R2: 15, // .btn-* recipe overridden at the call site (§3) — 11 are `min-h-11`, moot once the recipe lands
+  R2: 0, // .btn-* recipe overridden at the call site (§3) — CLOSED 2026-09-13: recipe went 48→44px, the 11 redundant height overrides were stripped, the red primary became .btn-danger, and login folded onto .btn-primary. Enforced in full; a new override is now a regression.
   R3: 41, // card fill paired with a non-card radius (§1.2) — settings sections, daily panels, knowledge/[domain]
   R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3
   R5: 1, // <Chip> geometry override (§4.1)

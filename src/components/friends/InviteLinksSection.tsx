@@ -433,11 +433,11 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
                 type="button"
                 onClick={() => void saveCategories()}
                 disabled={draftCategories.length === 0 || saving}
-                className="btn-primary min-h-11 px-4 disabled:opacity-45"
+                className="btn-primary"
               >
                 {saving ? 'Saving…' : editor.kind === 'create' ? 'Create link' : 'Save changes'}
               </button>
-              <button type="button" onClick={closeEditor} className="btn-ghost min-h-11 px-3">
+              <button type="button" onClick={closeEditor} className="btn-ghost px-3">
                 Cancel
               </button>
             </div>
@@ -490,7 +490,7 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
               <button
                 type="button"
                 onClick={() => setPendingDeleteId(null)}
-                className="btn-ghost min-h-11 flex-1"
+                className="btn-ghost flex-1"
               >
                 Keep it
               </button>
@@ -498,7 +498,7 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
                 type="button"
                 onClick={() => void confirmDelete()}
                 disabled={deleting}
-                className="btn-primary min-h-11 flex-1 bg-[var(--destructive)]"
+                className="btn-danger flex-1"
               >
                 {deleting ? 'Deleting…' : 'Delete link'}
               </button>
