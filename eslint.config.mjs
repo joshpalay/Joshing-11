@@ -47,7 +47,8 @@ const TOKEN_LINT_RULE = {
 // **52 (2026-09-13)** = 63 − 10 icon buttons folded onto .btn-icon − 1 ceremony
 // file now exempt. **41 (2026-09-13)** = 52 − 7 placeholders folded onto
 // <Skeleton> − 4 pulsing text labels the selector no longer treats as
-// placeholders. When you clean a file
+// placeholders. **37 (2026-09-13)** = 41 − the last 4 chip shadows, closed by
+// ratifying §2.2a. When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
 const TOKEN_LINT_GRANDFATHERED = [
