@@ -1,11 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock';
 import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
+import { FriendsPageClient } from '@/components/friends/FriendsPageClient';
 import { InviteLinksSection } from '@/components/friends/InviteLinksSection';
-import { PersonalInviteFlow } from '@/components/friends/PersonalInviteFlow';
 import {
   MutualFriendSuggestionsSection,
   type MutualFriendSuggestionRow,
@@ -136,107 +137,92 @@ export default async function FriendsPage() {
   // get an empty "Suggested" section body under a visible heading.
   const hasSuggestions = reflections.length > 0;
 
+  // Suggested: passive scanning. Every row carries a provenance chip so a
+  // suggestion never reads as unexplained.
+  //
+  // Rendered ONLY when it has people in it -- heading included. Previously
+  // the heading always rendered, so with no contact matches and no invite
+  // reflections the whole section was a title over a "Coming soon" card:
+  // roughly a third of the first screen saying nothing. An empty section
+  // should be absent, not empty.
+  const suggested = hasSuggestions ? (
+    <section className="mb-5 space-y-3">
+      <h2 className="text-foreground font-serif text-xl font-semibold">Suggested</h2>
+      <div className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
+        {reflections.map((reflection) => {
+          const displayName = reflection.displayName?.trim() || `@${reflection.handle ?? ''}`;
+          const initials = initialsFor(reflection.displayName, reflection.handle ?? '?');
+          const swatch = reflection.avatarColor || colorForUser(reflection.inviteeUserId);
+          return (
+            <article
+              key={reflection.invitationId}
+              className="flex items-start gap-3 border-b py-3 last:border-0 last:pb-0"
+            >
+              <span
+                aria-hidden
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                style={{ background: swatch }}
+              >
+                {initials}
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-foreground font-medium">{displayName}</h3>
+                <span className="text-muted-foreground bg-secondary mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs">
+                  Joined from your invite
+                </span>
+                <p className="text-muted-foreground/70 mt-1 text-xs">
+                  invited {formatRelativeTime(reflection.invitedAt.toISOString())} · joined{' '}
+                  {formatRelativeTime(reflection.joinedAt.toISOString())}
+                </p>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  ) : null;
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5 pb-28">
       <header className="mb-5">
         <h1 className="text-foreground font-serif text-3xl font-semibold">Friends</h1>
       </header>
 
-      {/* Add someone new: exact @handle / phone lookup, plus contact sync where
-          the browser supports it. No section heading -- the card carries its own,
-          and a heading over a single card was pure vertical cost. */}
-      <div className="mb-5 space-y-3">
-        <FindFriendsSearch />
-        <ContactMatchBlock
-          discoverableByContacts={viewer.discoverableByContacts}
-          initialMatches={contactMatches.map((match) => ({
-            id: match.id,
-            handle: match.handle,
-            displayName: match.displayName,
-            avatarColor: match.avatarColor,
-            createdAt: match.createdAt.toISOString(),
-            relationship: match.relationship,
-          }))}
-          initialRefreshDue={contactRefreshDue}
+      <Suspense fallback={null}>
+        <FriendsPageClient
+          findFriendsSearch={<FindFriendsSearch />}
+          contactMatchBlock={
+            <ContactMatchBlock
+              discoverableByContacts={viewer.discoverableByContacts}
+              initialMatches={contactMatches.map((match) => ({
+                id: match.id,
+                handle: match.handle,
+                displayName: match.displayName,
+                avatarColor: match.avatarColor,
+                createdAt: match.createdAt.toISOString(),
+                relationship: match.relationship,
+              }))}
+              initialRefreshDue={contactRefreshDue}
+            />
+          }
+          suggested={suggested}
+          // The roster is what people come back for.
+          friendsList={<FriendsList />}
+          // B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2a: below the roster -- this is
+          // a colder, more algorithmic signal than the people the viewer already
+          // knows. Renders nothing when there's nothing to suggest (handled
+          // inside the component itself, so the empty-state rule lives in one
+          // place).
+          mutualFriendSuggestions={<MutualFriendSuggestionsSection initialSuggestions={mutualFriendSuggestions} />}
+          inviteLinksSection={
+            <InviteLinksSection
+              initialTopics={resolvedTopics}
+              initialLinks={initialLinks}
+              creatorName={viewer.displayName}
+            />
+          }
         />
-      </div>
-
-      {/* Text a specific person directly, distinct from the generic
-          shareable link below. Its own anchor (#personal-invite) so the
-          no-match state above, and any future "resend" action, can link or
-          hand off straight into it. */}
-      <div className="mb-5">
-        <PersonalInviteFlow />
-      </div>
-
-      {/* Suggested: passive scanning. Every row carries a provenance chip so a
-          suggestion never reads as unexplained.
-
-          Rendered ONLY when it has people in it -- heading included. Previously
-          the heading always rendered, so with no contact matches and no invite
-          reflections the whole section was a title over a "Coming soon" card:
-          roughly a third of the first screen saying nothing. An empty section
-          should be absent, not empty. */}
-      {hasSuggestions ? (
-        <section className="mb-5 space-y-3">
-          <h2 className="text-foreground font-serif text-xl font-semibold">Suggested</h2>
-          <div className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
-            {reflections.map((reflection) => {
-              const displayName = reflection.displayName?.trim() || `@${reflection.handle ?? ''}`;
-              const initials = initialsFor(reflection.displayName, reflection.handle ?? '?');
-              const swatch = reflection.avatarColor || colorForUser(reflection.inviteeUserId);
-              return (
-                <article
-                  key={reflection.invitationId}
-                  className="flex items-start gap-3 border-b py-3 last:border-0 last:pb-0"
-                >
-                  <span
-                    aria-hidden
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                    style={{ background: swatch }}
-                  >
-                    {initials}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-foreground font-medium">{displayName}</h3>
-                    <span className="text-muted-foreground bg-secondary mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs">
-                      Joined from your invite
-                    </span>
-                    <p className="text-muted-foreground/70 mt-1 text-xs">
-                      invited {formatRelativeTime(reflection.invitedAt.toISOString())} · joined{' '}
-                      {formatRelativeTime(reflection.joinedAt.toISOString())}
-                    </p>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      {/* Invite via link. An action rather than a destination, so it sits above
-          the roster but below the lookup. */}
-      <div className="mb-5">
-        <InviteLinksSection
-          initialTopics={resolvedTopics}
-          initialLinks={initialLinks}
-          creatorName={viewer.displayName}
-        />
-      </div>
-
-      {/* The roster is what people come back for, so it moves up: with the dead
-          contact card and the empty Suggested section gone, it now starts on the
-          first screen instead of the third. */}
-      <FriendsList />
-
-      {/* B-MUTUAL-FRIEND-SUGGESTIONS-01 Phase 2a: below the existing friend
-          list/pending-requests block, per the settled placement decision --
-          this is a colder, more algorithmic signal than the roster above it,
-          so it sits after the people the viewer already knows. Renders
-          nothing when there's nothing to suggest (handled inside the
-          component itself, not here, so the empty-state rule lives in one
-          place). */}
-      <MutualFriendSuggestionsSection initialSuggestions={mutualFriendSuggestions} />
+      </Suspense>
     </main>
   );
 }

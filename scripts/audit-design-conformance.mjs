@@ -35,7 +35,7 @@ import { join, relative } from 'node:path';
 // number after a cleanup; never raise one. A rule at 0 is a rule that is
 // enforced in full.
 const BASELINE = {
-  R1: 35, // Tailwind shadow utility (§2.1) — 8 of these are the bottom toasts on shadow-lg
+  R1: 34, // Tailwind shadow utility (§2.1) — 8 of these are the bottom toasts on shadow-lg
   R2: 15, // .btn-* recipe overridden at the call site (§3) — 11 are `min-h-11`, moot once the recipe lands
   R3: 41, // card fill paired with a non-card radius (§1.2) — settings sections, daily panels, knowledge/[domain]
   R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3
@@ -43,7 +43,7 @@ const BASELINE = {
   R6: 23, // hand-rolled round icon button, not .btn-icon (§3.4)
   R7: 11, // animate-pulse outside <Skeleton> (§7.1)
   R8: 34, // button or input rendered as a pill (§1.4) — overlaps R4's selectable pills
-  R9: 333, // heuristic: <button> block with no focus-visible and not .btn-* (§9.2)
+  R9: 332, // heuristic: <button> block with no focus-visible and not .btn-* (§9.2)
   R10: 321, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1)
 };
 

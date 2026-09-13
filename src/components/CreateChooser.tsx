@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pencil, Send, Users } from 'lucide-react';
+import { Pencil, Send, UserPlus, Users } from 'lucide-react';
 
 // Capability 8: creating a question is a three-way choice surfaced up front —
 // bank it only, send to your friends, or send to specific people. Sending
@@ -38,6 +38,18 @@ const QUESTION_OPTIONS: ReadonlyArray<{
   },
 ];
 
+// A sibling action, not a 4th question intent (D-FRIENDS-RESTRUCTURE-01) --
+// it leaves the question composer entirely and opens the personal-invite
+// sheet on /friends instead. Kept in the same shape as the question options
+// (rather than a second hand-rolled button) so the chooser still has exactly
+// one button template in source.
+const ADD_FRIEND_OPTION = {
+  key: 'add_friend' as const,
+  icon: UserPlus,
+  title: 'Add a friend',
+  description: 'Text someone a personal invite.',
+};
+
 export function CreateChooser({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
 
@@ -59,20 +71,30 @@ export function CreateChooser({ open, onClose }: { open: boolean; onClose: () =>
     router.push(`/questions?create=1&intent=${intent}`);
   }
 
+  function addFriend() {
+    onClose();
+    router.push('/friends?invite=1');
+  }
+
+  const options = [
+    ...QUESTION_OPTIONS.map((option) => ({ ...option, key: option.intent, onClick: () => addQuestion(option.intent) })),
+    { ...ADD_FRIEND_OPTION, onClick: addFriend },
+  ];
+
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-[var(--scrim)] px-0 pb-0 md:items-center md:px-4 md:pb-4" role="dialog" aria-modal="true" aria-labelledby="create-chooser-title">
       <button className="absolute inset-0 cursor-default" type="button" aria-label="Close create chooser" onClick={onClose} />
       <section className="relative w-full rounded-t-2xl bg-background p-5 shadow-[var(--shadow-overlay)] md:max-w-md md:rounded-2xl">
-        <h2 id="create-chooser-title" className="font-serif text-2xl font-semibold">Create a question</h2>
+        <h2 id="create-chooser-title" className="font-serif text-2xl font-semibold">Create</h2>
         <div className="mt-5 grid gap-3">
-          {QUESTION_OPTIONS.map((option) => {
+          {options.map((option) => {
             const Icon = option.icon;
             return (
               <button
-                key={option.intent}
+                key={option.key}
                 type="button"
                 className="flex min-h-20 w-full items-center gap-4 rounded-lg border bg-card px-4 py-3 text-left transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary"
-                onClick={() => addQuestion(option.intent)}
+                onClick={option.onClick}
               >
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary" aria-hidden="true">
                   <Icon className="size-5" />

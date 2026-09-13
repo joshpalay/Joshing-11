@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Bell, Brain, Home, Pencil, Plus, User, Users } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
 
@@ -57,7 +57,6 @@ export function Nav({
   friendsDotVisible?: boolean;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const currentUserId = initialUserId;
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
 
@@ -100,12 +99,6 @@ export function Nav({
   }, [initialUserId]);
 
   const accountInitials = displayName ? initialsFor(displayName) || null : null;
-  // On Home and the Questions page the FAB is a dedicated "add a question"
-  // shortcut: it drops straight into the composer (?create=1) rather than the
-  // generic three-way Create chooser. The composer still surfaces every
-  // destination control, so nothing is lost by skipping the chooser here. The
-  // chooser stays as the FAB action on the other surfaces.
-  const isQuestionComposerShortcut = pathname === '/' || pathname.startsWith('/questions');
   const isOtherUserProfilePath = (() => {
     if (!pathname.startsWith('/users/')) return false;
     const rest = pathname.slice('/users/'.length);
@@ -113,14 +106,18 @@ export function Nav({
     if (!profileId) return false;
     return profileId !== currentUserId;
   })();
-  // B-10.1 (2026-08-30): the '/games/' branch is gone with the Joshing Games
-  // sunset (the route redirects home now). Despite the legacy name this is the
-  // Create / add-a-question FAB, not a game shortcut.
+  // D-FRIENDS-RESTRUCTURE-01: the FAB is universal now -- same button, same
+  // "open the create chooser" behavior, on every route (no more dedicated
+  // add-a-question shortcut on Home/Questions, no more hiding it on
+  // /friends or /knowledge just because the old single-purpose shortcut
+  // design didn't have a use for it there). These three exceptions remain
+  // for reasons unrelated to that old design:
+  // - /admin is Josh's internal tools surface, not part of the create flow.
+  // - /dev/invite-redesign/creator is an isolated dev harness for testing
+  //   the invite creator in isolation; the FAB would pollute what's tested.
+  // - another user's profile isn't a place to float a generic create button.
   const hidesCreateShortcut =
-    pathname.startsWith('/daily') ||
     pathname.startsWith('/admin') ||
-    pathname.startsWith('/knowledge') ||
-    pathname === '/friends' ||
     pathname === '/dev/invite-redesign/creator' ||
     isOtherUserProfilePath;
   const showCreateShortcut = !hidesCreateShortcut;
@@ -234,18 +231,12 @@ export function Nav({
           <div className="flex w-full max-w-2xl justify-end px-5">
             <button
               type="button"
-              className={[
-                'bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-lg',
-                // The dedicated add-a-question FAB shows on every viewport; the
-                // generic Create chooser FAB stays mobile-only as before.
-                isQuestionComposerShortcut ? '' : 'md:hidden',
-              ].join(' ')}
-              aria-label={isQuestionComposerShortcut ? 'Add a question' : 'Create'}
-              onClick={() =>
-                isQuestionComposerShortcut
-                  ? router.push('/questions?create=1')
-                  : setCreateChooserOpen(true)
-              }
+              /* eslint-disable-next-line canon/restricted-syntax -- the FAB is the
+                 ratified rounded-full exception for icon buttons (DESIGN-SYSTEM
+                 §3.4, §3.8); .btn-icon's square 44px recipe doesn't apply here. */
+              className="bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-[var(--shadow-card-strong)] md:hidden"
+              aria-label="Create"
+              onClick={() => setCreateChooserOpen(true)}
             >
               <Plus className="size-6" />
             </button>
