@@ -108,8 +108,11 @@ Grep (overlay on a non-2xl radius): `rg -n 'role="dialog"' -A3 src --glob '*.tsx
 - **RATIFIED:** a primary or secondary action is never a pill. The onboarding "Add" pill
   (`OnboardingFlow.tsx:881`) becomes a standard button (§3.1). Commit `e68aebde` already
   stripped the other `rounded-full` overrides from `.btn-*` sites; none remain on `main`.
-- **RATIFIED (Phase 4):** inputs are never pills either (`OnboardingFlow.tsx:880` `rounded-full` input →
-  `--radius-xs`, matching `LoginPanel.tsx:27` and `KnowledgeFlatClient.tsx:914`).
+- **RATIFIED (Phase 4):** inputs are never pills either. **Landed 2026-09-13:** `AddTopicField`'s
+  shared `DEFAULT_INPUT_CLASS` moved to `--radius-xs` — which reaches all five consumers — and
+  onboarding's two overrides went with it: its pill input took the same radius, and its navy
+  pill "Add" button became `.btn-ghost`, since Continue is that screen's primary and Add is
+  secondary (§3.1, one per view).
 
 Grep (a button or input that is a pill):
 `rg -n '<(button|input)\b' -A5 src --glob '*.tsx' | rg 'rounded-full' | rg -v 'size-(9|10|11|12|14)|aria-label'`
@@ -155,18 +158,19 @@ cards and took `--shadow-card`, as did `PeopleYouInvited`'s hover lift.
 **Exception, by Phase 4 amendment:** the FAB (`Nav.tsx`) took **`--shadow-card-strong`**, not
 overlay — a 12px/28px blur under a 56px circle reads as a stain.
 
-### 2.2a Chips and pills carry no elevation — PROPOSED (2026-09-13)
+### 2.2a Chips and pills carry no elevation — RATIFIED (Josh, 2026-09-13)
 
 The shadow sweep left exactly six `shadow-sm` sites and every one is a chip or pill:
 `KnowledgeBubbleMap.tsx:318`, `KnowledgePeaksView.tsx:1034,1062` (a `hover:shadow-sm` lift), and
 three on `TerritorySetupClient` (`:738` label chip, `:980,:998` the size-14 territory circles).
 §2.1 named this gap — "chips/pills currently have no elevation rule" — and never filled it.
 
-Proposed: **a chip is a label, not a surface. It sits on the page and casts nothing.** The
-`Chip` primitive already ships with no shadow, so this only ratifies what the primitive does.
-Not applied here, because restyling every chip is a visible change that deserves its own yes.
-Note that `TerritorySetupClient`'s three also sit on the deferred "raised" register (§11), so
-they may resolve with that instead.
+**A chip is a label, not a surface. It sits on the page and casts nothing.** The `Chip`
+primitive already shipped with no shadow, so this ratifies what the primitive does and holds
+the hand-rolled ones to it. Applied the same day: the territory label chip and its two
+selector circles, the bubble-map filter pill, and the two peaks-view filter pills all dropped
+`shadow-sm` / `hover:shadow-sm`. **R1 closed at 0.** `TerritorySetupClient`'s deferred "raised"
+register (§11) is a separate question about its drag surface, untouched here.
 
 ### 2.3 Letterpress is tokenised — RATIFIED (Phase 4, 2026-09-11) (E-2)
 
@@ -343,18 +347,18 @@ and sits *on* another control. Ratified (Phase 4) `<Badge>` in `src/components/u
 
 ---
 
-### 4.3 Selectable chip (filter / toggle pill) — PROPOSED (surfaced by `check:design` R4, 2026-09-11; not yet ratified)
+### 4.3 Selectable chip (filter / toggle pill) — RATIFIED (Josh, 2026-09-13; build pending)
 
 Roughly a dozen pills are **buttons**, not labels: interest pickers (`OnboardingFlow.tsx:171-211`,
 `AddTopicField.tsx:58`, `QuestionForm.tsx:1057`), the daily-summary filter row
 (`daily/summary/page.tsx:903-927`, `min-h-9`), knowledge-map filters
 (`KnowledgePeaksView.tsx:461,1034,1062`, `KnowledgeNodeCard.tsx:267`), `InviteCategoryChips`.
 They share `rounded-full border px-3 py-1(.5) text-sm|text-xs` and hand-roll a selected state.
-Neither `Chip` (a `span`) nor any button type in §3 covers them. Proposed: a `selectable`
-variant on `Chip` rendered as a `<button type="button" aria-pressed>` — `md` geometry,
-`min-h-9` visual with a 44px hit area via padding, selected state carried by ink fill
-(`bg-foreground text-background`) **and** `aria-pressed`, never by hue alone. Until ratified,
-the R4 count includes them; new filter pills should copy `daily/summary/page.tsx:910`.
+Neither `Chip` (a `span`) nor any button type in §3 covers them. **Ratified:** a `selectable`
+variant on `Chip` rendered as a `<button type="button" aria-pressed>` — `md` geometry, a 44px
+hit area (§9.1), the §9.2 focus ring, and a selected state carried by ink fill
+(`bg-foreground text-background`) **and** `aria-pressed`, never by hue alone. **Build pending**
+(§12); until it lands, new filter pills copy `daily/summary/page.tsx:910`.
 
 ## 5. Cards and containers
 
@@ -535,7 +539,7 @@ renamed off `--radius-xs`, the SMS-code input onto `--radius-xs` + `min-h-11`, a
 
 | Edit | Where | Ruling |
 |---|---|---|
-| Add-a-topic control joins the system: `AddTopicField` `DEFAULT_INPUT_CLASS` `rounded-full` → `--radius-xs` (5 consumers), and `OnboardingFlow.tsx:934-935`'s pill input + navy pill button fold onto that default + `.btn-ghost` (the screen's primary is Continue, so Add is secondary — §3.1 one-per-view) | `interests/AddTopicField.tsx`, `OnboardingFlow.tsx` | 1.4, 1.5, 3.2 |
+| **Build §4.3** — add the `selectable` variant to `Chip`, then migrate the ~12 filter pills (`OnboardingFlow` interest chips, `AddTopicField` `DEFAULT_CHIP_CLASS`, `QuestionForm:1057`, the `daily/summary` filter row, `KnowledgePeaksView`, `KnowledgeNodeCard`, `InviteCategoryChips`) | `ui/Chip.tsx` + call sites | 4.3 |
 | Duplicate `--radius-xs…lg` literal block | `globals.css:374-377` | 1.1 |
 | Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
 | Chip: drop `sm`; add `Badge`; migrate Nav/FeedList badges and `MyQuestionCard` label | `ui/` | 4.1–4.2 |
@@ -571,7 +575,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 |---|---|---|
 | 1.2 card radius | R3 · **0 — closed 2026-09-13** | — |
 | 1.4 no pill buttons/inputs | R8 · 34 | yes |
-| 2.1 no Tailwind shadow utilities | R1 · **6** (was 35; the remainder are chips, blocked on §2.2a) | yes |
+| 2.1 no Tailwind shadow utilities | R1 · **0 — closed 2026-09-13** (35 → 6 → 0, the last 6 by ratifying §2.2a) | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |

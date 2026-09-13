@@ -35,14 +35,12 @@ import { join, relative } from 'node:path';
 // number after a cleanup; never raise one. A rule at 0 is a rule that is
 // enforced in full.
 const BASELINE = {
-  // Tailwind shadow utility (§2.1). 35 -> 6 on 2026-09-13: toasts, anchored
-  // menus, sheets, the knowledge floating cards, the FAB and the sms-consent
-  // figures all moved onto the tokens. The 6 that remain are every chip/pill
-  // in the app that carries `shadow-sm` — the elevation gap §2.1 named and
-  // never filled. Unblocked by ratifying §4.4 (chips carry no elevation);
-  // three of them also sit on TerritorySetupClient, whose "raised" register is
-  // separately deferred (§11).
-  R1: 6,
+  // Tailwind shadow utility (§2.1) — CLOSED 2026-09-13. 35 -> 6: toasts,
+  // anchored menus, sheets, the knowledge floating cards, the FAB and the
+  // sms-consent figures moved onto the tokens. 6 -> 0: §2.2a was ratified
+  // (a chip is a label, not a surface — it casts nothing), so the last
+  // shadow-sm came off the territory chips and the knowledge filter pills.
+  R1: 0,
   R2: 0, // .btn-* recipe overridden at the call site (§3) — CLOSED 2026-09-13: recipe went 48→44px, the 11 redundant height overrides were stripped, the red primary became .btn-danger, and login folded onto .btn-primary. Enforced in full; a new override is now a regression.
   R3: 0, // card fill paired with a non-card radius (§1.2) — CLOSED 2026-09-13: 38 card containers moved onto --radius-card (settings sections, daily summary/catch-up panels, knowledge/[domain], the inline-field card variants), one input onto --radius-xs. Enforced in full.
   R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3

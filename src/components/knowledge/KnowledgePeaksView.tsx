@@ -1031,7 +1031,7 @@ export function PeakDetailCard({
                 key={child.id}
                 type="button"
                 onClick={() => onSelectSibling(child.id)}
-                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
               >
                 <span
@@ -1059,7 +1059,7 @@ export function PeakDetailCard({
                   key={sib.id}
                   type="button"
                   onClick={() => onSelectSibling(sib.id)}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
                 >
                   <span

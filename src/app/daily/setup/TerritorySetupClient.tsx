@@ -735,7 +735,7 @@ function DragPreview({ domain }: { domain: TerritoryDomain }) {
         ) : null}
       </KnowledgeBubble>
       <span
-        className="rounded-full bg-[var(--cream)]/95 px-2 py-0.5 font-serif text-[11px] leading-tight shadow-sm"
+        className="rounded-full bg-[var(--cream)]/95 px-2 py-0.5 font-serif text-[11px] leading-tight"
         style={{ color: color.text }}
       >
         {domain.domain}
@@ -977,7 +977,7 @@ function QuickMoveTargets({
           key={target.value}
           ref={(element) => setQuickTargetRef(target.value, element)}
           type="button"
-          className={`grid size-14 place-items-center rounded-full border px-0.5 text-center text-[0.62rem] leading-[0.72rem] font-semibold break-words hyphens-auto shadow-sm transition ${
+          className={`grid size-14 place-items-center rounded-full border px-0.5 text-center text-[0.62rem] leading-[0.72rem] font-semibold break-words hyphens-auto transition ${
             hoveredTarget === target.value
               ? 'scale-110 border-[var(--ink)] bg-[var(--ink)] text-[var(--cream)] shadow-[0_10px_24px_rgba(26,18,8,0.24)]'
               : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--ink)]'
@@ -995,7 +995,7 @@ function QuickMoveTargets({
         type="button"
         aria-label={`Throw out ${domain}`}
         title="Throw out"
-        className={`grid size-14 place-items-center rounded-full border shadow-sm transition ${
+        className={`grid size-14 place-items-center rounded-full border transition ${
           hoveredRemoveTarget
             ? 'scale-110 border-[var(--destructive)] bg-[var(--destructive)] text-white shadow-[0_10px_24px_rgba(180,35,24,0.32)]'
             : 'border-[var(--border-warm)] bg-[var(--cream)] text-[var(--text-muted-warm)]'
