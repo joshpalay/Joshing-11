@@ -301,9 +301,11 @@ function interestPhrase(suggestedInterests: string[]) {
 }
 
 export function buildFriendInvitationMessage({
+  inviterName,
   inviteUrl,
   suggestedInterests,
 }: {
+  inviterName: string
   inviteUrl: string
   suggestedInterests: string[]
 }): string {
@@ -312,13 +314,15 @@ export function buildFriendInvitationMessage({
     ? ` I added a few ideas that made me think of you — ${ideas}. Keep, edit, or ignore them.`
     : ''
 
-  return `Hey — I thought you’d like this corner of Joshing.${ideaCopy} No app to download — just tap this: ${inviteUrl}`
+  return `Hey — ${inviterName} thought you’d like this corner of Joshing.${ideaCopy} No app to download — just tap this: ${inviteUrl}`
 }
 
 export function buildExistingUserFriendInvitationMessage({
+  inviterName,
   inviteUrl,
   suggestedInterests,
 }: {
+  inviterName: string
   inviteUrl: string
   suggestedInterests: string[]
 }): string {
@@ -327,7 +331,7 @@ export function buildExistingUserFriendInvitationMessage({
     ? ` I added a few areas I think overlap with your world — ${ideas}. Keep, edit, or ignore them.`
     : ''
 
-  return `Hey — I thought you’d like this corner of Joshing.${ideaCopy} Tap this when you have a minute: ${inviteUrl}`
+  return `Hey — ${inviterName} thought you’d like this corner of Joshing.${ideaCopy} Tap this when you have a minute: ${inviteUrl}`
 }
 
 function maskPhoneNumber(phone: string): string {
@@ -344,7 +348,8 @@ function maskPhoneNumber(phone: string): string {
 
 function serializeOutgoingInvitation(
   invitation: OutgoingFriendInvitation,
-  request: Request
+  request: Request,
+  inviterName: string
 ) {
   const inviteUrl =
     invitation.status === 'pending'
@@ -352,6 +357,7 @@ function serializeOutgoingInvitation(
       : null
   const message = inviteUrl
     ? buildFriendInvitationMessage({
+        inviterName,
         inviteUrl,
         suggestedInterests: invitation.suggestedInterests,
       })
@@ -387,20 +393,38 @@ async function getUserByPhone(phone: string) {
   return user ?? null
 }
 
+function firstName(displayName: string | null, fallback: string): string {
+  const trimmed = displayName?.trim()
+  if (!trimmed) return fallback
+  const head = trimmed.split(/\s+/)[0]
+  return head || fallback
+}
+
+async function getInviterFirstName(userId: string): Promise<string> {
+  const [user] = await db
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+
+  return firstName(user?.displayName ?? null, 'A friend')
+}
+
 export async function GET(request: Request) {
   const session = await getSession()
   if (!session)
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   try {
-    const invitations = await listOutgoingFriendInvitations({
-      inviterUserId: session.userId,
-    })
+    const [invitations, inviterName] = await Promise.all([
+      listOutgoingFriendInvitations({ inviterUserId: session.userId }),
+      getInviterFirstName(session.userId),
+    ])
 
     return NextResponse.json({
       ok: true,
       invitations: invitations.map((invitation) =>
-        serializeOutgoingInvitation(invitation, request)
+        serializeOutgoingInvitation(invitation, request, inviterName)
       ),
     })
   } catch (error) {
@@ -582,7 +606,9 @@ export async function PATCH(request: Request) {
     }
 
     const inviteUrl = `${getBaseUrl(request)}/invite/${invitation.token}`
+    const inviterName = await getInviterFirstName(session.userId)
     const message = buildFriendInvitationMessage({
+      inviterName,
       inviteUrl,
       suggestedInterests,
     })
@@ -694,7 +720,9 @@ export async function POST(request: Request) {
         })
 
       const inviteUrl = `${getBaseUrl(request)}/activities#friendship-${encodeURIComponent(friendshipRequest.id)}`
+      const inviterName = await getInviterFirstName(session.userId)
       const message = buildExistingUserFriendInvitationMessage({
+        inviterName,
         inviteUrl,
         suggestedInterests,
       })
@@ -739,7 +767,9 @@ export async function POST(request: Request) {
     })
 
     const inviteUrl = `${getBaseUrl(request)}/invite/${invitation.token}`
+    const inviterName = await getInviterFirstName(session.userId)
     const message = buildFriendInvitationMessage({
+      inviterName,
       inviteUrl,
       suggestedInterests,
     })
