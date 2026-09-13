@@ -155,7 +155,7 @@ export function FeedOverflowMenu({
             role="menu"
             aria-label="More Feed actions"
             onKeyDown={handleMenuKeyDown}
-            className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl"
+            className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-[var(--shadow-overlay)] sm:w-72 sm:rounded-2xl"
           >
             <div className="flex items-center justify-between px-3 py-2 sm:hidden">
               <p className="text-foreground text-sm font-medium">

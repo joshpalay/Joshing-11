@@ -243,7 +243,7 @@ function CardOverflowMenu({
         <div
           id={menuId}
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-md"
+          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border bg-background p-1 shadow-[var(--shadow-overlay)]"
         >
           <button
             type="button"

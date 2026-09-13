@@ -246,7 +246,7 @@ export function ContactMatchBlock({
 
       {error ? <p className="text-destructive mt-3 text-sm">{error}</p> : null}
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-[var(--shadow-overlay)]">
           {toast}
         </div>
       ) : null}

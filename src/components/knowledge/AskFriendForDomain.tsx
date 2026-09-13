@@ -205,7 +205,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
         aria-label="Close"
         onClick={onClose}
       />
-      <section className="bg-background relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border p-5 shadow-xl sm:max-w-xl sm:rounded-2xl">
+      <section className="bg-background relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border p-5 shadow-[var(--shadow-overlay)] sm:max-w-xl sm:rounded-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.12em] uppercase">

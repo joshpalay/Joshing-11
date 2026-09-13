@@ -22,7 +22,7 @@ export function ReminderConfirmedToast({ show }: { show: boolean }) {
 
   if (!visible) return null
   return (
-    <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+    <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-[var(--shadow-overlay)] md:bottom-8">
       You&rsquo;re set &mdash; we&rsquo;ll text you when each day&rsquo;s five open.
     </div>
   )

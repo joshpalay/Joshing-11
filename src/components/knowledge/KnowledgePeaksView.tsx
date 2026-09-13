@@ -861,7 +861,7 @@ export function PeakDetailCard({
   const card = (children: ReactNode) => (
     <section
       aria-label={`${node.name} details`}
-      className="rounded-xl border p-4 shadow-lg"
+      className="rounded-xl border p-4 shadow-[var(--shadow-overlay)]"
       style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
     >
       {children}
