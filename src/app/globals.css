@@ -486,15 +486,20 @@
   }
 
   /* Canonical button system. One family of utilities (primary / ghost / danger /
-     icon), all sharing the 4px corner radius and a focus-visible ring.
-     `.btn-primary` is the daily-five call-to-action: 48px-tall (min-h-12),
-     brand-link fill, bold base type with 0.04em tracking — the single standard
-     for prominent primary CTAs. Ghost / danger / icon stay 44px-tall (min-h-11)
-     with text-sm so they read as secondary next to a primary CTA.
+     icon), all sharing the 4px corner radius, the 44px touch floor (min-h-11 /
+     size-11, DESIGN-SYSTEM §9.1), and one focus-visible ring (§9.2).
+     `.btn-primary` is the single standard for prominent primary CTAs: navy fill
+     (--btn-primary-bg), bold base type with 0.04em tracking. Ghost / danger /
+     icon read as secondary by WEIGHT and SIZE (text-sm, medium) — never by a
+     different height.
+     Height is 44px app-wide (B-FABLE-DESIGN-CANON-01 Phase 2 ruling 2,
+     2026-09-11): the recipe was 48px (min-h-12) while eight invite/consent call
+     sites overrode it to min-h-11, so the two disagreed on every shared screen.
+     44 won; those overrides are now redundant and were stripped.
      The shadcn ui/button was removed in favor of these — see the 2026-05-30
      design audit (C6, button consolidation). */
   .btn-primary {
-    @apply inline-flex min-h-12 items-center justify-center rounded-[4px] bg-[var(--btn-primary-bg)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex min-h-11 items-center justify-center rounded-[4px] bg-[var(--btn-primary-bg)] px-4 py-2 text-base font-bold tracking-[0.04em] text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-ghost {

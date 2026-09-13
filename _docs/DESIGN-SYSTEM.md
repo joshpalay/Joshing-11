@@ -182,10 +182,11 @@ Grep (a `.btn-*` site overriding the recipe):
 Everything else in the recipe stands: `rounded-[4px]`, `bg-[var(--btn-primary-bg)]` (navy),
 `text-base font-bold tracking-[0.04em] text-white`, `px-4 py-2`, `hover:opacity-90`.
 
-- **Pending recipe edit** (this job may not touch `globals.css`; see §12): `globals.css:497`
-  `min-h-12` → `min-h-11`; the header comment's "48px-tall" and "brand-link fill" both
-  corrected. Once landed, the eight `btn-primary min-h-11` overrides are redundant and the
-  codemod strips them.
+- **Landed 2026-09-13.** `globals.css` now reads `min-h-11`; the header comment is corrected;
+  all fifteen call-site overrides are stripped (eleven redundant heights, the red
+  `.btn-primary` that became `.btn-danger`, and login's parallel definition, which now reads
+  `btn-primary w-full`). Conformance rule **R2 is closed at 0** — a new override is a
+  regression, not a backlog item.
 - **One per view.** A primary CTA is the single most important action on the surface. Two
   side by side is a design error, not a layout problem.
 - **Use it for:** starting or resuming play, submitting a form, accepting an invitation,
@@ -202,8 +203,8 @@ primary by weight and size, never by colour.
 ### 3.3 Destructive — `.btn-danger` — RATIFIED (`globals.css:504-506`; Phase 2 ruling 2)
 
 44px, `rounded-[4px]`, `bg-destructive`, `text-sm font-medium text-white`. **The only button
-that may be red.** `InviteLinksSection.tsx:501` (a `.btn-primary` repainted
-`bg-[var(--destructive)]`) is a `.btn-danger` wearing the wrong class — codemod. Always paired
+that may be red.** (`InviteLinksSection.tsx:501`, a `.btn-primary` repainted
+`bg-[var(--destructive)]`, was corrected to `.btn-danger` on 2026-09-13.) Always paired
 with an inline confirm (`.btn-danger` + `.btn-ghost`), never `window.confirm()`
 (`design-sweep-NEXT-STEPS` item 5).
 
@@ -486,13 +487,14 @@ fill (chip surface, skeleton fill, badge colour, accent bar), it says so and def
 
 `globals.css` and components are untouched by `B-FABLE-DESIGN-CANON-01`. The rulings imply:
 
+**Done 2026-09-13 (PR "design-codemod: buttons"):** the `.btn-primary` recipe is `min-h-11`
+with its comment corrected; all fifteen call-site overrides stripped;
+`InviteLinksSection.tsx:501` → `.btn-danger`; `LoginPanel.tsx` `SUBMIT_CLASS` →
+`btn-primary w-full`. R2 closed at 0.
+
 | Edit | Where | Ruling |
 |---|---|---|
-| `.btn-primary` `min-h-12` → `min-h-11`; header comment "48px-tall" → "44px"; "brand-link fill" → "navy fill" | `globals.css:490-497` | 3.1, B-3 |
-| Strip the 8 `min-h-11` overrides once the recipe changes | `invite/[token]`, `sms-consent`, `InviteLinksSection`, `Accept*Button`, dev page | 3.1 |
-| `InviteLinksSection.tsx:501` → `.btn-danger` | component | 3.3 |
-| `LoginPanel.tsx:29` `SUBMIT_CLASS` → `btn-primary w-full` (identical look at 44px; gains the focus ring) | component | ruling 3 |
-| `OnboardingFlow.tsx:881` pill → `btn-primary`; `:880` input → `--radius-xs` | component | 1.4 |
+| Add-a-topic control joins the system: `AddTopicField` `DEFAULT_INPUT_CLASS` `rounded-full` → `--radius-xs` (5 consumers), and `OnboardingFlow.tsx:934-935`'s pill input + navy pill button fold onto that default + `.btn-ghost` (the screen's primary is Continue, so Add is secondary — §3.1 one-per-view) | `interests/AddTopicField.tsx`, `OnboardingFlow.tsx` | 1.4, 1.5, 3.2 |
 | Stale comment "content cards use rounded-md" | `globals.css:185-186` | 1.2 |
 | Duplicate `--radius-xs…lg` literal block | `globals.css:374-377` | 1.1 |
 | Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
@@ -530,15 +532,15 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 1.2 card radius | R3 · 41 | — |
 | 1.4 no pill buttons/inputs | R8 · 34 | yes |
 | 2.1 no Tailwind shadow utilities | R1 · 35 | yes |
-| 3 no `.btn-*` overrides | R2 · 15 (11 are `min-h-11`, moot once §3.1's recipe edit lands) | yes |
+| 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
 | 3.4 hand-rolled icon buttons | R6 · 23 | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · 11 | yes |
 | 9.1 / 9.2 touch floor and focus ring | R10 · 321 / R9 · 333 (heuristic, count only) | — |
 
-Lint lane baseline: **98** `canon/restricted-syntax` warnings (29 shadow · 28 pill · 15
-btn-override · 11 icon · 11 animate-pulse · 4 Chip); `--max-warnings 103` = 5 pre-existing
-(4 colour-lane + 1 unused-var; the old ceiling of 16 had slack) + 98.
+Lint lane baseline: **83** `canon/restricted-syntax` warnings (29 shadow · 28 pill · 11 icon ·
+11 animate-pulse · 4 Chip; btn-override closed 2026-09-13); `--max-warnings 88` = 5
+pre-existing (4 colour-lane + 1 unused-var) + 83. It was 103 at the Phase 5 build.
 
 ---
 
