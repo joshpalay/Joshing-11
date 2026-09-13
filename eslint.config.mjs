@@ -45,7 +45,9 @@ const TOKEN_LINT_RULE = {
 // 29 shadow warnings, closed by the shadow codemod (the other 4 were in
 // template strings the selector never saw; `check:design` R1 counts those).
 // **52 (2026-09-13)** = 63 − 10 icon buttons folded onto .btn-icon − 1 ceremony
-// file now exempt. When you clean a file
+// file now exempt. **41 (2026-09-13)** = 52 − 7 placeholders folded onto
+// <Skeleton> − 4 pulsing text labels the selector no longer treats as
+// placeholders. When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
 const TOKEN_LINT_GRANDFATHERED = [
@@ -91,9 +93,13 @@ const DESIGN_LINT_RULES = [
       "Overriding a .btn-* recipe at the call site (DESIGN-SYSTEM §3). If a surface needs a different button, it is a different type — decide it in the canon, don't restyle it here.",
   },
   {
-    // §7.1 — animate-pulse outside <Skeleton> is drift.
-    selector: `${CLS}[value=/\\banimate-pulse\\b/]`,
-    message: "Loading placeholders use <Skeleton> (DESIGN-SYSTEM §7.1), not animate-pulse boxes.",
+    // §7.1 — an animate-pulse PLACEHOLDER BLOCK outside <Skeleton> is drift. A
+    // pulsing text label ("Loading questions…") is a different pattern with
+    // nothing to stand in for; `text-` separates them. Kept in step with R7's
+    // skipLine in scripts/audit-design-conformance.mjs.
+    selector: `${CLS}[value=/^(?!.*\\btext-).*\\banimate-pulse\\b/]`,
+    message:
+      "Loading placeholders use <Skeleton> (DESIGN-SYSTEM §7.1), not animate-pulse boxes.",
   },
   {
     // §1.4 — a button or input is never a pill (sized round icon buttons are
