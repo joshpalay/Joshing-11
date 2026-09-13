@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
+import { Skeleton } from '@/components/ui/Skeleton';
 import type { DraftCandidate, DraftTier } from '@/server/crafter/draft-candidates';
 
 // B-CRAFTER-LIFECYCLE-01 — the creation surface, shared by BOTH audiences:
@@ -228,16 +229,19 @@ export function CreationSurface({
             craft, not a stall (same posture as the daily's generating state). */}
         {drafting
           ? Array.from({ length: 3 }, (_, i) => (
+              // The shell keeps the real card's border and radius so the wait
+              // holds the layout; the bars inside carry the one shimmer
+              // treatment (DESIGN-SYSTEM §7.1), so the shell no longer pulses.
               <div
                 key={`skeleton-${i}`}
-                className="animate-pulse rounded-md border p-4"
+                className="rounded-[var(--radius-card)] border p-4"
                 style={{ borderColor: 'var(--border)' }}
                 aria-hidden
               >
-                <div className="h-3 w-24 rounded" style={{ background: 'var(--surface-2)' }} />
-                <div className="mt-3 h-4 w-full rounded" style={{ background: 'var(--surface-2)' }} />
-                <div className="mt-2 h-4 w-3/4 rounded" style={{ background: 'var(--surface-2)' }} />
-                <div className="mt-3 h-3 w-1/3 rounded" style={{ background: 'var(--surface-2)' }} />
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="mt-3 h-4 w-full" />
+                <Skeleton className="mt-2 h-4 w-3/4" />
+                <Skeleton className="mt-3 h-3 w-1/3" />
               </div>
             ))
           : null}

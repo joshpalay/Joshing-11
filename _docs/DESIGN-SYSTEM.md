@@ -425,7 +425,18 @@ for-you, from-friends, activities, home, knowledge. **`animate-pulse` outside `S
 drift**: `/questions` (`questions/page.tsx:128-132,566`), `CreationSurface.tsx:233`, and the
 admin loaders are codemod work.
 
-Grep: `rg -n 'animate-pulse' src --glob '*.tsx' | rg -v 'ui/Skeleton|KnowledgeBubbleMap'`
+**Landed 2026-09-13.** `/questions` (both loaders), `CreationSurface`'s drafting cards and the
+admin rerun bars now render `<Skeleton>`; R7 is closed at 0. `CreationSurface` keeps its card
+shell — border, padding, the card radius — so the wait holds the real layout, and only the bars
+inside shimmer. The shell itself no longer pulses: nesting a pulse inside a shimmer double-
+animates the same wait.
+
+**A pulsing text label is not a skeleton.** "Loading questions…", "Asking Wikidata and the
+LLM…", a rotating status phrase — that is real text breathing while it waits, with nothing for
+`<Skeleton>` to stand in for. §7.1 governs *placeholder blocks*, the empty boxes that stand in
+for content. The rule separates the two on `text-` and no longer reports the four text pulses.
+
+Grep: `rg -n 'animate-pulse' src --glob '*.tsx' | rg -v 'ui/Skeleton|KnowledgeBubbleMap|text-'`
 
 ### 7.2 Exemptions
 
@@ -564,13 +575,15 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
-| 7.1 `animate-pulse` outside Skeleton | R7 · 11 | yes |
+| 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
 | 9.1 / 9.2 touch floor and focus ring | R10 · 320 / R9 · 329 (heuristic, count only) | — |
 
-Lint lane baseline: **47** `canon/restricted-syntax` warnings (28 pill · 11 animate-pulse ·
-4 Chip · 4 shadow-in-template-string); `--max-warnings 52` = 5 pre-existing (4 colour-lane +
-1 unused-var) + 47. Trajectory: **103** at the Phase 5 build → 88 (buttons) → 63 (shadows) →
-52 (icon buttons). Every closure ratchets the ceiling down the same day.
+Lint lane baseline: **36** `canon/restricted-syntax` warnings (28 pill · 4 Chip ·
+4 shadow-in-template-string); `--max-warnings 41` = 5 pre-existing (4 colour-lane +
+1 unused-var) + 36. Trajectory: **103** at the Phase 5 build → 88 (buttons) → 63 (shadows) →
+52 (icon buttons) → 41 (skeletons). Every closure ratchets the ceiling down the same day.
+**Every remaining warning is a pill or a Chip**, so one decision — §4.3 (selectable chips) —
+governs most of what is left in this lane.
 
 **Where the two lanes disagree, and why that is fine.** The script reads whole lines and
 7-line `<button>` blocks; the lint selectors read one string literal. So a shadow inside a
