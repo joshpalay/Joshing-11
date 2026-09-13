@@ -48,7 +48,7 @@ export function AcceptFriendInvitationButton({
         type="button"
         onClick={() => void continueInvite()}
         disabled={busy}
-        className="btn-primary min-h-11 w-full"
+        className="btn-primary w-full"
       >
         {busy ? 'Continuing…' : actionLabel}
       </button>

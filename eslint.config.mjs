@@ -40,7 +40,8 @@ const TOKEN_LINT_RULE = {
 // unused-var) and the ceiling had slack. 103 (2026-09-11) = 5 + the 98
 // design-canon warnings from DESIGN_LINT_RULES below (its baseline, measured at
 // the Phase 5 build: 29 shadow, 28 pill, 15 btn-override, 11 icon, 11
-// animate-pulse, 4 Chip). When you clean a file
+// animate-pulse, 4 Chip). **88 (2026-09-13)** = 103 − the 15 btn-override
+// warnings, closed by the button codemod. When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
 const TOKEN_LINT_GRANDFATHERED = [

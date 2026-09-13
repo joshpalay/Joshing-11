@@ -36,7 +36,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
             session ? (
               <AcceptFriendInvitationButton token={token} inviterName={inviterName} />
             ) : (
-              <Link href={inviteLoginHref(token)} className="btn-primary min-h-11 w-full">
+              <Link href={inviteLoginHref(token)} className="btn-primary w-full">
                 {inviteAcceptanceLabel(inviterName)}
               </Link>
             )
@@ -57,7 +57,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <p className="text-muted-foreground text-sm leading-6">
             Continue to Joshing with the account that accepted it.
           </p>
-          <Link href={session ? '/' : '/login'} className="btn-primary min-h-11 w-full">
+          <Link href={session ? '/' : '/login'} className="btn-primary w-full">
             {session ? 'Continue to Joshing' : 'Go to login'}
           </Link>
         </div>
@@ -78,7 +78,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
         <p className="text-muted-foreground text-sm leading-6">
           Ask your friend to send you a new Joshing invitation.
         </p>
-        <Link href="/login" className="btn-ghost min-h-11 w-full">
+        <Link href="/login" className="btn-ghost w-full">
           Go to login
         </Link>
       </div>

@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:evals": "RUN_LLM_EVALS=1 vitest run eval.test",
     "eval:question-lifecycle": "tsx scripts/question-lifecycle-eval.ts",
-    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 103",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings 88",
     "check:fonts": "node scripts/check-font-ratchet.mjs",
     "check:colors": "node scripts/check-color-ratchet.mjs",
     "check:spacing": "node scripts/check-spacing-ratchet.mjs",
