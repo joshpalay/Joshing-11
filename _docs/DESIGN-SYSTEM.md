@@ -483,13 +483,32 @@ inline actions; `size-11` on icon buttons; `min-h-11` on inputs. Visual size may
 
 ### 9.2 The focus ring — RATIFIED (Phase 4, 2026-09-11) as universal (recipe RATIFIED for `.btn-*`, `globals.css:497-509`)
 
-`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-focus-visible:ring-offset-2` (`--ring` = navy) on **every** interactive element, not just the
-recipes. The old `ring-3 ring-ring/50` idiom has zero uses and is withdrawn. Never remove the
-ring without replacing it with an equally visible focus state; `LoginPanel.tsx:29` ships
-without one and gains it when it folds into `.btn-primary` (§12).
+**The app has one focus indicator and every element inherits it.** `globals.css`'s base layer
+gives `:focus-visible` a `2px solid var(--ring)` outline at a `2px` offset — the same weight and
+colour the `.btn-*` recipes draw as a ring. A component needs its own focus styles **only when
+it wants something different**.
 
-Grep (button with no focus state): `rg -n '<button\b' -A6 src --glob '*.tsx' | rg -v 'focus-visible|btn-' | rg 'className'` — heuristic; 318 hits on `main`.
+**The one real defect is killing it.** `outline-none` with nothing put back leaves an element
+with no focus indicator at all. Where a component does want its own treatment, the correct
+idiom is kill *and* replace on the same element:
+`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
+— which is what all 77 ring sites already do. The old `ring-3 ring-ring/50` idiom has zero uses
+and is withdrawn.
+
+**Corrected 2026-09-13 — the old reading of this rule was wrong.** It said "every interactive
+element must carry the ring classes", and the conformance rule counted 333 buttons that didn't.
+That measured nothing: `globals.css`'s `*` rule set only outline *colour*, and with no
+outline-style of its own the browser went on drawing **its** default focus ring, merely tinted.
+Focus was never missing app-wide — it was just never ours, and it varied by engine. Meanwhile
+the actual gap was the opposite and far smaller: **43 elements, almost all form fields, killed
+the outline and substituted a 1px border tint**, which is not an equally visible state. The base
+rule now supplies the ring, those 43 dropped their `outline-none`, and **R9 counts focus-killers
+and is closed at 0**.
+
+Outline rather than a ring, deliberately: `ring-*` compiles to `box-shadow`, which collides with
+the elevation tokens on any element that also casts a shadow.
+
+Grep (focus killed with no replacement): `rg -n 'outline-none' src --glob '*.tsx' | rg -v 'ring-'`
 
 ---
 

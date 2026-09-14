@@ -48,7 +48,7 @@ const BASELINE = {
   R6: 0, // hand-rolled round icon button (§3.4) — CLOSED 2026-09-13: 10 sheet/menu close and "more actions" controls folded onto .btn-icon. The other 13 the rule used to report were never icon buttons (see the note above LINE_RULES).
   R7: 0, // animate-pulse placeholder outside <Skeleton> (§7.1) — CLOSED 2026-09-13: the /questions loaders, CreationSurface's drafting cards and the admin rerun bars all render <Skeleton>. The 4 the rule used to report were pulsing text labels, not placeholders.
   R8: 34, // button or input rendered as a pill (§1.4) — overlaps R4's selectable pills
-  R9: 328, // heuristic: <button> block with no focus-visible and not .btn-* (§9.2) — 4 closed by the icon-button fold
+  R9: 0, // focus killed without a replacement ring (§9.2) — CLOSED 2026-09-13. Redefined: the old rule counted buttons with no focus-visible CLASS (328) but the browser was always drawing one, so it measured nothing. This counts the real defect — `outline-none` with nothing put back — which was 43 form fields, all fixed.
   R10: 320, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — daily/summary's size-10 "More actions" reached 44px via the recipe
 };
 
@@ -120,6 +120,21 @@ const LINE_RULES = [
   // (`WelcomeTourScreen`) and the FAB — none of them icon buttons. Keying it on
   // an actual `<button>` block cut it from 23 to the real number.
   {
+    // R9 was "a <button> block with no focus-visible class" — 333 of them, and
+    // it was measuring the wrong thing. `*` in globals.css set only outline
+    // COLOR, so every element still drew its BROWSER's default focus ring,
+    // merely tinted: focus was never absent, just never ours. The real defect
+    // is the opposite — an element that KILLS the outline and puts nothing
+    // back. That was 43 sites, almost all form fields substituting a 1px border
+    // tint. With the base :focus-visible rule in globals.css those 43 are
+    // fixed, and this rule now guards the thing that actually breaks focus.
+    id: 'R9',
+    section: '§9.2',
+    title: 'focus killed without a replacement ring',
+    re: /(?:focus(?:-visible)?:)?outline-none\b/g,
+    skipLine: (l) => /\bring-/.test(l), // kill + replace is the correct idiom
+  },
+  {
     id: 'R7',
     section: '§7.1',
     title: 'animate-pulse placeholder outside <Skeleton>',
@@ -157,13 +172,6 @@ const BLOCK_RULES = [
     title: 'button or input rendered as a pill',
     tag: /<(?:button|input)\b/,
     test: (b) => /\brounded-full\b/.test(b) && !new RegExp(ICON_SIZE).test(b) && !/btn-icon/.test(b),
-  },
-  {
-    id: 'R9',
-    section: '§9.2',
-    title: 'heuristic — <button> block with no focus-visible and not .btn-*',
-    tag: /<button\b/,
-    test: (b) => !/focus-visible|btn-(?:primary|ghost|danger|icon)/.test(b),
   },
   {
     id: 'R10',

@@ -790,7 +790,7 @@ export function QuestionForm({
           rows={4}
           maxLength={300}
           required
-          className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
+          className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base focus:border-[var(--brand-navy)]"
           placeholder="What is the name of Alexander the Great's horse?"
           readOnly={state.stage === 'SUBMITTING'}
         />
@@ -851,7 +851,7 @@ export function QuestionForm({
               maxLength={200}
               required
               readOnly={state.stage === 'SUBMITTING'}
-              className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]"
+              className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 focus:border-[var(--brand-navy)]"
               placeholder="Bucephalus"
             />
           </div>
@@ -954,7 +954,7 @@ export function QuestionForm({
 
           <div>
             <label htmlFor="alternate-answers" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Alternate answers</label>
-            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="Accepted variations, separated by commas" />
+            <input id="alternate-answers" value={state.alternateText} onChange={(event) => dispatch({ type: 'FIELD', field: 'alternateText', value: event.target.value })} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 focus:border-[var(--brand-navy)]" placeholder="Accepted variations, separated by commas" />
             <p className="mt-1 text-xs text-muted-foreground">{alternateAnswers.length}/{MAX_ALTERNATE_ANSWERS} alternates</p>
           </div>
 
@@ -973,7 +973,7 @@ export function QuestionForm({
 
           <div>
             <label htmlFor="creator-note" className="mb-1 block text-xs uppercase tracking-[0.1em] text-muted-foreground">Between us text</label>
-            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 outline-none focus:border-[var(--brand-navy)]" placeholder="A note just for your friends" />
+            <textarea id="creator-note" value={state.creatorNote} onChange={(event) => dispatch({ type: 'FIELD', field: 'creatorNote', value: event.target.value.slice(0, 200) })} rows={3} maxLength={200} readOnly={state.stage === 'SUBMITTING'} className="w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 focus:border-[var(--brand-navy)]" placeholder="A note just for your friends" />
             <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <span>Only friends see this.</span>
               <span>{state.creatorNote.length}/200</span>
@@ -1072,7 +1072,7 @@ export function QuestionForm({
                           value={state.friendSearch}
                           onChange={(event) => dispatch({ type: 'FRIEND_SEARCH', value: event.target.value })}
                           placeholder="Search friends..."
-                          className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-9 pr-3 text-sm outline-none focus:border-[var(--brand-navy)]"
+                          className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-9 pr-3 text-sm focus:border-[var(--brand-navy)]"
                           disabled={state.stage === 'SUBMITTING'}
                         />
                       </label>
