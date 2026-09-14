@@ -60,6 +60,10 @@ vi.mock('@/components/feed/EditorialPromos', () => ({
   CommonGroundFeature: () => <div>PANEL:common_ground</div>,
   GrowYourCircleFeature: () => <div>PANEL:add_friends</div>,
   RecentlyExpandingFeature: () => <div>PANEL:recently_expanding</div>,
+  // Never reached in these SSR tests (the add-topic promo is client-fetched, so
+  // its effect never runs), but kept in step with the real module's exports so
+  // the mock can't go stale into an undefined-component error.
+  AddATopicFeature: () => <div>PANEL:add_topic</div>,
 }))
 
 import FeedList from '@/components/FeedList'
