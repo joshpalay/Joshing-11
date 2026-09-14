@@ -1505,6 +1505,108 @@ returns nothing).
 2. Watch `answer_leak_single_word` accumulate more data (still 2 of 78).
 3. The three open `ContentReport` rows remain unaddressed, now 11 days old.
 4. The generalized cross-domain audit (other tightly-paired domains) still
+### 2026-09-14 (diagnosis-review) — six more clean days; zero Joyce/Woolf recurrence; new uncommitted single-word-leak gate extends this doc
+
+**This session has live production DB access** (Supabase MCP), unlike the
+last two reviews. Re-verified directly against `GateDropStat` rather than
+from git alone.
+
+**`answer_leak_partial` / `domain_drift` — still zero drops, now over 6 days
+and ~85 `considered` each:**
+
+| day | answer_leak_partial | domain_drift | quality (drops) |
+|---|---|---|---|
+| 09-08 | 19 considered, 0 dropped | 19, 0 | 19, 6 dropped |
+| 09-09 | 18, 0 | 18, 0 | 18, 7 |
+| 09-10 | 8, 0 | 8, 0 | 8, 2 |
+| 09-11 | 9, 0 | 9, 0 | 9, 3 |
+| 09-12 | 11, 0 | 11, 0 | 11, 4 |
+| 09-13 | 31, 0 | 31, 0 | 31, 11 |
+
+`quality` (the shared Haiku plumbing under `domain_drift`) keeps dropping
+normally every single day with `failed_open: 0` throughout — this rules out
+a silent outage as the explanation for the two flipped gates' zero-drop
+streak. Cross-checked with the newly-scoped `npm run check:gate-flags`
+(now `daily_build`-scoped, per #1646's `GateDropStat.scope` column): same
+zero-drop read over its own 4-day post-scope window (2026-09-10 through
+2026-09-13, 48/48 considered), `[INCONCLUSIVE]`, consistent with the raw
+numbers above.
+
+**Zero recurrence of the specific Joyce-under-Woolf pattern since the
+2026-09-08 cleanup**, re-queried directly: no `GeneratedQuestion` row filed
+under "Virginia Woolf's Novels and Essays" with a Joyce/Dubliners/Forster
+`fact_key` has been created since 2026-09-08. This is a different, narrower
+signal than `domain_drift`'s own dropped-count (it only confirms the ONE
+known historical pattern hasn't come back, not that the gate is catching
+anything new), but it's consistent with the Mechanism 2 hold decision not
+yet needing revisiting.
+
+**This still does not resolve the Mechanism-2 code-fix decision.** Six
+clean, quality-healthy days is suggestive but the doc's own framing
+requires either an actual drop or enough clean days to be confident —
+genuinely a judgment call, not a bright line this review can cross on its
+own. Flagging it as approaching the point where Josh may want to look, not
+as an answer.
+
+**Bank state:** `still_servable` (is_duplicate=false) is now **2,223** of
+2,968 total — up from 2,138 at the 2026-09-07 review, consistent with
+ordinary generation at the documented rate.
+
+**The 3 original `ContentReport` rows** (`800c44a3…`, `357618e3…`,
+`139e1932…`) are all still `status='open'`, unchanged.
+
+**New, directly relevant to this doc: an uncommitted-as-PR gate on the
+current branch (`claude/single-word-answer-leak-gate`, commit `508e10ed`,
+pushed but no PR opened yet) closes exactly the recall gap this doc's
+2026-09-06 root-cause entry identified** — `questionPartiallyLeaksAnswer`
+returns early on `tokens.length < 2`, so a one-word primary answer
+("Suspension", "Venus", "Snorks") can never trigger the partial-leak rule
+no matter how squarely the stem names it. A user report on a served
+"Suspension" question traced to this exact gap. The commit adds
+`singleWordAnswerLeaks()`, wired into both the generation-time and
+bank-re-serve gates behind a new `SINGLE_WORD_ANSWER_LEAK_ENABLED` flag
+(default off, measure-only — mirroring `PARTIAL_ANSWER_LEAK_ENABLED`'s own
+rollout). Verified directly against the DB, not just the commit message:
+all three rows it claims to have demoted are in fact `is_duplicate=true`
+with matching `verification_reason` text (`46489305…` Suspension,
+`c2069c67…` Venus/Aphrodite, `2636588a…` Snorks — all "Manual demote per
+user report 2026-09-12").
+
+**One more live instance of the same defect shape was NOT caught by that
+manual demote, and is still servable today**: `09ad84c2…`, answer
+"Suspension (or suspension dissonance)", `is_duplicate=false`, generated
+2026-05-06 — its own stored `verification_reason` already says *"the
+question is oddly circular (it describes 'suspension' and then asks for a
+term, whose answer is 'suspension')"* and left it servable anyway (the
+verifier's job there was false-premise checking, not answer-leak). This is
+a concrete, live example of the recall gap the new gate is built for,
+useful as a positive fixture if/when a bank sweep for this defect class
+runs.
+
+Also new on the same commit: a `grounded_trust_ask_mismatch` telemetry
+counter for a related but separate gap (retrieval-grounded rows marked
+`machine_verified` from web corroboration alone, even when the independent
+cold-solve check fails — 481 of 1,349 such rows, telemetry-only, no served
+behavior change).
+
+**Not yet a decision for this doc** — `SINGLE_WORD_ANSWER_LEAK_ENABLED` has
+no production data (flag isn't even in a merged PR yet), so there's nothing
+to flip. Flagging its existence here, the way the 2026-09-07 entry flagged
+the off-domain-second-opinion WIP, so it isn't lost or duplicated. Worth
+tracking as a candidate "decision 5" once it has a PR and some measure-only
+telemetry.
+
+**Status stays `active`** — no open decision resolved this pass.
+
+### Next steps (revised)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   — 6 clean days in; worth Josh's judgment call soon on whether that's
+   enough to revisit the Mechanism-2 code-fix hold, even without an actual
+   drop.
+2. Once `claude/single-word-answer-leak-gate` becomes a PR: track
+   `SINGLE_WORD_ANSWER_LEAK_ENABLED` here as a new open decision, same
+   shape as `PARTIAL_ANSWER_LEAK_ENABLED` was.
+3. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
 
 ### 2026-09-18 (diagnosis-review) — 12 clean days on both established flags; single-word gate unchanged; no new relevant code
