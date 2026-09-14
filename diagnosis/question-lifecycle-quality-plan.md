@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
 related-pr: "#1646"
 ---
@@ -265,3 +265,75 @@ have. Status stays `active`; nothing here resolves an open decision.
    available.
 2. Everything else (Phase 2 comparison, Phase 3 verification-hold decision,
    Phase 4 labeled set) unchanged.
+
+### 2026-09-14 (diagnosis-review) — first real reading: Phase 1 exit criteria pass; Phase 2 comparison mixed
+
+**This session has live production DB access** (Supabase MCP) — the first
+review able to run either script this doc depends on.
+
+```
+npm run check:question-lifecycle (trailing 14 days):
+  live generated rows               147
+  missing subject_entity            96 (65%)
+  missing embedding                 97 (66%)
+  verified ok but unverified tier   5
+  later verdict unverifiable        0
+  linked rows                       781   canonical-answer drift 51   accepted-alt drift 1
+  built rows                        13    visible p50/p95/max  35012/54299/59095ms   short builds 0
+  bank hits/misses                  75/76
+  grading calls                     82    duration p50/p95  1029/1448ms
+  disputes                          pending=2, alternative_added=2
+  scope support                     daily_build only
+```
+
+**Phase 1 exit criteria — all met.** No new short builds (0). No sustained
+grading outage (82 calls, p50/p95 1029/1448ms — in line with the baseline's
+91 calls / 1014 / 1424ms). `GateDropStat.scope` is present and reads
+`daily_build only`, confirming migration 0145 is doing its job of excluding
+maintenance-script traffic from player-build gate totals — this is exactly
+what Phase 1's third criterion asked for.
+
+**Phase 2 comparison against the 2026-09-09 baseline — mixed, not a clean
+pass:**
+
+| Signal | Baseline | Now | Read |
+|---|---:|---:|---|
+| Build visible p50 | 25,243ms | 35,012ms | up — but see the daily-build-latency doc's own review today: Phase 3 n grew 3→12 there and residual spread is wide and unexplained, so this is more likely that doc's open question than a regression from this PR |
+| Bank hits/misses | 65/33 (66%) | 75/76 (50%) | hit rate down; not investigated further this pass |
+| Grading calls/time | 91 / 1014ms p50 | 82 / 1029ms p50 | flat, no regression |
+| Missing `subject_entity` on new rows | 162/194 (83.5%) | 96/147 (65.3%) | improved, but still a majority — decision 3 (require the field) still far off |
+| Accepted-alternative drift | 1 | 1 | unchanged — meets the "does not increase" criterion |
+| Canonical-answer drift | 51 | 51 | unchanged (same population; not itself expected to move without a review pass) |
+
+The build-latency p50 rise and the bank-hit-rate drop are both real numbers
+but neither is clearly attributable to this PR specifically without more
+digging — flagging rather than calling either a regression, since a build
+config, grounding volume, or generation gate change ship changes across the
+platform on the same days without a controlled comparison to isolate them.
+
+**Decision 2 (`VERIFICATION_UNVERIFIABLE_HOLD_ENABLED`)** — shadow data is
+thin: `later verdict unverifiable: 0` in this window, `verified ok but
+unverified tier: 5`. Not enough to say the hold is safe to enable; Phase 3's
+14-day window (from `#1646`'s 2026-09-10 merge, so due ~2026-09-24) isn't
+reached yet.
+
+**Also ran `npm run check:gate-flags`** — now correctly scoped
+(`daily_build`-only, per #1646): both `answer_leak_partial` and
+`domain_drift` still 0/48 dropped over the 4-day post-scope window
+(2026-09-10 through 2026-09-13), `[INCONCLUSIVE]`. Cross-referenced in the
+answer-leak-domain-drift-plan.md review today with a longer, unscoped
+window — same read, no drops either way.
+
+**No open decision formally resolved.** Phase 1 passing is real progress
+(first clean confirmation this PR didn't break anything), but decisions
+2–6 all still need either more time (Phase 3's 14-day window) or work not
+yet done (Phase 4's labeled set, decision 6's manual review of the 51
+answer-drift rows). Status stays `active`.
+
+### Next steps (revised)
+1. Phase 3 (verification-hold decision) — due ~2026-09-24; re-check then.
+2. Worth a quick look at the bank-hit-rate drop (66%→50%) and the build p50
+   rise, cross-referenced against the daily-build-latency doc's own findings
+   today, to see if they're the same underlying cause or two separate things.
+3. Phase 4 (labeled set) and decision 6 (manual review of the 51 drifted
+   linked-copy answers) — not started.

@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
 related-pr: "#1654, #1662, #1666"
 ---
@@ -425,3 +425,84 @@ where 2026-09-11 left them.** Status stays `active`.
    is available — due at deploy+7 days (~2026-09-18), sooner is fine once
    access exists.
 2. Everything else in §2/§4 unchanged.
+
+### 2026-09-14 (diagnosis-review) — early look at deploy+~3 days (not yet Phase 1's due date); mixed, sample too thin to act on
+
+**This session has live production DB access** (Supabase MCP). Deploy was
+2026-09-11T19:14:09Z; today is deploy+~3 days, short of Phase 1's
+deploy+7-days due date (~2026-09-18) and well short of Phase 2's
+deploy+14-days-or-200-rows. Running the doc's own Phase 1 SQL anyway per
+its own "sooner is fine once access exists" note — treat everything below
+as a preview, not a reading the exit criteria can be judged against yet.
+
+**Gate behavior since deploy (n=51 considered):**
+```
+quality          18/51 dropped (35.3%)   failed_open=0
+difficulty_floor  2/51 dropped (3.9%)    failed_open=0
+answer_shape      0/51 dropped (0%)      failed_open=0
+```
+Both of Phase 1's numeric exit criteria pass on this early slice: quality
+drop rate 35.3% is inside the 35–45% acceptable band (not yet ≥45%, so
+decision 2 doesn't trigger), difficulty-floor deflections at 3.9% are under
+the ≤5% ceiling.
+
+**Register/tier mix of new rows (n=27 — very thin):**
+```
+mean_words       32.3   (baseline 31.2, target ≤24)
+pct_over_25w     67%    (baseline 66%, target ≤45%)
+pct_in_opener    0%     (baseline 58%, not targeted, "watch")
+pct_accessible   67%    (baseline 41%, target range 30-45%, floor ≥25%)
+```
+**R2-a's length target has not moved, and if anything reads slightly
+worse** — mean words and the over-25-word share are flat-to-up against
+baseline despite the prompt change explicitly asking for shorter setups.
+At n=27 this could easily be noise (a couple of long specialist-tier rows
+would swing it), but it's the opposite direction from what R2-a predicts,
+so worth watching rather than dismissing. `pct_in_opener` dropping from
+58% to 0% is striking but wasn't a formal target. `pct_accessible` at 67%
+clears the ≥25% floor with room to spare — no sign of the "model dodged
+the tier" failure mode — though it's well above the baseline's 41% and the
+targeted 30-45% range on the high side, worth noting even though the exit
+criterion only specifies a floor.
+
+**Starvation tripwire**: no rise in short-queue builds — corroborated by
+today's daily-build-latency-deferral-plan.md review, which found
+`target_size` matching `final_size` on all 12 `outcome='built'` rows since
+the deferral shipped (0 mismatches), spanning across this deploy.
+
+**Phase 3 preview (correct-rate) — too thin to read, flagging only:**
+```
+accessible, post-deploy: 6 rows / 8 answers, mean_rate 0.583
+accessible, pre-deploy:  30 rows / 37 answers, mean_rate 0.733
+```
+A 15-point dip, which would exceed the ≤10-point exit criterion — but n=6
+rows / 8 answers is nowhere near enough to act on, and the doc's own §4
+caveat about the pre-cohort being thin/biased applies even harder to a
+6-row post-cohort. Not a finding, just marking that this is the metric to
+re-check once volume exists.
+
+**Per-defect split (R8 telemetry) — n=42 considered:**
+```
+DEFINITION_SUPPLIED   11/42 dropped (26%)   <- R2's target defect
+ANSWER_LEAKED          2/42
+SELF_ANSWERING         1/42
+GENERIC_AT_TIER        1/42                 <- R1's target defect
+(everything else 0/42)
+```
+`DEFINITION_SUPPLIED` is still the dominant drop reason — consistent with
+the doc's own baseline note that R2 targets this specifically.
+`GENERIC_AT_TIER` (R1's mechanism) firing only once so far is too thin to
+read either way.
+
+**No open decision resolved — this is explicitly before the due date.**
+Nothing here should move `status` or trigger any of the Phase 2 decision
+table's rows. Flagging the length-metric non-movement as the one thing
+worth a closer look once Phase 1's real (n≥7-days) reading lands, since
+it's the one signal reading opposite to prediction rather than just noisy.
+
+### Next steps (revised)
+1. Re-run this doc's Phase 1 SQL at the real due date (~2026-09-18) for a
+   less noisy read — today's n=27/42/51 rows are a preview, not a verdict.
+2. Watch specifically whether `mean_words` / `pct_over_25w` come back down
+   as volume increases, or whether R2-a genuinely isn't landing.
+3. Everything else in §2/§4 unchanged.

@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -973,3 +973,60 @@ session with DB access to advance.
 ### Next steps (unchanged)
 1. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 2. Phase 3 population reading, question 4 (bonus cost) — unchanged.
+
+### 2026-09-14 (diagnosis-review) — Phase 3 jumps to n=12; median saving now 8,678ms, close to the original ~7.6s prediction
+
+**This session has live production DB access** (Supabase MCP) — the first
+review since 2026-09-08 that could actually run `npm run check:build-latency`.
+
+```
+DailyBuildMetric totals: carry_forward=195  existing_queue=16  built=13  partial_carry_forward=1
+Phase 2: unchanged, still passes on the original row (35 / 44 with build_id).
+Phase 3 (12 usable rows, up from 3):
+  saved 1529 / 1362 / 2154 / 8241 / 8678 / 38116 / 17701 / 10221 / 18117 / 1618 / 2193 / 20563 ms
+  residual (saved − this row's own bonus cost): 711..37506ms over 12 rows -- wide; explain before relying on it.
+  3b median saving: 8678ms   (baseline build's bonus cost: ~7646ms)
+```
+
+**The median moved a lot since the last reading (1529ms at n=3 →
+8678ms at n=12) and is now close to the original ~7.6s pre-registration** —
+the opposite direction of the 2026-09-07 "far below prediction" finding.
+Consistent with what that entry already suspected: the early rows (n=2–3)
+were themselves not a representative sample, not evidence the deferral
+under-delivers. `outcome='lost_persist_race'` is still **0** — unchanged,
+still uninformative about real-world race frequency.
+
+**One row is a genuine outlier worth flagging, not just noise**:
+`2026-09-09T17:05:16.518Z` — `saved: 38116ms` against a bonus
+`generationMs` of only `610ms`, residual `37506ms` (the next-highest
+residual is 3742ms). Checked whether this is another data-integrity
+anomaly like the one that produced open question 5: it is not the same
+shape — `target_size=5`, `final_size=6`, exactly one bonus slot appended,
+no slot-collision signature. So the queue itself looks correct; the
+mystery is that the deferred continuation's wall-clock time is ~37s longer
+than the ~600ms of LLM work it did. Not investigated further this pass —
+noting it as the largest single contributor to the "wide, explain before
+relying on it" residual spread the script already flags, and a candidate
+first thing to look at if the spread doesn't narrow with more rows.
+
+**Code check**: no commits since the last review touch
+`queue-orchestrator.ts` or `daily.ts` — the persist-race fix is unchanged,
+consistent with `git log --since=2026-09-12` on both files returning
+nothing.
+
+**No open decision formally resolved** — question 4 (is the +2 bonus worth
+its own generation cost) is a product call for Josh, not something this
+review can decide — but the number it needs is now materially more solid
+(n=12 vs n=3) and reads much closer to the original estimate than the last
+two entries suggested. Worth resurfacing to Josh now that the population
+read has stabilized somewhat, rather than waiting indefinitely for the
+residual spread to fully explain itself.
+
+### Next steps (revised)
+1. Watch for the first `outcome='lost_persist_race'` row — still 0, still
+   needs DB access to check.
+2. Worth a look at the 2026-09-09T17:05:16.518Z outlier build specifically
+   (37.5s unexplained residual) if the spread doesn't narrow with more rows.
+3. Question 4 (bonus cost vs. ~8.7s median latency) — evidence is now
+   strong enough that Josh may want to make this call rather than wait
+   further; not resolved by this review.
