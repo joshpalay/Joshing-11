@@ -379,6 +379,10 @@ function serializeOutgoingInvitation(
     acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
     cancelledAt: invitation.cancelledAt?.toISOString() ?? null,
     expiresAt: invitation.expiresAt.toISOString(),
+    // Surfaced separately from `message` so the UI can show the link itself
+    // (matching how the shareable category links render their URL), not just
+    // bury it inside the composed SMS text.
+    inviteUrl,
     message,
   }
 }

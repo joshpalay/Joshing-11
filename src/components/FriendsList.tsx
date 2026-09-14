@@ -63,6 +63,7 @@ type OutgoingInvite = {
   acceptedAt: string | null;
   cancelledAt: string | null;
   expiresAt: string;
+  inviteUrl: string | null;
   message: string | null;
 };
 
@@ -302,6 +303,22 @@ function PendingInviteCard({
                 </span>
               ))}
             </div>
+          ) : null}
+
+          {/* The link itself, shown as plain text -- previously this was only
+              reachable by tapping "Send message" / "Copy instead", which
+              embed it in the SMS body. Matching how InviteLinksSection shows
+              its shareable-link URLs so a personal invite's link doesn't
+              read as lost once the compose form is behind you. */}
+          {invite.inviteUrl ? (
+            <a
+              href={invite.inviteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-muted text-muted-foreground hover:text-foreground mt-3 block rounded-md px-2 py-1.5 font-mono text-xs break-all underline decoration-transparent underline-offset-2 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+            >
+              {invite.inviteUrl}
+            </a>
           ) : null}
 
           {canMessage ? (

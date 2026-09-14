@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -184,8 +185,16 @@ export default async function FriendsPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5 pb-28">
-      <header className="mb-5">
+      <header className="mb-5 flex items-center justify-between gap-3">
         <h1 className="text-foreground font-serif text-3xl font-semibold">Friends</h1>
+        {/* A single obvious entry point for invites, right at the top of the
+            page -- previously the only way in was the global "Add a friend"
+            chooser option or a bare ?invite=1 deep link. Reuses the same
+            query param FriendsPageClient already watches, so this opens the
+            existing personal-invite sheet rather than a new page/flow. */}
+        <Link href="/friends?invite=1" scroll={false} className="btn-primary shrink-0 px-4">
+          Invite a friend
+        </Link>
       </header>
 
       <Suspense fallback={null}>
