@@ -512,7 +512,7 @@ function QuestionsPageContent() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search questions..."
-                className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm outline-none focus:border-[var(--brand-navy)]"
+                className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm focus:border-[var(--brand-navy)]"
               />
             </label>
           </section>

@@ -82,7 +82,7 @@ export function LlmProviderPanel({ initial }: { initial: Providers }) {
                   value={providers[key]}
                   onChange={(event) => void onChange(key, event.target.value as Provider)}
                   disabled={savingKey === key}
-                  className="h-9 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 text-sm outline-none disabled:opacity-60"
+                  className="h-9 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-2 text-sm disabled:opacity-60"
                 >
                   <option value="anthropic">Anthropic</option>
                   <option value="openai">OpenAI</option>

@@ -229,7 +229,7 @@ function PendingInviteCard({
           <label className="text-foreground block text-sm font-medium">
             Name
             <input
-              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition"
               value={editName}
               onChange={(event) => {
                 setEditName(event.target.value);
@@ -243,7 +243,7 @@ function PendingInviteCard({
           <label className="text-foreground block text-sm font-medium">
             Phone number
             <input
-              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition outline-none"
+              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition"
               value={editPhone}
               onChange={(event) => {
                 setEditPhone(formatUsPhoneInput(event.target.value));
@@ -260,7 +260,7 @@ function PendingInviteCard({
             {editInterests.map((interest, index) => (
               <input
                 key={index}
-                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-full border border-[var(--accent-gold)] px-4 text-base transition outline-none"
+                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-full border border-[var(--accent-gold)] px-4 text-base transition"
                 value={interest}
                 onChange={(event) => {
                   const next = event.target.value;
@@ -795,7 +795,7 @@ export default function FriendsList() {
                     value={friendSearch}
                     onChange={(event) => setFriendSearch(event.target.value)}
                     placeholder="Filter by name or topic"
-                    className="focus:border-[var(--brand-navy)] border-border bg-background h-10 w-full rounded-md border pr-3 pl-10 text-sm outline-none"
+                    className="focus:border-[var(--brand-navy)] border-border bg-background h-10 w-full rounded-md border pr-3 pl-10 text-sm"
                   />
                 </label>
               </div>
