@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-17
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
 ---
@@ -1654,4 +1654,52 @@ directly, not inferred.
 2. Watch `answer_leak_single_word` accumulate more data (still 2 of 83).
 3. The three open `ContentReport` rows remain unaddressed, now 12 days old.
 4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-14 (correction, same day) — the single-word gate was already MERGED, not uncommitted WIP; `gh pr list`'s default filter misled the entry above
+
+**The entry above is wrong about the single-word-answer-leak gate's status.**
+`gh pr list --head claude/single-word-answer-leak-gate` (no `--state` flag)
+defaults to open-only PRs and returned empty, which I read as "no PR." It
+actually has one — **#1673, merged 2026-09-13T15:14:57Z** — I just didn't
+ask for merged/closed PRs too. Confirmed two ways: `gh pr view 1673` shows
+`headRefName: claude/single-word-answer-leak-gate`, `baseRefName: main`,
+`mergedAt: 2026-09-13T15:14:57Z`; and directly, `git diff 508e10ed
+origin/main` on all five files the commit touched returns **empty** — the
+content is already byte-identical on `main` (as `48b4d6ed`, the squash
+commit).
+
+**Also wrong: the gate name.** It's `answer_leak_single_word`, not
+`single_word_answer_leak`. Corrected here since a future search for the
+wrong name will find nothing.
+
+**Real telemetry exists, measure-only as designed:**
+
+```
+gate: answer_leak_single_word   day: 2026-09-13   considered: 12  dropped: 0
+gate: answer_leak_single_word   day: 2026-09-13   considered: 2   dropped: 0
+```
+
+14 considered, 0 dropped, 0 failed_open on its first day live — expected
+for a measure-only flag (`SINGLE_WORD_ANSWER_LEAK_ENABLED` unset).
+
+**Corrected status: this is now a real, merged, measure-only gate — add it
+to this doc's tracked decisions**, the same shape as
+`PARTIAL_ANSWER_LEAK_ENABLED` was before Phase 1 gave it a precision
+number. `related-pr` above now includes `#1673`.
+
+### Next steps (corrected)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   — 6 clean days in; worth Josh's judgment call soon on whether that's
+   enough to revisit the Mechanism-2 code-fix hold, even without an actual
+   drop.
+2. **New open decision 5: flip `SINGLE_WORD_ANSWER_LEAK_ENABLED`?** Same
+   shape as decision 1 was — needs the same kind of precision check (blind
+   labeling or at minimum a spot-check of what it would have dropped) before
+   flipping, not just "0 dropped on day one" (that's expected at this flag's
+   necessarily low hit rate, same caution as every other gate in this doc).
+   Two known plausible false positives are already named in `508e10ed`'s
+   commit message ("Host" as an essay title, "Laertes" as a co-participant)
+   — worth checking those specifically once there's more data.
+3. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
