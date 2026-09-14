@@ -472,7 +472,7 @@ function ControlsBar({
         onChange={(event) => onSearch(event.target.value)}
         placeholder="Search your areas…"
         aria-label="Search areas"
-        className="min-h-9 w-full rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-9 w-full rounded-[var(--radius-xs)] border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         style={{ borderColor: 'var(--border)', background: 'var(--brand-card)', color: 'var(--brand-ink)' }}
       />
 
@@ -927,13 +927,7 @@ export function PeakDetailCard({
           <p className="font-serif text-base text-[var(--brand-ink)]">
             Add <strong>{node.name}</strong> to your map?
           </p>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid size-8 flex-none place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-          >
+          <button type="button" onClick={onClose} aria-label="Close" className="btn-icon flex-none rounded-full">
             <X className="size-4" aria-hidden />
           </button>
         </div>
@@ -976,13 +970,7 @@ export function PeakDetailCard({
             {formatPts(node.value ?? 0)} pts{node.mastered ? ' · Mastery' : ''}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="grid size-8 flex-none place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-        >
+        <button type="button" onClick={onClose} aria-label="Close" className="btn-icon flex-none rounded-full">
           <X className="size-4" aria-hidden />
         </button>
       </div>

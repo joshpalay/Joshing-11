@@ -201,13 +201,7 @@ export function KnowledgeNodeCard({
                   : ''}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="grid size-8 flex-none place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
-        >
+        <button type="button" onClick={onClose} aria-label="Close" className="btn-icon flex-none rounded-full">
           <X className="size-4" aria-hidden />
         </button>
       </div>

@@ -276,11 +276,11 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
           </div>
         ) : (
           <>
-            <div className="bg-card mt-6 grid rounded-full border p-1 text-sm font-medium">
+            <div className="bg-card mt-6 grid rounded-[var(--radius-xs)] border p-1 text-sm font-medium">
               <div className="grid grid-cols-2">
                 <button
                   type="button"
-                  className={`min-h-11 rounded-full transition ${mode === 'friend' ? 'bg-foreground text-background' : 'text-muted-foreground'}`}
+                  className={`min-h-11 rounded-[var(--radius-xs)] transition ${mode === 'friend' ? 'bg-foreground text-background' : 'text-muted-foreground'}`}
                   onClick={() => setMode('friend')}
                   disabled={friends.length === 0 && !loadingFriends}
                 >
@@ -288,7 +288,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 </button>
                 <button
                   type="button"
-                  className={`min-h-11 rounded-full transition ${mode === 'new' ? 'bg-foreground text-background' : 'text-muted-foreground'}`}
+                  className={`min-h-11 rounded-[var(--radius-xs)] transition ${mode === 'new' ? 'bg-foreground text-background' : 'text-muted-foreground'}`}
                   onClick={() => setMode('new')}
                 >
                   New friend
