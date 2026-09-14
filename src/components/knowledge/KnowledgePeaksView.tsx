@@ -13,6 +13,7 @@ import {
   getCircleOpacity,
 } from '@/components/knowledge/CategoryCircles';
 import { FrequencyMark } from '@/components/knowledge/FrequencyMark';
+import { Chip } from '@/components/ui/Chip';
 import {
   TERRITORY_FREQUENCIES,
   TERRITORY_FREQUENCY_COPY,
@@ -457,8 +458,6 @@ function ControlsBar({
   freqFilter: Set<TerritoryFrequency>;
   onToggleFreq: (freq: TerritoryFrequency) => void;
 }) {
-  const pill =
-    'inline-flex min-h-8 items-center rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
   const pillStyle = (on: boolean) =>
     on
       ? { borderColor: 'var(--brand-navy)', color: 'var(--brand-card)', background: 'var(--brand-navy)' }
@@ -480,16 +479,15 @@ function ControlsBar({
       <div className="flex flex-wrap items-center gap-1.5">
         <span className={groupLabel}>Sort</span>
         {(['mastery', 'category'] as const).map((mode) => (
-          <button
+          <Chip
             key={mode}
-            type="button"
+            variant="outline"
             onClick={() => onSort(mode)}
-            aria-pressed={sortMode === mode}
-            className={pill}
+            selected={sortMode === mode}
             style={pillStyle(sortMode === mode)}
           >
             {mode === 'mastery' ? 'Mastery' : 'Category'}
-          </button>
+          </Chip>
         ))}
       </div>
 
@@ -497,16 +495,15 @@ function ControlsBar({
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={groupLabel}>Category</span>
           {categories.map((field) => (
-            <button
+            <Chip
               key={field}
-              type="button"
+              variant="outline"
               onClick={() => onToggleCat(field)}
-              aria-pressed={catFilter.has(field)}
-              className={pill}
+              selected={catFilter.has(field)}
               style={pillStyle(catFilter.has(field))}
             >
               {categoryLabel(field)}
-            </button>
+            </Chip>
           ))}
         </div>
       ) : null}
@@ -515,17 +512,16 @@ function ControlsBar({
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={groupLabel}>Rotation</span>
           {TERRITORY_FREQUENCIES.map((freq) => (
-            <button
+            <Chip
               key={freq}
-              type="button"
+              variant="outline"
               onClick={() => onToggleFreq(freq)}
-              aria-pressed={freqFilter.has(freq)}
-              className={`${pill} gap-1`}
+              selected={freqFilter.has(freq)}
               style={pillStyle(freqFilter.has(freq))}
             >
               {TERRITORY_FREQUENCY_LABEL[freq]}
               <FrequencyMark frequency={freq} color="var(--brand-ink-400)" size={12} decorative />
-            </button>
+            </Chip>
           ))}
         </div>
       ) : null}
@@ -1027,20 +1023,21 @@ export function PeakDetailCard({
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {heldChildren.map((child) => (
-              <button
+              <Chip
                 key={child.id}
-                type="button"
+                variant="outline"
                 onClick={() => onSelectSibling(child.id)}
-                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+                leading={
+                  <span
+                    aria-hidden
+                    className="size-3 rounded-full"
+                    style={{ background: child.mastered ? 'var(--accent-gold)' : fieldColor(child.field) }}
+                  />
+                }
               >
-                <span
-                  aria-hidden
-                  className="size-3 rounded-full"
-                  style={{ background: child.mastered ? 'var(--accent-gold)' : fieldColor(child.field) }}
-                />
                 <span className="font-serif text-[var(--brand-ink)]">{child.name}</span>
-              </button>
+              </Chip>
             ))}
           </div>
         </div>
@@ -1055,20 +1052,21 @@ export function PeakDetailCard({
           {jumpSiblings.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {jumpSiblings.map((sib) => (
-                <button
+                <Chip
                   key={sib.id}
-                  type="button"
+                  variant="outline"
                   onClick={() => onSelectSibling(sib.id)}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+                  leading={
+                    <span
+                      aria-hidden
+                      className="size-3 rounded-full"
+                      style={{ background: sib.mastered ? 'var(--accent-gold)' : fieldColor(sib.field) }}
+                    />
+                  }
                 >
-                  <span
-                    aria-hidden
-                    className="size-3 rounded-full"
-                    style={{ background: sib.mastered ? 'var(--accent-gold)' : fieldColor(sib.field) }}
-                  />
                   <span className="font-serif text-[var(--brand-ink)]">{sib.name}</span>
-                </button>
+                </Chip>
               ))}
             </div>
           ) : null}

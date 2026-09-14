@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatRelativeTime } from '@/components/feed/visual';
 import { buildAddSomeoneHandoff } from '@/components/friends/add-someone';
 import { saveInviteEdit } from '@/components/friends/invite-edit';
+import { Chip } from '@/components/ui/Chip';
 import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 type FriendSort = 'name_asc' | 'name_desc' | 'recent';
@@ -213,9 +214,7 @@ function PendingInviteCard({
           <h3 className="text-foreground font-serif text-lg font-semibold leading-tight">{invitationName(invite)}</h3>
           <p className="text-muted-foreground mt-1 text-sm">{invitationTiming(invite.sentAt)}</p>
         </div>
-        <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
-          Waiting
-        </span>
+        <Chip>Waiting</Chip>
       </div>
 
       {editing ? (
@@ -294,12 +293,9 @@ function PendingInviteCard({
           {invite.suggestedInterests.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {invite.suggestedInterests.map((interest) => (
-                <span
-                  key={interest}
-                  className="border-primary/10 bg-primary/5 text-foreground rounded-full border px-3 py-1 text-sm"
-                >
+                <Chip key={interest} variant="outline" className="border-primary/10 bg-primary/5">
                   {interest}
-                </span>
+                </Chip>
               ))}
             </div>
           ) : null}
@@ -381,12 +377,9 @@ export function IncomingRequestCard({
       {request.suggestedInterests.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {request.suggestedInterests.map((interest) => (
-            <span
-              key={interest}
-              className="border-primary/10 bg-primary/5 text-foreground rounded-full border px-3 py-1 text-sm"
-            >
+            <Chip key={interest} variant="outline" className="border-primary/10 bg-primary/5">
               {interest}
-            </span>
+            </Chip>
           ))}
         </div>
       ) : null}
@@ -435,9 +428,7 @@ function OutboundRequestCard({
             Request sent · {requestTiming(request.createdAt)}
           </p>
         </div>
-        <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-medium">
-          Waiting
-        </span>
+        <Chip>Waiting</Chip>
       </div>
 
       {request.personalNote ? (

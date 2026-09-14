@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowUpRight, Plus, X, ZoomIn } from 'lucide-react';
 
 import type { KnowledgeParentProgress } from '@/server/knowledge/knowledge-tree';
+import { Chip } from '@/components/ui/Chip';
 
 // D-KNOWLEDGE-MAP-USABILITY-01 B1/C1/C3 — the selection action card. A tap on
 // the bubble map SELECTS a node and raises this card; every mutation or
@@ -261,14 +262,15 @@ export function KnowledgeNodeCard({
             {node.ghostChildren.map((ghost) => (
               <li key={ghost.id} className="flex items-center justify-between gap-2">
                 <span className="truncate font-serif text-sm text-[var(--brand-ink)]">{ghost.name}</span>
-                <button
-                  type="button"
+                <Chip
+                  variant="outline"
                   onClick={() => startAdd(ghost.id, ghost.name)}
-                  className="inline-flex min-h-8 flex-none items-center gap-1 rounded-full border px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex-none"
                   style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
+                  leading={<Plus className="size-3.5" aria-hidden />}
                 >
-                  <Plus className="size-3.5" aria-hidden /> Add
-                </button>
+                  Add
+                </Chip>
               </li>
             ))}
           </ul>

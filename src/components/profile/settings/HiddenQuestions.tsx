@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 
+import { Chip } from '@/components/ui/Chip';
+
 // The undo behind "Never show this question again".
 //
 // Permanent hiding is only safe against a finite question pool
@@ -72,15 +74,15 @@ export function HiddenQuestions({ initial }: { initial: HiddenQuestionItem[] }) 
                 <p className="text-sm text-foreground">{item.questionText}</p>
                 <p className="text-quiet text-[var(--brand-ink-400)]">{item.domain}</p>
               </div>
-              <button
-                type="button"
+              <Chip
+                variant="outline"
                 onClick={() => void restore(item.id)}
                 disabled={restoring === item.id}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--brand-rule)] px-3 py-1.5 text-sm font-medium transition hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="shrink-0 border-[var(--brand-rule)] font-medium"
+                leading={<RotateCcw className="size-4" />}
               >
-                <RotateCcw className="size-4" />
                 {restoring === item.id ? 'Bringing back…' : 'Bring back'}
-              </button>
+              </Chip>
             </li>
           ))}
         </ul>

@@ -43,13 +43,13 @@ const BASELINE = {
   R1: 0,
   R2: 0, // .btn-* recipe overridden at the call site (§3) — CLOSED 2026-09-13: recipe went 48→44px, the 11 redundant height overrides were stripped, the red primary became .btn-danger, and login folded onto .btn-primary. Enforced in full; a new override is now a regression.
   R3: 0, // card fill paired with a non-card radius (§1.2) — CLOSED 2026-09-13: 38 card containers moved onto --radius-card (settings sections, daily summary/catch-up panels, knowledge/[domain], the inline-field card variants), one input onto --radius-xs. Enforced in full.
-  R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3
-  R5: 1, // <Chip> geometry override (§4.1)
+  R4: 0, // hand-rolled chip / pill (§4.1) — CLOSED 2026-09-14: all 31 moved onto <Chip>, including the ~12 filter/pick pills via the new §4.3 interactive form (href/onClick/selected). Two components that render their own <button> and can't wrap in <Chip> (AddToBankAction, SendQuestionAction) use the exported `chipButtonClassName` helper instead of hand-copying the recipe.
+  R5: 0, // <Chip> geometry override (§4.1) — CLOSED 2026-09-14: PeopleYouInvited's `px-3` override dropped.
   R6: 0, // hand-rolled round icon button (§3.4) — CLOSED 2026-09-13: 10 sheet/menu close and "more actions" controls folded onto .btn-icon. The other 13 the rule used to report were never icon buttons (see the note above LINE_RULES).
   R7: 0, // animate-pulse placeholder outside <Skeleton> (§7.1) — CLOSED 2026-09-13: the /questions loaders, CreationSurface's drafting cards and the admin rerun bars all render <Skeleton>. The 4 the rule used to report were pulsing text labels, not placeholders.
-  R8: 34, // button or input rendered as a pill (§1.4) — overlaps R4's selectable pills
+  R8: 21, // button or input rendered as a pill (§1.4) — 34 -> 21 as a side effect of the R4 cleanup (the same sites were double-counted here); the rest is unrelated admin-surface drift, not yet swept.
   R9: 0, // focus killed without a replacement ring (§9.2) — CLOSED 2026-09-13. Redefined: the old rule counted buttons with no focus-visible CLASS (328) but the browser was always drawing one, so it measured nothing. This counts the real defect — `outline-none` with nothing put back — which was 43 form fields, all fixed.
-  R10: 320, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — daily/summary's size-10 "More actions" reached 44px via the recipe
+  R10: 302, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — 320 -> 302 as a side effect of the R4 cleanup; still open and noisy, not this job's target
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────

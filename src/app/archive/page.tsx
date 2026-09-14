@@ -9,6 +9,7 @@ import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import { EditorialBadge } from '@/components/EditorialBadge';
+import { Chip } from '@/components/ui/Chip';
 import { cn } from '@/lib/utils';
 
 type ArchiveSource = 'daily' | 'feed' | 'joshing_game' | 'sent_to_me' | 'written_by_me';
@@ -288,15 +289,10 @@ export default function ArchivePage() {
         {activeFilters.length > 0 ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {activeFilters.map((chip) => (
-              <button
-                key={chip.key}
-                type="button"
-                className="inline-flex min-h-8 items-center gap-2 rounded-full border bg-card px-3 text-xs text-card-foreground"
-                onClick={chip.clear}
-              >
+              <Chip key={chip.key} variant="outline" className="bg-card" onClick={chip.clear}>
                 {chip.label}
                 <X className="size-3" />
-              </button>
+              </Chip>
             ))}
             <button
               type="button"
@@ -391,14 +387,11 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Link
-          href={`/knowledge/${encodeURIComponent(item.domain)}`}
-          className="rounded-full bg-secondary px-2.5 py-1 font-medium text-secondary-foreground"
-        >
+        <Chip href={`/knowledge/${encodeURIComponent(item.domain)}`} className="bg-secondary text-secondary-foreground">
           {item.domainDisplayName}
-        </Link>
+        </Chip>
         {!item.verified ? (
-          <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground" title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard.">⚠ unverified</span>
+          <Chip variant="outline" title="The author wrote their own answer instead of using the LLM's suggestion. The answer may not be standard.">⚠ unverified</Chip>
         ) : null}
         {item.pointsAwarded !== null ? (
           <span className="font-mono font-semibold text-foreground">+{Math.round(item.pointsAwarded)} pts</span>

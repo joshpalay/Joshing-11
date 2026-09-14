@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { DomainVisibilityToggle, type DomainVisibility } from '@/components/knowledge/DomainVisibilityToggle';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Chip } from '@/components/ui/Chip';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
 import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
@@ -175,9 +176,9 @@ export default function DomainDetailPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <h1 className="font-serif text-5xl font-semibold leading-tight">{detail.displayName}</h1>
           {detail.isDeclaredInterest ? (
-            <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.1em]">
+            <Chip variant="outline" uppercase>
               Declared Interest
-            </span>
+            </Chip>
           ) : null}
         </div>
       </header>

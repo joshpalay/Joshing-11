@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTopicField, type AddTopicError } from '@/components/interests/AddTopicField'
+import { Chip } from '@/components/ui/Chip'
 import { LoadingBackdrop } from '@/components/LoadingScreen'
 import { SmsReminderDisclosure } from '@/components/reminders/SmsReminderDisclosure'
 import { safeInviteName } from '@/lib/invite-links'
@@ -168,7 +169,7 @@ function InterestToggleChip({
 
   if (state === 'selected') {
     return (
-      <span className="bg-card inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium">
+      <Chip variant="outline" className="bg-card">
         {interest.domain}
         {sourceLabel}
         <button
@@ -179,13 +180,13 @@ function InterestToggleChip({
         >
           ×
         </button>
-      </span>
+      </Chip>
     )
   }
 
   if (state === 'removed') {
     return (
-      <span className="text-muted-foreground inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1.5 text-sm">
+      <Chip variant="outline" className="text-muted-foreground border-dashed">
         <span className="line-through">{interest.domain}</span>
         {sourceLabel}
         <span className="text-[10px] font-semibold tracking-wide uppercase">Removed</span>
@@ -198,24 +199,26 @@ function InterestToggleChip({
         >
           Undo
         </button>
-      </span>
+      </Chip>
     )
   }
 
   return (
-    <button
-      type="button"
+    <Chip
+      variant="outline"
       onClick={onToggle}
       disabled={disabled}
       title={disabled ? `${MAX_INTERESTS} max — remove one to add another` : undefined}
-      className="bg-card hover:bg-muted inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-45"
+      className="bg-card"
+      leading={
+        <span aria-hidden="true" className="text-muted-foreground">
+          +
+        </span>
+      }
     >
-      <span aria-hidden="true" className="text-muted-foreground">
-        +
-      </span>
       {interest.domain}
       {sourceLabel}
-    </button>
+    </Chip>
   )
 }
 
@@ -936,7 +939,7 @@ export default function OnboardingFlow({
                 // primary (§3.1, one per view) — so it drops its navy pill and
                 // takes the same .btn-ghost every other AddTopicField uses.
                 buttonClassName="btn-ghost"
-                chipClassName="rounded-full border border-[var(--border-warm)] bg-[var(--brand-card)] px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+                chipClassName="border border-[var(--border-warm)] bg-[var(--brand-card)]"
                 mutedClassName="text-muted-foreground text-sm"
                 errorClassName="text-destructive mt-3 text-sm"
               />

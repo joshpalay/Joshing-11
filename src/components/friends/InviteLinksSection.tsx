@@ -9,6 +9,7 @@ import {
   type AddTopicError,
 } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
+import { Chip } from '@/components/ui/Chip';
 import {
   inviteLinkCardTitle,
   MAX_INVITE_LINK_CATEGORIES,
@@ -68,19 +69,18 @@ async function shareUrl(url: string, onCopied: () => void) {
 function CategoryChip({ topic, onRemove }: { topic: InviteLinkTopic; onRemove?: () => void }) {
   const color = topicColor(topic);
   return (
-    <span
-      className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-normal"
+    <Chip
+      variant="outline"
+      className="max-w-full whitespace-normal font-semibold"
       style={{
         borderColor: `color-mix(in srgb, ${color.primary} 40%, transparent)`,
         color: color.text,
         overflowWrap: 'anywhere',
       }}
+      leading={
+        <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: color.primary }} />
+      }
     >
-      <span
-        aria-hidden
-        className="size-1.5 shrink-0 rounded-full"
-        style={{ background: color.primary }}
-      />
       <span>{topic.label}</span>
       {onRemove ? (
         <button
@@ -92,7 +92,7 @@ function CategoryChip({ topic, onRemove }: { topic: InviteLinkTopic; onRemove?: 
           ×
         </button>
       ) : null}
-    </span>
+    </Chip>
   );
 }
 
@@ -393,15 +393,15 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
                 <p className="text-muted-foreground mb-2 text-xs font-medium">Your categories</p>
                 <div className="flex flex-wrap gap-2">
                   {availableSuggestions.map((topic) => (
-                    <button
+                    <Chip
                       key={topic.label}
-                      type="button"
+                      variant="outline"
                       onClick={() => addSuggestedTopic(topic)}
-                      className="hover:bg-muted inline-flex min-h-9 max-w-full items-center gap-1 rounded-full border px-3 py-1 text-left text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+                      className="max-w-full text-left font-medium"
+                      leading={<Plus className="size-3.5 shrink-0" aria-hidden />}
                     >
-                      <Plus className="size-3.5 shrink-0" aria-hidden />
                       <span style={{ overflowWrap: 'anywhere' }}>{topic.label}</span>
-                    </button>
+                    </Chip>
                   ))}
                 </div>
               </div>

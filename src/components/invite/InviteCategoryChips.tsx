@@ -2,6 +2,7 @@
 
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import { sanitizeInviteLinkCategories } from '@/lib/invite-links';
+import { Chip } from '@/components/ui/Chip';
 
 export function InviteCategoryChips({ categories }: { categories: unknown }) {
   const safeCategories = sanitizeInviteLinkCategories(categories);
@@ -12,22 +13,21 @@ export function InviteCategoryChips({ categories }: { categories: unknown }) {
       {safeCategories.map((category) => {
         const color = getPortraitDomainColor(category.broadCategory ?? category.label);
         return (
-          <span
+          <Chip
             key={category.label}
-            className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold whitespace-normal"
+            variant="outline"
+            className="max-w-full whitespace-normal font-semibold"
             style={{
               borderColor: `color-mix(in srgb, ${color.primary} 40%, transparent)`,
               color: color.text,
               overflowWrap: 'anywhere',
             }}
+            leading={
+              <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: color.primary }} />
+            }
           >
-            <span
-              aria-hidden
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ background: color.primary }}
-            />
             {category.label}
-          </span>
+          </Chip>
         );
       })}
     </div>

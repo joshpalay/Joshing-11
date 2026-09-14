@@ -324,8 +324,9 @@ here); callers pass hue via `className`/`style` **in addition to** the label.
 
 - **RATIFIED (Phase 4):** retire Chip `sm` (`text-[10px]`). Its only real job was the difficulty label
   (`MyQuestionCard.tsx:65`), which is `md` + `uppercase`; the count-badge job moves to §4.2.
-- **RATIFIED (Phase 4):** callers may **not re-pad or re-size** a Chip. `PeopleYouInvited.tsx:299`
-  (`className="px-3"`) is drift. Colour overrides remain allowed until the palette pass.
+- **RATIFIED (Phase 4):** callers may **not re-pad or re-size** a Chip. Colour overrides
+  remain allowed until the palette pass. `PeopleYouInvited.tsx:299`'s `className="px-3"`
+  was the one live offender — dropped 2026-09-14, **R5 closed at 0**.
 
 Grep (chip geometry override): `rg -n '<Chip\b[^>]*className="[^"]*\b(p[xy]-|text-(xs|sm|\[)|rounded-)' src --glob '*.tsx'`
 Grep (hand-rolled chip): `rg -n 'rounded-full[^"]*\b(px-2|px-2\.5|px-3)\b[^"]*\b(text-xs|text-\[10px\]|text-sm)' src --glob '*.tsx' | rg -v 'Chip|<button|<input'`
@@ -347,18 +348,24 @@ and sits *on* another control. Ratified (Phase 4) `<Badge>` in `src/components/u
 
 ---
 
-### 4.3 Selectable chip (filter / toggle pill) — RATIFIED (Josh, 2026-09-13; build pending)
+### 4.3 Interactive chip (filter / toggle / pick pill) — RATIFIED (Josh, 2026-09-13; landed 2026-09-14)
 
-Roughly a dozen pills are **buttons**, not labels: interest pickers (`OnboardingFlow.tsx:171-211`,
-`AddTopicField.tsx:58`, `QuestionForm.tsx:1057`), the daily-summary filter row
-(`daily/summary/page.tsx:903-927`, `min-h-9`), knowledge-map filters
-(`KnowledgePeaksView.tsx:461,1034,1062`, `KnowledgeNodeCard.tsx:267`), `InviteCategoryChips`.
-They share `rounded-full border px-3 py-1(.5) text-sm|text-xs` and hand-roll a selected state.
-Neither `Chip` (a `span`) nor any button type in §3 covers them. **Ratified:** a `selectable`
-variant on `Chip` rendered as a `<button type="button" aria-pressed>` — `md` geometry, a 44px
-hit area (§9.1), the §9.2 focus ring, and a selected state carried by ink fill
-(`bg-foreground text-background`) **and** `aria-pressed`, never by hue alone. **Build pending**
-(§12); until it lands, new filter pills copy `daily/summary/page.tsx:910`.
+Roughly a dozen pills were **buttons**, not labels — interest pickers (`OnboardingFlow.tsx`),
+the daily-summary reaction row (`daily/summary/page.tsx`), knowledge-map filters and sibling
+pickers (`KnowledgePeaksView.tsx`, `KnowledgeNodeCard.tsx`, `KnowledgeBubbleMap.tsx`),
+`InviteCategoryChips`, `InviteLinksSection`'s suggested-topic and category chips,
+`AddTopicField`'s candidate/convergence chips, one-shot actions styled as chips (archive's
+filter-clear, TerritorySetupClient's toast Undo, HiddenQuestions' restore, InvitedClient's
+broader-domain pick) and one chip-shaped nav tag (`MutualFriendsSection`'s friend-name pill).
+`Chip` (a `span`) covered none of them. **Landed:** `href`/`onClick` on `Chip` render a
+`<Link>`/`<button type="button">` instead of a `span` — `md` geometry, the real §9.1 44px
+floor (`min-h-11`, not a padded hit box), the §9.2 focus ring. `selected` is for a genuine
+toggle (a filter, a friend picker) — it drives `aria-pressed` **and** the ink-fill selected
+state (`bg-foreground text-background`), never hue alone; a one-shot pick/nav chip (a
+suggestion, "+ topic", "restore") omits it. Two components that render their own `<button>`
+and can't wrap in `<Chip>` (`AddToBankAction`, `SendQuestionAction`) take the exported
+`chipButtonClassName` helper instead of hand-copying the recipe — the geometry stays defined
+in exactly one place. **R4 closed at 0** (all 31); **R5 closed at 0** (the one Chip override).
 
 ## 5. Cards and containers
 
@@ -556,9 +563,14 @@ its comment corrected; all fifteen call-site overrides stripped;
 renamed off `--radius-xs`, the SMS-code input onto `--radius-xs` + `min-h-11`, and the stale
 "content cards use `rounded-md`" convention comment in `globals.css` corrected.
 
+**Done 2026-09-14 — chips (R4 closed at 0, R5 closed at 0):** `Chip` grew the §4.3
+interactive form (`href`/`onClick`/`selected`) plus an exported `chipButtonClassName`
+helper for the two components that render their own `<button>`; all 31 hand-rolled
+pills — labels and interactive alike — moved onto it, and `PeopleYouInvited`'s padding
+override was dropped.
+
 | Edit | Where | Ruling |
 |---|---|---|
-| **Build §4.3** — add the `selectable` variant to `Chip`, then migrate the ~12 filter pills (`OnboardingFlow` interest chips, `AddTopicField` `DEFAULT_CHIP_CLASS`, `QuestionForm:1057`, the `daily/summary` filter row, `KnowledgePeaksView`, `KnowledgeNodeCard`, `InviteCategoryChips`) | `ui/Chip.tsx` + call sites | 4.3 |
 | Duplicate `--radius-xs…lg` literal block | `globals.css:374-377` | 1.1 |
 | Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
 | Chip: drop `sm`; add `Badge`; migrate Nav/FeedList badges and `MyQuestionCard` label | `ui/` | 4.1–4.2 |
@@ -593,20 +605,20 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | Rule | Script id · baseline (2026-09-11) | Lint selector |
 |---|---|---|
 | 1.2 card radius | R3 · **0 — closed 2026-09-13** | — |
-| 1.4 no pill buttons/inputs | R8 · 34 | yes |
+| 1.4 no pill buttons/inputs | R8 · 21 (34 → 21 as a side effect of the R4 cleanup; rest is unswept admin-surface drift) | yes |
 | 2.1 no Tailwind shadow utilities | R1 · **0 — closed 2026-09-13** (35 → 6 → 0, the last 6 by ratifying §2.2a) | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
-| 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
+| 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 320 / R9 · 329 (heuristic, count only) | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 302 (heuristic, count only; 320 → 302 as a side effect of the R4 cleanup) / R9 · **0 — closed 2026-09-13** | — |
 
-Lint lane baseline: **36** `canon/restricted-syntax` warnings (28 pill · 4 Chip ·
-4 shadow-in-template-string); `--max-warnings 41` = 5 pre-existing (4 colour-lane +
-1 unused-var) + 36. Trajectory: **103** at the Phase 5 build → 88 (buttons) → 63 (shadows) →
-52 (icon buttons) → 41 (skeletons). Every closure ratchets the ceiling down the same day.
-**Every remaining warning is a pill or a Chip**, so one decision — §4.3 (selectable chips) —
-governs most of what is left in this lane.
+Lint lane baseline: **27** `canon/restricted-syntax` + `no-restricted-syntax` warnings
+combined (`package.json`'s `lint` script pins `--max-warnings 27`). Trajectory: **103** at
+the Phase 5 build → 88 (buttons) → 63 (shadows) → 52 (icon buttons) → 41 (skeletons) →
+37 (focus/chips-flat/skeletons stack landed on `main`, #1686) → 27 (R4/R5 chip cleanup,
+2026-09-14). Every closure ratchets the ceiling down the same day. What's left is mostly
+R8/R10 debt outside a chip's reach — unswept admin-surface pill buttons and inputs.
 
 **Where the two lanes disagree, and why that is fine.** The script reads whole lines and
 7-line `<button>` blocks; the lint selectors read one string literal. So a shadow inside a
