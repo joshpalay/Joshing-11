@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { Chip } from '@/components/ui/Chip'
 
 type MutualFriend = {
   id: string
@@ -46,19 +46,14 @@ export function MutualFriendsSection({
       <ul className="mt-3 flex flex-wrap gap-2">
         {friends.map((friend) => (
           <li key={friend.id}>
-            <Link
-              href={`/users/${friend.id}`}
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex items-center rounded-full px-3 py-1 text-sm font-medium"
-            >
+            <Chip href={`/users/${friend.id}`} className="bg-secondary text-secondary-foreground hover:bg-secondary/80">
               {friend.displayName}
-            </Link>
+            </Chip>
           </li>
         ))}
         {overflowCount > 0 ? (
           <li>
-            <span className="text-muted-foreground inline-flex items-center rounded-full px-3 py-1 text-sm">
-              +{overflowCount} more
-            </span>
+            <Chip className="text-muted-foreground">+{overflowCount} more</Chip>
           </li>
         ) : null}
       </ul>

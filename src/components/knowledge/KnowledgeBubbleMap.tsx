@@ -8,6 +8,7 @@ import { hierarchy, pack, type HierarchyCircularNode } from 'd3-hierarchy';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { KnowledgeNodeCard, type SelectedNodeInfo } from '@/components/knowledge/KnowledgeNodeCard';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import { Chip } from '@/components/ui/Chip';
 
 // B-KNOWLEDGE-TAXONOMY-01 P5 — the nested circle-pack knowledge map, ported
 // from the ratified knowledge-bubbles prototype onto the repo's design
@@ -310,27 +311,29 @@ export function KnowledgeBubbleMap({
       {!listMode ? (
         <div className="flex gap-2 overflow-x-auto py-2" role="list" aria-label="Your peaks">
           {peaks.map((leaf) => (
-            <button
+            <Chip
               key={leaf.data.id}
-              type="button"
+              variant="outline"
               role="listitem"
               onClick={() => focusLeaf(leaf)}
-              className="flex flex-none items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex-none"
               style={{ borderColor: 'var(--border)', background: 'var(--brand-card)' }}
+              leading={
+                <span
+                  aria-hidden
+                  className="size-4 rounded-full"
+                  style={{
+                    background: leaf.data.mastered ? 'var(--accent-gold)' : fieldColor(leaf.data.field),
+                  }}
+                />
+              }
             >
-              <span
-                aria-hidden
-                className="size-4 rounded-full"
-                style={{
-                  background: leaf.data.mastered ? 'var(--accent-gold)' : fieldColor(leaf.data.field),
-                }}
-              />
               <span className="font-serif text-[var(--brand-ink)]">{leaf.data.name}</span>
               <span className="text-[10px] text-[var(--text-muted)]">
                 {leaf.data.mastered ? 'Mastery · ' : ''}
                 {leaf.value} pts
               </span>
-            </button>
+            </Chip>
           ))}
         </div>
       ) : null}

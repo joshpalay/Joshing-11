@@ -296,7 +296,7 @@ export default function PeopleYouInvited() {
                     {invite.inviteePhoneMasked}
                   </p>
                 </div>
-                <Chip className="px-3">{STATUS_COPY[invite.status]}</Chip>
+                <Chip>{STATUS_COPY[invite.status]}</Chip>
               </div>
             )
 

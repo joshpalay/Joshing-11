@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
+import { Chip } from '@/components/ui/Chip';
 
 export type AddTopicCandidate = { label: string; broadCategory?: string | null };
 
@@ -54,8 +55,11 @@ type ConvergeApiCandidate = {
 const DEFAULT_INPUT_CLASS =
   'min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] disabled:opacity-60';
 const DEFAULT_BUTTON_CLASS = 'btn-ghost';
+// §4.1/§4.3 — colour only; geometry (radius, padding, size, the disabled
+// state) comes from <Chip>'s interactive form. Never re-add rounded-full,
+// px-*, py-* or text-* here (R5 — Chip geometry is not overridable).
 const DEFAULT_CHIP_CLASS =
-  'rounded-full border border-[var(--border-warm)] bg-[var(--cream)] px-3 py-1.5 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--cream-warm)] disabled:opacity-50';
+  'border border-[var(--border-warm)] bg-[var(--cream)] text-[var(--ink)] hover:bg-[var(--cream-warm)]';
 const DEFAULT_MUTED_CLASS = 'text-sm text-[var(--text-muted-warm)]';
 const DEFAULT_ERROR_CLASS = 'text-destructive mt-3 text-sm';
 
@@ -477,15 +481,14 @@ export function AddTopicField({
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {candidates.map((candidate) => (
-              <button
+              <Chip
                 key={candidate.label}
-                type="button"
                 onClick={() => void resolveThenDrain(commit(candidate))}
                 disabled={busy}
                 className={chipClassName}
               >
                 {pendingLabel === candidate.label.trim() ? 'Adding…' : candidate.label}
-              </button>
+              </Chip>
             ))}
           </div>
         </div>
@@ -499,18 +502,16 @@ export function AddTopicField({
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {convergence.suggestions.map((suggestion) => (
-              <button
+              <Chip
                 key={suggestion.label}
-                type="button"
                 onClick={() => void resolveThenDrain(persistTopic(suggestion))}
                 disabled={busy}
                 className={chipClassName}
               >
                 {pendingLabel === suggestion.label.trim() ? 'Adding…' : suggestion.label}
-              </button>
+              </Chip>
             ))}
-            <button
-              type="button"
+            <Chip
               onClick={() => void resolveThenDrain(persistTopic(convergence.typed))}
               disabled={busy}
               className={chipClassName}
@@ -518,7 +519,7 @@ export function AddTopicField({
               {pendingLabel === convergence.typed.label.trim()
                 ? 'Adding…'
                 : `Add “${convergence.typed.label}” instead`}
-            </button>
+            </Chip>
           </div>
         </div>
       ) : null}

@@ -18,6 +18,7 @@ import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { AddToBankAction } from '@/components/AddToBankAction'
 import { AuthorName } from '@/components/AuthorName'
 import { EditorialBadge } from '@/components/EditorialBadge'
+import { Chip, chipButtonClassName } from '@/components/ui/Chip'
 import { CategoryGainsDisplay } from '@/components/review/CategoryGainsDisplay'
 import MasteryMoment from '@/components/review/MasteryMoment'
 import { RefineYourGame } from '@/components/review/RefineYourGame'
@@ -568,14 +569,14 @@ function ShareResultsButton({ correct, total }: { correct: number; total: number
   }, [correct, total])
 
   return (
-    <button
-      type="button"
+    <Chip
+      variant="outline"
       onClick={() => void share()}
-      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--brand-border)] bg-[var(--brand-card)] px-3 text-sm font-medium text-[var(--brand-ink-700)] transition hover:bg-[var(--brand-cream-page)] hover:text-[var(--brand-ink)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="bg-[var(--brand-card)] text-[var(--brand-ink-700)] hover:bg-[var(--brand-cream-page)] hover:text-[var(--brand-ink)]"
+      leading={<Share2 className="size-4" />}
     >
-      <Share2 className="size-4" />
       {copied ? 'Copied' : 'Share your results'}
-    </button>
+    </Chip>
   )
 }
 
@@ -900,23 +901,23 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             initialInBank={question.isInBank}
             contextType="manual"
             label="Save"
-            className="min-h-9 rounded-full border-0 bg-transparent px-2.5 text-xs hover:bg-muted"
+            className={chipButtonClassName({ className: 'border-0 bg-transparent text-muted-foreground' })}
           />
         ) : null}
-        <button
+        <Chip
           aria-label="Love this question"
-          aria-pressed={rating === 'thumbs_up'}
-          className={cn(
-            'inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-            rating === 'thumbs_up' ? 'bg-[var(--brand-cream-page)] text-[var(--brand-orange)]' : ''
-          )}
+          selected={rating === 'thumbs_up'}
+          className={
+            rating === 'thumbs_up'
+              ? 'bg-[var(--brand-cream-page)] text-[var(--brand-orange)]'
+              : 'text-muted-foreground'
+          }
           disabled={isFeedbackPending}
-          type="button"
           onClick={() => updateFeedback('thumbs_up')}
+          leading={<Heart className={cn('size-4', rating === 'thumbs_up' ? 'fill-current' : '')} />}
         >
-          <Heart className={cn('size-4', rating === 'thumbs_up' ? 'fill-current' : '')} />
           Like
-        </button>
+        </Chip>
         <SendQuestionAction
           question={{
             id: question.questionId,
@@ -924,7 +925,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             domain: question.domainDisplayName,
           }}
           label="Share"
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className={chipButtonClassName({ className: 'text-muted-foreground' })}
         />
       </div>
 

@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, MouseEventHandler, ReactNode } from 'react';
+import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 
@@ -24,6 +25,16 @@ import { cn } from '@/lib/utils';
 //
 // Not absorbed here (intentionally distinct primitives): `AvatarChip` (initials
 // avatar) and `EditorialBadge` (the house-author semantic marker).
+//
+// §4.3 — the interactive form (RATIFIED Josh 2026-09-13; built 2026-09-14,
+// closing R4's ~12 filter/pick pills). Pass `href` for a chip-shaped nav
+// link, `onClick` for a chip-shaped button; passing neither keeps the plain,
+// non-interactive `span`. `selected` is for a genuine toggle (a filter, a
+// friend picker) — it drives `aria-pressed` and the ink-fill selected state.
+// Omit it for a one-shot pick chip (a suggestion, "+ topic", "restore")
+// where there is no on/off to track. Interactive chips take `min-h-11` —
+// the real §9.1 44px floor, not a padded hit box — so the visible pill is
+// taller than a plain label Chip; that's the intended tell that it's tappable.
 
 type ChipSize = 'sm' | 'md';
 
@@ -41,6 +52,27 @@ const VARIANT_CLASSES: Record<ChipVariant, string> = {
   outline: 'border border-border text-foreground',
 };
 
+// For a component that renders its own <button> and can't wrap in <Chip>
+// (AddToBankAction, SendQuestionAction) but wants to sit in a chip-styled
+// action row. Keeps the geometry defined in exactly one place — do not
+// hand-copy the recipe string at a call site, that's the R4 pattern this
+// primitive exists to close.
+export function chipButtonClassName({
+  size = 'md',
+  variant = 'neutral',
+  selected,
+  className,
+}: { size?: ChipSize; variant?: ChipVariant; selected?: boolean; className?: string } = {}) {
+  return cn(
+    'inline-flex min-h-11 items-center gap-1 whitespace-nowrap rounded-full font-medium leading-none',
+    SIZE_CLASSES[size],
+    VARIANT_CLASSES[variant],
+    'cursor-pointer transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
+    selected ? 'bg-foreground text-background' : 'hover:bg-muted',
+    className,
+  );
+}
+
 export type ChipProps = {
   /** The label. REQUIRED — a chip never signals state by color alone. */
   children: ReactNode;
@@ -54,6 +86,14 @@ export type ChipProps = {
   style?: CSSProperties;
   title?: string;
   'aria-label'?: string;
+  role?: string;
+  /** Renders as a Link instead of a span (a chip-shaped nav tag). */
+  href?: string;
+  /** Renders as a button instead of a span (a chip-shaped action or filter). */
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
+  /** Toggle state for a real filter/selection chip. Omit for a one-shot pick. */
+  selected?: boolean;
 };
 
 export function Chip({
@@ -66,22 +106,64 @@ export function Chip({
   style,
   title,
   'aria-label': ariaLabel,
+  role,
+  href,
+  onClick,
+  disabled,
+  selected,
 }: ChipProps) {
-  return (
-    <span
-      title={title}
-      aria-label={ariaLabel}
-      className={cn(
-        'inline-flex items-center gap-1 whitespace-nowrap rounded-full font-medium leading-none',
-        SIZE_CLASSES[size],
-        VARIANT_CLASSES[variant],
-        uppercase && 'uppercase tracking-[0.08em]',
-        className,
-      )}
-      style={style}
-    >
+  const geometry = cn(
+    'inline-flex items-center gap-1 whitespace-nowrap rounded-full font-medium leading-none',
+    SIZE_CLASSES[size],
+    VARIANT_CLASSES[variant],
+    uppercase && 'uppercase tracking-[0.08em]',
+  );
+  const content = (
+    <>
       {leading}
       {children}
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        title={title}
+        aria-label={ariaLabel}
+        role={role}
+        className={cn(geometry, 'min-h-11 transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
+        style={style}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        title={title}
+        aria-label={ariaLabel}
+        aria-pressed={selected}
+        role={role}
+        className={cn(
+          uppercase && 'uppercase tracking-[0.08em]',
+          chipButtonClassName({ size, variant, selected, className }),
+        )}
+        style={style}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <span title={title} aria-label={ariaLabel} role={role} className={cn(geometry, className)} style={style}>
+      {content}
     </span>
   );
 }

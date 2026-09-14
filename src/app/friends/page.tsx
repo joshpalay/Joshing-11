@@ -14,6 +14,7 @@ import {
 } from '@/components/friends/MutualFriendSuggestionsSection';
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual';
 import FriendsList from '@/components/FriendsList';
+import { Chip } from '@/components/ui/Chip';
 import { getSession } from '@/server/auth/session';
 import { db, users } from '@/server/db';
 import {
@@ -168,9 +169,9 @@ export default async function FriendsPage() {
               </span>
               <div className="min-w-0 flex-1">
                 <h3 className="text-foreground font-medium">{displayName}</h3>
-                <span className="text-muted-foreground bg-secondary mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs">
+                <Chip className="text-muted-foreground bg-secondary mt-1">
                   Joined from your invite
-                </span>
+                </Chip>
                 <p className="text-muted-foreground/70 mt-1 text-xs">
                   invited {formatRelativeTime(reflection.invitedAt.toISOString())} · joined{' '}
                   {formatRelativeTime(reflection.joinedAt.toISOString())}

@@ -16,6 +16,7 @@ import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import { GhostTerritoryCircle } from '@/components/knowledge/GhostTerritoryCircle';
+import { Chip } from '@/components/ui/Chip';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { getPortraitCircleSize, type CircleSizingTier } from '@/lib/knowledge/circle-sizing';
 import {
@@ -652,16 +653,16 @@ export function TerritorySetupClient({
           >
             <span>{toast.message}</span>
             {toast.undoDomain ? (
-              <button
-                type="button"
-                className="rounded-full bg-[var(--cream)]/15 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-[var(--cream)] uppercase transition hover:bg-[var(--cream)]/25"
+              <Chip
+                uppercase
+                className="bg-[var(--cream)]/15 text-[var(--cream)] hover:bg-[var(--cream)]/25"
                 onClick={() => {
                   if (toast.undoDomain) removeDomain(toast.undoDomain);
                   setToast(null);
                 }}
               >
                 Undo
-              </button>
+              </Chip>
             ) : null}
           </div>
         </div>

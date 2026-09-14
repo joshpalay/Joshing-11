@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowUpRight, Bell, PencilLine, Trophy } from 'lucide-react';
 
+import { Chip } from '@/components/ui/Chip';
+
 // B-CRAFTER-LIFECYCLE-01 Phase 3 — the exhaustion experience, per the
 // player-youre-out prototype: completion framing (a trophy, not an apology),
 // honesty about why, then three doors. Contribution-weighted: "add one
@@ -183,11 +185,11 @@ export function InvitedClient({
                 </span>
               ) : (
                 broaderDomains.map((candidate) => (
-                  <button
+                  <Chip
                     key={candidate.domain}
-                    type="button"
+                    variant="outline"
                     onClick={() => void pickBroader(candidate)}
-                    className="min-h-9 w-fit rounded-full border px-3 py-1.5 text-xs transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="hover:opacity-80"
                     style={
                       addedDomain === candidate.domain
                         ? { borderColor: 'var(--success)', color: 'var(--success)' }
@@ -197,7 +199,7 @@ export function InvitedClient({
                     {addedDomain === candidate.domain ? '✓ added — in your rotation ' : ''}
                     {candidate.domain}
                     {candidate.poolDepth > 0 ? ` · ${candidate.poolDepth} questions waiting` : ''}
-                  </button>
+                  </Chip>
                 ))
               )}
             </div>

@@ -3,6 +3,7 @@
 import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MAX_ALTERNATE_ANSWERS } from '@/lib/questions-types';
+import { Chip } from '@/components/ui/Chip';
 
 export type QuestionFormValues = {
   text: string;
@@ -1049,15 +1050,15 @@ export function QuestionForm({
                             {recents.map((friend) => {
                               const selected = state.sendToFriendIds.includes(friend.id);
                               return (
-                                <button
+                                <Chip
                                   key={friend.id}
-                                  type="button"
+                                  variant="outline"
                                   onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })}
-                                  aria-pressed={selected}
-                                  className={['rounded-full border px-3 py-1 text-sm transition', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background hover:bg-muted'].join(' ')}
+                                  selected={selected}
+                                  className={selected ? 'border-primary bg-primary text-primary-foreground' : 'bg-background'}
                                 >
                                   {friend.displayName}
-                                </button>
+                                </Chip>
                               );
                             })}
                           </div>
