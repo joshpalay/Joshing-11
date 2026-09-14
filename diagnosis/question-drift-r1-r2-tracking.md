@@ -2,9 +2,9 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
-related-pr: "#1654, #1662, #1666"
+related-pr: "#1654, #1662, #1666, #1683"
 ---
 
 # Diagnosis: Question drift — impact of R1 (accessible fan-salience) and R2 (no self-defining setups)
@@ -419,6 +419,63 @@ What git/GitHub confirm instead:
 
 **No decision-resolving change; all five open decisions in §2 are exactly
 where 2026-09-11 left them.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Run this doc's own Phase 1 SQL once a session with production DB access
+   is available — due at deploy+7 days (~2026-09-18), sooner is fine once
+   access exists.
+2. Everything else in §2/§4 unchanged.
+
+### 2026-09-14 (diagnosis-review) — deploy+~3 days, still short of the +7 day Phase 1 window; a related (not tracked) change to the R5 baseline; no DB access this session
+
+**Environment note:** no `.env`/`.env.local` present and
+`mcp__Supabase__list_projects` returns zero projects, so none of this doc's
+Phase 1 SQL could run. Not due yet regardless — deploy was
+2026-09-11T19:14:09Z, so Phase 1's deploy+7-day window lands ~2026-09-18 and
+Phase 2's deploy+14-day window ~2026-09-25.
+
+**`git log --since=2026-09-12` on this doc's tracked paths** (`SYSTEM_PROMPT`,
+`QUALITY_GATE_SYSTEM_PROMPT`, `adaptive-difficulty.ts` for R5, the R1–R9
+prompt/gate code in `generate-questions.ts`) shows one new commit:
+`#1683`, "fix(difficulty): seed brand-new topics at accessible, not overall
+skill," merged 2026-09-13T21:17:34Z, touching `src/server/adaptive-difficulty.ts`
+only (22/-16, one file).
+
+**Read the diff directly — this does not touch R5's flag or its floor
+mechanism**, but it does change the baseline R5 stacks on top of, so it's
+worth recording here even though it resolves none of this doc's five open
+decisions:
+- Before: a domain with no persisted difficulty row seeded from the
+  player's **global adaptive level** (`seedDifficultyFromAdaptiveLevel(level)`).
+  After: it always seeds from `MIN_ADAPTIVE_LEVEL` (accessible), regardless
+  of global skill — the PR's own rationale is a strong overall player
+  hitting a first-contact bonus question in a domain they've never played
+  and getting handed specialist-tier difficulty on zero domain-specific
+  signal.
+- `applyFocusFloor(...)` — the function R5's `DECLARED_DOMAIN_FLOOR_ENABLED`
+  path calls to raise a declared domain's floor — is unchanged, still called
+  the same way, still gated behind the same flag (confirmed still read with
+  default-off semantics at `adaptive-difficulty.ts:257`, same line this
+  doc's 2026-09-12 entry checked). The PR's own comment states the R5 floor
+  read is untouched ("read for ALL requested domains" logic is unmodified).
+- Net effect if/when R5 is later enabled: the floor now lifts from a
+  strictly lower, uniform baseline (everyone starts at accessible) instead
+  of a baseline that varied with the player's global skill. Not a reason to
+  change the "enable only after Phase 2 closes" recommendation — flagging it
+  so whoever reviews R5's enablement later isn't surprised that the
+  pre-floor baseline shifted underneath it in the meantime.
+
+**No other commits since the last review touch this doc's paths.** Nine
+commits landed on `main` in total (#1670–#1683); the other eight are
+unrelated UI/friends/invites work, confirmed by file list.
+
+`git log --all --grep=revert --since=2026-09-05` — no reverts of `#1654`,
+`#1662`, or `#1666`; all three remain in `main`'s ancestry (fast-forwarded
+only this session), so the prior direct-API "MERGED" confirmations still
+hold.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-12 left them.** Status stays `active`.
 
 ### Next steps (unchanged)
 1. Run this doc's own Phase 1 SQL once a session with production DB access

@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
 related-pr: "#1646"
 ---
@@ -260,6 +260,34 @@ checked from here** — that needs the live DB reading this session doesn't
 have. Status stays `active`; nothing here resolves an open decision.
 
 ### Next steps
+1. Run `npm run check:question-lifecycle` and `npm run check:gate-flags` for
+   the Phase 1/2 readings once a session with `DATABASE_URL` access is
+   available.
+2. Everything else (Phase 2 comparison, Phase 3 verification-hold decision,
+   Phase 4 labeled set) unchanged.
+
+### 2026-09-14 (diagnosis-review) — no change; still no DB access this session
+
+**Environment note:** no `.env`/`.env.local` present (`ls .env*` shows only
+`.env.example`) and `mcp__Supabase__list_projects` returns zero projects, so
+neither `npm run check:question-lifecycle` nor `npm run check:gate-flags`
+could be run, same constraint as the last review.
+
+What git can confirm instead:
+- `git log --since=2026-09-12 -- src/server/daily/__tests__/verification-gating.test.ts
+  scripts/check-question-lifecycle.mjs` — **zero commits.** No code touching
+  the unverifiable-hold path, the answer-normalizer, or the lifecycle
+  checker has landed since the last review.
+- `git log --all --grep=revert --since=2026-09-05` — no revert of `#1646`;
+  it remains in `main`'s ancestry (fast-forwarded only this session), so the
+  prior direct-API "MERGED 2026-09-10T10:23:28Z" confirmation still holds.
+- Nine commits landed on `main` since the last review (#1670–#1683); none
+  touch this doc's tracked paths — spot-checked file lists directly.
+
+**Phase 1's exit criteria still cannot be checked from here.** Status stays
+`active`; nothing here resolves an open decision.
+
+### Next steps (unchanged)
 1. Run `npm run check:question-lifecycle` and `npm run check:gate-flags` for
    the Phase 1/2 readings once a session with `DATABASE_URL` access is
    available.

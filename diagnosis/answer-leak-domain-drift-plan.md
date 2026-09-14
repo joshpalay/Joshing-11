@@ -2,9 +2,9 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628"
+related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
@@ -1217,4 +1217,79 @@ this doc needs `GateDropStat` access this session doesn't have.
    session with DB access.
 2. The 7 Phase 1 disagreement items remain closed, no outstanding action.
 3. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-14 (diagnosis-review) — a new, directly related gate shipped (#1673); still no DB access this session
+
+**Environment note, same as every prior scheduled-review entry:** this
+session has no `.env`/`.env.local` at all (`ls .env*` shows only
+`.env.example`) and `mcp__Supabase__list_projects` returns zero projects, so
+`GateDropStat`, `ContentReport`, and every other production counter this doc
+depends on are unreadable this session. Everything below is from git/GitHub
+only. Also checked `git log --all --grep=revert` back to 2026-09-05 — no
+reverts of any PR this doc references, so the prior "confirmed MERGED"
+findings for #1611/#1613/#1618/#1619/#1623/#1624/#1628 still hold by
+ancestry (all are contained in `main`, which was only fast-forwarded, never
+rebased, since the last review).
+
+**New, relevant PR since the last review: `#1673`, "fix(quality): close
+single-word answer-leak blind spot, add trust-tier telemetry," merged
+2026-09-13T15:14:57Z.** This is a direct continuation of a gap this doc
+already named — the 2026-09-06 (evening) entry above identified that
+`questionPartiallyLeaksAnswer` returns early on `tokens.length < 2`, so a
+single-word answer like "Tears" is structurally outside the rule. #1673's
+own PR description names the same production incident shape directly: a
+served question leaked its one-word answer ("Suspension"), traced to
+exactly that gap, with two more already-served rows found and demoted by
+hand (Venus/Aphrodite, Snorks).
+
+**What it adds**, confirmed by reading the diff (`self-answering.ts`,
+`generate-questions.ts`, new test file
+`single-word-answer-leak-gate.test.ts`):
+- `singleWordAnswerLeaks()` — a new deterministic check for exactly this
+  shape, wired into both the generation-time gate (`findAnswerLeaks`) and
+  the bank-re-serve gate (`findBankSourceDefect`) — so, unlike the original
+  three PR #1611 gates (which per the 2026-09-06 root-cause entry above
+  initially only guarded the front door), this one launched already covering
+  the re-serve path from day one.
+- A **new flag, `SINGLE_WORD_ANSWER_LEAK_ENABLED`**, default **off /
+  measure-only** — the same rollout convention this doc's own Phase 1 used
+  for `PARTIAL_ANSWER_LEAK_ENABLED`. Not yet in `.env` locally (expected;
+  it's Vercel-only like the other two) and not yet observable via
+  `GateDropStat` this session.
+- The PR's own description flags two plausible false positives found in
+  testing ("Host" as an essay title the stem must describe anyway;
+  "Laertes" named as a co-participant in a duel) — worth watching in the new
+  `answer_leak_single_word` counter before considering fail-closed, i.e. the
+  same precision question this doc's Phase 1 asked of the original
+  partial-leak rule.
+- A separate, unrelated-to-flipping telemetry addition in the same PR:
+  `grounded_trust_ask_mismatch`, counting `machine_verified` bank rows where
+  the cold-solve check couldn't reproduce the stored answer (481/1,349 =
+  36% of that population) — informational only, no behavior change, not a
+  decision this doc tracks.
+
+**Not adding a new open decision to §2 yet.** The flag is measure-only with
+zero production data behind it as of this entry — there is nothing to
+decide until `answer_leak_single_word` accumulates enough rows to read a
+precision number, the same gate this doc's Phase 1 already ran once for
+partial-leak. Logging it here so it's tracked from day one rather than
+rediscovered later, and adding `#1673` to this file's `related-pr`.
+
+**Everything else this doc already tracks is unchanged:** both existing
+flags (`PARTIAL_ANSWER_LEAK_ENABLED`, `DOMAIN_DRIFT_DROP_ENABLED`) reconfirmed
+still flipped on per the 2026-09-08 entries, no code touching Mechanism 2's
+avoid-list rendering or `off-domain-second-opinion.ts` since 2026-09-08, the
+7 Phase 1 disagreement items remain closed, and the generalized cross-domain
+audit still hasn't been started.
+
+### Next steps (revised)
+1. Watch `answer_leak_single_word` in `GateDropStat` (needs DB access) —
+   this is now the leading item, since it's a fresh measure-only gate with a
+   known false-positive risk already flagged by its own author.
+2. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop (or a few more clean, quality-healthy days) — needs a
+   session with DB access.
+3. The 7 Phase 1 disagreement items remain closed, no outstanding action.
+4. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

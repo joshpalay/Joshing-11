@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-12
+last-reviewed: 2026-09-14
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -969,6 +969,39 @@ Checked what git can confirm instead:
 stays fixed/closed; questions 3 and 4 stay open and untouched; the
 `lost_persist_race` watch and the Phase 3 population reading both need a
 session with DB access to advance.
+
+### Next steps (unchanged)
+1. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+2. Phase 3 population reading, question 4 (bonus cost) — unchanged.
+
+### 2026-09-14 (diagnosis-review) — no change; still no DB access this session
+
+**Environment note:** no `.env`/`.env.local` present (`ls .env*` shows only
+`.env.example`) and `mcp__Supabase__list_projects` returns zero projects, so
+`npm run check:build-latency` could not be run and `DailyBuildMetric` /
+`outcome='lost_persist_race'` could not be queried, same constraint as the
+last two reviews. Phase 3 stays at the last known reading (n=3, median
+saving 1529ms, residual 925–1627ms).
+
+Checked what git can confirm instead:
+- `git log --since=2026-09-12 -- src/server/daily/queue-orchestrator.ts
+  src/server/db/queries/daily.ts src/server/daily/build-context.ts` —
+  **zero commits.** Nothing has touched the persist-race fix, the two
+  build-latency columns, or the orchestrator's bail-on-loss check since the
+  last review; `#1620`'s `{ row, won }` contract is still the last change to
+  this path.
+- `git log --all --grep=revert --since=2026-09-05` — no reverts of `#1620`
+  or `#1626`, and both remain in `main`'s ancestry (only fast-forwarded this
+  session, never rebased), so their merged state is unchanged from the last
+  direct API confirmation.
+- Nine commits landed on `main` since the last review (#1670–#1683); none
+  touch the daily-build/queue-orchestrator path — spot-checked their file
+  lists directly rather than assumed.
+
+**No decision-resolving change.** Status stays `active`. Open question 5
+stays fixed/closed; questions 3 and 4 stay open and untouched; the
+`lost_persist_race` watch and the Phase 3 population reading both still need
+a session with DB access to advance.
 
 ### Next steps (unchanged)
 1. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
