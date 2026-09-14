@@ -472,6 +472,22 @@
   * {
     @apply border-border outline-ring/50;
     }
+  /* ONE focus indicator for the whole app (DESIGN-SYSTEM §9.2).
+     The `*` rule above sets only outline-COLOR. With no outline-style that
+     draws nothing of its own — the ring you saw was each BROWSER's default
+     ring, merely tinted. So focus was never missing app-wide, it was just
+     never ours, and it varied by engine. This makes it ours and uniform: the
+     same 2px --ring at a 2px offset the .btn-* recipes already use.
+     Every interactive element now inherits it without restating it, which is
+     why a component only needs its own focus styles when it wants something
+     different. Killing this with `outline-none` and putting nothing back is
+     the one real focus defect, and the conformance script counts it (R9).
+     Outline, not a ring: `ring-*` compiles to box-shadow, which collides with
+     the elevation tokens on any element that also casts a shadow. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    }
   body {
     @apply bg-background text-foreground;
     /* Defensive guard: never let a stray over-wide element (e.g. a dev tool bar)

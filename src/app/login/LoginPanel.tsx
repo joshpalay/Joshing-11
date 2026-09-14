@@ -24,7 +24,7 @@ function formatPhoneForDisplay(e164: string): string {
 const CARD_CLASS =
   'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5';
 const INPUT_CLASS =
-  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] outline-none transition-colors focus:border-[var(--brand-navy)]';
+  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] transition-colors focus:border-[var(--brand-navy)]';
 // The login submit IS the canonical primary CTA — it always shared
 // --btn-primary-bg, the bold base type and the 0.04em tracking with
 // `.btn-primary`, and diverged only on height (44 vs the old recipe's 48).

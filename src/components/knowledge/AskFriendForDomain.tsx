@@ -243,7 +243,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                 Message you can send
                 <textarea
                   ref={messageRef}
-                  className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 min-h-32 w-full rounded-xl border border-[var(--accent-gold)] p-3 text-sm leading-6 outline-none"
+                  className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 min-h-32 w-full rounded-xl border border-[var(--accent-gold)] p-3 text-sm leading-6"
                   value={handoffMessage}
                   onChange={(event) => setHandoffMessage(event.target.value)}
                 />
@@ -331,7 +331,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   <label className="block text-sm font-medium">
                     Name
                     <input
-                      className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base outline-none"
+                      className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                       placeholder="Their name"
@@ -341,7 +341,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   <label className="block text-sm font-medium">
                     Phone number
                     <input
-                      className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base outline-none"
+                      className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-2 h-12 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base"
                       value={phone}
                       onChange={(event) =>
                         setPhone(formatUsPhoneInput(event.target.value))
@@ -365,7 +365,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                         ? 'First idea'
                         : `Optional idea ${index + 1}`}
                       <input
-                        className="bg-[var(--brand-field)] text-foreground focus:border-[var(--brand-navy)] disabled:bg-muted mt-2 h-11 w-full rounded-lg border border-[var(--accent-gold)] px-3 text-sm tracking-normal normal-case outline-none"
+                        className="bg-[var(--brand-field)] text-foreground focus:border-[var(--brand-navy)] disabled:bg-muted mt-2 h-11 w-full rounded-lg border border-[var(--accent-gold)] px-3 text-sm tracking-normal normal-case"
                         value={interest}
                         disabled={index === 0}
                         onChange={(event) =>

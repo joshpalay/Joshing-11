@@ -193,7 +193,7 @@ export function ReportReasonSheet({
                       ? 'What did we get wrong?'
                       : 'What feels off about this?'
                   }
-                  className="mt-1 w-full resize-none rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif text-[15px] leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)] focus-visible:outline-none"
+                  className="mt-1 w-full resize-none rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif text-[15px] leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)]"
                 />
               </label>
 
@@ -206,7 +206,7 @@ export function ReportReasonSheet({
                     value={suggestedAnswer}
                     onChange={(e) => setSuggestedAnswer(e.target.value)}
                     placeholder="If you know it"
-                    className="mt-1 w-full rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif text-[15px] leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)] focus-visible:outline-none"
+                    className="mt-1 w-full rounded-2xl border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 font-serif text-[15px] leading-6 text-[var(--brand-ink)] focus:border-[var(--brand-navy)]"
                   />
                 </label>
               ) : null}

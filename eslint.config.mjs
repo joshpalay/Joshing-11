@@ -118,6 +118,14 @@ const DESIGN_LINT_RULES = [
       "Hand-rolled icon button (DESIGN-SYSTEM §3.4). Use .btn-icon (44px square, focus ring); add rounded-full only on a sheet close control or the FAB.",
   },
   {
+    // §9.2 — killing the focus outline without putting a ring back leaves an
+    // element with no focus indicator. `outline-none` is only correct when the
+    // same element also draws `ring-*`.
+    selector: `${CLS}[value=/^(?!.*\\bring-).*outline-none\\b/]`,
+    message:
+      "This kills the focus outline and puts nothing back (DESIGN-SYSTEM §9.2). Either drop outline-none and inherit the app's focus ring, or pair it with focus-visible:ring-2 ring-ring ring-offset-2.",
+  },
+  {
     // §4.1 — Chip geometry is fixed; callers may not re-pad or re-size it.
     selector: `JSXOpeningElement[name.name='Chip'] > ${CLS}[value=/\\b(?:p[xy]-|text-(?:xs|sm|\\[)|rounded-)/]`,
     message:
