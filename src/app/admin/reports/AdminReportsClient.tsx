@@ -10,6 +10,7 @@ import type { MachineDemotionReviewItem } from '@/server/db/queries/machine-demo
 import { LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 import { AdminTabs } from '@/app/admin/AdminTabs';
 import { InfoTerm } from '@/app/admin/InfoTerm';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 // Human labels for the two question stores — the raw table names ('question' /
 // 'generated') read as opaque status words, so they never render verbatim.
@@ -269,7 +270,7 @@ export function AdminReportsClient({
           aria-live="polite"
         >
           <div
-            className="flex max-w-full items-center gap-3 rounded-full border px-4 py-2.5 text-sm shadow-lg"
+            className="flex max-w-full items-center gap-3 rounded-full border px-4 py-2.5 text-sm shadow-[var(--shadow-overlay)]"
             style={{ background: 'var(--brand-card)', borderColor: 'var(--border)' }}
           >
             {toastError ? (
@@ -464,8 +465,8 @@ function RerunProgress() {
   return (
     <div className="rounded-md px-3 py-2 text-quiet" style={{ background: 'var(--surface-2)' }}>
       <span className="animate-pulse text-[var(--brand-ink-700)]">{RERUN_PHRASES[i]}</span>
-      <span className="mt-2 block h-3 w-2/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
-      <span className="mt-1.5 block h-3 w-1/3 animate-pulse rounded" style={{ background: 'var(--border)' }} />
+      <Skeleton className="mt-2 h-3 w-2/3" />
+      <Skeleton className="mt-1.5 h-3 w-1/3" />
     </div>
   );
 }

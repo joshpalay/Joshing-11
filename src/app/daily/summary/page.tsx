@@ -253,7 +253,7 @@ export default function DailySummaryPage() {
           {line ? <InterpretiveLine text={line} /> : null}
         </header>
 
-        <section className="mt-8 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+        <section className="mt-8 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
           <h2 style={titleStyle}>Your Growth Recap</h2>
           <CategoryGainsDisplay
             roundItems={growthCircleItems}
@@ -307,7 +307,7 @@ export default function DailySummaryPage() {
         </section>
 
         {summary.recentFriendBridge ? (
-          <section className="mt-6 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+          <section className="mt-6 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
             <h2 style={titleStyle}>Meanwhile</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
               {bridgeSentence(summary.recentFriendBridge)}
@@ -325,7 +325,7 @@ export default function DailySummaryPage() {
             viewport so "Back home" is always reachable while the recap scrolls.
             bottom-4 floats it off the edge; the shadow lifts it above the cards
             that scroll behind its sides. */}
-        <section className="sticky bottom-4 z-20 mx-auto mt-8 max-w-xs rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4 text-center shadow-[var(--shadow-overlay)] sm:max-w-sm">
+        <section className="sticky bottom-4 z-20 mx-auto mt-8 max-w-xs rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4 text-center shadow-[var(--shadow-overlay)] sm:max-w-sm">
           <p className="text-sm leading-6 text-[var(--brand-ink-700)]">
             {tomorrowWeekday}’s five arrive at noon.
           </p>
@@ -740,7 +740,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
   })
 
   return (
-    <article className="relative overflow-hidden rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
+    <article className="relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
       <div
         className="absolute inset-y-0 left-0 w-1"
         style={{
@@ -807,7 +807,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           aria-haspopup="menu"
           aria-expanded={isOverflowOpen}
           onClick={() => setIsOverflowOpen((open) => !open)}
-          className="text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:ring-ring -mr-2 -mt-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full transition focus-visible:ring-2 focus-visible:outline-none"
+          className="btn-icon rounded-full -mr-2 -mt-2"
         >
           <MoreHorizontal className="size-5" />
         </button>
@@ -987,14 +987,14 @@ function QuestionCardOverflowMenu({
         aria-label="Close menu"
         onClick={onClose}
       />
-      <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl">
+      <div className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-[var(--shadow-overlay)] sm:w-72 sm:rounded-2xl">
         <div className="flex items-center justify-between px-3 py-2 sm:hidden">
           <p className="text-foreground text-sm font-medium">More actions</p>
           <button
             type="button"
             aria-label="Close menu"
             onClick={onClose}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+            className="btn-icon rounded-full"
           >
             <X className="size-4" />
           </button>

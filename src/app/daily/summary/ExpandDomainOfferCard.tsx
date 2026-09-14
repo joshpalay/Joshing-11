@@ -99,7 +99,7 @@ export function ExpandDomainOfferCard({
 
   if (state === 'done') {
     return (
-      <section className="mt-5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+      <section className="mt-5 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
         <h2 style={titleStyle}>Branching out</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
           Added {addedCount} new {addedCount === 1 ? 'domain' : 'domains'} to your rotation. They&rsquo;ll
@@ -143,7 +143,7 @@ export function ExpandDomainOfferCard({
     ) : null
 
   return (
-    <section className="mt-5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
+    <section className="mt-5 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4">
       <h2 style={titleStyle}>You&rsquo;re crushing {offer.sourceDisplayName}</h2>
       <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
         You&rsquo;ve covered a lot of ground here. Add any to your rotation:

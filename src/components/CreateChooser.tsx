@@ -93,7 +93,7 @@ export function CreateChooser({ open, onClose }: { open: boolean; onClose: () =>
               <button
                 key={option.key}
                 type="button"
-                className="flex min-h-20 w-full items-center gap-4 rounded-lg border bg-card px-4 py-3 text-left transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary"
+                className="flex min-h-20 w-full items-center gap-4 rounded-[var(--radius-card)] border bg-card px-4 py-3 text-left transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary"
                 onClick={option.onClick}
               >
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary" aria-hidden="true">

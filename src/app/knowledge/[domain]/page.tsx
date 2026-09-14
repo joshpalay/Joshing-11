@@ -182,7 +182,7 @@ export default function DomainDetailPage() {
         </div>
       </header>
 
-      <section className="mb-5 rounded-lg border bg-card p-5 text-card-foreground">
+      <section className="mb-5 rounded-[var(--radius-card)] border bg-card p-5 text-card-foreground">
         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Current tier</p>
         <h2 className="mt-2 font-serif text-4xl font-semibold">{KNOWLEDGE_TIER_LABEL[tier]}</h2>
         <div className="mt-5">
@@ -207,7 +207,7 @@ export default function DomainDetailPage() {
         <StatTile label="Last active" value={relativeTime(detail.lastAnsweredAt)} />
       </section>
 
-      <section className="mb-5 rounded-lg border bg-card p-5">
+      <section className="mb-5 rounded-[var(--radius-card)] border bg-card p-5">
         <h2 className="font-serif text-2xl font-semibold">Who can see this on your profile?</h2>
         <div className="mt-4">
           <DomainVisibilityToggle
@@ -228,9 +228,9 @@ export default function DomainDetailPage() {
       <section className="mb-7">
         <h2 className="font-serif text-2xl font-semibold">Recent activity in this domain</h2>
         {detail.recentEvents.length === 0 ? (
-          <p className="mt-3 rounded-lg border bg-card p-4 text-sm text-muted-foreground">No activity here yet.</p>
+          <p className="mt-3 rounded-[var(--radius-card)] border bg-card p-4 text-sm text-muted-foreground">No activity here yet.</p>
         ) : (
-          <div className="mt-3 divide-y rounded-lg border bg-card">
+          <div className="mt-3 divide-y rounded-[var(--radius-card)] border bg-card">
             {detail.recentEvents.map((event) => (
               <div key={event.id} className="flex items-center gap-3 px-4 py-3 text-sm">
                 <span className="font-semibold text-foreground">+{formatNumber(event.points)} pts</span>
@@ -245,9 +245,9 @@ export default function DomainDetailPage() {
       <section>
         <h2 className="font-serif text-2xl font-semibold">Your questions in this domain</h2>
         {detail.questionHistory.length === 0 ? (
-          <p className="mt-3 rounded-lg border bg-card p-4 text-sm text-muted-foreground">No answered questions here yet.</p>
+          <p className="mt-3 rounded-[var(--radius-card)] border bg-card p-4 text-sm text-muted-foreground">No answered questions here yet.</p>
         ) : (
-          <div className="mt-3 divide-y rounded-lg border bg-card">
+          <div className="mt-3 divide-y rounded-[var(--radius-card)] border bg-card">
             {detail.questionHistory.map((answer) => {
               const expanded = expandedAnswerId === answer.id;
               return (
@@ -306,7 +306,7 @@ export default function DomainDetailPage() {
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="rounded-[var(--radius-card)] border bg-card p-4">
       <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>

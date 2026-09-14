@@ -155,7 +155,7 @@ export function FeedOverflowMenu({
             role="menu"
             aria-label="More Feed actions"
             onKeyDown={handleMenuKeyDown}
-            className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-2xl sm:w-72 sm:rounded-2xl sm:shadow-xl"
+            className="bg-background relative w-full max-w-md rounded-3xl border p-2 shadow-[var(--shadow-overlay)] sm:w-72 sm:rounded-2xl"
           >
             <div className="flex items-center justify-between px-3 py-2 sm:hidden">
               <p className="text-foreground text-sm font-medium">
@@ -165,7 +165,7 @@ export function FeedOverflowMenu({
                 type="button"
                 aria-label="Close menu"
                 onClick={closeMenu}
-                className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-11 items-center justify-center rounded-full"
+                className="btn-icon rounded-full"
               >
                 <X className="size-4" />
               </button>

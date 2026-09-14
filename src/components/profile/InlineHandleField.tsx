@@ -99,7 +99,7 @@ export function InlineHandleField({
         <span className="text-muted-foreground">@</span>
         <input
           autoFocus
-          className="flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base outline-none focus:border-[var(--brand-navy)]"
+          className="flex-1 rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base focus:border-[var(--brand-navy)]"
           value={draft}
           maxLength={20}
           placeholder="username"
@@ -148,7 +148,7 @@ export function InlineHandleField({
 
   if (editing) {
     return (
-      <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
+      <div className={variant === 'card' ? 'rounded-[var(--radius-card)] border bg-card p-4' : ''}>
         {variant === 'card' ? (
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
@@ -165,7 +165,7 @@ export function InlineHandleField({
 
   const trimmed = value.trim();
   return (
-    <div className={variant === 'card' ? 'rounded-xl border bg-card p-4' : ''}>
+    <div className={variant === 'card' ? 'rounded-[var(--radius-card)] border bg-card p-4' : ''}>
       {variant === 'card' ? (
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">

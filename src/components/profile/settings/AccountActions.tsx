@@ -471,7 +471,7 @@ export function AccountActions({
           />
         </SettingsGroup>
         {confirmingLogout ? (
-          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-xl border p-4">
+          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-[var(--radius-card)] border p-4">
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
             <div className="mt-3 flex gap-2">
               <button
@@ -516,7 +516,7 @@ export function AccountActions({
                   setDeleteConfirmation(event.target.value);
                   setDeleteError(null);
                 }}
-                className="focus:border-destructive mt-1 h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-sm outline-none"
+                className="focus:border-destructive mt-1 h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-sm"
                 autoComplete="off"
                 disabled={deletingAccount}
               />

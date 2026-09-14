@@ -356,7 +356,7 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
             onClick={closeEditor}
           />
           <div
-            className="bg-card text-card-foreground relative max-h-[85vh] w-full space-y-3 overflow-y-auto rounded-t-2xl border p-4 shadow-xl sm:max-w-md sm:rounded-2xl"
+            className="bg-card text-card-foreground relative max-h-[85vh] w-full space-y-3 overflow-y-auto rounded-t-2xl border p-4 shadow-[var(--shadow-overlay)] sm:max-w-md sm:rounded-2xl"
             style={{ borderColor: 'var(--brand-border)' }}
           >
             <div>
@@ -509,7 +509,7 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
 
       {toast ? (
         <div
-          className="bg-foreground text-background fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full px-4 py-2 text-sm whitespace-nowrap shadow-lg"
+          className="bg-foreground text-background fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full px-4 py-2 text-sm whitespace-nowrap shadow-[var(--shadow-overlay)]"
           role="status"
         >
           {toast}

@@ -151,7 +151,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
 
   if (!isOpen) {
     return toast ? (
-      <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+      <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-[var(--shadow-overlay)] md:bottom-8">
         {toast}
       </div>
     ) : null;
@@ -170,7 +170,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
           </header>
 
           <div className="flex-1 overflow-y-auto p-5">
-            <section className="rounded-lg border bg-card p-4">
+            <section className="rounded-[var(--radius-card)] border bg-card p-4">
               <Chip className="bg-secondary text-secondary-foreground">{question.domain}</Chip>
               <p className="mt-3 text-sm font-medium leading-6 text-card-foreground">{question.text}</p>
             </section>
@@ -180,7 +180,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
               <label className="relative mt-3 block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
-                  className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm outline-none focus:border-[var(--brand-navy)]"
+                  className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm focus:border-[var(--brand-navy)]"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search by name..."
@@ -220,7 +220,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
                 <span className="text-xs text-muted-foreground">{message.length}/200</span>
               </div>
               <textarea
-                className="mt-3 min-h-24 w-full resize-none rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 text-sm outline-none focus:border-[var(--brand-navy)]"
+                className="mt-3 min-h-24 w-full resize-none rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] p-3 text-sm focus:border-[var(--brand-navy)]"
                 maxLength={200}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
@@ -249,7 +249,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
         </aside>
       </div>
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-[var(--shadow-overlay)] md:bottom-8">
           {toast}
         </div>
       ) : null}

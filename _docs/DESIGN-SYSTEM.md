@@ -66,14 +66,22 @@ write `rounded-[4px]` inside `globals.css`, which is exempt.
 - `--radius-xs` (the same 4px) is reserved for **non-card controls**: inputs, the login field,
   small chrome. Do not use it on a card; the card rule must stay greppable by its own name.
 - `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl` on a card-shaped container are drift.
-  The Phase 2 migration (`5b873477`) covered the friends/profile/invite section cards; the
-  conformance script (`check:design` R3) then found **about forty more** card containers still
-  on `rounded-lg`/`rounded-xl` — the daily summary and catch-up panels, `ExpandDomainOfferCard`,
-  `FirstSessionPanel`, `knowledge/[domain]` sections, every settings form section
-  (`NotificationsForm`, `PrivacyForm`, `AccountActions`, the LLM readouts), `BlockedList` rows,
-  `InlineEditableField`/`InlineHandleField` card variants, `SendQuestionDrawer:173` — plus the
-  four on `rounded-2xl` (`NotForMeSheet.tsx:157`, `HiddenQuestions.tsx:69`,
-  `daily/summary/page.tsx:328`, `users/[id]/page.tsx:582`). All codemod work, not exceptions.
+  **Closed 2026-09-13.** The Phase 2 migration (`5b873477`) had covered only the
+  friends/profile/invite section cards; the conformance script (R3) then found ~40 more — the
+  daily summary and catch-up panels, `ExpandDomainOfferCard`, `FirstSessionPanel`,
+  `knowledge/[domain]`, every settings form section (`NotificationsForm`, `PrivacyForm`,
+  `AccountActions`, the LLM readouts), `BlockedList` rows, the
+  `InlineEditableField`/`InlineHandleField` card variants, `SendQuestionDrawer`, `DomainList`,
+  `AskFriendForDomain`, `unsubscribe`, `verify-email`. All 38 moved onto `--radius-card`;
+  **R3 is enforced at 0.**
+- **One value, one name.** Twelve cards spelled the same 4px as `--radius-xs` (including
+  `FeedCardShell`, `TodaysFiveCard`, `MissedQuestionsCard`, the welcome-tour cards); they were
+  renamed to `--radius-card` on 2026-09-13, so every remaining `--radius-xs` site is a control
+  (three inputs, five buttons) and the card rule is greppable by its own token.
+- **Not cards, and not R3's business:** a bottom sheet that paints `bg-card` keeps its 18px
+  corner (§1.3) — `rounded-t-*` is excluded from the rule for that reason. Inputs take
+  `--radius-xs` (§1.5); `NotificationsForm`'s SMS-code field was also below the touch floor at
+  `h-10` and moved to `min-h-11` in the same pass.
 
 Grep (cards on a non-card radius, approximate — pairs a card fill with a named radius):
 `rg -n 'rounded-(lg|xl|2xl|3xl)\b[^"]*(bg-card|bg-\[var\(--brand-card\)\]|border-\[var\(--brand-rule\)\])|(bg-card|bg-\[var\(--brand-card\)\])[^"]*rounded-(lg|xl|2xl|3xl)\b' src --glob '*.tsx'`
@@ -100,8 +108,11 @@ Grep (overlay on a non-2xl radius): `rg -n 'role="dialog"' -A3 src --glob '*.tsx
 - **RATIFIED:** a primary or secondary action is never a pill. The onboarding "Add" pill
   (`OnboardingFlow.tsx:881`) becomes a standard button (§3.1). Commit `e68aebde` already
   stripped the other `rounded-full` overrides from `.btn-*` sites; none remain on `main`.
-- **RATIFIED (Phase 4):** inputs are never pills either (`OnboardingFlow.tsx:880` `rounded-full` input →
-  `--radius-xs`, matching `LoginPanel.tsx:27` and `KnowledgeFlatClient.tsx:914`).
+- **RATIFIED (Phase 4):** inputs are never pills either. **Landed 2026-09-13:** `AddTopicField`'s
+  shared `DEFAULT_INPUT_CLASS` moved to `--radius-xs` — which reaches all five consumers — and
+  onboarding's two overrides went with it: its pill input took the same radius, and its navy
+  pill "Add" button became `.btn-ghost`, since Continue is that screen's primary and Add is
+  secondary (§3.1, one per view).
 
 Grep (a button or input that is a pill):
 `rg -n '<(button|input)\b' -A5 src --glob '*.tsx' | rg 'rounded-full' | rg -v 'size-(9|10|11|12|14)|aria-label'`
@@ -131,17 +142,35 @@ them is withdrawn).
 | Flat letterpress | `--shadow-stamp` / `--shadow-stamp-sm` | `4px 4px 0 ink` / `2px 2px 0 ink` | `OverlapMap`, `KnowledgeOverviewClient`, `ShareCard` (see §2.3) |
 | Focus / selection ring | `0 0 0 2px <color>` | literal | selected-state cards (`AnsweredByYouCard`, catch-up, summary, `DomainCircle`) — a *selection* idiom, distinct from keyboard focus (§9) |
 
-Grep (Tailwind shadow utility in a component): `rg -n '\bshadow-(sm|md|lg|xl|2xl)\b' src --glob '*.tsx'` — 35 on `main` (11 `shadow-sm`, 24 `lg/xl/2xl`).
+Grep (Tailwind shadow utility in a component): `rg -n '(?<![\w-])shadow-(sm|md|lg|xl|2xl)\b' src --glob '*.tsx'`
+— 35 at the Phase 5 build, **6 after 2026-09-13**, and all six are chips (see §2.2a). The
+lookbehind matters: `drop-shadow-*` is a filter, not an elevation register, and is not drift.
 
 ### 2.2 Sheets, drawers, popovers and the FAB sit on `--shadow-overlay` — RATIFIED (Phase 4, 2026-09-11)
 
 The disposition doc assigned `--shadow-overlay` to the two centered modals only; 30 sites now
 use it, including bottom sheets. Ratified: **one overlay register** for every floating surface
-(sheet, drawer, anchored menu, toast). The remaining `shadow-2xl/xl` sheets
-(`FeedActions.tsx:158`, `AnsweredRowActions.tsx:70`, `AddAreaModal.tsx:47`,
-`daily/summary/page.tsx:990`) migrate. **Exception, by Phase 4 amendment:** the FAB
-(`Nav.tsx:225`) moves from `shadow-lg` to **`--shadow-card-strong`** — the heavy overlay blur
-under a 56px circle reads as a stain; if it looks fine in practice, overlay is acceptable.
+(sheet, drawer, anchored menu, toast). **Landed 2026-09-13**: ten toasts and floating pills,
+four anchored menus (the responsive `sm:shadow-xl` step dropped with them — one register means
+one value at every width), three sheets, and the three knowledge cards that float over the
+bubble map all read `--shadow-overlay`. The four `sms-consent` screenshot figures are resting
+cards and took `--shadow-card`, as did `PeopleYouInvited`'s hover lift.
+**Exception, by Phase 4 amendment:** the FAB (`Nav.tsx`) took **`--shadow-card-strong`**, not
+overlay — a 12px/28px blur under a 56px circle reads as a stain.
+
+### 2.2a Chips and pills carry no elevation — RATIFIED (Josh, 2026-09-13)
+
+The shadow sweep left exactly six `shadow-sm` sites and every one is a chip or pill:
+`KnowledgeBubbleMap.tsx:318`, `KnowledgePeaksView.tsx:1034,1062` (a `hover:shadow-sm` lift), and
+three on `TerritorySetupClient` (`:738` label chip, `:980,:998` the size-14 territory circles).
+§2.1 named this gap — "chips/pills currently have no elevation rule" — and never filled it.
+
+**A chip is a label, not a surface. It sits on the page and casts nothing.** The `Chip`
+primitive already shipped with no shadow, so this ratifies what the primitive does and holds
+the hand-rolled ones to it. Applied the same day: the territory label chip and its two
+selector circles, the bubble-map filter pill, and the two peaks-view filter pills all dropped
+`shadow-sm` / `hover:shadow-sm`. **R1 closed at 0.** `TerritorySetupClient`'s deferred "raised"
+register (§11) is a separate question about its drag surface, untouched here.
 
 ### 2.3 Letterpress is tokenised — RATIFIED (Phase 4, 2026-09-11) (E-2)
 
@@ -318,18 +347,18 @@ and sits *on* another control. Ratified (Phase 4) `<Badge>` in `src/components/u
 
 ---
 
-### 4.3 Selectable chip (filter / toggle pill) — PROPOSED (surfaced by `check:design` R4, 2026-09-11; not yet ratified)
+### 4.3 Selectable chip (filter / toggle pill) — RATIFIED (Josh, 2026-09-13; build pending)
 
 Roughly a dozen pills are **buttons**, not labels: interest pickers (`OnboardingFlow.tsx:171-211`,
 `AddTopicField.tsx:58`, `QuestionForm.tsx:1057`), the daily-summary filter row
 (`daily/summary/page.tsx:903-927`, `min-h-9`), knowledge-map filters
 (`KnowledgePeaksView.tsx:461,1034,1062`, `KnowledgeNodeCard.tsx:267`), `InviteCategoryChips`.
 They share `rounded-full border px-3 py-1(.5) text-sm|text-xs` and hand-roll a selected state.
-Neither `Chip` (a `span`) nor any button type in §3 covers them. Proposed: a `selectable`
-variant on `Chip` rendered as a `<button type="button" aria-pressed>` — `md` geometry,
-`min-h-9` visual with a 44px hit area via padding, selected state carried by ink fill
-(`bg-foreground text-background`) **and** `aria-pressed`, never by hue alone. Until ratified,
-the R4 count includes them; new filter pills should copy `daily/summary/page.tsx:910`.
+Neither `Chip` (a `span`) nor any button type in §3 covers them. **Ratified:** a `selectable`
+variant on `Chip` rendered as a `<button type="button" aria-pressed>` — `md` geometry, a 44px
+hit area (§9.1), the §9.2 focus ring, and a selected state carried by ink fill
+(`bg-foreground text-background`) **and** `aria-pressed`, never by hue alone. **Build pending**
+(§12); until it lands, new filter pills copy `daily/summary/page.tsx:910`.
 
 ## 5. Cards and containers
 
@@ -400,7 +429,18 @@ for-you, from-friends, activities, home, knowledge. **`animate-pulse` outside `S
 drift**: `/questions` (`questions/page.tsx:128-132,566`), `CreationSurface.tsx:233`, and the
 admin loaders are codemod work.
 
-Grep: `rg -n 'animate-pulse' src --glob '*.tsx' | rg -v 'ui/Skeleton|KnowledgeBubbleMap'`
+**Landed 2026-09-13.** `/questions` (both loaders), `CreationSurface`'s drafting cards and the
+admin rerun bars now render `<Skeleton>`; R7 is closed at 0. `CreationSurface` keeps its card
+shell — border, padding, the card radius — so the wait holds the real layout, and only the bars
+inside shimmer. The shell itself no longer pulses: nesting a pulse inside a shimmer double-
+animates the same wait.
+
+**A pulsing text label is not a skeleton.** "Loading questions…", "Asking Wikidata and the
+LLM…", a rotating status phrase — that is real text breathing while it waits, with nothing for
+`<Skeleton>` to stand in for. §7.1 governs *placeholder blocks*, the empty boxes that stand in
+for content. The rule separates the two on `text-` and no longer reports the four text pulses.
+
+Grep: `rg -n 'animate-pulse' src --glob '*.tsx' | rg -v 'ui/Skeleton|KnowledgeBubbleMap|text-'`
 
 ### 7.2 Exemptions
 
@@ -443,13 +483,32 @@ inline actions; `size-11` on icon buttons; `min-h-11` on inputs. Visual size may
 
 ### 9.2 The focus ring — RATIFIED (Phase 4, 2026-09-11) as universal (recipe RATIFIED for `.btn-*`, `globals.css:497-509`)
 
-`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-focus-visible:ring-offset-2` (`--ring` = navy) on **every** interactive element, not just the
-recipes. The old `ring-3 ring-ring/50` idiom has zero uses and is withdrawn. Never remove the
-ring without replacing it with an equally visible focus state; `LoginPanel.tsx:29` ships
-without one and gains it when it folds into `.btn-primary` (§12).
+**The app has one focus indicator and every element inherits it.** `globals.css`'s base layer
+gives `:focus-visible` a `2px solid var(--ring)` outline at a `2px` offset — the same weight and
+colour the `.btn-*` recipes draw as a ring. A component needs its own focus styles **only when
+it wants something different**.
 
-Grep (button with no focus state): `rg -n '<button\b' -A6 src --glob '*.tsx' | rg -v 'focus-visible|btn-' | rg 'className'` — heuristic; 318 hits on `main`.
+**The one real defect is killing it.** `outline-none` with nothing put back leaves an element
+with no focus indicator at all. Where a component does want its own treatment, the correct
+idiom is kill *and* replace on the same element:
+`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
+— which is what all 77 ring sites already do. The old `ring-3 ring-ring/50` idiom has zero uses
+and is withdrawn.
+
+**Corrected 2026-09-13 — the old reading of this rule was wrong.** It said "every interactive
+element must carry the ring classes", and the conformance rule counted 333 buttons that didn't.
+That measured nothing: `globals.css`'s `*` rule set only outline *colour*, and with no
+outline-style of its own the browser went on drawing **its** default focus ring, merely tinted.
+Focus was never missing app-wide — it was just never ours, and it varied by engine. Meanwhile
+the actual gap was the opposite and far smaller: **43 elements, almost all form fields, killed
+the outline and substituted a 1px border tint**, which is not an equally visible state. The base
+rule now supplies the ring, those 43 dropped their `outline-none`, and **R9 counts focus-killers
+and is closed at 0**.
+
+Outline rather than a ring, deliberately: `ring-*` compiles to `box-shadow`, which collides with
+the elevation tokens on any element that also casts a shadow.
+
+Grep (focus killed with no replacement): `rg -n 'outline-none' src --glob '*.tsx' | rg -v 'ring-'`
 
 ---
 
@@ -476,6 +535,7 @@ fill (chip surface, skeleton fill, badge colour, accent bar), it says so and def
 | `GameplayChat` glow, ceremony gem | elevation registers | disposition |
 | `TerritorySetupClient`, `PortraitCircles` "raised" | elevation registers, pending `--shadow-raised` | disposition §Deferred |
 | Ceremony rooms, `--interlude-*`, `--editorial-*` bands | card recipe | §5.1 |
+| Ceremony rooms — **and their chrome** (the Exit control takes its colour from the beat's theme and hovers on `white/10`; the neutral `.btn-icon` ink would be invisible on a saturated ground) | button recipes | §3.4, added 2026-09-13 |
 | `Nav.tsx` bottom tabs | §3.5 tab recipe | §3.5 |
 | `/admin/*` | list rule (grid tables allowed), token lint scope | §6.2 |
 | `data-flat` / `data-shadow` CSS, `PaletteToggle` | everything (testing chrome, unmounted) | `globals.css:720-762` |
@@ -487,22 +547,25 @@ fill (chip surface, skeleton fill, badge colour, accent bar), it says so and def
 
 `globals.css` and components are untouched by `B-FABLE-DESIGN-CANON-01`. The rulings imply:
 
-**Done 2026-09-13 (PR "design-codemod: buttons"):** the `.btn-primary` recipe is `min-h-11`
-with its comment corrected; all fifteen call-site overrides stripped;
+**Done 2026-09-13 — buttons (R2 closed at 0):** the `.btn-primary` recipe is `min-h-11` with
+its comment corrected; all fifteen call-site overrides stripped;
 `InviteLinksSection.tsx:501` → `.btn-danger`; `LoginPanel.tsx` `SUBMIT_CLASS` →
-`btn-primary w-full`. R2 closed at 0.
+`btn-primary w-full`.
+
+**Done 2026-09-13 — cards (R3 closed at 0):** 38 containers onto `--radius-card`, 12 cards
+renamed off `--radius-xs`, the SMS-code input onto `--radius-xs` + `min-h-11`, and the stale
+"content cards use `rounded-md`" convention comment in `globals.css` corrected.
 
 | Edit | Where | Ruling |
 |---|---|---|
-| Add-a-topic control joins the system: `AddTopicField` `DEFAULT_INPUT_CLASS` `rounded-full` → `--radius-xs` (5 consumers), and `OnboardingFlow.tsx:934-935`'s pill input + navy pill button fold onto that default + `.btn-ghost` (the screen's primary is Continue, so Add is secondary — §3.1 one-per-view) | `interests/AddTopicField.tsx`, `OnboardingFlow.tsx` | 1.4, 1.5, 3.2 |
-| Stale comment "content cards use rounded-md" | `globals.css:185-186` | 1.2 |
+| **Build §4.3** — add the `selectable` variant to `Chip`, then migrate the ~12 filter pills (`OnboardingFlow` interest chips, `AddTopicField` `DEFAULT_CHIP_CLASS`, `QuestionForm:1057`, the `daily/summary` filter row, `KnowledgePeaksView`, `KnowledgeNodeCard`, `InviteCategoryChips`) | `ui/Chip.tsx` + call sites | 4.3 |
 | Duplicate `--radius-xs…lg` literal block | `globals.css:374-377` | 1.1 |
 | Unused shadcn leftovers `--chart-1…5`, `--sidebar-*` (0 consumers) | `globals.css:212-225`, `.dark` | housekeeping, RATIFIED (Phase 4) |
-| Four leftover `rounded-2xl` rows/tiles → `--radius-card` | §1.2 list | 1.2 |
-| `FeedCardShell.tsx:16` `--radius-xs` → `--radius-card` (same value, canonical name) | component | 1.2 |
 | Chip: drop `sm`; add `Badge`; migrate Nav/FeedList badges and `MyQuestionCard` label | `ui/` | 4.1–4.2 |
 | `/questions` skeleton, `CreationSurface` → `<Skeleton>` | components | 7.1 |
-| Sheet shadows → `--shadow-overlay`; FAB → `--shadow-card-strong`; menus `rounded-3xl` → `2xl` | components | 1.3, 2.2, 3.8 |
+| Anchored menus `rounded-3xl` → `rounded-2xl` (`FeedActions`, `AnsweredRowActions`, `daily/summary`) — their *shadows* landed 2026-09-13, the radius did not | components | 1.3 |
+| Ratify §2.2a (chips carry no elevation), then strip the last 6 `shadow-sm` | components | 2.2a |
+| `HiddenQuestions.tsx:69` (row) and `users/[id]/page.tsx:582` (avatar tile) — the two `rounded-2xl` sites R3 never flagged because neither paints a card fill; decide row-vs-avatar per §3.6 / §1.4 | components | 1.2, 1.4 |
 
 ---
 
@@ -529,18 +592,27 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 |---|---|---|
 | Rule | Script id · baseline (2026-09-11) | Lint selector |
 |---|---|---|
-| 1.2 card radius | R3 · 41 | — |
+| 1.2 card radius | R3 · **0 — closed 2026-09-13** | — |
 | 1.4 no pill buttons/inputs | R8 · 34 | yes |
-| 2.1 no Tailwind shadow utilities | R1 · 35 | yes |
+| 2.1 no Tailwind shadow utilities | R1 · **0 — closed 2026-09-13** (35 → 6 → 0, the last 6 by ratifying §2.2a) | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
-| 3.4 hand-rolled icon buttons | R6 · 23 | yes |
+| 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · 1 / R4 · 31 (≈12 are §4.3 selectable pills) | yes / — |
-| 7.1 `animate-pulse` outside Skeleton | R7 · 11 | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 321 / R9 · 333 (heuristic, count only) | — |
+| 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 320 / R9 · 329 (heuristic, count only) | — |
 
-Lint lane baseline: **83** `canon/restricted-syntax` warnings (29 shadow · 28 pill · 11 icon ·
-11 animate-pulse · 4 Chip; btn-override closed 2026-09-13); `--max-warnings 88` = 5
-pre-existing (4 colour-lane + 1 unused-var) + 83. It was 103 at the Phase 5 build.
+Lint lane baseline: **36** `canon/restricted-syntax` warnings (28 pill · 4 Chip ·
+4 shadow-in-template-string); `--max-warnings 41` = 5 pre-existing (4 colour-lane +
+1 unused-var) + 36. Trajectory: **103** at the Phase 5 build → 88 (buttons) → 63 (shadows) →
+52 (icon buttons) → 41 (skeletons). Every closure ratchets the ceiling down the same day.
+**Every remaining warning is a pill or a Chip**, so one decision — §4.3 (selectable chips) —
+governs most of what is left in this lane.
+
+**Where the two lanes disagree, and why that is fine.** The script reads whole lines and
+7-line `<button>` blocks; the lint selectors read one string literal. So a shadow inside a
+template string is counted by R1 and invisible to lint, and `check:design` can exempt a file
+per-rule (`RULE_EXEMPT`) where lint can only exempt a file from the whole lane. Keep the two
+exemption lists in step by hand — `src/app/ceremony/**` is in both.
 
 ---
 

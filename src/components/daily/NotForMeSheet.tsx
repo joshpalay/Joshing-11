@@ -91,7 +91,7 @@ export function NotForMeSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--brand-ink-400)] transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="btn-icon rounded-full"
           >
             <X className="size-4" />
           </button>
@@ -154,7 +154,7 @@ function Choice({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex w-full items-start gap-3 rounded-2xl border border-[var(--brand-rule)] bg-[var(--brand-card)] px-4 py-3 text-left transition hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="flex w-full items-start gap-3 rounded-[var(--radius-card)] border border-[var(--brand-rule)] bg-[var(--brand-card)] px-4 py-3 text-left transition hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <span className="mt-0.5 shrink-0 text-[var(--brand-ink-400)]">{icon}</span>
       <span className="flex flex-col gap-0.5">

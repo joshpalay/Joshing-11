@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { QuestionForm, type QuestionFormValues } from '@/components/QuestionForm';
 import { MyQuestionCard } from '@/components/questions/MyQuestionCard';
 import { AnsweredQuestionsList, type AnsweredQuestionItem } from '@/components/questions/AnsweredQuestionsList';
+import { Skeleton } from '@/components/ui/Skeleton';
 import type { QuestionView } from '@/server/db/queries/questions';
 
 type SortMode = 'newest' | 'most_answered' | 'hardest' | 'easiest';
@@ -125,11 +126,11 @@ function initialValues(question: QuestionView): QuestionFormValues {
 function LoadingSkeleton() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6 pb-24">
-      <div className="mb-5 h-20 animate-pulse rounded-lg bg-muted" />
-      <div className="mb-5 h-14 animate-pulse rounded-lg bg-muted" />
+      <Skeleton className="mb-5 h-20" />
+      <Skeleton className="mb-5 h-14" />
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-36 animate-pulse rounded-lg border bg-card" />
+          <Skeleton key={index} className="h-36" />
         ))}
       </div>
     </main>
@@ -511,7 +512,7 @@ function QuestionsPageContent() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search questions..."
-                className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm outline-none focus:border-[var(--brand-navy)]"
+                className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm focus:border-[var(--brand-navy)]"
               />
             </label>
           </section>
@@ -563,7 +564,7 @@ function QuestionsPageContent() {
           {answeredLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-16 animate-pulse rounded-lg border bg-card" />
+                <Skeleton key={index} className="h-16" />
               ))}
             </div>
           ) : answeredError ? (
@@ -622,7 +623,7 @@ function QuestionsPageContent() {
       ) : null}
 
       {toast ? (
-        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg md:bottom-8">
+        <div className="fixed bottom-24 left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-[var(--shadow-overlay)] md:bottom-8">
           {toast}
         </div>
       ) : null}

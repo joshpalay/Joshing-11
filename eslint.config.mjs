@@ -41,7 +41,14 @@ const TOKEN_LINT_RULE = {
 // design-canon warnings from DESIGN_LINT_RULES below (its baseline, measured at
 // the Phase 5 build: 29 shadow, 28 pill, 15 btn-override, 11 icon, 11
 // animate-pulse, 4 Chip). **88 (2026-09-13)** = 103 − the 15 btn-override
-// warnings, closed by the button codemod. When you clean a file
+// warnings, closed by the button codemod. **63 (2026-09-13)** = 88 − 25 of the
+// 29 shadow warnings, closed by the shadow codemod (the other 4 were in
+// template strings the selector never saw; `check:design` R1 counts those).
+// **52 (2026-09-13)** = 63 − 10 icon buttons folded onto .btn-icon − 1 ceremony
+// file now exempt. **41 (2026-09-13)** = 52 − 7 placeholders folded onto
+// <Skeleton> − 4 pulsing text labels the selector no longer treats as
+// placeholders. **37 (2026-09-13)** = 41 − the last 4 chip shadows, closed by
+// ratifying §2.2a. When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
 const TOKEN_LINT_GRANDFATHERED = [
@@ -87,13 +94,20 @@ const DESIGN_LINT_RULES = [
       "Overriding a .btn-* recipe at the call site (DESIGN-SYSTEM §3). If a surface needs a different button, it is a different type — decide it in the canon, don't restyle it here.",
   },
   {
-    // §7.1 — animate-pulse outside <Skeleton> is drift.
-    selector: `${CLS}[value=/\\banimate-pulse\\b/]`,
-    message: "Loading placeholders use <Skeleton> (DESIGN-SYSTEM §7.1), not animate-pulse boxes.",
+    // §7.1 — an animate-pulse PLACEHOLDER BLOCK outside <Skeleton> is drift. A
+    // pulsing text label ("Loading questions…") is a different pattern with
+    // nothing to stand in for; `text-` separates them. Kept in step with R7's
+    // skipLine in scripts/audit-design-conformance.mjs.
+    selector: `${CLS}[value=/^(?!.*\\btext-).*\\banimate-pulse\\b/]`,
+    message:
+      "Loading placeholders use <Skeleton> (DESIGN-SYSTEM §7.1), not animate-pulse boxes.",
   },
   {
-    // §1.4 — a button or input is never a pill (sized round icon buttons are §3.4's business).
-    selector: `JSXOpeningElement[name.name=/^(?:button|input)$/] > ${CLS}[value=/^(?!.*\\bsize-(?:9|10|11|12|14)\\b).*\\brounded-full\\b/]`,
+    // §1.4 — a button or input is never a pill (sized round icon buttons are
+    // §3.4's business). `btn-icon rounded-full` is the sanctioned circular icon
+    // button and is excluded: its size-11 comes from the recipe, so the
+    // size-N lookahead alone would not spare it.
+    selector: `JSXOpeningElement[name.name=/^(?:button|input)$/] > ${CLS}[value=/^(?!.*\\bbtn-icon\\b)(?!.*\\bsize-(?:9|10|11|12|14)\\b).*\\brounded-full\\b/]`,
     message:
       "Buttons and inputs are never pills (DESIGN-SYSTEM §1.4). Use the .btn-* recipe or --radius-xs; rounded-full is for chips, badges, avatars, the FAB and close controls.",
   },
@@ -102,6 +116,14 @@ const DESIGN_LINT_RULES = [
     selector: `JSXOpeningElement[name.name='button'] > ${CLS}[value=/^(?!.*\\bbtn-icon\\b)(?=.*\\bsize-(?:9|10|11|12|14)\\b).*\\brounded-full\\b/]`,
     message:
       "Hand-rolled icon button (DESIGN-SYSTEM §3.4). Use .btn-icon (44px square, focus ring); add rounded-full only on a sheet close control or the FAB.",
+  },
+  {
+    // §9.2 — killing the focus outline without putting a ring back leaves an
+    // element with no focus indicator. `outline-none` is only correct when the
+    // same element also draws `ring-*`.
+    selector: `${CLS}[value=/^(?!.*\\bring-).*outline-none\\b/]`,
+    message:
+      "This kills the focus outline and puts nothing back (DESIGN-SYSTEM §9.2). Either drop outline-none and inherit the app's focus ring, or pair it with focus-visible:ring-2 ring-ring ring-offset-2.",
   },
   {
     // §4.1 — Chip geometry is fixed; callers may not re-pad or re-size it.
@@ -122,6 +144,12 @@ const DESIGN_LINT_EXEMPT = [
   "src/**/*.test.tsx",
   "src/app/dev/**",
   "src/app/feed/debug/**",
+  // The weekly ceremony renders as full-bleed saturated "rooms" with reversed
+  // type — an immersive surface exempted by DESIGN-SYSTEM §11. Its chrome is
+  // tuned to the room (the Exit control takes its colour from the beat's theme
+  // and hovers on white/10), so the neutral recipes do not apply. Kept in step
+  // with RULE_EXEMPT.R6 in scripts/audit-design-conformance.mjs.
+  "src/app/ceremony/**",
 ];
 
 const eslintConfig = defineConfig([

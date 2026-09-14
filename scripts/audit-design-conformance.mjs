@@ -35,16 +35,21 @@ import { join, relative } from 'node:path';
 // number after a cleanup; never raise one. A rule at 0 is a rule that is
 // enforced in full.
 const BASELINE = {
-  R1: 34, // Tailwind shadow utility (§2.1) — 8 of these are the bottom toasts on shadow-lg
+  // Tailwind shadow utility (§2.1) — CLOSED 2026-09-13. 35 -> 6: toasts,
+  // anchored menus, sheets, the knowledge floating cards, the FAB and the
+  // sms-consent figures moved onto the tokens. 6 -> 0: §2.2a was ratified
+  // (a chip is a label, not a surface — it casts nothing), so the last
+  // shadow-sm came off the territory chips and the knowledge filter pills.
+  R1: 0,
   R2: 0, // .btn-* recipe overridden at the call site (§3) — CLOSED 2026-09-13: recipe went 48→44px, the 11 redundant height overrides were stripped, the red primary became .btn-danger, and login folded onto .btn-primary. Enforced in full; a new override is now a regression.
-  R3: 41, // card fill paired with a non-card radius (§1.2) — settings sections, daily panels, knowledge/[domain]
+  R3: 0, // card fill paired with a non-card radius (§1.2) — CLOSED 2026-09-13: 38 card containers moved onto --radius-card (settings sections, daily summary/catch-up panels, knowledge/[domain], the inline-field card variants), one input onto --radius-xs. Enforced in full.
   R4: 31, // hand-rolled chip / pill (§4.1) — ~12 are selectable filter pills awaiting §4.3
   R5: 1, // <Chip> geometry override (§4.1)
-  R6: 23, // hand-rolled round icon button, not .btn-icon (§3.4)
-  R7: 11, // animate-pulse outside <Skeleton> (§7.1)
+  R6: 0, // hand-rolled round icon button (§3.4) — CLOSED 2026-09-13: 10 sheet/menu close and "more actions" controls folded onto .btn-icon. The other 13 the rule used to report were never icon buttons (see the note above LINE_RULES).
+  R7: 0, // animate-pulse placeholder outside <Skeleton> (§7.1) — CLOSED 2026-09-13: the /questions loaders, CreationSurface's drafting cards and the admin rerun bars all render <Skeleton>. The 4 the rule used to report were pulsing text labels, not placeholders.
   R8: 34, // button or input rendered as a pill (§1.4) — overlaps R4's selectable pills
-  R9: 332, // heuristic: <button> block with no focus-visible and not .btn-* (§9.2)
-  R10: 321, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1)
+  R9: 0, // focus killed without a replacement ring (§9.2) — CLOSED 2026-09-13. Redefined: the old rule counted buttons with no focus-visible CLASS (328) but the browser was always drawing one, so it measured nothing. This counts the real defect — `outline-none` with nothing put back — which was 43 form fields, all fixed.
+  R10: 320, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — daily/summary's size-10 "More actions" reached 44px via the recipe
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────
@@ -56,6 +61,13 @@ const isExempt = (p) => EXEMPT.some((e) => p === e || p.startsWith(e)) || isTest
 const RULE_EXEMPT = {
   R7: ['src/components/ui/Skeleton.tsx', 'src/components/knowledge/KnowledgeBubbleMap.tsx'],
   R1: ['src/components/ui/Skeleton.tsx'],
+  // §11 exempt surfaces, for icon buttons specifically:
+  //  • the ceremony rooms are immersive saturated grounds — their Exit control
+  //    takes its colour from the room's theme and hovers on white/10, so the
+  //    .btn-icon recipe (muted ink, hover:bg-muted) would be wrong there;
+  //  • TerritorySetupClient's size-14 circles are a bespoke drag surface whose
+  //    "raised" register is separately deferred.
+  R6: ['src/app/ceremony/[ceremonyId]/page.tsx', 'src/app/daily/setup/TerritorySetupClient.tsx'],
 };
 
 const ICON_SIZE = String.raw`\bsize-(?:9|10|11|12|14)\b`;
@@ -83,7 +95,10 @@ const LINE_RULES = [
     section: '§1.2',
     title: 'card fill paired with a non-card radius',
     re: /\brounded-(?:lg|xl|2xl|3xl)\b[^"'`}]*(?:\bbg-card\b|bg-\[var\(--brand-card\)\])|(?:\bbg-card\b|bg-\[var\(--brand-card\)\])[^"'`}]*\brounded-(?:lg|xl|2xl|3xl)\b/g,
-    skipLine: (l) => /animate-pulse|<input|<textarea/.test(l), // skeletons are R7; inputs are §1.5
+    // skeletons are R7; inputs are §1.5; `rounded-t-*` is a bottom sheet, whose
+    // 18px corner is correct per §1.3 — a sheet that happens to paint `bg-card`
+    // is not a card, and flagging it would make R3 permanently un-closable.
+    skipLine: (l) => /animate-pulse|<input|<textarea|rounded-t-/.test(l),
   },
   {
     id: 'R4',
@@ -98,36 +113,65 @@ const LINE_RULES = [
     title: '<Chip> geometry override (padding / size / radius)',
     re: /<Chip\b[^>]*className=["'{`][^"'`}]*\b(?:p[xy]-|text-(?:xs|sm|\[)|rounded-)/g,
   },
+  // R6 lives in BLOCK_RULES — see below. As a line rule it matched any line
+  // with `size-N` + `rounded-full`, which swept in decorative icon wrappers
+  // (`SettingsRow`, `users/[id]`), territory circles that contain text
+  // (`TerritorySetupClient`, `GhostTerritoryCircle`), an avatar
+  // (`WelcomeTourScreen`) and the FAB — none of them icon buttons. Keying it on
+  // an actual `<button>` block cut it from 23 to the real number.
   {
-    id: 'R6',
-    section: '§3.4',
-    title: 'hand-rolled round icon button (should be .btn-icon)',
-    re: new RegExp(String.raw`${ICON_SIZE}[^"'\`}]*\brounded-full\b|\brounded-full\b[^"'\`}]*${ICON_SIZE}`, 'g'),
-    skipLine: (l) => /btn-icon|<Skeleton|<span|<div|<img|Avatar/.test(l),
+    // R9 was "a <button> block with no focus-visible class" — 333 of them, and
+    // it was measuring the wrong thing. `*` in globals.css set only outline
+    // COLOR, so every element still drew its BROWSER's default focus ring,
+    // merely tinted: focus was never absent, just never ours. The real defect
+    // is the opposite — an element that KILLS the outline and puts nothing
+    // back. That was 43 sites, almost all form fields substituting a 1px border
+    // tint. With the base :focus-visible rule in globals.css those 43 are
+    // fixed, and this rule now guards the thing that actually breaks focus.
+    id: 'R9',
+    section: '§9.2',
+    title: 'focus killed without a replacement ring',
+    re: /(?:focus(?:-visible)?:)?outline-none\b/g,
+    skipLine: (l) => /\bring-/.test(l), // kill + replace is the correct idiom
   },
   {
     id: 'R7',
     section: '§7.1',
-    title: 'animate-pulse outside <Skeleton>',
+    title: 'animate-pulse placeholder outside <Skeleton>',
     re: /\banimate-pulse\b/g,
+    // §7.1 governs PLACEHOLDER BLOCKS — the empty grey boxes that stand in for
+    // content. A pulsing *text label* ("Loading questions…", a rotating status
+    // phrase) is a different pattern: real text that breathes while it waits,
+    // with nothing for <Skeleton> to stand in for. `text-` on the same element
+    // separates the two cleanly.
+    skipLine: (l) => /\btext-/.test(l),
   },
 ];
 
 // Block rules: run over each `<button …>` opening block (tag + next 6 lines).
 const BLOCK_RULES = [
   {
+    id: 'R6',
+    section: '§3.4',
+    title: 'hand-rolled round icon button (should be .btn-icon)',
+    tag: /<button\b/,
+    test: (b) =>
+      new RegExp(ICON_SIZE).test(b) &&
+      /\brounded-full\b/.test(b) &&
+      !/btn-icon/.test(b) &&
+      // The FAB is its own type (§3.8).
+      !/pointer-events-auto grid size-14/.test(b) &&
+      // A full-width left-aligned row is a list-row button (§3.6); the round
+      // `size-N` in its window belongs to a decorative <span> inside it, not to
+      // the button (e.g. CreateChooser's option rows).
+      !/w-full[^"]*text-left|text-left[^"]*w-full/.test(b),
+  },
+  {
     id: 'R8',
     section: '§1.4',
     title: 'button or input rendered as a pill',
     tag: /<(?:button|input)\b/,
     test: (b) => /\brounded-full\b/.test(b) && !new RegExp(ICON_SIZE).test(b) && !/btn-icon/.test(b),
-  },
-  {
-    id: 'R9',
-    section: '§9.2',
-    title: 'heuristic — <button> block with no focus-visible and not .btn-*',
-    tag: /<button\b/,
-    test: (b) => !/focus-visible|btn-(?:primary|ghost|danger|icon)/.test(b),
   },
   {
     id: 'R10',
@@ -190,7 +234,9 @@ for (const file of walk(join(root, 'src'))) {
   }
 }
 
-const rules = [...LINE_RULES, ...BLOCK_RULES].filter((r) => !only || r.id === only);
+const rules = [...LINE_RULES, ...BLOCK_RULES]
+  .filter((r) => !only || r.id === only)
+  .sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
 let failed = false;
 const pad = (s, n) => String(s).padEnd(n);
 
