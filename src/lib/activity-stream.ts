@@ -22,6 +22,7 @@ import { HOME_TOP3_ELIGIBLE_TYPES } from '@/lib/activity-types';
 import type { ActivityItemView } from '@/server/db/queries/activity';
 import type { MasteryTier } from '@/types/db';
 import type { BundleAnswerMoment, LatelyMoment } from '@/server/db/queries/lately';
+import type { NearbyTerritory } from '@/lib/daily/territory-model';
 import { LATELY_TIER, latelyTierForMomentDir, djb2 } from '@/lib/lately';
 import type { LatelyMilestone } from '@/lib/lately-milestones';
 import type { FriendActivityCard } from '@/lib/friend-activity';
@@ -201,6 +202,11 @@ export type AddFriendsPromoPerson = {
   relationship: RelationshipResult;
 };
 
+// The add-topic promo reuses the suggestion shape the /knowledge and manage
+// surfaces already pass to TopicSuggestionCarousel, so the in-feed promo and
+// the manage page render identical circles from one type.
+export type AddTopicPromoSuggestion = NearbyTerritory;
+
 // Inline embeds rendered under a stream row's one-liner. A discriminated union
 // so each promo carries only its own payload; ActivityStreamItem switches on
 // `kind`. `common_ground` draws the overlapping-circle motif with a link to a
@@ -241,6 +247,12 @@ export type StreamEmbed =
       kind: 'add_friends';
       variant: 'invite';
       href: string;
+      headlineIndex?: number;
+    }
+  | {
+      kind: 'add_topic';
+      href: string;
+      suggestions: AddTopicPromoSuggestion[];
       headlineIndex?: number;
     };
 
@@ -1218,6 +1230,32 @@ export function addFriendsPromoToStreamItem(
     friendId: null,
     homeEligible: true,
     line: [txt(embed.variant === 'suggestions' ? 'People you may know' : 'Grow your circle')],
+    secondLine: null,
+    anchorId: null,
+    action: null,
+    icon: 'domain',
+    expand: null,
+    embed,
+  };
+}
+
+// A homepage-only "add a topic" nudge: a few suggested topics the viewer can
+// adopt by tapping, with a link through to the full manage surface. Rides IN the
+// feed rather than as a fixed card above it, so it scrolls past like the other
+// editorial interludes instead of pushing the feed down on every visit.
+// Question-free, so it never expands.
+export function addTopicPromoToStreamItem(
+  embed: Extract<StreamEmbed, { kind: 'add_topic' }>,
+  sortAt: Date,
+  id: string,
+): StreamItem {
+  return {
+    id,
+    sortAt,
+    tier: LATELY_TIER.OTHER,
+    friendId: null,
+    homeEligible: true,
+    line: [txt('Add a topic')],
     secondLine: null,
     anchorId: null,
     action: null,

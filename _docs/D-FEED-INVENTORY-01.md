@@ -19,8 +19,11 @@ The Home feed is **three row families merged into one scroll**, then rendered in
    Three sub-sources: **activity rows** (`activityToStreamItem`), **Lately moments**
    (`momentToStreamItem`), **milestones** (`milestoneToStreamItem`), **convergences**
    (`convergenceToStreamItem`).
-3. **Editorial promos** — three home-only `StreamItem`s carrying an `embed`: `common_ground`,
-   `recently_expanding`, `add_friends`. Rendered full-bleed via `EditorialPromos.tsx`.
+3. **Editorial promos** — four home-only `StreamItem`s carrying an `embed`: `common_ground`,
+   `recently_expanding`, `add_friends`, `add_topic`. Rendered full-bleed via `EditorialPromos.tsx`.
+   The first three are assembled server-side in `build-edition.ts`; `add_topic` is built in
+   FeedList from a client-side fetch, because its suggestion pool is too heavy for the home
+   critical path (see `api/interests/suggestions/route.ts`).
 
 **Layout zones (FeedList render, `FeedList.tsx:1745-1779`):**
 - **"For You"** (pinned top) — `kind:'feed'` question cards (sent/broadcast/liked/answered).
@@ -107,6 +110,7 @@ literal. Quoted verbatim from the `line:` arrays.
 | `common_ground` | `'Shared Ground'` | `'You and {friendFirstName} keep finding one another here.'` | supporting `` `${count} shared interest${count===1?'':'s'}` ``; CTA `'Explore your overlap →'` | `1 shared interest` / `N shared interests` |
 | `add_friends` (`suggestions` & `invite`) | `'Grow Your Circle'` | `'Know someone who belongs here?'` | CTA `'Find friends →'` | none |
 | `recently_expanding` | `'Your World Is Expanding'` | `"The places you've been exploring lately."` | CTA `'See your knowledge →'` | none |
+| `add_topic` | — (no eyebrow) | `'Something else you’d love to be asked about?'` | supporting = the post-add confirmation + `Undo` (absent until something is added); CTA `'Add your own →'` | none |
 
 ### A5 — Per-person CLUSTER rollup (`PersonActivityCard.tsx`) — the alternate rendered form
 

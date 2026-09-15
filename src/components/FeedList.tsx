@@ -33,11 +33,13 @@ import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/co
 import { EditorialFeature } from '@/components/feed/EditorialFeature'
 import { ReportReasonSheet } from '@/components/report/ReportReasonSheet'
 import {
+  AddATopicFeature,
   CommonGroundFeature,
   GrowYourCircleFeature,
   RecentlyExpandingFeature,
 } from '@/components/feed/EditorialPromos'
-import type { StreamItem } from '@/lib/activity-stream'
+import { addTopicPromoToStreamItem, type StreamItem } from '@/lib/activity-stream'
+import type { NearbyTerritory } from '@/lib/daily/territory-model'
 import type { InsideJokeKind, QuestionSource } from '@/lib/questions-types'
 import {
   ANSWER_GRADER_RETRY_MESSAGE,
@@ -1199,6 +1201,69 @@ function FeedListContent({
     return [...feedRows, ...activityRows].sort((a, b) => b.sortMs - a.sortMs)
   }, [items, activityItems, unifiedHome, budget])
 
+  // Home only, and fetched CLIENT-side after mount — which is the whole reason
+  // /api/interests/suggestions exists: getKnowledgeMapData plus the catalog
+  // lookups behind it are far too heavy for the home critical path, so this
+  // promo must never join the server-assembled promos in buildHomeEdition.
+  // The shuffle, clock read and day seed happen in the effect rather than the
+  // memo below because Math.random()/Date.now() may not be called during render.
+  const [topicPromo, setTopicPromo] = useState<{
+    suggestions: NearbyTerritory[]
+    daySeed: number
+    sortAt: Date
+  } | null>(null)
+  useEffect(() => {
+    if (!unifiedHome) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch('/api/interests/suggestions', { credentials: 'include' })
+        if (!response.ok) return
+        const body = (await response.json().catch(() => null)) as
+          | { suggestions?: NearbyTerritory[] }
+          | null
+        if (cancelled) return
+        const list = Array.isArray(body?.suggestions) ? body.suggestions : []
+        for (let i = list.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[list[i], list[j]] = [list[j]!, list[i]!]
+        }
+        const now = new Date()
+        setTopicPromo({
+          suggestions: list,
+          daySeed: Math.floor(now.getTime() / 86_400_000),
+          sortAt: now,
+        })
+      } catch {
+        // Suggestions are a nicety; failing quietly just drops the interlude.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [unifiedHome])
+
+  // Null until suggestions arrive, so a slow or failed fetch just means no
+  // interlude this visit. Deliberately NOT spliced into `displayRows`/`promos`
+  // below: that path feeds `restRows` — the "Recent activity" zone — where an
+  // evergreen nudge would sit under a heading it contradicts AND, arriving
+  // post-mount, would flip that zone from empty to non-empty on a quiet week,
+  // moving the Shared Ground panel and the "Past 7 days" band after hydration.
+  // It takes a fixed tail slot instead, beside the Find Friends interlude.
+  const addTopicPromo = useMemo<StreamItem | null>(() => {
+    if (!topicPromo || topicPromo.suggestions.length === 0) return null
+    return addTopicPromoToStreamItem(
+      {
+        kind: 'add_topic',
+        href: '/daily/setup',
+        suggestions: topicPromo.suggestions,
+        headlineIndex: topicPromo.daySeed,
+      },
+      topicPromo.sortAt,
+      `add-topic-${topicPromo.daySeed}`,
+    )
+  }, [topicPromo])
+
   // Place the home-only discovery modules. They are NOT part of the chronological
   // union above; each renders whenever its data exists. Rather than clump them at
   // the top or tail, SPREAD the present modules evenly through the feed so they
@@ -1856,6 +1921,9 @@ function FeedListContent({
       if (embed?.kind === 'recently_expanding') {
         return <RecentlyExpandingFeature key={`e-${row.item.id}`} embed={embed} />
       }
+      if (embed?.kind === 'add_topic') {
+        return <AddATopicFeature key={`e-${row.item.id}`} embed={embed} />
+      }
       // From Friends milestone streaks render as a compact triangle bundle
       // SUMMARY on the home zone; tapping EXPANDS it in place to the streak's
       // questions in the new card styling (category eyebrow + per-card
@@ -2348,6 +2416,15 @@ function FeedListContent({
           ) : null}
         </div>
       ) : null}
+
+      {/* "Add a topic" — the same always-on tail treatment as Find friends, and
+          for the same reason: it's an evergreen discovery nudge, so it belongs
+          outside both the recency zone and the single rotating panel slot.
+          Suppressed on the all-empty page, where the empty state already carries
+          the one invitation (the server nulls `panel` there for that reason). */}
+      {addTopicPromo && !loadingInitial && !budget?.isAllEmpty
+        ? renderRow(panelRow(addTopicPromo))
+        : null}
 
       {/* The always-on "Find friends" interlude sits directly above the Write
           composer at the feed tail (D-HOME-PACING-01 update: promoted out of the

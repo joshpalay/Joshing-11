@@ -9,8 +9,11 @@ import { EditorialFeature } from '@/components/feed/EditorialFeature';
 import { colorForUser, initialsFor, isDarkColor } from '@/components/feed/visual';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
 import { expandingTerritoryAccent } from '@/components/knowledge/PortraitCircles';
+import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-ground-circles';
 import type { StreamEmbed } from '@/lib/activity-stream';
+import type { NearbyTerritory } from '@/lib/daily/territory-model';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 // The "Overlap" circles render larger here than on the profile page — the
 // motif is the hero artwork, so it should catch the eye before the copy.
@@ -50,6 +53,12 @@ const ADD_FRIENDS_HEADLINES = [
   'Know someone who belongs here?',
   'Who else should be in your circle?',
   'There’s room for the people who get you.',
+] as const;
+
+const ADD_TOPIC_HEADLINES = [
+  'Something else you’d love to be asked about?',
+  'What else should we ask you about?',
+  'There’s more ground worth claiming.',
 ] as const;
 
 // Common-ground headlines split into the copy AROUND the friend link so the
@@ -289,6 +298,126 @@ export function RecentlyExpandingFeature({
         </div>
       }
       cta={{ label: 'See your knowledge →', href: embed.href }}
+    />
+  );
+}
+
+/**
+ * "Add a topic" — a few suggested topics the viewer can adopt by tapping a
+ * circle, with a link through to the full manage surface.
+ *
+ * Lives IN the feed rather than pinned above it: as a fixed card above the feed
+ * it pushed the real content down on every single visit (Josh, 2026-09-14).
+ * As an interleaved promo it reads as an occasional interlude and scrolls away
+ * like the rest of the feed. Adding flips the circle in place to its "Added" state
+ * (TopicSuggestionCarousel owns that), and the supporting line carries the
+ * confirmation plus an Undo for a mis-tap.
+ */
+export function AddATopicFeature({
+  embed,
+}: {
+  embed: Extract<StreamEmbed, { kind: 'add_topic' }>;
+}) {
+  // `created` comes from the POST response: an idempotent re-add of a topic the
+  // viewer already holds returns created:false, and Undo must not render there —
+  // it would deactivate a pre-existing interest.
+  const [added, setAdded] = useState<{ domain: string; created: boolean } | null>(null);
+  const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
+  const [undoing, setUndoing] = useState(false);
+
+  const addSuggestion = async (territory: NearbyTerritory): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          label: territory.domain,
+          ...(territory.broadCategory ? { broadCategory: territory.broadCategory } : {}),
+        }),
+      });
+      if (!response.ok) throw new Error('add failed');
+      const body = (await response.json().catch(() => null)) as
+        | { domain?: string; created?: boolean }
+        | null;
+      // Prefer the canonical domain the server persisted over our local label.
+      const domain = typeof body?.domain === 'string' && body.domain ? body.domain : territory.domain;
+      setAdded({ domain, created: body?.created === true });
+      setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
+      return true;
+    } catch {
+      // Leave the circle in place so the player can retry.
+      return false;
+    }
+  };
+
+  // Deactivates that one domain (not a full replace), so it can't clobber an
+  // interest declared elsewhere meanwhile.
+  const undoAdded = async () => {
+    if (!added?.created || undoing) return;
+    setUndoing(true);
+    try {
+      const response = await fetch('/api/declared-interests', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ domain: added.domain }),
+      });
+      if (!response.ok) throw new Error('undo failed');
+      setAddedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(domainKey(added.domain));
+        return next;
+      });
+      setAdded(null);
+    } catch {
+      // Leave the confirmation up — the topic is still genuinely added.
+    } finally {
+      setUndoing(false);
+    }
+  };
+
+  return (
+    <EditorialFeature
+      // An interlude tone, not a wash: this is a fourth home interlude, and the
+      // interlude tones are what carry the Josefin-caps system voice on the
+      // supporting line + CTA (B-HOME-INTERLUDE-TYPE-01). Sage keeps the topic
+      // circles legible on a light ground — they're built for the cream card —
+      // where the dark ink/terracotta grounds would fight them.
+      tone="interlude-sage"
+      headline={rotate(ADD_TOPIC_HEADLINES, embed.headlineIndex)}
+      artwork={
+        <TopicSuggestionCarousel
+          suggestions={embed.suggestions}
+          addedKeys={addedKeys}
+          onAdd={addSuggestion}
+        />
+      }
+      supporting={
+        added ? (
+          <>
+            {added.created ? (
+              <>Added &ldquo;{added.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
+            ) : (
+              <>&ldquo;{added.domain}&rdquo; is already in your topics.</>
+            )}
+            {added.created ? (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="underline transition hover:opacity-70 disabled:opacity-50"
+                  onClick={() => void undoAdded()}
+                  disabled={undoing}
+                >
+                  {undoing ? 'Undoing…' : 'Undo'}
+                </button>
+              </>
+            ) : null}
+          </>
+        ) : undefined
+      }
+      cta={{ label: 'Add your own →', href: embed.href }}
     />
   );
 }
