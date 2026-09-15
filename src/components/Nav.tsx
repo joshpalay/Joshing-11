@@ -234,7 +234,7 @@ export function Nav({
               /* eslint-disable-next-line canon/restricted-syntax -- the FAB is the
                  ratified rounded-full exception for icon buttons (DESIGN-SYSTEM
                  §3.4, §3.8); .btn-icon's square 44px recipe doesn't apply here. */
-              className="bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-[var(--shadow-card-strong)] md:hidden"
+              className="bg-primary text-primary-foreground pointer-events-auto grid size-14 place-items-center rounded-full shadow-[var(--shadow-card-strong)]"
               aria-label="Create"
               onClick={() => setCreateChooserOpen(true)}
             >
