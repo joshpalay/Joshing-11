@@ -7,6 +7,7 @@ import { Combine, Plus, Share2 } from 'lucide-react';
 import { AddAreaModal } from '@/components/knowledge/AddAreaModal';
 import { SharePortraitModal } from '@/components/knowledge/SharePortraitModal';
 import type { ShareDomain } from '@/components/knowledge/SharePortraitCard';
+import { Chip } from '@/components/ui/Chip';
 
 // P5 follow-up — the share/tidy chrome from the flat knowledge page, on the
 // bubble map. Share opens the existing portrait modal (it captures on mount —
@@ -67,35 +68,36 @@ export function BubblePageChrome({
           {tidyNotice}
         </span>
       ) : null}
-      <button
-        type="button"
+      <Chip
+        variant="outline"
+        uppercase
         onClick={() => setAddOpen(true)}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[0.7rem] uppercase tracking-[0.08em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' }}
+        className="bg-card"
+        leading={<Plus className="size-3.5" aria-hidden />}
       >
-        <Plus className="size-3.5" aria-hidden />
         Add
-      </button>
-      <button
-        type="button"
+      </Chip>
+      <Chip
+        variant="outline"
+        uppercase
         onClick={() => void tidy()}
         disabled={tidying}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[0.7rem] uppercase tracking-[0.08em] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)', background: 'var(--brand-card)' }}
+        className="bg-card"
+        leading={<Combine className="size-3.5" aria-hidden />}
       >
-        <Combine className="size-3.5" aria-hidden />
         {tidying ? 'Tidying…' : 'Tidy'}
-      </button>
+      </Chip>
       {domains.length > 0 ? (
-        <button
-          type="button"
+        <Chip
+          variant="outline"
+          uppercase
           onClick={() => setShareOpen(true)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[0.7rem] uppercase tracking-[0.08em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)', background: 'var(--brand-card)' }}
+          className="bg-card text-[var(--brand-navy)]"
+          style={{ borderColor: 'var(--brand-navy)' }}
+          leading={<Share2 className="size-3.5" aria-hidden />}
         >
-          <Share2 className="size-3.5" aria-hidden />
           Share
-        </button>
+        </Chip>
       ) : null}
 
       {addOpen ? (

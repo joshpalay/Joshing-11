@@ -360,7 +360,7 @@ export default function PeopleYouInvited() {
                       {editInterests.map((interest, index) => (
                         <input
                           key={index}
-                          className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-full border border-[var(--accent-gold)] px-4 text-base transition"
+                          className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] px-4 text-base transition"
                           value={interest}
                           onChange={(event) => {
                             const next = event.target.value

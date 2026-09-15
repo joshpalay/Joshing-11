@@ -113,6 +113,18 @@ Grep (overlay on a non-2xl radius): `rg -n 'role="dialog"' -A3 src --glob '*.tsx
   onboarding's two overrides went with it: its pill input took the same radius, and its navy
   pill "Add" button became `.btn-ghost`, since Continue is that screen's primary and Add is
   secondary (§3.1, one per view).
+- **R8 closed at 0, 2026-09-14.** The remaining 21 hand-rolled pills: 3 inputs onto
+  `--radius-xs`; 4 undersized `aria-label="Close"`/breadcrumb-nav icon buttons (size-7/8, below
+  R6's size-9 sweep) onto `.btn-icon rounded-full`; 4 secondary action pills (`BubblePageChrome`'s
+  Add/Tidy/Share, `KnowledgeBubbleMap`'s List/Bubble toggle) onto `<Chip>`; 4 segmented-toggle
+  sites (`AskFriendForDomain`, `DomainVisibilityToggle`, `SectionVisibilityToggle`) onto
+  `--radius-xs` on *both* the pill container and its buttons — a nested segment can't round
+  less than its container without a visible gap. **7 stay exempt** (`RULE_EXEMPT`, not fixed):
+  `ReminderInterstitial`'s three CTAs take `roomTheme()` colour, the same bespoke takeover
+  system R6 already exempts (ceremony rooms); three inline chip-dismiss "×" glyphs (size-5/6 —
+  `OnboardingFlow`, `InviteLinksSection`, `QuestionForm`) are genuine circular icon hit-areas,
+  just smaller than `.btn-icon`'s fixed 44px; `KnowledgeBubbleMap`'s "zoom out one level" sits
+  inline in a `min-h-6` breadcrumb row that `.btn-icon` would overwhelm.
 
 Grep (a button or input that is a pill):
 `rg -n '<(button|input)\b' -A5 src --glob '*.tsx' | rg 'rounded-full' | rg -v 'size-(9|10|11|12|14)|aria-label'`
@@ -605,7 +617,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | Rule | Script id · baseline (2026-09-11) | Lint selector |
 |---|---|---|
 | 1.2 card radius | R3 · **0 — closed 2026-09-13** | — |
-| 1.4 no pill buttons/inputs | R8 · 21 (34 → 21 as a side effect of the R4 cleanup; rest is unswept admin-surface drift) | yes |
+| 1.4 no pill buttons/inputs | R8 · **0 — closed 2026-09-14** (7 exempt, `RULE_EXEMPT`) | yes |
 | 2.1 no Tailwind shadow utilities | R1 · **0 — closed 2026-09-13** (35 → 6 → 0, the last 6 by ratifying §2.2a) | yes |
 | 3 no `.btn-*` overrides | R2 · **0 — closed 2026-09-13** | yes |
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
@@ -613,12 +625,15 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
 | 9.1 / 9.2 touch floor and focus ring | R10 · 302 (heuristic, count only; 320 → 302 as a side effect of the R4 cleanup) / R9 · **0 — closed 2026-09-13** | — |
 
-Lint lane baseline: **27** `canon/restricted-syntax` + `no-restricted-syntax` warnings
-combined (`package.json`'s `lint` script pins `--max-warnings 27`). Trajectory: **103** at
+Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
+combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at
 the Phase 5 build → 88 (buttons) → 63 (shadows) → 52 (icon buttons) → 41 (skeletons) →
-37 (focus/chips-flat/skeletons stack landed on `main`, #1686) → 27 (R4/R5 chip cleanup,
-2026-09-14). Every closure ratchets the ceiling down the same day. What's left is mostly
-R8/R10 debt outside a chip's reach — unswept admin-surface pill buttons and inputs.
+37 (focus/chips-flat/skeletons stack landed on `main`, #1686) → 27 (R4/R5 chip cleanup) →
+18 (R8 cleanup, 2026-09-14). Every closure ratchets the ceiling down the same day. The lint
+selectors still flag 2 of R8's 7 `RULE_EXEMPT` sites (`InviteLinksSection`,
+`KnowledgeBubbleMap`) since the eslint lane has no per-rule file exemption, only a whole-lane
+one (§13's "where the two lanes disagree" note) — real drift, not a regression, if this
+number doesn't move on its own.
 
 **Where the two lanes disagree, and why that is fine.** The script reads whole lines and
 7-line `<button>` blocks; the lint selectors read one string literal. So a shadow inside a

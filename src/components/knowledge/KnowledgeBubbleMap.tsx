@@ -298,14 +298,14 @@ export function KnowledgeBubbleMap({
             </span>
           ) : null}
         </nav>
-        <button
-          type="button"
+        <Chip
+          variant="outline"
+          uppercase
           onClick={() => setListMode((v) => !v)}
-          className="rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.08em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ borderColor: 'var(--border)', color: 'var(--brand-ink-700)' }}
         >
           {listMode ? 'Bubble view' : 'List view'}
-        </button>
+        </Chip>
       </div>
 
       {!listMode ? (

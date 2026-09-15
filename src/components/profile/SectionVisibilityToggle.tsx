@@ -86,14 +86,14 @@ export function SectionVisibilityToggle({
   return (
     <div>
       <div
-        className={`${wrapperLayout} rounded-full border bg-card p-1 font-medium`}
+        className={`${wrapperLayout} rounded-[var(--radius-xs)] border bg-card p-1 font-medium`}
         aria-label={`Visibility for ${label}`}
       >
         {OPTIONS.map((option) => (
           <button
             key={option}
             type="button"
-            className={`${baseBtn} rounded-full capitalize transition ${
+            className={`${baseBtn} rounded-[var(--radius-xs)] capitalize transition ${
               visibility === option
                 ? 'bg-foreground text-background'
                 : 'text-muted-foreground hover:text-foreground'

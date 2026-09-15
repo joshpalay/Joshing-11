@@ -47,9 +47,9 @@ const BASELINE = {
   R5: 0, // <Chip> geometry override (§4.1) — CLOSED 2026-09-14: PeopleYouInvited's `px-3` override dropped.
   R6: 0, // hand-rolled round icon button (§3.4) — CLOSED 2026-09-13: 10 sheet/menu close and "more actions" controls folded onto .btn-icon. The other 13 the rule used to report were never icon buttons (see the note above LINE_RULES).
   R7: 0, // animate-pulse placeholder outside <Skeleton> (§7.1) — CLOSED 2026-09-13: the /questions loaders, CreationSurface's drafting cards and the admin rerun bars all render <Skeleton>. The 4 the rule used to report were pulsing text labels, not placeholders.
-  R8: 21, // button or input rendered as a pill (§1.4) — 34 -> 21 as a side effect of the R4 cleanup (the same sites were double-counted here); the rest is unrelated admin-surface drift, not yet swept.
+  R8: 0, // button or input rendered as a pill (§1.4) — CLOSED 2026-09-14: 3 inputs onto --radius-xs (§1.5), 4 undersized "Close"/nav icon buttons onto .btn-icon (they missed R6's original size-9+ sweep), 4 action pills onto <Chip>, and 4 segmented-toggle sites (AskFriendForDomain, DomainVisibilityToggle, SectionVisibilityToggle) onto --radius-xs so the nested buttons still match their container. The remaining 7 are RULE_EXEMPT below (a bespoke takeover theme, three inline chip-dismiss glyphs below .btn-icon's size floor, and one breadcrumb nav control .btn-icon would overwhelm).
   R9: 0, // focus killed without a replacement ring (§9.2) — CLOSED 2026-09-13. Redefined: the old rule counted buttons with no focus-visible CLASS (328) but the browser was always drawing one, so it measured nothing. This counts the real defect — `outline-none` with nothing put back — which was 43 form fields, all fixed.
-  R10: 302, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — 320 -> 302 as a side effect of the R4 cleanup; still open and noisy, not this job's target
+  R10: 295, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — 302 -> 295 as a side effect of the R8 cleanup (the .btn-icon conversions reach 44px too); still open and noisy, not this job's target
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────
@@ -68,6 +68,23 @@ const RULE_EXEMPT = {
   //  • TerritorySetupClient's size-14 circles are a bespoke drag surface whose
   //    "raised" register is separately deferred.
   R6: ['src/app/ceremony/[ceremonyId]/page.tsx', 'src/app/daily/setup/TerritorySetupClient.tsx'],
+  // §11 exempt surfaces, for pill buttons/inputs specifically:
+  //  • ReminderInterstitial is a fixed-inset takeover on `roomTheme()`, the same
+  //    ceremony theming system R6 already exempts above — its pill CTAs take
+  //    their colour from the room, not the .btn-* tokens;
+  //  • OnboardingFlow, InviteLinksSection and QuestionForm each carry one
+  //    inline chip-dismiss "×" (size-5/6, below R6's icon-button threshold) —
+  //    a circular icon hit-area is explicitly sanctioned by §1.4, this is just
+  //    smaller than .btn-icon's fixed 44px square;
+  //  • KnowledgeBubbleMap's breadcrumb "zoom out one level" control sits inline
+  //    in a `min-h-6` crumb row; .btn-icon's 44px square would overwhelm it.
+  R8: [
+    'src/app/daily/summary/ReminderInterstitial.tsx',
+    'src/app/onboarding/OnboardingFlow.tsx',
+    'src/components/friends/InviteLinksSection.tsx',
+    'src/components/knowledge/KnowledgeBubbleMap.tsx',
+    'src/components/QuestionForm.tsx',
+  ],
 };
 
 const ICON_SIZE = String.raw`\bsize-(?:9|10|11|12|14)\b`;
