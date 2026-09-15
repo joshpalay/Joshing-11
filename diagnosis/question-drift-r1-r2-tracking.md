@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-15
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683"
 ---
@@ -482,3 +482,87 @@ where 2026-09-12 left them.** Status stays `active`.
    is available — due at deploy+7 days (~2026-09-18), sooner is fine once
    access exists.
 2. Everything else in §2/§4 unchanged.
+
+### 2026-09-15 (diagnosis-review) — first real Phase 1 reading (deploy+~4 days, ahead of the +7 day window); migration 0147 confirmed applied; nothing trips a Phase 1 stop condition yet
+
+**Environment note:** this session has a live, read-only Supabase MCP
+connection to the production project (`grixooyecvnugpxvcbct`) — the first
+DB access this doc has had since it opened (every prior review, 2026-09-12
+and 2026-09-14, had none). Ran this doc's own §4 Phase 1 SQL directly.
+Deploy was 2026-09-11T19:14:09Z, so this is deploy+~4 days — earlier than
+the deploy+7-day Phase 1 window and well short of Phase 2's deploy+14-days-
+or-200-rows gate (only 50 post-deploy live rows exist; Phase 2 needs
+whichever of the two conditions is later, and neither is met yet). Reading
+early because access exists now, not because it's due.
+
+**Migration 0147 (`question_shape`) is confirmed applied** — the
+2026-09-11 entry said "has NOT been run yet"; it now shows as a real
+column with real data: of 51 post-deploy rows, 23 carry a shape (28 are
+`NULL`, expected for rows generated in gaps or by paths that don't set
+it). Distribution: `identification` 15/23 (65.2%), `technique_or_term`
+7/23, `who_did_what` 1/23. Down from the ~77% `identification` share R4's
+own motivating read found pre-fix, though still short of the ~44% R3's
+exemplar-retirement scenario projected — too small a sample (n=23) to
+read as more than "moving the right direction."
+
+**Phase 1 SQL, run for real for the first time:**
+
+| Metric | Baseline | Now (since 19:14:09Z deploy, n≈50-73) | Target | Read |
+|---|---:|---:|---:|---|
+| Quality gate drop rate | 31% | **27/73 = 37.0%** | 35-45% OK, >45% trips decision 2 | within band |
+| `failed_open` (same window) | — | **0** | 0 | clean |
+| Mean words/question | 31.2 | **30.8** | ≤24 | barely moved |
+| Rows over 25 words | 66% | **64%** | ≤45% | barely moved |
+| Rows opening "In …" | 58% | **0%** | watch only | collapsed |
+| Accessible share of new rows | 41% | **64%** | 30-45% (< 25% = fail) | well *above* target band |
+| Difficulty-floor deflections | 2% | **2/73 = 2.7%** | ≤5% | within band |
+
+**None of Phase 1's three stop conditions trip.** Quality-gate drop rate
+is inside the acceptable band with zero fail-opens; accessible share is
+nowhere near the <25% "model dodged the tier" floor; difficulty-floor
+deflections are well under 5%. (The fourth Phase 1 check — short-queue /
+`generation_failed` builds from Vercel logs — still can't be checked from
+here, same gap every prior review hit.)
+
+**Two things worth flagging even though nothing trips a stop condition:**
+- **Word length and the ">25 words" share barely moved** (31.2→30.8,
+  66%→64%) despite R2-a's explicit target of ≤24 words / ≤45% over-25. The
+  "In …" opener collapsing from 58% to 0% shows *something* in phrasing
+  changed sharply, but raw length didn't follow. Not a Phase 1 failure (no
+  length threshold is a stop condition), but worth watching into Phase 2's
+  hand read.
+- **Accessible share overshot the target band on the high side** (64% vs.
+  a 30-45% target, baseline 41%). The plan's tripwires only guard the low
+  end (<25% = model avoiding the tier); nothing in the plan anticipated
+  *this* much overshoot. Not resolving anything here, just naming it since
+  it's a bigger move than the plan's own table expected in either
+  direction.
+
+**Per-defect gate breakdown since deploy** (`quality:*`, day≥2026-09-11):
+`DEFINITION_SUPPLIED` 17/64 (26.6%, still the largest single category —
+consistent with R2 targeting it, though this is a mechanical per-attempt
+rate, not the same measurement as Phase 2's hand-read %), `GENERIC_AT_TIER`
+4/64, `ANSWER_LEAKED` 2/64, `SELF_ANSWERING` 1/64, everything else 0.
+
+**Phase 3 (correct-rate) — too thin to read yet:** accessible-tier mean
+`empirical_correct_rate`, pre-deploy cohort 0.725 (n=34 rows/47 answers) vs
+post-deploy 0.650 (n=10 rows/12 answers). A ~7.5-point dip, inside the
+Phase 3 exit criterion's ≤10-point allowance, but the post cohort is only
+10 rows/12 answers — nowhere near enough to trust, and the doc's own
+caveat about pre-cohort selection bias still applies. Not treating this as
+a real reading yet.
+
+**No decision-resolving change; nothing in §2 moves.** Status stays
+`active`. Phase 1 looks clean so far but isn't due for a real verdict
+until ~2026-09-18; Phase 2's hand read isn't due until ~2026-09-25 or 200
+rows, whichever is later (currently 50).
+
+### Next steps (revised)
+1. Re-run this Phase 1 SQL at the actual deploy+7-day mark (~2026-09-18)
+   for the real verdict; today's reading is early and directionally clean
+   but not the official checkpoint.
+2. Watch whether accessible share (currently 64%, well above the 30-45%
+   target band) settles or keeps climbing — not a stop condition today,
+   but worth a closer look if it persists into Phase 2.
+3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).

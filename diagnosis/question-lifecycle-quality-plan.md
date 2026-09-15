@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-15
 owner: Josh
 related-pr: "#1646"
 ---
@@ -293,3 +293,102 @@ What git can confirm instead:
    available.
 2. Everything else (Phase 2 comparison, Phase 3 verification-hold decision,
    Phase 4 labeled set) unchanged.
+
+### 2026-09-15 (diagnosis-review) — first real reading since this doc opened; Phase 1 exit criteria now confirmed MET; Phase 2 mostly clean with one ambiguous speed signal
+
+**Environment note:** this session has a live, read-only Supabase MCP
+connection to the production project (`grixooyecvnugpxvcbct`) — the first
+DB access this doc has had since it opened on 2026-09-09 (both prior
+reviews, 2026-09-12 and 2026-09-14, had none). Replicated
+`scripts/check-question-lifecycle.mjs`'s exact queries by hand (script
+itself needs `DATABASE_URL`, which still isn't in this session's `.env`)
+against a trailing-14-day window, so every number below is directly
+comparable to the §3 baseline table.
+
+| Signal | Baseline (pre-deploy) | Now (trailing 14d) | Read |
+|---|---:|---:|---|
+| Daily builds | 9 | 16 | more volume, ordinary growth |
+| Builds below target | 0 of 9 | **0 of 16** | still complete |
+| Visible build p50 / p95 / max | 25,243 / 53,820 / 59,095 ms | **33,119 / 53,100 / 59,095 ms** | p50 up ~31% — see caveat below |
+| Bank hits / misses | 65 / 33 (66.3%) | **84 / 90 (48.3%)** | hit rate down ~18pts |
+| Grading calls | 91 | 87 | flat |
+| Grading time p50 / p95 | 1,014 / 1,424 ms | 1,014 / 1,435 ms | flat — no outage |
+| Recent generated rows | 194 | 164 | — |
+| Missing `subject_entity` | 162/194 (83.5%) | **93/164 (56.7%)** | improved |
+| Missing embedding | 162/194 (83.5%) | **97/164 (59.1%)** | improved |
+| `ok` rows still unverified | 4 | 4 | flat |
+| `unverifiable` (14d) | 1 | 0 | — |
+| Linked copies | 760 | 791 | population grew, expected |
+| Canonical-answer drift | 51 | **51 — unchanged** | zero new drift since the fix |
+| Accepted-alternative drift | 1 | **1 — unchanged** | meets "should not grow" exactly |
+
+**`GateDropStat.scope` confirmed present and functional** — queried the
+column directly (exists) and pulled the scoped breakdown
+(`scope='daily_build'`, trailing 14 days): `quality` gate 26/70 dropped
+(37.1%, within the acceptable band), plus a much richer per-gate view than
+this doc has ever had (`answer_cooldown`, `answer_leak`, `factual`,
+`subject_cooldown`, `intra_batch_embedding`, `bank_pick_quality`,
+`thin_declared`, `answered_history_embedding`, `recent_history`,
+`batch_dedup`, and the per-defect `quality:*` breakdown — all newly
+visible now that maintenance traffic is scoped out). **Two gates show
+nonzero `failed_open` that no diagnosis doc has tracked before:
+`batch_dedup` (7 of 70) and `recent_history` (1 of 70).** Not investigated
+further this pass — flagging for awareness since a failing-open dedup/
+history check could theoretically let a near-duplicate or recently-served
+question through silently, but this is new territory, not something this
+doc's open decisions currently cover.
+
+**Phase 1's three exit criteria are now all directly verifiable, and all
+three pass:** no short builds (0 of 16), no sustained grading outage (calls
+and timing flat), and `GateDropStat.scope` is present and excluding
+maintenance from player-build totals (confirmed above). This is the first
+time any session has been able to check Phase 1 since the doc opened.
+
+**Phase 2's five exit criteria: 4 clearly pass, 1 is ambiguous.** Target
+reached (PASS), no model-call regression (PASS, flat), new bank copies
+retain metadata better than before (PASS — missing-subject/embedding rates
+dropped ~27 points each), accepted-alternative drift flat at 1 (PASS,
+exact). The ambiguous one: **visible build p50 rose ~31% (25.2s → 33.1s)**,
+which reads like it could be a "material speed regression" — but this is
+very likely explained by the *same* two outlier builds the
+`daily-build-latency-deferral-plan.md` review (also run today) found
+independently: two of the 16 builds in this window show 20-40x the normal
+bonus-phase residual (23.7s and 37.5s of unexplained time), which alone
+would drag a 16-row p50 upward. Not claiming that's the full explanation —
+just flagging that this doc's speed metric and that doc's anomaly are very
+likely the same underlying builds, so whoever chases the outlier builds
+should check both docs' numbers move together once it's understood.
+
+**Bank hit-rate drop (66.3% → 48.3%) is plausibly explained by a documented,
+intentional change**, not a regression: `question-drift-r1-r2-tracking.md`'s
+R8 (shipped 2026-09-11) started writing real `empirical_correct_rate` /
+`n_answered` counters for the first time, which activated
+`rankAndFilterBankCandidates`'s existing dud-exclusion rule
+(`empirical_correct_rate = 0` with `n_answered ≥ 5`) — previously inert
+because the inputs were always null. A lower bank hit rate is the expected,
+documented side effect of that rule finally having real data to act on, not
+a new problem. Cross-referencing rather than re-deriving since that doc's
+own 2026-09-11 entry already predicted this.
+
+**Decision 2 (verification hold) and decision 5 (cost-per-played-question)**
+still have no new data — the shadow `wouldFilter` count and per-question
+cost link aren't stored anywhere this query can reach. **Decision 3
+(require subject/sub-angle metadata)**: coverage improved substantially
+(83.5%→~58% missing) but "reliably contain it" is still a stretch at
+roughly half the rows lacking it — not yet resolvable. **Decision 4**
+(fairer grading) still needs Phase 4's labeled set, not started.
+
+**No decision-resolving change to §2.** Status stays `active` — Phase 1
+passing is a phase-gate, not one of the six enumerated open decisions, and
+the one ambiguous Phase 2 signal (build speed) needs the cross-doc anomaly
+understood before it can be read either way.
+
+### Next steps (revised)
+1. Once the two outlier builds are traced (see
+   `daily-build-latency-deferral-plan.md`'s 2026-09-15 entry), re-check
+   whether this doc's build-time p50 recovers — that would settle the one
+   ambiguous Phase 2 criterion.
+2. Worth a look, new: `batch_dedup` (7/70) and `recent_history` (1/70)
+   `failed_open` counts — not previously tracked by any diagnosis doc.
+3. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.

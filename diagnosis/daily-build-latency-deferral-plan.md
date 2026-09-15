@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-15
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1006,3 +1006,84 @@ a session with DB access to advance.
 ### Next steps (unchanged)
 1. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 2. Phase 3 population reading, question 4 (bonus cost) — unchanged.
+
+### 2026-09-15 (diagnosis-review) — DB access restored; n grows 3→15; the "stable residual" question reopens far wider than before, driven by two new large outliers
+
+**Environment note:** this session has a live, read-only Supabase MCP
+connection to the production project (`grixooyecvnugpxvcbct`) — the first
+DB access this doc has had since the 2026-09-08 entries (2026-09-12 and
+2026-09-14 both had none). All numbers below are directly queried.
+
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time.
+Unchanged conclusion: still uninformative about real-world race frequency
+either way (the one confirmed historical occurrence lived on a
+since-deleted disposable fixture, so surviving telemetry structurally
+can't see it).
+
+**Phase 3a (mechanism) still holds on every row**: `span_ms - user_visible_ms`
+is ≥ that row's own bonus `generationMs` on all 15 post-deferral `built`
+rows queried (full history, not just the 3 previously known). No row
+violates the "can't save more than the work was worth" floor.
+
+**Phase 3b (population) — n jumped from 3 to 15, and the median moved a
+lot: 1,529ms → 8,678ms.** Full table (`saved` = `span_ms - user_visible_ms`,
+`residual` = `saved` − that row's bonus-phase `generationMs`):
+
+| started_at | saved | bonus | residual |
+|---|---:|---:|---:|
+| 2026-09-06 17:03:54 | 1,529 | 501 | 1,028 |
+| 2026-09-06 17:05:14 | 1,362 | 437 | 925 |
+| 2026-09-07 17:05:14 | 2,154 | 527 | 1,627 |
+| 2026-09-08 17:05:15 | 8,241 | 7,021 | 1,220 |
+| 2026-09-09 17:05:14 | 8,678 | 7,473 | 1,205 |
+| **2026-09-09 17:05:16** | **38,116** | 610 | **37,506** |
+| 2026-09-10 17:05:16 | 17,701 | 16,169 | 1,532 |
+| 2026-09-11 17:05:17 | 10,221 | 6,479 | 3,742 |
+| 2026-09-12 17:05:16 | 18,117 | 16,821 | 1,296 |
+| 2026-09-13 00:42:18 | 1,618 | 907 | 711 |
+| 2026-09-13 17:05:15 | 2,193 | 932 | 1,261 |
+| 2026-09-13 17:05:18 | 20,563 | 19,190 | 1,373 |
+| **2026-09-14 17:05:19 (87e51589)** | **24,688** | 941 | **23,747** |
+| 2026-09-14 17:05:19 (01087e38) | 12,745 | 11,966 | 779 |
+| 2026-09-14 23:40:02 | 1,436 | 727 | 709 |
+
+Median saving (n=15): **8,678ms**. Residual spread widened from the
+already-flagged "925–1627ms, wide" band at n=3 to **709ms – 37,506ms**
+at n=15 — over 50x, not a gradual widening.
+
+**Two rows are dramatic outliers, and neither matches a known failure
+signature.** `84e717bd…` (2026-09-09 17:05:16) and `87e51589…` (2026-09-14
+17:05:19) both show `deferred: true` with `span_ms` fully populated — not
+the "continuation dropped" signature this doc's own §6 already watches
+for — yet their residual (the part of the saving NOT explained by bonus
+`generationMs`) is 20–40x every other row's. Something took an extra
+23.7–37.5 seconds on these two builds that isn't bonus generation and isn't
+explained by anything this doc currently measures. Not investigated
+further this pass (out of scope for a review — this is reconnaissance, not
+a fix), but naming both build_ids here so whoever picks this up next
+doesn't have to re-find them.
+
+**No recurrence of the original slot-collision anomaly (open question 5):**
+`target_size = 5` and `final_size ≥ target_size` on all 15 rows (final_size
+5, 6, or 7 — no `final_size < target_size` case like the historical
+3-slot corruption). The #1620 fix continues to show no sign of the old
+damage pattern.
+
+**This does not resolve open question 4** (is the +2 bonus worth its
+generation cost) — if anything it makes the honest answer noisier: most
+builds save low-single-digit seconds, but a minority save (or cost,
+depending on framing) 20-40 seconds for reasons not yet understood. Not
+flipping status to `needs-decision`: there's no clean yes/no ready for
+Josh here, just a widened uncertainty band and two named outliers worth a
+closer look whenever someone has time to trace them (correlate against
+Vercel function logs for those two timestamps, the way the original
+persist-race investigation did).
+
+### Next steps (revised)
+1. **New:** trace why builds `84e717bd-…` (2026-09-09T17:05:16Z) and
+   `87e51589-…` (2026-09-14T17:05:19Z) show 20-40x the residual of every
+   other post-deferral row, despite normal `deferred`/`span_ms`/`final_size`
+   fields — needs Vercel function logs for those windows, not just DB data.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — now has more data but a wider,
+   not narrower, uncertainty band; still unresolved.

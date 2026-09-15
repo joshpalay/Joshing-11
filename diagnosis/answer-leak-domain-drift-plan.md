@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-14
+last-reviewed: 2026-09-15
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
 ---
@@ -961,6 +961,76 @@ actually live, not just set.
 still Josh's call, now backed by the merged second-opinion mitigation
 (#1623). The "why does Woolf keep generating Joyce" investigation — still
 not started.
+
+### 2026-09-15 (diagnosis-review) — real `GateDropStat` access restored (first time since 2026-09-08); both flags still 0 real-world drops after 8 clean days; new single-word gate logs its first drop
+
+**Environment note:** unlike the 2026-09-12 and 2026-09-14 reviews (no DB
+access at all), this session has a live, read-only Supabase MCP connection
+to the production project (`grixooyecvnugpxvcbct`, confirmed by matching
+table names/row counts against this repo's schema). All numbers below are
+directly queried, not inferred from git.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 149 | 0 | 0 |
+| `domain_drift` | 149 | 0 | 0 |
+| `answer_leak_single_word` | 36 | **1** | 0 |
+| `answer_shape` | 149 | 2 | 0 |
+| `quality` | 741 | 235 | 229 (all on 2026-09-07) |
+
+**Both `answer_leak_partial` and `domain_drift` have now run 8 consecutive
+days (2026-09-07 through 2026-09-14) with `dropped: 0` every single day**,
+149 rows considered cumulatively. This is still **not** a red flag — per
+`check:gate-flags`'s own documented reasoning, expected hit rates for these
+gates are low single digits at best, so a multi-day zero-drop streak is
+consistent with "nothing to catch yet," not "the gate is inert." It also
+does **not** yet give Josh's 2026-09-08 held decision (whether to build the
+Mechanism-2 avoid-list code fix) a clean answer either way — that decision
+was explicitly waiting on `domain_drift` catching *something* real in
+production traffic, and it still hasn't, one way the other.
+
+**New data point: `answer_leak_single_word` (from #1673, shipped
+2026-09-13, still measure-only) recorded its first-ever drop** — 1 of 22
+considered on 2026-09-14 (36 considered cumulative across its short life).
+Far too small a sample to read a precision number from (the doc's own Phase
+1 for the original partial-leak rule needed 13 hits before blind-labeling
+was worth doing), but logging it here from day one as the doc's 2026-09-14
+entry said it would.
+
+**`quality` gate's `failed_open: 229` is confirmed still isolated to
+2026-09-07 only** — queried the full daily history back to 2026-07-09;
+every other day, including all 8 post-flip days, reads `failed_open: 0`.
+This reinforces (does not newly prove) the standing hypothesis that the
+spike was the Anthropic credit-exhaustion incident's retries writing into
+the shared counter, not a recurring live-traffic problem.
+
+**Still open, unresolved:** the three original `ContentReport` rows
+(`139e1932…`, `800c44a3…`, `357618e3…`) are still `status='open'` after 9
+days — re-verified directly, unchanged since every prior review. This doc
+doesn't own their resolution, but flagging the duration since it's now
+approaching two weeks unreviewed. Bank `still_servable` count (is_duplicate
+= false) is now **2,246**, up from 2,138 at the last point this was
+measured (2026-09-07) — consistent with ordinary ~13-15 rows/day
+generation over 8 days, not investigated further.
+
+**No decision-resolving change.** Status stays `active`. The Mechanism-2
+code-fix decision is exactly where Josh left it on 2026-09-08: waiting on
+`domain_drift` to show a real drop (or enough clean days to read the
+gate's absence-of-signal as meaningful), which this review still can't
+supply either way.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now checkable directly via Supabase MCP when a
+   session has it.
+2. Watch `answer_leak_single_word`'s first drop accumulate more data before
+   reading a precision number from it.
+3. The three open `ContentReport` rows remain unaddressed — not this doc's
+   action item, but worth surfacing given the age.
+4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
 
 ### 2026-09-08 (later still) — correction: both flags ARE flipped and live; the redeploy concern above didn't materialize
 
