@@ -49,7 +49,14 @@ const BASELINE = {
   R7: 0, // animate-pulse placeholder outside <Skeleton> (§7.1) — CLOSED 2026-09-13: the /questions loaders, CreationSurface's drafting cards and the admin rerun bars all render <Skeleton>. The 4 the rule used to report were pulsing text labels, not placeholders.
   R8: 0, // button or input rendered as a pill (§1.4) — CLOSED 2026-09-14: 3 inputs onto --radius-xs (§1.5), 4 undersized "Close"/nav icon buttons onto .btn-icon (they missed R6's original size-9+ sweep), 4 action pills onto <Chip>, and 4 segmented-toggle sites (AskFriendForDomain, DomainVisibilityToggle, SectionVisibilityToggle) onto --radius-xs so the nested buttons still match their container. The remaining 7 are RULE_EXEMPT below (a bespoke takeover theme, three inline chip-dismiss glyphs below .btn-icon's size floor, and one breadcrumb nav control .btn-icon would overwhelm).
   R9: 0, // focus killed without a replacement ring (§9.2) — CLOSED 2026-09-13. Redefined: the old rule counted buttons with no focus-visible CLASS (328) but the browser was always drawing one, so it measured nothing. This counts the real defect — `outline-none` with nothing put back — which was 43 form fields, all fixed.
-  R10: 295, // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1) — 302 -> 295 as a side effect of the R8 cleanup (the .btn-icon conversions reach 44px too); still open and noisy, not this job's target
+  // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1).
+  // 295 -> 190 on 2026-09-15 by SCOPING, not by fixing: §9.1 was ratified as a
+  // player-surface rule, so the admin console and dev palette toggle are now
+  // RULE_EXEMPT below (105 sites). What's left is 190 player-facing controls —
+  // ~43 inline text actions missing §3.7's own `min-h-11`, ~18 tabs/list-rows
+  // missing §3.5/§3.6's, and ~115 small labelled buttons that need a per-site
+  // read. This number is a TREND LINE, not a rule to close at 0: see §9.1.
+  R10: 190,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────
@@ -85,7 +92,17 @@ const RULE_EXEMPT = {
     'src/components/knowledge/KnowledgeBubbleMap.tsx',
     'src/components/QuestionForm.tsx',
   ],
+  // §9.1 is a PLAYER-surface rule (Josh, 2026-09-15). The 44px floor exists for
+  // thumbs on phones; the admin console and the dev palette toggle are
+  // desktop-and-mouse tools with one operator, and padding their dense data
+  // tables to 44px would make them worse, not more accessible. Directory
+  // prefixes, so a new admin screen is covered without editing this list.
+  R10: ['src/app/admin/', 'src/components/dev/'],
 };
+
+// An entry is either an exact path or a directory prefix ending in `/`.
+const ruleExempts = (ruleId, rel) =>
+  (RULE_EXEMPT[ruleId] ?? []).some((e) => (e.endsWith('/') ? rel.startsWith(e) : rel === e));
 
 const ICON_SIZE = String.raw`\bsize-(?:9|10|11|12|14)\b`;
 const BTN_OVERRIDE = String.raw`\b(?:min-h-\d+|h-\d+|rounded-\S+|text-(?:xs|sm|base|lg)|font-(?:medium|semibold|bold)|bg-\[)`;
@@ -193,7 +210,7 @@ const BLOCK_RULES = [
   {
     id: 'R10',
     section: '§9.1',
-    title: 'heuristic — <button> block with no ≥44px dimension and not .btn-*',
+    title: 'heuristic — player-surface <button> with no ≥44px dimension, not .btn-*',
     tag: /<button\b/,
     test: (b) =>
       !/btn-(?:primary|ghost|danger|icon)|min-h-(?:11|12|14)\b|\bsize-(?:11|12|14)\b|\bh-(?:11|12|14)\b|min-h-\[4[4-9]px\]|absolute inset-0|\bpy-(?:3|4)\b/.test(
@@ -231,7 +248,7 @@ for (const file of walk(join(root, 'src'))) {
   const lines = raw.map(stripComments);
 
   for (const rule of LINE_RULES) {
-    if (RULE_EXEMPT[rule.id]?.includes(rel)) continue;
+    if (ruleExempts(rule.id, rel)) continue;
     lines.forEach((line, i) => {
       if (!line) return;
       if (rule.skipLine?.(line)) return;
@@ -242,7 +259,7 @@ for (const file of walk(join(root, 'src'))) {
   }
 
   for (const rule of BLOCK_RULES) {
-    if (RULE_EXEMPT[rule.id]?.includes(rel)) continue;
+    if (ruleExempts(rule.id, rel)) continue;
     lines.forEach((line, i) => {
       if (!rule.tag.test(line)) return;
       const block = lines.slice(i, i + 7).join('\n');

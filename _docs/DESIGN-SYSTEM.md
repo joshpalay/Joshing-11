@@ -500,6 +500,28 @@ inline actions; `size-11` on icon buttons; `min-h-11` on inputs. Visual size may
 (a 20px glyph, a 13px link) inside a 44px box. The one exemption is §3.9. On `main`, 52 of the
 369 non-`.btn-*` buttons declare a ≥44px dimension; the rest are the codemod's largest bucket.
 
+**Scope — RATIFIED (Josh, 2026-09-15): this is a PLAYER-surface rule.** The floor exists for
+thumbs on phones. The admin console (`src/app/admin/**`) and the dev palette toggle
+(`src/components/dev/**`) are desktop, mouse-driven, single-operator tools whose dense data
+tables would get *worse* if every row action were padded to 44px. They are `RULE_EXEMPT` from
+R10 by directory prefix, so a new admin screen is covered without editing the list. This
+scoping took R10 from 295 to **190** on 2026-09-15 without changing a single component.
+
+**R10 is a trend line, not a rule to close at 0.** Unlike R1–R9, the heuristic cannot tell a
+genuine miss from a control that is compact by design, and it reads only the 7 lines after the
+tag (so a size class living in a shared constant reads as absent — 10 such false positives were
+confirmed by hand). Treat a *rise* as the regression signal; do not pad components to drive it
+to zero. What the remaining 190 actually are, measured 2026-09-15:
+
+| bucket | count | disposition |
+|---|---|---|
+| Inline text actions missing §3.7's `min-h-11` | ~43 | real fix — text size unchanged, only the hit box grows |
+| Tabs / list-rows missing §3.5 / §3.6's `min-h-11` | ~18 | real fix — both sections already mandate it |
+| Small labelled buttons | ~115 | per-site judgement; no blanket call |
+| Icon-only + confirmed false positives | ~9 | noise |
+
+Grep (a button with no declared 44px dimension): `npm run check:design -- --rule=R10 --verbose`
+
 ### 9.2 The focus ring — RATIFIED (Phase 4, 2026-09-11) as universal (recipe RATIFIED for `.btn-*`, `globals.css:497-509`)
 
 **The app has one focus indicator and every element inherits it.** `globals.css`'s base layer
@@ -557,6 +579,7 @@ fill (chip surface, skeleton fill, badge colour, accent bar), it says so and def
 | Ceremony rooms — **and their chrome** (the Exit control takes its colour from the beat's theme and hovers on `white/10`; the neutral `.btn-icon` ink would be invisible on a saturated ground) | button recipes | §3.4, added 2026-09-13 |
 | `Nav.tsx` bottom tabs | §3.5 tab recipe | §3.5 |
 | `/admin/*` | list rule (grid tables allowed), token lint scope | §6.2 |
+| `/admin/**`, `components/dev/**` | 44px floor (R10) — desktop, mouse, one operator | §9.1, added 2026-09-15 |
 | `data-flat` / `data-shadow` CSS, `PaletteToggle` | everything (testing chrome, unmounted) | `globals.css:720-762` |
 | Scrim-tap button | 44px floor | §3.9 |
 
@@ -623,7 +646,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 302 (heuristic, count only; 320 → 302 as a side effect of the R4 cleanup) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 190 (heuristic, **trend line — never close at 0**; 295 → 190 on 2026-09-15 by scoping to player surfaces) / R9 · **0 — closed 2026-09-13** | — |
 
 Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
 combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at
