@@ -447,7 +447,7 @@ export default function PeopleYouInvited() {
                   <div className="mt-3 flex justify-end">
                     <button
                       type="button"
-                      className="text-muted-foreground text-sm"
+                      className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
                       onClick={() => deleteInvite(invite)}
                       disabled={deletingId === invite.id}
                     >
@@ -470,21 +470,21 @@ export default function PeopleYouInvited() {
                     <div className="flex justify-center gap-6">
                       <button
                         type="button"
-                        className="text-muted-foreground text-sm"
+                        className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
                         onClick={() => copyInvite(invite)}
                       >
                         {copyingId === invite.id ? 'Copied ✓' : 'Copy instead'}
                       </button>
                       <button
                         type="button"
-                        className="text-muted-foreground text-sm"
+                        className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
                         onClick={() => startEdit(invite)}
                       >
                         Edit
                       </button>
                       <button
                         type="button"
-                        className="text-muted-foreground text-sm"
+                        className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
                         onClick={() => cancelInvite(invite)}
                         disabled={cancellingId === invite.id}
                       >

@@ -143,7 +143,9 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.25rem', lineHeight: 1, padding: '0 2px' }}
+            // §9.1/§3.4: a modal close is the one control every user reaches for,
+            // and the glyph is all there is to aim at — 44px box, same glyph size.
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.25rem', lineHeight: 1, padding: '0 2px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 }}
           >
             ×
           </button>
@@ -242,7 +244,9 @@ export function QuickAddQuestionModal({ onClose, onAdded }: Props) {
             <button
               type="button"
               onClick={onClose}
-              style={{ ...monoStyle, color: 'var(--text-muted)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+              // §3.7/§9.1: an inline text action — the label keeps its size, the
+              // invisible box around it grows to the floor.
+              style={{ ...monoStyle, color: 'var(--text-muted)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', minHeight: 44 }}
             >
               Cancel
             </button>

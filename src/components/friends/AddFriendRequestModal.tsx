@@ -163,7 +163,7 @@ export function AddFriendRequestModal({
             aria-label="Close"
             onClick={onClose}
             disabled={sending}
-            className="text-muted-foreground hover:text-foreground -mr-1 px-2 text-lg leading-none"
+            className="text-muted-foreground hover:text-foreground -mr-1 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-lg leading-none"
           >
             ×
           </button>

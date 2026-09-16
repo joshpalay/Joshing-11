@@ -769,7 +769,7 @@ export function QuestionForm({
           <button
             type="button"
             onClick={() => setOrientationVisible(false)}
-            className="mt-2 text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
+            className="mt-2 inline-flex min-h-11 items-center text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
           >
             Got it
           </button>

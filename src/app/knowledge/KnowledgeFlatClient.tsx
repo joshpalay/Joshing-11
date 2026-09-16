@@ -939,7 +939,7 @@ function KnowledgePageContent({
                 {addedTopic.created ? (
                   <button
                     type="button"
-                    className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                    className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
                     onClick={() => void undoAddedTopic()}
                     disabled={undoing}
                   >
@@ -1039,7 +1039,7 @@ function KnowledgePageContent({
                     {addedTopic.created ? (
                       <button
                         type="button"
-                        className="mt-1 text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
+                        className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold tracking-[0.08em] text-[var(--brand-link)] uppercase transition hover:opacity-70 disabled:opacity-50"
                         onClick={() => void undoAddedTopic()}
                         disabled={undoing}
                       >
@@ -1201,7 +1201,7 @@ function KnowledgePageContent({
                         <button
                           key={choice.label}
                           type="button"
-                          className="border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
+                          className="border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] min-h-11 px-3 py-1.5 text-[0.82rem] cursor-pointer hover:bg-[var(--cream-warm)]"
                           onClick={() => {
                             setSelectedInterest({ label: choice.label, broadCategory: choice.broadCategory ?? undefined });
                             setInterestChoices(null);

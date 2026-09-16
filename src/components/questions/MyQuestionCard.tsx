@@ -104,14 +104,14 @@ export function MyQuestionCard({
               Delete this question?
             </span>
             <button
-              className="rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
+              className="min-h-11 rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
               type="button"
               onClick={onConfirmDelete}
             >
               Confirm
             </button>
             <button
-              className="rounded-md border px-3 py-2 text-sm"
+              className="min-h-11 rounded-md border px-3 py-2 text-sm"
               type="button"
               onClick={onCancelConfirm}
             >
@@ -254,7 +254,7 @@ function CardOverflowMenu({
               setOpen(false);
               onDelete();
             }}
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             {inUse ? <Lock className="size-4" /> : <Trash2 className="size-4" />}
             Delete

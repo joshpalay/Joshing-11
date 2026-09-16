@@ -993,6 +993,10 @@ function ExpandableExplainer({ sentence, full }: { sentence: string; full: strin
             background: 'none',
             border: 'none',
             padding: 0,
+            // §9.1: the label stays 0.65rem; only the hit box grows to the floor.
+            display: 'inline-flex',
+            alignItems: 'center',
+            minHeight: 44,
             cursor: 'pointer',
             fontFamily: 'var(--font-mono)',
             fontSize: '0.65rem',

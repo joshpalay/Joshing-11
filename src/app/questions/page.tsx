@@ -436,7 +436,7 @@ function QuestionsPageContent() {
       <div className="mb-5 flex border-b">
         <button
           type="button"
-          className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+          className={`min-h-11 px-4 py-2.5 text-sm font-medium transition-colors ${
             tab === 'authored'
               ? 'border-b-2 border-foreground text-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -447,7 +447,7 @@ function QuestionsPageContent() {
         </button>
         <button
           type="button"
-          className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+          className={`min-h-11 px-4 py-2.5 text-sm font-medium transition-colors ${
             tab === 'answered'
               ? 'border-b-2 border-foreground text-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -604,7 +604,7 @@ function QuestionsPageContent() {
                 <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{drawer.mode === 'edit' ? 'Edit' : 'Create'}</p>
                 <h2 className="font-serif text-2xl font-semibold">{drawer.mode === 'edit' ? 'Edit question' : 'Write a question'}</h2>
               </div>
-              <button className="rounded-md border p-2 hover:bg-muted" type="button" onClick={closeDrawer} title="Close">
+              <button className="flex size-11 items-center justify-center rounded-md border hover:bg-muted" type="button" onClick={closeDrawer} title="Close">
                 <X className="size-4" />
               </button>
             </div>

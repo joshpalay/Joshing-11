@@ -62,13 +62,18 @@ const BASELINE = {
   // 34px square icon button) — a real tap target a few px under the floor, so
   // they were raised to min-h-11/size-11. Several live in a shared const, so
   // one edit moved a whole family.
-  // The remaining 116 are NOT a backlog: 57 were read and deliberately left
+  // 116 -> 96 on 2026-09-16: a closer read of the 59 "no declared height" sites
+  // found 20 that are not the design question at all — their height comes from
+  // padding, and the control is transparent (a §3.7 text action, an icon-only
+  // share glyph, a modal close, §3.5 tabs, a §3.6 menu row), so the box reaches
+  // 44px with no visible change. Fixed.
+  // The remaining 96 are NOT a backlog: 57 were read and deliberately left
   // (already compliant behind the heuristic's blind spot, prop-driven sizing,
-  // or micro-type decoration), and 59 are bordered buttons with no declared
-  // height, where reaching 44px means visibly fattening the control — a design
-  // call, deliberately not made by codemod. See §9.1.
+  // or micro-type decoration), and 39 are bordered or filled buttons whose box
+  // IS their visual, where reaching 44px means visibly fattening the control —
+  // a design call, deliberately not made by codemod. See §9.1.
   // This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 116,
+  R10: 96,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────

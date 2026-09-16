@@ -457,6 +457,9 @@ function CloseRoom({
           onClick={onReplay}
           style={{
             width: '100%',
+            // §9.1: transparent full-width text action — the 11px label is
+            // unchanged, the box it sits in reaches the floor.
+            minHeight: 44,
             background: 'transparent',
             border: 'none',
             color: th.sub,

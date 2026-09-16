@@ -520,17 +520,28 @@ to zero. Where the 295 went:
 | List-rows / tabs missing §3.5 / §3.6's `min-h-11` | 11 | **fixed 2026-09-16** — both sections already mandated it |
 | Heuristic false positives (class in a shared const) | 14 | left alone — the component is already compliant |
 | Controls declaring an explicit 32–40px height | 26 | **fixed 2026-09-16** — raised to `min-h-11` / `size-11` |
+| Transparent controls whose height came from padding | 20 | **fixed 2026-09-16** — box grows, visual unchanged |
 | Read and deliberately left | 57 | already compliant behind the blind spot, sizing owned by a caller's prop, or micro-type decoration |
-| Bordered buttons with no declared height | 59 | **open design call** — see below |
+| Buttons whose box IS their visual | 39 | **open design call** — see below |
 
-**The open call (59 sites).** A bordered button's box *is* its visual, so unlike a text link it
-cannot grow to 44px invisibly — `min-h-11` on `px-3 py-1 text-xs` makes a tertiary control
-visibly chunkier. That is a design decision about how heavy secondary and tertiary buttons
-should read, not a conformance fix, so it was deliberately **not** made by codemod. Until it is
-made, these stay in the count. Concentrated in `QuestionForm` (7), `CreationSurface` (6),
-`FriendsList` (4), `PeopleYouInvited` (4), the ceremony rooms (3).
+**The test that decided the last 59.** Not "does it declare a height" but **"is the box
+visible?"** A transparent control — a text action, an icon-only glyph, a tab, a menu row — can
+grow to 44px with nothing on screen changing, so it is a conformance fix and was made. A
+bordered or filled button's box *is* its visual: `min-h-11` on a `border px-3 py-1 text-sm`
+tertiary button makes it visibly chunkier. That is a decision about how heavy secondary and
+tertiary buttons should read across the app, not a conformance fix, so it was deliberately
+**not** made by codemod. Until the call is made, these stay in the count.
 
-**Landed 2026-09-16 (295 → 116).** The inline-text-action pass is the one worth understanding:
+Two cases failed the test for their own reason and are also left: `InlineAnswerFlow`'s "ANSWER
+→" draws its underline as a `border-bottom`, so a 44px box would detach the rule from the
+label; `EditorialPromos`' "Undo" sits mid-sentence in flowing prose, where `inline-flex
+min-h-11` would stretch the line box.
+
+The open 39 are concentrated in `CreationSurface` (6) and `QuestionForm` (5) — the same
+`border px-3 py-1` tertiary recipe in both — plus `InlineHandleField` (2) and singles across
+the knowledge and ceremony surfaces.
+
+**Landed 2026-09-16 (295 → 96).** The inline-text-action pass is the one worth understanding:
 §3.7's own recipe (`FeedActionLink`) *starts* with `inline-flex min-h-11 items-center`, so a
 14px link keeps its type size and simply sits in a 44px-tall invisible box — which is what §9.1
 means by "visual size may be smaller … inside a 44px box". Three `block`-display links
@@ -545,6 +556,13 @@ so the raise is mechanical, not a design change. It was applied by matching each
 resolved class string rather than scanning the lines after `<button` — a window scan mis-hit
 `<h3>`/`<p>` elements twice during this work. Note that four of the 26 live in a shared class
 constant, so one edit moved a whole family of buttons.
+
+The third pass (116 → 96) came from re-reading the sites that had been parked as "no declared
+height". Twenty of them had a perfectly readable height once you added up padding and
+line-height, and were transparent — so they were the *same* fix as the first pass, just hidden
+from a class-string rule. That is the general lesson here: the heuristic reads classes, but the
+question §9.1 actually asks is about rendered pixels, so a parked site is worth re-reading with
+the computed box in hand rather than trusting the first triage.
 
 Grep (a button with no declared 44px dimension): `npm run check:design -- --rule=R10 --verbose`
 
@@ -672,7 +690,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 116 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights; the last 59 are an open design call) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 96 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls whose height came from padding; the last 39 are an open design call) / R9 · **0 — closed 2026-09-13** | — |
 
 Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
 combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at

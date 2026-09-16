@@ -397,7 +397,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   </button>
                   <button
                     type="button"
-                    className="text-muted-foreground px-3 text-sm"
+                    className="text-muted-foreground inline-flex min-h-11 items-center px-3 text-sm"
                     onClick={onClose}
                   >
                     Cancel
