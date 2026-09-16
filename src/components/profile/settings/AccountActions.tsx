@@ -548,7 +548,7 @@ export function AccountActions({
           ) : (
             <button
               type="button"
-              className="text-muted-foreground hover:text-destructive text-xs font-medium underline-offset-2 hover:underline"
+              className="inline-flex items-center min-h-11 text-muted-foreground hover:text-destructive text-xs font-medium underline-offset-2 hover:underline"
               onClick={() => {
                 setConfirmingDelete(true);
                 setConfirmingLogout(false);

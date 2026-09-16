@@ -50,13 +50,16 @@ const BASELINE = {
   R8: 0, // button or input rendered as a pill (§1.4) — CLOSED 2026-09-14: 3 inputs onto --radius-xs (§1.5), 4 undersized "Close"/nav icon buttons onto .btn-icon (they missed R6's original size-9+ sweep), 4 action pills onto <Chip>, and 4 segmented-toggle sites (AskFriendForDomain, DomainVisibilityToggle, SectionVisibilityToggle) onto --radius-xs so the nested buttons still match their container. The remaining 7 are RULE_EXEMPT below (a bespoke takeover theme, three inline chip-dismiss glyphs below .btn-icon's size floor, and one breadcrumb nav control .btn-icon would overwhelm).
   R9: 0, // focus killed without a replacement ring (§9.2) — CLOSED 2026-09-13. Redefined: the old rule counted buttons with no focus-visible CLASS (328) but the browser was always drawing one, so it measured nothing. This counts the real defect — `outline-none` with nothing put back — which was 43 form fields, all fixed.
   // heuristic: <button> block with no ≥44px dimension and not .btn-* (§9.1).
-  // 295 -> 190 on 2026-09-15 by SCOPING, not by fixing: §9.1 was ratified as a
-  // player-surface rule, so the admin console and dev palette toggle are now
-  // RULE_EXEMPT below (105 sites). What's left is 190 player-facing controls —
-  // ~43 inline text actions missing §3.7's own `min-h-11`, ~18 tabs/list-rows
-  // missing §3.5/§3.6's, and ~115 small labelled buttons that need a per-site
-  // read. This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 190,
+  // 295 -> 190 on 2026-09-15 by SCOPING, not fixing: §9.1 was ratified as a
+  // player-surface rule, so the admin console and dev palette toggle are
+  // RULE_EXEMPT below (105 sites).
+  // 190 -> 142 on 2026-09-16 by FIXING the sites where the canon had already
+  // decided the answer: 40 inline text actions onto §3.7's own
+  // `inline-flex min-h-11 items-center`, LoginPanel's shared SUBTLE_LINK_CLASS
+  // (3 more), 10 list-rows and the feed tab strip onto §3.5/§3.6's `min-h-11`.
+  // The remaining 142 are small labelled buttons needing a per-site read.
+  // This number is a TREND LINE, not a rule to close at 0: see §9.1.
+  R10: 142,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────

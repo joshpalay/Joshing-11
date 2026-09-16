@@ -359,7 +359,7 @@ export function KnowledgePeaksView({
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
-              className="text-sm text-[var(--brand-navy)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex items-center min-h-11 text-sm text-[var(--brand-navy)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {showAll ? 'Show fewer' : `See all ${sorted.length} things you know`}
             </button>
@@ -385,7 +385,7 @@ export function KnowledgePeaksView({
                       type="button"
                       role="listitem"
                       onClick={() => setSelectedId(leaf.node.id)}
-                      className="flex w-full items-center gap-2.5 border-b py-2.5 text-left text-sm hover:bg-[var(--brand-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="min-h-11 flex w-full items-center gap-2.5 border-b py-2.5 text-left text-sm hover:bg-[var(--brand-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       style={{ borderColor: 'var(--border)' }}
                     >
                       <span
@@ -1233,7 +1233,7 @@ export function PeakDetailCard({
               <button
                 type="button"
                 onClick={() => setRemoveConfirm(true)}
-                className="mt-3 text-xs underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center min-h-11 mt-3 text-xs underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ color: 'var(--text-muted)' }}
               >
                 Remove from your map

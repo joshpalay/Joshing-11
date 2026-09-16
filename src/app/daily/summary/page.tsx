@@ -883,7 +883,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             <button
               type="button"
               onClick={() => setIsExplainerOpen(true)}
-              className="mt-2 text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
+              className="inline-flex items-center min-h-11 mt-2 text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
             >
               More context →
             </button>
@@ -903,7 +903,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           <button
             type="button"
             onClick={handleUndoAction}
-            className="ml-auto font-medium tracking-[0.08em] uppercase underline underline-offset-4"
+            className="inline-flex items-center min-h-11 ml-auto font-medium tracking-[0.08em] uppercase underline underline-offset-4"
           >
             Undo
           </button>

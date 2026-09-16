@@ -509,16 +509,26 @@ scoping took R10 from 295 to **190** on 2026-09-15 without changing a single com
 
 **R10 is a trend line, not a rule to close at 0.** Unlike R1–R9, the heuristic cannot tell a
 genuine miss from a control that is compact by design, and it reads only the 7 lines after the
-tag (so a size class living in a shared constant reads as absent — 10 such false positives were
+tag (so a size class living in a shared constant reads as absent — 14 such false positives were
 confirmed by hand). Treat a *rise* as the regression signal; do not pad components to drive it
-to zero. What the remaining 190 actually are, measured 2026-09-15:
+to zero. Where the 295 went:
 
 | bucket | count | disposition |
 |---|---|---|
-| Inline text actions missing §3.7's `min-h-11` | ~43 | real fix — text size unchanged, only the hit box grows |
-| Tabs / list-rows missing §3.5 / §3.6's `min-h-11` | ~18 | real fix — both sections already mandate it |
-| Small labelled buttons | ~115 | per-site judgement; no blanket call |
-| Icon-only + confirmed false positives | ~9 | noise |
+| Admin / dev tooling | 105 | **exempt 2026-09-15** — scoping, above |
+| Inline text actions missing §3.7's `min-h-11` | 43 | **fixed 2026-09-16** — `inline-flex min-h-11 items-center`; type size unchanged, only the hit box grew |
+| List-rows / tabs missing §3.5 / §3.6's `min-h-11` | 11 | **fixed 2026-09-16** — both sections already mandated it |
+| Heuristic false positives (class in a shared const) | 14 | left alone — the component is already compliant |
+| Small labelled buttons | 142 | per-site judgement; no blanket call |
+
+**Landed 2026-09-16 (295 → 142).** The inline-text-action pass is the one worth understanding:
+§3.7's own recipe (`FeedActionLink`) *starts* with `inline-flex min-h-11 items-center`, so a
+14px link keeps its type size and simply sits in a 44px-tall invisible box — which is what §9.1
+means by "visual size may be smaller … inside a 44px box". Three `block`-display links
+(`knowledge/[domain]`, `DomainList`, `QuestionForm`'s reformulation option) took `min-h-11`
+without a display swap: they wrap already-tall content, so the min-height is inert there and
+only guards the empty case. `LoginPanel`'s shared `SUBTLE_LINK_CLASS` moved `block` → `flex
+w-fit` so `mx-auto` still centres it while the label centres inside the taller box.
 
 Grep (a button with no declared 44px dimension): `npm run check:design -- --rule=R10 --verbose`
 
@@ -646,7 +656,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 190 (heuristic, **trend line — never close at 0**; 295 → 190 on 2026-09-15 by scoping to player surfaces) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 142 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass) / R9 · **0 — closed 2026-09-13** | — |
 
 Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
 combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at

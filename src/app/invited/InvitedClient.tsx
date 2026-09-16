@@ -247,7 +247,7 @@ export function InvitedClient({
         <button
           type="button"
           onClick={() => router.push('/daily/summary')}
-          className="text-muted-foreground mx-auto mt-6 inline-flex min-h-9 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="text-muted-foreground mx-auto mt-6 inline-flex min-h-11 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           Continue to today&apos;s recap →
         </button>
@@ -255,7 +255,7 @@ export function InvitedClient({
         <button
           type="button"
           onClick={() => router.push('/')}
-          className="text-muted-foreground mx-auto mt-6 inline-flex min-h-9 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="text-muted-foreground mx-auto mt-6 inline-flex min-h-11 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           Back home
         </button>

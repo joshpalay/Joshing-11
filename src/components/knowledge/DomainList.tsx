@@ -25,7 +25,7 @@ export function DomainList({ domains, onDomainSelect }: DomainListProps) {
         <button
           key={domain.domain}
           type="button"
-          className="block w-full bg-transparent px-4 py-0 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="block min-h-11 w-full bg-transparent px-4 py-0 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onDomainSelect?.(domain.domain)}
         >
           <DomainRow

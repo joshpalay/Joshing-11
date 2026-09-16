@@ -55,7 +55,7 @@ export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
             type="button"
             onClick={() => void handleBlock()}
             disabled={pending}
-            className="text-destructive font-medium underline-offset-4 hover:underline"
+            className="inline-flex items-center min-h-11 text-destructive font-medium underline-offset-4 hover:underline"
           >
             {pending ? 'Blocking…' : 'Block'}
           </button>
@@ -63,7 +63,7 @@ export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
             type="button"
             onClick={() => setConfirming(false)}
             disabled={pending}
-            className="text-muted-foreground underline-offset-4 hover:underline"
+            className="inline-flex items-center min-h-11 text-muted-foreground underline-offset-4 hover:underline"
           >
             Cancel
           </button>
@@ -77,7 +77,7 @@ export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="text-muted-foreground/70 hover:text-muted-foreground mt-3 text-xs underline-offset-4 hover:underline"
+      className="inline-flex items-center min-h-11 text-muted-foreground/70 hover:text-muted-foreground mt-3 text-xs underline-offset-4 hover:underline"
     >
       Block
     </button>

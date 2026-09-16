@@ -278,7 +278,7 @@ function RoundCloseCard({
         {hasMore ? (
           <button
             type="button"
-            className="text-sm font-medium text-[var(--text-muted)] underline underline-offset-4 transition hover:text-[var(--text)]"
+            className="inline-flex items-center min-h-11 text-sm font-medium text-[var(--text-muted)] underline underline-offset-4 transition hover:text-[var(--text)]"
             onClick={onPlayNext}
           >
             Start another {nextBatchSize}
@@ -547,7 +547,7 @@ function RoundRecapCard({ record }: { record: CatchupBatchRecord }) {
             <button
               type="button"
               onClick={() => setIsExplainerOpen(true)}
-              className="mt-2 text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
+              className="inline-flex items-center min-h-11 mt-2 text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
             >
               More context →
             </button>

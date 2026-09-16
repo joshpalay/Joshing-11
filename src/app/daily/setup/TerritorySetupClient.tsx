@@ -557,7 +557,7 @@ export function TerritorySetupClient({
               />
               <button
                 type="button"
-                className="mt-3 text-sm text-[var(--text-muted-warm)] underline-offset-2 hover:underline"
+                className="inline-flex items-center min-h-11 mt-3 text-sm text-[var(--text-muted-warm)] underline-offset-2 hover:underline"
                 onClick={() => setCreating(false)}
               >
                 Done

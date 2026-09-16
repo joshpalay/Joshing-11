@@ -820,7 +820,7 @@ export default function FriendsList() {
                       No one in your friends by that. Looking for someone new?{' '}
                       <button
                         type="button"
-                        className="text-primary underline"
+                        className="inline-flex items-center min-h-11 text-primary underline"
                         onClick={goToAddSomeone}
                       >
                         Add someone →
@@ -832,7 +832,7 @@ export default function FriendsList() {
                   )}
                   <button
                     type="button"
-                    className="text-primary underline"
+                    className="inline-flex items-center min-h-11 text-primary underline"
                     onClick={clearFriendFilters}
                   >
                     Clear filters

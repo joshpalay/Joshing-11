@@ -530,7 +530,7 @@ function QuestionsPageContent() {
           ) : filteredQuestions.length === 0 ? (
             <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
               <h2 className="font-serif text-2xl font-semibold">No questions match your filter.</h2>
-              <button className="mt-3 text-sm text-primary underline" type="button" onClick={clearFilters}>
+              <button className="inline-flex items-center min-h-11 mt-3 text-sm text-primary underline" type="button" onClick={clearFilters}>
                 Clear filters
               </button>
             </section>

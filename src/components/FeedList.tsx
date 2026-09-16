@@ -227,7 +227,7 @@ function ThumbsdownConfirmRow({
             event.stopPropagation()
             onUndo()
           }}
-          className="text-foreground text-xs font-medium underline-offset-4 hover:underline disabled:opacity-50"
+          className="inline-flex items-center min-h-11 text-foreground text-xs font-medium underline-offset-4 hover:underline disabled:opacity-50"
         >
           Undo
         </button>
@@ -721,7 +721,7 @@ function FeedSurfaceTabs({
             id={`feed-tab-${tab.filter}`}
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+            className={`flex min-h-11 items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
               selected
                 ? 'border-foreground text-foreground border-b-2'
                 : 'text-muted-foreground hover:text-foreground'
