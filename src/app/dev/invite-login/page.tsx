@@ -144,6 +144,7 @@ function DevInviteLoginPageInner() {
             inviteContext={screen === 'linkCard' ? PREVIEW_LINK_CONTEXT : PREVIEW_INVITER}
             previewDeadEnd={screen === 'deadEnd'}
             previewStep={screen === 'code' || screen === 'profile' ? screen : 'phone'}
+            previewMode
           />
         </Suspense>
       </div>

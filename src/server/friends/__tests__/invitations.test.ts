@@ -15,7 +15,7 @@ type Invitation = {
   expiresAt: Date;
 };
 
-const { dbMock, state } = vi.hoisted(() => {
+const { dbMock, state, activityItemsTable } = vi.hoisted(() => {
   const state = {
     invitation: undefined as Invitation | undefined,
     updateReturnsClaim: true,
@@ -23,7 +23,14 @@ const { dbMock, state } = vi.hoisted(() => {
     invitationValues: undefined as Record<string, unknown> | undefined,
     updateValues: undefined as Record<string, unknown> | undefined,
     inviterName: 'Alex Inviter' as string | null,
+    activityValues: [] as Record<string, unknown>[],
   };
+
+  // A distinguishable table reference so the shared `db.insert` mock can route
+  // writeActivity's insert (used by notifyInvitationFriendshipFormed) to its
+  // own tracking array instead of falling through to the invitation-insert
+  // branch below, which would otherwise clobber `state.invitation`.
+  const activityItemsTable = { __table: 'activityItems' };
 
   function makeSelectBuilder(selection?: Record<string, unknown>) {
     const isLandingSelect = Boolean(selection && 'inviterName' in selection);
@@ -85,6 +92,15 @@ const { dbMock, state } = vi.hoisted(() => {
     };
   }
 
+  function makeActivityInsertBuilder() {
+    return {
+      values: vi.fn((values: Record<string, unknown>) => {
+        state.activityValues.push(values);
+        return Promise.resolve(undefined);
+      }),
+    };
+  }
+
   function makeInsertBuilder({ friendshipOnly = false } = {}) {
     return {
       values: vi.fn((values: Record<string, unknown>) => {
@@ -119,16 +135,19 @@ const { dbMock, state } = vi.hoisted(() => {
   const dbMock = {
     select: vi.fn((selection?: Record<string, unknown>) => makeSelectBuilder(selection)),
     update: vi.fn(() => makeUpdateBuilder()),
-    insert: vi.fn(() => makeInsertBuilder()),
+    insert: vi.fn((table?: unknown) =>
+      table === activityItemsTable ? makeActivityInsertBuilder() : makeInsertBuilder(),
+    ),
     transaction: vi.fn(async (callback: (tx: typeof tx) => unknown) => callback(tx)),
     tx,
   };
 
-  return { dbMock, state };
+  return { dbMock, state, activityItemsTable };
 });
 
 vi.mock('@/server/db', () => ({
   db: dbMock,
+  activityItems: activityItemsTable,
   users: {
     id: 'users.id',
     displayName: 'users.displayName',
@@ -203,6 +222,7 @@ describe('acceptFriendInvitation', () => {
     state.friendshipValues = [];
     state.invitationValues = undefined;
     state.updateValues = undefined;
+    state.activityValues = [];
   });
 
   it('accepts a valid token for the matching verified phone and creates an invitation friendship', async () => {
@@ -238,6 +258,23 @@ describe('acceptFriendInvitation', () => {
         approvedAt: now,
       }),
     ]);
+    // Both sides learn the connection formed — a friendship this consent-free
+    // path used to create with zero feed/notification trace (QA walkthrough,
+    // 2026-09-15). See notifyInvitationFriendshipFormed.
+    expect(state.activityValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'user-inviter',
+          type: 'follow_mutual',
+          actorUserId: 'user-invitee',
+        }),
+        expect.objectContaining({
+          userId: 'user-invitee',
+          type: 'follow_mutual',
+          actorUserId: 'user-inviter',
+        }),
+      ]),
+    );
   });
 
   it("accepts Jaime's 000000-verified matching phone once and rejects wrong-phone or reused claims without duplicate friendship rows", async () => {

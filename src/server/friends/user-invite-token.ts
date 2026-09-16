@@ -12,7 +12,10 @@ import {
 } from '@/server/db/queries/invite-links';
 import { parsePreSeededInterests, type PreSeededInterest } from '@/server/db/queries/users';
 import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed';
-import { upsertInvitationFriendship } from '@/server/friends/friendships';
+import {
+  notifyInvitationFriendshipFormed,
+  upsertInvitationFriendship,
+} from '@/server/friends/friendships';
 
 export { generateUserInviteToken } from '@/server/db/queries/invite-links';
 
@@ -288,6 +291,12 @@ export async function acceptUserInviteLink({
     // One-time inviter feed backfill (B-HomeSeed-1). Best-effort internally so
     // it can't throw — a backfill hiccup must never fail the link acceptance.
     await backfillInviterFeedItems({
+      inviterUserId: inviter.inviterUserId,
+      inviteeUserId,
+    });
+    // Same gap as the named-invitation path (invitations.ts): the friendship
+    // otherwise forms with no feed/notification trace on either side.
+    await notifyInvitationFriendshipFormed({
       inviterUserId: inviter.inviterUserId,
       inviteeUserId,
     });
