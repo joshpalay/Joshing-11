@@ -1886,9 +1886,9 @@ export function findBankSameFactDuplicates(
   for (const f of bankFacts) {
     const a = sameFactAnswerKey(f.answer);
     if (!a) continue;
-    byDomainAnswer.add(`${f.domainKey} ${a}`);
+    byDomainAnswer.add(`${f.domainKey}\u0000${a}`);
     const sk = entityKey(f.subjectEntity);
-    if (sk) bySubjectAnswer.add(`${sk} ${a}`);
+    if (sk) bySubjectAnswer.add(`${sk}\u0000${a}`);
   }
   for (let i = 0; i < generated.length; i += 1) {
     const q = generated[i];
@@ -1896,7 +1896,7 @@ export function findBankSameFactDuplicates(
     if (!a) continue;
     const dk = domainKey(q.canonical_subcategory);
     const sk = entityKey(q.subject_entity);
-    if (byDomainAnswer.has(`${dk} ${a}`) || (sk && bySubjectAnswer.has(`${sk} ${a}`))) {
+    if (byDomainAnswer.has(`${dk}\u0000${a}`) || (sk && bySubjectAnswer.has(`${sk}\u0000${a}`))) {
       drop.add(i);
     }
   }
