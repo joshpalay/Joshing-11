@@ -538,23 +538,38 @@ separate changes and were not made here. `px-3` → `px-4` goes with the height:
 with 12px side padding reads as a stubby tall pill, and every `.btn-*` recipe pairs `min-h-11`
 with `px-4`.
 
-**Two controls cannot take the floor and are exempt by construction.**
-`InlineAnswerFlow`'s "ANSWER →" draws its underline as a `border-bottom` on the button itself,
-so a 44px box detaches the rule from the label — it would need the border moved to an inner
-span first. `EditorialPromos`' "Undo" sits mid-sentence in flowing prose, where `inline-flex
-min-h-11` stretches the whole line box. Both are left deliberately; fixing them is a
-refactor, not a size change.
+**Two controls could not take the floor by min-height — both now clear it another way
+(2026-09-16).** They are the two idioms worth copying when `min-h-11` is not available:
 
-**Where the remaining 79 are.** 38 the heuristic cannot see (the class lives in a shared
+- **The underline belongs to the label, not the button.** `InlineAnswerFlow`'s "ANSWER →" drew
+  its rule as a `border-bottom` on the `<button>`, so a 44px box dropped the rule 27px below
+  the text. The border moved to an inner `<span>`; the button is now a 44px flex box and the
+  underline still sits against the words.
+- **A mid-sentence link grows its hit area with `::after`, never with height.**
+  `EditorialPromos`' "Undo" sits inside flowing prose, where `min-h-11` would stretch the whole
+  line box. Instead: `relative after:absolute after:inset-x-0 after:top-1/2 after:h-11
+  after:-translate-y-1/2 after:content-['']` — a 44px invisible target centred on the text and
+  outside layout, so the paragraph is untouched. **Use this for any inline link inside prose.**
+
+**Where the remaining 74 are.** 38 the heuristic cannot see (the class lives in a shared
 constant or outside its 7-line window — confirmed by hand); 11 whose size is owned by a
 caller's `className` prop, so there is nothing to fix in the component; ~14 already over the
 floor via padding or inline style the heuristic cannot add up; and the ratified small controls
 — chip-dismiss `×` glyphs (§1.4), the `Switch` track (a switch is not a button box), and the
-`KnowledgeBubbleMap` breadcrumb (already R8-exempt for the same reason). Four more sit in
-`components/games/game-details-mode-sections.tsx`, which **nothing imports** — dead surface
-left by the Joshing Games sunset, and a deletion question rather than a sizing one.
+`KnowledgeBubbleMap` breadcrumb (already R8-exempt for the same reason).
 
-**Landed 2026-09-16 (295 → 79).** The inline-text-action pass is the one worth understanding:
+**The Joshing Games components are exempt, NOT deleted (2026-09-16).** `FirstGamePanel`,
+`game-details-mode-sections` and `interpretive-sections` render to no player — `/games/[id]`
+redirects home — so they are not player surface and are `RULE_EXEMPT` from R10 (4 sites). They
+are kept because a static import scan calls them dead and the decision record does not: B-10.1
+was a **soft** sunset that deliberately preserved the API routes and tables so a revival is a
+git restore, and `D-AREA-EXPANSION-01` (SETTLED, ready for `B-AREA-EXPANSION-01`) names
+`CompletedRecapHeader` in `game-details-mode-sections.tsx` as built infrastructure it plans to
+reuse. If Games is ever hard-sunset, delete the files and the exemption together.
+`games/QuestionRatingButtons.tsx` is **not** exempt — `/archive` renders it, so it is live
+player surface and stays in the count.
+
+**Landed 2026-09-16 (295 → 74).** The inline-text-action pass is the one worth understanding:
 §3.7's own recipe (`FeedActionLink`) *starts* with `inline-flex min-h-11 items-center`, so a
 14px link keeps its type size and simply sits in a 44px-tall invisible box — which is what §9.1
 means by "visual size may be smaller … inside a 44px box". Three `block`-display links
@@ -687,8 +702,8 @@ Two vehicles, both report-only for existing code and blocking for regressions:
   above its baseline, `--verbose` lists every offender. Lower a baseline after a cleanup; never
   raise one.
 
-Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · radius 0 · z-index 0
-· type-size 213. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
+Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing 0 · radius 0 · z-index 0
+· type-size 207. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
 `[#hex]` in `className` under `src/components/**`, 12 grandfathered files at `warn`,
 `--max-warnings 16`. **Do not add to the grandfather list.**
 
@@ -703,7 +718,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 79 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 74 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling, → 74 by exempting the unreachable Joshing Games components and reworking the two text actions that could not take a min-height. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
 
 Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
 combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at

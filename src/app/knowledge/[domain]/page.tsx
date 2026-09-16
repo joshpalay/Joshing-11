@@ -263,7 +263,20 @@ export default function DomainDetailPage() {
                     aria-expanded={expanded}
                   >
                     <div className="flex items-start gap-3">
-                    <span className={`mt-0.5 font-semibold ${answer.isCorrect ? 'text-green-700' : 'text-destructive'}`}>
+                    {/* STYLE-GUIDE-COLOR §1: grading is reserved and has exactly
+                        ONE correct and ONE wrong value. This was `text-green-700`
+                        (a raw Tailwind palette green) and `text-destructive` (the
+                        third red) — the only grading site in the app still off the
+                        --game-* tokens. The ✓/✗ glyph keeps the WCAG pairing, so
+                        colour is never the sole signal. */}
+                    <span
+                      className="mt-0.5 font-semibold"
+                      style={{
+                        color: answer.isCorrect
+                          ? 'var(--game-correct)'
+                          : 'var(--game-wrong-strong)',
+                      }}
+                    >
                       {answer.isCorrect ? '✓' : '✗'}
                     </span>
                     <div className="min-w-0 flex-1">

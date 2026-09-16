@@ -46,20 +46,24 @@ export function InlineAnswerFlow({
           type="button"
           onClick={answer.open}
           style={{
+            // §9.1: the BOX reaches the 44px floor, but the underline rides on
+            // the LABEL (the inner span) rather than on the button — on the
+            // button it would drop to the bottom of the 44px control, 27px
+            // adrift of the text it is supposed to underline.
             display: 'inline-flex',
             alignItems: 'center',
+            minHeight: 44,
             background: 'transparent',
             border: 'none',
-            borderBottom: `1px solid ${INK}`,
             color: INK,
             fontFamily: FM,
             fontSize: 11,
             letterSpacing: 1.5,
-            padding: '0 0 2px',
+            padding: 0,
             cursor: 'pointer',
           }}
         >
-          ANSWER →
+          <span style={{ borderBottom: `1px solid ${INK}`, paddingBottom: 2 }}>ANSWER →</span>
         </button>
       </div>
 

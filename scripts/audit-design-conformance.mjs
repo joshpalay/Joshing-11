@@ -72,15 +72,23 @@ const BASELINE = {
   // settled the last open design call, so the 17 remaining under-floor
   // labelled buttons took .btn-ghost's geometry (inline-flex, min-h-11,
   // centred, px-4) while keeping their own radius and colour.
-  // The remaining 79 are NOT a backlog. They are: 38 the heuristic cannot see
+  // 79 -> 74 on 2026-09-16: the three unreachable Joshing Games components
+  // are RULE_EXEMPT above (4 sites, kept not deleted — see the note there), and
+  // EditorialPromos' mid-sentence "Undo" now grows its hit area with an
+  // absolutely-positioned ::after instead of a min-height, so it clears the
+  // floor without stretching the prose line box.
+  // The remaining 74 are NOT a backlog. They are: 38 the heuristic cannot see
   // (the class lives in a shared const or outside its 7-line window), 11 whose
   // size is owned by a caller's className prop, ~14 already over the floor via
   // padding or inline style the heuristic cannot add up, and a short list of
   // ratified small controls — chip-dismiss glyphs (§1.4), the Switch track,
-  // the KnowledgeBubbleMap breadcrumb (also R8-exempt), and two text actions
-  // that CANNOT take the floor without breaking their own layout (see §9.1).
+  // and the KnowledgeBubbleMap breadcrumb (also R8-exempt).
+  // The two text actions that could not take the floor by min-height BOTH now
+  // clear it by other means (§9.1): InlineAnswerFlow moved its underline to an
+  // inner span, EditorialPromos grew an ::after hit area. InlineAnswerFlow is
+  // still counted because its 44px is an inline style the regex cannot read.
   // This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 79,
+  R10: 74,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────
@@ -121,7 +129,25 @@ const RULE_EXEMPT = {
   // desktop-and-mouse tools with one operator, and padding their dense data
   // tables to 44px would make them worse, not more accessible. Directory
   // prefixes, so a new admin screen is covered without editing this list.
-  R10: ['src/app/admin/', 'src/components/dev/'],
+  //
+  //  Three Joshing Games components are also not player surface, because they
+  //  no longer render to a player: `/games/[id]` redirects home (B-10.1, the
+  //  2026-08-30 SOFT sunset). They are exempt rather than deleted, deliberately:
+  //  the sunset kept the API routes and tables so a revival is a git restore,
+  //  and D-AREA-EXPANSION-01 (SETTLED, ready for B-AREA-EXPANSION-01) names
+  //  `CompletedRecapHeader` in game-details-mode-sections.tsx as built
+  //  infrastructure it plans to reuse. A static import scan calls these dead;
+  //  the decision record does not. If Games is ever hard-sunset, delete the
+  //  files and these three lines together.
+  //  NOTE: `games/QuestionRatingButtons.tsx` is NOT here — /archive renders it,
+  //  so it is live player surface and stays in the count.
+  R10: [
+    'src/app/admin/',
+    'src/components/dev/',
+    'src/components/games/FirstGamePanel.tsx',
+    'src/components/games/game-details-mode-sections.tsx',
+    'src/components/games/interpretive-sections.tsx',
+  ],
 };
 
 // An entry is either an exact path or a directory prefix ending in `/`.
