@@ -23,8 +23,14 @@ function formatPhoneForDisplay(e164: string): string {
 
 const CARD_CLASS =
   'w-full max-w-sm rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-12 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5';
+// `placeholder:text-muted-foreground` matters more here than on most inputs:
+// the code field's placeholder ("000000") is itself a plausible 6-digit
+// value, and without an explicit muted color it inherited this class's full-
+// opacity `text-[var(--brand-navy)]`, making an empty field look pre-filled
+// (QA walkthrough, 2026-09-15 — submitting untouched produced a confusing
+// "Enter the 6-digit code" error).
 const INPUT_CLASS =
-  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] transition-colors focus:border-[var(--brand-navy)]';
+  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] placeholder:text-muted-foreground transition-colors focus:border-[var(--brand-navy)]';
 // The login submit IS the canonical primary CTA — it always shared
 // --btn-primary-bg, the bold base type and the 0.04em tracking with
 // `.btn-primary`, and diverged only on height (44 vs the old recipe's 48).
@@ -109,6 +115,14 @@ type LoginPanelProps = {
   previewDeadEnd?: boolean;
   // Dev-preview only: render a later sign-up state without sending an OTP.
   previewStep?: Step;
+  // Dev-preview only (`/dev/invite-login`): disarms every submit handler that
+  // would otherwise hit a real auth/account endpoint (request-otp, verify-otp,
+  // the profile PATCHes). Without this the "look-only" preview was really just
+  // the genuine LoginPanel with live wiring — entering any real, reachable
+  // phone + code (e.g. one of the AUTH_OTP_BYPASS numbers) completed an actual
+  // login and silently swapped the tab's session to that account (QA
+  // walkthrough, 2026-09-15). Never passed by the production login page.
+  previewMode?: boolean;
 };
 
 type Step = 'phone' | 'code' | 'profile';
@@ -222,6 +236,7 @@ export default function LoginPanel({
   inviteContext = null,
   previewDeadEnd = false,
   previewStep = 'phone',
+  previewMode = false,
 }: LoginPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -419,6 +434,11 @@ export default function LoginPanel({
       return;
     }
 
+    // Look-only: never send a real OTP or advance past this screen. Advancing
+    // would invite typing a real, reachable number here and completing an
+    // actual send — see the `previewMode` doc comment on LoginPanelProps.
+    if (previewMode) return;
+
     if (invitationToken || userInvite) sendTelemetry('friend_invite_auth_started');
 
     setLoading(true);
@@ -468,6 +488,12 @@ export default function LoginPanel({
       setError('Enter the 6-digit code.');
       return;
     }
+
+    // Look-only: never verify a real code or establish a real session — this
+    // is the exact step that could otherwise log the viewer into whatever
+    // real account the entered phone+code belongs to. See the `previewMode`
+    // doc comment on LoginPanelProps.
+    if (previewMode) return;
 
     setLoading(true);
     try {
@@ -573,6 +599,10 @@ export default function LoginPanel({
       setError('Please wait until we confirm that username is available.');
       return;
     }
+
+    // Look-only: never PATCH a real account. See the `previewMode` doc
+    // comment on LoginPanelProps.
+    if (previewMode) return;
 
     setLoading(true);
     try {

@@ -585,11 +585,15 @@
 
 /* Rotating loader copy — each phrase fades up, holds, then fades away just as
    the next one mounts. Duration is mirrored by MESSAGE_CYCLE_MS in
-   LoadingScreen.tsx; keep the two in sync. */
+   LoadingScreen.tsx; keep the two in sync. The 8%/92% edges (was 14%/86%,
+   QA walkthrough 2026-09-15) trade a slightly snappier crossfade for a
+   shorter low-contrast dwell — the copy is legible-but-faint for ~256ms per
+   edge instead of ~448ms, while still reading as a soft fade rather than a
+   hard cut. */
 @keyframes loading-message {
   0%   { opacity: 0; transform: translate(-50%, 4px); }
-  14%  { opacity: 1; transform: translate(-50%, 0); }
-  86%  { opacity: 1; transform: translate(-50%, 0); }
+  8%   { opacity: 1; transform: translate(-50%, 0); }
+  92%  { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, -4px); }
 }
 

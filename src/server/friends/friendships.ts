@@ -433,3 +433,39 @@ export async function upsertInvitationFriendship(
       })
   }
 }
+
+/**
+ * Tell both sides an invite-formed friendship just landed. Every OTHER
+ * friendship-forming path (public auto-approve, request accept) writes a
+ * `follow_mutual` card to at least one side; invitation acceptance
+ * (`upsertInvitationFriendship`) wrote none, so a friend appeared with zero
+ * feed/notification trace — a real gap the invite-is-the-consent design never
+ * meant to include, just never got around to (QA walkthrough, 2026-09-15).
+ * Call AFTER the friendship write commits: best-effort like
+ * `backfillInviterFeedItems`, so a notification hiccup can never undo or
+ * block an otherwise-successful accept.
+ */
+export async function notifyInvitationFriendshipFormed({
+  inviterUserId,
+  inviteeUserId,
+}: {
+  inviterUserId: string
+  inviteeUserId: string
+}): Promise<void> {
+  await Promise.all([
+    writeActivity({
+      userId: inviterUserId,
+      type: 'follow_mutual',
+      actorUserId: inviteeUserId,
+      referenceId: inviteeUserId,
+      referenceType: 'invitation_friendship',
+    }),
+    writeActivity({
+      userId: inviteeUserId,
+      type: 'follow_mutual',
+      actorUserId: inviterUserId,
+      referenceId: inviterUserId,
+      referenceType: 'invitation_friendship',
+    }),
+  ])
+}

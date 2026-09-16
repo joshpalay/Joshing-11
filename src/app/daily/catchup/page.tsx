@@ -158,7 +158,14 @@ export default function DailyCatchupPage() {
             style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
           >
             <p className="font-serif text-lg text-[var(--text)]">{CATCH_UP_EMPTY_COPY}</p>
-            <button type="button" className="btn-primary mt-4" onClick={() => router.push('/')}>
+            <button
+              type="button"
+              className="btn-primary mt-4"
+              onClick={() => {
+                router.push('/')
+                router.refresh()
+              }}
+            >
               Back home
             </button>
           </div>
@@ -168,7 +175,17 @@ export default function DailyCatchupPage() {
             remainingCount={remainingCount}
             nextBatchSize={nextBatchSize}
             onPlayNext={startNextBatch}
-            onHome={() => router.push('/')}
+            // `router.refresh()` alongside the push: Home's activity feed (the
+            // From Friends milestone cards, "N of M questions" remaining) is
+            // server-rendered from the same buildActivityStream call /activities
+            // uses, but a bare client-side push can serve Home's cached RSC
+            // payload from before this round was answered — showing the bundle
+            // as still-fully-unplayed while a fresh /activities load correctly
+            // shows it consumed (QA walkthrough, 2026-09-15).
+            onHome={() => {
+              router.push('/')
+              router.refresh()
+            }}
           />
         ) : (
           <>

@@ -173,9 +173,18 @@ export default function DailySummaryPage() {
         event.preventDefault()
         interstitialFiredRef.current = true
         setInterstitialOpen(true)
+        return
       }
+      // Home's activity feed (the From Friends milestone cards, "N of M
+      // questions" remaining) is server-rendered from the same
+      // buildActivityStream call /activities uses, but a plain Link nav can
+      // land on Home's cached RSC payload from before this round was played —
+      // showing stale progress until refreshed (QA walkthrough, 2026-09-15).
+      // Kicking the refresh alongside the Link's own navigation busts that
+      // cache so Home re-renders with today's answers already reflected.
+      router.refresh()
     },
-    [summary],
+    [summary, router],
   )
 
   if (loading) {
@@ -359,7 +368,14 @@ export default function DailySummaryPage() {
       {interstitialOpen ? (
         <ReminderInterstitial
           phoneNumber={summary.phoneNumber}
-          onProceed={() => router.push('/')}
+          // router.refresh() forces Home to re-render with fresh server data —
+          // without it a client-side push can land on Home's cached RSC payload
+          // from before today's round was played, showing stale progress on the
+          // From Friends milestone cards (QA walkthrough, 2026-09-15).
+          onProceed={() => {
+            router.push('/')
+            router.refresh()
+          }}
         />
       ) : null}
     </main>

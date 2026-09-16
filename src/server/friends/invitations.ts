@@ -6,7 +6,10 @@ import { maskPhoneE164 } from '@/lib/phone-e164';
 import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links';
 import { activityItems, db, friendInvitations, users } from '@/server/db';
 import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed';
-import { upsertInvitationFriendship } from '@/server/friends/friendships';
+import {
+  notifyInvitationFriendshipFormed,
+  upsertInvitationFriendship,
+} from '@/server/friends/friendships';
 import { hashTelemetryValue, logTelemetry } from '@/server/telemetry';
 
 export const INVITATION_ACCEPTANCE_ERROR_MESSAGE = 'This invitation could not be accepted.';
@@ -743,6 +746,14 @@ export async function acceptFriendInvitation({
   // invitation and never on subsequent logins. Best-effort internally — it
   // cannot throw, so it can't affect the accepted result.
   await backfillInviterFeedItems({
+    inviterUserId: invitation.inviterUserId,
+    inviteeUserId,
+  });
+
+  // Both sides just became friends with no accept/decline step of their own —
+  // the invite was the consent, but neither party otherwise learns the
+  // connection formed. Best-effort, same posture as the backfill above.
+  await notifyInvitationFriendshipFormed({
     inviterUserId: invitation.inviterUserId,
     inviteeUserId,
   });

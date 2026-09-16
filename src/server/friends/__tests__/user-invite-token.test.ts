@@ -58,11 +58,13 @@ const {
   attributeInviteLinkJoinMock,
   getJoinedInviteLinkMock,
   upsertInvitationFriendshipMock,
+  notifyInvitationFriendshipFormedMock,
 } = vi.hoisted(() => ({
   findLiveInviteLinkByTokenMock: vi.fn(),
   attributeInviteLinkJoinMock: vi.fn(async () => {}),
   getJoinedInviteLinkMock: vi.fn(),
   upsertInvitationFriendshipMock: vi.fn(async () => {}),
+  notifyInvitationFriendshipFormedMock: vi.fn(async () => {}),
 }));
 
 vi.mock('@/server/db', () => ({
@@ -92,6 +94,7 @@ vi.mock('@/server/feed/backfill-inviter-feed', () => ({
 
 vi.mock('@/server/friends/friendships', () => ({
   upsertInvitationFriendship: upsertInvitationFriendshipMock,
+  notifyInvitationFriendshipFormed: notifyInvitationFriendshipFormedMock,
 }));
 
 import {
@@ -379,6 +382,13 @@ describe('acceptUserInviteLink', () => {
 
     expect(result).toEqual({ accepted: true });
     expect(attributeInviteLinkJoinMock).toHaveBeenCalledWith('invitee-1', 'link-1');
+    // Both sides learn the connection formed — this consent-free path used to
+    // create a friendship with zero feed/notification trace (QA walkthrough,
+    // 2026-09-15).
+    expect(notifyInvitationFriendshipFormedMock).toHaveBeenCalledWith({
+      inviterUserId: 'inviter-1',
+      inviteeUserId: 'invitee-1',
+    });
   });
 
   it('a failed attribution never undoes an otherwise-successful accept', async () => {
