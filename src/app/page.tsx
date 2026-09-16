@@ -7,7 +7,6 @@ import TodaysFiveCard, {
 } from '@/components/TodaysFiveCard'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
-import { AddTopicHomeCard } from '@/components/home/AddTopicHomeCard'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
 import { MutualFriendSuggestionsTeaser } from '@/components/home/MutualFriendSuggestionsTeaser'
@@ -133,10 +132,10 @@ export default async function Home() {
           </span>
         </div>
 
-        {/* Add a topic — a lightweight seed-a-Daily-Five entry point, placed
-            just above the activity feed (Recent activity lives in the feed).
-            Signed-in only; the full manage surface is /daily/setup. */}
-        {session ? <AddTopicHomeCard /> : null}
+        {/* "Add a topic" is no longer pinned here: it used to sit above the feed
+            on every visit and push the real content down. It now rides IN the
+            feed as an editorial interlude alongside the other discovery promos,
+            so it scrolls past instead of crowding (see AddATopicFeature). */}
 
         <section id="feed" data-tour="foryou">
           {session ? (

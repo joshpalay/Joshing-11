@@ -59,6 +59,7 @@ vi.mock('@/components/feed/EditorialPromos', () => ({
   CommonGroundFeature: () => <div>PANEL:common_ground</div>,
   GrowYourCircleFeature: () => <div>PANEL:add_friends</div>,
   RecentlyExpandingFeature: () => <div>PANEL:recently_expanding</div>,
+  AddATopicFeature: () => <div>PANEL:add_topic</div>,
 }))
 
 import FeedList from '@/components/FeedList'
