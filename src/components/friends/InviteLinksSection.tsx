@@ -324,14 +324,14 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
                 <button
                   type="button"
                   onClick={() => openEdit(link)}
-                  className="min-h-10 text-sm font-medium text-[var(--brand-navy)] underline decoration-transparent underline-offset-4 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+                  className="inline-flex items-center min-h-11 text-sm font-medium text-[var(--brand-navy)] underline decoration-transparent underline-offset-4 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={() => setPendingDeleteId(link.id)}
-                  className="text-destructive focus-visible:outline-destructive min-h-10 text-sm font-medium underline decoration-transparent underline-offset-4 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2"
+                  className="inline-flex items-center text-destructive focus-visible:outline-destructive min-h-11 text-sm font-medium underline decoration-transparent underline-offset-4 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2"
                 >
                   Delete
                 </button>

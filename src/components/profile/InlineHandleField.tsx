@@ -177,7 +177,7 @@ export function InlineHandleField({
       <button
         type="button"
         aria-label="Edit username"
-        className="group/edit flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-muted/40"
+        className="min-h-11 group/edit flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-muted/40"
         onClick={beginEdit}
       >
         <span>{trimmed.length > 0 ? `@${trimmed}` : 'Pick a username'}</span>

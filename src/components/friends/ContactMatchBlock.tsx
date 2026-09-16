@@ -177,7 +177,7 @@ export function ContactMatchBlock({
             type="button"
             onClick={() => void matchContacts()}
             disabled={matching}
-            className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4"
+            className="inline-flex items-center min-h-11 text-muted-foreground hover:text-foreground text-sm underline underline-offset-4"
           >
             {matching ? 'Refreshing…' : 'Refresh ↻'}
           </button>

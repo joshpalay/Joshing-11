@@ -194,7 +194,7 @@ function InterestToggleChip({
           type="button"
           onClick={onToggle}
           disabled={disabled}
-          className="font-semibold text-[var(--brand-navy)] underline disabled:opacity-50"
+          className="inline-flex items-center min-h-11 font-semibold text-[var(--brand-navy)] underline disabled:opacity-50"
           aria-label={`Undo removing ${interest.domain}`}
         >
           Undo

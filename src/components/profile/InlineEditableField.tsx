@@ -224,7 +224,7 @@ export function InlineEditableField({
       <button
         type="button"
         aria-label={`Edit ${label.toLowerCase()}`}
-        className="group/edit flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-muted/40"
+        className="min-h-11 group/edit flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-muted/40"
         onClick={beginEdit}
       >
         {trimmed.length > 0 ? (

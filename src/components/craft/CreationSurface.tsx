@@ -126,7 +126,7 @@ export function CreationSurface({
       <button
         type="button"
         onClick={onBack}
-        className="text-muted-foreground mb-3 inline-flex min-h-9 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="text-muted-foreground mb-3 inline-flex min-h-11 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         ← back
       </button>
@@ -486,7 +486,7 @@ function OwnQuestionCard({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="text-muted-foreground text-xs underline-offset-2 hover:underline"
+          className="inline-flex items-center min-h-11 text-muted-foreground text-xs underline-offset-2 hover:underline"
         >
           close
         </button>

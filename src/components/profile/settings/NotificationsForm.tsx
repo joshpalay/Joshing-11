@@ -349,7 +349,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
                 </div>
                 <button
                   type="button"
-                  className="text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
+                  className="inline-flex items-center min-h-11 text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
                   onClick={() => void sendPhoneVerificationCode()}
                   disabled={sendingPhoneCode}
                 >
@@ -383,7 +383,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
             {hasVerifiedEmail && !editingEmail ? (
               <button
                 type="button"
-                className="mt-2 self-start text-xs font-medium underline-offset-2 hover:underline"
+                className="inline-flex items-center min-h-11 mt-2 self-start text-xs font-medium underline-offset-2 hover:underline"
                 onClick={startEditingEmail}
               >
                 Change email
@@ -432,7 +432,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
             {editingEmail ? (
               <button
                 type="button"
-                className="text-muted-foreground text-sm underline-offset-2 hover:underline disabled:opacity-50"
+                className="inline-flex items-center min-h-11 text-muted-foreground text-sm underline-offset-2 hover:underline disabled:opacity-50"
                 onClick={cancelEditingEmail}
                 disabled={savingEmail}
               >
@@ -451,7 +451,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
             </p>
             <button
               type="button"
-              className="text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
+              className="inline-flex items-center min-h-11 text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
               onClick={() => void resendEmail()}
               disabled={resending || resendCooldown > 0}
             >

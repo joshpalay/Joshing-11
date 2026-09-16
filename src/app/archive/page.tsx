@@ -296,7 +296,7 @@ export default function ArchivePage() {
             ))}
             <button
               type="button"
-              className="text-xs font-medium text-muted-foreground underline underline-offset-2"
+              className="inline-flex items-center min-h-11 text-xs font-medium text-muted-foreground underline underline-offset-2"
               onClick={() => {
                 setSource('');
                 setDomain('');

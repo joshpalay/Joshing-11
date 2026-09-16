@@ -258,7 +258,7 @@ export default function DomainDetailPage() {
                 >
                   <button
                     type="button"
-                    className="block w-full text-left"
+                    className="block min-h-11 w-full text-left"
                     onClick={() => setExpandedAnswerId(expanded ? null : answer.id)}
                     aria-expanded={expanded}
                   >

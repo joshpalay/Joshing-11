@@ -61,7 +61,7 @@ export function ViaAttribution({ answerers }: { answerers: ViaAnswerer[] }) {
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
             aria-expanded={expanded}
-            className="font-medium text-[var(--brand-ink-700)] underline decoration-[var(--brand-rule)] underline-offset-2 hover:decoration-[var(--brand-ink)]"
+            className="inline-flex items-center min-h-11 font-medium text-[var(--brand-ink-700)] underline decoration-[var(--brand-rule)] underline-offset-2 hover:decoration-[var(--brand-ink)]"
           >
             {expanded ? 'Show less' : `${answerers.length} friends answered`}
           </button>

@@ -427,7 +427,7 @@ export function ReformulationOption({ text, onUse }: { text: string; onUse: () =
     <button
       type="button"
       onClick={onUse}
-      className="block w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
+      className="block min-h-11 w-full rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
     >
       <span className="block">{text}</span>
     </button>
@@ -1090,7 +1090,7 @@ export function QuestionForm({
                                 type="button"
                                 onClick={() => dispatch({ type: 'TOGGLE_FRIEND', id: friend.id })}
                                 aria-pressed={selected}
-                                className="flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/60"
+                                className="min-h-11 flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/60"
                               >
                                 <span className={['inline-flex size-4 items-center justify-center rounded-sm border', selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'].join(' ')}>
                                   {selected ? <span aria-hidden className="text-[10px] leading-none">✓</span> : null}

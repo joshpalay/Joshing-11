@@ -36,7 +36,7 @@ export function DismissedFeedBar({
             type="button"
             disabled={disabled}
             onClick={onUndo}
-            className="text-foreground text-xs font-medium underline-offset-4 hover:underline disabled:opacity-50"
+            className="inline-flex items-center min-h-11 text-foreground text-xs font-medium underline-offset-4 hover:underline disabled:opacity-50"
           >
             Undo
           </button>

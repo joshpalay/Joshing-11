@@ -80,7 +80,7 @@ export function BlockedList({ initialItems }: { initialItems: BlockedListItem[] 
               type="button"
               onClick={() => void handleUnblock(item.id)}
               disabled={pendingId === item.id}
-              className="text-muted-foreground text-sm underline-offset-4 hover:underline"
+              className="inline-flex items-center min-h-11 text-muted-foreground text-sm underline-offset-4 hover:underline"
             >
               {pendingId === item.id ? 'Unblocking…' : 'Unblock'}
             </button>

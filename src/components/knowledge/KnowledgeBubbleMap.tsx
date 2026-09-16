@@ -280,7 +280,7 @@ export function KnowledgeBubbleMap({
                       setSelectedId(null);
                       setFocusId(node.data.id);
                     }}
-                    className="font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex items-center min-h-11 font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     style={{ color: 'var(--brand-ink-700)' }}
                   >
                     {node.data.id === 'root' ? rootTitle : node.data.name}

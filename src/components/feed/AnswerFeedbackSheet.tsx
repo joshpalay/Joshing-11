@@ -372,7 +372,7 @@ export function AnswerFeedbackSheet({
                   <button
                     type="button"
                     onClick={() => void handleUndo()}
-                    className="font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
+                    className="inline-flex items-center min-h-11 font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
                   >
                     Undo
                   </button>

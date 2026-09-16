@@ -646,7 +646,7 @@ export default function WelcomeTourScreen({
               </button>
               <button
                 type="button"
-                className="mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
+                className="inline-flex items-center min-h-11 mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
                 onClick={() => finish(exploreHref)}
               >
                 Skip the tour
@@ -678,7 +678,7 @@ export default function WelcomeTourScreen({
               {!postGame ? (
                 <button
                   type="button"
-                  className="mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
+                  className="inline-flex items-center min-h-11 mt-3 text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-[var(--brand-ink)]"
                   onClick={() => finish(exploreHref)}
                 >
                   I&apos;ll explore more first

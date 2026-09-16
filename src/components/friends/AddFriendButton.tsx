@@ -220,7 +220,7 @@ export function AddFriendButton({
                   co-equal CTA. */}
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground self-center text-xs underline underline-offset-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45"
+                className="inline-flex items-center min-h-11 text-muted-foreground hover:text-foreground self-center text-xs underline underline-offset-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45"
                 onClick={handleRemove}
                 disabled={pendingAction !== null}
               >

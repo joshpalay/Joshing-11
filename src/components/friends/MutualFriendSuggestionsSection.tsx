@@ -133,7 +133,7 @@ export function MutualFriendSuggestionsSection({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="focus-visible:ring-ring text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="inline-flex items-center min-h-11 focus-visible:ring-ring text-sm font-medium text-[var(--brand-ink-400)] underline underline-offset-4 hover:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           See more
         </button>

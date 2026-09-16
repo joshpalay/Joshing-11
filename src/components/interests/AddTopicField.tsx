@@ -461,7 +461,7 @@ export function AddTopicField({
                   void runQueue();
                 }}
                 disabled={busy}
-                className="font-medium underline underline-offset-2 disabled:opacity-50"
+                className="inline-flex items-center min-h-11 font-medium underline underline-offset-2 disabled:opacity-50"
               >
                 {`Skip and add the rest`}
               </button>

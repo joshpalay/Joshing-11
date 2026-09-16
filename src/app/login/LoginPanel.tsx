@@ -42,8 +42,12 @@ const SUBMIT_CLASS = 'btn-primary w-full';
 // Quiet secondary action (e.g. "this number is not correct" / "go back"): a
 // muted, sentence-case text link. Deliberately understated so it doesn't
 // compete with the primary button or flood the card with orange caps.
+// §3.7 + §9.1: `flex w-fit` rather than `block` so the 44px floor can come
+// from min-h-11 with the label centred in it — a block button would put the
+// extra height below the text. `flex` is still block-level, so `mx-auto`
+// keeps centring it.
 const SUBTLE_LINK_CLASS =
-  'mx-auto block text-sm leading-5 text-black/55 underline underline-offset-4 transition-colors hover:text-black/80 disabled:opacity-60';
+  'mx-auto flex min-h-11 w-fit items-center justify-center text-sm leading-5 text-black/55 underline underline-offset-4 transition-colors hover:text-black/80 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {

@@ -192,7 +192,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
                     type="button"
                     onClick={() => restore(question)}
                     disabled={busy}
-                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+                    className="min-h-11 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
                   >
                     <Undo2 className="size-3.5" aria-hidden="true" />
                     Restore
@@ -260,7 +260,7 @@ export function RecoveredDeck({ deck: initialDeck, dismissed: initialDismissed, 
                     type="button"
                     onClick={dismissCurrent}
                     disabled={busy}
-                    className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+                    className="inline-flex items-center min-h-11 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
                   >
                     Dismiss — take it out of circulation
                   </button>

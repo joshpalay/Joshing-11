@@ -75,7 +75,7 @@ function MenuButton({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className="text-foreground hover:bg-muted flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50"
+      className="text-foreground hover:bg-muted flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -208,7 +208,7 @@ export function FeedOverflowMenu({
                   role="menuitem"
                   disabled={disabled}
                   onClick={wrapAction(onReportIncorrect)}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
                 >
                   This is incorrect
                 </button>
@@ -217,7 +217,7 @@ export function FeedOverflowMenu({
                   role="menuitem"
                   disabled={disabled}
                   onClick={wrapAction(onReportInappropriate)}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm transition disabled:opacity-50"
                 >
                   This is inappropriate
                 </button>
