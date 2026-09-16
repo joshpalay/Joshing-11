@@ -86,7 +86,7 @@ import { getExpansionParents } from '@/server/knowledge/open-domain';
 import { getOrBuildDomainRungs } from '@/server/knowledge/nearness-tree';
 import { getHeldDomainKeys } from '@/server/db/queries/nearness-overlay';
 import { getDurablePoolDepthForDomains } from '@/server/db/queries/retrieval-demand';
-import { getServableBankFactKeys } from '@/server/db/queries/pool';
+import { getServableBankFactKeys, getServableBankFacts } from '@/server/db/queries/pool';
 import { getBankLabelIndex, reconcileBankDomain } from '@/server/questions/reconcile-bank-domain';
 import { resolveFinestNode } from '@/server/knowledge/graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
@@ -98,7 +98,7 @@ import {
   selectCustomDomainsForRound,
 } from '@/server/daily/domain-selection';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
-import { ANSWER_COOLDOWN_DAYS, answerCooldownKey } from '@/server/daily/answer-cooldown';
+import { ANSWER_COOLDOWN_DAYS, answerCooldownKey, sameFactAnswerKey } from '@/server/daily/answer-cooldown';
 import { SUBJECT_COOLDOWN_DAYS, entityKey } from '@/server/daily/subject-cooldown';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
@@ -173,12 +173,12 @@ NEVER generate multiple-choice questions. Do not list candidate answers inside t
 NEVER name the answer in the question_text. The answer (or a near-paraphrase of it) must not appear anywhere in the setup — if the very term you are asking the player to produce shows up in your own phrasing, the question gives itself away. Rephrase so it doesn't. E.g. do NOT ask "what term describes the mental model a user forms…" when the answer is "mental model".
 
 BAD (multiple-choice phrasing — never produce these):
-- "Which of the following best describes Sally — a romantic rival, a radical free spirit, or a steadying maternal figure?"
+- "Which of the following best describes Mrs. Danvers in Rebecca — a loyal housekeeper, a grieving friend, or a jealous saboteur?"
 - "Was the symphony premiered in 1888, 1893, or 1901?"
 
 GOOD (open recall):
-- "What does Sally Seton represent to the young Clarissa in Mrs. Dalloway?"
-- "What does the madeleine awaken in the narrator of In Search of Lost Time?"
+- "In Rebecca, which room at Manderley does Mrs. Danvers keep exactly as its dead mistress left it?"
+- "In Great Expectations, what does Miss Havisham still wear decades after being jilted?"
 
 TRIVIA-OF-TRIVIA RULE:
 Prefer questions of substance — "what is X", "what does X mean", "why does X matter", "who did X" — over questions of mere recall — "what year", "what number", "what label". A date, a count, or a name is worth asking only when that specific fact is itself meaningful; a question that lands on substance is almost always the better question. Lead with the idea, not the index card.
@@ -188,17 +188,17 @@ The single largest source of broken questions is a FALSE CLAIM smuggled into the
 - QUANTITATIVE — a count, date, year, ordinal, or superlative/exclusivity claim ("fifty points", "the largest", "the first", "the only", "exactly three", "founded", "premiered in 1888").
 - QUALITATIVE / RELATIONAL — a characterization or causal/derivational link asserted as fact ("its unusual four-movement structure", "a rule that bars volleying before the ball crosses the net", "a transformation that draws on the ancient dragon").
 RULE: assert in the setup ONLY what the question actually needs the player to lean on, and only what you are certain is true. If a fact is not essential to the ask, CUT it. When you must include framing, prefer evocative, atmospheric description (which carries no factual claim) over a pile of stated counts, superlatives, and attributions. One clause of framing is enough. Length is not a virtue: a longer setup is more places for a wrong side-fact to hide AND more chances to describe the answer outright (see Rule 3c below) — a short question with no wrong number and no self-definition is the safe one.
-- BAD (false, unnecessary superlative): "Dumbledore makes last-minute point awards that overturn Slytherin's lead. Which student receives fifty points — the largest single award in that sequence — for standing up to his friends?" → the "fifty points / largest single award" claim is both decorative and false (it was ten points, and the largest award went to someone else); the question works without it.
-- GOOD (same answer, no asserted side-fact): "At the end-of-year feast in Harry's first year, which student does Dumbledore award points to 'for standing up to his friends'?" → "Neville Longbottom"
+- BAD (false, unnecessary side-fact): "Jane Eyre spends eight years at Lowood, a charity school where her only friend dies in the typhus epidemic that sweeps through it. What is that friend's name?" → the typhus claim is decorative AND false (the friend dies of consumption; the typhus outbreak kills other girls), and "eight years" is a second checkable number the ask never needed; the question works without either.
+- GOOD (same answer, no asserted side-fact): "In Jane Eyre, which schoolfriend does Jane climb into bed beside on the night the girl dies at Lowood?" → "Helen Burns"
 THE SAME FLOOR APPLIES TO THE EXPLAINER, NOT JUST THE SETUP: the explainer is fact-checked exactly like the question, and one wrong decorative aside in it — a date, a count, an adjacent work, an attribution the answer never needed — demotes the WHOLE question even when the ask and answer are perfect. Every factual claim you put in the explainer must be load-bearing to understanding the answer AND independently checkable. If you are not certain of an incidental detail (the exact year, "the first", who directed the adaptation, what else the author wrote), leave it OUT — a short explainer that only restates why the answer is right is safer than a rich one that smuggles in a wrong "1973". Prefer under-claiming to a decorative aside.
 
 ASK ONLY WHAT THE SOURCE SETTLES (presupposition floor — ALL tiers):
 The rule above governs what your setup ASSERTS. This one governs what your question PRESUPPOSES. A question can assert nothing false and still be broken, because the interrogative smuggles in a claim of its own: "which X did Y choose" presupposes that Y chose one; "what kind of X do they plan" presupposes a settled plan. If the source RAISES the matter and never RESOLVES it — a question a character asks that no one answers, a debate left open, a possibility floated and dropped, a detail the work pointedly withholds — then there is no answer to key, and the item is broken however the grader is set. Be most suspicious of the source's OWN questions: an interrogative line in the text is a tempting hook precisely because it is famous and memorable, but its content is a set of POSSIBILITIES, not a fact.
 TEST: for every "which X", "what kind of X", "how many X", "the X that…" in your stem, ask — does the work SETTLE this, or does it merely RAISE it? Key only on what is settled.
-- BAD (presupposes a decision the source never makes): "In Shakespeare's Macbeth, the three witches open the play by agreeing to meet again after a battle. In what kind of weather do they plan to reconvene?" → the play's second line — "In thunder, lightning, or in rain?" — is the First Witch's QUESTION; the weather is never decided, so nothing can be keyed correct. Every clause of that setup is nonetheless TRUE, which is why the side-facts rule above does not catch it.
-- GOOD (asks what the same scene DOES settle): "The three witches open Shakespeare's Macbeth by planning where to meet once the battle is done. Whom do they intend to find there?" → "Macbeth"
-- GOOD (asks about the open question AS an open question): "Shakespeare's Macbeth opens with one witch asking when the three will meet again — and naming three possibilities in the same breath. What are they?" → "Thunder, lightning, or rain"
-Note how the BAD example also breaks Rule 3b below by bundling a second ask ("— and with whom?"): a stem that presupposes an unsettled fact often reaches for a second, settled one to feel answerable. Both faults have the same fix — ask the one settled thing.
+- BAD (presupposes a decision the source never makes): "In Frank Stockton's 'The Lady, or the Tiger?', the princess signals her lover toward one of the two arena doors. What does he find when he opens it?" → the story's LAST LINE is that question, put to the reader; the author pointedly never answers it, so nothing can be keyed correct. Every clause of that setup is nonetheless TRUE, which is why the side-facts rule above does not catch it.
+- GOOD (asks what the same story DOES settle): "In 'The Lady, or the Tiger?', who signals to the accused lover which of the two doors to open?" → "the princess"
+- GOOD (asks about the open question AS an open question): "Stockton's 'The Lady, or the Tiger?' ends by refusing to say what came through the door and asking the reader instead. What are the two possibilities the title names?" → "a lady or a tiger"
+Note how a stem that presupposes an unsettled fact often reaches for candidate answers to feel answerable ("— the lady or the tiger?"), breaking the multiple-choice rule above in the same breath. Both faults have the same fix — ask the one settled thing.
 
 FAN-SALIENCE RULE (Rule 1 — tier-dependent):
 Do NOT default to the most nameable entity in a work — the character roster, the title, the principal location. Those are wiki-salient (easy to look up, dull to be asked). Chase fan-salient facts instead: the thing a devoted fan of THIS specific work would be delighted to be recognized for knowing — the rewatch-catch, the running joke, the exact wording of a famous line, the specific beat or object fans hold onto. Apply by difficulty tier:
@@ -206,47 +206,47 @@ Do NOT default to the most nameable entity in a work — the character roster, t
 - accessible: fan-salience is STILL REQUIRED — but at the ANGLE, not the difficulty. An accessible question may be answerable by a casual player who has merely brushed against the work; that is fine and intended. What it may NOT be is the roster/title/location lead — "what is the hero's name", "what planet is he from", "who composed it", "what city is it set in". Those are the encyclopedia's first line, and they are the single most common way an accessible question goes generic. Instead pick the WELL-KNOWN fact a fan would also be proud of: the catchphrase, the iconic object, the famous scene beat, the running gag everyone quotes, the line on the poster. Easy AND specific is the target; easy and generic is a failure. Do NOT satisfy this by making the question harder — if the only fan-salient angle you can find is obscure, that fact is not accessible and belongs at a higher tier; find a different well-known fact instead. Do not strain or contort a simple fact to manufacture delight; choose a different fact.
 
 WHAT "accessible" MEANS (difficulty_estimate calibration — person-anchored, not domain-anchored):
-Accessible = a random adult with NO particular interest in this domain could plausibly answer it from school, headlines, or everyday life. The most famous fact WITHIN a niche field is still NOT accessible if outsiders have never met it. For the domain "Renaissance Florence": "Florence is the capital of which Italian region?" (Tuscany) is accessible; "Who engineered the double-shell dome of Florence Cathedral?" (Brunelleschi) is NOT — that is the field's own landmark, famous inside it and unknown outside it, so label it moderate or specialist.
-For a fandom domain the same rule applies via cultural osmosis: accessible is what someone who has merely brushed against the franchise knows ("In the Zelda games, what is the hero's name?" → Link), NOT the fandom's own famous moments ("Which sage accompanies you in the Water Temple?") — those are moderate/specialist however central fans consider them. A niche domain may support only a FEW genuinely accessible questions; that is fine — do not stretch the label to fill a quota.
+Accessible = a random adult with NO particular interest in this domain could plausibly answer it from school, headlines, or everyday life. The most famous fact WITHIN a niche field is still NOT accessible if outsiders have never met it. For the domain "Ancient Egypt": "The Nile empties into which sea?" (the Mediterranean) is accessible; "Which pharaoh built the Step Pyramid at Saqqara?" (Djoser) is NOT — that is the field's own landmark, famous inside it and unknown outside it, so label it moderate or specialist.
+For a fandom domain the same rule applies via cultural osmosis: accessible is what someone who has merely brushed against the work knows ("In Jaws, what does Chief Brody say they're going to need?" → a bigger boat), NOT the fandom's own famous details ("In Jaws, what is the name of Quint's boat?" → the Orca) — those are moderate/specialist however central fans consider them. A niche domain may support only a FEW genuinely accessible questions; that is fine — do not stretch the label to fill a quota.
 
 STRIP-THE-DOMAIN TEST (Rule 2 — hard floor, ALL tiers including accessible):
 Before emitting, mentally remove the work's title from the question. If what remains could appear in any generic trivia app, the question is too generic — revise it. The angle, not just the subject, must be specific to the work.
-- PASSES: "In American Psycho, what color is Paul Allen's business card?" — strip the title and the angle is still specific to the work.
-- FAILS: "In Gilmore Girls, what is the name of Rory's first boyfriend?" — strip the title and it is generic teen-romance trivia.
+- PASSES: "In Casablanca, what does Rick say he came to Casablanca for?" — strip the title and the angle ("the waters" — he was misinformed) is still specific to the work.
+- FAILS: "In Jane Eyre, what is the name of the man Jane works for?" — strip the title and it is generic governess-romance trivia.
 
 STRIP-THE-FIELD TEST (Rule 2c — the same floor for DISCIPLINE domains):
-Rule 2 is written for works, and a discipline domain has no title to remove — UX Design, Calculus, Counterpoint, Food Chemistry, Parliamentary Procedure, Mock Trial. So the test above passes vacuously there, and what survives is a textbook definition with the term blanked out. That is the most common way a field question goes generic.
+Rule 2 is written for works, and a discipline domain has no title to remove — Cartography, Chess, Typography, Metallurgy, Maritime Law, Beekeeping. So the test above passes vacuously there, and what survives is a textbook definition with the term blanked out. That is the most common way a field question goes generic.
 TEST: remove the FIELD name instead. If what remains is a dictionary definition of a term, it is too generic, however technical the term sounds.
 FIX: anchor the term to something a practitioner would actually trade — the person whose name is on it, the argument about it, the famous failure that produced it, the specific case where it decided something, the rule of thumb everyone quotes. A field has fans too; ask what THEY would be delighted to be asked.
-- FAILS (definition with the label removed): "In UX design, what term describes the visual cues that suggest to a user how an object should be used?" → strip "UX design" and it is a glossary entry.
-- PASSES (same field, real angle): "In UX design, the ten usability heuristics every design review still cites are named after which researcher?" → Jakob Nielsen.
-- FAILS: "In Western music theory, what term describes a chord built by stacking two intervals of a third?" → a definition of "triad".
-- PASSES: "What is the name of the famously unresolved chord that opens Wagner's Tristan und Isolde?" → the Tristan chord — a term, but attached to the argument fans actually have about it.
+- FAILS (definition with the label removed): "In chess, what term describes capturing a pawn that has just advanced two squares as though it had moved only one?" → strip "chess" and it is a glossary entry for "en passant".
+- PASSES (same field, real angle): "In chess, the 1851 Anderssen–Kieseritzky game, in which White sacrifices both rooks and the queen, is remembered by what name?" → the Immortal Game.
+- FAILS: "In cartography, what term describes a map projection that preserves angles but distorts area?" → a definition of "conformal".
+- PASSES: "Which cartographer's projection is the one that still makes Greenland look the size of Africa?" → Mercator — a term, but attached to the argument map people actually have about it.
 This does NOT mean field questions must be hard. An accessible field question is fine; it just may not be a definition (see Rule 3c).
 
 NAME THE SOURCE (Rule 2b — self-containment, hard floor, ALL tiers):
 The player is shown ONLY your question_text and a BROAD category label (e.g. "Film & Television") — NEVER the specific domain / canonical_subcategory you are generating for. So a question that leans on a specific work, franchise, series, character, or fictional world MUST name that source inside the question_text itself. A reader who has never heard of the domain must still know WHICH work you are asking about. Do not write for a reader who already knows the domain is set — you are the only one who sees it.
-- FAILS (source never named): "At the start of most episodes, Candace notices the boys' project and reaches for her phone. Whom does she call to try to get them busted?" — nothing tells the player this is Phineas and Ferb, so it is unanswerable out of context.
-- PASSES (source named): "In Phineas and Ferb, whom does Candace repeatedly call to try to get her brothers busted?"
+- FAILS (source never named): "Every morning the agent sits at the counter of the Double R Diner and praises the same order to the waitress. What kind of pie does he ask for?" — nothing tells the player this is Twin Peaks, so it is unanswerable out of context.
+- PASSES (source named): "In Twin Peaks, what kind of pie does Agent Cooper order at the Double R Diner?"
 - This is distinct from Rule 2: naming the title is REQUIRED here (self-containment), while Rule 2 forbids the title being the ONLY thing that makes the question specific. A good question names the work AND has a work-specific angle.
 - EXEMPTION: real-world domains whose subject is unambiguous on its own — a country, a science, a historical period, a named public figure — do not need a "source" prefix when the question already identifies what it is about. The rule targets fiction and franchise questions that silently assume the reader knows the property.
 
 ONE CLEAN ANSWER (Rule 3 — ALL tiers):
-The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "he understands the language of birds"), re-aim the question so the answer is crisp (e.g. ask what specific ability the potion grants → "birdsong"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
+The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "the whale rams the ship and everyone drowns except the narrator"), re-aim the question so the answer is crisp (e.g. ask who alone survives the Pequod → "Ishmael"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
 
 DO NOT DEFINE YOUR OWN ANSWER (Rule 3c — hard floor, ALL tiers including accessible):
 A setup that lists every defining property of the answer and then asks "what is that called?" is not a question — it is a definition with the label removed. The recall step is gone; the player is only being asked to attach a name to something you have already fully identified. This is the single most common way an ACCESSIBLE question goes wrong, because "make it easy" gets read as "describe the answer".
 TEST (apply before emitting, every question): strike the interrogative clause and read what is left. If the remaining sentence already picks out exactly one thing in the world — the only city that fits, the only muscle that fits, the only law that fits — you have supplied the definition. Cut the defining properties until real identification work remains, or re-aim at a different angle on the same subject.
-- BAD (definition supplied): "During the Progressive Era, women across the country organized and marched for the right to vote, culminating in a constitutional amendment ratified in 1920. What is this amendment commonly called?" → strike the question and "constitutional amendment + 1920 + women voting" already names the Nineteenth Amendment; nothing is left to recall.
-- GOOD (same subject, recall restored): "Which constitutional amendment did Alice Paul's National Woman's Party picket the White House to win?" → the player must know what Paul was fighting for.
-- NOT this defect: context that narrows a field without settling it ("what is the name of Captain Picard's civilian brother" — knowing he has a brother does not tell you "Robert"). Context is fine; a complete description is not.
+- BAD (definition supplied): "On 14 July 1789 a Paris crowd stormed a royal fortress-prison in the east of the city, an event France now celebrates as its national holiday. What is this event called?" → strike the question and "Paris + 14 July 1789 + fortress-prison + national holiday" already names the storming of the Bastille; nothing is left to recall.
+- GOOD (same subject, recall restored): "How many prisoners did the crowd actually find inside the Bastille when it fell?" → the player must know the famous anticlimax (seven).
+- NOT this defect: context that narrows a field without settling it ("what is the name of Sherlock Holmes's smarter older brother" — knowing he has a brother does not tell you "Mycroft"). Context is fine; a complete description is not.
 An easy question is allowed to be EASY. It is not allowed to answer itself. Do not satisfy the accessible tier by narrating the answer — pick a genuinely well-known fact and ask it plainly instead.
 
 SINGLE ASK (Rule 3b — ALL tiers):
 Ask for exactly ONE thing. A question poses ONE question with ONE answer. NEVER bundle two distinct asks into a single question — no "what is X — and what is Y?", no "who did A, and where did it happen?", no compound joined by "and". If a setup tempts you to ask two things, keep the single better one and cut the other. This is the most common way a question goes wrong: it reads as one sentence but secretly demands two separate facts, so it has no clean single answer.
 - Do not ask the player for a list. The current grader is designed for one main answer.
-- BAD (two asks): "In 'Götterdämmerung,' what vulnerability lets Hagen kill Siegfried with a single thrust — and what is the precise location of that vulnerability on his body?"
-- GOOD (one ask): "In 'Götterdämmerung,' Siegfried's bath in the dragon's blood left one spot unprotected. Where on his body is it?"
+- BAD (two asks): "In Moby-Dick, what is Captain Ahab's false leg made from — and which whale took the original?"
+- GOOD (one ask): "In Moby-Dick, Captain Ahab's false leg is fashioned from what?" → "a sperm whale's jawbone"
 
 NAMED-AUTHORITY RULE (Rule 4 — scoping qualifiers, ALL tiers):
 When you pin a question to a specific jurisdiction, ruleset, edition, organization, version, region, or year ("In Michigan…", "under FIDE rules…", "in the 1st edition…"), the answer you emit MUST be the one correct UNDER THAT named authority — not the more common or default answer. Named specifics frequently override the default on purpose: e.g. Michigan's Rules of Evidence permit wide-open cross-examination, so "beyond the scope of direct" is NOT a valid objection there, though it is under the Federal Rules. If you are not certain how the named authority departs from the default, pick a different angle rather than risk an answer keyed to the generic default.
@@ -255,10 +255,10 @@ RANGE-BOUNDED DOMAIN RULE (Rule 4b — anti-spoiler, ALL tiers):
 When the DOMAIN itself names a bounded range — "Books 1-6", "Seasons 1-3", "the original trilogy", "up to 1945", "Volume 1", "the first film" — the player has DELIBERATELY scoped to that range. Draw questions ONLY from inside it, and NEVER surface a fact, character, reveal, death, or plot twist that first occurs BEYOND the stated bound — doing so spoils the very thing the player fenced off. A later-book reveal ("which parent is secretly a spy") is a spoiler even when true. Treat the range as a hard wall: if you cannot field the question from within the bound, choose a different in-bound fact rather than reach past it. When no range qualifier is present, this rule does not apply.
 
 CALIBRATION PAIRS (generic → fan-salient; study these — concrete pairs calibrate harder than abstract principles):
-- BAD (generic, roster): "In Gilmore Girls, what is the name of Lorelai's dog?" → GOOD (fan-salient, same answer): "Lorelai names her dog after a Canadian crooner — a running gag, since the real musician also haunts her dreams. What's the dog called?" → "Paul Anka"
-- BAD (generic location): "In what city is the Dragonfly Inn located?" → GOOD (accessible, clears strip-the-domain): "Lorelai and Sookie's inn shares the town's quirk of naming businesses after insects. What's it called?" → "the Dragonfly Inn"
-- BAD (generic, title): "In American Psycho, what is the protagonist's name?" → GOOD (specialist, fan-salient): "In American Psycho, what color is Paul Allen's business card?" → "bone"
-- BAD (paragraph answer): "What does Siegfried gain after tasting the dragon's blood?" → "He suddenly understands the language of the birds." → GOOD (one clean answer): "After tasting Fafner's blood, Siegfried can suddenly understand the song of which creatures?" → "birds"
+- BAD (generic, roster): "In Jaws, what is the name of Quint's boat?" → GOOD (fan-salient, same answer): "In Jaws, the shark hunter Quint names his boat after the one sea creature that preys on great whites. What's it called?" → "the Orca"
+- BAD (generic location): "In what city is Rick's café in Casablanca?" → GOOD (accessible, clears strip-the-domain): "In Casablanca, Rick claims he came to the city for something the desert town famously lacks. What?" → "the waters"
+- BAD (generic, title): "In Moby-Dick, what is the narrator's name?" → GOOD (specialist, fan-salient): "In Moby-Dick, what does Queequeg's coffin end up serving as?" → "Ishmael's life-buoy"
+- BAD (paragraph answer): "What happens to the Pequod at the end of Moby-Dick?" → "The white whale rams and sinks it, and every man aboard drowns except the narrator." → GOOD (one clean answer): "In Moby-Dick, who alone survives the sinking of the Pequod?" → "Ishmael"
 - GOOD reference (already on-target, specialist): the unproduced Dungeons & Dragons animated finale that fans still trade the script of → "Requiem"
 
 STYLE EXEMPLARS (match this register, specificity, and concision):
@@ -272,33 +272,34 @@ THE EXAMPLES IN THESE INSTRUCTIONS ARE NOT A QUESTION BANK (hard floor, ALL tier
 Every illustration above and below — the exemplars, the GOOD/BAD pairs, the calibration pairs, the rule demonstrations — is built on a REAL fact about a real work. They are here to show you the SHAPE of a good question, never to supply its content. Reaching for one is the laziest possible failure: you would be handing back the instruction sheet.
 This applies with special force to the BAD examples. A fact used to demonstrate a defect is still off limits when you fix the defect — the fact was never the point.
 Never build a question around any of these subjects, which appear as examples somewhere in these instructions:
-- Mrs. Lovett's pie filling; Neville Longbottom's house points at the end-of-year feast; Candace calling her mother to report her brothers; Big Ben's chimes in Mrs. Dalloway; Sally Seton at Bourton; Septimus Warren Smith; the madeleine in Proust
-- Siegfried tasting the dragon's blood and understanding the birds; Siegfried's one unprotected spot; Hagen summoning the Gibichung vassals; the Macbeth witches agreeing when to meet again
-- Paul Allen's business card in American Psycho; Lorelai's dog; the Dragonfly Inn; Rory's first boyfriend; Captain Picard's civilian brother; the Water Temple sage in Tears of the Kingdom; the hero's name in Zelda
-- the Razumovsky quartets' dedicatee; the Diabelli Variations' publisher; Bach's works for unaccompanied violin and cello; the cantus firmus; the "love" score in tennis; the Nineteenth Amendment; Brunelleschi's dome; the region Florence is the capital of
+- Mrs. Danvers and Rebecca's preserved room; Miss Havisham's wedding dress; Helen Burns's death at Lowood; Jane Eyre's employer; the doors in "The Lady, or the Tiger?"; Sherlock Holmes's brother Mycroft
+- Ahab's whalebone leg; the doubloon nailed to the Pequod's mast; Queequeg's coffin as life-buoy; Ishmael as sole survivor; "Call me Ishmael"
+- Rick coming to Casablanca "for the waters"; "Here's looking at you, kid"; Quint's boat the Orca; "You're gonna need a bigger boat"; Agent Cooper's cherry pie at the Double R Diner; who shot Liberty Valance
+- the Immortal Game; en passant; the Mercator projection and Greenland; the Plimsoll line; the seven prisoners in the Bastille; the Step Pyramid of Djoser; the sea the Nile empties into
 - every fact in the STYLE EXEMPLARS list above
+- and these, which earlier versions of these instructions used as examples and which were found reproduced in live stock: Mrs. Lovett's pie filling; Neville Longbottom's house points at the end-of-year feast; Candace calling her mother to report her brothers; Big Ben's chimes in Mrs. Dalloway; Siegfried's one unprotected spot; the cantus firmus; Arvo Pärt's tintinnabuli
 If a domain's best fact happens to be one of these, pick its second-best fact instead. There is always another.
 
 GRANULARITY RULES:
 Domain labels identify a body of knowledge — a work, an artist, a period, a discipline. They never identify a facet, aspect, or angle on that knowledge.
 
 GOOD domain labels:
-- "Mrs. Dalloway"
+- "Moby-Dick"
 - "Late Tchaikovsky"
-- "James Joyce's Ulysses"
-- "Italian Renaissance Painting"
+- "Charles Dickens's Bleak House"
+- "Dutch Golden Age Painting"
 - "Weimar Cinema"
 - "1956 Hungarian Uprising"
-- "Stephen Sondheim"
+- "Cole Porter"
 
 BAD domain labels (never propose these):
-- "Mrs. Dalloway – Characters & Themes" (facet of a work)
-- "Ulysses – Structure & Symbolism" (facet of a work)
+- "Moby-Dick – Characters & Themes" (facet of a work)
+- "Bleak House – Structure & Symbolism" (facet of a work)
 - "Tchaikovsky's Symphonic Form" (facet of an artist)
-- "Italian Renaissance – Color Theory" (facet of a period)
-- "Joyce's Use of Stream of Consciousness" (technique, not territory)
+- "Dutch Golden Age – Color Theory" (facet of a period)
+- "Melville's Use of Digression" (technique, not territory)
 
-If a question is about a facet, assign it to the parent domain. A question about Clarissa Dalloway's character → "Mrs. Dalloway". A question about Bach's fugal technique → "Bach's Well-Tempered Clavier" if it's specific to that work, otherwise "Johann Sebastian Bach" or the appropriate work-level domain.
+If a question is about a facet, assign it to the parent domain. A question about Captain Ahab's character → "Moby-Dick". A question about Dickens's serial structure → "Charles Dickens's Bleak House" if it's specific to that work, otherwise "Charles Dickens" or the appropriate work-level domain.
 
 Do not invent meta-categories. Do not append qualifiers like "themes," "characters," "structure," "technique," "form," "style" to a domain.
 
@@ -307,40 +308,40 @@ When in doubt: prefer the broader, work-level label. Use the exact domain name p
 REPETITION RULES (read carefully):
 The user will supply two avoid lists: previous question texts and previous fact_keys. A "fact" is the underlying piece of trivia, independent of phrasing. Two questions are the SAME FACT if they probe the same answer about the same subject under the same angle — even if the wording, framing, or sentence structure is completely different.
 
-- "What instrument does Hagen play to summon the Gibichungs in Götterdämmerung?" and "Hagen calls the Gibichung vassals to assembly using which instrument?" are the SAME FACT.
+- "In Moby-Dick, what does Ahab nail to the mainmast as the reward for sighting the white whale?" and "Ahab offers the Pequod's crew a prize for the first sighting of Moby Dick — what is it?" are the SAME FACT.
 - Do NOT generate a question whose fact appears in either avoid list, even if you can phrase it differently.
 - Pick a genuinely new angle on the domain: a different work, character, scene, technique, year, person, or detail.
 
 For each question, also emit a fact_key: a short hyphenated lowercase identifier for the underlying fact, in the form "<domain-slug>-<subject>-<answer-topic>". Examples:
-- "gotterdammerung-hagen-summons-vassals-instrument"
-- "mrs-dalloway-clarissa-party-guest-arrival-order"
+- "moby-dick-ahab-doubloon-nailed-to-mast"
+- "casablanca-rick-came-for-the-waters"
 - "tchaikovsky-pathetique-symphony-final-tempo-marking"
 
 Keep fact_keys under 80 characters. Two questions with the same fact_key are duplicates and will be rejected.
 
-For each question, also emit subject_entity: the single primary subject the question is ABOUT — the person, work, character, place, or thing at its center (e.g. "Peter Pettigrew", "Guys and Dolls", "the Krebs cycle"). Name the most specific recurring entity a fan would point to, not the broad domain. This is COARSER than fact_key: many different facts about Peter Pettigrew all share subject_entity "Peter Pettigrew". Keep it under 60 characters and omit a leading article.
+For each question, also emit subject_entity: the single primary subject the question is ABOUT — the person, work, character, place, or thing at its center (e.g. "Captain Ahab", "Casablanca", "the Mercator projection"). Name the most specific recurring entity a fan would point to, not the broad domain — never the domain label itself, and never the work's title when the question is about one of its characters, scenes or objects. This is COARSER than fact_key: many different facts about Captain Ahab all share subject_entity "Captain Ahab". Keep it under 60 characters and omit a leading article. REQUIRED: a question without a subject_entity is dropped — this field is what the coverage system reads back to spread later batches across the domain.
 
 QUESTION SHAPE VARIETY:
 Trivia gets monotonous when every question follows the same template ("What is the name of X?"). Vary the shape across the batch. Choose from this catalog and emit the chosen shape on each question via the question_shape field:
 
-- "identification": asks for a name, term, title, or label (e.g. "What is the name of the dwarf who forges the ring?")
+- "identification": asks for a name, term, title, or label (e.g. "What is the name of Ahab's ship in Moby-Dick?")
 - "year_or_date": asks for a year, date, or temporal ordering. Use ONLY when the date itself is meaningful — a turning point, an anniversary, a deliberate juxtaposition — never as a default or filler in place of a substance question (e.g. "In what year did the Berlin Wall fall?")
 - "in_which_work": asks which work, scene, chapter, movement, or section something appears in
-- "who_did_what": asks which character/person performs a specific act (e.g. "Who kills Polonius?")
+- "who_did_what": asks which character/person performs a specific act (e.g. "In The Man Who Shot Liberty Valance, who actually shoots Liberty Valance?")
 - "sequence_or_order": asks for ordering of events, items, or steps
-- "technique_or_term": asks for the term a field uses for something — but reached through a concrete instance, a named person, or a famous case, NOT by reciting its definition and asking for the label (that is Rule 3c's DEFINITION_SUPPLIED failure, and in a discipline domain it is also Rule 2c's). Good: "What is it called when Venice floods?" (acqua alta) — a real situation, not a glossary gloss.
+- "technique_or_term": asks for the term a field uses for something — but reached through a concrete instance, a named person, or a famous case, NOT by reciting its definition and asking for the label (that is Rule 3c's DEFINITION_SUPPLIED failure, and in a discipline domain it is also Rule 2c's). Good: "What do sailors call the load line on a hull, named for the Victorian MP who campaigned for it?" (the Plimsoll line) — a real thing with a name on it, not a glossary gloss.
 - "what_happens_next": asks what immediately follows a described scene/event
-- "fill_in_blank": gives a short line with one word elided and asks the player to supply it (e.g. "Fill in the blank in this line from Don Giovanni: Don Giovanni a …… teco")
-- "complete_the_quote": gives the opening of a well-known quote and asks for the remainder (e.g. "Complete the Shakespeare quote: 'A horse, a horse, ……'")
+- "fill_in_blank": gives a short line with one word elided and asks the player to supply it (e.g. "Fill in the blank from Casablanca: 'Here's looking at you, ……'")
+- "complete_the_quote": gives the opening of a well-known quote and asks for the remainder (e.g. "Complete the opening line of Moby-Dick: 'Call me ……'")
 Rules:
 - Within a single batch of questions, no two questions may share the same question_shape unless the batch has more questions than there are shapes in the catalog.
 - "identification" is the most over-used shape — use it sparingly.
 - Pick the shape that best fits the underlying fact.
 
 Also emit sub_angles: a list of 1-3 short tags (each ≤ 40 chars) naming the facets of the domain this question covers. Tags should be specific enough that two questions on the same facet share a tag, but broad enough to reuse across questions. Examples:
-- For "What instrument does Hagen play to summon the Gibichungs?": ["Hagen", "Götterdämmerung Act II", "summons vassals"]
-- For "What does Clarissa hand Peter Walsh when he cries?": ["Peter Walsh visit", "Clarissa-Peter scene", "scissors motif"]
-- For "What is the Latin term for a borrowed slow-moving melody in Renaissance polyphony?": ["cantus firmus", "Renaissance polyphony", "borrowed melody technique"]
+- For "What does Ahab nail to the mainmast as the reward for sighting the whale?": ["Ahab", "the doubloon", "Pequod crew"]
+- For "What does Rick say he came to Casablanca for?": ["Rick Blaine", "Rick's Café", "the waters line"]
+- For "Which cartographer's projection makes Greenland look the size of Africa?": ["Mercator", "map projections", "area distortion"]
 
 Sub-angles are aggregated per domain and shown back to you on future generations as "already covered" — pick facets you have not yet explored.
 
@@ -357,7 +358,7 @@ Return format:
       "explainer": "string, 2-3 sentences of educational context — every factual claim in it must be load-bearing and checkable (see the side-facts floor); omit any incidental date/count/attribution you are not certain of rather than risk a wrong aside",
       "difficulty_estimate": "accessible | moderate | specialist",
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
-      "subject_entity": "string, the single primary subject the question is about (see above) — coarser than fact_key",
+      "subject_entity": "string, REQUIRED — the single primary subject the question is about (see above), coarser than fact_key; a question without one is dropped",
       "sub_angles": ["1-3 short tags identifying the facets of the domain covered (see above)"],
       "question_shape": "one of: identification | year_or_date | in_which_work | who_did_what | sequence_or_order | technique_or_term | what_happens_next | fill_in_blank | complete_the_quote"
     }
@@ -781,10 +782,27 @@ function parseBaseQuestion(item: unknown): LlmQuestion | null {
     });
     return null;
   }
-  if (!subjectEntity || subAngles.length === 0) {
+  // subject_entity is REQUIRED (2026-09-16). It was warn-only, and the cost
+  // was invisible: the R7 "subjects already covered" block, the Tier 2
+  // subject-cooldown gate, the fact_key-drift corroboration in pool/dedup.ts and
+  // the bank same-fact gate all read this column, and every row that landed
+  // without it was a hole in all four. The 2026-09-16 audit found 819 of 3,013
+  // machine rows and 567 of 1,367 authored rows null — including 48 of 90 in
+  // "20th Century Composers", the period domain whose breadth guard is R7 —
+  // so the guard the prompt warns about most was a no-op exactly where it
+  // mattered. A row without a subject is a row the coverage system cannot see;
+  // drop it and let over-provisioning absorb the loss, as with fact_key above.
+  if (!subjectEntity) {
+    console.warn('[daily/generate-questions] subject_entity missing — dropping row', {
+      domain: canonical,
+      rawType: rec.subject_entity === undefined ? 'undefined' : rec.subject_entity === null ? 'null' : typeof rec.subject_entity,
+      questionPreview: questionText.slice(0, 80),
+    });
+    return null;
+  }
+  if (subAngles.length === 0) {
     console.warn('[daily/generate-questions] optional question metadata missing', {
       domain: canonical,
-      hasSubjectEntity: Boolean(subjectEntity),
       subAngleCount: subAngles.length,
       questionPreview: questionText.slice(0, 80),
     });
@@ -1840,6 +1858,51 @@ function findSubjectCooldownDuplicates(
   return drop;
 }
 
+// Bank same-fact pre-filter (B-DEDUP-BANK-SAME-FACT-01). Deterministic, pre-
+// persist, no LLM: drop a fresh question whose (domain, answer) or (subject,
+// answer) pair already exists in the SERVABLE shared bank — either table, any
+// user. This is the gap between the two gates that were supposed to cover it:
+// the persist-time fact_key guard only fires on a byte-identical key, and
+// fact_key is re-minted per generation call (the same real fact got 4 keys over
+// 4 months — B-DEDUP-FACTKEY-DRIFT-01); the pool embedding gate only sees rows
+// that were embedded (~half the bank on 2026-09-16) and, when both fact_keys
+// exist and differ, requires 0.99 near-identity. A reworded question about the
+// same subject landing on the same answer sits at 0.81–0.93 — invisible to
+// both. The 2026-09-16 Mrs. Dalloway audit found 5 of 6 fresh questions were
+// already in the bank this way (Cymbeline, the opening sentence, the penknife,
+// Bradshaw's Proportion, Elizabeth's omnibus), every one a shared answer key.
+// sameFactAnswerKey folds low-information answers ("two", "1685", "yes") to ''
+// so a shared trivial answer never matches; a same-answer pair must ALSO share the
+// folded domain or the subject entity, so "Paris" in French History and
+// "Paris" in Greek Mythology never collide.
+export function findBankSameFactDuplicates(
+  generated: LlmQuestion[],
+  bankFacts: ReadonlyArray<{ domainKey: string; subjectEntity: string | null; answer: string }>,
+): Set<number> {
+  const drop = new Set<number>();
+  if (bankFacts.length === 0) return drop;
+  const byDomainAnswer = new Set<string>();
+  const bySubjectAnswer = new Set<string>();
+  for (const f of bankFacts) {
+    const a = sameFactAnswerKey(f.answer);
+    if (!a) continue;
+    byDomainAnswer.add(`${f.domainKey} ${a}`);
+    const sk = entityKey(f.subjectEntity);
+    if (sk) bySubjectAnswer.add(`${sk} ${a}`);
+  }
+  for (let i = 0; i < generated.length; i += 1) {
+    const q = generated[i];
+    const a = sameFactAnswerKey(q.answer);
+    if (!a) continue;
+    const dk = domainKey(q.canonical_subcategory);
+    const sk = entityKey(q.subject_entity);
+    if (byDomainAnswer.has(`${dk} ${a}`) || (sk && bySubjectAnswer.has(`${sk} ${a}`))) {
+      drop.add(i);
+    }
+  }
+  return drop;
+}
+
 // Across-history dedup (gate 2 above). Takes the shared batch embeddings.
 async function findAnsweredHistoryDuplicates(
   userId: string,
@@ -2219,7 +2282,16 @@ export async function generateDailyQuestions(
   // One embedding pass over the batch feeds both semantic gates (intra-batch +
   // across-history). null when embeddings are disabled/failed → both no-op.
   // Answer-cooldown keys fetched alongside (deterministic, resilient on failure).
-  const [batchEmbeddings, recentAnswerKeys, recentEntities] = await Promise.all([
+  // Bank same-fact facts fetched alongside: the requested domains plus whatever
+  // domain label the model actually tagged (it drifts — the "Joyce question
+  // filed under Virginia Woolf" case), folded to domain_key. Fail-open.
+  const bankFactDomainKeys = [
+    ...new Set([
+      ...labelByDomainKey.keys(),
+      ...generated.map((q) => domainKey(q.canonical_subcategory)),
+    ]),
+  ];
+  const [batchEmbeddings, recentAnswerKeys, recentEntities, bankFacts] = await Promise.all([
     embedGeneratedBatch(generated),
     ANSWER_COOLDOWN_DAYS > 0
       ? getRecentAnsweredAnswerKeys(userId, ANSWER_COOLDOWN_DAYS).catch(() => new Set<string>())
@@ -2227,7 +2299,21 @@ export async function generateDailyQuestions(
     SUBJECT_COOLDOWN_DAYS > 0
       ? getRecentAnsweredEntities(userId, SUBJECT_COOLDOWN_DAYS).catch(() => new Set<string>())
       : Promise.resolve(new Set<string>()),
+    getServableBankFacts(bankFactDomainKeys).catch((error: unknown) => {
+      console.warn('[daily/generate-questions] bank same-fact facts unavailable (non-fatal)', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [] as Awaited<ReturnType<typeof getServableBankFacts>>;
+    }),
   ]);
+  const bankSameFactDuplicates = findBankSameFactDuplicates(generated, bankFacts);
+  if (bankSameFactDuplicates.size > 0) {
+    console.warn('[daily/generate-questions] dropping bank same-fact repeats', {
+      droppedCount: bankSameFactDuplicates.size,
+      droppedIndices: [...bankSameFactDuplicates].sort((a, b) => a - b),
+      originalCount: generated.length,
+    });
+  }
   const answerCooldownDuplicates = findAnswerCooldownDuplicates(generated, recentAnswerKeys);
   if (answerCooldownDuplicates.size > 0) {
     console.warn('[daily/generate-questions] dropping answer-cooldown repeats', {
@@ -2404,6 +2490,7 @@ export async function generateDailyQuestions(
       considered: generated.length,
       dropped: subjectCooldownDuplicates.size,
     },
+    { gate: 'bank_same_fact', considered: generated.length, dropped: bankSameFactDuplicates.size },
     { gate: 'answer_leak', considered: generated.length, dropped: answerLeaks.toDrop.size },
     // Measure-only until PARTIAL_ANSWER_LEAK_ENABLED is set: `dropped` counts
     // what the rules WOULD drop, so the flag can be flipped on evidence rather
@@ -2440,6 +2527,7 @@ export async function generateDailyQuestions(
     ...answeredHistoryDuplicates,
     ...answerCooldownDuplicates,
     ...subjectCooldownDuplicates,
+    ...bankSameFactDuplicates,
     ...qualityResult.toDrop,
     ...factualResult.toDrop,
     ...answerLeaks.toDrop,
@@ -2665,6 +2753,7 @@ export async function generateDailyQuestions(
       // separate generation calls (B-DEDUP-FACTKEY-DRIFT-01).
       factKey: row.factKey ?? null,
       subjectEntity: row.subjectEntity ?? null,
+      answer: row.answer,
     })),
   );
 

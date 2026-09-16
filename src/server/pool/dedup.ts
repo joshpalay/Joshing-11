@@ -24,6 +24,7 @@ import {
   type NearestPoolMatch,
 } from '@/server/db/queries/pool';
 import { embedText, embedTexts, isEmbeddingEnabled } from '@/server/llm/embeddings';
+import { sameFactAnswerKey } from '@/server/daily/answer-cooldown';
 
 // Cosine *similarity* threshold (1 = identical). Start strict per §7 (the spec's
 // knob table does not pin a number); override via env without a deploy.
@@ -73,12 +74,29 @@ function sameSubjectEntity(a: string | null | undefined, b: string | null | unde
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+/** Same normalized answer head (sameFactAnswerKey: parenthetical/dash tail cut,
+ *  article stripped, lowercased; low-information answers — bare numbers,
+ *  yes/no, under three characters — fold to '' and never match). Two stems that share a subject's vocabulary AND land on
+ *  one answer are one fact, whatever fact_key each generation call minted
+ *  (B-DEDUP-BANK-SAME-FACT-01, 2026-09-16: the "Peter Walsh's penknife" pair —
+ *  cosine 0.93, different fact_keys — was live twice in the bank). */
+function sameAnswer(a: string | null | undefined, b: string | null | undefined): boolean {
+  const ka = sameFactAnswerKey(a);
+  return ka !== '' && ka === sameFactAnswerKey(b);
+}
+
 /**
  * Pure collision matrix. `incomingId` is the row just inserted; `nearest` is the
  * closest existing pool row (excluding self), or null if none within reach.
  */
 export function resolveCollision(
-  incoming: { id: string; origin: PoolOrigin; factKey?: string | null; subjectEntity?: string | null },
+  incoming: {
+    id: string;
+    origin: PoolOrigin;
+    factKey?: string | null;
+    subjectEntity?: string | null;
+    answer?: string | null;
+  },
   nearest: NearestPoolMatch | null,
   threshold: number,
   differentFactThreshold: number = getDifferentFactCosineThreshold(),
@@ -101,11 +119,19 @@ export function resolveCollision(
   // DIFFERENT subjects sharing one work's vocabulary; matching subject_entity
   // rules that case out). subject_entity itself isn't always populated
   // consistently either, so this narrows the gap rather than closing it.
+  // A matching answer is the other corroborating signal (B-DEDUP-BANK-SAME-
+  // FACT-01): when the nearest row lands on the same answer as the incoming
+  // one, "the keys differ" is fact_key drift, not evidence of a distinct fact,
+  // so the base threshold applies. This is what the raised bar was silently
+  // letting through — a reworded same-answer question about the same subject
+  // embeds at ~0.93, above base but far below the 0.99 near-identity bar.
+  const answersMatch = sameAnswer(incoming.answer, nearest.answer);
   const factKeysDiffer =
     incoming.factKey != null &&
     nearest.factKey != null &&
     incoming.factKey !== nearest.factKey &&
-    !sameSubjectEntity(incoming.subjectEntity, nearest.subjectEntity);
+    !sameSubjectEntity(incoming.subjectEntity, nearest.subjectEntity) &&
+    !answersMatch;
   // fact_key is an LLM-generation artifact — a human-authored Question row
   // never carries one (src/server/questions/fact-key.ts), so a human-vs-human
   // collision can NEVER reach the factKeysDiffer branch above and always fell
@@ -121,7 +147,9 @@ export function resolveCollision(
   // human-vs-human so the machine-involving branches (already covered by
   // fact_key when present, and deliberately left lenient when a machine row's
   // near-neighbor is an older fact_key-less human row) are untouched.
-  const bothHuman = incoming.origin === 'human' && nearest.origin === 'human';
+  // The same answer corroboration relaxes the human-vs-human bar too: two
+  // authored questions about one subject with one answer are one fact.
+  const bothHuman = incoming.origin === 'human' && nearest.origin === 'human' && !answersMatch;
   const effectiveThreshold = factKeysDiffer || bothHuman
     ? Math.max(threshold, differentFactThreshold)
     : threshold;
@@ -153,6 +181,7 @@ export async function embedAndResolveDuplicate(args: {
   questionText: string;
   factKey?: string | null;
   subjectEntity?: string | null;
+  answer?: string | null;
 }): Promise<void> {
   if (!isEmbeddingEnabled()) return;
   try {
@@ -163,7 +192,13 @@ export async function embedAndResolveDuplicate(args: {
 
     const nearest = await findNearestInPool(embedding, args.id);
     const decision = resolveCollision(
-      { id: args.id, origin: args.origin, factKey: args.factKey ?? null, subjectEntity: args.subjectEntity ?? null },
+      {
+        id: args.id,
+        origin: args.origin,
+        factKey: args.factKey ?? null,
+        subjectEntity: args.subjectEntity ?? null,
+        answer: args.answer ?? null,
+      },
       nearest,
       getDedupCosineThreshold(),
     );
@@ -211,6 +246,7 @@ export async function embedAndResolveDuplicatesBatch(
     questionText: string;
     factKey?: string | null;
     subjectEntity?: string | null;
+    answer?: string | null;
   }>,
 ): Promise<void> {
   if (!isEmbeddingEnabled() || rows.length === 0) return;
@@ -226,7 +262,13 @@ export async function embedAndResolveDuplicatesBatch(
 
       const nearest = await findNearestInPool(embedding, row.id);
       const decision = resolveCollision(
-        { id: row.id, origin: row.origin, factKey: row.factKey ?? null, subjectEntity: row.subjectEntity ?? null },
+        {
+          id: row.id,
+          origin: row.origin,
+          factKey: row.factKey ?? null,
+          subjectEntity: row.subjectEntity ?? null,
+          answer: row.answer ?? null,
+        },
         nearest,
         threshold,
       );

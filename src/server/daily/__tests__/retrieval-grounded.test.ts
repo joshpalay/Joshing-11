@@ -71,6 +71,7 @@ describe('parseGroundedQuestions', () => {
         explainer: 'The finale is marked Adagio lamentoso, an unusual slow close.',
         difficulty_estimate: 'moderate',
         fact_key: 'tchaikovsky-pathetique-final-tempo',
+        subject_entity: 'Pathétique Symphony',
         sub_angles: ['Pathétique', 'finale'],
         question_shape: 'technique_or_term',
         source_refs: ['https://en.wikipedia.org/wiki/x', 'https://www.britannica.com/y'],

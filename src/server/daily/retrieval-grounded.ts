@@ -283,6 +283,11 @@ async function refillDomain(
           difficultyEstimate: q.difficulty_estimate,
           basePoints: resolveDailyBasePoints(q.difficulty_estimate),
           factKey: q.fact_key,
+          // Was never written on this path — the R7 subject-coverage block and
+          // the subject-cooldown gate read this column, so every grounded row
+          // was invisible to both (2026-09-16 backfill found 819 null machine
+          // rows, this path among the sources).
+          subjectEntity: q.subject_entity,
           subAngles: q.sub_angles,
           sourceRefs: q.source_refs,
           trustTier,
@@ -303,6 +308,8 @@ async function refillDomain(
         origin: 'machine',
         questionText: row.questionText,
         factKey: row.factKey ?? null,
+        subjectEntity: row.subjectEntity ?? null,
+        answer: row.answer,
       }).catch(() => undefined);
     } catch (err) {
       console.warn('[pool-refill] persist failed', {

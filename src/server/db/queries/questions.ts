@@ -701,7 +701,12 @@ export async function createQuestion(params: {
   // MACHINE pool row suppresses the *machine* row (human beats machine); a
   // collision with another human row suppresses this new one. Always flags,
   // never deletes.
-  await embedAndResolveDuplicate({ id: created.id, origin: 'human', questionText: params.text });
+  await embedAndResolveDuplicate({
+    id: created.id,
+    origin: 'human',
+    questionText: params.text,
+    answer: params.correctAnswer,
+  });
 
   return { id: created.id };
 }
