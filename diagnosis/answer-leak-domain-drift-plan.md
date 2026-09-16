@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-16
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
 ---
@@ -1361,5 +1361,61 @@ audit still hasn't been started.
    for an actual drop (or a few more clean, quality-healthy days) — needs a
    session with DB access.
 3. The 7 Phase 1 disagreement items remain closed, no outstanding action.
+4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-16 (diagnosis-review) — `answer_leak_single_word` recorded a second drop; the two established flags cross 10 clean days; nothing else moved
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+2026-09-15. All numbers below are directly queried.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 175 | 0 | 0 |
+| `domain_drift` | 175 | 0 | 0 |
+| `answer_leak_single_word` | 72 | **2** | 0 |
+| `answer_shape` | 175 | 2 | 0 |
+| `quality` | 175 | 66 | 229 (all on 2026-09-07, unchanged) |
+
+`answer_leak_partial` and `domain_drift` are now at **10 consecutive clean
+days, 175 rows considered, still 0 drops each** — the Mechanism-2
+code-fix decision Josh held on 2026-09-08 is exactly where it was: still
+waiting on `domain_drift` to catch something real, still hasn't. This is
+the longest zero-drop streak this doc has recorded and does not itself
+change the read (per `check:gate-flags`'s own documented reasoning, low
+single-digit hit rates make a long clean streak unsurprising either way).
+
+`answer_leak_single_word` recorded a **second** drop (was 1 of 36 on
+2026-09-15; now 2 of 72). Still far too small a sample to read a precision
+number from — same threshold this doc used for the original partial-leak
+rule (13 hits before blind-labeling was worth doing).
+
+**The 3 original `ContentReport` rows are still `status='open'`** —
+re-verified directly by id, unchanged since every prior review, now 10 days
+since they were filed (2026-09-06). Not this doc's action item, but the age
+keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,260**, up from 2,246 at the
+last review — one day of ordinary ~14-row generation, not investigated
+further.
+
+**No code change since the last review:** `git log --since=2026-09-15` on
+`self-answering.ts`, `off-domain-second-opinion.ts`, and
+`generate-questions.ts` returns nothing. Only 3 commits landed on `main`
+since the last review (#1691, #1692, and the previous diagnosis-review
+commit itself), none touching this doc's tracked paths.
+
+**No decision-resolving change.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now at 10 clean days.
+2. Watch `answer_leak_single_word` accumulate more data before reading a
+   precision number (now 2 of 72).
+3. The three open `ContentReport` rows remain unaddressed, now 10 days old —
+   not this doc's action item, but worth surfacing given the age.
 4. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

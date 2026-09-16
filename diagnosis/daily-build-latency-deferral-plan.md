@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-16
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1087,3 +1087,71 @@ persist-race investigation did).
 2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 3. Question 4 (is the bonus worth its cost) — now has more data but a wider,
    not narrower, uncertainty band; still unresolved.
+
+### 2026-09-16 (diagnosis-review) — n grows 15→18; a THIRD large-residual build found on 2026-09-15; still zero races, still no slot-collision recurrence
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+2026-09-15.
+
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time. No
+change from every prior reading.
+
+**`DailyBuildMetric` totals:** `built=19` (1 pre-deferral baseline + 18
+post-deferral, up from 15 post-deferral at the last review),
+`carry_forward=238`, `existing_queue=27`, `partial_carry_forward=2`.
+
+**Three new post-deferral rows since the last review**, all `deferred:
+true`, `target_size=5`, `final_size` 5 or 6 (no recurrence of the
+open-question-5 slot-collision shape):
+
+| started_at | saved | bonus (`generationMs`) | residual |
+|---|---:|---:|---:|
+| 2026-09-15 11:22:10 | 7,611 | 6,925 | 686 |
+| 2026-09-15 17:05:17 | 15,546 | 14,662 | 884 |
+| **2026-09-15 17:05:18** | **25,482** | 12,405 | **13,077** |
+| 2026-09-16 00:39:40 | 1,471 | 766 | 705 |
+
+**A third dramatic-residual build, `cff84520-…` (2026-09-15 17:05:18Z),
+different in shape from the first two.** The two previously-named outliers
+(`84e717bd-…`, `87e51589-…`) had *small* bonus-phase `generationMs` (610ms,
+941ms) paired with a *huge* residual (23.7s, 37.5s) — the anomaly lived
+entirely outside bonus generation. This one's own bonus generation was
+already large (12,405ms) and its residual (13,077ms) is elevated well above
+the normal 700–3,700ms band but far below the two prior outliers. Whether
+this is the same underlying mechanism at a different magnitude, or a
+different mechanism that happens to also inflate the residual, is not
+established — not investigated further this pass (still reconnaissance, not
+a fix), but naming it here so whoever traces the first two doesn't have to
+separately re-find this one.
+
+**Worth noting on the same timestamp:** `a78fdf84-…` (17:05:17) and
+`cff84520-…` (17:05:18) started **one second apart**, both from the same
+17:05 UTC cron pass, both `deferred: true`, both `final_size: 6` — two
+builds completing in close succession with very different bonus-generation
+costs (14,662ms vs 12,405ms). `outcome='lost_persist_race'` is 0 for both,
+so this is not the persist-race this doc already fixed; presumably two
+different users' builds landing in the same cron tick, which is unremarkable
+given `USER_CONCURRENCY=4`. Flagging only because it's adjacent to the new
+anomaly, not because it is one itself.
+
+**3b population, updated: median saving 9,449.5ms** (n=18, was 8,678ms at
+n=15). Residual spread is still 709ms–37,506ms — the new rows don't move
+either end of that range, they add a third point inside it.
+
+**No code change since the last review:** `git log --since=2026-09-15` on
+`queue-orchestrator.ts`, `daily.ts`, and `build-context.ts` returns nothing.
+
+**No decision-resolving change.** Status stays `active`. Question 4 (is the
+bonus worth its generation cost) remains open and, if anything, the case for
+looking harder at it keeps strengthening: bonus generation alone now
+regularly runs 6–19 seconds on top of whatever residual overhead is present.
+
+### Next steps (revised)
+1. Trace why `84e717bd-…` (2026-09-09), `87e51589-…` (2026-09-14), and now
+   `cff84520-…` (2026-09-15) show outsized residuals — needs Vercel function
+   logs for those windows, not just DB data. Three occurrences in 18 rows
+   (~17%) is no longer a tail case worth deferring indefinitely.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved, and bonus
+   generation cost itself (not just the residual) is trending up.

@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-16
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683"
 ---
@@ -564,5 +564,68 @@ rows, whichever is later (currently 50).
 2. Watch whether accessible share (currently 64%, well above the 30-45%
    target band) settles or keeps climbing — not a stop condition today,
    but worth a closer look if it persists into Phase 2.
+3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-16 (diagnosis-review) — deploy+~5 days, still short of the +7 day window; accessible-share overshoot cooling toward the target band; nothing trips a stop condition
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+2026-09-15. Deploy was 2026-09-11T19:14:09Z, so this is deploy+~5 days —
+still short of the deploy+7-day Phase 1 window (~2026-09-18) and well short
+of Phase 2's deploy+14-days-or-200-rows gate (64 post-deploy live rows
+exist now, up from 50). Reading early again since access exists, same as
+yesterday.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-15 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 73 | **64** | — | some post-deploy rows were demoted between readings (expected — the gate/sweep chain runs continuously); not itself a signal |
+| Mean words/question | 30.8 | **30.6** | ≤24 | still barely moved |
+| Rows over 25 words | 64% | **63%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 64% | **58%** | 30-45% | still above target band, but cooling — 6 points closer than yesterday |
+| Difficulty-floor deflections | 2.7% | — (not re-run; last reading well inside band) | ≤5% | — |
+
+**Quality-gate drop rate since deploy, re-run:** 42/109 = **38.5%**
+(considered 109, up from 73; dropped 42, up from 27) — still inside the
+35-45% acceptable band, `failed_open: 0`. `difficulty_floor`: 2/109 = 1.8%,
+still well under the 5% stop condition.
+
+**None of Phase 1's three stop conditions trip**, same as yesterday. The
+accessible-share overshoot (64% → 58%) is the one number worth tracking
+specifically: it's moving toward the 30-45% target band rather than away
+from it, which is a mild point in favor of "this settles on its own" over
+"R1-a needs a rewrite," but one day of movement on a metric this doc's own
+plan didn't anticipate overshooting in either direction isn't enough to
+call it.
+
+**Phase 3 (correct-rate) — still too thin, dip near but inside the ≤10-point
+allowance:** accessible-tier mean `empirical_correct_rate`, pre-deploy
+cohort now **0.741** (36 rows/52 answers, up from 34/47 = 0.725) vs
+post-deploy **0.650** (unchanged, still only 10 rows/12 answers). Dip is
+now **9.1 points** (was 7.5), still inside the ≤10-point exit criterion but
+closer to it — driven by the pre-cohort's own number moving as more answers
+accumulate on old rows, not by the post-cohort changing at all. The
+post-cohort's sample size hasn't grown in a day; still not treating this as
+a real reading.
+
+**No code change since the last review:** `git log --since=2026-09-15` on
+`generate-questions.ts` and `adaptive-difficulty.ts` returns nothing. No
+new PRs since #1683 touch this doc's tracked paths (checked the repo's
+recent PR list directly — #1685–#1693 are all design-canon/UI/friends work,
+none touching generation or the quality gate).
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-15 left them.** Status stays `active`. Phase 1's real
+checkpoint is still ~2026-09-18; Phase 2's hand read still isn't due
+(~2026-09-25 or 200 rows, currently 64).
+
+### Next steps (unchanged)
+1. Re-run this Phase 1 SQL at the actual deploy+7-day mark (~2026-09-18)
+   for the real verdict.
+2. Keep watching accessible share — cooling (64%→58%) but still above the
+   30-45% target band.
 3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).

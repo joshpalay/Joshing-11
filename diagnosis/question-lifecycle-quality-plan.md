@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-15
+last-reviewed: 2026-09-16
 owner: Josh
 related-pr: "#1646"
 ---
@@ -390,5 +390,55 @@ understood before it can be read either way.
    ambiguous Phase 2 criterion.
 2. Worth a look, new: `batch_dedup` (7/70) and `recent_history` (1/70)
    `failed_open` counts — not previously tracked by any diagnosis doc.
+3. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-16 (diagnosis-review) — `batch_dedup` `failed_open` ticked up; the cross-doc build-speed outlier count grew to three; no decision moved
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+2026-09-15.
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 96 | 7 | 1 |
+| `batch_dedup` | 96 | 1 | **9** |
+| `quality` | 96 | 37 (38.5%) | 0 |
+
+`batch_dedup`'s `failed_open` rose from 7 to 9 over one day; `recent_history`
+unchanged at 1. Both remain small in absolute terms and neither has been
+investigated for root cause — same "flagging for awareness, not yet this
+doc's open decision" posture as the 2026-09-15 entry. `quality`'s scoped
+drop rate (38.5%) stays inside the acceptable band, consistent with the
+question-drift doc's own reading of the same shared gate today.
+
+**The build-speed cross-reference now has a third data point.**
+`daily-build-latency-deferral-plan.md`'s review today (also run this
+session) found a **third** large-residual build on 2026-09-15
+(`cff84520-…`, 13,077ms residual), in addition to the two named on
+2026-09-15 (`84e717bd-…`, `87e51589-…`). This doc's own ambiguous Phase 2
+speed signal (build p50 up ~31%) was attributed to those first two outliers
+dragging a 16-row sample; with a third now on record and none yet traced
+to a root cause, the same caveat applies with slightly more supporting
+evidence, not less. Not re-running this doc's own p50 query this pass — no
+reason to expect it moved materially with one more day of ordinary
+`existing_queue` growth on top.
+
+**No code change since the last review:** `git log --since=2026-09-15` on
+`verification-gating.test.ts` and `check-question-lifecycle.mjs` returns
+nothing.
+
+**No decision-resolving change to §2.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Once the outlier builds are traced (now three:
+   `daily-build-latency-deferral-plan.md`'s 2026-09-16 entry), re-check
+   whether this doc's build-time p50 recovers.
+2. Keep an eye on `batch_dedup` `failed_open` (now 9/96, trending up) and
+   `recent_history` (steady at 1/96) — still not this doc's tracked open
+   decision, but worth a root-cause look if the trend continues.
 3. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
