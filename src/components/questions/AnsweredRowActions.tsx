@@ -57,7 +57,7 @@ export function AnsweredRowActions({
         aria-haspopup="menu"
         aria-expanded={isMenuOpen}
         onClick={() => setIsMenuOpen((current) => !current)}
-        className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="inline-flex size-11 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <MoreHorizontal className="size-4" />
       </button>

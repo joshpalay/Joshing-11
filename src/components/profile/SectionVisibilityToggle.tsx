@@ -76,7 +76,7 @@ export function SectionVisibilityToggle({
 
   const baseBtn =
     size === 'compact'
-      ? 'min-h-9 px-3 py-1.5 text-xs'
+      ? 'min-h-11 px-3 py-1.5 text-xs'
       : 'min-h-10 px-3 text-sm';
 
   const wrapperLayout = fullWidth

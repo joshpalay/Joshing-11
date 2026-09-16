@@ -52,7 +52,7 @@ export function DomainVisibilityToggle({ domainName, initialVisibility, onChange
           <button
             key={option}
             type="button"
-            className={`min-h-10 rounded-[var(--radius-xs)] px-3 capitalize transition ${
+            className={`min-h-11 rounded-[var(--radius-xs)] px-3 capitalize transition ${
               visibility === option ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
             }`}
             onClick={() => void setNextVisibility(option)}

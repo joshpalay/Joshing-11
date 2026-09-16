@@ -73,7 +73,7 @@ export function KnowledgeNodeCard({
   };
 
   const actionButton =
-    'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+    'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
   // ── Confirm / added / failed take over the card body (C1) ──────────────────
   if (phase.step !== 'idle') {

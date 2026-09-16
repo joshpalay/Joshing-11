@@ -73,7 +73,7 @@ export function QuestionRatingButtons({ questionId }: { questionId: string }) {
         aria-label="Thumbs up"
         aria-pressed={myRating === 'up'}
         className={cn(
-          'inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition',
+          'inline-flex size-11 items-center justify-center rounded-md border text-muted-foreground transition',
           myRating === 'up'
             ? 'border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]'
             : 'border-border bg-background hover:bg-muted hover:text-foreground',

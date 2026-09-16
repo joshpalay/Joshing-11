@@ -827,7 +827,7 @@ export function PeakDetailCard({
         onClick={() => void inlineAdd(id, name)}
         // Compact sibling of .btn-ghost (same corners/border/type, row-friendly
         // height) — the full 44px system ghost overwhelms a single text row.
-        className="inline-flex min-h-9 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex min-h-11 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         style={added ? { color: 'var(--text-muted)' } : undefined}
         aria-label={
           added

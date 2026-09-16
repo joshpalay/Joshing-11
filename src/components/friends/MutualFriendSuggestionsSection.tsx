@@ -23,7 +23,7 @@ export const DEFAULT_VISIBLE = 5
 // + text-foreground resolve to the cream page surface + navy ink in this
 // app's theme, giving the outlined navy-on-cream look without a new color.
 const REQUEST_BUTTON_CLASS =
-  'inline-flex min-h-9 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  'inline-flex min-h-11 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 export function mutualFriendCountLabel(count: number): string {
   return count === 1 ? '1 mutual friend' : `${count} mutual friends`

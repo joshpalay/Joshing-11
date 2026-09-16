@@ -427,10 +427,10 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
           </>
         ) : (
           <div className="flex items-center gap-2 text-muted-foreground">
-            <button className="inline-flex size-9 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Send to friend">
+            <button className="inline-flex size-11 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Send to friend">
               <Send className="size-4" />
             </button>
-            <button className="inline-flex size-9 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Add to bank">
+            <button className="inline-flex size-11 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Add to bank">
               <Bookmark className="size-4" />
             </button>
           </div>

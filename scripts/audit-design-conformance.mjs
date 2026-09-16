@@ -57,9 +57,18 @@ const BASELINE = {
   // decided the answer: 40 inline text actions onto §3.7's own
   // `inline-flex min-h-11 items-center`, LoginPanel's shared SUBTLE_LINK_CLASS
   // (3 more), 10 list-rows and the feed tab strip onto §3.5/§3.6's `min-h-11`.
-  // The remaining 142 are small labelled buttons needing a per-site read.
+  // 142 -> 116 on 2026-09-16: every remaining site was read individually and
+  // given a call. 26 were controls declaring an explicit 32-40px height (or a
+  // 34px square icon button) — a real tap target a few px under the floor, so
+  // they were raised to min-h-11/size-11. Several live in a shared const, so
+  // one edit moved a whole family.
+  // The remaining 116 are NOT a backlog: 57 were read and deliberately left
+  // (already compliant behind the heuristic's blind spot, prop-driven sizing,
+  // or micro-type decoration), and 59 are bordered buttons with no declared
+  // height, where reaching 44px means visibly fattening the control — a design
+  // call, deliberately not made by codemod. See §9.1.
   // This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 142,
+  R10: 116,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────

@@ -221,7 +221,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
           </div>
           <button
             type="button"
-            className="inline-flex size-10 items-center justify-center rounded-md border"
+            className="inline-flex size-11 items-center justify-center rounded-md border"
             onClick={onClose}
             aria-label="Close"
           >

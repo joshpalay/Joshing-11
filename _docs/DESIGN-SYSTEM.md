@@ -519,9 +519,18 @@ to zero. Where the 295 went:
 | Inline text actions missing §3.7's `min-h-11` | 43 | **fixed 2026-09-16** — `inline-flex min-h-11 items-center`; type size unchanged, only the hit box grew |
 | List-rows / tabs missing §3.5 / §3.6's `min-h-11` | 11 | **fixed 2026-09-16** — both sections already mandated it |
 | Heuristic false positives (class in a shared const) | 14 | left alone — the component is already compliant |
-| Small labelled buttons | 142 | per-site judgement; no blanket call |
+| Controls declaring an explicit 32–40px height | 26 | **fixed 2026-09-16** — raised to `min-h-11` / `size-11` |
+| Read and deliberately left | 57 | already compliant behind the blind spot, sizing owned by a caller's prop, or micro-type decoration |
+| Bordered buttons with no declared height | 59 | **open design call** — see below |
 
-**Landed 2026-09-16 (295 → 142).** The inline-text-action pass is the one worth understanding:
+**The open call (59 sites).** A bordered button's box *is* its visual, so unlike a text link it
+cannot grow to 44px invisibly — `min-h-11` on `px-3 py-1 text-xs` makes a tertiary control
+visibly chunkier. That is a design decision about how heavy secondary and tertiary buttons
+should read, not a conformance fix, so it was deliberately **not** made by codemod. Until it is
+made, these stay in the count. Concentrated in `QuestionForm` (7), `CreationSurface` (6),
+`FriendsList` (4), `PeopleYouInvited` (4), the ceremony rooms (3).
+
+**Landed 2026-09-16 (295 → 116).** The inline-text-action pass is the one worth understanding:
 §3.7's own recipe (`FeedActionLink`) *starts* with `inline-flex min-h-11 items-center`, so a
 14px link keeps its type size and simply sits in a 44px-tall invisible box — which is what §9.1
 means by "visual size may be smaller … inside a 44px box". Three `block`-display links
@@ -529,6 +538,13 @@ means by "visual size may be smaller … inside a 44px box". Three `block`-displ
 without a display swap: they wrap already-tall content, so the min-height is inert there and
 only guards the empty case. `LoginPanel`'s shared `SUBTLE_LINK_CLASS` moved `block` → `flex
 w-fit` so `mx-auto` still centres it while the label centres inside the taller box.
+
+The second pass (142 → 116) raised the 26 controls that already *declared* a height of 32–40px
+(or a 34px square icon button): those state an intended tap target and land a few pixels short,
+so the raise is mechanical, not a design change. It was applied by matching each site's exact
+resolved class string rather than scanning the lines after `<button` — a window scan mis-hit
+`<h3>`/`<p>` elements twice during this work. Note that four of the 26 live in a shared class
+constant, so one edit moved a whole family of buttons.
 
 Grep (a button with no declared 44px dimension): `npm run check:design -- --rule=R10 --verbose`
 
@@ -656,7 +672,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 142 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 116 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights; the last 59 are an open design call) / R9 · **0 — closed 2026-09-13** | — |
 
 Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
 combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at

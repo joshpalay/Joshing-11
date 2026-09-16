@@ -132,7 +132,7 @@ export function MyQuestionCard({
                 domain: question.domainDisplayName,
               }}
               label=""
-              className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
             />
             <CardOverflowMenu inUse={inUse} onDelete={onDeleteRequest} />
           </div>
@@ -235,7 +235,7 @@ function CardOverflowMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <MoreHorizontal className="size-4" />
       </button>
