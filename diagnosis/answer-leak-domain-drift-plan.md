@@ -1419,3 +1419,33 @@ commit itself), none touching this doc's tracked paths.
    not this doc's action item, but worth surfacing given the age.
 4. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
+
+### 2026-09-16 (later, diagnosis-review) — second same-day check; nothing moved
+
+Re-queried everything this doc depends on a few hours after the entry above
+(same session-type access, `grixooyecvnugpxvcbct`). Every number is
+byte-identical to the morning reading except ordinary bank growth:
+
+- `GateDropStat` since the flip (2026-09-07): `answer_leak_partial` 175/0,
+  `domain_drift` 175/0, `answer_leak_single_word` 72/2, `answer_shape`
+  175/2, `quality` 175/66/229 failed_open — **all unchanged** from the entry
+  above. No new drop, no new clean day (same day).
+- The 3 original `ContentReport` rows (`139e1932…`, `800c44a3…`,
+  `357618e3…`) still `status='open'`, unchanged.
+- Bank `still_servable`: **2,262**, up from 2,260 — 2 rows of ordinary
+  generation in a few hours, not a signal.
+- `git log` confirms no commits landed touching `self-answering.ts`,
+  `off-domain-second-opinion.ts`, or `generate-questions.ts` since the
+  entry above.
+
+**No decision-resolving change.** Status stays `active`. Recording this as
+a distinct entry per this doc's own convention (a missing entry reads as
+"not reviewed"), not because anything actually moved.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — still 10+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 72).
+3. The three open `ContentReport` rows remain unaddressed, now 10 days old.
+4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.

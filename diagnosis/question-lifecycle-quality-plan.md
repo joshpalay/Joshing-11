@@ -442,3 +442,21 @@ nothing.
    decision, but worth a root-cause look if the trend continues.
 3. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
+
+### 2026-09-16 (later, diagnosis-review) — second same-day check; nothing moved
+
+Re-queried `batch_dedup` / `recent_history` / `quality` (`scope='daily_build'`,
+trailing 14 days) a few hours after the entry above: considered 96,
+dropped/failed_open identical on all three gates (`batch_dedup` 1 dropped /
+9 failed_open, `recent_history` 7 dropped / 1 failed_open, `quality` 37
+dropped / 0 failed_open) — **byte-identical to the morning reading**, no
+drift at all in this window. `git log` confirms no commits since the entry
+above touching `verification-gating.test.ts` or `check-question-lifecycle.mjs`.
+
+**No decision-resolving change to §2.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+2. Keep an eye on `batch_dedup` `failed_open` and `recent_history`.
+3. Everything else (Phase 3, Phase 4, decision 5) unchanged.

@@ -629,3 +629,24 @@ checkpoint is still ~2026-09-18; Phase 2's hand read still isn't due
    30-45% target band.
 3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).
+
+### 2026-09-16 (later, diagnosis-review) — second same-day check; minor row growth only
+
+Re-queried a few hours after the entry above, same live Supabase access.
+Post-deploy row count (`created_at > '2026-09-11 19:14:09Z'`,
+`is_duplicate=false`) is now **66**, up from 64 — 2 rows of ordinary
+generation. Accessible share unchanged at **58%**. Quality-gate drop rate
+and `difficulty_floor` re-run over the `day >= '2026-09-11'` window are also
+unchanged: 42/109 dropped (38.5%), `difficulty_floor` 2/109 — identical to
+the morning reading. `git log` confirms no commits since the entry above
+touching `generate-questions.ts` or `adaptive-difficulty.ts`.
+
+**No decision-resolving change; all five open decisions in §2 unchanged.**
+Status stays `active`. Phase 1's real checkpoint is still ~2026-09-18;
+Phase 2's hand read still isn't due.
+
+### Next steps (unchanged)
+1. Re-run this Phase 1 SQL at the actual deploy+7-day mark (~2026-09-18).
+2. Keep watching accessible share — still above the 30-45% target band.
+3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).

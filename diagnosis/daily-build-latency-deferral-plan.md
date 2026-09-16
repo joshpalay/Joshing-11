@@ -1155,3 +1155,21 @@ regularly runs 6–19 seconds on top of whatever residual overhead is present.
 2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 3. Question 4 (is the bonus worth its cost) — unresolved, and bonus
    generation cost itself (not just the residual) is trending up.
+
+### 2026-09-16 (later, diagnosis-review) — second same-day check; no new built row
+
+Re-queried a few hours after the entry above, same live Supabase access.
+`DailyBuildMetric` totals unchanged: `built=19` (1 baseline + 18
+post-deferral — no new row since this morning), `outcome='lost_persist_race'`
+still **0**, cumulative all time. No new PRs, and `git log` since the entry
+above confirms zero commits touching `queue-orchestrator.ts`, `daily.ts`, or
+`build-context.ts`.
+
+**No decision-resolving change.** Status stays `active`. Phase 3's n stays
+at 18 post-deferral rows; the three named outlier builds (2026-09-09,
+2026-09-14, 2026-09-15) are still untraced.
+
+### Next steps (unchanged)
+1. Trace the three outsized-residual builds — needs Vercel function logs.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved.
