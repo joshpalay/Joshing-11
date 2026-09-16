@@ -43,6 +43,31 @@ export function answerCooldownKey(answer: string | null | undefined): string {
   return core;
 }
 
+// Same-fact answer key (B-DEDUP-BANK-SAME-FACT-01). answerCooldownKey, minus
+// the low-information answers two DIFFERENT facts routinely share: bare
+// numbers/years ("two", "1685", "32"), yes/no/true/false, and anything under
+// three characters. A shared "Cymbeline" is evidence of one fact; a shared
+// "two" is not. Used by the pool collision matrix and the bank same-fact gate —
+// NOT by the per-user answer cooldown, whose semantics are unchanged.
+const NUMBER_WORDS = new Set([
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'twenty', 'hundred', 'thousand',
+]);
+// Colours are the one content word measured to recur across DIFFERENT facts in
+// one domain (2026-09-16 precision sample, 30 live collision groups: 27 true
+// repeats; the 3 misses were "red"/"yellow" across different films).
+const LOW_INFO = new Set([
+  'yes', 'no', 'true', 'false', 'none', 'nothing', 'both', 'neither',
+  'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'black', 'white', 'grey', 'gray', 'pink', 'brown', 'gold', 'silver',
+]);
+export function sameFactAnswerKey(answer: string | null | undefined): string {
+  const key = answerCooldownKey(answer);
+  if (key.length < 3) return '';
+  if (LOW_INFO.has(key) || NUMBER_WORDS.has(key)) return '';
+  if (/^[\d,.\s%$-]+(?:\s*(?:times|years?|bc|ad|bce|ce))?$/.test(key)) return '';
+  return key;
+}
+
 export type AnswerCooldownGate = {
   /** True if this answer was answered within the cooldown window or already used in this build. Read-only. */
   blocks: (answer: string | null | undefined) => boolean;

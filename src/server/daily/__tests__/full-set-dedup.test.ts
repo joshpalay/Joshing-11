@@ -85,6 +85,7 @@ function respondByTag(tag: string) {
               explainer: 'He lives a lifetime on Kataan and keeps the flute.',
               difficulty_estimate: 'accessible',
               fact_key: FLUTE_FACT_KEY,
+              subject_entity: 'Jean-Luc Picard',
               sub_angles: ['The Inner Light'],
               question_shape: 'who_did_what',
             },

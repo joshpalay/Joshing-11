@@ -84,6 +84,7 @@ function respondByTag(tag: string) {
               explainer: 'He is painting the Magdalene in the church.',
               difficulty_estimate: 'accessible',
               fact_key: 'tosca-cavaradossi-act1-painting',
+              subject_entity: 'Cavaradossi',
               sub_angles: ['Tosca Act I'],
               question_shape: 'who_did_what',
             },

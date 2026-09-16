@@ -2,6 +2,7 @@ import { and, cosineDistance, eq, inArray, isNotNull, isNull, sql } from 'drizzl
 
 import { db } from '@/server/db';
 import { generatedQuestions, questions } from '@/server/db/schema';
+import { domainKey } from '@/lib/knowledge/domain-key';
 
 // B1 pool substrate — unified selection layer (PRD-D-5 §5.1 / §8).
 //
@@ -59,6 +60,49 @@ export async function getServableBankFactKeys(
   // (see domain-fragmentation.ts:130).
   const rows = (result as unknown as { rows?: Row[] }).rows ?? (result as unknown as Row[]);
   return rows.map((r) => ({ domainKey: r.domain_key, factKey: r.fact_key }));
+}
+
+/**
+ * Servable bank rows for a domain set, reduced to the three fields the
+ * deterministic same-fact gate needs (B-DEDUP-BANK-SAME-FACT-01): folded
+ * domain key, subject_entity, answer. Both tables — machine rows by
+ * domain_key, human rows by folded canonical_subcategory (Question has no
+ * domain_key column, so the fold happens here in JS).
+ *
+ * Why this exists: fact_key is re-minted per generation call and never
+ * matches across calls for the same real fact, and the embedding gate only
+ * sees rows that were embedded (~half the bank as of 2026-09-16). What DOES
+ * survive rewording is the pair (subject, answer) — five of six Mrs. Dalloway
+ * collisions found in the 2026-09-16 audit shared an answer key with a bank row
+ * whose stem embedded at 0.81–0.93 against the new one, under every threshold.
+ */
+export async function getServableBankFacts(
+  domainKeys: string[],
+): Promise<Array<{ domainKey: string; subjectEntity: string | null; answer: string }>> {
+  const keys = [...new Set(domainKeys.filter(Boolean))];
+  if (keys.length === 0) return [];
+  type Row = { domain_key: string | null; label: string | null; subject_entity: string | null; answer: string };
+  const result = await db.execute(sql`
+    SELECT g.domain_key, g.canonical_subcategory AS label, g.subject_entity, g.answer
+      FROM ${generatedQuestions} g
+     WHERE g.domain_key = ANY(${keys})
+       AND g.is_duplicate = false
+    UNION ALL
+    SELECT NULL AS domain_key, q.canonical_subcategory AS label, q.subject_entity, q.answer_text AS answer
+      FROM ${questions} q
+     WHERE q.deleted_at IS NULL
+       AND q.is_duplicate = false
+       AND q.canonical_subcategory IS NOT NULL
+  `);
+  const rows = (result as unknown as { rows?: Row[] }).rows ?? (result as unknown as Row[]);
+  const keySet = new Set(keys);
+  const out: Array<{ domainKey: string; subjectEntity: string | null; answer: string }> = [];
+  for (const r of rows) {
+    const key = r.domain_key ?? (r.label ? domainKey(r.label) : null);
+    if (!key || !keySet.has(key)) continue;
+    out.push({ domainKey: key, subjectEntity: r.subject_entity, answer: r.answer });
+  }
+  return out;
 }
 
 export type PoolOrigin = 'machine' | 'human';
@@ -268,6 +312,12 @@ export interface NearestPoolMatch {
    *  coarser signal to corroborate a same-fact match even when fact_key text
    *  drifted. */
   subjectEntity: string | null;
+  /** The match's stored answer. A matching answer key (see answerCooldownKey)
+   *  is the strongest cheap same-fact signal there is: two stems about one
+   *  subject that land on the same answer are the same fact however they are
+   *  worded, which is exactly the paraphrase case fact_key drift hides
+   *  (B-DEDUP-BANK-SAME-FACT-01). */
+  answer: string | null;
 }
 
 /**
@@ -289,6 +339,7 @@ export async function findNearestInPool(
         distance: machineDistance,
         factKey: generatedQuestions.factKey,
         subjectEntity: generatedQuestions.subjectEntity,
+        answer: generatedQuestions.answer,
       })
       .from(generatedQuestions)
       .where(and(
@@ -299,7 +350,12 @@ export async function findNearestInPool(
       .orderBy(machineDistance)
       .limit(1),
     db
-      .select({ id: questions.id, distance: humanDistance, subjectEntity: questions.subjectEntity })
+      .select({
+        id: questions.id,
+        distance: humanDistance,
+        subjectEntity: questions.subjectEntity,
+        answer: questions.answerText,
+      })
       .from(questions)
       .where(and(
         isNotNull(questions.embedding),
@@ -319,6 +375,7 @@ export async function findNearestInPool(
       similarity: 1 - Number(machineNearest[0].distance),
       factKey: machineNearest[0].factKey ?? null,
       subjectEntity: machineNearest[0].subjectEntity ?? null,
+      answer: machineNearest[0].answer ?? null,
     });
   }
   if (humanNearest[0]) {
@@ -330,6 +387,7 @@ export async function findNearestInPool(
       similarity: 1 - Number(humanNearest[0].distance),
       factKey: null,
       subjectEntity: humanNearest[0].subjectEntity ?? null,
+      answer: humanNearest[0].answer ?? null,
     });
   }
   if (!candidates.length) return null;

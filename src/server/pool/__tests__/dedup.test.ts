@@ -14,6 +14,7 @@ const near = (over: Partial<NearestPoolMatch> & Pick<NearestPoolMatch, 'origin'>
   similarity: 0.99,
   factKey: null,
   subjectEntity: null,
+  answer: null,
   ...over,
 });
 
@@ -217,5 +218,62 @@ describe('resolveCollision — human-vs-human never gets fact_key protection (en
       existingOrigin: 'machine',
       survivorId: 'new-h',
     });
+  });
+});
+
+describe('resolveCollision — matching answer corroborates a drifted fact_key (B-DEDUP-BANK-SAME-FACT-01)', () => {
+  it('suppresses the live penknife pair: different fact_keys, cosine 0.93, same answer', () => {
+    // Real rows, 2026-09-16: both "Peter Walsh's penknife" questions were servable.
+    const decision = resolveCollision(
+      {
+        id: 'new-m',
+        origin: 'machine',
+        factKey: 'mrs-dalloway-peter-walsh-penknife-fidget-motif',
+        subjectEntity: 'Peter Walsh',
+        answer: 'A penknife (pocketknife)',
+      },
+      near({
+        id: 'old-m',
+        origin: 'machine',
+        similarity: 0.9325,
+        factKey: 'virginia-woolf-s-novels-and-essays-mrs-dalloway-a-penknife-pocketknife',
+        subjectEntity: 'Mrs. Dalloway',
+        answer: 'A penknife (pocket knife)',
+      }),
+      T,
+      DT,
+    );
+    // "pocketknife" vs "pocket knife" differ, but the head before the paren matches.
+    expect(decision).toEqual({ action: 'suppress_incoming', survivorId: 'old-m' });
+  });
+
+  it('keeps distinct facts with different answers under the raised bar', () => {
+    const decision = resolveCollision(
+      { id: 'new-m', origin: 'machine', factKey: 'md-kilman-coat', subjectEntity: 'Doris Kilman', answer: 'a green mackintosh' },
+      near({ id: 'old-m', origin: 'machine', similarity: 0.95, factKey: 'md-kilman-envy', subjectEntity: 'Miss Kilman', answer: 'Envy' }),
+      T,
+      DT,
+    );
+    expect(decision).toEqual({ action: 'none' });
+  });
+
+  it('never lets a generic shared answer ("two") relax the bar', () => {
+    const decision = resolveCollision(
+      { id: 'new-m', origin: 'machine', factKey: 'a-x', subjectEntity: 'A', answer: 'Two' },
+      near({ id: 'old-m', origin: 'machine', similarity: 0.95, factKey: 'b-y', subjectEntity: 'B', answer: 'two' }),
+      T,
+      DT,
+    );
+    expect(decision).toEqual({ action: 'none' });
+  });
+
+  it('relaxes the human-vs-human bar when the answers match', () => {
+    const decision = resolveCollision(
+      { id: 'new-h', origin: 'human', subjectEntity: 'Mrs. Dalloway', answer: 'Cymbeline' },
+      near({ id: 'old-h', origin: 'human', similarity: 0.95, factKey: null, subjectEntity: 'Clarissa Dalloway', answer: 'Cymbeline' }),
+      T,
+      DT,
+    );
+    expect(decision).toEqual({ action: 'suppress_incoming', survivorId: 'old-h' });
   });
 });

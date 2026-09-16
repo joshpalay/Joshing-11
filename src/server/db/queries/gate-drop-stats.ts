@@ -24,6 +24,10 @@ export const GATE_NAMES = [
   'answered_history_embedding',
   'answer_cooldown',
   'subject_cooldown',
+  // Deterministic (domain|subject, answer) match against the SERVABLE shared
+  // bank, both tables, any user — the same-fact paraphrases fact_key drift and
+  // the un-embedded half of the bank hide (B-DEDUP-BANK-SAME-FACT-01).
+  'bank_same_fact',
   'answer_leak',
   // Measure-only until PARTIAL_ANSWER_LEAK_ENABLED / DOMAIN_DRIFT_DROP_ENABLED
   // are set: `dropped` counts what each rule WOULD remove, so the flags get

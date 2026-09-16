@@ -96,6 +96,30 @@ describe('generation prompt — example facts are off limits (R6)', () => {
     }
   });
 
+  it('draws its illustrative examples from works outside the live inventory (2026-09-16)', () => {
+    // The GOOD/BAD pairs used to be built on the user\'s own domains (Mrs.
+    // Dalloway, Harry Potter, the Ring, Gilmore Girls, UX Design…), so the
+    // "examples are not a question bank" rule was eating real fan-salient
+    // surface — ~8 banned facts in Mrs. Dalloway alone. Examples now come from
+    // works no held domain covers; the list below is what must NOT reappear.
+    for (const leaked of [
+      'Sally Seton represent',
+      'Dumbledore award',
+      'Macbeth by planning',
+      "Paul Allen's business card?" ,
+      "Lorelai's dog",
+      'Captain Picard',
+      'Phineas and Ferb, whom',
+      'Nineteenth Amendment',
+      'Water Temple',
+    ]) {
+      expect(SYSTEM_PROMPT).not.toContain(leaked);
+    }
+    for (const fresh of ['Moby-Dick', 'The Lady, or the Tiger?', 'Casablanca', 'Immortal Game']) {
+      expect(SYSTEM_PROMPT).toContain(fresh);
+    }
+  });
+
   it('extends the ban to facts used in the BAD examples', () => {
     expect(SYSTEM_PROMPT).toContain('A fact used to demonstrate a defect is still off limits');
   });

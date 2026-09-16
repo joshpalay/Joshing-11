@@ -33,12 +33,21 @@ describe('generated question contract', () => {
     expect(parsed).toEqual([]);
   });
 
-  it('measures optional subject metadata without starving question supply', () => {
+  it('rejects a missing subject_entity (required since 2026-09-16)', () => {
+    // R7 subject coverage, the subject-cooldown gate, pool dedup's fact_key-drift
+    // corroboration and the bank same-fact gate all read this column; a null
+    // row is invisible to every one of them.
     const parsed = parseQuestions(JSON.stringify({
-      questions: [validQuestion({ subject_entity: null, sub_angles: [] })],
+      questions: [validQuestion({ subject_entity: null })],
+    }));
+    expect(parsed).toEqual([]);
+  });
+
+  it('still keeps a question whose sub_angles are empty (optional, measured)', () => {
+    const parsed = parseQuestions(JSON.stringify({
+      questions: [validQuestion({ sub_angles: [] })],
     }));
     expect(parsed).toHaveLength(1);
-    expect(parsed[0].subject_entity).toBeNull();
     expect(parsed[0].sub_angles).toEqual([]);
   });
 });
