@@ -49,7 +49,7 @@ export function GhostTerritoryCircle({
       type="button"
       aria-label={added ? `${territory.domain} — added` : `Add ${territory.domain}`}
       aria-pressed={added}
-      className={`flex w-full flex-col items-center gap-1.5 rounded-[var(--radius-3xl)] p-1 text-center transition ${
+      className={`flex min-h-11 w-full flex-col items-center gap-1.5 rounded-[var(--radius-3xl)] p-1 text-center transition ${
         busy ? 'opacity-40' : 'opacity-100'
       }`}
       style={style}

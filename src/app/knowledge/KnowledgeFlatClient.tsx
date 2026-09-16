@@ -1217,7 +1217,7 @@ function KnowledgePageContent({
                   <div className="mt-3 border border-[var(--border-light)] bg-[var(--cream)] p-3">
                     <p className="m-0 font-semibold">{selectedInterest.label}</p>
                     {selectedInterest.description ? <p className="mt-2 text-[var(--text-muted-warm)] text-[0.88rem] leading-[1.5]">{selectedInterest.description}</p> : null}
-                    <button type="button" className="mt-2 border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
+                    <button type="button" className="mt-2 inline-flex min-h-11 items-center border-none bg-transparent text-[var(--text-muted-warm)] underline cursor-pointer p-0 text-[0.76rem] uppercase tracking-[0.08em]" onClick={() => setSelectedInterest({ label: customInterest.trim() || selectedInterest.label })}>
                       Use my wording
                     </button>
                   </div>

@@ -123,7 +123,7 @@ html.welcome-tour-active{overflow:hidden;}
 html.welcome-tour-active [data-app-chrome]{display:none !important;}
 .welcome-tour-strip{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--brand-ink-950);color:var(--primary-foreground);padding:9px 16px;}
 .welcome-tour-strip .wt-wm{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-cream);}
-.welcome-tour-strip .wt-skip{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:color-mix(in srgb, var(--primary-foreground) 82%, transparent);background:color-mix(in srgb, var(--primary-foreground) 12%, transparent);border:none;border-radius:999px;padding:6px 13px;cursor:pointer;}
+.welcome-tour-strip .wt-skip{display:inline-flex;align-items:center;justify-content:center;min-height:44px;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:color-mix(in srgb, var(--primary-foreground) 82%, transparent);background:color-mix(in srgb, var(--primary-foreground) 12%, transparent);border:none;border-radius:999px;padding:6px 13px;cursor:pointer;}
 .welcome-tour-pips{display:flex;gap:5px;}
 .welcome-tour-pips i{width:6px;height:6px;border-radius:50%;background:color-mix(in srgb, var(--primary-foreground) 28%, transparent);transition:background .3s;}
 .welcome-tour-pips i.on{background:var(--brand-orange);}

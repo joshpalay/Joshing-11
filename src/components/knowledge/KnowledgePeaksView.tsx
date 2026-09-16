@@ -677,7 +677,7 @@ function KnowledgeCircleCell({
       type="button"
       onClick={onSelect}
       aria-pressed={active}
-      className={`flex flex-col items-center gap-1 rounded-xl p-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+      className={`flex min-h-11 flex-col items-center gap-1 rounded-xl p-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
         active ? 'bg-[var(--brand-card)]' : 'hover:opacity-90'
       }`}
     >

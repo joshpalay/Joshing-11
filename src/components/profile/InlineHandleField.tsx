@@ -121,7 +121,7 @@ export function InlineHandleField({
           <div className="mt-2 flex gap-2">
             <button
               type="button"
-              className="rounded-md bg-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--primary-foreground)] transition hover:opacity-90 disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--warning)] px-4 py-1 text-xs font-medium text-[var(--primary-foreground)] transition hover:opacity-90 disabled:opacity-60"
               onClick={() => void confirmSave()}
               disabled={status === 'saving'}
             >
@@ -129,7 +129,7 @@ export function InlineHandleField({
             </button>
             <button
               type="button"
-              className="rounded-md border border-[var(--warning-border)] px-3 py-1 text-xs"
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--warning-border)] px-4 py-1 text-xs"
               onClick={cancel}
               disabled={status === 'saving'}
             >

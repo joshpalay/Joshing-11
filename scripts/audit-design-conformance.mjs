@@ -67,13 +67,20 @@ const BASELINE = {
   // padding, and the control is transparent (a §3.7 text action, an icon-only
   // share glyph, a modal close, §3.5 tabs, a §3.6 menu row), so the box reaches
   // 44px with no visible change. Fixed.
-  // The remaining 96 are NOT a backlog: 57 were read and deliberately left
-  // (already compliant behind the heuristic's blind spot, prop-driven sizing,
-  // or micro-type decoration), and 39 are bordered or filled buttons whose box
-  // IS their visual, where reaching 44px means visibly fattening the control —
-  // a design call, deliberately not made by codemod. See §9.1.
+  // 96 -> 79 on 2026-09-16: Josh RATIFIED "chunky" — a bordered or filled
+  // button that has to get visibly fatter to reach 44px gets fatter. That
+  // settled the last open design call, so the 17 remaining under-floor
+  // labelled buttons took .btn-ghost's geometry (inline-flex, min-h-11,
+  // centred, px-4) while keeping their own radius and colour.
+  // The remaining 79 are NOT a backlog. They are: 38 the heuristic cannot see
+  // (the class lives in a shared const or outside its 7-line window), 11 whose
+  // size is owned by a caller's className prop, ~14 already over the floor via
+  // padding or inline style the heuristic cannot add up, and a short list of
+  // ratified small controls — chip-dismiss glyphs (§1.4), the Switch track,
+  // the KnowledgeBubbleMap breadcrumb (also R8-exempt), and two text actions
+  // that CANNOT take the floor without breaking their own layout (see §9.1).
   // This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 96,
+  R10: 79,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────
