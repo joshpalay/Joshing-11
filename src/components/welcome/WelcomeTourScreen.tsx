@@ -51,7 +51,7 @@ const SCOPED_STYLE = `
 .wts-col{position:relative;margin:0 auto;display:flex;height:100dvh;width:100%;max-width:420px;flex-direction:column;overflow:hidden;background:var(--brand-cream-page);}
 .wts-strip{position:relative;z-index:63;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--brand-ink-950);color:var(--primary-foreground);padding:9px 16px;}
 .wts-strip .wts-wm{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-cream);}
-.wts-strip .wts-skip{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:color-mix(in srgb, var(--primary-foreground) 82%, transparent);background:color-mix(in srgb, var(--primary-foreground) 12%, transparent);border:none;border-radius:999px;padding:6px 13px;cursor:pointer;}
+.wts-strip .wts-skip{display:inline-flex;align-items:center;justify-content:center;min-height:44px;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:color-mix(in srgb, var(--primary-foreground) 82%, transparent);background:color-mix(in srgb, var(--primary-foreground) 12%, transparent);border:none;border-radius:999px;padding:6px 13px;cursor:pointer;}
 .wts-pips{display:flex;gap:5px;}
 .wts-pips i{width:6px;height:6px;border-radius:50%;background:color-mix(in srgb, var(--primary-foreground) 28%, transparent);transition:background .3s;}
 .wts-pips i.on{background:var(--brand-orange);}

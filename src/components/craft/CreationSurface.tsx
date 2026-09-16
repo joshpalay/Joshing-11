@@ -407,7 +407,7 @@ function OwnQuestionCard({
             <button
               type="button"
               onClick={() => { setAnswer(verify.status === 'wrong' ? (verify.corrected ?? answer) : answer); setVerify({ status: 'idle' }); }}
-              className="mt-2 rounded-md border px-3 py-1 text-xs font-medium"
+              className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium"
               style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
             >
               Apply suggested answer
@@ -523,7 +523,7 @@ function OwnQuestionCard({
             <button
               type="button"
               onClick={useSuggestion}
-              className="mt-2 rounded-md border px-3 py-1 text-xs font-medium"
+              className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium"
               style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
             >
               Use Joshing&apos;s answer
@@ -545,7 +545,7 @@ function OwnQuestionCard({
                 type="button"
                 onClick={() => void checkAnswer()}
                 disabled={verify.status === 'checking'}
-                className="rounded-md border px-3 py-1 text-xs font-medium disabled:opacity-50"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium disabled:opacity-50"
                 style={{ borderColor: 'var(--brand-navy)', color: 'var(--brand-navy)' }}
               >
                 Check my answer
@@ -553,7 +553,7 @@ function OwnQuestionCard({
               <button
                 type="button"
                 onClick={useSuggestion}
-                className="rounded-md border px-3 py-1 text-xs font-medium"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
               >
                 Use Joshing&apos;s answer
@@ -569,7 +569,7 @@ function OwnQuestionCard({
             <button
               type="button"
               onClick={() => void checkAnswer()}
-              className="mt-2 rounded-md border px-3 py-1 text-xs font-medium"
+              className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium"
               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
             >
               Check answer
@@ -913,7 +913,7 @@ function CandidateCard({
             <button
               type="button"
               onClick={() => applyCorrection(verify.corrected!)}
-              className="mt-2 rounded-md border px-3 py-1 text-xs font-medium"
+              className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium"
               style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
             >
               Apply suggested answer

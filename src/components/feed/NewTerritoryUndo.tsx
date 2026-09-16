@@ -60,7 +60,7 @@ const primaryMessageStyle = {
 };
 
 const pillButton =
-  'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-quiet transition-colors disabled:opacity-60';
+  'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-quiet transition-colors disabled:opacity-60';
 
 export function NewTerritoryUndo({
   domain,

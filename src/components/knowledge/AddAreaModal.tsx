@@ -33,7 +33,7 @@ export function AddAreaModal({
   }, [onClose]);
 
   const actionButton =
-    'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+    'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
   return (
     <div

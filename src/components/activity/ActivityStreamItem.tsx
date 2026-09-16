@@ -875,7 +875,11 @@ export function ConvergenceExpansion({
               justifyContent: 'center',
               background: 'transparent',
               border: 'none',
+              // §9.1/§3.4: icon-only, so the 15px glyph is the whole target. The
+              // box is transparent, so growing it to 44px changes nothing visually.
               padding: 4,
+              minWidth: 44,
+              minHeight: 44,
               color: INK,
               cursor: 'pointer',
             }}
@@ -944,7 +948,11 @@ function SendOnwardExpansion({
             justifyContent: 'center',
             background: 'transparent',
             border: 'none',
+            // §9.1/§3.4: icon-only, so the 15px glyph is the whole target. The
+            // box is transparent, so growing it to 44px changes nothing visually.
             padding: 4,
+            minWidth: 44,
+            minHeight: 44,
             color: INK,
             cursor: 'pointer',
           }}

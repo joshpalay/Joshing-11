@@ -677,7 +677,7 @@ function KnowledgeCircleCell({
       type="button"
       onClick={onSelect}
       aria-pressed={active}
-      className={`flex flex-col items-center gap-1 rounded-xl p-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+      className={`flex min-h-11 flex-col items-center gap-1 rounded-xl p-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
         active ? 'bg-[var(--brand-card)]' : 'hover:opacity-90'
       }`}
     >
@@ -827,7 +827,7 @@ export function PeakDetailCard({
         onClick={() => void inlineAdd(id, name)}
         // Compact sibling of .btn-ghost (same corners/border/type, row-friendly
         // height) — the full 44px system ghost overwhelms a single text row.
-        className="inline-flex min-h-9 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex min-h-11 flex-none items-center gap-1 rounded-[var(--radius-xs)] border bg-background px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         style={added ? { color: 'var(--text-muted)' } : undefined}
         aria-label={
           added

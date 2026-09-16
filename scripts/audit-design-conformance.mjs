@@ -57,9 +57,30 @@ const BASELINE = {
   // decided the answer: 40 inline text actions onto §3.7's own
   // `inline-flex min-h-11 items-center`, LoginPanel's shared SUBTLE_LINK_CLASS
   // (3 more), 10 list-rows and the feed tab strip onto §3.5/§3.6's `min-h-11`.
-  // The remaining 142 are small labelled buttons needing a per-site read.
+  // 142 -> 116 on 2026-09-16: every remaining site was read individually and
+  // given a call. 26 were controls declaring an explicit 32-40px height (or a
+  // 34px square icon button) — a real tap target a few px under the floor, so
+  // they were raised to min-h-11/size-11. Several live in a shared const, so
+  // one edit moved a whole family.
+  // 116 -> 96 on 2026-09-16: a closer read of the 59 "no declared height" sites
+  // found 20 that are not the design question at all — their height comes from
+  // padding, and the control is transparent (a §3.7 text action, an icon-only
+  // share glyph, a modal close, §3.5 tabs, a §3.6 menu row), so the box reaches
+  // 44px with no visible change. Fixed.
+  // 96 -> 79 on 2026-09-16: Josh RATIFIED "chunky" — a bordered or filled
+  // button that has to get visibly fatter to reach 44px gets fatter. That
+  // settled the last open design call, so the 17 remaining under-floor
+  // labelled buttons took .btn-ghost's geometry (inline-flex, min-h-11,
+  // centred, px-4) while keeping their own radius and colour.
+  // The remaining 79 are NOT a backlog. They are: 38 the heuristic cannot see
+  // (the class lives in a shared const or outside its 7-line window), 11 whose
+  // size is owned by a caller's className prop, ~14 already over the floor via
+  // padding or inline style the heuristic cannot add up, and a short list of
+  // ratified small controls — chip-dismiss glyphs (§1.4), the Switch track,
+  // the KnowledgeBubbleMap breadcrumb (also R8-exempt), and two text actions
+  // that CANNOT take the floor without breaking their own layout (see §9.1).
   // This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 142,
+  R10: 79,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────

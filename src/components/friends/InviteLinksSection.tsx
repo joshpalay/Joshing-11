@@ -317,7 +317,7 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
                 <button
                   type="button"
                   onClick={() => void shareUrl(link.url, () => flashToast('Link copied.'))}
-                  className="inline-flex min-h-10 items-center justify-center rounded-md bg-[var(--brand-navy)] px-3 text-xs font-semibold text-[var(--brand-card)] transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--brand-navy)] px-3 text-xs font-semibold text-[var(--brand-card)] transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
                 >
                   Share link
                 </button>

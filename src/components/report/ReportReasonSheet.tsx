@@ -261,7 +261,7 @@ function SegmentButton({
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        'flex-1 rounded-2xl border px-3 py-2 text-sm font-medium transition',
+        'min-h-11 flex-1 rounded-2xl border px-3 py-2 text-sm font-medium transition',
         selected
           ? 'border-[var(--brand-ink)] bg-muted text-foreground'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground',

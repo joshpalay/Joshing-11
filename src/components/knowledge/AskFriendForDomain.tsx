@@ -221,7 +221,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
           </div>
           <button
             type="button"
-            className="inline-flex size-10 items-center justify-center rounded-md border"
+            className="inline-flex size-11 items-center justify-center rounded-md border"
             onClick={onClose}
             aria-label="Close"
           >
@@ -397,7 +397,7 @@ export function AskFriendForDomain({ domain, onClose }: Props) {
                   </button>
                   <button
                     type="button"
-                    className="text-muted-foreground px-3 text-sm"
+                    className="text-muted-foreground inline-flex min-h-11 items-center px-3 text-sm"
                     onClick={onClose}
                   >
                     Cancel

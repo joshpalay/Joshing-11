@@ -398,6 +398,10 @@ function DismissNoticeRow({
               background: 'none',
               border: 'none',
               padding: 0,
+              // §9.1: transparent text action — label size unchanged, box grows.
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: 44,
               cursor: 'pointer',
               color: 'var(--text-muted)',
               textDecoration: 'underline',
@@ -993,6 +997,10 @@ function ExpandableExplainer({ sentence, full }: { sentence: string; full: strin
             background: 'none',
             border: 'none',
             padding: 0,
+            // §9.1: the label stays 0.65rem; only the hit box grows to the floor.
+            display: 'inline-flex',
+            alignItems: 'center',
+            minHeight: 44,
             cursor: 'pointer',
             fontFamily: 'var(--font-mono)',
             fontSize: '0.65rem',
@@ -1528,6 +1536,12 @@ function ResultRow({
                     border: '1px solid var(--border)',
                     background: 'var(--surface)',
                     color: 'var(--text)',
+                    // §9.1: a bordered pill, so the box IS the visual — it reads
+                    // chunkier at the floor, which is the ratified trade (Josh).
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 44,
                     cursor:
                       recheckState === 'submitting' || recheckState === 'done'
                         ? 'default'

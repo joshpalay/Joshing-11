@@ -328,17 +328,17 @@ function PendingInviteCard({
               <div className="flex justify-center gap-6">
                 <button
                   type="button"
-                  className="text-muted-foreground text-sm"
+                  className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
                   onClick={() => onCopy(invite)}
                 >
                   {copyingId === invite.id ? 'Copied ✓' : 'Copy instead'}
                 </button>
-                <button type="button" className="text-muted-foreground text-sm" onClick={startEdit}>
+                <button type="button" className="text-muted-foreground inline-flex min-h-11 items-center text-sm" onClick={startEdit}>
                   Edit
                 </button>
                 <button
                   type="button"
-                  className="text-muted-foreground text-sm"
+                  className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
                   onClick={() => onCancel(invite)}
                   disabled={cancellingId === invite.id}
                 >
@@ -455,7 +455,7 @@ function OutboundRequestCard({
       <div className="mt-4 flex justify-center">
         <button
           type="button"
-          className="text-muted-foreground text-sm"
+          className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
           onClick={() => onCancel(request)}
           disabled={busy}
         >

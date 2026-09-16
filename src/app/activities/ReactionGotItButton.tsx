@@ -27,7 +27,7 @@ export function ReactionGotItButton({ reactionId, replied }: { reactionId: strin
   return (
     <button
       type="button"
-      className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
+      className="inline-flex min-h-11 items-center rounded-md border px-3 text-sm"
       onClick={() => void markReplied()}
       disabled={pending}
     >

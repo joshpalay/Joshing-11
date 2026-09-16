@@ -769,7 +769,7 @@ export function QuestionForm({
           <button
             type="button"
             onClick={() => setOrientationVisible(false)}
-            className="mt-2 text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
+            className="mt-2 inline-flex min-h-11 items-center text-[0.78rem] uppercase tracking-[0.08em] text-[var(--text-muted-warm)] underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0"
           >
             Got it
           </button>
@@ -874,7 +874,7 @@ export function QuestionForm({
                   type="button"
                   onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
                   disabled={state.stage === 'SUBMITTING'}
-                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Use Joshing&apos;s answer
                 </button>
@@ -899,7 +899,7 @@ export function QuestionForm({
                   type="button"
                   onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
                   disabled={state.stage === 'SUBMITTING'}
-                  className="mt-2 rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Use Joshing&apos;s answer instead
                 </button>
@@ -915,7 +915,7 @@ export function QuestionForm({
                   type="button"
                   onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
                   disabled={state.stage === 'SUBMITTING'}
-                  className="mt-2 rounded-md border border-[var(--warning)] px-3 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--warning)] px-4 py-1 text-xs font-medium text-[var(--warning)] hover:bg-[var(--warning-surface)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Use Joshing&apos;s answer instead
                 </button>
@@ -933,7 +933,7 @@ export function QuestionForm({
                     type="button"
                     onClick={() => void checkAnswer()}
                     disabled={state.stage === 'SUBMITTING'}
-                    className="rounded-md border border-[var(--brand-navy)] px-3 py-1 text-xs font-medium text-[var(--brand-navy)] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--brand-navy)] px-4 py-1 text-xs font-medium text-[var(--brand-navy)] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Check my answer
                   </button>
@@ -941,7 +941,7 @@ export function QuestionForm({
                     type="button"
                     onClick={() => dispatch({ type: 'USE_SUGGESTION' })}
                     disabled={state.stage === 'SUBMITTING'}
-                    className="rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-1 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Use Joshing&apos;s answer instead
                   </button>
@@ -997,7 +997,7 @@ export function QuestionForm({
                       onClick={() => setVisibility(option.value)}
                       aria-pressed={state.visibility === option.value}
                       disabled={state.stage === 'SUBMITTING'}
-                      className={['rounded px-3 py-1 text-sm transition', state.visibility === option.value ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'].join(' ')}
+                      className={['inline-flex min-h-11 items-center justify-center rounded px-3 py-1 text-sm transition', state.visibility === option.value ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'].join(' ')}
                     >
                       {option.label}
                     </button>

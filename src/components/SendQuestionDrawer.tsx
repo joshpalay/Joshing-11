@@ -164,7 +164,7 @@ export function SendQuestionDrawer({ isOpen, onClose, question, onSent }: SendQu
         <aside className="relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-lg bg-background shadow-[var(--shadow-overlay)] md:h-full md:max-h-none md:w-[440px] md:rounded-none">
           <header className="flex items-center justify-between gap-3 border-b p-5">
             <h2 className="font-serif text-2xl font-semibold">Send to a friend</h2>
-            <button className="inline-flex size-10 items-center justify-center rounded-md border hover:bg-muted" type="button" onClick={onClose} title="Close">
+            <button className="inline-flex size-11 items-center justify-center rounded-md border hover:bg-muted" type="button" onClick={onClose} title="Close">
               <X className="size-4" />
             </button>
           </header>

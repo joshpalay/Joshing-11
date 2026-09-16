@@ -133,14 +133,19 @@ export function DirectQuestionAnswer({
         type="button"
         onClick={() => setPhase('input')}
         style={{
-          display: 'inline-block',
+          // §9.1: filled, so the box IS the visual — it reads chunkier at the
+          // floor, which is the ratified trade (Josh).
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 44,
           background: INK,
           color: 'var(--brand-cream-page)',
           border: 'none',
           fontFamily: FM,
           fontSize: 10,
           letterSpacing: 2,
-          padding: '8px 12px',
+          padding: '8px 16px',
           cursor: 'pointer',
         }}
       >

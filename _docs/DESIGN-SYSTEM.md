@@ -519,9 +519,42 @@ to zero. Where the 295 went:
 | Inline text actions missing §3.7's `min-h-11` | 43 | **fixed 2026-09-16** — `inline-flex min-h-11 items-center`; type size unchanged, only the hit box grew |
 | List-rows / tabs missing §3.5 / §3.6's `min-h-11` | 11 | **fixed 2026-09-16** — both sections already mandated it |
 | Heuristic false positives (class in a shared const) | 14 | left alone — the component is already compliant |
-| Small labelled buttons | 142 | per-site judgement; no blanket call |
+| Controls declaring an explicit 32–40px height | 26 | **fixed 2026-09-16** — raised to `min-h-11` / `size-11` |
+| Transparent controls whose height came from padding | 20 | **fixed 2026-09-16** — box grows, visual unchanged |
+| Bordered / filled buttons that had to get fatter | 17 | **fixed 2026-09-16** — the "chunky" ruling, below |
+| Read and deliberately left | 79 | see the disposition below |
 
-**Landed 2026-09-16 (295 → 142).** The inline-text-action pass is the one worth understanding:
+**"Chunky" — RATIFIED (Josh, 2026-09-16).** The last open question on R10 was what to do with a
+button whose box *is* its visual. A transparent control — a text action, an icon-only glyph, a
+tab, a menu row — can grow to 44px with nothing on screen changing. A bordered or filled button
+cannot: `min-h-11` on a `border px-3 py-1 text-xs` tertiary button makes it visibly fatter.
+**The ruling is that it gets fatter.** The thumb wins over the silhouette.
+
+The recipe is `.btn-ghost`'s geometry — `inline-flex min-h-11 items-center justify-center` with
+`px-4` — applied at the call site while the site keeps its own radius and colour. It is not a
+fold onto `.btn-ghost` itself, because that would also swap the radius (`rounded-md` → 4px) and
+paint `bg-background` on controls that are currently transparent over a card. Those are
+separate changes and were not made here. `px-3` → `px-4` goes with the height: a 44px-tall box
+with 12px side padding reads as a stubby tall pill, and every `.btn-*` recipe pairs `min-h-11`
+with `px-4`.
+
+**Two controls cannot take the floor and are exempt by construction.**
+`InlineAnswerFlow`'s "ANSWER →" draws its underline as a `border-bottom` on the button itself,
+so a 44px box detaches the rule from the label — it would need the border moved to an inner
+span first. `EditorialPromos`' "Undo" sits mid-sentence in flowing prose, where `inline-flex
+min-h-11` stretches the whole line box. Both are left deliberately; fixing them is a
+refactor, not a size change.
+
+**Where the remaining 79 are.** 38 the heuristic cannot see (the class lives in a shared
+constant or outside its 7-line window — confirmed by hand); 11 whose size is owned by a
+caller's `className` prop, so there is nothing to fix in the component; ~14 already over the
+floor via padding or inline style the heuristic cannot add up; and the ratified small controls
+— chip-dismiss `×` glyphs (§1.4), the `Switch` track (a switch is not a button box), and the
+`KnowledgeBubbleMap` breadcrumb (already R8-exempt for the same reason). Four more sit in
+`components/games/game-details-mode-sections.tsx`, which **nothing imports** — dead surface
+left by the Joshing Games sunset, and a deletion question rather than a sizing one.
+
+**Landed 2026-09-16 (295 → 79).** The inline-text-action pass is the one worth understanding:
 §3.7's own recipe (`FeedActionLink`) *starts* with `inline-flex min-h-11 items-center`, so a
 14px link keeps its type size and simply sits in a 44px-tall invisible box — which is what §9.1
 means by "visual size may be smaller … inside a 44px box". Three `block`-display links
@@ -529,6 +562,20 @@ means by "visual size may be smaller … inside a 44px box". Three `block`-displ
 without a display swap: they wrap already-tall content, so the min-height is inert there and
 only guards the empty case. `LoginPanel`'s shared `SUBTLE_LINK_CLASS` moved `block` → `flex
 w-fit` so `mx-auto` still centres it while the label centres inside the taller box.
+
+The second pass (142 → 116) raised the 26 controls that already *declared* a height of 32–40px
+(or a 34px square icon button): those state an intended tap target and land a few pixels short,
+so the raise is mechanical, not a design change. It was applied by matching each site's exact
+resolved class string rather than scanning the lines after `<button` — a window scan mis-hit
+`<h3>`/`<p>` elements twice during this work. Note that four of the 26 live in a shared class
+constant, so one edit moved a whole family of buttons.
+
+The third pass (116 → 96) came from re-reading the sites that had been parked as "no declared
+height". Twenty of them had a perfectly readable height once you added up padding and
+line-height, and were transparent — so they were the *same* fix as the first pass, just hidden
+from a class-string rule. That is the general lesson here: the heuristic reads classes, but the
+question §9.1 actually asks is about rendered pixels, so a parked site is worth re-reading with
+the computed box in hand rather than trusting the first triage.
 
 Grep (a button with no declared 44px dimension): `npm run check:design -- --rule=R10 --verbose`
 
@@ -656,7 +703,7 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 142 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 79 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
 
 Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
 combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at
