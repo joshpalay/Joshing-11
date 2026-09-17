@@ -51,6 +51,19 @@ const TOKEN_LINT_RULE = {
 // ratifying §2.2a. When you clean a file
 // off this list or fix a canon site, drop the `--max-warnings` ceiling in
 // package.json by the number of warnings it removed. Never raise it.
+//
+// **18 → 48 (2026-09-17) — the one sanctioned raise, and why it is not a
+// regression.** The rule's scope widened from `src/components/**` to `src/**`.
+// Nothing got worse; 30 pre-existing violations became VISIBLE that the rule had
+// never been able to see, because it stopped at a folder boundary that has no
+// design meaning. The alternative — widening the scope and leaving the ceiling
+// at 18 — would have meant either failing the build on day one or quietly
+// exempting the files, and exempting them is how this hole was dug. So: park
+// them as warnings, name each cluster above, and ratchet back down.
+// The "never raise it" contract still stands for every other case: a raise is
+// legitimate ONLY when the net gets wider, never when the code gets worse, and
+// the new number must be the measured count on the day — not a round number
+// with headroom.
 const TOKEN_LINT_GRANDFATHERED = [
   "src/components/CreateChooser.tsx",
   "src/components/LoadingScreen.tsx",
@@ -64,6 +77,27 @@ const TOKEN_LINT_GRANDFATHERED = [
   "src/components/games/QuestionRatingButtons.tsx",
   "src/components/knowledge/AskFriendForDomain.tsx",
   "src/components/profile/SharedInterestsOverlap.tsx",
+  // Added 2026-09-17 when the rule's scope widened from `src/components/**` to
+  // `src/**` (see the block below). These are NOT new drift — they are drift the
+  // rule could never see, because it stopped at the folder boundary. They are
+  // parked as warnings, not exempted, and each needs a real pass:
+  //   • LoginPanel (19) — the whole panel paints `text-black/NN` and `bg-white/55`
+  //     rather than --brand-ink / --brand-card. It is the most-seen screen in the
+  //     app, so swapping pure black for the navy ink is a visible design change
+  //     and wants eyes, not a find-replace.
+  //   • share/ceremony/[token] (7, across page + not-found) — a PUBLIC share
+  //     landing on a raw `bg-stone-950`/`text-stone-50` dark theme. Strangers see
+  //     this page, so it is the least defensible of the three; it needs a proper
+  //     dark-surface token set, which does not exist yet.
+  //   • TerritorySetupClient (4) — `bg-white/40`-style scrims on the drag surface
+  //     whose "raised" register is separately deferred (see RULE_EXEMPT.R6).
+  "src/app/login/LoginPanel.tsx",
+  // Directory glob, NOT the two literal paths: the route segment is `[token]`,
+  // and eslint runs these through minimatch, where `[token]` is a character
+  // class matching one of t/o/k/e/n — so the literal path silently never
+  // matches. Any dynamic-route file added to this list needs the same shape.
+  "src/app/share/ceremony/**",
+  "src/app/daily/setup/TerritorySetupClient.tsx",
 ];
 
 // ── Design-canon lint (B-FABLE-DESIGN-CANON-01, Phase 5; _docs/DESIGN-SYSTEM.md §13) ──
@@ -183,7 +217,21 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["src/components/**/*.tsx"],
+    // Extended from `src/components/**` to all of `src/**` on 2026-09-17.
+    // The components-only scope was a real hole: `knowledge/[domain]`'s answer
+    // history rendered grading as `text-green-700` / `text-destructive` —
+    // breaking STYLE-GUIDE-COLOR §1's "exactly one correct and one wrong value"
+    // — and nothing flagged it for months, because the file lives under
+    // `src/app/**`. Route handlers and pages paint the same pixels as
+    // components; there was never a reason for the rule to stop at the folder.
+    files: ["src/**/*.tsx"],
+    // Same exemption list as the design-canon lane: tests, the dev palette, the
+    // feed debug page, and the ceremony rooms (immersive saturated surfaces with
+    // reversed type, exempted by DESIGN-SYSTEM §11 — their chrome is tuned to the
+    // room, and the Exit control hovers on white/10 by design). Before this,
+    // dev/ and ceremony/ were exempt from every design lane EXCEPT this one,
+    // purely because this one never reached outside src/components.
+    ignores: DESIGN_LINT_EXEMPT,
     rules: TOKEN_LINT_RULE,
   },
   {

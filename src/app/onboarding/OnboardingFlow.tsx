@@ -857,7 +857,7 @@ export default function OnboardingFlow({
                     <p
                       className={`mt-2 text-sm ${
                         handleStatus.state === 'available'
-                          ? 'text-emerald-600'
+                          ? 'text-[var(--success)]'
                           : handleStatus.state === 'unavailable'
                             ? 'text-destructive'
                             : 'text-muted-foreground'

@@ -903,7 +903,7 @@ export default function LoginPanel({
             <p
               className={`text-center text-sm ${
                 handleStatus.state === 'available'
-                  ? 'text-emerald-600'
+                  ? 'text-[var(--success)]'
                   : handleStatus.state === 'unavailable'
                     ? 'text-destructive'
                     : 'text-black/60'
