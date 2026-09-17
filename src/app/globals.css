@@ -2,7 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* No `@custom-variant dark` — this app has one ground and it is cream (Josh,
+   2026-09-17). Declaring the variant made `dark:` compile silently, which is
+   how a dead theme stays plausible; without it, a stray `dark:` class is a
+   build-time error instead of a class that never fires. See the note above the
+   token block below. */
 
 @theme inline {
     --font-heading: var(--font-sans);
@@ -427,46 +431,15 @@
     --z-takeover: 80;
 }
 
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --user-bubble: oklch(0.58 0.18 250);
-    --user-bubble-foreground: oklch(0.99 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
-    /* Editorial feature washes — tinted off the dark card so the bands stay
-       legible as a featured surface in dark mode. */
-    --editorial-parchment: color-mix(in srgb, var(--brand-border) 10%, var(--card));
-    --editorial-sage:      color-mix(in srgb, var(--success) 12%, var(--card));
-    --editorial-slate:     color-mix(in srgb, var(--brand-link) 14%, var(--card));
-}
+/* NOTE: there is deliberately NO .dark block and no dark: variant in this app.
+   Joshing has ONE ground and it is cream (Josh, 2026-09-17). A 40-line shadcn
+   .dark scaffold sat here until then: nothing ever added the class, no dark:
+   variant was used anywhere in src/, and there is no theme provider — so every
+   declaration in it was inert. Its real cost was readability: it gave --card,
+   --primary-foreground, --destructive and a dozen more a SECOND definition, so
+   reading a token value out of this file meant checking which block won.
+   If a surface needs to be dark, it is an immersive room (DESIGN-SYSTEM §11),
+   which themes itself — not a mode. */
 
 @layer base {
   * {

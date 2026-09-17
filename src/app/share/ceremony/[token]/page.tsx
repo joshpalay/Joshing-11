@@ -37,7 +37,11 @@ export default async function CeremonySharePage({ params }: { params: Promise<{ 
   if (!data) notFound();
 
   return (
-    <main className="min-h-dvh bg-stone-950 px-5 py-10 text-stone-50">
+    // The app has ONE ground and it is cream (Josh, 2026-09-17: no dark mode).
+    // This page used to paint a raw `bg-stone-950` backdrop, which was never a
+    // theme — just an unconverted default. It also fought the thing it exists to
+    // show: <ShareCard> is a LIGHT card (a PAPER→CREAM gradient on warm ink).
+    <main className="min-h-dvh bg-[var(--brand-cream-page)] px-5 py-10 text-[var(--brand-ink)]">
       <div className="mx-auto flex max-w-md flex-col items-center gap-7">
         <ShareCard
           beatsPayload={data.beatsPayload}
@@ -47,18 +51,20 @@ export default async function CeremonySharePage({ params }: { params: Promise<{ 
         />
 
         <section className="w-full space-y-4 text-center">
-          <details className="rounded-md border border-stone-700 bg-stone-900/70 px-4 py-3 text-left">
-            <summary className="cursor-pointer text-sm font-medium text-stone-100">What&rsquo;s this?</summary>
-            <p className="mt-3 text-sm leading-6 text-stone-300">
+          <details className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-4 py-3 text-left">
+            <summary className="min-h-11 cursor-pointer text-sm font-medium text-[var(--brand-ink)]">
+              What&rsquo;s this?
+            </summary>
+            <p className="mt-3 text-sm leading-6 text-[var(--brand-ink-700)]">
               Joshing is a private knowledge game with friends. Every week, it turns what you learned,
               wrote, and shared into a small reflection.
             </p>
           </details>
 
-          <Link
-            href="/login"
-            className="inline-flex h-12 items-center justify-center rounded-md bg-stone-100 px-6 text-sm font-medium text-stone-950"
-          >
+          {/* Was a hand-rolled `h-12 rounded-md bg-stone-100` button. It is the
+              one CTA on the page a stranger lands on, so it is .btn-primary —
+              which also brings it to the §9.1 floor and the 4px corner. */}
+          <Link href="/login" className="btn-primary">
             Try Joshing
           </Link>
         </section>

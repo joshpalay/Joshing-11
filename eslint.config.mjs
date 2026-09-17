@@ -81,6 +81,14 @@ const TOKEN_LINT_RULE = {
 // `ring-black/5` card hairlines onto `--brand-ink`/5, which the rule had never
 // flagged because the white/black alternative was missing the `ring` prefix
 // (now aligned with the palette line — see TOKEN_LINT_REGEX).
+//
+// **30 → 23 (2026-09-17, same day).** Josh ruled out a dark mode, which settled
+// the last cluster too: `share/ceremony/[token]` was not a dark THEME, it was an
+// unconverted `bg-stone-950` default wrapped around a LIGHT card — <ShareCard>
+// paints a PAPER→CREAM gradient. Both pages moved onto the cream ground, and
+// their hand-rolled CTA became `.btn-primary`. The dead 40-line `.dark` block
+// and the `@custom-variant dark` that made `dark:` compile came out of
+// globals.css in the same pass; see the note there.
 const TOKEN_LINT_GRANDFATHERED = [
   "src/components/CreateChooser.tsx",
   "src/components/LoadingScreen.tsx",
@@ -95,22 +103,14 @@ const TOKEN_LINT_GRANDFATHERED = [
   "src/components/knowledge/AskFriendForDomain.tsx",
   "src/components/profile/SharedInterestsOverlap.tsx",
   // Added 2026-09-17 when the rule's scope widened from `src/components/**` to
-  // `src/**` (see the block above). These are NOT new drift — they are drift the
-  // rule could never see, because it stopped at the folder boundary. They are
-  // parked as warnings, not exempted, and each needs a real pass:
-  //   • share/ceremony/[token] (7, across page + not-found) — a PUBLIC share
-  //     landing on a raw `bg-stone-950`/`text-stone-50` dark theme. Strangers see
-  //     this page, so it is the least defensible of the two; it needs a proper
-  //     dark-surface token set, which does not exist yet.
+  // `src/**` (see the block above). NOT new drift — drift the rule could never
+  // see, because it stopped at the folder boundary. Parked as a warning, not
+  // exempted:
   //   • TerritorySetupClient (4) — `bg-white/40`-style scrims on the drag surface
   //     whose "raised" register is separately deferred (see RULE_EXEMPT.R6).
-  // LoginPanel was the third, and was CLEANED rather than parked on 2026-09-17 —
-  // see the ceiling note above. Do not re-add it.
-  // Directory glob, NOT the two literal paths: the route segment is `[token]`,
-  // and eslint runs these through minimatch, where `[token]` is a character
-  // class matching one of t/o/k/e/n — so the literal path silently never
-  // matches. Any dynamic-route file added to this list needs the same shape.
-  "src/app/share/ceremony/**",
+  // The other two clusters were CLEANED rather than parked, both on 2026-09-17:
+  // LoginPanel, and share/ceremony (which was a dark page in an app that has no
+  // dark mode). Do not re-add either.
   "src/app/daily/setup/TerritorySetupClient.tsx",
 ];
 

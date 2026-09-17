@@ -705,7 +705,7 @@ Two vehicles, both report-only for existing code and blocking for regressions:
 Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing 0 · radius 0 · z-index 0
 · type-size 207. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
 `[#hex]` in `className` under **`src/**`** (widened from `src/components/**` on 2026-09-17 —
-see below), 14 grandfathered files at `warn`, `--max-warnings 30`. **Do not add to the
+see below), 13 grandfathered files at `warn`, `--max-warnings 23`. **Do not add to the
 grandfather list** except when the rule's own scope widens, which is the only reason it grew.
 
 **The folder boundary was a hole (closed 2026-09-17).** The colour rule only ever read
@@ -717,12 +717,33 @@ came to render grading as `text-green-700` against `text-destructive`, breaking
 the ceremony rooms) — before this, those four were exempt from every design lane *except* this
 one, purely because this one never reached them.
 
-Widening it surfaced **30** pre-existing violations in three clusters. **`LoginPanel` — the
-biggest, and the most-seen screen in the app — was cleaned the same day**, and the other two are
-parked as warnings and named in `eslint.config.mjs`: `share/ceremony/[token]` (7 — a **public**
-share landing on a raw `bg-stone-950` dark theme, the least defensible of the set; it needs a
-dark-surface token set that does not exist yet) and `TerritorySetupClient` (4 — scrims on the
-drag surface whose "raised" register is separately deferred).
+Widening it surfaced **30** pre-existing violations in three clusters. Two were cleaned the same
+day — `LoginPanel` (the most-seen screen in the app) and `share/ceremony/[token]` — leaving one
+parked and named in `eslint.config.mjs`: `TerritorySetupClient` (4 — scrims on the drag surface
+whose "raised" register is separately deferred).
+
+### There is no dark mode — RATIFIED (Josh, 2026-09-17)
+
+**Joshing has one ground and it is cream.** This was the answer to "the share page needs a
+dark-surface token set": it does not, because there is no dark surface to build a set for.
+
+`share/ceremony/[token]` was never a dark *theme*. It was an unconverted `bg-stone-950` default
+wrapped around a **light** card — `<ShareCard>` paints a `PAPER → CREAM` gradient on warm ink —
+so the page was fighting the one thing it exists to show, on the one surface a stranger sees.
+Both pages moved onto `--brand-cream-page` / `--brand-ink`, and their hand-rolled
+`h-12 rounded-md bg-stone-100` CTA became `.btn-primary`, which also brings it to the §9.1 floor.
+
+**The dead scaffold came out with it.** `globals.css` carried a 40-line `.dark { … }` block and
+an `@custom-variant dark`. Nothing ever added the class — no theme provider, no `next-themes`,
+no `dark` on `<html>`, and **zero `dark:` variants anywhere in `src/`** — so every declaration
+in it was inert. Its real cost was readability: it gave `--card`, `--primary-foreground`,
+`--destructive` and a dozen more a **second definition**, so reading a token value out of the
+file meant first working out which block won. Dropping the `@custom-variant` matters too: while
+it was declared, a stray `dark:` class compiled silently into a rule that could never fire.
+Now it is a build-time error.
+
+**If a surface needs to be dark, it is an immersive room (§11), which themes itself — not a
+mode.** The ceremony rooms are the only such surface, and they are already exempt by name.
 
 **The login clean-up is the pattern to copy (2026-09-17).** All 21 sites moved onto
 `--warm-ink` / `--brand-card` keeping **every opacity step exactly as it was** —
@@ -768,14 +789,14 @@ silently never matches and the file stays at `error`.
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
 | 9.1 / 9.2 touch floor and focus ring | R10 · 74 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling, → 74 by exempting the unreachable Joshing Games components and reworking the two text actions that could not take a min-height. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
 
-Lint lane baseline: **30** `canon/restricted-syntax` + `no-restricted-syntax` warnings
-combined (`package.json`'s `lint` script pins `--max-warnings 30`). Trajectory: **103** at
+Lint lane baseline: **23** `canon/restricted-syntax` + `no-restricted-syntax` warnings
+combined (`package.json`'s `lint` script pins `--max-warnings 23`). Trajectory: **103** at
 the Phase 5 build → 88 (buttons) → 63 (shadows) → 52 (icon buttons) → 41 (skeletons) →
 37 (focus/chips-flat/skeletons stack landed on `main`, #1686) → 27 (R4/R5 chip cleanup) →
 18 (R8 cleanup, 2026-09-14) → **48 (2026-09-17, the colour rule's scope widened to `src/**` —
 the count went up because the net did, not because the code did; see above)** → **30 (same
-day — LoginPanel cleaned rather than parked)**. Every closure
-ratchets the ceiling down the same day, and the 11 still-parked warnings are a backlog to
+day — LoginPanel cleaned rather than parked)** → **23 (same day — no dark mode, so share/ceremony moved to the cream ground)**. Every closure
+ratchets the ceiling down the same day, and the 4 still-parked warnings are a backlog to
 work off, not a new normal. The lint
 selectors still flag 2 of R8's 7 `RULE_EXEMPT` sites (`InviteLinksSection`,
 `KnowledgeBubbleMap`) since the eslint lane has no per-rule file exemption, only a whole-lane
