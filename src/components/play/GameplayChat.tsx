@@ -696,6 +696,9 @@ function QuestionRow({
               ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
               : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
             padding: '20px 22px',
+            // Contain the floated report control while still allowing the
+            // question copy to wrap beside it.
+            display: 'flow-root',
             fontFamily: 'var(--font-serif)',
             fontSize: '1.4875rem',
             fontWeight: 700,
@@ -704,18 +707,34 @@ function QuestionRow({
             lineHeight: 1.3,
           }}
         >
+          {/* Float the menu so it occupies the card corner instead of reserving
+              a full header row. The attribution and question copy can then wrap
+              naturally beside the tap target. */}
+          {reportTarget ? (
+            <div
+              style={{
+                ...reportMenuFontResetStyle,
+                float: 'right',
+                margin: '-8px -10px 6px 10px',
+              }}
+            >
+              <AnsweredRowActions
+                target={reportTarget}
+                surface={reportSurface}
+                onReportSubmitted={(category) => {
+                  if (category === 'inappropriate') onReportedInappropriate?.();
+                }}
+              />
+            </div>
+          ) : null}
           {/* Attribution ("FROM YESTERDAY · Maid Acasa") lives INSIDE the cream
               question card, not above it: on the full-strength triangle surface
               (daily/page.tsx) bare muted text floated on the pattern was illegible
               (see the questionActionLinkStyle note). On the cream fill it reads
               cleanly, sitting as one quiet line above the prompt. */}
-          {subhead || creatorName || reportTarget ? (
+          {subhead || creatorName ? (
             <div
               style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '10px',
                 marginBottom: '14px',
               }}
             >
@@ -784,22 +803,19 @@ function QuestionRow({
                 </span>
               ) : null}
             </div>
-            {reportTarget ? (
-              <span style={reportMenuFontResetStyle}>
-                <AnsweredRowActions
-                  target={reportTarget}
-                  surface={reportSurface}
-                  onReportSubmitted={(category) => {
-                    if (category === 'inappropriate') onReportedInappropriate?.();
-                  }}
-                />
-              </span>
-            ) : null}
             </div>
           ) : null}
           <p style={{ margin: 0 }}>{questionText}</p>
           {badges.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '6px',
+                marginTop: '12px',
+                clear: 'both',
+              }}
+            >
               {badges.map((badge) => (
                 <span
                   key={badge.label}
