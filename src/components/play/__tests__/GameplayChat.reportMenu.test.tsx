@@ -64,6 +64,8 @@ describe('GameplayChat ⋯ report menu (catch-up thread)', () => {
       questionMessage({ subhead: null, creatorName: null, reportTarget: { questionId: 'cq-1' } }),
     ]);
     expect(rendered).toContain('More actions');
+    expect(rendered).toContain('float:right');
+    expect(rendered).toContain('display:flow-root');
   });
 
   it('renders no menu on a question card without a reportTarget', () => {
