@@ -31,8 +31,8 @@ The thesis test for the whole system: **nothing that isn't a graded answer may r
 
 | Token | Current | Target |
 |---|---|---|
-| `--game-wrong` | `#c96b4a` (terracotta) | a true red _(set)_ — clearly not orange, not the link color |
-| `--game-wrong-strong` | `#c33d14` | the strong variant of the new red _(set)_ |
+| `--game-wrong` | `#c96b4a` (terracotta) | **`#a93b3b`** — muted brick, the wash/fill base (result-card backgrounds at 8–12%) |
+| `--game-wrong-strong` | `#c33d14` | **`#c1121f`** — the signal: rail + label text, a clear true red |
 | `--game-correct` | `#366045` | keep — but **confirm it clears the knowledge greens** (`#5a7a2e`, `#4a7a5a`, `#2e8b57`); if any crowd it, the *category* green moves, not the grading green |
 
 **Per the existing WCAG note:** correct/wrong must never be carried by color alone — always paired with a label or mark. The new red doesn't change that; it just makes the color half unambiguous.
@@ -117,5 +117,35 @@ In dependency order, same define → route → de-collide shape as the type prom
 ---
 
 ## What's settled vs. what still needs a value
-- **Settled (rules):** color-job taxonomy; WRONG→red; category = top-level domain with leaf inheritance; gold once-per-viewport, ceremony wins ties; orange = link/brand; one value per token.
-- **Still to set (values):** the specific WRONG-red hex; the per-domain category hues (needs the real top-level domain list from live code); the triangle category-vs-muted decision.
+
+**Reconciled against `globals.css` on 2026-09-16.** This section had said three values were
+still open. All three had in fact been set in the CSS, and the canon's own rule is that where
+this document and `globals.css` disagree, the CSS is right and the document has the bug. The
+values, so the doc stops asking a question the code has answered:
+
+- **The WRONG red — SET.** `--game-wrong #a93b3b` (the muted brick used as the wash/fill base
+  at 8–12%) and `--game-wrong-strong #c1121f` (the signal: rail and label text). Both are
+  clearly out of the terracotta family and away from the link orange `#d15e36`, which is what
+  §1 asked for.
+- **The category hues — SET.** Twelve `--cat-*` pairs (fill + text) keyed on top-level domain:
+  literature, music, film-tv, architecture, food, technology, sports, history, science,
+  philosophy, pop-culture, language. Two were deliberately moved to clear grading —
+  `--cat-literature` to bordeaux `#7d2c3f` off the grading red, `--cat-language` to teal
+  `#2e6e7e` off the CORRECT green.
+- **The triangle — DECIDED: option (b), decorative.** Triangle fill is a deterministic hash
+  over the six muted `--tri-*` values and carries no category meaning. The one bit a triangle
+  encodes is solid/hollow = unplayed/played, which is safe now that WRONG has left orange.
+  Recorded at `globals.css:93-98`. Moving to option (a) — hue = `--cat-*` category — is a
+  deliberate product change, not a cleanup.
+
+**The one thing that was genuinely still open, and is now closed.** §1's fix-list says there
+must be exactly one correct and one wrong value. Every grading site in the app used
+`--game-correct` / `--game-wrong*` — except `knowledge/[domain]`'s answer-history ✓/✗, which
+rendered `text-green-700` (a raw Tailwind palette green) against `text-destructive` (a third
+red). It survived because the palette-colour lint selector only covers `src/components/**`,
+and this file is under `src/app/**`. Moved onto the grading tokens 2026-09-16.
+
+**Still standing, and deliberately so:** `--destructive` and `--success` remain in the token
+set. They are NOT retired outright — only retired *as grading signals*. `--destructive` is the
+colour of a destructive **action** (a Delete control), and `--success` backs the status-banner
+surfaces. Neither may be used to say an answer was right or wrong.

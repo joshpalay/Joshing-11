@@ -404,9 +404,14 @@ export function AddATopicFeature({
             {added.created ? (
               <>
                 {' '}
+                {/* §9.1: this link sits MID-SENTENCE, so it cannot take
+                    `min-h-11` — that would stretch the prose line box around it.
+                    The hit area is grown by an absolutely-positioned ::after
+                    instead: 44px tall, centred on the text, invisible, and
+                    outside layout, so the paragraph is untouched. */}
                 <button
                   type="button"
-                  className="underline transition hover:opacity-70 disabled:opacity-50"
+                  className="relative underline transition after:absolute after:inset-x-0 after:top-1/2 after:h-11 after:-translate-y-1/2 after:content-[''] hover:opacity-70 disabled:opacity-50"
                   onClick={() => void undoAdded()}
                   disabled={undoing}
                 >

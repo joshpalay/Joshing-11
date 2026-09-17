@@ -538,23 +538,38 @@ separate changes and were not made here. `px-3` → `px-4` goes with the height:
 with 12px side padding reads as a stubby tall pill, and every `.btn-*` recipe pairs `min-h-11`
 with `px-4`.
 
-**Two controls cannot take the floor and are exempt by construction.**
-`InlineAnswerFlow`'s "ANSWER →" draws its underline as a `border-bottom` on the button itself,
-so a 44px box detaches the rule from the label — it would need the border moved to an inner
-span first. `EditorialPromos`' "Undo" sits mid-sentence in flowing prose, where `inline-flex
-min-h-11` stretches the whole line box. Both are left deliberately; fixing them is a
-refactor, not a size change.
+**Two controls could not take the floor by min-height — both now clear it another way
+(2026-09-16).** They are the two idioms worth copying when `min-h-11` is not available:
 
-**Where the remaining 79 are.** 38 the heuristic cannot see (the class lives in a shared
+- **The underline belongs to the label, not the button.** `InlineAnswerFlow`'s "ANSWER →" drew
+  its rule as a `border-bottom` on the `<button>`, so a 44px box dropped the rule 27px below
+  the text. The border moved to an inner `<span>`; the button is now a 44px flex box and the
+  underline still sits against the words.
+- **A mid-sentence link grows its hit area with `::after`, never with height.**
+  `EditorialPromos`' "Undo" sits inside flowing prose, where `min-h-11` would stretch the whole
+  line box. Instead: `relative after:absolute after:inset-x-0 after:top-1/2 after:h-11
+  after:-translate-y-1/2 after:content-['']` — a 44px invisible target centred on the text and
+  outside layout, so the paragraph is untouched. **Use this for any inline link inside prose.**
+
+**Where the remaining 74 are.** 38 the heuristic cannot see (the class lives in a shared
 constant or outside its 7-line window — confirmed by hand); 11 whose size is owned by a
 caller's `className` prop, so there is nothing to fix in the component; ~14 already over the
 floor via padding or inline style the heuristic cannot add up; and the ratified small controls
 — chip-dismiss `×` glyphs (§1.4), the `Switch` track (a switch is not a button box), and the
-`KnowledgeBubbleMap` breadcrumb (already R8-exempt for the same reason). Four more sit in
-`components/games/game-details-mode-sections.tsx`, which **nothing imports** — dead surface
-left by the Joshing Games sunset, and a deletion question rather than a sizing one.
+`KnowledgeBubbleMap` breadcrumb (already R8-exempt for the same reason).
 
-**Landed 2026-09-16 (295 → 79).** The inline-text-action pass is the one worth understanding:
+**The Joshing Games components are exempt, NOT deleted (2026-09-16).** `FirstGamePanel`,
+`game-details-mode-sections` and `interpretive-sections` render to no player — `/games/[id]`
+redirects home — so they are not player surface and are `RULE_EXEMPT` from R10 (4 sites). They
+are kept because a static import scan calls them dead and the decision record does not: B-10.1
+was a **soft** sunset that deliberately preserved the API routes and tables so a revival is a
+git restore, and `D-AREA-EXPANSION-01` (SETTLED, ready for `B-AREA-EXPANSION-01`) names
+`CompletedRecapHeader` in `game-details-mode-sections.tsx` as built infrastructure it plans to
+reuse. If Games is ever hard-sunset, delete the files and the exemption together.
+`games/QuestionRatingButtons.tsx` is **not** exempt — `/archive` renders it, so it is live
+player surface and stays in the count.
+
+**Landed 2026-09-16 (295 → 74).** The inline-text-action pass is the one worth understanding:
 §3.7's own recipe (`FeedActionLink`) *starts* with `inline-flex min-h-11 items-center`, so a
 14px link keeps its type size and simply sits in a 44px-tall invisible box — which is what §9.1
 means by "visual size may be smaller … inside a 44px box". Three `block`-display links
@@ -687,10 +702,38 @@ Two vehicles, both report-only for existing code and blocking for regressions:
   above its baseline, `--verbose` lists every offender. Lower a baseline after a cleanup; never
   raise one.
 
-Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · radius 0 · z-index 0
-· type-size 213. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
-`[#hex]` in `className` under `src/components/**`, 12 grandfathered files at `warn`,
-`--max-warnings 16`. **Do not add to the grandfather list.**
+Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing 0 · radius 0 · z-index 0
+· type-size 207. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
+`[#hex]` in `className` under **`src/**`** (widened from `src/components/**` on 2026-09-17 —
+see below), 16 grandfathered files at `warn`, `--max-warnings 48`. **Do not add to the
+grandfather list** except when the rule's own scope widens, which is the only reason it grew.
+
+**The folder boundary was a hole (closed 2026-09-17).** The colour rule only ever read
+`src/components/**`, so anything under `src/app/**` — every page and route segment — could
+paint raw Tailwind palette colours and nothing complained. That is how `knowledge/[domain]`
+came to render grading as `text-green-700` against `text-destructive`, breaking
+`STYLE-GUIDE-COLOR` §1's "exactly one correct and one wrong value" for months. Scope is now
+`src/**`, sharing the design-canon lane's exemption list (tests, `app/dev/`, `feed/debug/`,
+the ceremony rooms) — before this, those four were exempt from every design lane *except* this
+one, purely because this one never reached them.
+
+Widening it surfaced **30** pre-existing violations in three clusters, parked as warnings, each
+named in `eslint.config.mjs`: `LoginPanel` (19 — `text-black/NN` and `bg-white/55` throughout;
+the most-seen screen in the app, so swapping pure black for the navy ink is a visible design
+change that wants eyes, not a codemod), `share/ceremony/[token]` (7 — a **public** share
+landing on a raw `bg-stone-950` dark theme, the least defensible of the three; it needs a
+dark-surface token set that does not exist yet), and `TerritorySetupClient` (4 — scrims on the
+drag surface whose "raised" register is separately deferred). Three more were fixed outright:
+two `text-emerald-600` handle-availability labels onto `--success`, and one `text-white` avatar
+initial onto `--primary-foreground`.
+
+**A raise is legitimate only when the net gets wider, never when the code gets worse** — and
+the new ceiling must be the measured count on the day, not a round number with headroom.
+
+**Trap for the next person:** a grandfather entry for a **dynamic route** must be a directory
+glob (`src/app/share/ceremony/**`), not the literal path. ESLint runs these through minimatch,
+where `[token]` is a character class matching one of `t`/`o`/`k`/`e`/`n` — so the literal path
+silently never matches and the file stays at `error`.
 
 | Rule | Check | Vehicle |
 |---|---|---|
@@ -703,13 +746,16 @@ Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing · ra
 | 3.4 hand-rolled icon buttons | R6 · **0 — closed 2026-09-13** | yes |
 | 4.1 Chip geometry overrides / hand-rolled chips | R5 · **0 — closed 2026-09-14** / R4 · **0 — closed 2026-09-14** (all 31, via §4.3) | yes / — |
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
-| 9.1 / 9.2 touch floor and focus ring | R10 · 79 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
+| 9.1 / 9.2 touch floor and focus ring | R10 · 74 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling, → 74 by exempting the unreachable Joshing Games components and reworking the two text actions that could not take a min-height. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
 
-Lint lane baseline: **18** `canon/restricted-syntax` + `no-restricted-syntax` warnings
-combined (`package.json`'s `lint` script pins `--max-warnings 18`). Trajectory: **103** at
+Lint lane baseline: **48** `canon/restricted-syntax` + `no-restricted-syntax` warnings
+combined (`package.json`'s `lint` script pins `--max-warnings 48`). Trajectory: **103** at
 the Phase 5 build → 88 (buttons) → 63 (shadows) → 52 (icon buttons) → 41 (skeletons) →
 37 (focus/chips-flat/skeletons stack landed on `main`, #1686) → 27 (R4/R5 chip cleanup) →
-18 (R8 cleanup, 2026-09-14). Every closure ratchets the ceiling down the same day. The lint
+18 (R8 cleanup, 2026-09-14) → **48 (2026-09-17, the colour rule's scope widened to `src/**` —
+the count went up because the net did, not because the code did; see above)**. Every closure
+ratchets the ceiling down the same day, and the 30 newly-visible warnings are a backlog to
+work off, not a new normal. The lint
 selectors still flag 2 of R8's 7 `RULE_EXEMPT` sites (`InviteLinksSection`,
 `KnowledgeBubbleMap`) since the eslint lane has no per-rule file exemption, only a whole-lane
 one (§13's "where the two lanes disagree" note) — real drift, not a regression, if this

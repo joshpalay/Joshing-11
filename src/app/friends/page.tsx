@@ -162,7 +162,7 @@ export default async function FriendsPage() {
             >
               <span
                 aria-hidden
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-[var(--primary-foreground)]"
                 style={{ background: swatch }}
               >
                 {initials}

@@ -23,7 +23,11 @@ import { join, relative } from 'node:path';
 // not earned a named register (9/10/11/15px) plus the rem-form arbitraries
 // (text-[0.6rem]/[0.7rem]/… System-label sizes, mostly admin + catchup) that
 // the sweep deliberately left in place.
-const CEILING = 213;
+// Lowered 213 → 207 on 2026-09-16: the design-canon passes retired six
+// arbitraries as a side effect (the R10 floor work rewrote the class strings
+// that carried them). A ratchet only ratchets if the ceiling follows the
+// count down, so this closes the slack rather than banking it.
+const CEILING = 207;
 
 // ── Exemptions (mirrors the color ratchet; keep this list short) ────────────
 const EXEMPT = [
