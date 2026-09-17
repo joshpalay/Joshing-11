@@ -705,7 +705,7 @@ Two vehicles, both report-only for existing code and blocking for regressions:
 Existing CI ratchets (`npm run check:*`): fonts 0 · colours 41 · spacing 0 · radius 0 · z-index 0
 · type-size 207. Existing lint: `no-restricted-syntax` on palette colours / `bg-white` /
 `[#hex]` in `className` under **`src/**`** (widened from `src/components/**` on 2026-09-17 —
-see below), 16 grandfathered files at `warn`, `--max-warnings 48`. **Do not add to the
+see below), 14 grandfathered files at `warn`, `--max-warnings 30`. **Do not add to the
 grandfather list** except when the rule's own scope widens, which is the only reason it grew.
 
 **The folder boundary was a hole (closed 2026-09-17).** The colour rule only ever read
@@ -717,15 +717,35 @@ came to render grading as `text-green-700` against `text-destructive`, breaking
 the ceremony rooms) — before this, those four were exempt from every design lane *except* this
 one, purely because this one never reached them.
 
-Widening it surfaced **30** pre-existing violations in three clusters, parked as warnings, each
-named in `eslint.config.mjs`: `LoginPanel` (19 — `text-black/NN` and `bg-white/55` throughout;
-the most-seen screen in the app, so swapping pure black for the navy ink is a visible design
-change that wants eyes, not a codemod), `share/ceremony/[token]` (7 — a **public** share
-landing on a raw `bg-stone-950` dark theme, the least defensible of the three; it needs a
-dark-surface token set that does not exist yet), and `TerritorySetupClient` (4 — scrims on the
-drag surface whose "raised" register is separately deferred). Three more were fixed outright:
-two `text-emerald-600` handle-availability labels onto `--success`, and one `text-white` avatar
-initial onto `--primary-foreground`.
+Widening it surfaced **30** pre-existing violations in three clusters. **`LoginPanel` — the
+biggest, and the most-seen screen in the app — was cleaned the same day**, and the other two are
+parked as warnings and named in `eslint.config.mjs`: `share/ceremony/[token]` (7 — a **public**
+share landing on a raw `bg-stone-950` dark theme, the least defensible of the set; it needs a
+dark-surface token set that does not exist yet) and `TerritorySetupClient` (4 — scrims on the
+drag surface whose "raised" register is separately deferred).
+
+**The login clean-up is the pattern to copy (2026-09-17).** All 21 sites moved onto
+`--warm-ink` / `--brand-card` keeping **every opacity step exactly as it was** —
+`text-black/75` became `text-[var(--warm-ink)]/75`, not a jump to the nearest named ink step.
+Mapping varied opacities (`/45 /55 /60 /70 /75 /80`) onto the three ink steps would have been a
+re-design; preserving them changes the *hue* onto the system and nothing else. The result is
+close to invisible, because the login screen's own ink token is `--warm-ink #1a1208`, a
+brown-black — `login/page.tsx` was already on it and only the panel had been left behind.
+
+Note 21, not 19: **two of the sites lived in shared class constants**, which the lint's
+`JSXAttribute` selector never reads — the same blind spot R10 has. Fixing only what the linter
+can see would have left the file half-converted.
+
+Five more were fixed outright: two `text-emerald-600` handle-availability labels onto
+`--success`, one `text-white` avatar initial and one `text-white` badge onto
+`--primary-foreground`, and three `ring-black/5` card hairlines onto `--brand-ink`/5. Those
+last three had never been flagged at all — see the regex note below.
+
+**Second hole, closed with it: the white/black rule was missing prefixes.** `TOKEN_LINT_REGEX`
+banned palette colours across thirteen prefixes (`bg|text|border|ring|from|to|via|fill|stroke|
+decoration|divide|accent|caret|outline`) but banned `white`/`black` across only five, so
+`ring-black/5`, `divide-white`, `from-black` and friends were legal everywhere. The two lists
+are now identical — **keep them that way.**
 
 **A raise is legitimate only when the net gets wider, never when the code gets worse** — and
 the new ceiling must be the measured count on the day, not a round number with headroom.
@@ -748,13 +768,14 @@ silently never matches and the file stays at `error`.
 | 7.1 `animate-pulse` outside Skeleton | R7 · **0 — closed 2026-09-13** | yes |
 | 9.1 / 9.2 touch floor and focus ring | R10 · 74 (heuristic, **trend line — never close at 0**; 295 → 190 scoped to player surfaces, → 142 by the §3.7/§3.5/§3.6 pass, → 116 by raising declared 32–40px heights, → 96 by raising transparent controls sized from padding, → 79 by the **chunky** ruling, → 74 by exempting the unreachable Joshing Games components and reworking the two text actions that could not take a min-height. No open design call remains.) / R9 · **0 — closed 2026-09-13** | — |
 
-Lint lane baseline: **48** `canon/restricted-syntax` + `no-restricted-syntax` warnings
-combined (`package.json`'s `lint` script pins `--max-warnings 48`). Trajectory: **103** at
+Lint lane baseline: **30** `canon/restricted-syntax` + `no-restricted-syntax` warnings
+combined (`package.json`'s `lint` script pins `--max-warnings 30`). Trajectory: **103** at
 the Phase 5 build → 88 (buttons) → 63 (shadows) → 52 (icon buttons) → 41 (skeletons) →
 37 (focus/chips-flat/skeletons stack landed on `main`, #1686) → 27 (R4/R5 chip cleanup) →
 18 (R8 cleanup, 2026-09-14) → **48 (2026-09-17, the colour rule's scope widened to `src/**` —
-the count went up because the net did, not because the code did; see above)**. Every closure
-ratchets the ceiling down the same day, and the 30 newly-visible warnings are a backlog to
+the count went up because the net did, not because the code did; see above)** → **30 (same
+day — LoginPanel cleaned rather than parked)**. Every closure
+ratchets the ceiling down the same day, and the 11 still-parked warnings are a backlog to
 work off, not a new normal. The lint
 selectors still flag 2 of R8's 7 `RULE_EXEMPT` sites (`InviteLinksSection`,
 `KnowledgeBubbleMap`) since the eslint lane has no per-rule file exemption, only a whole-lane

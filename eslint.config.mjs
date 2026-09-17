@@ -16,7 +16,11 @@ import nextTs from "eslint-config-next/typescript";
 //   • arbitrary hex — bg-[#fff], text-[#1a1208] (use var(--brand-*) / var(--warm-*))
 const TOKEN_LINT_REGEX = [
   "\\b(?:bg|text|border|ring|from|to|via|fill|stroke|decoration|divide|accent|caret|outline)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d{2,3}\\b",
-  "\\b(?:bg|text|border|fill|stroke)-(?:white|black)\\b",
+  // Same prefix list as the palette line above. It used to be the short set
+  // (bg|text|border|fill|stroke), so `ring-black/5`, `divide-white`,
+  // `from-black` and friends slipped through — login/page.tsx was carrying one.
+  // Keep the two lists identical.
+  "\\b(?:bg|text|border|ring|from|to|via|fill|stroke|decoration|divide|accent|caret|outline)-(?:white|black)\\b",
   "\\[#[0-9a-fA-F]{3,8}\\]",
 ].join("|");
 
@@ -64,6 +68,19 @@ const TOKEN_LINT_RULE = {
 // legitimate ONLY when the net gets wider, never when the code gets worse, and
 // the new number must be the measured count on the day — not a round number
 // with headroom.
+//
+// **48 → 30 (2026-09-17, same day).** LoginPanel — the biggest of the three
+// newly-visible clusters, and the most-seen screen in the app — was CLEANED, not
+// parked: all 21 sites (19 the lint could see, plus 2 hiding in shared class
+// constants the JSXAttribute selector never reads) moved onto
+// `--warm-ink` / `--brand-card`, keeping every opacity step exactly as it was.
+// The swap is close to invisible because the login screen's own ink token is
+// `--warm-ink #1a1208`, a brown-black — the surrounding login/page.tsx was
+// already on it; only the panel had been left behind. Four stragglers went with
+// it: one `text-white` badge onto `--primary-foreground`, and three
+// `ring-black/5` card hairlines onto `--brand-ink`/5, which the rule had never
+// flagged because the white/black alternative was missing the `ring` prefix
+// (now aligned with the palette line — see TOKEN_LINT_REGEX).
 const TOKEN_LINT_GRANDFATHERED = [
   "src/components/CreateChooser.tsx",
   "src/components/LoadingScreen.tsx",
@@ -78,20 +95,17 @@ const TOKEN_LINT_GRANDFATHERED = [
   "src/components/knowledge/AskFriendForDomain.tsx",
   "src/components/profile/SharedInterestsOverlap.tsx",
   // Added 2026-09-17 when the rule's scope widened from `src/components/**` to
-  // `src/**` (see the block below). These are NOT new drift — they are drift the
+  // `src/**` (see the block above). These are NOT new drift — they are drift the
   // rule could never see, because it stopped at the folder boundary. They are
   // parked as warnings, not exempted, and each needs a real pass:
-  //   • LoginPanel (19) — the whole panel paints `text-black/NN` and `bg-white/55`
-  //     rather than --brand-ink / --brand-card. It is the most-seen screen in the
-  //     app, so swapping pure black for the navy ink is a visible design change
-  //     and wants eyes, not a find-replace.
   //   • share/ceremony/[token] (7, across page + not-found) — a PUBLIC share
   //     landing on a raw `bg-stone-950`/`text-stone-50` dark theme. Strangers see
-  //     this page, so it is the least defensible of the three; it needs a proper
+  //     this page, so it is the least defensible of the two; it needs a proper
   //     dark-surface token set, which does not exist yet.
   //   • TerritorySetupClient (4) — `bg-white/40`-style scrims on the drag surface
   //     whose "raised" register is separately deferred (see RULE_EXEMPT.R6).
-  "src/app/login/LoginPanel.tsx",
+  // LoginPanel was the third, and was CLEANED rather than parked on 2026-09-17 —
+  // see the ceiling note above. Do not re-add it.
   // Directory glob, NOT the two literal paths: the route segment is `[token]`,
   // and eslint runs these through minimatch, where `[token]` is a character
   // class matching one of t/o/k/e/n — so the literal path silently never

@@ -291,7 +291,7 @@ export function OnboardingReminderScreen(props: ComponentProps<typeof Onboarding
   return (
     <main className="min-h-dvh">
       <LoadingBackdrop className="min-h-dvh px-4 py-8 sm:px-6 sm:py-12">
-        <section className="relative z-10 mx-auto w-full max-w-2xl rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-6 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5 sm:px-10 sm:py-10">
+        <section className="relative z-10 mx-auto w-full max-w-2xl rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-6 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-[var(--brand-ink)]/5 sm:px-10 sm:py-10">
           <OnboardingReminderStep {...props} />
         </section>
       </LoadingBackdrop>

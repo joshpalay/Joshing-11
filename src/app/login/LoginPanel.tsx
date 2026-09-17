@@ -30,7 +30,7 @@ const CARD_CLASS =
 // (QA walkthrough, 2026-09-15 — submitting untouched produced a confusing
 // "Enter the 6-digit code" error).
 const INPUT_CLASS =
-  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-white px-3 text-center text-base tracking-wide text-[var(--brand-navy)] placeholder:text-muted-foreground transition-colors focus:border-[var(--brand-navy)]';
+  'h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-card)] px-3 text-center text-base tracking-wide text-[var(--brand-navy)] placeholder:text-muted-foreground transition-colors focus:border-[var(--brand-navy)]';
 // The login submit IS the canonical primary CTA — it always shared
 // --btn-primary-bg, the bold base type and the 0.04em tracking with
 // `.btn-primary`, and diverged only on height (44 vs the old recipe's 48).
@@ -47,7 +47,7 @@ const SUBMIT_CLASS = 'btn-primary w-full';
 // extra height below the text. `flex` is still block-level, so `mx-auto`
 // keeps centring it.
 const SUBTLE_LINK_CLASS =
-  'mx-auto flex min-h-11 w-fit items-center justify-center text-sm leading-5 text-black/55 underline underline-offset-4 transition-colors hover:text-black/80 disabled:opacity-60';
+  'mx-auto flex min-h-11 w-fit items-center justify-center text-sm leading-5 text-[var(--warm-ink)]/55 underline underline-offset-4 transition-colors hover:text-[var(--warm-ink)]/80 disabled:opacity-60';
 
 function sendTelemetry(event: string) {
   void fetch('/api/telemetry', {
@@ -205,8 +205,8 @@ function LoadingLabel({ verb }: { verb: string }) {
 
 function InviteContextCard({ invite }: { invite: InviteContext }) {
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-      <p className="text-[15px] leading-6 text-black/75">
+    <div className="rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-[var(--brand-card)]/55 p-4 text-center">
+      <p className="text-[15px] leading-6 text-[var(--warm-ink)]/75">
         <strong className="font-semibold text-[var(--brand-navy)]">
           {inviterFirstName(invite.inviterName)}
         </strong>{' '}
@@ -219,7 +219,7 @@ function InviteContextCard({ invite }: { invite: InviteContext }) {
 
 export function OtpRequestDisclosure() {
   return (
-    <p className="mt-2 text-center text-xs leading-5 text-black/60">
+    <p className="mt-2 text-center text-xs leading-5 text-[var(--warm-ink)]/60">
       By selecting Continue, you agree to receive one automated Joshing verification text at this
       number. Message and data rates may apply. Reply <strong>STOP</strong> to unsubscribe or{' '}
       <strong>HELP</strong> for help. Consent is not a condition of purchase.{' '}
@@ -683,8 +683,8 @@ export default function LoginPanel({
             // "this isn't my number" leads to a fresh invite, not a re-type
             // (D-AUTH-INVITE-PHONE-FIRST §2.2 / §2.4).
             <>
-              <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-                <p className="text-[15px] leading-6 text-black/75">
+              <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-[var(--brand-card)]/55 p-4 text-center">
+                <p className="text-[15px] leading-6 text-[var(--warm-ink)]/75">
                   <strong className="font-semibold text-[var(--brand-navy)]">
                     {inviterFirstName(invitePrefill.inviterName)}
                   </strong>{' '}
@@ -705,7 +705,7 @@ export default function LoginPanel({
                     small, muted "or" with more room below it than above. */}
                 <div className="mt-4 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
-                  <span className="text-xs font-medium text-black/45">or</span>
+                  <span className="text-xs font-medium text-[var(--warm-ink)]/45">or</span>
                   <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
                 </div>
 
@@ -727,10 +727,10 @@ export default function LoginPanel({
             // theirs. The invite is phone-bound, so the only way forward is a
             // fresh invite from the inviter — carried by wording, not an error
             // banner (D-AUTH-INVITE-PHONE-FIRST §2.6 / §2.7).
-            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
-              <p className="text-[15px] leading-6 text-black/75">
+            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-[var(--brand-card)]/55 p-4 text-center">
+              <p className="text-[15px] leading-6 text-[var(--warm-ink)]/75">
                 This invite was sent to{' '}
-                <span className="font-medium whitespace-nowrap text-black">
+                <span className="font-medium whitespace-nowrap text-[var(--warm-ink)]">
                   {formatUsPhoneInput(invitePrefill.inviteePhone)}
                 </span>
                 . If that isn’t your number, ask {inviterFirstName(invitePrefill.inviterName)} to
@@ -749,7 +749,7 @@ export default function LoginPanel({
             // Editable entry: cold-visit / per-user-link paths only.
             <>
               <label
-                className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
+                className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-[var(--warm-ink)]"
                 htmlFor="phone"
               >
                 What is your phone number?
@@ -799,7 +799,7 @@ export default function LoginPanel({
             </g>
           </svg>
           <label
-            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black"
+            className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-[var(--warm-ink)]"
             htmlFor="code"
           >
             Enter your code for{' '}
@@ -826,7 +826,7 @@ export default function LoginPanel({
 
             <div className="flex items-center gap-3" aria-hidden="true">
               <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
-              <span className="text-[17px] font-medium text-black">or</span>
+              <span className="text-[17px] font-medium text-[var(--warm-ink)]">or</span>
               <span className="h-px flex-1 bg-[var(--brand-navy)]/15" />
             </div>
 
@@ -845,18 +845,18 @@ export default function LoginPanel({
         </form>
       ) : (
         <form className="space-y-3.5" onSubmit={completeProfile}>
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-white">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-navy)] text-2xl font-bold text-[var(--primary-foreground)]">
             @
           </div>
-          <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-black">
+          <p className="block text-center text-[17px] leading-[26px] font-medium tracking-[1.7px] text-[var(--warm-ink)]">
             Finish your profile
           </p>
-          <p className="text-center text-[15px] leading-6 text-black/70">
+          <p className="text-center text-[15px] leading-6 text-[var(--warm-ink)]/70">
             Pick the name friends will see and the username they can use to find you.
           </p>
           <div className="space-y-2">
             <label
-              className="block text-center text-sm font-medium text-black"
+              className="block text-center text-sm font-medium text-[var(--warm-ink)]"
               htmlFor="display-name"
             >
               Display name
@@ -880,7 +880,7 @@ export default function LoginPanel({
             ) : null}
           </div>
           <div className="space-y-2">
-            <label className="block text-center text-sm font-medium text-black" htmlFor="handle">
+            <label className="block text-center text-sm font-medium text-[var(--warm-ink)]" htmlFor="handle">
               Username
             </label>
             <input
@@ -906,7 +906,7 @@ export default function LoginPanel({
                   ? 'text-[var(--success)]'
                   : handleStatus.state === 'unavailable'
                     ? 'text-destructive'
-                    : 'text-black/60'
+                    : 'text-[var(--warm-ink)]/60'
               }`}
             >
               {handle.length < HANDLE_MIN
@@ -947,7 +947,7 @@ export default function LoginPanel({
       ) : null}
 
       {step !== 'profile' ? (
-        <p className="mt-4 text-center text-xs leading-5 text-black/60">
+        <p className="mt-4 text-center text-xs leading-5 text-[var(--warm-ink)]/60">
           By signing in you agree to our
           <br />
           <a
