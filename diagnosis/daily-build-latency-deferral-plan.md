@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-16
+last-reviewed: 2026-09-17
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1168,6 +1168,45 @@ above confirms zero commits touching `queue-orchestrator.ts`, `daily.ts`, or
 **No decision-resolving change.** Status stays `active`. Phase 3's n stays
 at 18 post-deferral rows; the three named outlier builds (2026-09-09,
 2026-09-14, 2026-09-15) are still untraced.
+
+### Next steps (unchanged)
+1. Trace the three outsized-residual builds — needs Vercel function logs.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-09-17 (diagnosis-review) — one new built row, no new outlier; still zero races; median saving rises to 10,221ms (n=19)
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+2026-09-15/16.
+
+**One new post-deferral row since the last review**, from yesterday's 17:05
+UTC cron: `44703a3f-…` (2026-09-16 17:05:17Z), `deferred: true`,
+`target_size=5`, `final_size=6` — no recurrence of the open-question-5
+slot-collision shape.
+
+```
+saved 14,072ms   bonus (generationMs) 13,215ms   residual 857ms   <- new, normal band
+```
+
+The residual (857ms) sits comfortably inside the pre-outlier 700–3,700ms
+band — this row is **not** a fourth instance of the large-residual anomaly
+that hit three of the last nine rows. **3b population, updated: median
+saving 10,221ms** (n=19, was 9,449.5ms at n=18) — one row, small move.
+
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time. No
+change from every prior reading.
+
+**No code change since the last review** to this doc's tracked paths
+(`queue-orchestrator.ts`, `daily.ts`, `build-context.ts`) — `git log
+--since=2026-09-16` on all three returns nothing. Two commits did land on
+`main` since the last review (`#1698`, `#1699`, a bank-dedup/subject-entity
+change), both confirmed by diff to touch `generate-questions.ts` only in
+ways unrelated to persist logic or build-latency instrumentation — noted
+for completeness, not a hit on this doc's tracked paths.
+
+**No decision-resolving change.** Status stays `active`. The three named
+outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
 
 ### Next steps (unchanged)
 1. Trace the three outsized-residual builds — needs Vercel function logs.

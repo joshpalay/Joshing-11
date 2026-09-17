@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-16
+last-reviewed: 2026-09-17
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
 ---
@@ -1447,5 +1447,62 @@ a distinct entry per this doc's own convention (a missing entry reads as
    for an actual drop — still 10+ clean days.
 2. Watch `answer_leak_single_word` accumulate more data (still 2 of 72).
 3. The three open `ContentReport` rows remain unaddressed, now 10 days old.
+4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-17 (diagnosis-review) — 11 clean days on both established flags; single-word gate unchanged; a new, unrelated dedup PR checked and cleared
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 181 | 0 | 0 |
+| `domain_drift` | 181 | 0 | 0 |
+| `answer_leak_single_word` | 78 | 2 | 0 |
+| `answer_shape` | 181 | 2 | 0 |
+| `quality` | 181 | 71 | 229 (all on 2026-09-07, unchanged) |
+
+`answer_leak_partial` / `domain_drift` are now at **11 consecutive clean
+days**, 181 rows considered, still 0 drops each — the Mechanism-2 code-fix
+decision Josh held on 2026-09-08 is unchanged: still waiting on
+`domain_drift` to catch something real. `answer_leak_single_word` gained 6
+more `considered` (72→78) but no new drop (still 2) — still too small a
+sample to read precision from.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id), now **11 days** since they were filed (2026-09-06).
+Not this doc's action item, but the age keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,268**, up from 2,262 —
+ordinary generation, not investigated further.
+
+**New PRs since the last review, checked for relevance and cleared:**
+`#1698` ("dedup: bank same-fact gate, required subject_entity,
+non-inventory prompt examples") and its immediate follow-up `#1699` (a
+NUL-byte encoding fix to the same file) both merged 2026-09-16 evening.
+Both touch `generate-questions.ts`, so checked directly by diff and by
+grepping the merge commit for this doc's tracked symbols
+(`PARTIAL_ANSWER_LEAK_ENABLED`, `DOMAIN_DRIFT_DROP_ENABLED`,
+`findAnswerLeaks`, `findQualityFailures`, `isDomainDriftDropEnabled`) — only
+one incidental comment-line match, no logic change to any of them. `#1698`
+adds an unrelated new gate (`bank_same_fact`, a same-fact dedup check) and
+makes `subject_entity` required; neither touches this doc's gates or
+flags. Not adding either PR to this file's `related-pr`.
+
+**No code change since the last review** to `self-answering.ts` or
+`off-domain-second-opinion.ts` (`git log --since=2026-09-16` on both
+returns nothing).
+
+**No decision-resolving change.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now 11+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 78).
+3. The three open `ContentReport` rows remain unaddressed, now 11 days old.
 4. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

@@ -2,9 +2,9 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-16
+last-reviewed: 2026-09-17
 owner: Josh
-related-pr: "#1646"
+related-pr: "#1646, #1698"
 ---
 
 # Diagnosis: question lifecycle quality and grading fairness
@@ -460,3 +460,68 @@ above touching `verification-gating.test.ts` or `check-question-lifecycle.mjs`.
    build-time p50 recovers.
 2. Keep an eye on `batch_dedup` `failed_open` and `recent_history`.
 3. Everything else (Phase 3, Phase 4, decision 5) unchanged.
+
+### 2026-09-17 (diagnosis-review) — decision 3 substantially resolved: `subject_entity` is now required by code, not just improving by convention; `batch_dedup` failed_open ticks up again; build p50 essentially unchanged
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**Decision 3 ("when should subject and sub-angle metadata become
+required?") moved from "improving, not yet required" to "required, for
+half of it."** `#1698` ("dedup: bank same-fact gate, required
+subject_entity, non-inventory prompt examples"), merged 2026-09-16T22:07:16Z
+— confirmed by reading the diff, not just the PR title — changes
+`parseBaseQuestion` to **reject** a question with a null `subject_entity`
+(was warn-only), and fixes `retrieval-grounded.ts`, which never wrote the
+column on that path at all. This is an action already taken, not a
+question for Josh: recording it here as the resolution of half of decision
+3. **`sub_angles` remains optional** (a dedicated test added in the same PR,
+"still keeps a question whose sub_angles are empty (optional, measured)",
+confirms this explicitly) — so decision 3 is not fully closed, only its
+`subject_entity` half. Not moving `status` to `needs-decision`: there is
+nothing left for Josh to decide on the part that's already shipped, and
+the `sub_angles` half isn't newly resolved by anything found this session.
+Added `#1698` to this file's `related-pr` frontmatter (had none until now).
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 102 | 9 | 1 |
+| `batch_dedup` | 102 | 1 | **10** |
+| `quality` | 102 | 42 | 0 |
+
+`batch_dedup`'s `failed_open` ticked up again, 9→10 (was 7→9 over the prior
+two reviews) — still small in absolute terms, still not root-caused, same
+"flagging for awareness" posture as every prior entry. `recent_history`
+unchanged at 1. `quality`'s scoped drop rate (41.2%) stays inside the
+acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 33,407ms** (n=20),
+essentially unchanged from the last reading (33,119ms) and still well above
+the 25,243ms pre-deploy baseline — consistent with the
+`daily-build-latency-deferral-plan.md` review (also run this session)
+finding one new built row today with a *normal* residual (857ms, not a
+fourth outlier) — so the three named outlier builds are still the entire
+explanation for the elevated p50, and nothing moved to resolve or worsen
+that ambiguous Phase 2 speed signal today.
+
+**No code change since the last review** to `verification-gating.test.ts`
+or `check-question-lifecycle.mjs` (`git log --since=2026-09-16` on both
+returns nothing).
+
+**No decision-resolving change to the other five items in §2.** Status
+stays `active`.
+
+### Next steps (revised)
+1. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+2. Keep an eye on `batch_dedup` `failed_open` (now 10/102, still trending
+   up) and `recent_history` (steady at 1).
+3. Watch whether newly-generated rows actually reach 100% `subject_entity`
+   coverage now that it's a hard requirement (not re-queried this pass —
+   worth a look next review).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.

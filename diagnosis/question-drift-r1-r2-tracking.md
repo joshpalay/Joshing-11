@@ -2,9 +2,9 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-16
+last-reviewed: 2026-09-17
 owner: Josh
-related-pr: "#1654, #1662, #1666, #1683"
+related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
 
 # Diagnosis: Question drift — impact of R1 (accessible fan-salience) and R2 (no self-defining setups)
@@ -648,5 +648,91 @@ Phase 2's hand read still isn't due.
 ### Next steps (unchanged)
 1. Re-run this Phase 1 SQL at the actual deploy+7-day mark (~2026-09-18).
 2. Keep watching accessible share — still above the 30-45% target band.
+3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-17 (diagnosis-review) — deploy+~5.7 days, one day short of the +7 window; accessible share keeps cooling toward the target band; a new PR touches SYSTEM_PROMPT examples and closes the subject_entity gap
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this is
+deploy+~5.7 days — one day short of the deploy+7-day Phase 1 window
+(~2026-09-18), due at the next review.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-16 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 66 | **72** | — | ordinary generation |
+| Mean words/question | 30.6 | **30.6** | ≤24 | unchanged, still barely moved |
+| Rows over 25 words | 63% | **65%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 58% | **54%** | 30-45% | still above target band, still cooling — 4 points closer |
+
+**Quality-gate drop rate since deploy, re-run:** 47/115 = **40.9%**
+(considered 115, up from 109; dropped 47, up from 42) — still inside the
+35-45% acceptable band, `failed_open: 0`. `difficulty_floor`: 2/115 = 1.7%,
+still well under the 5% stop condition. Per-defect breakdown
+(`quality:*`, day≥2026-09-11): `DEFINITION_SUPPLIED` 26/106 (largest, as
+every prior reading), `GENERIC_AT_TIER` 13/106, `ANSWER_LEAKED` 4/106,
+`SELF_ANSWERING` 1/106, everything else 0.
+
+**None of Phase 1's three stop conditions trip**, same as every prior
+reading. Accessible share (58%→54%) continues cooling toward the 30-45%
+band rather than away from it — four consecutive readings now (64→58→54,
+plus today) moving the same direction, which is a stronger point in favor
+of "this settles on its own" than any single day's move.
+
+**Phase 3 (correct-rate) — still thin, but the dip narrowed:** accessible-tier
+mean `empirical_correct_rate`, post-deploy cohort now **0.682** (11
+rows/13 answers, up from 10/12), pre-deploy cohort unchanged at **0.741**
+(36 rows/52 answers — not re-queried this pass, no reason to expect the
+frozen pre-deploy population moved). Dip is now **5.9 points** (was 9.1),
+inside the ≤10-point exit criterion and moving the right direction, but
+13 answers is still nowhere near enough to trust as a real reading.
+
+**New PR since the last review, checked for relevance: `#1698`** ("dedup:
+bank same-fact gate, required subject_entity, non-inventory prompt
+examples"), merged 2026-09-16T22:07:16Z, plus its immediate NUL-byte fix
+`#1699` (2026-09-16T22:34:47Z). Two things in it matter to this doc:
+
+1. **`subject_entity` is now a hard requirement** at `parseBaseQuestion`
+   (was warn-only) — closes the gap R7's subject-coverage feedback
+   (`getRecentSubjectsByDomain`) depends on; 819 machine rows had it null
+   before this. Also fixes `retrieval-grounded.ts`, which never wrote the
+   column at all. This doesn't change any of this doc's five open
+   decisions but improves the data R7 already relies on.
+2. **`SYSTEM_PROMPT`'s illustrative examples moved off live-inventory
+   domains** (Mrs. Dalloway, Harry Potter, Ring Cycle, Gilmore Girls, UX
+   Design, Zelda, Macbeth, Florence → Moby-Dick, Casablanca, Jaws, Jane
+   Eyre, chess, cartography, etc.) — this is R6's "examples are not a
+   question bank" mechanism getting a data update, not new R6 rule text.
+   Read the diff directly: it does **not** touch the FAN-SALIENCE RULE
+   (R1-a), Rule 3c (R2-b), or any of the R1/R2/R3/R9 wording this doc
+   tracks — confirmed by diffing `SYSTEM_PROMPT`'s edit hunks against the
+   R1–R9 table in §1. Flagging it the same way `#1667` was flagged on
+   2026-09-12: **this is not an eighth prescription landing in this
+   window**, but it is a `SYSTEM_PROMPT` edit inside the measurement
+   window, so any Phase 2 hand-read row generated after
+   2026-09-16T22:07:16Z technically sees a slightly different prompt than
+   rows generated 2026-09-11–16. Not expected to matter for the R1/R2
+   metrics this doc scores (examples, not rules, changed), but worth
+   naming in case Phase 2's hand read wants to know the prompt wasn't
+   perfectly static for the full window.
+
+Adding `#1698` to this file's `related-pr` frontmatter since it directly
+touches data R7 depends on and edits `SYSTEM_PROMPT` inside the tracked
+window.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-16 left them.** Status stays `active`. Phase 1's real
+checkpoint is now imminent (~2026-09-18, i.e. the next review); Phase 2's
+hand read still isn't due (~2026-09-25 or 200 rows, currently 72).
+
+### Next steps (revised)
+1. Re-run this Phase 1 SQL at the actual deploy+7-day mark (~2026-09-18) —
+   due at the next review.
+2. Keep watching accessible share — now 54%, four readings running toward
+   the 30-45% target band.
 3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).
