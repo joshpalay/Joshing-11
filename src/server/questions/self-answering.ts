@@ -418,6 +418,58 @@ export function singleWordAnswerLeaks(text: string, answer: string): boolean {
   return ` ${normalizedQuestion} `.includes(` ${word} `);
 }
 
+// --- ANY-CONTENT-TOKEN leak detection (the "Hamlet the Dane" class) ----------
+//
+// The three rules above are all CONJUNCTIVE or near-conjunctive: the stem has to
+// show every substantive word of a form (acceptedFormLeaks), or everything it
+// withholds has to be filler / one generic head noun (questionPartiallyLeaks-
+// Answer), or the form has to be a single word (singleWordAnswerLeaks). A
+// two-word answer whose withheld word is ordinary SUBSTANCE falls through all
+// three — even when the word the stem DOES print is the whole recall step:
+//
+//   Q: "In Shakespeare's HAMLET, ... what epithet does the Ghost use...?"
+//   A: "Hamlet the Dane"      → withheld "dane" is neither filler nor generic
+//
+// This is the mechanical rule from the 2026-09-16 review: tokenise the answer,
+// drop the stopwords, and flag the question when ANY content token of it is
+// already printed in the stem. It also covers the fill-in-the-blank shape the
+// other rules miss, where the elided word appears elsewhere in the same line.
+//
+// DISJUNCTIVE, so it is by far the loosest rule in this file, and it fires on
+// shapes that are NOT leaks by design of the product:
+//  - Rule 2b (NAME THE SOURCE) REQUIRES the stem to name the work. An answer
+//    that shares a word with its own source title ("Hamlet", "Rocko", "The
+//    Snorks") therefore trips this rule structurally, not because the question
+//    gives anything away.
+//  - A stem that must name every participant in a scene to describe it.
+// Generic head nouns, filler and numbers are excluded (a stem printing "plan"
+// or "two" hands over nothing), but that only trims the obvious cases.
+//
+// Ships measure-only behind its own flag (ANY_TOKEN_ANSWER_LEAK_ENABLED), the
+// same posture the partial and single-word rules shipped under: count the hits
+// in production, read the sample, and flip only if the precision is real.
+export function answerTokenLeaks(text: string, answer: string): boolean {
+  const normalizedQuestion = normalize(text);
+  if (!normalizedQuestion) return false;
+  if (COUNTING_ASK.test(normalizedQuestion)) return false;
+
+  const [primary] = acceptedForms(answer);
+  if (!primary) return false;
+  const tokens = substantiveTokens(primary);
+  // A one-token form is singleWordAnswerLeaks' business — same rule, own flag,
+  // own counter; double-counting it here would muddy both.
+  if (tokens.length < 2) return false;
+
+  const padded = ` ${normalizedQuestion} `;
+  return tokens.some(
+    (t) =>
+      !isNumeric(t) &&
+      !GENERIC_HEAD_NOUNS.has(t) &&
+      !FILLER_WORDS.has(t) &&
+      padded.includes(` ${t} `),
+  );
+}
+
 export function textContainsAnswer(
   text: string,
   answer: string,

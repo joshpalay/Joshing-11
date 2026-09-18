@@ -39,6 +39,7 @@ const { dbMock, state, users, profileDomainVisibility } = vi.hoisted(() => {
         return { where: vi.fn(async () => {}) };
       }),
     })),
+    transaction: vi.fn(async (callback: (tx: Record<string, never>) => unknown) => callback({})),
   };
 
   return { dbMock, state, users, profileDomainVisibility };
@@ -59,12 +60,14 @@ const {
   getJoinedInviteLinkMock,
   upsertInvitationFriendshipMock,
   notifyInvitationFriendshipFormedMock,
+  isBlockedBetweenMock,
 } = vi.hoisted(() => ({
   findLiveInviteLinkByTokenMock: vi.fn(),
   attributeInviteLinkJoinMock: vi.fn(async () => {}),
   getJoinedInviteLinkMock: vi.fn(),
   upsertInvitationFriendshipMock: vi.fn(async () => {}),
   notifyInvitationFriendshipFormedMock: vi.fn(async () => {}),
+  isBlockedBetweenMock: vi.fn(async () => false),
 }));
 
 vi.mock('@/server/db', () => ({
@@ -96,6 +99,9 @@ vi.mock('@/server/friends/friendships', () => ({
   upsertInvitationFriendship: upsertInvitationFriendshipMock,
   notifyInvitationFriendshipFormed: notifyInvitationFriendshipFormedMock,
 }));
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  isBlockedBetween: isBlockedBetweenMock,
+}));
 
 import {
   acceptUserInviteLink,
@@ -112,6 +118,7 @@ function resetAll() {
   state.profileDomainVisibilityQueue = [];
   state.updateSetCalls = [];
   getDailyPreferencesMock.mockResolvedValue({ domainPreferenceFrequency: {} });
+  isBlockedBetweenMock.mockResolvedValue(false);
 }
 
 describe('getInviteLinkSeedTopics', () => {
@@ -361,6 +368,25 @@ describe('acceptUserInviteLink', () => {
     });
 
     expect(result).toEqual({ accepted: false });
+    expect(attributeInviteLinkJoinMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reusable invite when either account has blocked the other', async () => {
+    seedHandle();
+    findLiveInviteLinkByTokenMock.mockResolvedValueOnce({
+      id: 'link-1',
+      userId: 'inviter-1',
+      slot: 0,
+    });
+    state.usersQueue.push([{ inviteSeedInterests: [] }]);
+    state.profileDomainVisibilityQueue.push([]);
+    isBlockedBetweenMock.mockResolvedValueOnce(true);
+
+    await expect(
+      acceptUserInviteLink({ handle: 'josh', token: 'tok123', inviteeUserId: 'invitee-1' }),
+    ).resolves.toEqual({ accepted: false });
+
+    expect(upsertInvitationFriendshipMock).not.toHaveBeenCalled();
     expect(attributeInviteLinkJoinMock).not.toHaveBeenCalled();
   });
 

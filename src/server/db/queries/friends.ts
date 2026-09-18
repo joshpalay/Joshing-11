@@ -12,6 +12,7 @@ import {
   users,
 } from '@/server/db';
 import { getRelationships, type RelationshipResult } from '@/server/db/queries/friend-requests';
+import { blockedIdsAmong, isBlockedBetween } from '@/server/db/queries/user-blocks';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
 import { resolveDisplayName } from '@/server/lib/display-name';
 
@@ -92,7 +93,9 @@ export async function getFollowing(userId: string): Promise<User[]> {
     .innerJoin(users, eq(users.id, follows.followeeId))
     .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved')))
     .orderBy(asc(users.displayName), asc(users.phoneNumber))
-  return rows.map((row) => row.user)
+  const people = rows.map((row) => row.user)
+  const blockedIds = await blockedIdsAmong(userId, people.map((person) => person.id))
+  return people.filter((person) => !blockedIds.has(person.id))
 }
 
 /**
@@ -106,7 +109,9 @@ export async function getFollowers(userId: string): Promise<User[]> {
     .innerJoin(users, eq(users.id, follows.followerId))
     .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved')))
     .orderBy(asc(users.displayName), asc(users.phoneNumber))
-  return rows.map((row) => row.user)
+  const people = rows.map((row) => row.user)
+  const blockedIds = await blockedIdsAmong(userId, people.map((person) => person.id))
+  return people.filter((person) => !blockedIds.has(person.id))
 }
 
 /**
@@ -131,7 +136,9 @@ export async function getMutualFollows(userId: string): Promise<User[]> {
     .innerJoin(users, eq(users.id, follows.followeeId))
     .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved')))
     .orderBy(asc(users.displayName), asc(users.phoneNumber))
-  return rows.map((row) => row.user)
+  const people = rows.map((row) => row.user)
+  const blockedIds = await blockedIdsAmong(userId, people.map((person) => person.id))
+  return people.filter((person) => !blockedIds.has(person.id))
 }
 
 /**
@@ -157,7 +164,8 @@ export async function areFriends(userAId: string, userBId: string): Promise<bool
         ),
       ),
     )
-  return rows.length === 2
+  if (rows.length !== 2) return false
+  return !(await isBlockedBetween(userAId, userBId))
 }
 
 export async function getRecentDirectSendRecipients(userId: string, limit = 3): Promise<User[]> {
@@ -345,9 +353,28 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
     // pending request -- fully skipped, same as if the edge didn't exist.
   }
 
+  // A block is a hard boundary even if stale/buggy follow rows still exist.
+  // Invitation acceptance previously recreated approved edges after a block,
+  // which made both Friends lists show a profile link that correctly 404ed.
+  // Filter every hub relationship through the same bidirectional block model
+  // used by profile reads so the two surfaces cannot disagree.
+  const relationshipCandidateIds = Array.from(new Set([
+    ...followingIds,
+    ...followerIds,
+    ...incoming.map((request) => request.requesterId),
+    ...outbound.map((request) => request.recipientId),
+  ]))
+  const blockedIds = await blockedIdsAmong(userId, relationshipCandidateIds)
+  for (const blockedId of blockedIds) {
+    followingIds.delete(blockedId)
+    followerIds.delete(blockedId)
+  }
+  const visibleIncoming = incoming.filter((request) => !blockedIds.has(request.requesterId))
+  const visibleOutbound = outbound.filter((request) => !blockedIds.has(request.recipientId))
+
   const personIds = Array.from(new Set<string>([...followingIds, ...followerIds]))
-  const requesterIds = incoming.map((r) => r.requesterId)
-  const recipientIds = outbound.map((r) => r.recipientId)
+  const requesterIds = visibleIncoming.map((r) => r.requesterId)
+  const recipientIds = visibleOutbound.map((r) => r.recipientId)
   const allIds = Array.from(new Set<string>([...personIds, ...requesterIds, ...recipientIds]))
 
   const userRows = allIds.length === 0
@@ -412,7 +439,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   return {
     following: Array.from(followingIds).map(toPerson).sort(byName),
     followers: Array.from(followerIds).map(toPerson).sort(byName),
-    incomingRequests: incoming
+    incomingRequests: visibleIncoming
       .map((request) => {
         const user = usersById.get(request.requesterId)
         return {
@@ -425,7 +452,7 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
         }
       })
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
-    outboundRequests: outbound
+    outboundRequests: visibleOutbound
       .map((request) => {
         const user = usersById.get(request.recipientId)
         return {

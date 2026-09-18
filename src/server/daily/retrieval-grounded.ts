@@ -292,7 +292,10 @@ async function refillDomain(
           sourceRefs: q.source_refs,
           trustTier,
           askToAnswerVerified,
+          // Generator-emitted variants first (Rule 3d), then the corroboration
+          // passes — same union as the per-user path in generate-questions.ts.
           acceptableVariants: mergeVariants(
+            q.acceptable_variants,
             askResult.variantsByIndex.get(i),
             enrichByIndex.get(i),
           ),

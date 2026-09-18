@@ -69,6 +69,7 @@ function toLlmQuestion(row: Row, text: string, ans: string): LlmQuestion {
     broad_category: row.broadCategory,
     question_text: text,
     answer: ans,
+    acceptable_variants: [],
     explainer: row.explainer,
     difficulty_estimate: tier,
     fact_key: row.factKey,

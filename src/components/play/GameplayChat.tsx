@@ -382,8 +382,8 @@ function DismissNoticeRow({
         }}
       >
         <span>
-          Removed {snippet ? <span style={{ opacity: 0.85 }}>“{snippet}”</span> : null} from
-          catch up
+          Removed {snippet ? <span style={{ opacity: 0.85 }}>“{snippet}”</span> : null} from catch
+          up
         </span>
         <span style={{ margin: '0 6px', opacity: 0.6 }}>·</span>
         {state === 'undoing' ? (
@@ -495,8 +495,7 @@ function QuestionRow({
   // no gold ✦, no warm card tint, no inset rail. Those stay unique to a friend's
   // gift, which a return is not. Bonus wins if both are somehow set, so a card
   // can never grow two stacked banners.
-  const returnLabel =
-    !isBonus && returnLastSeenAt ? returnSourceLabel(returnLastSeenAt) : null;
+  const returnLabel = !isBonus && returnLastSeenAt ? returnSourceLabel(returnLastSeenAt) : null;
   const isReturn = Boolean(returnLabel);
   // Either banner welds to the top of the card, so the card must square off its
   // top corners for exactly the same reason in both cases.
@@ -537,345 +536,348 @@ function QuestionRow({
           ...(isNew ? { opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' } : {}),
         }}
       >
-      {numberMarker ? (
-        // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: editorial number marker in the
-        // gutter above the card — left-aligned, ~6px inset, ~10px gap to the
-        // card (8px here + the column's 2px gap). Positional only; it persists
-        // unchanged after the question is answered (F2) and never reflects
-        // result state.
-        <div style={{ paddingLeft: '6px', marginBottom: '8px' }}>
-          <QuestionNumberMarker
-            value={numberMarker.value}
-            bonus={numberMarker.bonus}
-            bonusIndex={numberMarker.bonusIndex}
-            bonusTotal={numberMarker.bonusTotal}
-          />
-        </div>
-      ) : null}
-      <div
-        style={{
-          alignSelf: 'flex-start',
-          maxWidth: THREAD_CARD_MAX_WIDTH,
-          width: '100%',
-        }}
-      >
-        {presenceSourceName ? (
-          <div
-            style={{
-              borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-              border: '1px solid var(--brand-navy)',
-              borderBottom: 'none',
-              background:
-                'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
-              boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
-              color: 'var(--primary-foreground)',
-              padding: '9px 13px 8px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px 10px',
-              }}
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.64rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.16em',
-                  lineHeight: 1.25,
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', lineHeight: 1 }}
-                >
-                  ✦
-                </span>
-                Bonus item
-              </span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.6rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  lineHeight: 1.25,
-                  color: 'color-mix(in srgb, var(--accent-gold) 35%, white)',
-                }}
-              >
-                {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
-              </span>
-            </div>
-          </div>
-        ) : null}
-        {returnLabel ? (
-          <div
-            style={{
-              borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
-              border: '1px solid var(--brand-rule)',
-              borderBottom: 'none',
-              // Neutral, not navy: present and unmissable, but visibly
-              // subordinate to both a core question and a friend's bonus. Built
-              // from existing tokens so the color ratchet (check:colors) stays
-              // clean. Deliberately NOT a grading color — red/green here would
-              // turn an honest label into "you got this wrong", which is the
-              // remediation framing §1 forbids.
-              background: 'color-mix(in srgb, var(--brand-ink-400) 14%, var(--game-card-question))',
-              color: 'var(--brand-ink-700)',
-              padding: '9px 13px 8px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px 10px',
-              }}
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.64rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.16em',
-                  lineHeight: 1.25,
-                }}
-              >
-                <span aria-hidden style={{ fontSize: '0.8rem', lineHeight: 1 }}>
-                  ↩
-                </span>
-                Second look
-              </span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.6rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  lineHeight: 1.25,
-                  color: 'var(--text-muted-warm)',
-                }}
-              >
-                {returnLabel}
-              </span>
-            </div>
+        {numberMarker ? (
+          // B-GAMEPLAY-QUESTION-NUMBER-BOX-01: editorial number marker in the
+          // gutter above the card — left-aligned, ~6px inset, ~10px gap to the
+          // card (8px here + the column's 2px gap). Positional only; it persists
+          // unchanged after the question is answered (F2) and never reflects
+          // result state.
+          <div style={{ paddingLeft: '6px', marginBottom: '8px' }}>
+            <QuestionNumberMarker
+              value={numberMarker.value}
+              bonus={numberMarker.bonus}
+              bonusIndex={numberMarker.bonusIndex}
+              bonusTotal={numberMarker.bonusTotal}
+            />
           </div>
         ) : null}
         <div
           style={{
-            // Bonus questions get a navy banner plus warm card tint so the
-            // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
-            background: isBonus
-              ? 'color-mix(in srgb, var(--accent-gold) 10%, var(--game-card-question))'
-              : 'var(--game-card-question)',
-            border: isBonus
-              ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
-              : '1px solid var(--brand-rule)',
-            // hasBanner, not isBonus: a return banner welds to the top edge the
-            // same way, so the card squares off under either one.
-            borderRadius: hasBanner ? '0 0 var(--radius-md) var(--radius-md)' : 'var(--radius-md)',
-            // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
-            boxShadow: isBonus
-              ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
-              : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
-            padding: '20px 22px',
-            // Contain the floated report control while still allowing the
-            // question copy to wrap beside it.
-            display: 'flow-root',
-            fontFamily: 'var(--font-serif)',
-            fontSize: '1.4875rem',
-            fontWeight: 700,
-            letterSpacing: 0,
-            color: 'var(--brand-ink)',
-            lineHeight: 1.3,
+            alignSelf: 'flex-start',
+            maxWidth: THREAD_CARD_MAX_WIDTH,
+            width: '100%',
           }}
         >
-          {/* Float the menu so it occupies the card corner instead of reserving
-              a full header row. The attribution and question copy can then wrap
-              naturally beside the tap target. */}
-          {reportTarget ? (
+          {presenceSourceName ? (
             <div
               style={{
-                ...reportMenuFontResetStyle,
-                float: 'right',
-                margin: '-8px -10px 6px 10px',
+                borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+                border: '1px solid var(--brand-navy)',
+                borderBottom: 'none',
+                background:
+                  'linear-gradient(135deg, var(--brand-navy), color-mix(in srgb, var(--brand-navy) 82%, var(--accent)))',
+                boxShadow: '0 8px 20px rgba(13, 31, 58, 0.18)',
+                color: 'var(--primary-foreground)',
+                padding: '9px 13px 8px',
               }}
             >
-              <AnsweredRowActions
-                target={reportTarget}
-                surface={reportSurface}
-                onReportSubmitted={(category) => {
-                  if (category === 'inappropriate') onReportedInappropriate?.();
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '6px 10px',
                 }}
-              />
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.16em',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', lineHeight: 1 }}
+                  >
+                    ✦
+                  </span>
+                  Bonus item
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.6rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    lineHeight: 1.25,
+                    color: 'color-mix(in srgb, var(--accent-gold) 35%, white)',
+                  }}
+                >
+                  {bonusSourceLabel(presenceSourceName, presenceSourceExtraCount)}
+                </span>
+              </div>
             </div>
           ) : null}
-          {/* Attribution ("FROM YESTERDAY · Maid Acasa") lives INSIDE the cream
+          {returnLabel ? (
+            <div
+              style={{
+                borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+                border: '1px solid var(--brand-rule)',
+                borderBottom: 'none',
+                // Neutral, not navy: present and unmissable, but visibly
+                // subordinate to both a core question and a friend's bonus. Built
+                // from existing tokens so the color ratchet (check:colors) stays
+                // clean. Deliberately NOT a grading color — red/green here would
+                // turn an honest label into "you got this wrong", which is the
+                // remediation framing §1 forbids.
+                background:
+                  'color-mix(in srgb, var(--brand-ink-400) 14%, var(--game-card-question))',
+                color: 'var(--brand-ink-700)',
+                padding: '9px 13px 8px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '6px 10px',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.16em',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  <span aria-hidden style={{ fontSize: '0.8rem', lineHeight: 1 }}>
+                    ↩
+                  </span>
+                  Second look
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.6rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    lineHeight: 1.25,
+                    color: 'var(--text-muted-warm)',
+                  }}
+                >
+                  {returnLabel}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          <div
+            style={{
+              // Bonus questions get a navy banner plus warm card tint so the
+              // gifted-from-a-friend item reads as an extra, not an ordinary prompt.
+              background: isBonus
+                ? 'color-mix(in srgb, var(--accent-gold) 10%, var(--game-card-question))'
+                : 'var(--game-card-question)',
+              border: isBonus
+                ? '1px solid color-mix(in srgb, var(--brand-navy) 72%, var(--accent-gold))'
+                : '1px solid var(--brand-rule)',
+              // hasBanner, not isBonus: a return banner welds to the top edge the
+              // same way, so the card squares off under either one.
+              borderRadius: hasBanner
+                ? '0 0 var(--radius-md) var(--radius-md)'
+                : 'var(--radius-md)',
+              // effect/card/question — soft layered drop shadow (bonus adds a gold inset rail).
+              boxShadow: isBonus
+                ? '0 8px 22px rgba(13, 31, 58, 0.14), 0 1px 3px rgba(40, 32, 30, 0.08), inset 4px 0 0 var(--accent-gold)'
+                : '0 4px 16px rgba(40, 32, 30, 0.08), 0 1px 3px rgba(40, 32, 30, 0.06)',
+              padding: '20px 22px',
+              // Contain the floated report control while still allowing the
+              // question copy to wrap beside it.
+              display: 'flow-root',
+              fontFamily: 'var(--font-serif)',
+              fontSize: '1.4875rem',
+              fontWeight: 700,
+              letterSpacing: 0,
+              color: 'var(--brand-ink)',
+              lineHeight: 1.3,
+            }}
+          >
+            {/* Float the menu so it occupies the card corner instead of reserving
+              a full header row. The attribution and question copy can then wrap
+              naturally beside the tap target. */}
+            {reportTarget ? (
+              <div
+                style={{
+                  ...reportMenuFontResetStyle,
+                  float: 'right',
+                  margin: '-8px -10px 6px 10px',
+                }}
+              >
+                <AnsweredRowActions
+                  target={reportTarget}
+                  surface={reportSurface}
+                  onReportSubmitted={(category) => {
+                    if (category === 'inappropriate') onReportedInappropriate?.();
+                  }}
+                />
+              </div>
+            ) : null}
+            {/* Attribution ("FROM YESTERDAY · Maid Acasa") lives INSIDE the cream
               question card, not above it: on the full-strength triangle surface
               (daily/page.tsx) bare muted text floated on the pattern was illegible
               (see the questionActionLinkStyle note). On the cream fill it reads
               cleanly, sitting as one quiet line above the prompt. */}
-          {subhead || creatorName ? (
-            <div
-              style={{
-                marginBottom: '14px',
-              }}
-            >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'baseline',
-                gap: '6px',
-                minWidth: 0,
-              }}
-            >
-              {subhead ? (
-                <span
+            {subhead || creatorName ? (
+              <div
+                style={{
+                  marginBottom: '14px',
+                }}
+              >
+                <div
                   style={{
-                    ...monoStyle,
-                    fontSize: '0.58rem',
-                    fontWeight: 400,
-                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'baseline',
+                    gap: '6px',
+                    minWidth: 0,
                   }}
                 >
-                  {subhead}
-                </span>
-              ) : null}
-              {subhead && creatorName ? (
-                <span
-                  aria-hidden
-                  style={{ fontSize: '0.58rem', color: 'var(--text-muted)', opacity: 0.6 }}
-                >
-                  ·
-                </span>
-              ) : null}
-              {creatorName ? (
-                <span
-                  style={{
-                    fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
-                    fontSize: '0.86rem',
-                    fontWeight: 400,
-                    letterSpacing: 0,
-                    color: 'var(--text)',
-                    opacity: 0.82,
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {/* The timeframe subhead already carries "FROM"; only prefix it
-                      here when the subhead is absent so the line never doubles up. */}
-                  {subhead ? null : (
+                  {subhead ? (
                     <span
                       style={{
                         ...monoStyle,
-                        fontSize: '0.55rem',
+                        fontSize: '0.58rem',
+                        fontWeight: 400,
                         color: 'var(--text-muted)',
-                        marginRight: '6px',
                       }}
                     >
-                      FROM
+                      {subhead}
                     </span>
-                  )}
-                  <span style={{ fontWeight: 600 }}>{creatorName}</span>
-                  {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
-                  {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
-                    <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
-                      gave you this
+                  ) : null}
+                  {subhead && creatorName ? (
+                    <span
+                      aria-hidden
+                      style={{ fontSize: '0.58rem', color: 'var(--text-muted)', opacity: 0.6 }}
+                    >
+                      ·
                     </span>
-                  )}
-                </span>
-              ) : null}
-            </div>
-            </div>
-          ) : null}
-          <p style={{ margin: 0 }}>{questionText}</p>
-          {badges.length > 0 ? (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '6px',
-                marginTop: '12px',
-                clear: 'both',
-              }}
-            >
-              {badges.map((badge) => (
-                <span
-                  key={badge.label}
-                  style={{
-                    // Figma display/pill/sans — serif, 12px, title-case (not the
-                    // mono uppercase used elsewhere).
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '0.675rem',
-                    lineHeight: 1.1,
-                    letterSpacing: '0.01em',
-                    borderRadius: '999px',
-                    border: '1px solid var(--border)',
-                    background:
-                      badge.tone === 'warning'
-                        ? 'color-mix(in srgb, var(--accent-gold) 14%, var(--surface))'
-                        : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
-                    color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
-                    opacity: 0.9,
-                    padding: '3px 9px',
-                  }}
-                >
-                  {badge.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
+                  ) : null}
+                  {creatorName ? (
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-serif), ui-serif, Georgia, serif',
+                        fontSize: '0.86rem',
+                        fontWeight: 400,
+                        letterSpacing: 0,
+                        color: 'var(--text)',
+                        opacity: 0.82,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {/* The timeframe subhead already carries "FROM"; only prefix it
+                      here when the subhead is absent so the line never doubles up. */}
+                      {subhead ? null : (
+                        <span
+                          style={{
+                            ...monoStyle,
+                            fontSize: '0.55rem',
+                            color: 'var(--text-muted)',
+                            marginRight: '6px',
+                          }}
+                        >
+                          FROM
+                        </span>
+                      )}
+                      <span style={{ fontWeight: 600 }}>{creatorName}</span>
+                      {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+                      {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
+                        <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
+                          gave you this
+                        </span>
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            <p style={{ margin: 0 }}>{questionText}</p>
+            {badges.length > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginTop: '12px',
+                  clear: 'both',
+                }}
+              >
+                {badges.map((badge) => (
+                  <span
+                    key={badge.label}
+                    style={{
+                      // Figma display/pill/sans — serif, 12px, title-case (not the
+                      // mono uppercase used elsewhere).
+                      fontFamily: 'var(--font-serif)',
+                      fontSize: '0.675rem',
+                      lineHeight: 1.1,
+                      letterSpacing: '0.01em',
+                      borderRadius: '999px',
+                      border: '1px solid var(--border)',
+                      background:
+                        badge.tone === 'warning'
+                          ? 'color-mix(in srgb, var(--accent-gold) 14%, var(--surface))'
+                          : 'color-mix(in srgb, var(--border) 18%, var(--surface))',
+                      color: badge.tone === 'warning' ? GOLD_INK : 'var(--text-muted)',
+                      opacity: 0.9,
+                      padding: '3px 9px',
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
-      {onGiveUp || onNotForMe ? (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '10px',
-            marginTop: '8px',
-            paddingLeft: '2px',
-          }}
-        >
-          {onGiveUp ? (
-            <button
-              type="button"
-              onClick={onGiveUp}
-              disabled={giveUpDisabled}
-              style={questionActionLinkStyle}
-            >
-              Show me the answer
-            </button>
-          ) : null}
-          {onNotForMe ? (
-            <button
-              type="button"
-              onClick={onNotForMe}
-              disabled={notForMeDisabled}
-              style={questionActionLinkStyle}
-            >
-              Not for me
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+        {onGiveUp || onNotForMe ? (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '10px',
+              marginTop: '8px',
+              paddingLeft: '2px',
+            }}
+          >
+            {onGiveUp ? (
+              <button
+                type="button"
+                onClick={onGiveUp}
+                disabled={giveUpDisabled}
+                style={questionActionLinkStyle}
+              >
+                Show me the answer
+              </button>
+            ) : null}
+            {onNotForMe ? (
+              <button
+                type="button"
+                onClick={onNotForMe}
+                disabled={notForMeDisabled}
+                style={questionActionLinkStyle}
+              >
+                Not for me
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1617,7 +1619,10 @@ function ResultRow({
           </>
         )}
         {showDiscoveryExplainer && explainerSentence ? (
-          <ExpandableExplainer sentence={explainerSentence} full={explanation ?? explainerSentence} />
+          <ExpandableExplainer
+            sentence={explainerSentence}
+            full={explanation ?? explainerSentence}
+          />
         ) : null}
         {typeof pointsAwarded === 'number' ? (
           <p

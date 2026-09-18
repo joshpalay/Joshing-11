@@ -1703,3 +1703,87 @@ number. `related-pr` above now includes `#1673`.
    — worth checking those specifically once there's more data.
 3. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
+
+### 2026-09-16 — two more items from Josh's review: the answer key splits in two (Rule 3d), and a fourth, disjunctive leak rule ships measure-only
+
+Two findings from the 2026-09-16 question review, built on
+`claude/single-word-answer-leak-gate`.
+
+**1. Canonical answer vs. accepted variants (Rule 3d).** Live rows carried
+their alternates packed inside the answer string — `"Lack of proportion (or
+'failure of propo…"`, `"Cannon (a peal of ordnance / guns)"` — even though
+`GeneratedQuestion.acceptable_variants` and
+`Question.accepted_alternatives` have existed since B4 Phase 4 and grading
+already reads both. Nothing made the generator USE them: the prompt asked
+for one `answer` string, so the model packed everything into it. Two costs,
+both real here: the deterministic `exactMatch` fast-path in `grading.ts` can
+only miss on a packed string, and `acceptedForms` reads a padded primary
+form, which is precisely how the Joyce "petition for universal peace"
+question survived (its answer padded in the word "calling").
+
+Now: the prompt asks for `answer` + `acceptable_variants` separately, with a
+HARD requirement that a translated / non-English answer carries both language
+forms or is not asked at all (the Poulenc "voyou" class). `splitPackedAnswer`
+(`src/server/answers/answer-variants.ts`) is the deterministic backstop for a
+model that ignores the rule. The peel **always keeps the packed original as a
+variant**, so the key can only get more lenient, never stricter — no
+regression is possible for an answer the grader accepts today. Disambiguating
+glosses (`"(the planet)"`) are dropped rather than promoted, since a bare
+category label accepted as an answer is forever.
+
+Carried at all three persist sites (per-user, retrieval-grounded, and
+supply-backfill — that last one stored **no** variants at all before, so its
+bank rows graded against the canonical string alone, forever, via
+verify-once-reuse-many).
+
+**Gate interaction worth knowing:** peeling shortens the primary form, which
+would have quietly NARROWED the conjunctive gate (it used to see the packed
+string and split it internally). `findAnswerLeaks` now passes the row's
+variants to `textContainsAnswer` (`leaksWholeAnswer`), which keeps coverage
+identical. It also means more one-token primary forms, so
+`answer_leak_single_word` should get louder — expect its counter to rise for
+reasons that have nothing to do with question quality changing.
+
+**2. New rule: `answerTokenLeaks` / gate `answer_leak_any_token`.** The
+mechanical answer-in-stem check from the review: tokenise the answer, drop
+the stopwords, flag when ANY content token is already printed in the stem.
+This is the first DISJUNCTIVE rule in the file — the three existing ones all
+need the stem to show the answer's words more or less completely, so a
+two-word answer whose withheld word is ordinary substance falls through all
+three ("Hamlet the Dane": the stem prints "Hamlet", withholds "Dane", and
+"dane" is neither filler nor a generic head noun).
+
+Generic head nouns, filler and numbers are excluded; counting asks are
+skipped; one-token forms are left to `singleWordAnswerLeaks` so the two
+counters never overlap. `countAnyTokenAnswerLeaks` is net of the three rules
+ahead of it, so the four gates never double-count a row.
+
+**Ships measure-only behind `ANY_TOKEN_ANSWER_LEAK_ENABLED` (default OFF)**,
+same posture and same one-flag-governs-both-paths contract as the partial and
+single-word rules (the flag also arms the bank RE-SERVE rejection in
+`findBankSourceDefect`). This one needs the measure period more than either
+predecessor: **Rule 2b (NAME THE SOURCE) requires the stem to name the
+work**, so an answer sharing a word with its own source title trips this rule
+structurally, not because anything leaked. Two such cases are pinned in
+`any-token-answer-leak-gate.test.ts` as expected-true-on-purpose ("Basset
+clarinet" against a stem that must say "clarinet"; a Rocko's Modern Life
+character).
+
+### Open decision 6: flip `ANY_TOKEN_ANSWER_LEAK_ENABLED`?
+
+Same bar as decisions 1 and 5 — a precision read, not a drop count. Do NOT
+flip on "the counter looks reasonable": this rule's expected false-positive
+rate is structurally higher than the other three, so it needs an actual
+labelled sample of what it would have dropped. A cheap way to get one without
+waiting for generation traffic: run the bank sweep dry with the flag set
+(`ANY_TOKEN_ANSWER_LEAK_ENABLED=1 npm run sweep:bank-quality`) and read the
+hits against existing stock.
+
+### Next steps (2026-09-16)
+1. Decisions 1, 2, 5 unchanged — still waiting on precision reads.
+2. Watch `answer_leak_any_token` in `GateDropStat` alongside a dry bank-sweep
+   sample before considering decision 6.
+3. Expect `answer_leak_single_word` to rise as a side effect of Rule 3d (see
+   above) — that rise is NOT evidence about question quality.
+4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
