@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 owner: Josh
 related-pr: "#1646, #1698"
 ---
@@ -523,5 +523,58 @@ stays `active`.
 3. Watch whether newly-generated rows actually reach 100% `subject_entity`
    coverage now that it's a hard requirement (not re-queried this pass —
    worth a look next review).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-18 (diagnosis-review) — `subject_entity` coverage confirmed 100% on the first rows generated under the new hard requirement; `batch_dedup` failed_open flat; build p50 still elevated
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`subject_entity` coverage since `#1698` (2026-09-16T22:07:16Z, the commit
+that made it a hard requirement): 0 of 4 newly-generated rows missing it.**
+Small sample (only 4 rows exist yet in this narrow post-deploy window), but
+directionally exactly what the requirement change predicts — a genuine
+`0%` miss rate versus the ~half of rows lacking it before. Worth another
+look once the sample grows past single digits.
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 107 | 9 | 1 |
+| `batch_dedup` | 107 | 1 | **10** |
+| `quality` | 107 | 45 | 0 |
+
+`batch_dedup`'s `failed_open` is flat at 10 (was 10/102 last review, now
+10/107) — the first time this counter hasn't ticked up between reviews
+since it started being tracked. `recent_history` unchanged at 1. `quality`'s
+scoped drop rate (42.1%) stays inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 34,129ms** (n=21),
+up slightly from the last reading of 33,407ms (n=20) —
+still well above the 25,243ms pre-deploy baseline, consistent with the
+`daily-build-latency-deferral-plan.md` review (also run this session)
+finding one new built row today (`97066d39…`) with a *normal* residual
+(875ms, not a fourth outlier) — so the three named outlier builds are still
+the entire explanation for the elevated p50.
+
+**No code change since the last review** to `verification-gating.test.ts`
+or `check-question-lifecycle.mjs` — the only two commits on `main` since
+the last review (`#1697` design-canon, `#1700` a UI text-wrap fix) touch
+neither file.
+
+**No decision-resolving change to the other five items in §2.** Status
+stays `active`.
+
+### Next steps (unchanged)
+1. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+2. Keep an eye on `batch_dedup` `failed_open` (10/107, flat this reading)
+   and `recent_history` (steady at 1).
+3. Keep watching `subject_entity` coverage as the post-`#1698` sample grows
+   past single digits.
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

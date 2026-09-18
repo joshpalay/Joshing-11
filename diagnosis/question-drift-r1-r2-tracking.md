@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -734,5 +734,94 @@ hand read still isn't due (~2026-09-25 or 200 rows, currently 72).
    due at the next review.
 2. Keep watching accessible share — now 54%, four readings running toward
    the 30-45% target band.
+3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-18 (diagnosis-review) — deploy+~7 days, the actual Phase 1 checkpoint: 2 of 3 exit criteria clearly pass; the 3rd has now gone unverifiable for the entire window
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~7.0 days — the actual Phase 1 checkpoint date this doc's
+own plan named, not another early read.
+
+**Phase 1 SQL, re-run, and scored against the plan's own exit criteria:**
+
+| Metric | 2026-09-17 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 72 | **76** | — | ordinary generation |
+| Mean words/question | 30.6 | **30.3** | ≤24 | still barely moved |
+| Rows over 25 words | 65% | **64%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 54% | **53%** | 30-45% | still above target band, essentially flat |
+
+**Quality-gate drop rate since deploy:** 50/120 = **41.7%** (considered
+120, up from 115; dropped 50, up from 47) — inside the 35-45% acceptable
+band, `failed_open: 0`. Per the plan's own decision-2 rule ("decide at
+Phase 1 if the quality-gate drop rate exceeds 45%"), 41.7% does **not**
+trip that threshold — R2-c (the gate-softener specialist-only change)
+stays as shipped, no action needed. `difficulty_floor`: 2/120 = 1.7%, well
+under the 5% stop condition. Per-defect breakdown (`quality:%`,
+day≥2026-09-11): `DEFINITION_SUPPLIED` 28/111 (largest, as every prior
+reading), `GENERIC_AT_TIER` 14/111, `ANSWER_LEAKED` 4/111, `SELF_ANSWERING`
+1/111, everything else 0.
+
+**Scoring the plan's own three Phase 1 exit criteria (§4) directly, since
+this is the checkpoint date named for that scoring:**
+
+1. Quality-gate drop rate ≤45% AND `failed_open`=0 — **PASS** (41.7%, 0).
+2. No rise in short-queue / `generation_failed` builds vs. the prior 7
+   days — **still not checkable from this environment.** This needs Vercel
+   function-log counts this session (and every prior diagnosis-review
+   session for this doc) has had no access to. This is not a new gap, but
+   it is now material in a way it wasn't before: this WAS the checkpoint
+   date the plan names for scoring all three criteria together, and this
+   one has gone the entire 7-day window without a single reading.
+3. Accessible share ≥25% AND difficulty-floor deflections ≤5% — **PASS**
+   (53% ≫ 25%; 1.7% ≪ 5%). Accessible share sitting well above the 30-45%
+   *target* band is a separately-tracked watch item, not itself a Phase 1
+   stop condition — only a fall below 25% would trip it.
+
+**Net: nothing trips a Phase 1 stop condition on the two criteria this
+environment can check, and neither open decision in §2 is newly resolved**
+(decision 2's 45% tripwire didn't fire, which is "no action" per the plan's
+own table, not a resolution requiring Josh; decision 1 is scored at Phase 2,
+not Phase 1, and Phase 2 isn't due — 76 rows vs. the 200-row-or-14-day gate,
+whichever is later, ~2026-09-25). **Not flipping `status` to
+`needs-decision`** — nothing here presents a specific question blocking one
+of the five enumerated open decisions. But flagging plainly, since the
+checkpoint itself just passed: **the short-queue/generation_failed criterion
+that the plan's own exit-criteria table requires "all three, else stop and
+revisit" has never been checked, at any point in this 7-day window, by any
+review session.** If Josh wants Phase 1 formally called MET, that currently
+rests on 2 of 3 criteria plus the absence of any other signal (no rise in
+`carry_forward`/`partial_carry_forward` share has been noticed as anomalous
+by the build-latency doc reviewed the same session) rather than a direct
+check of the one criterion built to catch exactly this failure mode.
+
+**Phase 3 (correct-rate) — dip widened slightly, still inside the
+≤10-point allowance:** accessible-tier mean `empirical_correct_rate`,
+post-deploy cohort now **0.654** (13 rows/15 answers, up from 11/13),
+pre-deploy cohort unchanged at **0.741** (36 rows/52 answers). Dip is now
+**8.7 points** (was 5.9), inside the ≤10-point exit criterion but moving
+the wrong direction this reading — still only 15 answers, nowhere near
+enough to trust as a real reading, same caveat as every prior entry.
+
+**No new relevant code:** the only two commits on `main` since the last
+review (`#1697` design-canon, `#1700` a UI text-wrap fix) touch neither
+`SYSTEM_PROMPT`, `QUALITY_GATE_SYSTEM_PROMPT`, nor `adaptive-difficulty.ts`
+— confirmed by diffing their changed-file lists directly.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-17 left them.** Status stays `active`. Phase 2's hand read
+still isn't due (~2026-09-25 or 200 rows, currently 76).
+
+### Next steps (revised)
+1. **New, and now the leading item:** get a real reading on short-queue /
+   `generation_failed` build counts since deploy (Vercel function logs, not
+   DB) — this is the one Phase 1 exit criterion that has never been
+   checked, and the checkpoint date for scoring it has now passed.
+2. Keep watching accessible share — now 53%, essentially flat this
+   reading after four straight readings of cooling (64→58→54→53).
 3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).

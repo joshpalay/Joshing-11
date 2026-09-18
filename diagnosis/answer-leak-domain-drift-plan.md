@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
 ---
@@ -1504,5 +1504,52 @@ returns nothing).
    for an actual drop — now 11+ clean days.
 2. Watch `answer_leak_single_word` accumulate more data (still 2 of 78).
 3. The three open `ContentReport` rows remain unaddressed, now 11 days old.
+4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-18 (diagnosis-review) — 12 clean days on both established flags; single-word gate unchanged; no new relevant code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 186 | 0 | 0 |
+| `domain_drift` | 186 | 0 | 0 |
+| `answer_leak_single_word` | 83 | 2 | 0 |
+| `answer_shape` | 186 | 2 | 0 |
+| `quality` | 186 | 74 | 229 (all on 2026-09-07, unchanged) |
+
+`answer_leak_partial` / `domain_drift` are now at **12 consecutive clean
+days**, 186 rows considered, still 0 drops each — the Mechanism-2 code-fix
+decision Josh held on 2026-09-08 is unchanged: still waiting on
+`domain_drift` to catch something real. `answer_leak_single_word` gained 5
+more `considered` (78→83) but no new drop (still 2) — still too small a
+sample to read precision from.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id: `139e1932…`, `800c44a3…`, `357618e3…`), now **12 days**
+since they were filed (2026-09-06). Not this doc's action item, but the age
+keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,272**, up from 2,268 —
+ordinary generation, not investigated further.
+
+**No new relevant code:** the only two commits on `main` since the last
+review (`#1697` design-canon, `#1700` a UI text-wrap fix) touch neither
+`self-answering.ts` nor `off-domain-second-opinion.ts` nor
+`generate-questions.ts` — confirmed by diffing their changed-file lists
+directly, not inferred.
+
+**No decision-resolving change.** Status stays `active`.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now 12+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 83).
+3. The three open `ContentReport` rows remain unaddressed, now 12 days old.
 4. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-18
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1204,6 +1204,44 @@ change from every prior reading.
 change), both confirmed by diff to touch `generate-questions.ts` only in
 ways unrelated to persist logic or build-latency instrumentation — noted
 for completeness, not a hit on this doc's tracked paths.
+
+**No decision-resolving change.** Status stays `active`. The three named
+outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
+
+### Next steps (unchanged)
+1. Trace the three outsized-residual builds — needs Vercel function logs.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-09-18 (diagnosis-review) — one new built row, normal residual; median saving rises to 11,483ms (n=20); still zero races, still no fourth outlier
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**One new post-deferral row since the last review**, from yesterday's 17:05
+UTC cron: `97066d39-…` (2026-09-17 17:05:18Z), `deferred: true`,
+`target_size=5`, `final_size=6` — no recurrence of the open-question-5
+slot-collision shape.
+
+```
+saved 14,293ms   bonus (generationMs) 13,418ms   residual 875ms   <- normal band
+```
+
+The residual (875ms) sits comfortably inside the pre-outlier 700–3,700ms
+band — this is **not** a fourth instance of the large-residual anomaly that
+hit three of the last twenty rows. **3b population, updated: median saving
+11,483ms** (n=20, was 10,221ms at n=19).
+
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time. No
+change from every prior reading. `DailyBuildMetric` totals: `built=21`,
+`carry_forward=286`, `existing_queue=30`, `partial_carry_forward=2`.
+
+**No code change since the last review** to this doc's tracked paths
+(`queue-orchestrator.ts`, `daily.ts`, `build-context.ts`) — the only two
+commits on `main` since the last review (`#1697` design-canon, `#1700` a UI
+text-wrap fix) touch neither file, confirmed by diffing their changed-file
+lists directly.
 
 **No decision-resolving change.** Status stays `active`. The three named
 outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
