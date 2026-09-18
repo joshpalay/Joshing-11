@@ -322,7 +322,13 @@ async function topUpAndCarryForwardPartialQueue(userId: string): Promise<boolean
     // the normal build so its graceful-degrade / generation_failed path decides.
     if (merged.length < DAILY_QUEUE_MIN_SIZE) return false;
 
-    const built = await carryForwardQueueWithSlots(userId, prior.id, merged, newGeneratedIds);
+    const built = await carryForwardQueueWithSlots(
+      userId,
+      prior.id,
+      merged,
+      newGeneratedIds,
+      carried.map((slot) => slot.slot_index),
+    );
     if (built) {
       console.info('[daily/queue-orchestrator] topped up carried-forward partial queue', {
         userId,

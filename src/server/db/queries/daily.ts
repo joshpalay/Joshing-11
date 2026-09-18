@@ -626,7 +626,8 @@ export async function carryForwardUntouchedDailyQueue(userId: string): Promise<b
   try {
     await db
       .update(dailyQueues)
-      .set({ queueDate: assignmentDateStr })
+      // Reset the reminder claims so the re-dated queue gets today's reminder.
+      .set({ queueDate: assignmentDateStr, smsReminderSentAt: null, emailReminderSentAt: null })
       .where(eq(dailyQueues.id, prior.id));
     return true;
   } catch (error) {
@@ -663,12 +664,12 @@ export async function getPriorInWindowDailyQueue(userId: string): Promise<DailyQ
 }
 
 /**
- * Re-date a prior in-window queue onto today with a REPLACED slots array — the
+ * Build today's queue from a prior in-window queue's unplayed slots — the
  * top-up sibling of carryForwardUntouchedDailyQueue. The orchestrator builds the
  * merged set (the prior queue's unplayed slots + freshly generated top-up slots),
- * then calls this to land it on today's date IN PLACE, so the carried questions
- * move out of catch-up and into today's Five without a second row (no double
- * surface). Mirrors carry-forward's empty-today cleanup + first-writer-wins (23505)
+ * then calls this to insert it as a NEW today row and strip the carried slots
+ * from the prior row, so they move out of catch-up (no double surface) while the
+ * prior day's answered slots stay intact. Mirrors carry-forward's empty-today cleanup + first-writer-wins (23505)
  * handling, and flags the freshly generated questions usedInQueue. Returns false
  * (writing nothing) if a full today-queue won the race.
  */
@@ -677,6 +678,7 @@ export async function carryForwardQueueWithSlots(
   priorQueueId: string,
   slots: QueueSlot[],
   newGeneratedQuestionIds: string[],
+  carriedSlotIndexes: number[],
 ): Promise<boolean> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
 
@@ -688,10 +690,34 @@ export async function carryForwardQueueWithSlots(
 
   try {
     await db.transaction(async (tx) => {
-      await tx
-        .update(dailyQueues)
-        .set({ queueDate: assignmentDateStr, slots })
+      // The prior row is the player's record of that day's round, so it is
+      // NEVER re-dated or overwritten here: doing so erased every answered slot
+      // (recap, round history, and the wrong answers catch-up re-offers). Only
+      // the carried slots leave it — they now live in today's row, so keeping
+      // them would double-surface them in catch-up. Remaining slots keep their
+      // slot_index, which is what catch-up ids and answer ids key on.
+      const carried = new Set(carriedSlotIndexes);
+      const [prior] = await tx
+        .select({ slots: dailyQueues.slots })
+        .from(dailyQueues)
         .where(eq(dailyQueues.id, priorQueueId));
+      if (prior) {
+        await tx
+          .update(dailyQueues)
+          .set({
+            slots: asQueueSlots(prior.slots).filter((slot) => !carried.has(slot.slot_index)),
+          })
+          .where(eq(dailyQueues.id, priorQueueId));
+      }
+      // A fresh row for today, so today's reminder claims start empty (the old
+      // re-date carried yesterday's "already sent" stamps and suppressed them).
+      await tx.insert(dailyQueues).values({
+        userId,
+        queueDate: assignmentDateStr,
+        slots,
+        targetSize: DAILY_QUEUE_SIZE,
+        buildCompletedAt: new Date(),
+      });
       if (newGeneratedQuestionIds.length > 0) {
         await tx
           .update(generatedQuestions)
