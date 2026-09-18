@@ -6,8 +6,9 @@ import { getSession } from '@/server/auth/session';
 import { db, feedItems, gradeDisputes, questions } from '@/server/db';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { getBasePoints } from '@/server/mastery/scoring';
-import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
+import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +75,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'invalid_state', message: 'That answer has already been rechecked.' }, { status: 400 });
     }
 
+    const quotaBefore = await getRecheckQuotaRemaining(session.userId);
+    if (quotaBefore <= 0) {
+      return NextResponse.json(
+        {
+          error: 'rate_limited',
+          message: `You've used all ${RECHECK_DAILY_LIMIT} rechecks for today. Try again tomorrow.`,
+        },
+        { status: 429 },
+      );
+    }
+
     const canonicalAnswer = question.answerText;
     const review = await recheckAnswerWithLLM({
       questionText: question.questionText,
@@ -83,12 +95,7 @@ export async function POST(request: NextRequest) {
       acceptedAlternatives: question.acceptedAlternatives ?? [],
     });
 
-    const accepted = review.decision === 'accept';
-    // A disputed answer key reads as "taking another look", not a rejection.
-    const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
-    // Only an accept auto-resolves; rejects and disputed keys stay 'pending' for
-    // human review rather than auto-dismissed. reviewDecision keeps the verdict.
-    const disputeStatus = accepted ? 'alternative_added' : 'pending';
+    const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
     const reviewedAt = accepted ? new Date() : null;
     const domain = question.canonicalSubcategory || question.broadCategory || question.category;
 
@@ -157,12 +164,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const { remaining: rechecksRemaining } = await consumeRecheckQuota(session.userId);
+
     return NextResponse.json({
       accepted,
       status: recheckStatus,
       reason: review.reason,
       pointsAwarded,
       correctAnswer: canonicalAnswer,
+      rechecksRemaining,
     });
   } catch (error) {
     console.error('[lately/milestone/recheck] unexpected', error);

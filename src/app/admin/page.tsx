@@ -8,6 +8,7 @@ import {
   getOpenReportsForReview,
 } from '@/server/db/queries/content-reports';
 import { getMachineDemotionsForReview } from '@/server/db/queries/machine-demotions';
+import { getPendingGradeDisputesForReview } from '@/server/db/queries/grade-disputes';
 import { getDomainFragmentationCandidates } from '@/server/db/queries/domain-fragmentation';
 import { getAllQuestionsForAdmin } from '@/server/db/queries/admin-questions';
 import { listKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
@@ -91,11 +92,12 @@ export default async function AdminOverviewPage() {
 
   // Every read independent + fail-open: one broken surface must not blank the
   // other cards. null ⇒ that card renders "—".
-  const [reports, demotions, blocked, supply, mergePairs, graph, questionsPage, crafterWorklist] =
+  const [reports, demotions, blocked, disputes, supply, mergePairs, graph, questionsPage, crafterWorklist] =
     await Promise.all([
       getOpenReportsForReview().catch(() => null),
       getMachineDemotionsForReview().catch(() => null),
       getBlockedQuestionsForReview().catch(() => null),
+      getPendingGradeDisputesForReview().catch(() => null),
       buildSupplyCoverageSummary(), // fail-open internally (returns null)
       getDomainFragmentationCandidates().catch(() => null),
       listKnowledgeGraph().catch(() => null),
@@ -111,6 +113,8 @@ export default async function AdminOverviewPage() {
       ? null
       : (reports?.length ?? 0) + (demotions?.length ?? 0);
   const readyFixCount = demotions?.filter((d) => d.proposal).length ?? null;
+  const urgentDisputeCount =
+    disputes?.filter((d) => d.reviewDecision === 'canonical_disputed').length ?? null;
   const highNeedCount = crafterWorklist?.filter((row) => row.heat === 'high').length ?? null;
 
   return (
@@ -137,6 +141,19 @@ export default async function AdminOverviewPage() {
             { value: n(openCount), label: 'needing review', tone: openCount ? 'danger' : undefined },
             { value: n(readyFixCount), label: 'with a ready fix', tone: readyFixCount ? 'navy' : undefined },
             { value: n(blocked?.length), label: 'blocked / actioned' },
+          ]}
+        />
+        <OverviewCard
+          href="/admin/disputes"
+          title="Answer disputes"
+          description="Rechecks that didn't auto-resolve — a player disagreed, or the reviewer flagged the question itself."
+          stats={[
+            { value: n(disputes?.length), label: 'pending' },
+            {
+              value: n(urgentDisputeCount),
+              label: 'question may be broken',
+              tone: urgentDisputeCount ? 'danger' : undefined,
+            },
           ]}
         />
       </div>

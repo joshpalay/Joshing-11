@@ -13,8 +13,9 @@ import {
 } from '@/server/daily/catchup';
 import { type QueueSlot } from '@/server/daily/types';
 import { isBonusSlot } from '@/server/daily/bonus';
-import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
+import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -40,7 +41,7 @@ export const dynamic = 'force-dynamic';
 // + answerResult), so there is no catch-up answer to recheck — the original feed
 // answer is appealable through /api/feed/{feedItemId}/recheck instead.
 
-type RecheckErrorCode = 'unauthorized' | 'validation' | 'not_found' | 'invalid_state' | 'question_not_found' | 'unexpected';
+type RecheckErrorCode = 'unauthorized' | 'validation' | 'not_found' | 'invalid_state' | 'question_not_found' | 'rate_limited' | 'unexpected';
 
 function errorResponse(status: number, error: RecheckErrorCode, message: string) {
   return NextResponse.json({ error, message }, { status });
@@ -87,6 +88,15 @@ export async function POST(request: NextRequest) {
     }
     if (!slot.generated_question_id && !slot.question_id) {
       return errorResponse(400, 'invalid_state', 'That catch-up slot has no question to recheck.');
+    }
+
+    const quotaBefore = await getRecheckQuotaRemaining(session.userId);
+    if (quotaBefore <= 0) {
+      return errorResponse(
+        429,
+        'rate_limited',
+        `You've used all ${RECHECK_DAILY_LIMIT} rechecks for today. Try again tomorrow.`,
+      );
     }
 
     // Resolve the answer key for the reviewer. Bot slots carry their alternatives
@@ -139,10 +149,7 @@ export async function POST(request: NextRequest) {
       acceptedAlternatives,
     });
 
-    const accepted = review.decision === 'accept';
-    // A disputed answer key reads as "taking another look", not a rejection.
-    const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
-    const disputeStatus = accepted ? 'alternative_added' : 'pending';
+    const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
     const reviewedAt = accepted ? new Date() : null;
 
     // Catch-up scoring uses the shared canonical scorer with the catch-up surface
@@ -282,6 +289,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const { remaining: rechecksRemaining } = await consumeRecheckQuota(session.userId);
+
     return NextResponse.json({
       accepted,
       status: recheckStatus,
@@ -290,6 +299,7 @@ export async function POST(request: NextRequest) {
       pointsAwarded,
       correctAnswer: canonicalAnswer,
       masteryDelta,
+      rechecksRemaining,
     });
   } catch (error) {
     console.error('[daily/catchup/recheck] unexpected', error);

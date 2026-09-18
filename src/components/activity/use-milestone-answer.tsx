@@ -10,6 +10,7 @@ import {
   submitAnswerWithRetry,
 } from '@/lib/answer-submit';
 import type { InsideJokeKind } from '@/lib/questions-types';
+import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy';
 
 type Feedback = {
   isCorrect: boolean;
@@ -129,23 +130,40 @@ export function useMilestoneAnswer(
       reason?: string;
       pointsAwarded?: number;
       message?: string;
+      rechecksRemaining?: number;
     } | null;
     if (!res.ok) throw new Error(body?.message ?? 'Could not recheck that answer.');
     const accepted = Boolean(body?.accepted);
     const points = typeof body?.pointsAwarded === 'number' ? body.pointsAwarded : 0;
+    const rechecksRemaining = typeof body?.rechecksRemaining === 'number' ? body.rechecksRemaining : null;
     if (accepted) {
       setFeedback((current) =>
         current ? { ...current, isCorrect: true, pointsAwarded: points } : current,
       );
       return {
         accepted: true,
-        message: `Recheck accepted — +${points} ${points === 1 ? 'point' : 'points'}.`,
+        message: appendRecheckQuotaNote(
+          `Recheck accepted — +${points} ${points === 1 ? 'point' : 'points'}.`,
+          rechecksRemaining,
+        ),
+      };
+    }
+    if (body?.status === 'disputed') {
+      return {
+        accepted: false,
+        message: appendRecheckQuotaNote(body.reason ?? DISPUTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
       };
     }
     if (body?.status === 'needs_human') {
-      return { accepted: false, message: body.reason ?? 'Flagged for a human look.' };
+      return {
+        accepted: false,
+        message: appendRecheckQuotaNote(body.reason ?? 'Flagged for a human look.', rechecksRemaining),
+      };
     }
-    return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' };
+    return {
+      accepted: false,
+      message: appendRecheckQuotaNote(body?.reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
+    };
   }
 
   // Hand the resolution up only once the viewer dismisses the result pop-up, so

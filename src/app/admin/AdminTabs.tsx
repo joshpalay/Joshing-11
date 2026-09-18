@@ -17,6 +17,7 @@ export type AdminTabKey =
   | 'crafter'
   | 'bulk-upload'
   | 'reports'
+  | 'disputes'
   | 'knowledge'
   | 'questions'
   | 'supply'
@@ -27,6 +28,7 @@ type Section = 'overview' | 'review' | 'author' | 'library' | 'domains';
 const SECTION_OF: Record<AdminTabKey, Section> = {
   overview: 'overview',
   reports: 'review',
+  disputes: 'review',
   crafter: 'author',
   'bulk-upload': 'author',
   questions: 'library',
@@ -45,6 +47,10 @@ const SECTIONS: Array<{ key: Section; label: string; href: string }> = [
 
 const SUBTABS: Partial<Record<Section, Array<{ key: AdminTabKey; label: string; href: string }>>> =
   {
+    review: [
+      { key: 'reports', label: 'Reports & demotions', href: '/admin/reports' },
+      { key: 'disputes', label: 'Answer disputes', href: '/admin/disputes' },
+    ],
     author: [
       { key: 'crafter', label: 'Write questions', href: '/admin/crafter' },
       { key: 'bulk-upload', label: 'Import CSV', href: '/admin/bulk-upload' },

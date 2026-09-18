@@ -12,6 +12,7 @@ import { parseCatchupItemId } from '@/server/daily/catchup';
 import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { LLM_QUESTION_ATTRIBUTION, type InsideJokeKind } from '@/lib/questions-types';
+import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy';
 import {
   parseCatchUpAnswerErrorBody,
   userFacingCatchUpSubmitMessage,
@@ -88,6 +89,7 @@ type DailyRecheckResponse = {
   pointsAwarded?: number;
   correctAnswer?: string;
   message?: string;
+  rechecksRemaining?: number;
 };
 
 export type CatchupStats = {
@@ -635,8 +637,10 @@ export function useCatchupFlow() {
       if (!response.ok || !raw) {
         return { accepted: false, message: raw?.message ?? 'Could not recheck that answer.' };
       }
+      const rechecksRemaining = typeof raw.rechecksRemaining === 'number' ? raw.rechecksRemaining : null;
       if (!raw.accepted) {
-        return { accepted: false, message: raw.reason ?? 'Rechecked and still marked wrong.' };
+        const fallback = raw.status === 'disputed' ? DISPUTED_RECHECK_FALLBACK_MESSAGE : 'Rechecked and still marked wrong.';
+        return { accepted: false, message: appendRecheckQuotaNote(raw.reason ?? fallback, rechecksRemaining) };
       }
 
       const pointsAwarded = Number(raw.pointsAwarded ?? 0);
@@ -652,7 +656,10 @@ export function useCatchupFlow() {
       );
       return {
         accepted: true,
-        message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+        message: appendRecheckQuotaNote(
+          `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+          rechecksRemaining,
+        ),
       };
     },
     [],
