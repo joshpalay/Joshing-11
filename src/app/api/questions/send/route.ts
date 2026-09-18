@@ -258,6 +258,14 @@ export async function resolveQuestionIdForSend(questionId: string): Promise<stri
       source: 'curated_sent',
       questionText: generated.questionText,
       answerText: generated.answer,
+      // Carry the machine row's acceptable_variants, exactly as
+      // persistGeneratedQuestion does on the daily path. Without this a
+      // forwarded question grades against the canonical string ALONE, so a
+      // recipient giving a right-but-rephrased answer is marked wrong on a
+      // question that grades correctly for everyone who met it via the daily
+      // five. Load-bearing since Rule 3d (2026-09-16): the canonical answer is
+      // now the bare form, with the alternates split out into this list.
+      acceptedAlternatives: generated.acceptableVariants ?? [],
       factualExplanation: generated.explainer,
       category: 'general_knowledge',
       broadCategory: generated.broadCategory,

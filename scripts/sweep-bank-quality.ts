@@ -86,6 +86,9 @@ function asLlmQuestion(row: BankRow): LlmQuestion {
     broad_category: row.broadCategory,
     question_text: row.questionText,
     answer: row.answer,
+    // The row's stored variants, so the leak gates test the same accepted forms
+    // the grader will (see leaksWholeAnswer in generate-questions.ts).
+    acceptable_variants: row.acceptableVariants ?? [],
     explainer: row.explainer,
     difficulty_estimate: tier,
     fact_key: row.factKey,

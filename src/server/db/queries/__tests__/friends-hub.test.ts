@@ -23,6 +23,10 @@ const { dbMock, state } = vi.hoisted(() => {
   return { dbMock: { select: vi.fn(() => makeSelect()) }, state }
 })
 
+const { blockedIdsAmongMock } = vi.hoisted(() => ({
+  blockedIdsAmongMock: vi.fn(async () => new Set<string>()),
+}))
+
 vi.mock('@/server/db', () => ({
   db: dbMock,
   declaredInterests: { userId: 'di.userId', domain: 'di.domain', isActive: 'di.isActive' },
@@ -49,6 +53,10 @@ vi.mock('@/server/db', () => ({
 }))
 
 vi.mock('@/server/feed/visibility', () => ({ DIRECT_SENT_FEED_SOURCE_TYPE: 'direct_sent' }))
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  blockedIdsAmong: blockedIdsAmongMock,
+  isBlockedBetween: vi.fn(async () => false),
+}))
 
 import { getFriendsHub } from '@/server/db/queries/friends'
 
@@ -57,6 +65,7 @@ const VIEWER = 'viewer-1'
 beforeEach(() => {
   vi.clearAllMocks()
   state.selectQueue = []
+  blockedIdsAmongMock.mockResolvedValue(new Set())
 })
 
 describe('getFriendsHub — declined edges are fully excluded', () => {
@@ -152,5 +161,41 @@ describe('getFriendsHub — display name never falls back to a phone number', ()
     expect(hub.following).toHaveLength(1)
     expect(hub.following[0]?.displayName).toBe('Joshing friend')
     expect(JSON.stringify(hub)).not.toMatch(/\+1\d{10}/)
+  })
+})
+
+describe('getFriendsHub — block boundary', () => {
+  it('does not expose a blocked mutual follow as a clickable friend row', async () => {
+    const now = new Date('2026-09-17T20:00:00.000Z')
+    state.selectQueue.push(
+      [
+        {
+          id: 'edge-out',
+          followerId: VIEWER,
+          followeeId: 'blocked-friend',
+          state: 'approved',
+          personalNote: null,
+          requestContext: null,
+          createdAt: now,
+        },
+        {
+          id: 'edge-in',
+          followerId: 'blocked-friend',
+          followeeId: VIEWER,
+          state: 'approved',
+          personalNote: null,
+          requestContext: null,
+          createdAt: now,
+        },
+      ],
+      [{ followPrivacy: 'approval_required' }],
+    )
+    blockedIdsAmongMock.mockResolvedValueOnce(new Set(['blocked-friend']))
+
+    const hub = await getFriendsHub(VIEWER)
+
+    expect(hub.following).toEqual([])
+    expect(hub.followers).toEqual([])
+    expect(blockedIdsAmongMock).toHaveBeenCalledWith(VIEWER, ['blocked-friend'])
   })
 })

@@ -60,6 +60,7 @@ function toLlmQuestion(row: { questionText: string; answer: string; canonicalSub
     broad_category: 'General',
     question_text: row.questionText,
     answer: row.answer,
+    acceptable_variants: [],
     explainer: '',
     difficulty_estimate: 'moderate',
     fact_key: null,

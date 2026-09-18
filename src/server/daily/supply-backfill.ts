@@ -458,6 +458,12 @@ async function buildDomain(
           factKey,
           subjectEntity: q.subject_entity,
           subAngles: q.sub_angles,
+          // Rule 3d: keep the generator's variants (and anything peeled out of a
+          // packed answer). This path runs neither ask-to-answer nor the
+          // enrichment gate, so without this its rows land with an EMPTY key and
+          // grade against the canonical string alone — forever, since bank rows
+          // are served verify-once-reuse-many.
+          acceptableVariants: q.acceptable_variants,
           trustTier,
           generatedByProvider: 'anthropic',
           expiresAt: DURABLE_EXPIRY,

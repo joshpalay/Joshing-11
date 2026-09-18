@@ -21,6 +21,11 @@ const { dbMock, state } = vi.hoisted(() => {
   return { dbMock, state }
 })
 
+const { blockedIdsAmongMock, isBlockedBetweenMock } = vi.hoisted(() => ({
+  blockedIdsAmongMock: vi.fn(async () => new Set<string>()),
+  isBlockedBetweenMock: vi.fn(async () => false),
+}))
+
 vi.mock('@/server/db', () => ({
   db: dbMock,
   declaredInterests: { userId: 'di.userId', domain: 'di.domain', isActive: 'di.isActive' },
@@ -38,6 +43,10 @@ vi.mock('@/server/db', () => ({
 }))
 
 vi.mock('@/server/feed/visibility', () => ({ DIRECT_SENT_FEED_SOURCE_TYPE: 'direct_sent' }))
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  blockedIdsAmong: blockedIdsAmongMock,
+  isBlockedBetween: isBlockedBetweenMock,
+}))
 
 import { areFriends, getFollowers, getFollowing, getFriends, getMutualFollows } from '@/server/db/queries/friends'
 
@@ -45,6 +54,8 @@ describe('follow query helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     state.rows = []
+    blockedIdsAmongMock.mockResolvedValue(new Set())
+    isBlockedBetweenMock.mockResolvedValue(false)
   })
 
   it('getFollowing returns the users I follow (approved outbound)', async () => {
@@ -73,6 +84,13 @@ describe('follow query helpers', () => {
     ])
   })
 
+  it('excludes a blocked user even when stale approved edges remain', async () => {
+    state.rows = [{ user: { id: 'user-josh', displayName: 'Josh', phoneNumber: '+1734' } }]
+    blockedIdsAmongMock.mockResolvedValueOnce(new Set(['user-josh']))
+
+    await expect(getFriends('user-jaime')).resolves.toEqual([])
+  })
+
   it('areFriends is true only when both directional approved edges exist', async () => {
     state.rows = [
       { followerId: 'a', followeeId: 'b' },
@@ -87,5 +105,15 @@ describe('follow query helpers', () => {
   it('areFriends is false for self', async () => {
     await expect(areFriends('a', 'a')).resolves.toBe(false)
     expect(dbMock.select).not.toHaveBeenCalled()
+  })
+
+  it('areFriends is false when either side has blocked the other', async () => {
+    state.rows = [
+      { followerId: 'a', followeeId: 'b' },
+      { followerId: 'b', followeeId: 'a' },
+    ]
+    isBlockedBetweenMock.mockResolvedValueOnce(true)
+
+    await expect(areFriends('a', 'b')).resolves.toBe(false)
   })
 })

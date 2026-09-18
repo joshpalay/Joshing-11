@@ -145,6 +145,10 @@ const { dbMock, state, activityItemsTable } = vi.hoisted(() => {
   return { dbMock, state, activityItemsTable };
 });
 
+const { isBlockedBetweenMock } = vi.hoisted(() => ({
+  isBlockedBetweenMock: vi.fn(async () => false),
+}));
+
 vi.mock('@/server/db', () => ({
   db: dbMock,
   activityItems: activityItemsTable,
@@ -179,6 +183,9 @@ vi.mock('@/server/db', () => ({
 // these tests focused on the acceptance logic.
 vi.mock('@/server/feed/backfill-inviter-feed', () => ({
   backfillInviterFeedItems: vi.fn(async () => ({ created: 0 })),
+}));
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  isBlockedBetween: isBlockedBetweenMock,
 }));
 
 import {
@@ -223,6 +230,7 @@ describe('acceptFriendInvitation', () => {
     state.invitationValues = undefined;
     state.updateValues = undefined;
     state.activityValues = [];
+    isBlockedBetweenMock.mockResolvedValue(false);
   });
 
   it('accepts a valid token for the matching verified phone and creates an invitation friendship', async () => {
@@ -275,6 +283,23 @@ describe('acceptFriendInvitation', () => {
         }),
       ]),
     );
+  });
+
+  it('rejects acceptance when either account has blocked the other', async () => {
+    setInvitation();
+    isBlockedBetweenMock.mockResolvedValueOnce(true);
+
+    await expect(
+      acceptFriendInvitation({
+        token: 'valid-token',
+        inviteeUserId: 'user-invitee',
+        verifiedPhone: matchingPhone,
+        now,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: 'blocked' });
+
+    expect(dbMock.transaction).not.toHaveBeenCalled();
+    expect(state.friendshipValues).toEqual([]);
   });
 
   it("accepts Jaime's 000000-verified matching phone once and rejects wrong-phone or reused claims without duplicate friendship rows", async () => {

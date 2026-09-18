@@ -98,11 +98,13 @@ import {
   selectCustomDomainsForRound,
 } from '@/server/daily/domain-selection';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
+import { normalizeAnswerVariants, splitPackedAnswer } from '@/server/answers/answer-variants';
 import { ANSWER_COOLDOWN_DAYS, answerCooldownKey, sameFactAnswerKey } from '@/server/daily/answer-cooldown';
 import { SUBJECT_COOLDOWN_DAYS, entityKey } from '@/server/daily/subject-cooldown';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import {
+  answerTokenLeaks,
   questionPartiallyLeaksAnswer,
   singleWordAnswerLeaks,
   textContainsAnswer,
@@ -234,6 +236,15 @@ The player is shown ONLY your question_text and a BROAD category label (e.g. "Fi
 ONE CLEAN ANSWER (Rule 3 — ALL tiers):
 The answer must be a single short, checkable response — a name, a title, a word, a short phrase. NEVER a sentence or paragraph that explains the answer. If the natural answer is explanatory (e.g. "the whale rams the ship and everyone drowns except the narrator"), re-aim the question so the answer is crisp (e.g. ask who alone survives the Pequod → "Ishmael"). Paragraph-length answers grade unpredictably and must not be produced. (This sharpens, but does not relax, the single-answer factual-recall and no-answer-leak rules above — a cleverer setup still must not name its own answer.)
 
+KEEP THE ANSWER KEY IN TWO PIECES (Rule 3d — ALL tiers):
+"answer" is the ONE canonical string — exactly what a player who knows the fact would type, and nothing else. Every OTHER phrasing a fair grader must accept goes in "acceptable_variants", a separate list. Do not pack alternates into the answer string.
+- BAD: "Cannon (a peal of ordnance / guns)" → GOOD: answer "Cannon", acceptable_variants ["a peal of ordnance", "guns"]
+- BAD: "Lack of proportion (or 'failure of proportion')" → GOOD: answer "Lack of proportion", acceptable_variants ["failure of proportion"]
+- BAD: "Andrey Razumovsky (Count Razumovsky)" → GOOD: answer "Andrey Razumovsky", acceptable_variants ["Count Razumovsky"]
+A parenthetical inside the answer is never acceptable — not for an alternate name, not for a gloss, not for a disambiguator. If the answer needs a disambiguator to be checkable, the QUESTION is underspecified: re-aim the stem so the bare answer is unambiguous.
+Most questions need no variants at all; return an empty list for those. The grader already handles spelling, capitalization, punctuation and word-order differences on its own, so do NOT list those. List only a genuinely different phrasing of the same answer (an alternate name, a common short form, the other accepted spelling of a transliterated name).
+NON-ENGLISH AND TRANSLATED ANSWERS — hard requirement: when the answer is a word or phrase in another language, or an English rendering of one, the key MUST carry BOTH forms (the original-language form and the English one) — one as "answer", the other in "acceptable_variants". A player who knows the fact may reasonably type either, and a key holding only one marks the other wrong. If you cannot supply both forms confidently, ask a different question instead.
+
 DO NOT DEFINE YOUR OWN ANSWER (Rule 3c — hard floor, ALL tiers including accessible):
 A setup that lists every defining property of the answer and then asks "what is that called?" is not a question — it is a definition with the label removed. The recall step is gone; the player is only being asked to attach a name to something you have already fully identified. This is the single most common way an ACCESSIBLE question goes wrong, because "make it easy" gets read as "describe the answer".
 TEST (apply before emitting, every question): strike the interrogative clause and read what is left. If the remaining sentence already picks out exactly one thing in the world — the only city that fits, the only muscle that fits, the only law that fits — you have supplied the definition. Cut the defining properties until real identification work remains, or re-aim at a different angle on the same subject.
@@ -354,7 +365,8 @@ Return format:
       "canonical_subcategory": "string, the domain label at work/artist/period/discipline level — must match the domain this question was generated for",
       "broad_category": "string",
       "question_text": "string",
-      "answer": "string",
+      "answer": "string, the ONE canonical answer — no parentheticals, no slashes, no 'or' alternates (see Rule 3d)",
+      "acceptable_variants": ["other phrasings a fair grader must accept (see Rule 3d) — usually empty; REQUIRED to carry the other language's form when the answer is translated or non-English"],
       "explainer": "string, 2-3 sentences of educational context — every factual claim in it must be load-bearing and checkable (see the side-facts floor); omit any incidental date/count/attribution you are not certain of rather than risk a wrong aside",
       "difficulty_estimate": "accessible | moderate | specialist",
       "fact_key": "string, short hyphenated lowercase identifier for the underlying fact (see REPETITION RULES)",
@@ -388,7 +400,14 @@ export type LlmQuestion = {
   canonical_subcategory: string;
   broad_category: string;
   question_text: string;
+  /** The ONE canonical answer string (Rule 3d). Alternates live in
+   *  `acceptable_variants`, never packed in here. */
   answer: string;
+  /** Other phrasings a fair grader must accept. Union of what the model emitted
+   *  and whatever a packed answer string had to be peeled apart into — see
+   *  splitPackedAnswer. Persisted to GeneratedQuestion.acceptable_variants, which
+   *  persistGeneratedQuestion carries onto Question.accepted_alternatives. */
+  acceptable_variants: string[];
   explainer: string;
   difficulty_estimate: 'accessible' | 'moderate' | 'specialist';
   fact_key: string | null;
@@ -807,11 +826,23 @@ function parseBaseQuestion(item: unknown): LlmQuestion | null {
       questionPreview: questionText.slice(0, 80),
     });
   }
+  // Rule 3d: the answer key is a canonical string PLUS a variants list. The
+  // model is asked for them separately; splitPackedAnswer is the deterministic
+  // backstop for when it packs alternates into the answer anyway ("Cannon (a
+  // peal of ordnance / guns)"), which it did for every row generated before the
+  // rule existed. A peel always keeps the packed original among the variants, so
+  // the key can only get more lenient here, never stricter.
+  const packed = splitPackedAnswer(answer);
+  const acceptableVariants = normalizeAnswerVariants(
+    [...(Array.isArray(rec.acceptable_variants) ? rec.acceptable_variants : []), ...packed.variants],
+    packed.answer,
+  );
   return {
     canonical_subcategory: canonical,
     broad_category: broad,
     question_text: questionText,
-    answer: normalizeCanonicalAnswerLabel(answer),
+    answer: normalizeCanonicalAnswerLabel(packed.answer),
+    acceptable_variants: acceptableVariants,
     explainer,
     difficulty_estimate: difficulty,
     fact_key: factKey,
@@ -1332,9 +1363,10 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
   const reasons: Record<number, string> = {};
   const partialEnabled = isPartialAnswerLeakEnabled();
   const singleWordEnabled = isSingleWordAnswerLeakEnabled();
+  const anyTokenEnabled = isAnyTokenAnswerLeakEnabled();
   for (let i = 0; i < generated.length; i += 1) {
     const q = generated[i];
-    if (textContainsAnswer(q.question_text, q.answer)) {
+    if (leaksWholeAnswer(q)) {
       toDrop.add(i);
       reasons[i] = `answer "${q.answer}" appears in question text`.slice(0, 200);
       continue;
@@ -1362,6 +1394,7 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
       if (singleWordEnabled) {
         toDrop.add(i);
         reasons[i] = `question gives away single-word answer "${q.answer}"`.slice(0, 200);
+        continue;
       } else {
         console.warn(
           '[daily/generate-questions] single-word answer leak (measuring, not dropping)',
@@ -1369,8 +1402,37 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
         );
       }
     }
+    // Any-content-token leak (the "Hamlet the Dane" class, 2026-09-16): the stem
+    // prints one of the answer's substantive words and withholds the other(s).
+    // Loosest rule in the chain — always MEASURED; only DROPS when enabled.
+    if (answerTokenLeaks(q.question_text, q.answer)) {
+      if (anyTokenEnabled) {
+        toDrop.add(i);
+        reasons[i] = `question shows part of answer "${q.answer}"`.slice(0, 200);
+      } else {
+        console.warn('[daily/generate-questions] answer-token leak (measuring, not dropping)', {
+          answer: q.answer.slice(0, 80),
+          questionPreview: q.question_text.slice(0, 120),
+        });
+      }
+    }
   }
   return { toDrop, reasons };
+}
+
+/**
+ * The whole-answer (conjunctive) check, with the row's accepted variants passed
+ * as alternate answers.
+ *
+ * Passing the variants is load-bearing since Rule 3d (2026-09-16): the gate used
+ * to see a PACKED answer string ("Venus (Aphrodite)") and acceptedForms split it
+ * internally, so both forms were checked. Now the packed string is split at
+ * parse time, and the alternates live in acceptable_variants — feeding them back
+ * in is what keeps this gate's coverage identical instead of quietly narrowing
+ * it to the canonical string alone.
+ */
+function leaksWholeAnswer(q: Pick<LlmQuestion, 'question_text' | 'answer' | 'acceptable_variants'>): boolean {
+  return textContainsAnswer(q.question_text, q.answer, q.acceptable_variants ?? []);
 }
 
 /**
@@ -1389,10 +1451,7 @@ export function isPartialAnswerLeakEnabled(): boolean {
 export function countPartialAnswerLeaks(generated: LlmQuestion[]): number {
   let n = 0;
   for (const q of generated) {
-    if (
-      !textContainsAnswer(q.question_text, q.answer) &&
-      questionPartiallyLeaksAnswer(q.question_text, q.answer)
-    ) {
+    if (!leaksWholeAnswer(q) && questionPartiallyLeaksAnswer(q.question_text, q.answer)) {
       n += 1;
     }
   }
@@ -1417,9 +1476,38 @@ export function isSingleWordAnswerLeakEnabled(): boolean {
 export function countSingleWordAnswerLeaks(generated: LlmQuestion[]): number {
   let n = 0;
   for (const q of generated) {
-    if (!textContainsAnswer(q.question_text, q.answer) && singleWordAnswerLeaks(q.question_text, q.answer)) {
+    if (!leaksWholeAnswer(q) && singleWordAnswerLeaks(q.question_text, q.answer)) {
       n += 1;
     }
+  }
+  return n;
+}
+
+/**
+ * ANY_TOKEN_ANSWER_LEAK_ENABLED — default OFF, own flag again. This is the
+ * disjunctive rule (ANY substantive word of the answer already printed in the
+ * stem), so it is the loosest of the four and the most likely to fire on a
+ * question that is fine — an answer that shares a word with the work Rule 2b
+ * forces the stem to name trips it structurally. Hits are logged and counted
+ * under `answer_leak_any_token`; nothing is dropped until this is set. Also
+ * governs the bank RE-SERVE rejection in findBankSourceDefect, mirroring the
+ * other two rules: a rule not trusted to drop at generation time is not trusted
+ * to reject a re-serve either.
+ */
+export function isAnyTokenAnswerLeakEnabled(): boolean {
+  const raw = process.env.ANY_TOKEN_ANSWER_LEAK_ENABLED?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+/** Hits the any-token rule found, whether or not the flag lets it drop. Counted
+ *  net of the rules ahead of it in the chain, so the gates don't double-count. */
+export function countAnyTokenAnswerLeaks(generated: LlmQuestion[]): number {
+  let n = 0;
+  for (const q of generated) {
+    if (leaksWholeAnswer(q)) continue;
+    if (questionPartiallyLeaksAnswer(q.question_text, q.answer)) continue;
+    if (singleWordAnswerLeaks(q.question_text, q.answer)) continue;
+    if (answerTokenLeaks(q.question_text, q.answer)) n += 1;
   }
   return n;
 }
@@ -1533,6 +1621,9 @@ export function findBankSourceDefect(source: {
   }
   if (isSingleWordAnswerLeakEnabled() && singleWordAnswerLeaks(questionText, answer)) {
     return `question gives away single-word answer "${answer}"`;
+  }
+  if (isAnyTokenAnswerLeakEnabled() && answerTokenLeaks(questionText, answer)) {
+    return `question shows part of answer "${answer}"`;
   }
   return null;
 }
@@ -2507,6 +2598,13 @@ export async function generateDailyQuestions(
       considered: generated.length,
       dropped: countSingleWordAnswerLeaks(generated),
     },
+    // Measure-only until ANY_TOKEN_ANSWER_LEAK_ENABLED is set — the disjunctive
+    // rule, counted net of the three above it. See answerTokenLeaks.
+    {
+      gate: 'answer_leak_any_token',
+      considered: generated.length,
+      dropped: countAnyTokenAnswerLeaks(generated),
+    },
     { gate: 'answer_shape', considered: generated.length, dropped: answerShape.toDrop.size },
     { gate: 'domain_drift', considered: generated.length, dropped: offDomain.size },
     { gate: 'difficulty_floor', considered: generated.length, dropped: underDifficulty.toDrop.size },
@@ -2716,9 +2814,12 @@ export async function generateDailyQuestions(
         questionShape: question.question_shape,
         trustTier,
         askToAnswerVerified,
-        // Union the ask-to-answer rephrasings (judge-verified equivalent) with the
-        // enrichment gate's additional distinct-but-correct answers (Fix 3).
+        // Union the generator's own variants (Rule 3d — including whatever was
+        // peeled out of a packed answer string) with the ask-to-answer
+        // rephrasings (judge-verified equivalent) and the enrichment gate's
+        // additional distinct-but-correct answers (Fix 3).
         acceptableVariants: mergeVariants(
+          question.acceptable_variants,
           askResult.variantsByIndex.get(persistIndex),
           enrichByIndex.get(persistIndex),
         ),

@@ -216,6 +216,7 @@ export async function flagDraftCandidates(
     broad_category: '',
     question_text: c.questionText,
     answer: c.answer,
+    acceptable_variants: [],
     explainer: '',
     difficulty_estimate: c.difficultyEstimate,
     fact_key: null,

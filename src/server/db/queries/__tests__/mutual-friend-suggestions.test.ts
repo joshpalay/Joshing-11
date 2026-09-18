@@ -17,8 +17,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { dbMock, state, getRelationshipsMock } = vi.hoisted(() => {
   const state = {
     // Queued in call order: [0] requester flag row, [1] getFriends rows
-    // (via getMutualFollows), [2] FoF candidate group-by rows,
-    // [3] candidateUsers rows.
+    // (via getMutualFollows), [2] block rows for those friends,
+    // [3] FoF candidate group-by rows, [4] candidateUsers rows.
     selectQueue: [] as unknown[][],
   }
 
@@ -54,6 +54,10 @@ vi.mock('@/server/db', () => ({
   joshingGameResponses: {},
   masteryEvents: {},
   questions: {},
+  userBlocks: {
+    blockerId: 'userBlocks.blockerId',
+    blockedId: 'userBlocks.blockedId',
+  },
   users: {
     id: 'users.id',
     handle: 'users.handle',
@@ -307,6 +311,7 @@ describe('getMutualFriendSuggestions (DB wiring)', () => {
     state.selectQueue = [
       [{ discoverableByMutualFriends: true }], // requester opted in
       [{ user: { id: 'friend-a', displayName: 'Friend A', phoneNumber: '+1' } }], // getFriends
+      [], // no blocks involving the direct friend
       [
         { candidateId: 'cand-low', mutualFriendCount: 1 },
         { candidateId: 'cand-high', mutualFriendCount: 2 },
@@ -330,6 +335,7 @@ describe('getMutualFriendSuggestions (DB wiring)', () => {
     state.selectQueue = [
       [{ discoverableByMutualFriends: true }],
       [{ user: { id: 'friend-a', displayName: 'Friend A', phoneNumber: '+1' } }],
+      [], // no blocks involving the direct friend
       [], // no FoF candidates at all
     ]
 
@@ -337,8 +343,8 @@ describe('getMutualFriendSuggestions (DB wiring)', () => {
 
     expect(result).toEqual([])
     expect(getRelationshipsMock).not.toHaveBeenCalled()
-    // requester flag + getFriends + FoF query = 3; the candidateUsers query
-    // never fires.
-    expect(dbMock.select).toHaveBeenCalledTimes(3)
+    // requester flag + getFriends + block filter + FoF query = 4; the
+    // candidateUsers query never fires.
+    expect(dbMock.select).toHaveBeenCalledTimes(4)
   })
 })

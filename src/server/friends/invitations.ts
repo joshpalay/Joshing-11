@@ -6,6 +6,7 @@ import { maskPhoneE164 } from '@/lib/phone-e164';
 import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links';
 import { activityItems, db, friendInvitations, users } from '@/server/db';
 import { backfillInviterFeedItems } from '@/server/feed/backfill-inviter-feed';
+import { isBlockedBetween } from '@/server/db/queries/user-blocks';
 import {
   notifyInvitationFriendshipFormed,
   upsertInvitationFriendship,
@@ -76,6 +77,7 @@ export type AcceptFriendInvitationResult =
         | 'accepted'
         | 'cancelled'
         | 'self'
+        | 'blocked'
         | 'phone_mismatch'
         | 'claim_failed';
     };
@@ -689,6 +691,10 @@ export async function acceptFriendInvitation({
 
   if (invitation.inviterUserId === inviteeUserId) {
     return { accepted: false, reason: 'self' };
+  }
+
+  if (await isBlockedBetween(invitation.inviterUserId, inviteeUserId)) {
+    return { accepted: false, reason: 'blocked' };
   }
 
   if (invitation.inviteePhone !== verifiedPhone) {

@@ -38,6 +38,12 @@ export const GATE_NAMES = [
   // isDiscriminating in self-answering.ts never credits a lone word as a tell,
   // so acceptedFormLeaks can't catch this shape. See singleWordAnswerLeaks.
   'answer_leak_single_word',
+  // Measure-only until ANY_TOKEN_ANSWER_LEAK_ENABLED is set (2026-09-16): ANY
+  // substantive word of the answer already printed in the stem (the "Hamlet the
+  // Dane" class) — the disjunctive counterpart to the three rules above, which
+  // all require the stem to show the answer's words more or less completely.
+  // Counted net of those three, so the four gates never double-count a row.
+  'answer_leak_any_token',
   'answer_shape',
   'domain_drift',
   // Bank RE-SERVE path, not generation. Every gate above runs only on freshly

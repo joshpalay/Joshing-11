@@ -5,6 +5,7 @@ import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links
 import { db, follows, profileDomainVisibility, users } from '@/server/db';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { isBlockedBetween } from '@/server/db/queries/user-blocks';
 import {
   attributeInviteLinkJoin,
   findLiveInviteLinkByToken,
@@ -281,12 +282,21 @@ export async function acceptUserInviteLink({
   const inviter = await resolveInviteLink(handle, token);
   if (!inviter) return { accepted: false };
   if (inviter.inviterUserId === inviteeUserId) return { accepted: false };
+  if (await isBlockedBetween(inviter.inviterUserId, inviteeUserId)) {
+    return { accepted: false };
+  }
 
   try {
-    await upsertInvitationFriendship(db, {
-      inviterUserId: inviter.inviterUserId,
-      inviteeUserId,
-      formedAt: now,
+    // Keep the two directional approved edges atomic. The named-invitation
+    // path already runs this helper inside its claim transaction; reusable
+    // links need the same guarantee so a failure cannot leave a one-way
+    // relationship that disagrees with profile visibility.
+    await db.transaction(async (tx) => {
+      await upsertInvitationFriendship(tx, {
+        inviterUserId: inviter.inviterUserId,
+        inviteeUserId,
+        formedAt: now,
+      });
     });
     // One-time inviter feed backfill (B-HomeSeed-1). Best-effort internally so
     // it can't throw — a backfill hiccup must never fail the link acceptance.

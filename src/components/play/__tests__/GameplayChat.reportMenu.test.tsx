@@ -12,7 +12,9 @@ import { GameplayChatThread, type ChatMessage } from '@/components/play/Gameplay
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...props}>{children}</a>
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }));
 
