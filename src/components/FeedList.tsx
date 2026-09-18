@@ -27,6 +27,7 @@ import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMoti
 import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
+import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
@@ -1854,12 +1855,14 @@ function FeedListContent({
         reason?: string
         pointsAwarded?: number
         message?: string
+        rechecksRemaining?: number
       } | null
       if (!response.ok) {
         throw new Error(body?.message ?? 'Could not recheck that answer.')
       }
       const accepted = Boolean(body?.accepted)
       const pointsAwarded = typeof body?.pointsAwarded === 'number' ? body.pointsAwarded : 0
+      const rechecksRemaining = typeof body?.rechecksRemaining === 'number' ? body.rechecksRemaining : null
       if (accepted) {
         setItems((current) =>
           current.map((currentItem) =>
@@ -1873,12 +1876,30 @@ function FeedListContent({
           if (!existing) return current
           return { ...current, [item.id]: { ...existing, correct: true, awardedPoints: pointsAwarded } }
         })
-        return { accepted: true, message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.` }
+        return {
+          accepted: true,
+          message: appendRecheckQuotaNote(
+            `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+            rechecksRemaining
+          ),
+        }
+      }
+      if (body?.status === 'disputed') {
+        return {
+          accepted: false,
+          message: appendRecheckQuotaNote(body.reason ?? DISPUTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
+        }
       }
       if (body?.status === 'needs_human') {
-        return { accepted: false, message: body.reason ?? 'Flagged for a human look.' }
+        return {
+          accepted: false,
+          message: appendRecheckQuotaNote(body.reason ?? 'Flagged for a human look.', rechecksRemaining),
+        }
       }
-      return { accepted: false, message: body?.reason ?? 'Rechecked and still marked wrong.' }
+      return {
+        accepted: false,
+        message: appendRecheckQuotaNote(body?.reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
+      }
     },
     []
   )

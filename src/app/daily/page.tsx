@@ -25,6 +25,7 @@ import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { ReminderConfirmedToast } from '@/components/ReminderConfirmedToast';
 import { type InsideJokeKind } from '@/lib/questions-types';
+import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy';
 import { slotCategoryLabel } from '@/server/daily/slot-label';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import {
@@ -152,10 +153,11 @@ type FailedAnswerResponse = {
 
 type RecheckResponse = {
   accepted?: boolean;
-  status?: 'accepted' | 'rejected' | 'needs_human';
+  status?: 'accepted' | 'rejected' | 'needs_human' | 'disputed';
   reason?: string;
   pointsAwarded?: number;
   correctAnswer?: string;
+  rechecksRemaining?: number;
 };
 
 const ANSWER_ERROR_MESSAGES: Record<string, string> = {
@@ -622,16 +624,36 @@ export default function DailyPage() {
           : existing,
       );
 
+      const rechecksRemaining =
+        body && 'rechecksRemaining' in body && typeof body.rechecksRemaining === 'number'
+          ? body.rechecksRemaining
+          : null;
+
       if (accepted) {
         return {
           accepted: true,
-          message: `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+          message: appendRecheckQuotaNote(
+            `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
+            rechecksRemaining,
+          ),
+        };
+      }
+      if (status === 'disputed') {
+        return {
+          accepted: false,
+          message: appendRecheckQuotaNote(reason ?? DISPUTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
         };
       }
       if (status === 'needs_human') {
-        return { accepted: false, message: reason ?? 'Flagged for a human look.' };
+        return {
+          accepted: false,
+          message: appendRecheckQuotaNote(reason ?? 'Flagged for a human look.', rechecksRemaining),
+        };
       }
-      return { accepted: false, message: reason ?? 'Rechecked and still marked wrong.' };
+      return {
+        accepted: false,
+        message: appendRecheckQuotaNote(reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
+      };
     },
     [queue],
   );

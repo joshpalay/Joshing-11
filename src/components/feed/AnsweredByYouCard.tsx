@@ -146,9 +146,9 @@ function AnsweredResult({
       setRecheckState('done')
       setRecheckMessage(outcome.message)
       setRecheckAccepted(outcome.accepted)
-    } catch {
+    } catch (error) {
       setRecheckState('error')
-      setRecheckMessage('Could not recheck that answer.')
+      setRecheckMessage(error instanceof Error ? error.message : 'Could not recheck that answer.')
       setRecheckAccepted(false)
     }
   }, [recheckAction, recheckState])

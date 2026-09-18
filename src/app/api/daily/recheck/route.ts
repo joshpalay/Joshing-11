@@ -10,14 +10,15 @@ import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { suggestAnswer } from '@/lib/llm';
 import { getProviderSettings } from '@/server/llm/settings';
-import { recheckAnswerWithLLM } from '@/server/llm/recheck';
+import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
+import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 
 export const dynamic = 'force-dynamic';
 
-type RecheckErrorCode = 'unauthorized' | 'validation' | 'not_found' | 'invalid_state' | 'question_not_found' | 'unexpected';
+type RecheckErrorCode = 'unauthorized' | 'validation' | 'not_found' | 'invalid_state' | 'question_not_found' | 'rate_limited' | 'unexpected';
 
 function errorResponse(status: number, error: RecheckErrorCode, message: string) {
   return NextResponse.json({ error, message }, { status });
@@ -95,6 +96,15 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, 'invalid_state', 'That Daily Five slot has no question to recheck.');
     }
 
+    const quotaBefore = await getRecheckQuotaRemaining(session.userId);
+    if (quotaBefore <= 0) {
+      return errorResponse(
+        429,
+        'rate_limited',
+        `You've used all ${RECHECK_DAILY_LIMIT} rechecks for today. Try again tomorrow.`,
+      );
+    }
+
     // Daily 5 slots come in two shapes — bot (generatedQuestions) and
     // friend-authored (canonical questions). Normalise into a single struct
     // so the recheck flow doesn't care which pool the slot came from.
@@ -162,19 +172,11 @@ export async function POST(request: NextRequest) {
       acceptedAlternatives: question.acceptedAlternatives,
     });
 
-    const accepted = review.decision === 'accept';
+    const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
     const pointsAwarded = accepted ? question.basePoints : 0;
-    // User-facing outcome. A disputed answer key reads as "we're taking
-    // another look" rather than a confident rejection — we will not tell the
-    // player they were wrong against an answer the reviewer flagged as wrong.
-    const recheckStatus = accepted ? 'accepted' : review.decision === 'reject' ? 'rejected' : 'needs_human';
-    // Backend dispute lifecycle. Only an accept auto-resolves (the alternative
-    // is added). Everything else — including plain rejects — now stays 'pending'
-    // so a human can review it, instead of being auto-dismissed. The precise
-    // verdict is preserved in reviewDecision below for the review queue.
-    const disputeStatus = accepted ? 'alternative_added' : 'pending';
     const reviewedAt = accepted ? new Date() : null;
     const answerId = `daily:${queue.id}:${parsed.slotIndex}:${session.userId}`;
+    const { remaining: rechecksRemaining } = await consumeRecheckQuota(session.userId);
 
     const nextSlots = slots.map((item) => {
       if (item.slot_index !== parsed.slotIndex) return item;
@@ -315,6 +317,7 @@ export async function POST(request: NextRequest) {
       pointsAwarded,
       correctAnswer: canonicalAnswer,
       masteryDelta,
+      rechecksRemaining,
     });
   } catch (error) {
     console.error('[daily/recheck] unexpected', error);

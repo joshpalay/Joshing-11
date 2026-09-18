@@ -1235,7 +1235,7 @@ Joshing questions are factual — they have objectively correct answers that do 
 Classification rules:
 "factual": Clear, verifiable answer exists. Provide it.
 "personal": The answer depends on private biographical knowledge of the creator (e.g. "What was the name of my first dog?" or "What is my favourite film?"). These cannot be fairly graded. Return null for suggested_answer and redirect the writer toward factual territory.
-"ambiguous": The question is unclear or subjective enough that grading would be difficult. Return null and a helpful note.
+"ambiguous": The question is unclear or subjective enough that grading would be difficult. Return null and a helpful note. This also covers a TYPE MISMATCH: the question asks for one grammatical category of answer (a shape, a person, a year, a title, a place, a structural technique, etc.) but the true answer is fundamentally a different category — e.g. "What shape did Brunelleschi use for the dome?" when the true answer is a construction method ("a double shell"), not a shape. A literal, correct reading of the question would then be marked wrong even though it's a defensible answer. Detect this and classify it as "ambiguous" too.
 "factual_uncertain": You believe there is a correct answer but are not confident. Provide your best guess with a caveat note, AND provide 2–3 alternative phrasings in suggested_phrasings that would be more specific or verifiable — e.g. narrowing scope, citing a source, or removing ambiguity.
 
 Canonical answer format: Keep suggested_answer short — the essential key fact or phrase, ≤ 15 words. Do not include explanatory context, mechanisms, or background in suggested_answer. If you want to include supporting detail, put it in the note field.
@@ -1252,7 +1252,7 @@ Difficulty estimate rules (for factual questions only; return null for personal/
 
 Notes by type:
 - personal: "This question may depend on private knowledge of you specifically, which makes it hard to grade fairly. Joshing questions work best when drawn from shared cultural territory. Consider reframing — for example, instead of 'What is my favourite opera?' try 'What opera features the famous Drinking Song?'"
-- ambiguous: "This might be hard to grade objectively. Is there a specific answer in mind? If not, consider reframing toward something with a clearer correct answer."
+- ambiguous: "This might be hard to grade objectively. Is there a specific answer in mind? If not, consider reframing toward something with a clearer correct answer." For a TYPE MISMATCH specifically, do NOT use this generic note — write a specific one naming the exact mismatch instead, e.g. "This asks for a shape, but the answer is a construction method (a double shell), not a shape. Consider rephrasing the question or the answer so they agree."
 - factual_uncertain: "I'm not entirely sure — you may want to double-check this one."
 
 Return only valid JSON with keys: type, suggested_answer, note, is_list, min_list_items, difficulty_estimate, suggested_phrasings.

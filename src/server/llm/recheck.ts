@@ -36,6 +36,43 @@ function trimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+export type RecheckOutcomeStatus = 'accepted' | 'rejected' | 'needs_human' | 'disputed';
+
+export type RecheckOutcome = {
+  accepted: boolean;
+  recheckStatus: RecheckOutcomeStatus;
+  disputeStatus: 'alternative_added' | 'pending';
+};
+
+/**
+ * Maps a recheck verdict to what it should do to the grade and the dispute
+ * record. Single source of truth so the four recheck routes (daily, daily
+ * catch-up, feed, Lately milestone) can't drift on this mapping.
+ *
+ * - accept: the player was right — grade flips, alternative folds into the
+ *   answer key.
+ * - canonical_disputed: the player's OWN answer is also wrong (that's baked
+ *   into the decision's definition — see parseAnswerRecheck's accepted_alternative
+ *   handling), but the stored answer key is broken too. Crediting the player
+ *   here would be false credit, so the grade stays wrong; the dispute is
+ *   flagged 'disputed' (not 'needs_human') so the review queue can prioritize
+ *   fixing the question itself over ordinary "player disagrees" cases.
+ * - reject / needs_human: grade stands as-is; the dispute sits pending for a
+ *   human call.
+ */
+export function resolveRecheckOutcome(decision: AnswerRecheckDecision): RecheckOutcome {
+  if (decision === 'accept') {
+    return { accepted: true, recheckStatus: 'accepted', disputeStatus: 'alternative_added' };
+  }
+  if (decision === 'canonical_disputed') {
+    return { accepted: false, recheckStatus: 'disputed', disputeStatus: 'pending' };
+  }
+  if (decision === 'reject') {
+    return { accepted: false, recheckStatus: 'rejected', disputeStatus: 'pending' };
+  }
+  return { accepted: false, recheckStatus: 'needs_human', disputeStatus: 'pending' };
+}
+
 export function parseAnswerRecheck(rawText: string): AnswerRecheckResult {
   const parsed = parseJsonObject(rawText);
   if (!parsed) return FALLBACK_RECHECK;

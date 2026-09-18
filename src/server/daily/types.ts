@@ -127,8 +127,14 @@ export const queueSlotSchema = z.object({
   reveal_inside_joke: z.string().nullish(),
   /** Provenance of the aside label: 'relational' (a person authored it) or 'editorial' (LLM-origin). */
   reveal_inside_joke_kind: z.enum(['relational', 'editorial']).nullish(),
-  /** Optional appeal state after a player asks the app to recheck a wrong grade. */
-  recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
+  /**
+   * Optional appeal state after a player asks the app to recheck a wrong grade.
+   * 'disputed' is distinct from 'needs_human': the reviewer concluded the
+   * player's own answer is ALSO wrong, but the stored answer key is broken too
+   * — the grade stays wrong (crediting it would be false credit) while the
+   * dispute is flagged for priority review of the question itself.
+   */
+  recheck_status: z.enum(['accepted', 'rejected', 'needs_human', 'disputed']).optional(),
   /** Short player-facing explanation from the recheck reviewer. */
   recheck_reason: z.string().nullish(),
   /**
@@ -137,7 +143,7 @@ export const queueSlotSchema = z.object({
    * catch-up attempt graded wrong can be appealed once; an 'accepted' verdict
    * flips `catchup_answer_state` to 'correct' (the live verdict stays put).
    */
-  catchup_recheck_status: z.enum(['accepted', 'rejected', 'needs_human']).optional(),
+  catchup_recheck_status: z.enum(['accepted', 'rejected', 'needs_human', 'disputed']).optional(),
   /** Short player-facing explanation from the catch-up recheck reviewer. */
   catchup_recheck_reason: z.string().nullish(),
 });
