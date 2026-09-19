@@ -172,12 +172,28 @@ export function KnowledgeCircle({
         flexShrink: 0,
       }}
     >
-      <KnowledgeBubble
-        diameter={displaySize}
-        tint={dc.primary}
-        opacity={opacity}
-        style={{ transition: animate ? undefined : 'none' }}
-      />
+      {/* Border sits on its own ring, outside the fill's opacity animation, so
+          low-point circles (opacity down to MIN_OPACITY) still read as a
+          circle instead of nearly vanishing against the page background. */}
+      <div
+        style={{
+          width: displaySize,
+          height: displaySize,
+          boxSizing: 'border-box',
+          borderRadius: '50%',
+          border: `1px solid ${dc.primary}`,
+          display: 'grid',
+          placeItems: 'center',
+          transition: animate ? undefined : 'none',
+        }}
+      >
+        <KnowledgeBubble
+          diameter={displaySize}
+          tint={dc.primary}
+          opacity={opacity}
+          style={{ transition: animate ? undefined : 'none' }}
+        />
+      </div>
     </div>
   );
 }
