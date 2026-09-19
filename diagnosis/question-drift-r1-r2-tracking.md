@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-19
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -823,5 +823,72 @@ still isn't due (~2026-09-25 or 200 rows, currently 76).
    checked, and the checkpoint date for scoring it has now passed.
 2. Keep watching accessible share — now 53%, essentially flat this
    reading after four straight readings of cooling (64→58→54→53).
+3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-19 (diagnosis-review) — deploy+~7.7 days; accessible share resumes cooling, now inside 4pts of the target band; Phase 3 dip byte-identical to last reading; the untraceable Phase 1 criterion is still untraced; no new relevant code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~7.7 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-18 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 76 | **83** | — | ordinary generation |
+| Mean words/question | 30.3 | **30.4** | ≤24 | still barely moved |
+| Rows over 25 words | 64% | **66%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 53% | **49%** | 30-45% | still above target band, resumed cooling — 4 points closer, now within 4pts of the top of the band |
+
+**Quality-gate drop rate since deploy:** 53/129 = **41.1%** (considered
+129, up from 120; dropped 53, up from 50) — inside the 35-45% acceptable
+band, `failed_open: 0`. `difficulty_floor`: 2/129 = 1.6%, well under the 5%
+stop condition. Per-defect breakdown (`quality:%`, day≥2026-09-11):
+`DEFINITION_SUPPLIED` 28/120 (largest, as every prior reading, flat since
+last review), `GENERIC_AT_TIER` 14/120 (flat), `ANSWER_LEAKED` 5/120 (up
+from 4), `SELF_ANSWERING` 1/120, `MISLEADING_SETUP` 1/120 (first nonzero
+reading for this defect), everything else 0.
+
+**None of Phase 1's checkable stop conditions trip**, same as every prior
+reading. Accessible share (53%→49%) resumed its cooling trend after
+flattening last review — five of the last six readings now moving toward
+the 30-45% band (64→58→54→53→49, one flat step in between), which keeps
+strengthening the "settles on its own" read over "R1-a needs a rewrite."
+
+**The one Phase 1 exit criterion this environment has never been able to
+check — short-queue / `generation_failed` build counts from Vercel function
+logs — is still unchecked**, same gap named at the actual Phase 1
+checkpoint (2026-09-18) and every review before it. Not re-litigating that
+finding, just confirming it hasn't been resolved since.
+
+**Phase 3 (correct-rate) — byte-identical to the last reading:**
+accessible-tier mean `empirical_correct_rate`, post-deploy cohort **0.654**
+(13 rows/15 answers, unchanged), pre-deploy cohort **0.741** (36 rows/52
+answers, unchanged). Dip holds at **8.7 points**, inside the ≤10-point exit
+criterion, same caveat as every prior entry (15 answers is nowhere near
+enough to trust).
+
+**No new relevant code:** `git log --since=2026-09-18` on
+`src/server/daily/generate-questions.ts` (for `SYSTEM_PROMPT` /
+`QUALITY_GATE_SYSTEM_PROMPT`) and `src/server/adaptive-difficulty.ts`
+returns nothing beyond `#1701` (checked directly — its diff to
+`generate-questions.ts` is entirely Rule 3d / the any-token gate, already
+tracked by `answer-leak-domain-drift-plan.md`, and does not touch
+`SYSTEM_PROMPT`'s FAN-SALIENCE RULE, Rule 3c, or any R1–R9 wording this doc
+tracks).
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-18 left them.** Status stays `active`. Phase 2's hand read
+still isn't due (~2026-09-25 or 200 rows, currently 83).
+
+### Next steps (unchanged)
+1. Get a real reading on short-queue / `generation_failed` build counts
+   since deploy (Vercel function logs, not DB) — still the one Phase 1
+   exit criterion never checked, now over a week past its checkpoint date.
+2. Keep watching accessible share — now 49%, resumed cooling toward the
+   30-45% target band.
 3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).

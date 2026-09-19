@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-19
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1242,6 +1242,51 @@ change from every prior reading. `DailyBuildMetric` totals: `built=21`,
 commits on `main` since the last review (`#1697` design-canon, `#1700` a UI
 text-wrap fix) touch neither file, confirmed by diffing their changed-file
 lists directly.
+
+**No decision-resolving change.** Status stays `active`. The three named
+outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
+
+### Next steps (unchanged)
+1. Trace the three outsized-residual builds — needs Vercel function logs.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-09-19 (diagnosis-review) — no new built row; still zero races; a new, adjacent-but-different queue-insert path shipped in #1703, worth a name-check only
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`DailyBuildMetric` totals: `built=21`** — byte-identical to the last
+review (no new `outcome='built'` row since `97066d39…`,
+2026-09-17T17:05:18Z). `carry_forward=309` (up from 286),
+`existing_queue=30` (flat), `partial_carry_forward=4` (up from 2).
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time —
+unchanged from every prior reading.
+
+Phase 3 stays at the last known reading (n=20 post-deferral + 1 baseline,
+median saving 11,483ms) — no new row to add one.
+
+**Not a hit on this doc's tracked paths, but close enough to name:** `#1703`
+("fix(daily): carry-forward no longer erases yesterday's round or
+suppresses today's reminder"), merged 2026-09-18T21:18:38Z, touches
+`src/server/db/queries/daily.ts` and `src/server/daily/queue-orchestrator.ts`
+— both files this doc watches — but changes a **different** function,
+`carryForwardQueueWithSlots`, not `persistDailyQueue`. Read the diff
+directly: `persistDailyQueue`'s `{ row, won }` contract and the
+orchestrator's `if (!persistResult.won)` bail-out (the `#1620` fix this doc
+tracks) are untouched. What changed instead: `carryForwardQueueWithSlots`
+used to `UPDATE` the PRIOR day's queue row in place (re-dating it onto
+today), which silently erased that row's answered slots and reset its
+reminder-sent stamps; it now `INSERT`s a fresh row for today and only
+strips the carried slot indices from the prior row, leaving its answered
+history intact. It has its own first-writer-wins guard (catches Postgres
+`23505` on the new insert, returns `false` for the caller to fall through
+on a race) — a different mechanism from `persistDailyQueue`'s `won` flag,
+but the same design intent. Not the mechanism `#1620` fixed, not a
+regression of it, and no `lost_persist_race` rows appeared after it shipped
+(still 0) — flagging only because it's a same-file, same-domain write-path
+change, not because anything here needs Josh's decision.
 
 **No decision-resolving change.** Status stays `active`. The three named
 outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.

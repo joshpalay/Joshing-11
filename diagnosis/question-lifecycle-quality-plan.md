@@ -2,9 +2,9 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-18
+last-reviewed: 2026-09-19
 owner: Josh
-related-pr: "#1646, #1698"
+related-pr: "#1646, #1698, #1702"
 ---
 
 # Diagnosis: question lifecycle quality and grading fairness
@@ -576,5 +576,98 @@ stays `active`.
    and `recent_history` (steady at 1).
 3. Keep watching `subject_entity` coverage as the post-`#1698` sample grows
    past single digits.
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-19 (diagnosis-review) — a new admin dispute queue directly relevant to decision 4 shipped (#1702); `subject_entity` coverage holds at 100%; `batch_dedup` failed_open ticks up again; build p50 unchanged
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**New PR directly relevant to decision 4, checked by reading the diff, not
+just the title: `#1702`** ("feat: let recheck overturn wrong-question
+grades, add dispute queue + rate limit"), merged 2026-09-18T12:04:17Z. This
+is new tooling, not a measurement of grading fairness itself, but it's the
+first thing to touch this doc's decision 4 ("did grading become fairer in
+real use? Answer with reviewed disputes, accepted alternatives...") since
+the doc opened:
+
+- A new `/admin/disputes` page and `GET /api/admin/disputes` route give
+  Josh a real queue to review `GradeDispute` rows against, where before
+  (per this doc's own §3 baseline) they were only ever counted, not worked
+  from an interface.
+- Recheck (`daily`, `catchup`, `feed`, `lately/milestone` recheck routes)
+  can now **overturn a wrong-question grade**, not just re-grade an
+  answer — `src/server/llm/recheck.ts` gained new logic and
+  `recheck-quota.ts` adds a rate limit on it.
+- `grade-disputes.ts` (new query file) is the first place this doc's
+  "reviewed disputes" evidence source (decision 4) could actually be
+  populated from a human review action rather than an automated status.
+
+**`GradeDispute` status counts, queried directly (all-time, not a window):**
+
+| status | count |
+|---|---:|
+| `pending` | 39 |
+| `alternative_added` | 26 |
+| `dismissed` | 5 |
+
+This doesn't map cleanly onto this doc's own §3 baseline table ("24
+alternatives added; 36 rejected; 3 need human review", taken 2026-09-09) —
+the status vocabulary looks different (`dismissed` here vs. "rejected"
+there) and `pending` at 39 is far larger than the baseline's "3 need human
+review." Not resolving that mapping this pass — flagging it as something
+to reconcile before treating either number as continuous with the other,
+since `#1702`'s new queue may have surfaced previously-invisible pending
+rows rather than the backlog actually growing 13x. **Not treating this as
+an answer to decision 4** — a queue existing is not the same as disputes
+being reviewed and labeled; this is new evidence-gathering *capability*,
+not evidence itself yet. Worth a dedicated look next review once the queue
+has had a few days of real use.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 12** newly-generated rows
+missing it (was 0 of 4 last review) — sample still small but the 0% miss
+rate is holding as it grows.
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 116 | 10 | 1 |
+| `batch_dedup` | 116 | 1 | **11** |
+| `quality` | 116 | 48 | 0 |
+
+`batch_dedup`'s `failed_open` ticked up again, 10→11 — still small in
+absolute terms, still not root-caused, same "flagging for awareness"
+posture as every prior entry. `recent_history` unchanged at 1 (dropped
+9→10). `quality`'s scoped drop rate (41.4%) stays inside the acceptable
+band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 34,129ms** (n=21),
+byte-identical to the last reading — no new `outcome='built'` row landed
+since the last review (confirmed against `daily-build-latency-deferral-
+plan.md`'s reading today, also `built=21`). Still well above the 25,243ms
+pre-deploy baseline; the three named outlier builds remain the entire
+explanation, still untraced.
+
+**No code change since the last review** to `verification-gating.test.ts`
+or `check-question-lifecycle.mjs`.
+
+**No decision-resolving change to the other five items in §2.** Status
+stays `active` — `#1702` is new capability toward decision 4, not a
+resolution of it.
+
+### Next steps (revised)
+1. **New:** give the `#1702` dispute queue a few days of real use, then
+   reconcile its `GradeDispute` status vocabulary against this doc's §3
+   baseline table and read whether reviewed disputes are actually moving
+   decision 4 forward.
+2. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+3. Keep an eye on `batch_dedup` `failed_open` (11/116, still trending up)
+   and `recent_history` (steady at 1).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

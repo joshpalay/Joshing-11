@@ -2,9 +2,9 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-17
+last-reviewed: 2026-09-19
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673"
+related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
@@ -1786,4 +1786,71 @@ hits against existing stock.
 3. Expect `answer_leak_single_word` to rise as a side effect of Rule 3d (see
    above) — that rise is NOT evidence about question quality.
 4. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-19 (diagnosis-review) — Rule 3d and the any-token gate shipped to production via #1701; `answer_leak_any_token` now has its first real telemetry; frontmatter had fallen a day behind the body
+
+**Bookkeeping note first:** this file's frontmatter still read
+`last-reviewed: 2026-09-17` even though the 2026-09-18 review entry below it
+was already written — the prior session appended the Update but didn't bump
+the frontmatter. Corrected above; not a sign anything was skipped, the body
+entry was there.
+
+**The 2026-09-16 WIP (Rule 3d answer-variant split + the
+`answerTokenLeaks`/`answer_leak_any_token` gate) is no longer WIP — it
+shipped to production in `#1701`** ("fix: close blocked-friend profile 404
+and harden answer quality"), merged 2026-09-18T11:04:06Z. Confirmed by
+reading the diff directly, not the PR title: `#1701` adds
+`answerTokenLeaks()` to `self-answering.ts` byte-for-byte matching what the
+2026-09-16 entry described, wires it into `findAnswerLeaks` behind
+`ANY_TOKEN_ANSWER_LEAK_ENABLED` (still default off), and adds
+`answer_leak_any_token` to `GATE_NAMES`. This file's own 2026-09-16 entry
+already documented the mechanism in full; nothing new to add there, just
+confirming it's live rather than sitting on a branch. Added `#1701` to
+`related-pr`.
+
+**`answer_leak_any_token` has its first-ever telemetry** (it read 0
+considered every prior review because the gate code wasn't deployed yet):
+
+| gate | considered (cum. since 09-07) | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 195 | 0 | 0 |
+| `domain_drift` | 195 | 0 | 0 |
+| `answer_leak_single_word` | 92 | 2 | 0 |
+| `answer_leak_any_token` | **9** | 0 | 0 |
+| `answer_shape` | 195 | 2 | 0 |
+| `quality` | 195 | 77 | 229 (all 2026-09-07, unchanged) |
+
+`answer_leak_partial` / `domain_drift` are now at **13 consecutive clean
+days**, 195 considered, still 0 drops each — Mechanism-2 code-fix decision
+unchanged, still waiting on `domain_drift` to catch something real.
+`answer_leak_single_word` gained 9 considered (83→92), no new drop (still
+2). `answer_leak_any_token` is far too new (9 considered) to read anything
+from — logging its existence from its first real day, same posture as every
+other gate in this doc got at birth.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id): `139e1932…` created 2026-09-06T01:15:10Z,
+`800c44a3…` and `357618e3…` both created 2026-09-06T14:53:3{8,9}Z — now
+**13 days** old. Not this doc's action item, but the age keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,279** of 3,025 total, up
+from 2,272 — ordinary generation, not investigated further.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were: 1/5 need a precision read that doesn't exist
+yet; 2 is still deliberately held off; 6 (any-token) just got its first
+telemetry but is nowhere near a precision read; the generalized cross-domain
+audit (other tightly-paired domains) still hasn't been started.
+
+### Next steps (unchanged, plus one new)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now 13+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 92).
+3. **New:** watch `answer_leak_any_token` accumulate data (9 considered, 0
+   dropped as of today) before considering decision 6 — same threshold this
+   doc has used for every prior gate (needs a real hit count before a
+   precision read is worth doing, not just "the counter looks reasonable").
+4. The three open `ContentReport` rows remain unaddressed, now 13 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
