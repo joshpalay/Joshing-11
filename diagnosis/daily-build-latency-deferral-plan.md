@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-19
+last-reviewed: 2026-09-21
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1287,6 +1287,47 @@ but the same design intent. Not the mechanism `#1620` fixed, not a
 regression of it, and no `lost_persist_race` rows appeared after it shipped
 (still 0) — flagging only because it's a same-file, same-domain write-path
 change, not because anything here needs Josh's decision.
+
+**No decision-resolving change.** Status stays `active`. The three named
+outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
+
+### Next steps (unchanged)
+1. Trace the three outsized-residual builds — needs Vercel function logs.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-09-21 (diagnosis-review) — two new built rows, both normal residual; median saving unchanged at 11,483ms (n=22); still zero races; three outlier builds remain untraced; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`DailyBuildMetric` totals:** `built=23` (up from 21), `carry_forward=357`,
+`existing_queue=30`, `partial_carry_forward=4`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**Two new post-deferral rows since the last review**, both `deferred: true`,
+`target_size=5`, neither reproducing the open-question-5 slot-collision
+shape (`final_size` 6 on both):
+
+| started_at | saved | bonus (`generationMs`) | residual |
+|---|---:|---:|---:|
+| 2026-09-19 17:05:18Z | 15,295 | 14,450 | 845 |
+| 2026-09-20 17:05:18Z | 7,913 | 6,708 | 1,205 |
+
+Both residuals sit comfortably inside the normal 700–3,700ms band — neither
+is a fourth instance of the large-residual anomaly that hit the three named
+outlier builds (2026-09-09, 2026-09-14, 2026-09-15). Phase 3a (mechanism)
+holds on both: `saved ≥` that row's own bonus `generationMs`.
+
+**3b population: median saving unchanged at 11,483ms** (n=22, up from
+n=20) — the two new rows landed on either side of the middle of the
+distribution without moving it.
+
+**No code change since the last review:** zero commits landed on `main` at
+all since the 2026-09-19 diagnosis-review commit (confirmed via `git log`),
+so `queue-orchestrator.ts`, `daily.ts`, and `build-context.ts` are
+byte-identical to the last review.
 
 **No decision-resolving change.** Status stays `active`. The three named
 outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.

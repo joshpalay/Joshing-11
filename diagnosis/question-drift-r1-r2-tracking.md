@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-19
+last-reviewed: 2026-09-21
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -891,4 +891,77 @@ still isn't due (~2026-09-25 or 200 rows, currently 83).
 2. Keep watching accessible share — now 49%, resumed cooling toward the
    30-45% target band.
 3. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-21 (diagnosis-review) — accessible share now within 3pts of the target band; Phase 3's dip breaches its ≤10-point criterion for the first time, but the sample is still far too thin to trust; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~9.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-19 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 83 | **92** | — | ordinary generation |
+| Mean words/question | 30.4 | **30.4** | ≤24 | unchanged, still barely moved |
+| Rows over 25 words | 66% | **65%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 49% | **48%** | 30-45% | still above target band, resumed cooling — now within 3pts of the top of the band |
+
+**Quality-gate drop rate since deploy:** 58/140 = **41.4%** (considered
+140, up from 129; dropped 58, up from 53) — inside the 35-45% acceptable
+band, `failed_open: 0`. `difficulty_floor`: 2/140 = 1.4%, well under the 5%
+stop condition. Per-defect breakdown (`quality:%`, day≥2026-09-11):
+`DEFINITION_SUPPLIED` 30/131 (largest, as every prior reading), `GENERIC_AT_TIER`
+15/131, `ANSWER_LEAKED` 5/131, `SELF_ANSWERING` 3/131 (up from 1),
+`FALSE_PREMISE` 1/131 (first nonzero reading for this defect),
+`MISLEADING_SETUP` 1/131, everything else 0.
+
+**None of Phase 1's checkable stop conditions trip**, same as every prior
+reading. Accessible share (49%→48%) continues its cooling trend — six of
+the last eight readings now moving toward the 30-45% band (64→58→54→53→49→
+one flat step→48), which keeps strengthening the "settles on its own" read.
+
+**The one Phase 1 exit criterion this environment has never been able to
+check** — short-queue / `generation_failed` build counts from Vercel
+function logs — is still unchecked, same gap as every review since the
+actual 2026-09-18 checkpoint.
+
+**Phase 3 (correct-rate) — the dip breaches its own exit criterion for the
+first time, but the sample is still far too thin to trust:**
+accessible-tier mean `empirical_correct_rate`, post-deploy cohort now
+**0.567** (15 rows/17 answers, up from 13/15), pre-deploy cohort **0.741**
+(36 rows/52 answers, unchanged). Dip is now **17.4 points** — the plan's
+Phase 3 exit criterion is a dip ≤10 points, and this is the first reading
+to exceed it (prior readings: 7.5→9.1→5.9→8.7→8.7). Flagging plainly, but
+**not** escalating to `needs-decision` on decision 3: the post-cohort is
+still only 17 answers, the exact caveat every prior entry has repeated
+("nowhere near enough to trust"), and the number has already moved
+non-monotonically by similar margins as one or two answers land on a
+handful of rows. One breach at n=17 answers isn't grounds to act on; a
+repeat breach on the next reading, or the cohort growing into the dozens
+while the dip holds, would be.
+
+**No new relevant code:** zero commits landed on `main` at all since the
+2026-09-19 diagnosis-review commit (confirmed via `git log`), so
+`SYSTEM_PROMPT`, `QUALITY_GATE_SYSTEM_PROMPT`, and `adaptive-difficulty.ts`
+are byte-identical to the last review.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-19 left them.** Status stays `active`. Phase 2's hand read
+still isn't due (~2026-09-25 or 200 rows, currently 92).
+
+### Next steps (revised)
+1. **New, and now the leading item:** watch the Phase 3 correct-rate dip
+   closely — it just breached the ≤10-point exit criterion for the first
+   time (17.4 points, n=17 answers). Needs a repeat reading before it means
+   anything, given the sample size, but it's the first time this doc's own
+   numbers have crossed a stated line.
+2. Keep watching accessible share — now 48%, within 3pts of the 30-45%
+   target band.
+3. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked.
+4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).
