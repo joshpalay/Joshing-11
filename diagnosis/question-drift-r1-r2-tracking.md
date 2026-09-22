@@ -1,6 +1,6 @@
 ---
 name: question-drift-r1-r2-tracking
-status: needs-decision
+status: active
 opened: 2026-09-11
 last-reviewed: 2026-09-22
 owner: Josh
@@ -1047,6 +1047,39 @@ Josh's to make.
    doc's own escalation rule has now fired.
 2. Keep watching accessible share — now 47%, within 2pts of the 30-45%
    target band.
+3. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked.
+4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-22 (later, Josh's decision) — decision 3 resolved: accept the dip, keep watching
+
+**Decision (Josh, 2026-09-22): the accessible-tier correct-rate dip is
+acceptable. Do not revert or reword R1-a. Keep watching the metric.**
+
+No code change, no flag flip — this is a judgment call, not an action. The
+plan's original framing anticipated this exact outcome: R2 removes
+giveaways, so "the easy tier gets a little less easy" was named as an
+expected, acceptable cost from the day this doc opened (§2, decision 3).
+Josh's call confirms that framing holds even at the harder end of what's
+been observed (18.2-point dip) rather than reverting on the strength of a
+19-answer sample.
+
+**Status moves back to `active`** — decision 3 is resolved (accept), but
+this is explicitly a "keep watching" resolution, not a "close the book"
+one: the post-deploy cohort is still small enough that a future reading
+could move it further, and nothing here changes the standing instruction to
+keep re-running Phase 3's correct-rate query on every review. If the dip
+keeps widening as the cohort grows past the "thin" caveat this doc has
+repeated at every reading, that would be new evidence, not a re-litigation
+of today's call.
+
+### Next steps (revised)
+1. Decision 3 closed (accept the dip) — keep reading Phase 3's
+   correct-rate query every review as the cohort grows past 19 answers;
+   only a widening trend on a larger sample would be new evidence.
+2. Keep watching accessible share — 47% as of the last reading, within 2pts
+   of the 30-45% target band.
 3. Get a real reading on short-queue / `generation_failed` build counts —
    still the one Phase 1 exit criterion never checked.
 4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
