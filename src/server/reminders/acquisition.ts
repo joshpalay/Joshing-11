@@ -6,6 +6,10 @@ export const SMS_CONSENT_SOURCES = [
   'profile_web_form',
   'onboarding_web_form',
   'daily_summary_web_form',
+  // The standalone /reminders link, shared by an inviter re-prompting people
+  // who already joined but never turned reminders on (no in-app surface asks
+  // them again — see deriveReminderAcquisitionState's 'retired' state below).
+  'reminder_link_web_form',
 ] as const
 
 export type SmsConsentSource = (typeof SMS_CONSENT_SOURCES)[number]
