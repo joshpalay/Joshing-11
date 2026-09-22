@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -14,15 +14,23 @@ function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
 }
 
+// 'skip' is the Not-for-me sheet's temporary "Skip for now" scope — the only
+// one capped by DAILY_SKIP_LIMIT. 'hide_question' and 'rest_category' close
+// the slot through this same endpoint too, but each already wrote its own
+// durable record (HiddenQuestion / DailyPreference) before calling here, so
+// they must never be blocked by the unrelated per-round skip budget.
 const bodySchema = z.object({
   queue_id: z.string().min(1),
   slot_index: z.number().int(),
+  scope: z.enum(['skip', 'hide_question', 'rest_category']).optional().default('skip'),
 });
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number } | null {
+function parseBody(
+  value: unknown,
+): { queueId: string; slotIndex: number; scope: 'skip' | 'hide_question' | 'rest_category' } | null {
   const parsed = bodySchema.safeParse(value);
   if (!parsed.success) return null;
-  return { queueId: parsed.data.queue_id, slotIndex: parsed.data.slot_index };
+  return { queueId: parsed.data.queue_id, slotIndex: parsed.data.slot_index, scope: parsed.data.scope };
 }
 
 export async function POST(request: NextRequest) {
@@ -54,8 +62,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_state', message: 'slot is already closed' }, { status: 400 });
   }
 
-  const currentSkipCount = slots.filter((item) => item.skipped).length;
-  if (currentSkipCount >= DAILY_SKIP_LIMIT) {
+  // Counted from SkippedDailyQuestion rather than slots[].skipped, so a
+  // durable hide/rest close-out (which also flips a slot's `skipped` flag,
+  // below) never eats into — or gets blocked by — the temporary skip budget.
+  const [skipCountRow] = await db
+    .select({ value: count() })
+    .from(skippedDailyQuestions)
+    .where(eq(skippedDailyQuestions.queueId, queue.id));
+  const currentSkipCount = skipCountRow?.value ?? 0;
+
+  const isTemporarySkip = parsed.scope === 'skip';
+  if (isTemporarySkip && currentSkipCount >= DAILY_SKIP_LIMIT) {
     return NextResponse.json(
       { error: 'skip_limit_reached', skip_count: currentSkipCount, skip_limit: DAILY_SKIP_LIMIT },
       { status: 400 },
@@ -67,14 +84,16 @@ export async function POST(request: NextRequest) {
   );
 
   await db.transaction(async (tx) => {
-    await tx.insert(skippedDailyQuestions).values({
-      userId: session.userId,
-      queueId: queue.id,
-      questionId: null,
-      generatedQuestionId: slot.generated_question_id ?? null,
-      canonicalSubcategory: slot.domain,
-      skippedAt: new Date(),
-    });
+    if (isTemporarySkip) {
+      await tx.insert(skippedDailyQuestions).values({
+        userId: session.userId,
+        queueId: queue.id,
+        questionId: null,
+        generatedQuestionId: slot.generated_question_id ?? null,
+        canonicalSubcategory: slot.domain,
+        skippedAt: new Date(),
+      });
+    }
 
     await tx
       .update(dailyQueues)
@@ -114,7 +133,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     skipped: true,
-    skip_count: currentSkipCount + 1,
+    skip_count: isTemporarySkip ? currentSkipCount + 1 : currentSkipCount,
     skip_limit: DAILY_SKIP_LIMIT,
     replacement_added: replacementAdded,
     queue_id: queue.id,
