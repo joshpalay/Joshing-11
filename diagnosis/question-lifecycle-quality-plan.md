@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 owner: Josh
 related-pr: "#1646, #1698, #1702"
 ---
@@ -732,5 +732,65 @@ stays `active`.
    build-time p50 recovers.
 3. Keep an eye on `batch_dedup` `failed_open` (12/127, still trending up)
    and `recent_history` (steady at 1).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-22 (diagnosis-review) — dispute queue still barely used; `recent_history` `failed_open` moves for the first time in weeks; `batch_dedup` ticks up again; `subject_entity` coverage holds at 100%; build p50 flat; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`#1702` dispute queue: still almost no real use.** `GradeDispute` status
+counts (all-time): `pending` 40, `alternative_added` 27, `dismissed` 5 —
+byte-identical to the last review. Still only **1** row with `reviewed_at`
+set since the queue shipped (2026-09-18). Not treating this as evidence for
+or against decision 4 either way, same posture as every prior entry.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 26** newly-generated rows
+missing it (was 0 of 21 last review) — sample still small but the 0% miss
+rate keeps holding as it grows.
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 136 | 11 | **2** |
+| `batch_dedup` | 136 | 1 | **13** |
+| `quality` | 136 | 56 | 0 |
+
+`recent_history`'s `failed_open` moved for the first time since this doc
+started tracking it — **1 → 2** — after sitting flat at 1 across every
+reading from 2026-09-16 through 2026-09-21. Still tiny in absolute terms
+and not root-caused; flagging the movement itself since "steady at 1" was
+the one constant in this counter until now. `batch_dedup`'s `failed_open`
+ticked up again, 12→13, continuing its slow upward trend. `quality`'s
+scoped drop rate (41.2%) stays inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 34,571ms** (n=20),
+essentially flat vs. the last reading (34,571ms, n=20) — still well above
+the 25,243ms pre-deploy baseline; the three named outlier builds tracked in
+`daily-build-latency-deferral-plan.md` remain the entire explanation, still
+untraced (confirmed against that doc's own reading today: one new
+normal-residual row landed, no fourth outlier).
+
+**No code change since the last review:** zero commits landed on `main` at
+all since the 2026-09-21 diagnosis-review commit (confirmed via `git log`),
+so `verification-gating.test.ts` and `check-question-lifecycle.mjs` are
+byte-identical to the last review.
+
+**No decision-resolving change to the other five items in §2.** Status
+stays `active`.
+
+### Next steps (revised)
+1. Check the `#1702` dispute queue again once it's had real review
+   activity — still only 1 of 40 pending rows reviewed.
+2. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+3. Keep an eye on `batch_dedup` `failed_open` (13/136, still trending up)
+   and `recent_history` (now 2/136, its first movement — worth a look if it
+   keeps climbing).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

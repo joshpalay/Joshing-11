@@ -1,8 +1,8 @@
 ---
 name: question-drift-r1-r2-tracking
-status: active
+status: needs-decision
 opened: 2026-09-11
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -960,6 +960,92 @@ still isn't due (~2026-09-25 or 200 rows, currently 92).
    anything, given the sample size, but it's the first time this doc's own
    numbers have crossed a stated line.
 2. Keep watching accessible share — now 48%, within 3pts of the 30-45%
+   target band.
+3. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked.
+4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-22 (diagnosis-review) — Phase 3 dip breaches its ≤10-point criterion for a SECOND consecutive reading; this doc's own escalation rule now fires; flipping to `needs-decision`; accessible share within 2pts of target band; no new code
+
+**NEEDS DECISION:** the Phase 3 correct-rate dip (decision 3 — "accept the
+accessible-tier correct-rate dip?") has now breached the plan's own ≤10-point
+exit criterion **twice in a row**: 17.4 points on 2026-09-21, and **18.2
+points today**. The 2026-09-21 entry explicitly set the bar for escalating
+this to Josh rather than continuing to wave it off: *"One breach at n=17
+answers isn't grounds to act on; a repeat breach on the next reading... would
+be."* That repeat breach has now happened, so per this doc's own stated rule
+this is flagged for a decision rather than logged as another "still too
+thin" note. The open question: **is the accessible-tier correct-rate dip an
+acceptable cost of R1/R2 (giveaways removed, so the easy tier gets
+correspondingly less easy), or should R1-a's accessible-tier fan-salience
+bar be walked back / reworded?** The honest caveat stands alongside the
+escalation: the post-deploy cohort is still only **19 answers** total, the
+smallest population this doc measures, and the number has moved
+non-monotonically before (7.5→9.1→5.9→8.7→8.7→17.4→18.2) as individual
+answers land on a handful of rows — this is a repeat breach of the stated
+line, not yet a cohort "grown into the dozens" the same entry named as the
+other, independent escalation trigger.
+
+**Phase 3 numbers, re-run:** accessible-tier mean `empirical_correct_rate`,
+post-deploy cohort now **0.559** (17 rows/19 answers, up from 15/17),
+pre-deploy cohort **0.741** (36 rows/52 answers, unchanged — the frozen
+pre-deploy population, no reason to expect it moved). Dip: **18.2 points**
+(was 17.4).
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~10.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-21 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 92 | **98** | — | ordinary generation |
+| Mean words/question | 30.4 | **30.6** | ≤24 | still barely moved |
+| Rows over 25 words | 65% | **64%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 48% | **47%** | 30-45% | still above target band, continues cooling — now within 2pts of the top of the band |
+
+**Quality-gate drop rate since deploy:** 61/149 = **40.9%** (considered
+149, up from 140; dropped 61, up from 58) — inside the 35-45% acceptable
+band, `failed_open: 0`. `difficulty_floor`: 2/149 = 1.3%, well under the 5%
+stop condition. Per-defect breakdown (`quality:%`, day≥2026-09-11):
+`DEFINITION_SUPPLIED` 31/140 (largest, as every prior reading),
+`GENERIC_AT_TIER` 15/140 (flat), `ANSWER_LEAKED` 5/140 (flat),
+`SELF_ANSWERING` 5/140 (up from 3), `FALSE_PREMISE` 1/140 (flat),
+`MISLEADING_SETUP` 1/140 (flat), everything else 0.
+
+**None of Phase 1's checkable stop conditions trip**, same as every prior
+reading. Accessible share (48%→47%) continues its cooling trend — seven of
+the last nine readings now moving toward the 30-45% band
+(64→58→54→53→49→flat→48→47), which keeps strengthening the "settles on its
+own" read for decisions 1/2. **The one Phase 1 exit criterion this
+environment has never been able to check** — short-queue /
+`generation_failed` build counts from Vercel function logs — is still
+unchecked, same gap as every review since the 2026-09-18 checkpoint.
+
+**No new relevant code:** zero commits landed on `main` at all since the
+2026-09-21 diagnosis-review commit (confirmed via `git log`), so
+`SYSTEM_PROMPT`, `QUALITY_GATE_SYSTEM_PROMPT`, and `adaptive-difficulty.ts`
+are byte-identical to the last review.
+
+**Status changes to `needs-decision`** on decision 3 specifically —
+decisions 1, 2, 4, 5 are exactly where 2026-09-21 left them (no stop
+condition tripped, R5 stays off pending Phase 2, Phase 2's hand read still
+not due: ~2026-09-25 or 200 rows, currently 98). Not taking any action on
+decision 3 myself — no flag to flip, no prompt to revert; this is a
+judgment call about whether R1/R2's known cost is acceptable, which is
+Josh's to make.
+
+### Next steps (revised)
+1. **Josh: decide on decision 3** — accept the accessible-tier correct-rate
+   dip (now 18.2 points, breached twice) as the expected cost of R1/R2, or
+   ask for R1-a's accessible bar to be reworded/walked back? The sample is
+   still thin (19 answers) — worth weighing that against the fact that this
+   doc's own escalation rule has now fired.
+2. Keep watching accessible share — now 47%, within 2pts of the 30-45%
    target band.
 3. Get a real reading on short-queue / `generation_failed` build counts —
    still the one Phase 1 exit criterion never checked.

@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-21
+last-reviewed: 2026-09-22
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1326,6 +1326,46 @@ distribution without moving it.
 
 **No code change since the last review:** zero commits landed on `main` at
 all since the 2026-09-19 diagnosis-review commit (confirmed via `git log`),
+so `queue-orchestrator.ts`, `daily.ts`, and `build-context.ts` are
+byte-identical to the last review.
+
+**No decision-resolving change.** Status stays `active`. The three named
+outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
+
+### Next steps (unchanged)
+1. Trace the three outsized-residual builds — needs Vercel function logs.
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-09-22 (diagnosis-review) — one new built row, normal residual; median saving rises to 12,745ms (n=23); still zero races; three outlier builds remain untraced; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`DailyBuildMetric` totals:** `built=24` (up from 23), `carry_forward=381`,
+`existing_queue=30`, `partial_carry_forward=4`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**One new post-deferral row since the last review**, from yesterday's 17:05
+UTC cron: `da48262f-…` (2026-09-21 17:05:19.605Z), `target_size=5`,
+`final_size=6` — no recurrence of the open-question-5 slot-collision shape.
+
+```
+saved 18,833ms   bonus (generationMs) 18,032ms   residual 801ms   <- normal band
+```
+
+The residual (801ms) sits comfortably inside the normal 700–3,700ms band —
+not a fourth instance of the large-residual anomaly that hit the three
+named outlier builds (2026-09-09, 2026-09-14, 2026-09-15). Phase 3a
+(mechanism) holds: `saved ≥` this row's own bonus `generationMs`.
+
+**3b population: median saving 12,745ms** (n=23, up from 11,483ms at
+n=22) — one row, moved the median up since it landed above the prior
+midpoint.
+
+**No code change since the last review:** zero commits landed on `main` at
+all since the 2026-09-21 diagnosis-review commit (confirmed via `git log`),
 so `queue-orchestrator.ts`, `daily.ts`, and `build-context.ts` are
 byte-identical to the last review.
 
