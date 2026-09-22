@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildVerifyOtpRequestBody,
   readInvitationToken,
+  readOfferReminders,
   readVerifiedIdentity,
   shouldCollectProfileIdentity,
 } from '@/app/login/LoginPanel'
@@ -67,5 +68,21 @@ describe('LoginPanel profile identity detection', () => {
     expect(shouldCollectProfileIdentity({ displayName: 'Jane Palay', handle: 'jpalay' })).toBe(
       false
     )
+  })
+})
+
+describe('LoginPanel post-OTP reminder offer', () => {
+  it('routes to /reminders only when verify-otp explicitly opts in', () => {
+    expect(readOfferReminders({ offerReminders: true })).toBe(true)
+  })
+
+  it('lands home for every other shape', () => {
+    // Absent (already opted in, opted out, or mid-onboarding), plus the
+    // malformed/legacy responses a cached client could still be sending.
+    expect(readOfferReminders({ offerReminders: false })).toBe(false)
+    expect(readOfferReminders({ user: { handle: 'jpalay' } })).toBe(false)
+    expect(readOfferReminders({ offerReminders: 'true' })).toBe(false)
+    expect(readOfferReminders(null)).toBe(false)
+    expect(readOfferReminders(undefined)).toBe(false)
   })
 })

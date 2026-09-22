@@ -19,6 +19,7 @@ import {
   INVITE_REQUIRED_MESSAGE,
 } from '@/server/friends/invitations';
 import { acceptUserInviteLink, resolveInviteLink } from '@/server/friends/user-invite-token';
+import type { ReminderOptInState } from '@/server/reminders/acquisition';
 
 // Headroom for the post-response Daily Five pre-warm (prewarmDailyQueue) on the
 // returning-user path. The background build can take seconds of Sonnet
@@ -51,6 +52,7 @@ type AuthUser = {
   handle: string | null;
   timezone: string;
   onboardingComplete: boolean;
+  smsOptIn: ReminderOptInState;
 };
 
 const USER_SELECTION = {
@@ -65,7 +67,33 @@ const USER_SELECTION = {
   // /api/auth/refresh-onboarding-claim route handler to re-mint the claim —
   // a redirect hop that opened an intermittent 404 window on / (B-ROOT-404).
   onboardingComplete: users.onboardingComplete,
+  // Drives the post-OTP reminder offer (see offerRemindersAfterLogin). Read
+  // here so the login response can route without a second query.
+  smsOptIn: users.smsOptIn,
 };
+
+/**
+ * Whether a just-authenticated returning user should land on /reminders
+ * instead of home.
+ *
+ * A successful OTP is the moment SMS reminders first become POSSIBLE for
+ * this account: the opt-in gate gives up unless phone_verified is true (see
+ * deriveReminderAcquisitionState), and the login path a few lines below is
+ * what sets it. Accounts created under the old universal-bypass OTP never
+ * verified a real handset, so for them every reminder ask in the product —
+ * onboarding's and the daily-summary interstitial's alike — has been
+ * silently suppressed since signup. This offer is their first real one.
+ *
+ * Deliberately NOT gated on shouldOfferReminderAcquisition: the
+ * dismissed/interstitial-seen stamps it retires on were accrued while the
+ * ask was impossible to satisfy, so honoring them here would re-suppress
+ * exactly the people this exists for. An explicit opted_out IS honored —
+ * that one is a real answer to a real question.
+ */
+function offerRemindersAfterLogin(user: AuthUser): boolean {
+  if (!user.onboardingComplete) return false; // onboarding runs its own ask
+  return user.smsOptIn !== 'opted_in' && user.smsOptIn !== 'opted_out';
+}
 
 async function findUserByPhone(phoneNumber: string): Promise<AuthUser | null> {
   const [existing] = await db
@@ -245,6 +273,7 @@ export async function POST(request: Request) {
           onboardingComplete: existingUser.onboardingComplete,
         },
         invitation: invitationResult,
+        offerReminders: offerRemindersAfterLogin(existingUser),
       });
     }
 
