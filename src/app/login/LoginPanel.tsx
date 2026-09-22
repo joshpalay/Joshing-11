@@ -176,6 +176,21 @@ export function shouldCollectProfileIdentity(identity: VerifiedIdentity): boolea
   return !identity.displayName || !identity.handle;
 }
 
+/**
+ * verify-otp sets this for a returning, onboarded player who isn't already
+ * signed up for reminder texts. The OTP they just entered is what verifies
+ * their phone, which is the gate every other reminder ask in the product
+ * sits behind — so this is the first moment the offer can actually be
+ * accepted. Absent or false, login lands home as usual.
+ */
+export function readOfferReminders(data: unknown): boolean {
+  return (
+    Boolean(data) &&
+    typeof data === 'object' &&
+    (data as { offerReminders?: unknown }).offerReminders === true
+  );
+}
+
 function inviterFirstName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return 'A friend';
@@ -268,6 +283,9 @@ export default function LoginPanel({
     displayName: '',
     handle: '',
   });
+  // Carried from the verify-otp response so the profile step, which redirects
+  // separately below, lands on the same place the direct path would.
+  const [offerReminders, setOfferReminders] = useState(false);
   // The invite arrival is now phone-first: it collapses into the `phone` step
   // with the field pre-filled, rather than a separate masked confirmation card
   // (D-AUTH-INVITE-PHONE-FIRST §4b / §6.1).
@@ -526,7 +544,9 @@ export default function LoginPanel({
       clearCachedLoadingMomentPayload();
 
       const identity = readVerifiedIdentity(data);
+      const remindersOffer = readOfferReminders(data);
       setVerifiedIdentity(identity);
+      setOfferReminders(remindersOffer);
       setDisplayName(identity.displayName);
       setHandle(identity.handle);
       setHandleManuallyEdited(Boolean(identity.handle));
@@ -543,7 +563,7 @@ export default function LoginPanel({
       // its "Verifying…" state. Resetting loading here would flash "Continue"
       // before the redirect lands.
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      router.replace('/');
+      router.replace(remindersOffer ? '/reminders' : '/');
       router.refresh();
     } catch {
       setError('Something went wrong. Please try again.');
@@ -641,7 +661,7 @@ export default function LoginPanel({
       }
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      router.replace('/');
+      router.replace(offerReminders ? '/reminders' : '/');
       router.refresh();
     } catch {
       setError('Something went wrong. Please try again.');
