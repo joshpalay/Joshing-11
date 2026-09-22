@@ -1034,7 +1034,10 @@ export default function DailyPage() {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
+          // 'hide_question' / 'rest_category' close the slot here too, but they've
+          // already written their own durable record above — they must not be
+          // blocked by the temporary per-round skip cap (only scope === 'skip' is).
+          body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex, scope }),
         });
         if (!skipResponse.ok) throw new Error('Could not close that question.');
         const body = (await skipResponse.json().catch(() => null)) as { slots?: QueueSlot[] } | null;
