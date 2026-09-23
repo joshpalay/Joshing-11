@@ -12,6 +12,7 @@ import { type InsideJokeKind } from '@/lib/questions-types'
 import { Chip } from '@/components/ui/Chip'
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote'
 import { ReportReasonSheet, type ReportReasonTarget } from '@/components/report/ReportReasonSheet'
+import { ArguePointSheet } from '@/components/answers/ArguePointSheet'
 
 // Darkened triangle-gold for text/eyebrows that need to clear AA on the cream
 // card (raw --accent-gold is too light for small text). Used by the
@@ -42,9 +43,11 @@ type AnswerFeedbackSheetProps = {
   // recipient knows to take the answer with a grain of salt.
   unverified?: boolean
   // Requests a second look at a wrong answer (typos, accepted synonyms, a
-  // disputed canonical answer). Resolves with the verdict to surface inline.
-  // Omit (or pass null) to hide the recheck affordance.
-  onRecheck?: (() => Promise<{ accepted: boolean; message: string }>) | null
+  // disputed canonical answer), optionally with the player's own written case
+  // ("Argue your point", B-ARGUE-01 — argument is null when they submit
+  // without typing one). Resolves with the verdict to surface inline. Omit
+  // (or pass null) to hide the recheck affordance.
+  onRecheck?: ((argument: string | null) => Promise<{ accepted: boolean; status?: string | null; message: string }>) | null
   // B-Report-2: opt-in content-reporting ⋯ menu. This sheet is shared across several
   // post-result surfaces; only the milestone inline flow enables it (the prompt scopes
   // the entry point to that surface). Omit on the feed/direct-answer result modals.
@@ -84,6 +87,7 @@ export function AnswerFeedbackSheet({
   const [recheckState, setRecheckState] = useState<RecheckState>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
   const [recheckAccepted, setRecheckAccepted] = useState(false)
+  const [argueOpen, setArgueOpen] = useState(false)
   // B-Report-2: the ⋯ menu (none existed on this surface before) and the "why" sheet.
   // A Lately milestone question is always a curated Question, so the target is questionId.
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -138,20 +142,23 @@ export function AnswerFeedbackSheet({
     }
   }
 
-  const requestRecheck = async () => {
-    if (!onRecheck || recheckState === 'submitting') return
+  // Opens the "Argue your point" panel; mirrors its outcome into local state
+  // so a small persisted note stays on the sheet after the panel closes.
+  const submitArgue = async (argument: string | null) => {
+    if (!onRecheck) throw new Error('Recheck is not available for this answer.')
     setRecheckState('submitting')
-    setRecheckMessage(null)
-    setRecheckAccepted(false)
     try {
-      const outcome = await onRecheck()
+      const outcome = await onRecheck(argument)
       setRecheckState('done')
       setRecheckMessage(outcome.message)
       setRecheckAccepted(outcome.accepted)
+      return outcome
     } catch (error) {
       setRecheckState('error')
-      setRecheckMessage(error instanceof Error ? error.message : 'Could not recheck that answer.')
+      const message = error instanceof Error ? error.message : 'Could not recheck that answer.'
+      setRecheckMessage(message)
       setRecheckAccepted(false)
+      throw error
     }
   }
 
@@ -289,10 +296,10 @@ export function AnswerFeedbackSheet({
                   <FeedActionLink
                     size="sm"
                     className="shrink-0"
-                    onClick={() => void requestRecheck()}
+                    onClick={() => setArgueOpen(true)}
                     disabled={recheckState === 'submitting'}
                   >
-                    {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
+                    Argue your point →
                   </FeedActionLink>
                 ) : null}
               </div>
@@ -406,6 +413,15 @@ export function AnswerFeedbackSheet({
           </button>
         </div>
       </div>
+
+      {argueOpen && onRecheck ? (
+        <ArguePointSheet
+          question={question}
+          submittedAnswer={submittedAnswer}
+          onSubmit={submitArgue}
+          onClose={() => setArgueOpen(false)}
+        />
+      ) : null}
 
       {report && isMenuOpen ? (
         <div

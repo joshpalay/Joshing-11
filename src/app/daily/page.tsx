@@ -25,7 +25,11 @@ import LoadingScreen from '@/components/LoadingScreen';
 import { useLoadingMoments } from '@/components/loading-moment/useLoadingMoment';
 import { ReminderConfirmedToast } from '@/components/ReminderConfirmedToast';
 import { type InsideJokeKind } from '@/lib/questions-types';
-import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy';
+import {
+  appendRecheckQuotaNote,
+  DISPUTED_RECHECK_FALLBACK_MESSAGE,
+  NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE,
+} from '@/lib/recheck-copy';
 import { slotCategoryLabel } from '@/server/daily/slot-label';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
 import {
@@ -572,14 +576,18 @@ export default function DailyPage() {
   }, [allDone, loading, error, queue]);
 
   const requestRecheck = useCallback(
-    async (slotIndex: number): Promise<RecheckActionResult> => {
+    async (slotIndex: number, argument: string | null): Promise<RecheckActionResult> => {
       if (!queue) throw new Error('No active queue');
 
       const response = await fetch('/api/daily/recheck', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex }),
+        body: JSON.stringify({
+          queue_id: queue.queue_id,
+          slot_index: slotIndex,
+          player_argument: argument,
+        }),
       });
       const body = (await response.json().catch(() => null)) as
         | RecheckResponse
@@ -632,6 +640,7 @@ export default function DailyPage() {
       if (accepted) {
         return {
           accepted: true,
+          status: 'accepted',
           message: appendRecheckQuotaNote(
             `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
             rechecksRemaining,
@@ -641,17 +650,20 @@ export default function DailyPage() {
       if (status === 'disputed') {
         return {
           accepted: false,
+          status,
           message: appendRecheckQuotaNote(reason ?? DISPUTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
         };
       }
       if (status === 'needs_human') {
         return {
           accepted: false,
-          message: appendRecheckQuotaNote(reason ?? 'Flagged for a human look.', rechecksRemaining),
+          status,
+          message: appendRecheckQuotaNote(reason ?? NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
         };
       }
       return {
         accepted: false,
+        status,
         message: appendRecheckQuotaNote(reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
       };
     },
@@ -746,7 +758,7 @@ export default function DailyPage() {
           openedTerritoryAdopted: false,
           recheckAction:
             slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
-              ? { onSubmit: () => requestRecheck(slot.slot_index) }
+              ? { onSubmit: (argument) => requestRecheck(slot.slot_index, argument) }
               : null,
           reportTarget: reportTargetFor(slot),
         });

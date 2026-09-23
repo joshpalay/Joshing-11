@@ -22,6 +22,7 @@ import { isLlmAttribution, type InsideJokeKind } from '@/lib/questions-types';
 import { CreatorNote, pickCreatorNote } from '@/components/CreatorNote';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import { type ReportReasonTarget } from '@/components/report/ReportReasonSheet';
+import { ArguePointSheet } from '@/components/answers/ArguePointSheet';
 
 export type ReactionPromptData = {
   senderName: string;
@@ -33,10 +34,12 @@ export type ReactionPromptData = {
   result: 'correct' | 'wrong';
 };
 
-export type RecheckActionResult = { accepted: boolean; message: string };
+export type RecheckActionResult = { accepted: boolean; status?: string | null; message: string };
 
 export type RecheckAction = {
-  onSubmit: () => Promise<RecheckActionResult>;
+  // "Argue your point" (B-ARGUE-01): argument is the player's optional typed
+  // case (null when they submit the panel without typing one).
+  onSubmit: (argument: string | null) => Promise<RecheckActionResult>;
 };
 
 export type ChatMessage =
@@ -1293,6 +1296,8 @@ function TypingRow() {
 
 function ResultRow({
   result,
+  submitted,
+  questionText,
   correctAnswer,
   returnRecoveryNote = null,
   consolation,
@@ -1346,6 +1351,7 @@ function ResultRow({
   );
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
   const [recheckAccepted, setRecheckAccepted] = useState(false);
+  const [argueOpen, setArgueOpen] = useState(false);
   const expired = result === 'expired';
   const correct = result === 'correct';
   const gaveUp = result === 'gave_up';
@@ -1369,22 +1375,31 @@ function ResultRow({
     creatorNote: authorNote,
     insideJoke,
   });
-  const requestRecheck = useCallback(async () => {
-    if (!recheckAction || recheckState === 'submitting') return;
-    setRecheckState('submitting');
-    setRecheckMessage(null);
-    setRecheckAccepted(false);
-    try {
-      const outcome = await recheckAction.onSubmit();
-      setRecheckState('done');
-      setRecheckMessage(outcome.message);
-      setRecheckAccepted(outcome.accepted);
-    } catch (error) {
-      setRecheckState('error');
-      setRecheckMessage(error instanceof Error ? error.message : 'Could not recheck that answer.');
-      setRecheckAccepted(false);
-    }
-  }, [recheckAction, recheckState]);
+  // Opens the "Argue your point" panel; the panel itself owns the
+  // submitting/result states for its own view. This function also mirrors the
+  // outcome into recheckState/recheckMessage so the card keeps a small
+  // persisted note ("✓ Recheck accepted — +1 point.") after the panel closes,
+  // matching the pre-B-ARGUE-01 behavior.
+  const submitArgue = useCallback(
+    async (argument: string | null) => {
+      if (!recheckAction) throw new Error('Recheck is not available for this answer.');
+      setRecheckState('submitting');
+      try {
+        const outcome = await recheckAction.onSubmit(argument);
+        setRecheckState('done');
+        setRecheckMessage(outcome.message);
+        setRecheckAccepted(outcome.accepted);
+        return outcome;
+      } catch (error) {
+        setRecheckState('error');
+        const message = error instanceof Error ? error.message : 'Could not recheck that answer.';
+        setRecheckMessage(message);
+        setRecheckAccepted(false);
+        throw error;
+      }
+    },
+    [recheckAction],
+  );
 
   // Verdict tone as accent only — the shared ThreadCard shell supplies the
   // radius/padding/border family; the result card varies by a color-coded left
@@ -1547,7 +1562,7 @@ function ResultRow({
               <div style={{ marginTop: '10px' }}>
                 <button
                   type="button"
-                  onClick={() => void requestRecheck()}
+                  onClick={() => setArgueOpen(true)}
                   disabled={recheckState === 'submitting' || recheckState === 'done'}
                   style={{
                     borderRadius: '999px',
@@ -1571,7 +1586,7 @@ function ResultRow({
                     textTransform: 'uppercase',
                   }}
                 >
-                  {recheckState === 'submitting' ? 'Rechecking...' : 'Recheck my answer'}
+                  Argue your point
                 </button>
                 {recheckMessage ? (
                   recheckAccepted ? (
@@ -1618,6 +1633,14 @@ function ResultRow({
             ) : null}
           </>
         )}
+        {argueOpen && recheckAction ? (
+          <ArguePointSheet
+            question={questionText}
+            submittedAnswer={submitted}
+            onSubmit={submitArgue}
+            onClose={() => setArgueOpen(false)}
+          />
+        ) : null}
         {showDiscoveryExplainer && explainerSentence ? (
           <ExpandableExplainer
             sentence={explainerSentence}

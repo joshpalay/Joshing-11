@@ -105,6 +105,13 @@ export function AdminDisputesClient({ disputes }: Props) {
                 </p>
               </div>
 
+              {row.playerArgument ? (
+                <p className="text-sm" style={{ color: 'var(--brand-ink)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Player&apos;s case: </span>
+                  &ldquo;{row.playerArgument}&rdquo;
+                </p>
+              ) : null}
+
               {row.reviewReason ? (
                 <p className="text-quiet italic" style={{ color: 'var(--text-muted)' }}>
                   Reviewer: {row.reviewReason}

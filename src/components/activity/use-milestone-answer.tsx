@@ -10,7 +10,11 @@ import {
   submitAnswerWithRetry,
 } from '@/lib/answer-submit';
 import type { InsideJokeKind } from '@/lib/questions-types';
-import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy';
+import {
+  appendRecheckQuotaNote,
+  DISPUTED_RECHECK_FALLBACK_MESSAGE,
+  NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE,
+} from '@/lib/recheck-copy';
 
 type Feedback = {
   isCorrect: boolean;
@@ -117,12 +121,14 @@ export function useMilestoneAnswer(
   // milestone recheck route (anchored on the synthetic catch-up FeedItem the
   // answer route wrote). On accept, reflect the win locally so the sheet flips to
   // "Correct!" and finish() retires the question as correct.
-  async function submitRecheck(): Promise<{ accepted: boolean; message: string }> {
+  async function submitRecheck(
+    argument: string | null,
+  ): Promise<{ accepted: boolean; status?: string | null; message: string }> {
     const res = await fetch('/api/lately/milestone/recheck', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ questionId: question.questionId }),
+      body: JSON.stringify({ questionId: question.questionId, player_argument: argument }),
     });
     const body = (await res.json().catch(() => null)) as {
       accepted?: boolean;
@@ -142,6 +148,7 @@ export function useMilestoneAnswer(
       );
       return {
         accepted: true,
+        status: 'accepted',
         message: appendRecheckQuotaNote(
           `Recheck accepted — +${points} ${points === 1 ? 'point' : 'points'}.`,
           rechecksRemaining,
@@ -151,17 +158,20 @@ export function useMilestoneAnswer(
     if (body?.status === 'disputed') {
       return {
         accepted: false,
+        status: body.status,
         message: appendRecheckQuotaNote(body.reason ?? DISPUTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
       };
     }
     if (body?.status === 'needs_human') {
       return {
         accepted: false,
-        message: appendRecheckQuotaNote(body.reason ?? 'Flagged for a human look.', rechecksRemaining),
+        status: body.status,
+        message: appendRecheckQuotaNote(body.reason ?? NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
       };
     }
     return {
       accepted: false,
+      status: body?.status,
       message: appendRecheckQuotaNote(body?.reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
     };
   }

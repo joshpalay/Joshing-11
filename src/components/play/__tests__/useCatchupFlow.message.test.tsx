@@ -161,7 +161,7 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    expect(rendered).toContain('Recheck my answer');
+    expect(rendered).toContain('Argue your point');
   });
 
   it('omits the recheck button when no recheckAction is wired (correct answer / feed-backed item)', () => {
@@ -176,7 +176,7 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
       }),
     ]);
 
-    expect(rendered).not.toContain('Recheck my answer');
+    expect(rendered).not.toContain('Argue your point');
   });
 
   it('names the removed question in the dismiss notice so undo has context', () => {
