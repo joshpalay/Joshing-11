@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 owner: Josh
 related-pr: "#1646, #1698, #1702"
 ---
@@ -792,5 +792,71 @@ stays `active`.
 3. Keep an eye on `batch_dedup` `failed_open` (13/136, still trending up)
    and `recent_history` (now 2/136, its first movement — worth a look if it
    keeps climbing).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-23 (diagnosis-review) — a bookkeeping correction on the dispute-queue "1 reviewed" claim; `batch_dedup` ticks up again, `recent_history` flat; `subject_entity` coverage holds at 100%; build p50 still elevated; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**Correction to the last two entries' dispute-queue reading.** Those said
+"only 1 of 40 pending rows has `reviewed_at` set." Re-querying directly by
+status: `pending` 40 (all `reviewed_at IS NULL`), `alternative_added` 27
+(all 27 have `reviewed_at` set, earliest 2026-05-19, latest
+2026-09-19T17:18:31Z), `dismissed` 5 (all 5 have `reviewed_at` set,
+2026-05-20 to 2026-05-28). **32 total reviewed rows, but zero of them are
+currently `pending`** — `reviewed_at` tracks resolution (moving to
+`alternative_added` or `dismissed`), not a separate "looked at but still
+pending" state the prior entries' framing implied. Not able to reconcile
+why the 2026-09-21/22 entries reported "1 of 40 pending" specifically — the
+counts (40/27/5) are otherwise identical to those two readings, so nothing
+changed underneath, only this doc's own description of what the number
+meant. Correcting per this doc's own convention (a new dated entry, not an
+edit to the old one) rather than leaving a wrong claim standing. **Net
+finding is the same as before: no real review activity since 2026-09-19**
+(the most recent `reviewed_at` timestamp across the whole table is still
+that same 2026-09-19T17:18:31Z) — the queue remains barely used.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 34** newly-generated rows
+missing it (was 0 of 26 last review).
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 147 | 12 | 2 |
+| `batch_dedup` | 147 | 1 | **14** |
+| `quality` | 147 | 61 | 0 |
+
+`batch_dedup`'s `failed_open` ticked up again, 13→14, continuing its slow
+upward trend. `recent_history` flat at 2 (no further movement since last
+review's first-ever tick from 1→2). `quality`'s scoped drop rate (41.5%)
+stays inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 35,610ms** (n=20),
+up slightly from the last reading (34,571ms, n=20) — still well above the
+25,243ms pre-deploy baseline; the three named outlier builds tracked in
+`daily-build-latency-deferral-plan.md` remain the entire explanation, still
+untraced (confirmed against that doc's own reading today: one new
+normal-residual row landed, no fourth outlier).
+
+**No code change since the last review:** `git log --since=2026-09-22` on
+`verification-gating.test.ts` and `check-question-lifecycle.mjs` returns
+nothing.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Check the `#1702` dispute queue again once it's had real review
+   activity — no new resolutions since 2026-09-19.
+2. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+3. Keep an eye on `batch_dedup` `failed_open` (14/147, still trending up)
+   and `recent_history` (flat at 2/147).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

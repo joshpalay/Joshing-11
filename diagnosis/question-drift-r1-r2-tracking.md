@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-22
+last-reviewed: 2026-09-23
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -1082,5 +1082,74 @@ of today's call.
    of the 30-45% target band.
 3. Get a real reading on short-queue / `generation_failed` build counts —
    still the one Phase 1 exit criterion never checked.
+4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
+   off pending Phase 2).
+
+### 2026-09-23 (diagnosis-review) — third consecutive Phase 3 breach, but narrower, not wider — no new evidence per Josh's own stated bar; accessible share now within 1pt of the target band; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~11.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-22 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 98 | **105** | — | ordinary generation |
+| Mean words/question | 30.6 | **30.8** | ≤24 | still barely moved |
+| Rows over 25 words | 64% | **67%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 47% | **46%** | 30-45% | still above target band, continues cooling — now within 1pt of the top of the band |
+
+**Quality-gate drop rate since deploy:** 66/161 = **41.0%** (considered 161,
+up from 149; dropped 66, up from 61) — inside the 35-45% acceptable band,
+`failed_open: 0`. `difficulty_floor`: 2/161 = 1.2%, well under the 5% stop
+condition. Per-defect breakdown (`quality:%`, day≥2026-09-11):
+`DEFINITION_SUPPLIED` 33/152 (largest, as every prior reading),
+`GENERIC_AT_TIER` 16/152 (up from 15), `SELF_ANSWERING` 6/152 (up from 5),
+`ANSWER_LEAKED` 5/152 (flat), `FALSE_PREMISE` 2/152 (up from 1),
+`MISLEADING_SETUP` 1/152 (flat), everything else 0.
+
+**None of Phase 1's checkable stop conditions trip**, same as every prior
+reading. Accessible share (47%→46%) continues its cooling trend — eight of
+the last ten readings now moving toward the 30-45% band. **The one Phase 1
+exit criterion this environment has never been able to check** —
+short-queue / `generation_failed` build counts from Vercel function logs —
+is still unchecked.
+
+**Phase 3 (correct-rate) — third consecutive breach of the ≤10-point
+criterion, but this time narrower, not wider:** accessible-tier mean
+`empirical_correct_rate`, post-deploy cohort now **0.605** (19 rows/21
+answers, up from 17/19), pre-deploy cohort **0.767** (40 rows/61 answers, up
+from 36/52 — the "frozen" pre-deploy population keeps moving as more
+answers land on old rows, same dynamic the 2026-09-16 entry first noted).
+Dip: **16.2 points** (was 18.2). Per Josh's own 2026-09-22 resolution of
+decision 3 ("keep watching the metric... only a widening trend on a larger
+sample would be new evidence"), this reading is explicitly **not** new
+evidence — the dip narrowed on a slightly larger sample, the opposite of a
+widening trend. Not re-escalating; decision 3 stays resolved (accept) per
+Josh's call. Logging the number because the doc's own convention is to log
+every reading, not because it changes anything.
+
+**No new relevant code:** `git log --since=2026-09-22` on `generate-questions.ts`
+(for `SYSTEM_PROMPT`/`QUALITY_GATE_SYSTEM_PROMPT`) and `adaptive-difficulty.ts`
+returns nothing. Only two commits landed on `main` since the last review
+(`#1705` a carry-forward/skip-cap fix, `#1706` SMS reminders after OTP
+login) — confirmed by diff, neither touches this doc's tracked paths.
+
+**No decision-resolving change.** Status stays `active` (decision 3 already
+resolved 2026-09-22; decisions 1, 2, 4, 5 unchanged). Phase 2's hand read
+still isn't due (~2026-09-25 or 200 rows, currently 105 — date is 2 days
+out, row count far short).
+
+### Next steps (unchanged)
+1. Keep watching accessible share — now 46%, within 1pt of the 30-45%
+   target band.
+2. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked.
+3. Keep reading Phase 3's correct-rate query every review — decision 3 is
+   resolved (accept), but a widening trend on a larger sample would be new
+   evidence per Josh's own stated bar; today's reading narrowed instead.
 4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).
