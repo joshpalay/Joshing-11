@@ -1959,6 +1959,13 @@ function FeedListContent({
             timestamp={formatRelativeTime(row.item.sortAt)}
             showTimestamp={false}
             elevated
+            // A resolved (answered/dismissed) question here can fully exhaust the
+            // bundle server-side. Without this, the Router Cache keeps serving the
+            // pre-exhaustion snapshot on the next soft-nav back to Home — the "Tap
+            // a streak…" header stays up with nothing playable under it (2026-09-22
+            // report). Mirrors the same router.refresh() the pendingQueue subpage
+            // already does on answer/dismiss.
+            onQuestionResolved={() => router.refresh()}
           />
         )
       }
