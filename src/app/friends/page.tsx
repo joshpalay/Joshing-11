@@ -14,6 +14,7 @@ import {
 } from '@/components/friends/MutualFriendSuggestionsSection';
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual';
 import FriendsList from '@/components/FriendsList';
+import PeopleYouInvited from '@/components/PeopleYouInvited';
 import { Chip } from '@/components/ui/Chip';
 import { getSession } from '@/server/auth/session';
 import { db, users } from '@/server/db';
@@ -230,6 +231,18 @@ export default async function FriendsPage() {
               initialLinks={initialLinks}
               creatorName={viewer.displayName}
             />
+          }
+          // Every personal-text invite you've sent, with its status (ready,
+          // accepted, expired, set aside) -- restored onto the Invitations
+          // tab after living unused since the Sep 3 links consolidation
+          // (d9d2636d) dropped its call site.
+          peopleYouInvited={
+            <section className="mt-8 space-y-3">
+              <h2 className="text-foreground font-serif text-xl font-semibold">
+                People you invited
+              </h2>
+              <PeopleYouInvited />
+            </section>
           }
         />
       </Suspense>

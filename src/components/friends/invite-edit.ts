@@ -1,9 +1,8 @@
-// Shared client logic for editing a still-pending friend invitation. Two
-// surfaces let you fix a fat-fingered invite — the standalone "People you
-// invited" card (PeopleYouInvited) and the Friends hub's "Waiting for Response"
-// section (FriendsList) — so the PATCH call and its error copy live here to keep
-// the two from drifting. The server contract is PATCH /api/friend-invitations
-// (see src/app/api/friend-invitations/route.ts).
+// Shared client logic for editing a still-pending friend invitation. Used by
+// the "People you invited" card (PeopleYouInvited, on the Friends page's
+// Invitations tab) so the PATCH call and its error copy have one home. The
+// server contract is PATCH /api/friend-invitations (see
+// src/app/api/friend-invitations/route.ts).
 
 export const INVITE_EDIT_ERROR_COPY: Record<string, string> = {
   invalid_phone: 'Use a US mobile number.',

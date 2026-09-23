@@ -78,6 +78,9 @@ vi.mock('@/components/friends/PersonalInviteFlow', () => ({
   PersonalInviteFlow: () => <div data-stub="personal-invite" />,
 }));
 vi.mock('@/components/FriendsList', () => ({ default: () => <div data-stub="friends-list" /> }));
+vi.mock('@/components/PeopleYouInvited', () => ({
+  default: () => <div data-stub="people-you-invited" />,
+}));
 // Captures the props the page computed (dedup + interests preview) as a JSON
 // blob in the DOM, so the test can assert on them without needing the real
 // client component's own interactive behavior (that's covered by
@@ -129,6 +132,7 @@ describe('/friends page sections', () => {
     expect(html).toContain('data-stub="find-friends-search"');
     expect(html).toContain('data-stub="invite-links"');
     expect(html).toContain('data-stub="friends-list"');
+    expect(html).toContain('data-stub="people-you-invited"');
   });
 
   it('omits the Suggested section when only contact matches exist and reflections are empty (B-FRIENDS-SAFETY-01 Phase 3)', async () => {
