@@ -14,6 +14,7 @@ import { FeedActionLink } from './FeedActionLink'
 import { FeedCardShell } from './FeedCardShell'
 import type { AnsweredByYouFeedItem, AnsweredByYouPairedFriend } from './types'
 import { colorForCategory, colorForUser, initialsFor, isDarkColor } from './visual'
+import { ArguePointSheet } from '@/components/answers/ArguePointSheet'
 
 function tierLabel(tier: string): string {
   const normalized = tier.toLowerCase() as MasteryTier
@@ -111,7 +112,9 @@ function AnsweredAvatarStack({
 }
 
 export type FeedRecheckAction = {
-  onSubmit: () => Promise<{ accepted: boolean; message: string }>
+  // "Argue your point" (B-ARGUE-01): argument is the player's optional typed
+  // case (null when they submit the panel without typing one).
+  onSubmit: (argument: string | null) => Promise<{ accepted: boolean; status?: string | null; message: string }>
 }
 
 type AnsweredByYouCardProps = {
@@ -135,23 +138,30 @@ function AnsweredResult({
   const [recheckState, setRecheckState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
   const [recheckAccepted, setRecheckAccepted] = useState(false)
+  const [argueOpen, setArgueOpen] = useState(false)
 
-  const requestRecheck = useCallback(async () => {
-    if (!recheckAction || recheckState === 'submitting') return
-    setRecheckState('submitting')
-    setRecheckMessage(null)
-    setRecheckAccepted(false)
-    try {
-      const outcome = await recheckAction.onSubmit()
-      setRecheckState('done')
-      setRecheckMessage(outcome.message)
-      setRecheckAccepted(outcome.accepted)
-    } catch (error) {
-      setRecheckState('error')
-      setRecheckMessage(error instanceof Error ? error.message : 'Could not recheck that answer.')
-      setRecheckAccepted(false)
-    }
-  }, [recheckAction, recheckState])
+  // Opens the "Argue your point" panel; mirrors its outcome into local state
+  // so a small persisted note stays on the card after the panel closes.
+  const submitArgue = useCallback(
+    async (argument: string | null) => {
+      if (!recheckAction) throw new Error('Recheck is not available for this answer.')
+      setRecheckState('submitting')
+      try {
+        const outcome = await recheckAction.onSubmit(argument)
+        setRecheckState('done')
+        setRecheckMessage(outcome.message)
+        setRecheckAccepted(outcome.accepted)
+        return outcome
+      } catch (error) {
+        setRecheckState('error')
+        const message = error instanceof Error ? error.message : 'Could not recheck that answer.'
+        setRecheckMessage(message)
+        setRecheckAccepted(false)
+        throw error
+      }
+    },
+    [recheckAction],
+  )
 
   return (
     <div className="w-full space-y-1.5">
@@ -190,11 +200,8 @@ function AnsweredResult({
             <FeedActionLink onClick={onRetry}>Try again →</FeedActionLink>
           ) : null}
           {recheckAction && recheckState !== 'done' ? (
-            <FeedActionLink
-              onClick={() => void requestRecheck()}
-              disabled={recheckState === 'submitting'}
-            >
-              {recheckState === 'submitting' ? 'Rechecking…' : 'Recheck →'}
+            <FeedActionLink onClick={() => setArgueOpen(true)} disabled={recheckState === 'submitting'}>
+              Argue your point →
             </FeedActionLink>
           ) : null}
         </div>
@@ -227,6 +234,14 @@ function AnsweredResult({
             {recheckMessage}
           </p>
         )
+      ) : null}
+      {argueOpen && recheckAction ? (
+        <ArguePointSheet
+          question={item.question}
+          submittedAnswer={item.submittedAnswer ?? ''}
+          onSubmit={submitArgue}
+          onClose={() => setArgueOpen(false)}
+        />
       ) : null}
     </div>
   )

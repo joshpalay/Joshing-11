@@ -14,6 +14,10 @@ export type PendingGradeDispute = {
   canonicalAnswer: string;
   submittedAnswer: string;
   surface: string | null;
+  // "Argue your point" (B-ARGUE-01): the player's own optional case, verbatim.
+  // Null for a plain recheck (no argument typed) and for every row written
+  // before this shipped.
+  playerArgument: string | null;
   reviewDecision: string | null;
   reviewReason: string | null;
   acceptedAlternative: string | null;
@@ -50,6 +54,7 @@ export async function getPendingGradeDisputesForReview(limit = 200): Promise<Pen
       canonicalAnswer: gradeDisputes.canonicalAnswer,
       submittedAnswer: gradeDisputes.submittedAnswer,
       surface: gradeDisputes.surface,
+      playerArgument: gradeDisputes.playerArgument,
       reviewDecision: gradeDisputes.reviewDecision,
       reviewReason: gradeDisputes.reviewReason,
       acceptedAlternative: gradeDisputes.acceptedAlternative,

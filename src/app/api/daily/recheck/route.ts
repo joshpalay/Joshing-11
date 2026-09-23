@@ -13,6 +13,7 @@ import { getProviderSettings } from '@/server/llm/settings';
 import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
+import { ARGUE_YOUR_POINT_MAX_LENGTH } from '@/lib/recheck-copy';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
 
@@ -31,12 +32,21 @@ function asQueueSlots(value: unknown): QueueSlot[] {
 const bodySchema = z.object({
   queue_id: z.string().min(1),
   slot_index: z.number().int(),
+  // "Argue your point" (B-ARGUE-01): optional written case, capped server-side
+  // so a direct API call can't bypass the sheet's client-side maxLength.
+  player_argument: z.string().trim().max(ARGUE_YOUR_POINT_MAX_LENGTH).optional().nullable(),
 });
 
-function parseBody(value: unknown): { queueId: string; slotIndex: number } | null {
+function parseBody(
+  value: unknown,
+): { queueId: string; slotIndex: number; playerArgument: string | null } | null {
   const parsed = bodySchema.safeParse(value);
   if (!parsed.success) return null;
-  return { queueId: parsed.data.queue_id, slotIndex: parsed.data.slot_index };
+  return {
+    queueId: parsed.data.queue_id,
+    slotIndex: parsed.data.slot_index,
+    playerArgument: parsed.data.player_argument?.trim() || null,
+  };
 }
 
 async function resolveCanonicalAnswer(question: typeof generatedQuestions.$inferSelect): Promise<string> {
@@ -170,6 +180,7 @@ export async function POST(request: NextRequest) {
       submittedAnswer: slot.submitted_answer,
       questionType: 'factual',
       acceptedAlternatives: question.acceptedAlternatives,
+      playerArgument: parsed.playerArgument,
     });
 
     const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
@@ -237,6 +248,7 @@ export async function POST(request: NextRequest) {
           canonicalAnswer,
           questionText: question.questionText,
           surface: 'daily',
+          playerArgument: parsed.playerArgument,
           reviewDecision: review.decision,
           reviewReason: review.reason,
           acceptedAlternative: review.acceptedAlternative,
@@ -249,6 +261,7 @@ export async function POST(request: NextRequest) {
             canonicalAnswer,
             questionText: question.questionText,
             surface: 'daily',
+            playerArgument: parsed.playerArgument,
             reviewDecision: review.decision,
             reviewReason: review.reason,
             acceptedAlternative: review.acceptedAlternative,

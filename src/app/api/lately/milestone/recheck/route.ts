@@ -9,6 +9,7 @@ import { getBasePoints } from '@/server/mastery/scoring';
 import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
+import { ARGUE_YOUR_POINT_MAX_LENGTH } from '@/lib/recheck-copy';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,9 @@ export const dynamic = 'force-dynamic';
 // the viewer's own recipientUserId, so a tampered questionId resolves to nothing.
 const bodySchema = z.object({
   questionId: z.string().trim().min(1),
+  // "Argue your point" (B-ARGUE-01): optional written case, capped server-side
+  // so a direct API call can't bypass the sheet's client-side maxLength.
+  player_argument: z.string().trim().max(ARGUE_YOUR_POINT_MAX_LENGTH).optional().nullable(),
 });
 
 export async function POST(request: NextRequest) {
@@ -37,6 +41,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'validation', message: 'questionId is required.' }, { status: 400 });
     }
     const { questionId } = parsed.data;
+    const playerArgument = parsed.data.player_argument?.trim() || null;
 
     const sourceAnswerId = `milestone-miss:${questionId}`;
     const [row] = await db
@@ -93,6 +98,7 @@ export async function POST(request: NextRequest) {
       submittedAnswer: feedItem.submittedAnswer,
       questionType: 'factual',
       acceptedAlternatives: question.acceptedAlternatives ?? [],
+      playerArgument,
     });
 
     const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
@@ -124,6 +130,7 @@ export async function POST(request: NextRequest) {
           canonicalAnswer,
           questionText: question.questionText,
           surface: 'lately_milestone',
+          playerArgument,
           reviewDecision: review.decision,
           reviewReason: review.reason,
           acceptedAlternative: review.acceptedAlternative,

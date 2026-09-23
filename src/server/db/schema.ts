@@ -739,6 +739,12 @@ export const gradeDisputes = pgTable(
     canonicalAnswer: text('canonical_answer').notNull(),
     questionText: text('question_text'),
     surface: text('surface'),
+    // "Argue your point" (B-ARGUE-01): the player's own 300-char case for why
+    // their answer should count, captured verbatim alongside the recheck it
+    // rode in on. Null for a plain recheck (no argument typed) and for every
+    // dispute row written before this shipped. Never fed back into the
+    // reviewer prompt as instructions — see wrapUserInput in recheckAnswerWithLLM.
+    playerArgument: text('player_argument'),
     reviewDecision: text('review_decision'),
     reviewReason: text('review_reason'),
     acceptedAlternative: text('accepted_alternative'),

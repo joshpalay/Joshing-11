@@ -383,7 +383,7 @@ describe('Feed answered states', () => {
         recheckAction={recheckAction}
       />
     )
-    expect(rendered).toContain('Recheck →')
+    expect(rendered).toContain('Argue your point →')
     // Brand action-link treatment (matches "Answer →"): sans, slate, underlined — no offset-shadow box.
     expect(rendered).toContain('text-[color:var(--brand-link)]')
     expect(rendered).not.toContain('3px 3px 0 var(--ink)')
@@ -404,21 +404,21 @@ describe('Answer feedback sheet recheck affordance', () => {
     onClose: () => {},
   }
 
-  it('offers a Recheck → link beside the answer on a wrong answer when onRecheck is provided', () => {
+  it('offers an Argue your point → link beside the answer on a wrong answer when onRecheck is provided', () => {
     const rendered = html(
       <AnswerFeedbackSheet
         {...baseProps}
         onRecheck={async () => ({ accepted: false, message: '' })}
       />
     )
-    expect(rendered).toContain('Recheck →')
+    expect(rendered).toContain('Argue your point →')
     // Reuses the shared sans slate action link, not a hand-rolled button.
     expect(rendered).toContain('text-[color:var(--brand-link)]')
   })
 
   it('hides the recheck link when no onRecheck handler is supplied', () => {
     const rendered = html(<AnswerFeedbackSheet {...baseProps} />)
-    expect(rendered).not.toContain('Recheck →')
+    expect(rendered).not.toContain('Argue your point →')
   })
 
   it('does not offer a recheck on a correct answer', () => {
@@ -431,7 +431,7 @@ describe('Answer feedback sheet recheck affordance', () => {
         onRecheck={async () => ({ accepted: false, message: '' })}
       />
     )
-    expect(rendered).not.toContain('Recheck →')
+    expect(rendered).not.toContain('Argue your point →')
   })
 
   // B-Report-2: the content-reporting ⋯ is opt-in so the shared result sheet does not

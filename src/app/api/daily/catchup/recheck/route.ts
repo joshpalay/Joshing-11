@@ -16,6 +16,7 @@ import { isBonusSlot } from '@/server/daily/bonus';
 import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
+import { ARGUE_YOUR_POINT_MAX_LENGTH } from '@/lib/recheck-copy';
 import { persistGeneratedQuestion } from '@/server/questions/persist-generated-question';
 import { writeMasteryEvent } from '@/server/mastery/write-mastery-event';
 import { createFeedItemsForFriendsFromAnswer } from '@/server/feed/create-feed-items-for-answer';
@@ -49,6 +50,9 @@ function errorResponse(status: number, error: RecheckErrorCode, message: string)
 
 const bodySchema = z.object({
   dailyQueueItemId: z.string().min(1),
+  // "Argue your point" (B-ARGUE-01): optional written case, capped server-side
+  // so a direct API call can't bypass the sheet's client-side maxLength.
+  player_argument: z.string().trim().max(ARGUE_YOUR_POINT_MAX_LENGTH).optional().nullable(),
 });
 
 export async function POST(request: NextRequest) {
@@ -58,6 +62,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return errorResponse(400, 'validation', 'dailyQueueItemId is required');
+    const playerArgument = parsed.data.player_argument?.trim() || null;
 
     const dispatch = parseCatchupItemId(parsed.data.dailyQueueItemId);
     if (!dispatch) return errorResponse(400, 'validation', 'dailyQueueItemId is malformed');
@@ -147,6 +152,7 @@ export async function POST(request: NextRequest) {
       // route, which passes the stored type — generated rows have none).
       questionType: 'factual',
       acceptedAlternatives,
+      playerArgument,
     });
 
     const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
@@ -217,6 +223,7 @@ export async function POST(request: NextRequest) {
           canonicalAnswer,
           questionText: slot.question_text,
           surface: 'daily_catchup',
+          playerArgument,
           reviewDecision: review.decision,
           reviewReason: review.reason,
           acceptedAlternative: review.acceptedAlternative,
@@ -229,6 +236,7 @@ export async function POST(request: NextRequest) {
             canonicalAnswer,
             questionText: slot.question_text,
             surface: 'daily_catchup',
+            playerArgument,
             reviewDecision: review.decision,
             reviewReason: review.reason,
             acceptedAlternative: review.acceptedAlternative,

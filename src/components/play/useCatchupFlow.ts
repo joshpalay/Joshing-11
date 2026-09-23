@@ -12,7 +12,11 @@ import { parseCatchupItemId } from '@/server/daily/catchup';
 import { CATCH_UP_BATCH_SIZE } from '@/lib/game-constants';
 import { difficultyEstimateToTierLabel } from '@/lib/questions/difficulty-tier';
 import { LLM_QUESTION_ATTRIBUTION, type InsideJokeKind } from '@/lib/questions-types';
-import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy';
+import {
+  appendRecheckQuotaNote,
+  DISPUTED_RECHECK_FALLBACK_MESSAGE,
+  NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE,
+} from '@/lib/recheck-copy';
 import {
   parseCatchUpAnswerErrorBody,
   userFacingCatchUpSubmitMessage,
@@ -615,7 +619,7 @@ export function useCatchupFlow() {
   // GameplayChat's ResultRow surfaces the returned message inline. Feed-backed
   // items never reach here (their recheckAction is null).
   const requestRecheck = useCallback(
-    async (item: CatchupQueueItem): Promise<RecheckActionResult> => {
+    async (item: CatchupQueueItem, argument: string | null): Promise<RecheckActionResult> => {
       const parsed = parseCatchupItemId(item.dailyQueueItemId);
       if (!parsed || parsed.surface !== 'daily') {
         return { accepted: false, message: 'Recheck isn’t available for this question.' };
@@ -627,7 +631,7 @@ export function useCatchupFlow() {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ dailyQueueItemId: item.dailyQueueItemId }),
+          body: JSON.stringify({ dailyQueueItemId: item.dailyQueueItemId, player_argument: argument }),
         });
       } catch {
         return { accepted: false, message: 'Could not recheck that answer.' };
@@ -639,8 +643,17 @@ export function useCatchupFlow() {
       }
       const rechecksRemaining = typeof raw.rechecksRemaining === 'number' ? raw.rechecksRemaining : null;
       if (!raw.accepted) {
-        const fallback = raw.status === 'disputed' ? DISPUTED_RECHECK_FALLBACK_MESSAGE : 'Rechecked and still marked wrong.';
-        return { accepted: false, message: appendRecheckQuotaNote(raw.reason ?? fallback, rechecksRemaining) };
+        const fallback =
+          raw.status === 'disputed'
+            ? DISPUTED_RECHECK_FALLBACK_MESSAGE
+            : raw.status === 'needs_human'
+              ? NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE
+              : 'Rechecked and still marked wrong.';
+        return {
+          accepted: false,
+          status: raw.status,
+          message: appendRecheckQuotaNote(raw.reason ?? fallback, rechecksRemaining),
+        };
       }
 
       const pointsAwarded = Number(raw.pointsAwarded ?? 0);
@@ -656,6 +669,7 @@ export function useCatchupFlow() {
       );
       return {
         accepted: true,
+        status: 'accepted',
         message: appendRecheckQuotaNote(
           `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
           rechecksRemaining,
@@ -699,7 +713,7 @@ export function useCatchupFlow() {
       // catch-up items aren't supported by /api/daily/catchup/recheck.
       const recheckAction: RecheckAction | null =
         !isCorrect && parseCatchupItemId(item.dailyQueueItemId)?.surface === 'daily'
-          ? { onSubmit: () => requestRecheck(item) }
+          ? { onSubmit: (argument) => requestRecheck(item, argument) }
           : null;
       setStats((existing) => ({
         answered: existing.answered + 1,

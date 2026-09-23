@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getSession } from '@/server/auth/session';
 import { db, feedItems, gradeDisputes, questions } from '@/server/db';
@@ -8,6 +9,7 @@ import { getBasePoints } from '@/server/mastery/scoring';
 import { recheckAnswerWithLLM, resolveRecheckOutcome } from '@/server/llm/recheck';
 import { recordAcceptedAlternative } from '@/server/answers/record-accepted-alternative';
 import { consumeRecheckQuota, getRecheckQuotaRemaining, RECHECK_DAILY_LIMIT } from '@/server/answers/recheck-quota';
+import { ARGUE_YOUR_POINT_MAX_LENGTH } from '@/lib/recheck-copy';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,12 +17,23 @@ type RouteContext = {
   params: Promise<{ feedItemId: string }>;
 };
 
-export async function POST(_request: NextRequest, context: RouteContext) {
+// "Argue your point" (B-ARGUE-01): optional written case, capped server-side
+// so a direct API call can't bypass the sheet's client-side maxLength. This
+// route previously took no body at all (feedItemId came from the URL); the
+// body is now optional JSON rather than required.
+const bodySchema = z.object({
+  player_argument: z.string().trim().max(ARGUE_YOUR_POINT_MAX_LENGTH).optional().nullable(),
+});
+
+export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: 'unauthorized', message: 'Please sign in to request a recheck.' }, { status: 401 });
     }
+
+    const parsedBody = bodySchema.safeParse(await request.json().catch(() => ({})));
+    const playerArgument = parsedBody.success ? parsedBody.data.player_argument?.trim() || null : null;
 
     const { feedItemId } = await context.params;
 
@@ -73,6 +86,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       submittedAnswer: feedItem.submittedAnswer,
       questionType: 'factual',
       acceptedAlternatives: question.acceptedAlternatives ?? [],
+      playerArgument,
     });
 
     const { accepted, recheckStatus, disputeStatus } = resolveRecheckOutcome(review.decision);
@@ -102,6 +116,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           canonicalAnswer,
           questionText: question.questionText,
           surface: 'feed',
+          playerArgument,
           reviewDecision: review.decision,
           reviewReason: review.reason,
           acceptedAlternative: review.acceptedAlternative,

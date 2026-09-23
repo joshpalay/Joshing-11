@@ -27,7 +27,11 @@ import { usePrefersReducedMotion } from '@/components/feed/usePrefersReducedMoti
 import { SpeechBubbleIllustration } from '@/components/home/FeedEmptyArt'
 import { formatRelativeTime, groupItemsByRecency } from '@/components/feed/visual'
 import { pickOpenedNewTerritory, pickOpenedTerritoryDomain } from '@/components/feed/territory'
-import { appendRecheckQuotaNote, DISPUTED_RECHECK_FALLBACK_MESSAGE } from '@/lib/recheck-copy'
+import {
+  appendRecheckQuotaNote,
+  DISPUTED_RECHECK_FALLBACK_MESSAGE,
+  NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE,
+} from '@/lib/recheck-copy'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
@@ -1844,10 +1848,15 @@ function FeedListContent({
   )
 
   const submitRecheck = useCallback(
-    async (item: FeedApiItem): Promise<{ accepted: boolean; message: string }> => {
+    async (
+      item: FeedApiItem,
+      argument: string | null,
+    ): Promise<{ accepted: boolean; status?: string | null; message: string }> => {
       const response = await fetch(`/api/feed/${item.id}/recheck`, {
         method: 'POST',
+        headers: { 'content-type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ player_argument: argument }),
       })
       const body = (await response.json().catch(() => null)) as {
         accepted?: boolean
@@ -1878,6 +1887,7 @@ function FeedListContent({
         })
         return {
           accepted: true,
+          status: 'accepted',
           message: appendRecheckQuotaNote(
             `Recheck accepted — +${pointsAwarded} ${pointsAwarded === 1 ? 'point' : 'points'}.`,
             rechecksRemaining
@@ -1887,17 +1897,20 @@ function FeedListContent({
       if (body?.status === 'disputed') {
         return {
           accepted: false,
+          status: body.status,
           message: appendRecheckQuotaNote(body.reason ?? DISPUTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
         }
       }
       if (body?.status === 'needs_human') {
         return {
           accepted: false,
-          message: appendRecheckQuotaNote(body.reason ?? 'Flagged for a human look.', rechecksRemaining),
+          status: body.status,
+          message: appendRecheckQuotaNote(body.reason ?? NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
         }
       }
       return {
         accepted: false,
+        status: body?.status,
         message: appendRecheckQuotaNote(body?.reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
       }
     },
@@ -2057,7 +2070,7 @@ function FeedListContent({
       const answeredItem = toAnsweredByYouItem(item, result, homeZoneCards)
       const isIncorrect = answeredItem.isCorrect === false
       const recheckAction: FeedRecheckAction | null = isIncorrect
-        ? { onSubmit: () => submitRecheck(item) }
+        ? { onSubmit: (argument) => submitRecheck(item, argument) }
         : null
       // direct_sent wrong answers stay re-attemptable (server
       // allows the re-grade; clicking reopens the same answer
@@ -2503,7 +2516,7 @@ function FeedListContent({
             questionId={sheetItem.question_id}
             feedItemId={sheetItem.id}
             unverified={result.unverified}
-            onRecheck={result.correct ? null : () => submitRecheck(sheetItem)}
+            onRecheck={result.correct ? null : (argument) => submitRecheck(sheetItem, argument)}
             onClose={() => setFeedbackSheetId(null)}
           />
         )
