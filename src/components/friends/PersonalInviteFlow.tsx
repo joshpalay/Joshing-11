@@ -97,8 +97,8 @@ function sendTelemetry(event: string, metadata: Record<string, unknown> = {}) {
 // InviteLinksSection. Always mounted at #personal-invite so other surfaces
 // (FindFriendsSearch's no-match state, a "fresh note" resend) can link or
 // dispatch straight into it via the friend-invitations:create-new event; on
-// success it dispatches friend-invitations:refresh, which FriendsList's
-// "Waiting for Response" section already listens for.
+// success it dispatches friend-invitations:refresh, which PeopleYouInvited
+// (on the Invitations tab) already listens for.
 export function PersonalInviteFlow() {
   const [step, setStep] = useState<Step>('identity')
   const [name, setName] = useState('')

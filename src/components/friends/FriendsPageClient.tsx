@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 
 import { PersonalInviteFlow } from '@/components/friends/PersonalInviteFlow';
 
-type Tab = 'friends' | 'links';
+type Tab = 'friends' | 'invitations';
 
 // D-FRIENDS-RESTRUCTURE-01: the tabbed shell for /friends. All the data
 // fetching still happens server-side in page.tsx -- this component only owns
@@ -20,6 +20,7 @@ export function FriendsPageClient({
   friendsList,
   mutualFriendSuggestions,
   inviteLinksSection,
+  peopleYouInvited,
 }: {
   findFriendsSearch: ReactNode;
   contactMatchBlock: ReactNode;
@@ -27,6 +28,7 @@ export function FriendsPageClient({
   friendsList: ReactNode;
   mutualFriendSuggestions: ReactNode;
   inviteLinksSection: ReactNode;
+  peopleYouInvited: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -34,11 +36,11 @@ export function FriendsPageClient({
   const [tab, setTab] = useState<Tab>('friends');
   const inviteOpen = searchParams.get('invite') === '1';
   const friendsTabRef = useRef<HTMLButtonElement | null>(null);
-  const linksTabRef = useRef<HTMLButtonElement | null>(null);
+  const invitationsTabRef = useRef<HTMLButtonElement | null>(null);
 
   function selectTab(next: Tab, { focus = false }: { focus?: boolean } = {}) {
     setTab(next);
-    if (focus) (next === 'friends' ? friendsTabRef : linksTabRef).current?.focus();
+    if (focus) (next === 'friends' ? friendsTabRef : invitationsTabRef).current?.focus();
   }
 
   // §3.5's ratified tab recipe requires roving tabIndex, which means the
@@ -47,7 +49,7 @@ export function FriendsPageClient({
   function handleTabListKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
-    selectTab(tab === 'friends' ? 'links' : 'friends', { focus: true });
+    selectTab(tab === 'friends' ? 'invitations' : 'friends', { focus: true });
   }
   // Holds a hand-off detail (from FindFriendsSearch's "no match" state, etc.)
   // for the brief window between requesting the sheet and PersonalInviteFlow
@@ -100,13 +102,13 @@ export function FriendsPageClient({
   }, [inviteOpen]);
 
   // FindFriendsSearch's no-match state also links to "#invite-links" as a
-  // fallback -- that section now lives on the Links tab instead of inline, so
-  // a plain anchor jump would land on a hidden panel. Switch tabs first, then
-  // scroll once the target is actually visible.
+  // fallback -- that section now lives on the Invitations tab instead of
+  // inline, so a plain anchor jump would land on a hidden panel. Switch tabs
+  // first, then scroll once the target is actually visible.
   useEffect(() => {
     function jumpToLinks() {
       if (window.location.hash !== '#invite-links') return;
-      setTab('links');
+      setTab('invitations');
       window.requestAnimationFrame(() => {
         document.getElementById('invite-links')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
@@ -138,17 +140,17 @@ export function FriendsPageClient({
           Your Friends
         </button>
         <button
-          ref={linksTabRef}
+          ref={invitationsTabRef}
           type="button"
-          className={`min-h-11 px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${tab === 'links' ? 'border-b-2 border-foreground text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`min-h-11 px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${tab === 'invitations' ? 'border-b-2 border-foreground text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
           role="tab"
-          id="friends-tab-links"
-          aria-selected={tab === 'links'}
-          aria-controls="friends-panel-links"
-          tabIndex={tab === 'links' ? 0 : -1}
-          onClick={() => selectTab('links')}
+          id="friends-tab-invitations"
+          aria-selected={tab === 'invitations'}
+          aria-controls="friends-panel-invitations"
+          tabIndex={tab === 'invitations' ? 0 : -1}
+          onClick={() => selectTab('invitations')}
         >
-          Links
+          Invitations
         </button>
       </div>
 
@@ -165,8 +167,9 @@ export function FriendsPageClient({
         {mutualFriendSuggestions}
       </div>
 
-      <div id="friends-panel-links" role="tabpanel" aria-labelledby="friends-tab-links" hidden={tab !== 'links'}>
+      <div id="friends-panel-invitations" role="tabpanel" aria-labelledby="friends-tab-invitations" hidden={tab !== 'invitations'}>
         {inviteLinksSection}
+        {peopleYouInvited}
       </div>
 
       {inviteOpen ? (

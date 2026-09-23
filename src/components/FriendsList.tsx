@@ -6,9 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { formatRelativeTime } from '@/components/feed/visual';
 import { buildAddSomeoneHandoff } from '@/components/friends/add-someone';
-import { saveInviteEdit } from '@/components/friends/invite-edit';
 import { Chip } from '@/components/ui/Chip';
-import { formatUsPhoneInput } from '@/lib/phone-e164';
 
 type FriendSort = 'name_asc' | 'name_desc' | 'recent';
 
@@ -78,28 +76,6 @@ function previewInterests(interests: string[]) {
   return interests.slice(0, 3).join(', ');
 }
 
-function buildSmsHref(phone: string, message: string) {
-  return `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(message)}`;
-}
-
-function invitationName(invite: OutgoingInvite) {
-  return invite.inviteeDisplayName.trim() || invite.inviteePhoneMasked || 'Invited friend';
-}
-
-function invitationTiming(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Invited recently';
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const invitedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const daysAgo = Math.max(0, Math.round((today.getTime() - invitedDay.getTime()) / 86_400_000));
-
-  if (daysAgo === 0) return 'Invited today';
-  if (daysAgo === 1) return 'Invited yesterday';
-  return `Invited ${daysAgo} days ago`;
-}
-
 function friendSecondary(person: Person) {
   const sharedInterest = person.sharedInterests[0];
   if (sharedInterest) return `Shared interest: ${sharedInterest}`;
@@ -141,215 +117,6 @@ function FriendCard({ person }: { person: Person }) {
         </p>
       )}
     </Link>
-  );
-}
-
-function PendingInviteCard({
-  invite,
-  copyingId,
-  cancellingId,
-  onCopy,
-  onCancel,
-  onSaved,
-}: {
-  invite: OutgoingInvite;
-  copyingId: string | null;
-  cancellingId: string | null;
-  onCopy: (invite: OutgoingInvite) => void;
-  onCancel: (invite: OutgoingInvite) => void;
-  onSaved: () => Promise<void> | void;
-}) {
-  const canMessage = invite.message && invite.inviteePhoneForActions;
-
-  const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editInterests, setEditInterests] = useState<string[]>(['', '', '']);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-
-  function startEdit() {
-    setEditName(invite.inviteeDisplayName);
-    setEditPhone(formatUsPhoneInput(invite.inviteePhoneForActions ?? ''));
-    setEditInterests([
-      invite.suggestedInterests[0] ?? '',
-      invite.suggestedInterests[1] ?? '',
-      invite.suggestedInterests[2] ?? '',
-    ]);
-    setEditError(null);
-    setEditing(true);
-  }
-
-  async function saveEdit() {
-    const trimmedName = editName.trim();
-    if (!trimmedName) {
-      setEditError('Add their name first.');
-      return;
-    }
-
-    setSavingEdit(true);
-    setEditError(null);
-
-    const result = await saveInviteEdit({
-      invitationId: invite.id,
-      inviteeDisplayName: trimmedName,
-      phone: editPhone,
-      suggestedInterests: editInterests.map((interest) => interest.trim()).filter(Boolean),
-    });
-
-    setSavingEdit(false);
-
-    if (!result.ok) {
-      setEditError(result.message);
-      return;
-    }
-
-    setEditing(false);
-    await onSaved();
-  }
-
-  return (
-    <article className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-foreground font-serif text-lg font-semibold leading-tight">{invitationName(invite)}</h3>
-          <p className="text-muted-foreground mt-1 text-sm">{invitationTiming(invite.sentAt)}</p>
-        </div>
-        <Chip>Waiting</Chip>
-      </div>
-
-      {editing ? (
-        <form
-          className="mt-4 space-y-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void saveEdit();
-          }}
-        >
-          <label className="text-foreground block text-sm font-medium">
-            Name
-            <input
-              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition"
-              value={editName}
-              onChange={(event) => {
-                setEditName(event.target.value);
-                setEditError(null);
-              }}
-              autoComplete="name"
-              maxLength={60}
-              placeholder="Their name"
-            />
-          </label>
-          <label className="text-foreground block text-sm font-medium">
-            Phone number
-            <input
-              className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] mt-1 h-11 w-full rounded-xl border border-[var(--accent-gold)] px-3 text-base transition"
-              value={editPhone}
-              onChange={(event) => {
-                setEditPhone(formatUsPhoneInput(event.target.value));
-                setEditError(null);
-              }}
-              autoComplete="tel"
-              inputMode="tel"
-              maxLength={14}
-              placeholder="(555) 123-4567"
-            />
-          </label>
-          <div className="space-y-2">
-            <span className="text-foreground block text-sm font-medium">Ideas (up to three)</span>
-            {editInterests.map((interest, index) => (
-              <input
-                key={index}
-                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-[var(--radius-xs)] border border-[var(--accent-gold)] px-4 text-base transition"
-                value={interest}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setEditInterests((current) => current.map((value, i) => (i === index ? next : value)));
-                  setEditError(null);
-                }}
-                maxLength={60}
-                placeholder={`Idea ${index + 1}`}
-              />
-            ))}
-          </div>
-
-          {editError ? <p className="text-destructive text-sm font-medium">{editError}</p> : null}
-
-          <div className="flex gap-3">
-            <button type="submit" className="btn-primary flex-1" disabled={savingEdit}>
-              {savingEdit ? 'Saving…' : 'Save changes'}
-            </button>
-            <button
-              type="button"
-              className="btn-ghost flex-1"
-              onClick={() => setEditing(false)}
-              disabled={savingEdit}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <>
-          {invite.suggestedInterests.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {invite.suggestedInterests.map((interest) => (
-                <Chip key={interest} variant="outline" className="border-primary/10 bg-primary/5">
-                  {interest}
-                </Chip>
-              ))}
-            </div>
-          ) : null}
-
-          {/* The link itself, shown as plain text -- previously this was only
-              reachable by tapping "Send message" / "Copy instead", which
-              embed it in the SMS body. Matching how InviteLinksSection shows
-              its shareable-link URLs so a personal invite's link doesn't
-              read as lost once the compose form is behind you. */}
-          {invite.inviteUrl ? (
-            <a
-              href={invite.inviteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-muted text-muted-foreground hover:text-foreground mt-3 block rounded-md px-2 py-1.5 font-mono text-xs break-all underline decoration-transparent underline-offset-2 transition hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-navy)]"
-            >
-              {invite.inviteUrl}
-            </a>
-          ) : null}
-
-          {canMessage ? (
-            <div className="mt-4 space-y-2">
-              <a
-                className="btn-primary flex w-full items-center justify-center"
-                href={buildSmsHref(invite.inviteePhoneForActions!, invite.message!)}
-              >
-                Send message
-              </a>
-              <div className="flex justify-center gap-6">
-                <button
-                  type="button"
-                  className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
-                  onClick={() => onCopy(invite)}
-                >
-                  {copyingId === invite.id ? 'Copied ✓' : 'Copy instead'}
-                </button>
-                <button type="button" className="text-muted-foreground inline-flex min-h-11 items-center text-sm" onClick={startEdit}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="text-muted-foreground inline-flex min-h-11 items-center text-sm"
-                  onClick={() => onCancel(invite)}
-                  disabled={cancellingId === invite.id}
-                >
-                  {cancellingId === invite.id ? 'Setting aside…' : 'Set aside'}
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </>
-      )}
-    </article>
   );
 }
 
@@ -476,8 +243,6 @@ export default function FriendsList() {
   const [friendsLoading, setFriendsLoading] = useState(true);
   const [invitesLoading, setInvitesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copyingId, setCopyingId] = useState<string | null>(null);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [friendSort, setFriendSort] = useState<FriendSort>('name_asc');
   const [friendSearch, setFriendSearch] = useState('');
 
@@ -634,45 +399,6 @@ export default function FriendsList() {
     [invites],
   );
 
-  async function copyInvite(invite: OutgoingInvite) {
-    if (!invite.message) return;
-
-    try {
-      await navigator.clipboard.writeText(invite.message);
-      setCopyingId(invite.id);
-      window.setTimeout(() => setCopyingId(null), 2000);
-    } catch {
-      if (navigator.share) await navigator.share({ text: invite.message });
-    }
-  }
-
-  async function cancelInvite(invite: OutgoingInvite) {
-    setCancellingId(invite.id);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/friend-invitations', {
-        method: 'DELETE',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ invitationId: invite.id }),
-      });
-      const body = (await response.json().catch(() => null)) as {
-        message?: string;
-      } | null;
-
-      if (!response.ok) {
-        throw new Error(body?.message ?? 'Could not set this aside.');
-      }
-
-      await loadInvites();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not set this aside.');
-    } finally {
-      setCancellingId(null);
-    }
-  }
-
   function approveRequest(request: IncomingRequest) {
     void actOnRequest(request.id, 'accept', 'Could not accept this request.');
   }
@@ -731,30 +457,6 @@ export default function FriendsList() {
                 request={request}
                 pendingRequestId={pendingRequestId}
                 onCancel={cancelRequest}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {!loading && pendingInvites.length > 0 ? (
-        <section aria-labelledby="waiting-for-response" className="space-y-3">
-          <h2
-            id="waiting-for-response"
-            className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase"
-          >
-            Waiting for Response
-          </h2>
-          <div className="space-y-3">
-            {pendingInvites.map((invite) => (
-              <PendingInviteCard
-                key={invite.id}
-                invite={invite}
-                copyingId={copyingId}
-                cancellingId={cancellingId}
-                onCopy={copyInvite}
-                onCancel={cancelInvite}
-                onSaved={loadInvites}
               />
             ))}
           </div>
