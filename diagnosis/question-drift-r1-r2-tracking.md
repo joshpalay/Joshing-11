@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -1153,3 +1153,98 @@ out, row count far short).
    evidence per Josh's own stated bar; today's reading narrowed instead.
 4. Everything else in §2/§4 unchanged (Phase 2 hand read not due; R5 stays
    off pending Phase 2).
+
+### 2026-09-24 (diagnosis-review) — the 8-reading accessible-share cooling trend reverses sharply (46%→54%); Phase 3 dip narrows again to 12.3 points; quality-gate drop rate eases; Phase 2 now gated by row count, not date, as the 14-day mark passes tomorrow; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~12.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-23 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 105 | **157** | — | large jump (+52) — ordinary generation, a busy day |
+| Mean words/question | 30.8 | **30.0** | ≤24 | still barely moved |
+| Rows over 25 words | 67% | **61%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 46% | **54%** | 30-45% | **reversed — up 8pts, breaking an 8-reading cooling streak** |
+
+**The accessible-share cooling trend (64→58→54→53→49→flat→48→47→46) just
+reversed to 54%**, the first rise since this doc started tracking the
+metric daily. Not a stop-condition trip — 54% is still well inside the
+"only a fall below 25%" floor, and well above the 46% low it had reached —
+but it breaks eight consecutive readings that had been moving the same
+direction and had been read as "settles on its own" evidence for decisions
+1/2. A hand spot-check of the 60 most-recent rows shows the reversal isn't
+one anomalous burst: both the 2026-09-23 11:17–11:20 UTC window and the
+17:05 UTC cron batch skew accessible, spread across the day rather than
+concentrated in one generation run. Not investigating root cause further
+this pass (reconnaissance, not a fix) — logging the reversal plainly since
+it's the first genuine direction change this metric has shown, and one
+more reading in the same direction would be worth flagging to Josh the way
+the Phase 3 dip's repeat-breach rule already did for decision 3.
+
+**Quality-gate drop rate since deploy:** 77/208 = **37.0%** (considered
+208, up from 161; dropped 77, up from 66) — inside the 35-45% acceptable
+band and eased back toward the middle of it (was 41.0%), `failed_open: 0`.
+`difficulty_floor`: 2/208 = 1.0%, well under the 5% stop condition.
+Per-defect breakdown (`quality:%`, day≥2026-09-11): `DEFINITION_SUPPLIED`
+38/199 (largest, as every prior reading), `GENERIC_AT_TIER` 17/199,
+`SELF_ANSWERING` 7/199, `ANSWER_LEAKED` 6/199, `FALSE_PREMISE` 4/199 (up
+from 2), `OPINION_OR_VAGUE` 1/199 (first nonzero reading for this defect),
+`MISLEADING_SETUP` 1/199 (flat), everything else 0.
+
+**None of Phase 1's checkable stop conditions trip.** The one Phase 1 exit
+criterion this environment has never been able to check — short-queue /
+`generation_failed` build counts from Vercel function logs — remains
+unchecked.
+
+**Phase 3 (correct-rate) — narrows for a second straight reading, now back
+under the ≤10-point line's near-neighborhood:** accessible-tier mean
+`empirical_correct_rate`, post-deploy cohort now **0.621** (29 rows/35
+answers, up from 19/21), pre-deploy cohort **0.744** (45 rows/73 answers,
+up from 40/61 — the "frozen" pre-deploy population keeps moving as more
+answers land on old rows, same dynamic noted since 2026-09-16). Dip:
+**12.3 points** (was 16.2, was 18.2 at the peak) — still technically above
+the plan's ≤10-point exit criterion, but continuing to narrow on a larger
+sample (35 answers, the largest post-deploy cohort yet), the opposite of
+the widening trend Josh's 2026-09-22 resolution said would count as new
+evidence. Not re-escalating; decision 3 stays resolved (accept) per Josh's
+call. Logging the number per this doc's convention.
+
+**Phase 2's hand read is now effectively gated by the row-count condition,
+not the date one.** The plan's own criterion is "deploy + 14 days, or once
+≥ 200 post-deploy live rows exist, **whichever is later**." The 14-day mark
+lands tomorrow (2026-09-25), but the row count (157, even after today's
++52 jump) is still short of 200 — at the current pace (~10-12 rows/day
+some days, more on busy days like today) 200 rows is now the binding
+constraint, likely landing a few days after the date threshold passes.
+Flagging this reframe so the next review doesn't read "2026-09-25" as an
+automatic trigger — the row count is what to watch now.
+
+**No new relevant code:** `git log --since=2026-09-23` on
+`generate-questions.ts` (for `SYSTEM_PROMPT`/`QUALITY_GATE_SYSTEM_PROMPT`)
+and `adaptive-difficulty.ts` returns nothing. One commit landed on `main`
+since the last review (`#1709`, "Argue your point"); read the diff — it
+touches `src/server/answers/` and `GradeDispute`, not this doc's tracked
+prompt/gate paths.
+
+**No decision-resolving change.** Status stays `active` (decision 3 already
+resolved 2026-09-22; decisions 1, 2, 4, 5 unchanged). Phase 2's hand read
+still isn't due (200-row threshold now the binding one, currently 157).
+
+### Next steps (revised)
+1. **New:** watch whether the accessible-share reversal (46%→54%) continues
+   or was a one-day blip — a second reading in the same direction would be
+   the first real challenge to the "settles on its own" read this doc has
+   carried since 2026-09-16.
+2. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked.
+3. Keep reading Phase 3's correct-rate query every review — dip narrowed
+   again (12.3pts, was 16.2) on the largest cohort yet (35 answers);
+   decision 3 stays resolved (accept).
+4. Phase 2 hand read: now gated by the 200-row mark, not the 14-day date
+   (which passes tomorrow) — currently 157 rows.
+5. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).

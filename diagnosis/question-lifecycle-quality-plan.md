@@ -2,9 +2,9 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 owner: Josh
-related-pr: "#1646, #1698, #1702"
+related-pr: "#1646, #1698, #1702, #1709"
 ---
 
 # Diagnosis: question lifecycle quality and grading fairness
@@ -858,5 +858,87 @@ nothing.
    build-time p50 recovers.
 3. Keep an eye on `batch_dedup` `failed_open` (14/147, still trending up)
    and `recent_history` (flat at 2/147).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-24 (diagnosis-review) — real activity finally hit the dispute queue, but likely from a new automated path (#1709), not human review; `batch_dedup`/`recent_history` `failed_open` both jump; `subject_entity` coverage holds; build p50 flat
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**The `#1702` dispute queue shows its first real movement since 2026-09-19
+— but a new PR merged the same day likely explains it, not human review.**
+`GradeDispute` status counts (all-time): `pending` 41 (was 40),
+`alternative_added` 29 (was 27), `dismissed` 5 (unchanged). Two rows
+resolved to `alternative_added` since the last review, both `reviewed_at`
+**2026-09-23 23:30:13Z and 23:33:01Z** — roughly 4 hours after `#1709`
+("Argue your point — reason-backed recheck") merged the same day at
+19:45:18Z. `#1709` adds a self-serve "Argue your point" recheck panel whose
+own PR description states one of its three outcomes is "✅ Accepted — grade
+flips, points awarded" (an automated verdict from the recheck's reviewer
+model), with `GradeDispute` gaining a new `player_argument` column
+(migration 0148, confirmed applied — `information_schema` shows the column
+present) specifically so disputes raised through this new flow are tracked
+there. The timing and mechanism strongly suggest these two `alternative_added`
+rows came from the new automated recheck path, not from someone working the
+`/admin/disputes` queue by hand — **not confirmed with certainty** (no
+`reviewed_by`/source column checked to prove it), but flagging the
+distinction because it changes what this doc's decision 4 can read from the
+counter: if `#1709`'s automated path is now the dominant contributor to
+`GradeDispute` resolutions, this counter is measuring an AI reviewer
+agreeing with itself, not staff-reviewed evidence of grading fairness in
+the sense decision 4 asks for. Worth a follow-up look at how `#1709`'s
+recheck resolutions are labeled in `GradeDispute` before treating any
+future counter growth as "the queue got real use."
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 85** newly-generated rows
+missing it (was 0 of 34 last review).
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 182 | 12 | **3** |
+| `batch_dedup` | 182 | 1 | **17** |
+| `quality` | 182 | 69 | 0 |
+
+Both counters moved more than their usual +0/+1 daily tick:
+`recent_history`'s `failed_open` ticked up for only the second time ever
+(2→3, after sitting flat at 2 since 2026-09-22); `batch_dedup`'s jumped
+14→17, a larger single-review increase than any prior reading. Still small
+in absolute terms and still not root-caused — same "flagging for
+awareness" posture as every prior entry — but the acceleration on both
+counters in the same window is worth naming rather than folding into the
+usual "ticked up again" line. `quality`'s scoped drop rate (37.9%) stays
+inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 35,152ms** (n=22),
+essentially flat vs. the last reading (35,610ms, n=20) — still well above
+the 25,243ms pre-deploy baseline; the outlier-build cluster tracked in
+`daily-build-latency-deferral-plan.md` grew from 3 to 5 occurrences this
+same session (see that doc's 2026-09-24 entry), which if anything
+strengthens rather than weakens the standing explanation for the elevated
+p50.
+
+**No code change to this doc's own tracked files** (`verification-gating.test.ts`,
+`check-question-lifecycle.mjs`) since the last review — the one new commit
+on `main`, `#1709`, touches `GradeDispute` and the recheck path (see above)
+but not either tracked file.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (revised)
+1. **New:** check how `#1709`'s automated recheck path labels its
+   `GradeDispute` resolutions, to know whether the queue's `alternative_added`
+   growth reflects staff review (what decision 4 needs) or the recheck
+   model agreeing with itself.
+2. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+3. Keep an eye on `batch_dedup` `failed_open` (17/182, accelerated this
+   reading) and `recent_history` (3/182, its second-ever movement).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

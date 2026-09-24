@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-23
+last-reviewed: 2026-09-24
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1412,3 +1412,65 @@ outlier builds (2026-09-09, 2026-09-14, 2026-09-15) remain untraced.
 1. Trace the three outsized-residual builds — needs Vercel function logs.
 2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 3. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-09-24 (diagnosis-review) — four new built rows; two show large residuals, joining the outlier cluster (now 5 of 28, ~18%); median saving flat at 13,408.5ms; still zero races; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`DailyBuildMetric` totals:** `built=29` (up from 25), `carry_forward=427`,
+`existing_queue=32`, `partial_carry_forward=5`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**Four new post-deferral rows since the last review**, all `deferred: true`,
+`target_size=5`:
+
+| build_id | started_at | saved | bonus (`generationMs`) | residual |
+|---|---|---:|---:|---:|
+| `a79b0faf-…` | 2026-09-23 11:17:28Z | 1,372 | 663 | 709 — normal band |
+| `42f757d7-…` | 2026-09-23 17:05:13Z | 18,853 | 844 | **18,009 — elevated** |
+| `8753461a-…` | 2026-09-23 17:05:14Z | 27,854 | 728 | **27,126 — outlier-class** |
+| `851b49c6-…` | 2026-09-23 17:05:22Z | 1,659 | 755 | 904 — normal band |
+
+Two of the four are unremarkable. **Two are not**, both from the same
+17:05 UTC cron pass one second apart: `8753461a-…`'s residual (27,126ms) is
+squarely in the same magnitude as the three previously-named outliers
+(23,747 / 37,506 / 13,077ms) — a small bonus-generation cost (728ms) paired
+with a huge unexplained residual, the exact shape of the first two named
+outliers (`84e717bd-…`, `87e51589-…`). `42f757d7-…`'s residual (18,009ms)
+sits between the normal band and the outlier band — elevated but not as
+extreme, closer to `cff84520-…`'s shape (large bonus cost *and* an inflated
+residual) than to the pure-residual outliers.
+
+**This raises the outlier count from 3 to effectively 5 of 28 post-deferral
+rows (~18%)** — no longer a small tail. Per the standing next-step, tracing
+this needs Vercel function logs this session doesn't have; naming
+`8753461a-…` and `42f757d7-…` here (alongside the still-untraced
+`84e717bd-…`, `87e51589-…`, `cff84520-…`) so whoever picks up the trace has
+the full set, not just the original three.
+
+**Phase 3a (mechanism) still holds** on all four new rows: `saved ≥` each
+row's own bonus `generationMs`.
+
+**3b population: median saving 13,408.5ms** (n=28, unchanged from n=24) —
+the new rows split two-and-two around the existing midpoint, so the median
+itself didn't move even though the outlier cluster grew.
+
+**No code change since the last review:** `git log --since=2026-09-23` on
+`queue-orchestrator.ts`, `daily.ts`, and `build-context.ts` returns nothing.
+One commit landed on `main` since the last review (`#1709`, "Argue your
+point — reason-backed recheck"); read the diff — touches
+`src/server/answers/`, not this doc's tracked build/queue paths.
+
+**No decision-resolving change.** Status stays `active`. The outlier-trace
+next step is now more urgent given the growth from 3 to 5 occurrences, but
+still needs access this session doesn't have.
+
+### Next steps (revised)
+1. **Trace the now-five outsized-residual builds** — needs Vercel function
+   logs. Named: `84e717bd-…` (09-09), `87e51589-…` (09-14), `cff84520-…`
+   (09-15), `42f757d7-…` and `8753461a-…` (both 09-23).
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved, and the growing
+   outlier share makes it harder to answer with a single number.
