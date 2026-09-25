@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -1247,4 +1247,92 @@ still isn't due (200-row threshold now the binding one, currently 157).
    decision 3 stays resolved (accept).
 4. Phase 2 hand read: now gated by the 200-row mark, not the 14-day date
    (which passes tomorrow) — currently 157 rows.
+5. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).
+
+### 2026-09-25 (diagnosis-review) — accessible-share reversal confirmed real, not a blip (flat at 54% for a second reading); Phase 3 dip narrows back under the ≤10-point line (9.8pts); quality-gate drop rate eases; Phase 2 still short of the 200-row gate; the 14-day date mark passes today; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~13.9 days — the 14-day date mark passes later today
+(19:14:09Z), but per the 2026-09-24 entry the row count is the binding
+Phase 2 gate now, not the date.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-24 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 157 | **170** | — | ordinary generation (+13) |
+| Mean words/question | 30.0 | **29.7** | ≤24 | still barely moved |
+| Rows over 25 words | 61% | **61%** | ≤45% | unchanged, still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 54% | **54%** | 30-45% | **flat — confirms the reversal is real, not a one-day blip** |
+
+**Per last review's own next step: the accessible-share reversal is
+confirmed, not a one-day blip.** 54% held exactly flat rather than resuming
+the eight-reading cooling trend (64→…→46→54→**54**) — the first genuine
+"same direction, second reading" this doc has seen since it started
+tracking this metric daily. Still not a stop condition (54% is nowhere near
+the <25% floor), but this is now the first real challenge to the "settles
+on its own" read for decisions 1/2 that this doc has carried since
+2026-09-16. Not investigating root cause further this pass (reconnaissance,
+not a fix) — worth a closer look if a third reading holds or rises further.
+
+**Quality-gate drop rate since deploy:** 90/239 = **37.7%** (considered
+239, up from 208; dropped 90, up from 77) — inside the 35-45% acceptable
+band and continues easing toward the middle of it (was 37.0%, 41.0% two
+reviews ago), `failed_open: 0`. `difficulty_floor`: 2/239 = 0.8%, well
+under the 5% stop condition. Per-defect breakdown (`quality:%`,
+day≥2026-09-11): `DEFINITION_SUPPLIED` 42/230 (largest, as every prior
+reading, up from 38/199), `GENERIC_AT_TIER` 23/230 (up from 17), `FALSE_PREMISE`
+7/230 (up from 4), `SELF_ANSWERING` 7/230 (flat), `ANSWER_LEAKED` 6/230
+(flat), `OPINION_OR_VAGUE` 1/230 (flat), `MISLEADING_SETUP` 1/230 (flat),
+everything else 0.
+
+**None of Phase 1's checkable stop conditions trip.** The one Phase 1 exit
+criterion this environment has never been able to check — short-queue /
+`generation_failed` build counts from Vercel function logs — remains
+unchecked.
+
+**Phase 3 (correct-rate) — narrows back under the ≤10-point line for the
+first time since the two-breach escalation:** accessible-tier mean
+`empirical_correct_rate`, post-deploy cohort now **0.610** (35 rows/50
+answers, up from 29/35), pre-deploy cohort **0.708** (48 rows/81 answers, up
+from 45/73 — the "frozen" pre-deploy population keeps moving as more
+answers land on old rows). Dip: **9.8 points** (was 12.3, was 16.2, was
+18.2 at the peak) — the first reading back under the plan's ≤10-point exit
+criterion since the 2026-09-21/22 breaches. Per Josh's 2026-09-22
+resolution of decision 3 ("keep watching... only a widening trend on a
+larger sample would be new evidence"), this continues to be the opposite of
+new evidence — the dip has now narrowed for three straight readings on the
+largest cohort yet (50 answers). Not re-escalating; decision 3 stays
+resolved (accept). Logging the number per this doc's convention.
+
+**Phase 2's hand read is still gated by the row-count condition.** 170
+rows, up from 157, still short of the 200-row mark. The 14-day date mark
+passes later today (2026-09-25T19:14:09Z), but per the 2026-09-24 entry the
+row count is now the binding constraint and remains so.
+
+**No new relevant code:** `git log --since=2026-09-24` on
+`generate-questions.ts` (for `SYSTEM_PROMPT`/`QUALITY_GATE_SYSTEM_PROMPT`)
+and `adaptive-difficulty.ts` returns nothing. Zero commits landed on `main`
+at all since the 2026-09-24 diagnosis-review commit.
+
+**No decision-resolving change.** Status stays `active` (decision 3 already
+resolved 2026-09-22; decisions 1, 2, 4, 5 unchanged). Phase 2's hand read
+still isn't due (200-row threshold, currently 170).
+
+### Next steps (revised)
+1. **Confirmed, now watch for a third reading:** the accessible-share
+   reversal held flat at 54% for a second straight reading — the first real
+   challenge to the "settles on its own" read. A third reading in the same
+   direction (flat or rising) would be worth a closer look at root cause.
+2. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked.
+3. Keep reading Phase 3's correct-rate query every review — dip narrowed to
+   9.8pts (back under the ≤10-point line) on the largest cohort yet (50
+   answers); decision 3 stays resolved (accept).
+4. Phase 2 hand read: still gated by the 200-row mark (the 14-day date mark
+   passes today but is no longer the binding condition) — currently 170
+   rows.
 5. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).

@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-24
+last-reviewed: 2026-09-25
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709"
 ---
@@ -940,5 +940,69 @@ but not either tracked file.
    build-time p50 recovers.
 3. Keep an eye on `batch_dedup` `failed_open` (17/182, accelerated this
    reading) and `recent_history` (3/182, its second-ever movement).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-25 (diagnosis-review) — no new dispute-queue activity since 09-19 (still likely automated, not staff review); `batch_dedup` failed_open eases on the rolling window; `subject_entity` coverage holds; build p50 up slightly; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews.
+
+**`#1702` dispute queue: no new resolutions.** `GradeDispute` status counts
+(all-time): `pending` 42 (was 41), `alternative_added` 29 (unchanged),
+`dismissed` 5 (unchanged). Latest `reviewed_at` across the whole table is
+still `2026-09-23T23:33:01Z` — the same two `#1709`-adjacent rows the last
+review flagged as likely automated-recheck resolutions, not human review.
+No progress on last review's open question (whether those two rows'
+resolution mechanism is the automated recheck path or staff work) — not
+re-investigated this pass.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 99** newly-generated rows
+missing it (was 0 of 85 last review).
+
+**`batch_dedup` / `recent_history` `failed_open`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 203 | 16 | 3 |
+| `batch_dedup` | 203 | 6 | **16** |
+| `quality` | 203 | 79 | 0 |
+
+This is a rolling 14-day window, not a cumulative-since-a-fixed-date count
+(unlike `answer-leak-domain-drift-plan.md`'s `GateDropStat` reads) — so a
+count can fall between reviews as an old high-`failed_open` day rolls out
+of the window, not just rise. `batch_dedup`'s `failed_open` **eased 17→16**
+on that basis (the accelerated 14→17 jump the last review flagged is now
+partly outside the trailing window), not a new all-time high. `recent_history`
+is unchanged at 3. `quality`'s scoped drop rate (38.9%) stays inside the
+acceptable band. Neither counter is root-caused; same "flagging for
+awareness" posture as every prior entry.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 36,208ms** (n=23),
+up slightly from the last reading (35,152ms, n=22) — still well above the
+25,243ms pre-deploy baseline. Consistent with
+`daily-build-latency-deferral-plan.md`'s own reading today: the
+elevated/outlier-residual cluster it tracks grew from 5 to 6 occurrences
+this same session, which if anything strengthens rather than weakens the
+standing explanation for the elevated p50.
+
+**No code change to this doc's own tracked files** (`verification-gating.test.ts`,
+`check-question-lifecycle.mjs`) since the last review — zero commits landed
+on `main` at all since the 2026-09-24 diagnosis-review commit.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Check how `#1709`'s automated recheck path labels its `GradeDispute`
+   resolutions — still not investigated; no new resolutions since
+   2026-09-23 to check against anyway.
+2. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers.
+3. Keep an eye on `batch_dedup` `failed_open` (16/203 on the rolling
+   14-day window, eased slightly) and `recent_history` (3/203, flat).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
