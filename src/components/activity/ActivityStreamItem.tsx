@@ -84,7 +84,9 @@ const SEND_BUTTON_STYLE: CSSProperties = {
   padding: 0,
   minWidth: 44,
   minHeight: 44,
-  margin: '-12px -12px -12px 0',
+  // Right margin pulls the box out by exactly the glyph's inset ((44 - 15) / 2),
+  // so the plane's right edge lines up with the question text above it.
+  margin: '-12px -14.5px -12px 0',
   color: INK,
   cursor: 'pointer',
 };
@@ -874,6 +876,9 @@ export function ConvergenceExpansion({
         marginTop: 12,
         borderLeft: `2px solid ${RULE}`,
         paddingLeft: 12,
+        // The row container has only 2px side padding; without this the text
+        // and the Send glyph run into the card's right edge.
+        paddingRight: 12,
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
@@ -923,6 +928,9 @@ function SendOnwardExpansion({
         marginTop: 12,
         borderLeft: `2px solid ${RULE}`,
         paddingLeft: 12,
+        // The row container has only 2px side padding; without this the text
+        // and the Send glyph run into the card's right edge.
+        paddingRight: 12,
       }}
     >
       <p style={REVEALED_QUESTION_STYLE}>{question.text}</p>
