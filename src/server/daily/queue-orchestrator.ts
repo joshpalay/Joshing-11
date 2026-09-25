@@ -22,6 +22,7 @@ import {
   type BonusPresence,
 } from '@/server/db/queries/daily';
 import { ANSWER_COOLDOWN_DAYS, makeAnswerCooldownGate } from '@/server/daily/answer-cooldown';
+import { getCoreSlots } from '@/server/daily/bonus';
 import {
   isMissedReturnEnabled,
   selectReturnCandidates,
@@ -280,13 +281,21 @@ export function mergeCarriedWithFresh(
  * makes generation return nothing, so this simply carries the unplayed set forward
  * at zero LLM cost. Default OFF; fail-open (any error → false → normal fresh build).
  */
-async function topUpAndCarryForwardPartialQueue(userId: string): Promise<boolean> {
+export async function topUpAndCarryForwardPartialQueue(userId: string): Promise<boolean> {
   if (!isDailyTopUpCarryForwardEnabled()) return false;
   try {
     const prior = await getPriorInWindowDailyQueue(userId);
     if (!prior) return false;
 
-    const unplayed = asQueueSlots(prior.slots).filter(
+    // CORE only (getCoreSlots): a +2 bonus or missed-return "Second look" slot
+    // left unanswered is opt-in and never part of the five (D-F3) — carrying one
+    // forward here would re-index it to slot_index 0 and hand it back as the
+    // FIRST question of the next day's game, ahead of five fresh core questions.
+    // isRoundComplete already treats these as fine to leave pending; this must
+    // agree, or finishing the actual five still "loses" a slot to a leftover
+    // extra. Bonus/return re-eligibility is handled separately (fresh +2 pass,
+    // missed-return's own cooldown) — never by carry-forward.
+    const unplayed = getCoreSlots(asQueueSlots(prior.slots)).filter(
       (slot) => !slot.answered && !slot.skipped,
     );
     // Nothing left to preserve → let it regenerate a fresh Five (engaged user who
@@ -294,9 +303,7 @@ async function topUpAndCarryForwardPartialQueue(userId: string): Promise<boolean
     // job and never reach here (it returns first).
     if (unplayed.length === 0) return false;
 
-    // Carry at most a full Five of unplayed slots; top up only the shortfall. A
-    // partial queue with >= DAILY_QUEUE_SIZE unplayed (e.g. bonus slots) needs no
-    // generation at all.
+    // Carry at most a full Five of unplayed core slots; top up only the shortfall.
     const carried = unplayed.slice(0, DAILY_QUEUE_SIZE);
     const needed = DAILY_QUEUE_SIZE - carried.length;
 

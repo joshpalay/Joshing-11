@@ -1,10 +1,16 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 
 // queue-orchestrator imports @/server/db/queries/daily (→ @/server/db, which
 // throws at module load without a connection string). Mock the daily surface with
 // faithful PURE slot builders so this unit exercises only mergeCarriedWithFresh.
+const mocks = vi.hoisted(() => ({
+  getPriorInWindowDailyQueue: vi.fn(),
+  carryForwardQueueWithSlots: vi.fn(),
+  generateDailyQuestionsFromKnowledgeBase: vi.fn(),
+}));
+
 vi.mock('@/server/db/queries/daily', () => ({
   buildBotSlot: (q: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
     slot_index: position,
@@ -19,11 +25,11 @@ vi.mock('@/server/db/queries/daily', () => ({
   buildHouseSlot: vi.fn(),
   buildPresenceSlot: vi.fn(),
   carryForwardUntouchedDailyQueue: vi.fn(),
-  carryForwardQueueWithSlots: vi.fn(),
+  carryForwardQueueWithSlots: mocks.carryForwardQueueWithSlots,
   clearStaleShortTodayQueue: vi.fn(),
   countDailyQueues: vi.fn(),
   getKnowledgeBase: vi.fn(),
-  getPriorInWindowDailyQueue: vi.fn(),
+  getPriorInWindowDailyQueue: mocks.getPriorInWindowDailyQueue,
   getTodaysDailyQueue: vi.fn(),
   persistDailyQueue: vi.fn(),
   pickEligibleAuthoredQuestions: vi.fn(),
@@ -32,16 +38,23 @@ vi.mock('@/server/db/queries/daily', () => ({
   getRecentAnsweredEntities: vi.fn(),
 }));
 
+vi.mock('@/server/daily/generate-questions', () => ({
+  generateDailyQuestionsFromKnowledgeBase: mocks.generateDailyQuestionsFromKnowledgeBase,
+}));
+
 vi.mock('@/server/questions/canonical-subcategory', () => ({
   // A subcategory of 'generic' is treated as a bucket label to drop.
   isGenericSubcategory: (s: string) => s === 'generic',
 }));
 
 let mergeCarriedWithFresh: typeof import('@/server/daily/queue-orchestrator').mergeCarriedWithFresh;
+let topUpAndCarryForwardPartialQueue: typeof import('@/server/daily/queue-orchestrator').topUpAndCarryForwardPartialQueue;
 
 beforeAll(async () => {
   process.env.DATABASE_URL ??= 'postgres://user:pass@localhost:5432/joshing_test';
-  ({ mergeCarriedWithFresh } = await import('@/server/daily/queue-orchestrator'));
+  ({ mergeCarriedWithFresh, topUpAndCarryForwardPartialQueue } = await import(
+    '@/server/daily/queue-orchestrator'
+  ));
 });
 
 function carriedSlot(text: string, index: number, answered = false): QueueSlot {
@@ -118,5 +131,104 @@ describe('mergeCarriedWithFresh', () => {
     const { merged, newGeneratedIds } = mergeCarriedWithFresh(carried, fresh);
     expect(merged).toHaveLength(DAILY_QUEUE_SIZE);
     expect(newGeneratedIds).toEqual([]);
+  });
+});
+
+// Regression: an unanswered +2 bonus slot or missed-return "Second look" slot
+// left over from a FINISHED prior round must never be carried forward as a
+// core slot of the next day's queue — that re-indexes it to slot_index 0 and
+// hands it back as the FIRST question of the next game, ahead of five fresh
+// core questions (the bug reported against B-MISSED-RETURN-01 / the +2 bonus).
+describe('topUpAndCarryForwardPartialQueue — bonus/return exclusion', () => {
+  function coreSlot(text: string, index: number, answered: boolean): QueueSlot {
+    return {
+      slot_index: index,
+      source: 'bot',
+      generated_question_id: `core-${index}`,
+      domain: 'History',
+      question_text: text,
+      answered,
+    } as QueueSlot;
+  }
+
+  function bonusSlot(text: string, index: number): QueueSlot {
+    return {
+      slot_index: index,
+      source: 'bot',
+      generated_question_id: `bonus-${index}`,
+      domain: 'History',
+      question_text: text,
+      answered: false,
+      presence_source_id: 'friend-1',
+      presence_source_name: 'Friend',
+    } as QueueSlot;
+  }
+
+  function returnSlot(text: string, index: number): QueueSlot {
+    return {
+      slot_index: index,
+      source: 'bot',
+      generated_question_id: `return-${index}`,
+      domain: 'History',
+      question_text: text,
+      answered: false,
+      return_scope: 'wrong',
+    } as QueueSlot;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.DAILY_TOPUP_CARRYFORWARD_ENABLED = 'true';
+  });
+
+  it('does not carry an unanswered bonus/return leftover when the core five are all resolved', async () => {
+    const priorSlots = [
+      ...Array.from({ length: 5 }, (_, i) => coreSlot(`Core${i}`, i, true)),
+      bonusSlot('Bonus', 5),
+      returnSlot('SecondLook', 6),
+    ];
+    mocks.getPriorInWindowDailyQueue.mockResolvedValue({ id: 'prior-1', slots: priorSlots });
+
+    const built = await topUpAndCarryForwardPartialQueue('user-1');
+
+    // Nothing core-level is left to preserve, so this falls through to a fresh
+    // build rather than smuggling the bonus/return leftover in as slot 0.
+    expect(built).toBe(false);
+    expect(mocks.carryForwardQueueWithSlots).not.toHaveBeenCalled();
+  });
+
+  it('carries only unanswered CORE slots, never the bonus/return leftovers riding along', async () => {
+    const priorSlots = [
+      coreSlot('Core0', 0, true),
+      coreSlot('Core1', 1, true),
+      coreSlot('Core2', 2, true),
+      coreSlot('CoreUnplayed', 3, false),
+      coreSlot('CoreUnplayed2', 4, false),
+      bonusSlot('Bonus', 5),
+      returnSlot('SecondLook', 6),
+    ];
+    mocks.getPriorInWindowDailyQueue.mockResolvedValue({ id: 'prior-1', slots: priorSlots });
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      { id: 'f1', questionText: 'Fresh1', canonicalSubcategory: 'History', broadCategory: null, difficultyEstimate: null },
+      { id: 'f2', questionText: 'Fresh2', canonicalSubcategory: 'History', broadCategory: null, difficultyEstimate: null },
+      { id: 'f3', questionText: 'Fresh3', canonicalSubcategory: 'History', broadCategory: null, difficultyEstimate: null },
+    ]);
+    mocks.carryForwardQueueWithSlots.mockResolvedValue(true);
+
+    const built = await topUpAndCarryForwardPartialQueue('user-1');
+
+    expect(built).toBe(true);
+    expect(mocks.carryForwardQueueWithSlots).toHaveBeenCalledTimes(1);
+    const [, , mergedSlots, , carriedSlotIndexes] = mocks.carryForwardQueueWithSlots.mock.calls[0];
+    // The two unanswered CORE slots land first (re-indexed 0/1); no slot in the
+    // merged queue carries a bonus/return marker.
+    expect(mergedSlots.map((s: QueueSlot) => s.question_text).slice(0, 2)).toEqual([
+      'CoreUnplayed',
+      'CoreUnplayed2',
+    ]);
+    expect(mergedSlots.some((s: QueueSlot) => s.presence_source_id || s.return_scope)).toBe(false);
+    // Only the original CORE indexes (3, 4) are reported as carried — the prior
+    // day's bonus/return slots (5, 6) stay put on the old row, not stripped out.
+    expect(carriedSlotIndexes).toEqual([3, 4]);
   });
 });
