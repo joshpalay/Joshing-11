@@ -24,6 +24,9 @@ const {
       unknown
     >,
     updateValues: undefined as Record<string, unknown> | undefined,
+    // UserBlock state between the session user and the invitee.
+    blockedEitherWay: false,
+    sessionUserIsBlocker: false,
   }
 
   const dbMock = {
@@ -107,6 +110,7 @@ vi.mock('@/server/db', () => ({
   db: dbMock,
   activityItems: { id: 'activityItems.id' },
   friendInvitations: { id: 'friendInvitations.id' },
+  userBlocks: { blockerId: 'userBlocks.blockerId', blockedId: 'userBlocks.blockedId' },
   follows: {
     id: 'follows.id',
     followerId: 'follows.followerId',
@@ -127,6 +131,15 @@ vi.mock('@/server/friends/invitations', () => ({
   updateFriendInvitation: updateFriendInvitationMock,
   getPendingInvitationForPhone: getPendingInvitationForPhoneMock,
   listOutgoingFriendInvitations: vi.fn(async () => []),
+}))
+
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  isBlockedBetween: vi.fn(async () => state.blockedEitherWay),
+  hasBlocked: vi.fn(async () => state.sessionUserIsBlocker),
+}))
+
+vi.mock('@/server/db/queries/friends', () => ({
+  getMutualFollows: vi.fn(async () => []),
 }))
 
 vi.mock('@/server/sms', () => ({
@@ -175,6 +188,8 @@ describe('POST /api/friend-invitations', () => {
     state.inviterDisplayName = null
     state.insertedFriendship = { id: 'friendship-1', state: 'pending' }
     state.updateValues = undefined
+    state.blockedEitherWay = false
+    state.sessionUserIsBlocker = false
     process.env.NEXT_PUBLIC_APP_URL = 'https://joshing.example'
   })
 
@@ -440,6 +455,42 @@ describe('POST /api/friend-invitations', () => {
     expect(response.status).toBe(200)
     expect(dbMock.insert).toHaveBeenCalled()
     expect(body.state).toBe('created')
+  })
+
+  // QA 2026-09-25 C1: this route used to turn an invite into a follow with no
+  // block check, and reported a blocked pair as "already friends".
+  it('tells the blocker plainly and writes nothing when they blocked the invitee', async () => {
+    state.existingUser = { id: 'user-invitee' }
+    state.existingFriendship = { id: 'stale-edge', state: 'approved' }
+    state.blockedEitherWay = true
+    state.sessionUserIsBlocker = true
+
+    const response = await POST(
+      jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toBe('blocked_by_you')
+    expect(dbMock.insert).not.toHaveBeenCalled()
+  })
+
+  it('looks like an ordinary sent request to someone who was blocked, and writes nothing', async () => {
+    state.existingUser = { id: 'user-invitee' }
+    state.blockedEitherWay = true
+    state.sessionUserIsBlocker = false
+
+    const response = await POST(
+      jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.type).toBe('friendship_request')
+    expect(body.state).toBe('created')
+    expect(typeof body.message).toBe('string')
+    expect(dbMock.insert).not.toHaveBeenCalled()
+    expect(createFriendInvitationMock).not.toHaveBeenCalled()
   })
 
   it('rejects 4 interests', async () => {

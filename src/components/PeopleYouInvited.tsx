@@ -22,6 +22,8 @@ type OutgoingInvite = {
   cancelledAt: string | null
   expiresAt: string
   message: string | null
+  // Friends right now (mutual, not blocked). 'accepted' is only history.
+  connected: boolean
 }
 
 type InvitationsResponse = {
@@ -282,7 +284,7 @@ export default function PeopleYouInvited() {
               invite.message &&
               invite.inviteePhoneForActions
             const acceptedProfileHref =
-              invite.status === 'accepted' && invite.inviteeUserId
+              invite.status === 'accepted' && invite.connected && invite.inviteeUserId
                 ? `/users/${invite.inviteeUserId}`
                 : null
 
@@ -424,10 +426,15 @@ export default function PeopleYouInvited() {
                   {statusDetail(invite)}
                 </p>
 
-                {invite.status === 'accepted' ? (
+                {invite.status === 'accepted' && invite.connected ? (
                   <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
                     They accepted your note — now you can trade questions more
                     easily.
+                  </p>
+                ) : null}
+                {invite.status === 'accepted' && !invite.connected ? (
+                  <p className="bg-muted text-muted-foreground mt-3 rounded-lg px-3 py-2 text-sm">
+                    You’re not connected right now.
                   </p>
                 ) : null}
 

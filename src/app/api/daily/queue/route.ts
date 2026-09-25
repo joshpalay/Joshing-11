@@ -4,6 +4,7 @@ import { getSession } from '@/server/auth/session';
 import { countDailyQueues, getTodaysDailyQueue, refreshQueueSlotQuestionTexts } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DailyQueueFillError, fillDailyQueueForUser } from '@/server/daily/queue-orchestrator';
+import { scrubBlockedPresence } from '@/server/daily/scrub-blocked-presence';
 import { DAILY_QUEUE_MIN_SIZE, DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { createServerTiming, logServerTiming } from '@/server/lib/server-timing';
@@ -76,7 +77,7 @@ async function serializeQueue(
     // Serve live question text (slot.question_text is an assignment-time
     // snapshot; grading resolves the live row, so an admin edit made after
     // assignment must reach the display too).
-    slots: await refreshQueueSlotQuestionTexts(kept),
+    slots: await scrubBlockedPresence(userId, await refreshQueueSlotQuestionTexts(kept)),
     difficulty_mode: difficultyMode,
     is_first_daily: isFirstDaily,
   };
