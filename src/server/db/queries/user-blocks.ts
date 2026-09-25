@@ -53,6 +53,19 @@ export async function isBlockedBetween(userIdA: string, userIdB: string): Promis
   return Boolean(row)
 }
 
+// Directional: true only if `blockerId` is the one who pressed Block. Lets a
+// surface speak plainly to the blocker ("you blocked them") while the blocked
+// side keeps the not-distinguishable-from-not-found treatment.
+export async function hasBlocked(blockerId: string, blockedId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: userBlocks.id })
+    .from(userBlocks)
+    .where(and(eq(userBlocks.blockerId, blockerId), eq(userBlocks.blockedId, blockedId)))
+    .limit(1)
+
+  return Boolean(row)
+}
+
 // Bulk version for list surfaces (search results, contact matches, feed
 // attribution): the subset of candidateIds that have a block with viewerId
 // in either direction. One query instead of one-per-candidate.

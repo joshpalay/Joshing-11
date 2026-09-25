@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Flag, Heart, MoreHorizontal, Share2, X } from 'lucide-react'
+
+import { formatNextResetDayTimeLocal } from '@/lib/games/timezone'
 import LoadingScreen from '@/components/LoadingScreen'
 import {
   type CSSProperties,
@@ -152,13 +154,11 @@ export default function DailySummaryPage() {
     () => (summary ? interpretiveLine(summary) : null),
     [summary]
   )
-  // The next Daily Five arrives at noon tomorrow; name the weekday (e.g. "Monday")
-  // rather than saying "Tomorrow" so the copy reads concretely.
-  const tomorrowWeekday = useMemo(() => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toLocaleDateString(undefined, { weekday: 'long' })
-  }, [])
+  // Same clock and wording as the home card ("Five new tomorrow at 1 PM"). This
+  // used to hardcode "{tomorrow's weekday}'s five arrive at noon", which
+  // contradicted home: the reset is a fixed UTC hour (1 PM Eastern), and it can
+  // fall later TODAY for someone who plays before it (QA 2026-09-25, S8).
+  const nextFiveAt = useMemo(() => formatNextResetDayTimeLocal(), [])
 
   // Intercept the three `/` exits: if the reminder interstitial is eligible and
   // has not yet fired this view, cancel the navigation and open it instead.
@@ -337,7 +337,7 @@ export default function DailySummaryPage() {
             that scroll behind its sides. */}
         <section className="sticky bottom-4 z-20 mx-auto mt-8 max-w-xs rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4 text-center shadow-[var(--shadow-overlay)] sm:max-w-sm">
           <p className="text-sm leading-6 text-[var(--brand-ink-700)]">
-            {tomorrowWeekday}’s five arrive at noon.
+            Five new {nextFiveAt}.
           </p>
           <div className="mt-3 flex flex-col items-center gap-2">
             <Link className="btn-primary w-full" href="/" onClick={handleExitHome}>

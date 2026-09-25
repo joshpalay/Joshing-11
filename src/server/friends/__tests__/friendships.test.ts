@@ -75,6 +75,7 @@ vi.mock('@/server/db', () => ({
   db: dbMock,
   follows: { id: 'follows.id', followerId: 'follows.followerId', followeeId: 'follows.followeeId', state: 'follows.state' },
   users: { id: 'users.id', followPrivacy: 'users.followPrivacy' },
+  userBlocks: { blockerId: 'userBlocks.blockerId', blockedId: 'userBlocks.blockedId' },
 }))
 
 vi.mock('@/server/activity/write-activity', () => ({

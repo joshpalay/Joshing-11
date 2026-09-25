@@ -35,7 +35,7 @@ import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily
 import {
   getBonusCount,
   getBonusSlots,
-  getCoreSlots,
+  getLiveCoreSlots,
   getSlotPresence,
   isAdditiveSlot,
   isBonusSlot,
@@ -522,17 +522,14 @@ export default function DailyPage() {
 
   const actualCurrentSlot = useMemo(() => currentPendingSlot(queue?.slots ?? []), [queue?.slots]);
   const currentSlot = pausedAfterSlotIndex === null ? actualCurrentSlot : null;
-  const completedCount = queue?.slots.filter((slot) => slot.answered).length ?? 0;
-  // Use the ACTUAL queue length, not DAILY_QUEUE_SIZE — a low-yield domain can
-  // produce a graceful-degraded shorter queue, and the progress dots should
-  // match the real number of questions rather than always showing five.
-  const queueLength = queue && queue.slots.length > 0 ? queue.slots.length : DAILY_QUEUE_SIZE;
   // Track split (D-F1): core dots vs additive bonus dots, derived from the shared
   // selector rather than index math. Track length stays the real queue length
   // (graceful-degrade can yield <5 core); the bonus group is set apart by a gap +
   // label, never counted toward the five.
   const coreDotCount =
-    queue && queue.slots.length > 0 ? getCoreSlots(queue.slots).length : DAILY_QUEUE_SIZE;
+    queue && queue.slots.length > 0
+      ? getLiveCoreSlots(queue.slots, DAILY_QUEUE_SIZE).length
+      : DAILY_QUEUE_SIZE;
   const bonusDotCount = queue ? getBonusCount(queue.slots) : 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
 
@@ -821,6 +818,10 @@ export default function DailyPage() {
         summaryHref: ceremonyRedirectId
           ? `/ceremony/${ceremonyRedirectId}?then=summary`
           : '/daily/summary',
+        // An unviewed weekly ceremony intercepts on the way to today's recap
+        // (B-CEREMONY-PLACEMENT-01). Say so: "See my recap" opened LAST WEEK's
+        // ceremony first, which read as the wrong recap (QA 2026-09-25, S7).
+        ...(ceremonyRedirectId ? { summaryLabel: 'See your week, then today →' } : {}),
       });
     }
 
@@ -839,16 +840,33 @@ export default function DailyPage() {
     ceremonyRedirectId,
   ]);
 
+  // Each dot belongs to ONE slot: core dots are the core slots in slot order,
+  // then the bonus dots are the bonus slots. Results used to be packed in
+  // answer order, so a bonus (or second-look) answer filled the next CORE dot
+  // and the track read "all done" with Q5 still open (QA 2026-09-25, S1).
+  // Return slots have no dot of their own, so they never fill one.
+  const trackSlots = useMemo(() => {
+    const bySlotIndex = (a: QueueSlot, b: QueueSlot) => a.slot_index - b.slot_index;
+    const slots = queue?.slots ?? [];
+    return [
+      ...getLiveCoreSlots(slots, DAILY_QUEUE_SIZE),
+      ...getBonusSlots(slots).sort(bySlotIndex),
+    ];
+  }, [queue?.slots]);
+
   const results = useMemo(() => {
     const map: Record<number, 'correct' | 'wrong' | 'expired'> = {};
-    let position = 1;
-    for (const slot of [...(queue?.slots ?? [])].sort((a, b) => a.slot_index - b.slot_index)) {
-      if (!slot.answered) continue;
-      map[position] = slot.answer_state === 'correct' ? 'correct' : 'wrong';
-      position += 1;
-    }
+    trackSlots.forEach((slot, i) => {
+      if (slot.answered) map[i + 1] = slot.answer_state === 'correct' ? 'correct' : 'wrong';
+    });
     return map;
-  }, [queue?.slots]);
+  }, [trackSlots]);
+
+  // The dot for the question on screen; 0 (no dot enlarged) for a second-look
+  // slot, which sits outside the track.
+  const currentDot = currentSlot
+    ? trackSlots.findIndex((slot) => slot.slot_index === currentSlot.slot_index) + 1
+    : 0;
 
   const postAnswer = useCallback(
     async (opts: { submittedAnswer: string; gaveUp: boolean }) => {
@@ -1116,7 +1134,7 @@ export default function DailyPage() {
           <GeometricProgress
             coreCount={coreDotCount}
             bonusCount={bonusDotCount}
-            current={Math.min(completedCount + 1, queueLength)}
+            current={currentDot}
             results={results}
           />
           <Link

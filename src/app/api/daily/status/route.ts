@@ -4,7 +4,7 @@ import { getSession } from '@/server/auth/session';
 import { getTodaysDailyQueue } from '@/server/db/queries/daily';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types';
-import { getBonusSlots, getCoreSlots } from '@/server/daily/bonus';
+import { getBonusSlots, getCoreSlots, getLiveCoreSlots } from '@/server/daily/bonus';
 import { getNextDailyResetBoundary } from '@/lib/games/timezone';
 
 export const dynamic = 'force-dynamic';
@@ -18,18 +18,19 @@ type SlotOutcome = 'correct' | 'incorrect' | 'skipped' | 'unanswered';
 function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
   const outcomes: SlotOutcome[] = Array.from({ length: DAILY_QUEUE_SIZE }, () => 'unanswered');
   // Home is fixed-5: the outcome array reflects core slots only. Bonus slots
-  // (D-4 §B +2) are additive and never enter the home card's count, so we drive
-  // this off the shared selector rather than the old `idx >= DAILY_QUEUE_SIZE`
-  // index math (same output, intention-revealing — D-F5).
-  for (const slot of getCoreSlots(slots)) {
-    const idx = slot.slot_index;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= DAILY_QUEUE_SIZE) continue;
-    if (slot.answered) {
-      outcomes[idx] = slot.answer_state === 'incorrect' ? 'incorrect' : 'correct';
-    } else if (slot.skipped) {
-      outcomes[idx] = 'skipped';
-    }
-  }
+  // (D-4 §B +2) are additive and never enter the home card's count. Dots are
+  // POSITIONAL over the live five (a skip's replacement takes its dot), not
+  // keyed by slot_index — replacements land at slot_index >= 5 and used to be
+  // dropped, leaving the skipped originals to fill the row.
+  getLiveCoreSlots(slots, DAILY_QUEUE_SIZE)
+    .slice(0, DAILY_QUEUE_SIZE)
+    .forEach((slot, idx) => {
+      if (slot.answered) {
+        outcomes[idx] = slot.answer_state === 'incorrect' ? 'incorrect' : 'correct';
+      } else if (slot.skipped) {
+        outcomes[idx] = 'skipped';
+      }
+    });
   return outcomes;
 }
 

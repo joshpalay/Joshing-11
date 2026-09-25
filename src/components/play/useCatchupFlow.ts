@@ -139,7 +139,11 @@ export type CatchupBatchRecord = {
 export type CatchupPhase = 'playing' | 'round_complete' | 'summary';
 
 function formatQuestionSubhead(item: CatchupQueueItem): string {
-  if (item.queueAge <= 1) return 'FROM YESTERDAY';
+  // queueAge 0 is today's own round (the home card's "play missed questions"
+  // replays it straight away); it used to share the <= 1 branch and read
+  // "FROM YESTERDAY" minutes after the player answered it (QA 2026-09-25).
+  if (item.queueAge <= 0) return 'FROM TODAY';
+  if (item.queueAge === 1) return 'FROM YESTERDAY';
   if (item.queueAge > 1 && item.queueAge <= 6) return `FROM ${item.queueAge} DAYS AGO`;
 
   const date = new Date(`${item.queueDate}T12:00:00.000Z`);

@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql, type SQL } from 'drizzle-orm'
 
 import { softDeleteActivityByReference, writeActivity } from '@/server/activity/write-activity'
-import { db, follows, users } from '@/server/db'
+import { db, follows, userBlocks, users } from '@/server/db'
 import { backfillFollowedUserFeedItems } from '@/server/feed/backfill-inviter-feed'
 
 export type Follow = typeof follows.$inferSelect
@@ -41,6 +41,17 @@ type FollowWriter = {
       }) => Promise<unknown>
     }
   }
+}
+
+// SQL predicate: no UserBlock row between the two columns' users, either
+// direction. Inlined (rather than calling isBlockedBetween) because
+// user-blocks.ts already imports from this module.
+function notExistsBlockBetween(userA: typeof follows.followerId, userB: typeof follows.followeeId): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM ${userBlocks}
+    WHERE (${userBlocks.blockerId} = ${userA} AND ${userBlocks.blockedId} = ${userB})
+       OR (${userBlocks.blockerId} = ${userB} AND ${userBlocks.blockedId} = ${userA})
+  )`
 }
 
 function requestContextForSuggestedInterests(suggestedInterests: string[]): FriendshipRequestContext | null {
@@ -257,6 +268,8 @@ export async function acceptPendingFriendshipRequest({
         eq(follows.id, friendshipId),
         eq(follows.state, 'pending'),
         eq(follows.followeeId, userId),
+        // Never form a friendship across a block, in either direction.
+        notExistsBlockBetween(follows.followerId, follows.followeeId),
       ),
     )
     .returning()

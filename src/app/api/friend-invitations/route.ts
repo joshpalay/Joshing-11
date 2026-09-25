@@ -13,6 +13,8 @@ import {
   updateFriendInvitation,
   type OutgoingFriendInvitation,
 } from '@/server/friends/invitations'
+import { getMutualFollows } from '@/server/db/queries/friends'
+import { hasBlocked, isBlockedBetween } from '@/server/db/queries/user-blocks'
 import { createOrReusePendingFriendshipRequest } from '@/server/friends/friendships'
 import { logTelemetry } from '@/server/telemetry'
 
@@ -420,16 +422,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   try {
-    const [invitations, inviterName] = await Promise.all([
+    const [invitations, inviterName, friends] = await Promise.all([
       listOutgoingFriendInvitations({ inviterUserId: session.userId }),
       getInviterFirstName(session.userId),
+      getMutualFollows(session.userId),
     ])
+    // "Accepted" is history; `connected` is now. An accepted invitee can since
+    // have been unfriended or blocked, and the row must not keep promising
+    // "now you can trade questions" or link a profile that 404s (QA
+    // 2026-09-25, C4). getMutualFollows already drops blocked pairs.
+    const friendIds = new Set(friends.map((friend) => friend.id))
 
     return NextResponse.json({
       ok: true,
-      invitations: invitations.map((invitation) =>
-        serializeOutgoingInvitation(invitation, request, inviterName)
-      ),
+      invitations: invitations.map((invitation) => ({
+        ...serializeOutgoingInvitation(invitation, request, inviterName),
+        connected:
+          invitation.inviteeUserId != null && friendIds.has(invitation.inviteeUserId),
+      })),
     })
   } catch (error) {
     console.error('[friend-invitations] list failed', error)
@@ -712,6 +722,45 @@ export async function POST(request: Request) {
           },
           { status: 429 }
         )
+      }
+
+      // A block is a hard edge here too (QA 2026-09-25, C1): this route used to
+      // turn an invite into a follow request with no block check at all, and
+      // reported the pair as "already friends" off a stale edge. The blocker
+      // gets a plain answer; the blocked side gets the exact response a fresh
+      // send would produce, with nothing written — a block must not be
+      // distinguishable from an ordinary pending request.
+      if (await isBlockedBetween(session.userId, existingUser.id)) {
+        recordInviteAttempt(session.userId, phone)
+        if (await hasBlocked(session.userId, existingUser.id)) {
+          return NextResponse.json(
+            {
+              error: 'blocked_by_you',
+              message:
+                'You’ve blocked this person. Unblock them in Privacy settings first.',
+            },
+            { status: 409 }
+          )
+        }
+        const inviteUrl = `${getBaseUrl(request)}/activities`
+        const message = buildExistingUserFriendInvitationMessage({
+          inviterName: await getInviterFirstName(session.userId),
+          inviteUrl,
+          suggestedInterests,
+        })
+        return NextResponse.json({
+          ok: true,
+          type: 'friendship_request',
+          state: 'created',
+          id: '',
+          invitationId: null,
+          inviteUrl,
+          message,
+          inviteeDisplayName,
+          inviteePhone: phone,
+          suggestedInterests,
+          expiresAt: null,
+        })
       }
 
       // Inviting an existing user from the invite flow follows them (pending or

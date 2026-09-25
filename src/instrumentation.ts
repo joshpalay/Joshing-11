@@ -1694,30 +1694,44 @@ export async function register() {
         await db.execute(sql`
         CREATE INDEX IF NOT EXISTS "Follow_followeeId_state_idx" ON "Follow" ("followeeId", "state")
       `);
-        await db.execute(sql`
-        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
-        SELECT gen_random_uuid()::text, "userAId", "userBId", 'approved'::"public"."FollowState",
-               COALESCE("formedAt", now()), "createdAt"
-        FROM "Friendship" WHERE "status" = 'active'
-        ON CONFLICT ("followerId", "followeeId") DO NOTHING
+        // One-time Friendship -> Follow copy, ONLY while Follow is still empty.
+        // `Friendship` is frozen, so its 'active' rows never learn about a later
+        // unfriend or block (both hard-delete Follow edges). Re-running the copy
+        // on every guarded boot resurrected those edges — a blocked pair came
+        // back as "already friends" and unblock silently restored the
+        // friendship (QA 2026-09-25, C1/C4). Once Follow has any row, the
+        // migration has happened and the legacy table must stay out of it.
+        const followResult = await db.execute(sql`
+        SELECT EXISTS (SELECT 1 FROM "Follow") AS "hasRows"
       `);
-        await db.execute(sql`
-        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
-        SELECT gen_random_uuid()::text, "userBId", "userAId", 'approved'::"public"."FollowState",
-               COALESCE("formedAt", now()), "createdAt"
-        FROM "Friendship" WHERE "status" = 'active'
-        ON CONFLICT ("followerId", "followeeId") DO NOTHING
-      `);
-        await db.execute(sql`
-        INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "personalNote", "requestContext", "created_at")
-        SELECT gen_random_uuid()::text,
-               "requestedByUserId",
-               CASE WHEN "requestedByUserId" = "userAId" THEN "userBId" ELSE "userAId" END,
-               'pending'::"public"."FollowState",
-               "personalNote", "requestContext", "createdAt"
-        FROM "Friendship" WHERE "status" = 'pending'
-        ON CONFLICT ("followerId", "followeeId") DO NOTHING
-      `);
+        const followHasRows =
+          followResult.rows[0]?.hasRows === true || followResult.rows[0]?.hasRows === 'true';
+        if (!followHasRows) {
+          await db.execute(sql`
+          INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
+          SELECT gen_random_uuid()::text, "userAId", "userBId", 'approved'::"public"."FollowState",
+                 COALESCE("formedAt", now()), "createdAt"
+          FROM "Friendship" WHERE "status" = 'active'
+          ON CONFLICT ("followerId", "followeeId") DO NOTHING
+        `);
+          await db.execute(sql`
+          INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "approvedAt", "created_at")
+          SELECT gen_random_uuid()::text, "userBId", "userAId", 'approved'::"public"."FollowState",
+                 COALESCE("formedAt", now()), "createdAt"
+          FROM "Friendship" WHERE "status" = 'active'
+          ON CONFLICT ("followerId", "followeeId") DO NOTHING
+        `);
+          await db.execute(sql`
+          INSERT INTO "Follow" ("id", "followerId", "followeeId", "state", "personalNote", "requestContext", "created_at")
+          SELECT gen_random_uuid()::text,
+                 "requestedByUserId",
+                 CASE WHEN "requestedByUserId" = "userAId" THEN "userBId" ELSE "userAId" END,
+                 'pending'::"public"."FollowState",
+                 "personalNote", "requestContext", "createdAt"
+          FROM "Friendship" WHERE "status" = 'pending'
+          ON CONFLICT ("followerId", "followeeId") DO NOTHING
+        `);
+        }
       } catch {
         // User or Friendship may not exist yet on a fresh database — migrate()
         // creates them and applies 0058 in normal order.

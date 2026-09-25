@@ -22,7 +22,14 @@ type Step = 'identity' | 'interests' | 'handoff'
 // converted server-side into a follow request. `state` reports what happened
 // so the handoff screen can speak plainly instead of pretending an SMS invite
 // went out (see POST /api/friend-invitations).
-type FriendshipRequestState = 'created' | 'auto_approved' | 'already_following' | 'pending_existing'
+// 'declined_cooldown' deliberately reuses the 'created' copy: the decliner is
+// never exposed, so the requester sees an ordinary sent request.
+type FriendshipRequestState =
+  | 'created'
+  | 'auto_approved'
+  | 'already_following'
+  | 'pending_existing'
+  | 'declined_cooldown'
 
 type InviteResult = {
   ok: boolean
@@ -41,17 +48,24 @@ type InviteResult = {
 // `needsNudge` decides whether the message/SMS handoff is still meaningful: a
 // pending request can be nudged along, but an auto-approved or already-existing
 // follow is terminal -- there's nothing to send.
-const FRIENDSHIP_STATE_COPY: Record<
-  FriendshipRequestState,
-  { eyebrow: string; headline: (name: string) => string; blurb: string; needsNudge: boolean }
-> = {
-  created: {
-    eyebrow: 'Already on Joshing',
-    headline: (name) => `${name} is already on Joshing.`,
-    blurb:
-      'We turned your invite into a friend request. They’ll see it — and the areas you flagged — in their activity. Want to nudge them?',
-    needsNudge: true,
-  },
+type FriendshipStateCopy = {
+  eyebrow: string
+  headline: (name: string) => string
+  blurb: string
+  needsNudge: boolean
+}
+
+const CREATED_COPY: FriendshipStateCopy = {
+  eyebrow: 'Already on Joshing',
+  headline: (name) => `${name} is already on Joshing.`,
+  blurb:
+    'We turned your invite into a friend request. They’ll see it — and the areas you flagged — in their activity. Want to nudge them?',
+  needsNudge: true,
+}
+
+const FRIENDSHIP_STATE_COPY: Record<FriendshipRequestState, FriendshipStateCopy> = {
+  created: CREATED_COPY,
+  declined_cooldown: CREATED_COPY,
   pending_existing: {
     eyebrow: 'Request still pending',
     headline: (name) => `You’ve already sent ${name} a friend request.`,

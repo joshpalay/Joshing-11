@@ -36,6 +36,7 @@ import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
 import type { QueueSlot } from '@/server/daily/types';
 import { getSlotPresence, isAdditiveSlot, isBonusSlot } from '@/server/daily/bonus';
+import { scrubBlockedPresence } from '@/server/daily/scrub-blocked-presence';
 import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
 import { shouldOfferReminderAcquisition } from '@/server/reminders/acquisition';
@@ -208,7 +209,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, dateString)))
     .limit(1);
 
-  const slots = asQueueSlots(queue?.slots);
+  const slots = await scrubBlockedPresence(userId, asQueueSlots(queue?.slots));
   const generatedIds = slots
     .map((slot) => slot.generated_question_id)
     .filter((id): id is string => Boolean(id));
