@@ -528,11 +528,9 @@ describe('/users/[id] friend profile page', () => {
 
     expect(html).toContain('Privacy &amp; discovery')
     expect(html).toContain('Notifications')
-    // Developer tools are temporarily ungated (DEV_TOOLS_UNGATED in
-    // AccountActions): every owner viewing their own profile sees them,
-    // regardless of ADMIN_USER_IDS. Flip back to expecting absence when the
-    // admin gate is restored.
-    expect(html).toContain('Developer tools')
+    // Developer tools are admin-gated (ADMIN_USER_IDS); a non-admin owner
+    // must not see them (QA 2026-09-25, S15).
+    expect(html).not.toContain('Developer tools')
     expect(html).toContain('Log out')
     expect(html).toContain('Delete account')
     expect(html).toContain('id="privacy-discovery"')

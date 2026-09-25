@@ -58,12 +58,12 @@ export async function logoutAndRedirect(navigate: (url: string) => void): Promis
   navigate('/login');
 }
 
-// TEMP (ungate): the Developer-tools section is currently shown to every owner
-// viewing their own profile, regardless of admin status. To restore the
-// ADMIN_USER_IDS gate (D-DESIGN-DEBT-STRUCTURAL-01, Phase 3), flip this back to
-// `false` — `showDeveloperTools` then falls back to the `isAdmin` prop. The
-// matching /dev route gate lives in src/app/dev/layout.tsx; revert both together.
-const DEV_TOOLS_UNGATED = true;
+// Admin gate RESTORED 2026-09-25 (QA report S15: reset-today / noon-reset tools
+// were visible to every player on their own profile). Temporarily ungated
+// 2026-06-22 (fc7554a7). Setting this to `true` shows the section to every
+// profile owner again; the matching /dev route gate lives in
+// src/app/dev/layout.tsx — keep both in step.
+const DEV_TOOLS_UNGATED = false;
 
 // A single developer tool. Link tools open a route (and participate in the
 // route-exists availability check); action tools fire an inline handler and are
