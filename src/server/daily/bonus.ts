@@ -94,6 +94,27 @@ export function getCoreSlots(slots: QueueSlot[]): QueueSlot[] {
   return slots.filter((slot) => !isAdditiveSlot(slot));
 }
 
+/**
+ * The core slots that hold one of the five progress dots, in slot order.
+ *
+ * Skipping keeps the skipped slot and APPENDS a replacement core slot at the
+ * next slot_index (api/daily/skip), so after N skips there are 5+N core slots.
+ * The replacement takes over the skipped slot's dot: while there are more than
+ * `size` core slots, the earliest skipped one is dropped. A skip whose
+ * replacement failed to generate keeps its dot (shown as skipped). Without
+ * this, home drew the five dots from slot_index 0-4 only — three skips read as
+ * "all five done" while their replacements were still waiting (QA 2026-09-25).
+ */
+export function getLiveCoreSlots(slots: QueueSlot[], size: number): QueueSlot[] {
+  const live = getCoreSlots(slots).sort((a, b) => a.slot_index - b.slot_index);
+  while (live.length > size) {
+    const skippedAt = live.findIndex((slot) => slot.skipped && !slot.answered);
+    if (skippedAt === -1) break;
+    live.splice(skippedAt, 1);
+  }
+  return live;
+}
+
 /** Return slots, input order preserved. */
 export function getReturnSlots(slots: QueueSlot[]): QueueSlot[] {
   return slots.filter(isReturnSlot);

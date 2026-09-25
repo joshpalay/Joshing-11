@@ -5,6 +5,7 @@ import {
   getBonusCount,
   getBonusSlots,
   getCoreSlots,
+  getLiveCoreSlots,
   getSlotPresence,
   isBonusSlot,
 } from '@/server/daily/bonus';
@@ -112,5 +113,26 @@ describe('bonus selector', () => {
         ),
       ).toEqual({ id: 'friend-5', name: null, extraCount: 0 });
     });
+  });
+});
+
+describe('getLiveCoreSlots', () => {
+  const skipped = (i: number) => slot({ slot_index: i, skipped: true });
+  const answered = (i: number) => slot({ slot_index: i, answered: true, answer_state: 'correct' });
+
+  it('gives a skipped slot the replacement dot (QA 2026-09-25)', () => {
+    // 2 answered, 3 skipped, 3 replacements appended at 5-7, bonus at 8.
+    const slots = [answered(0), skipped(1), answered(2), skipped(3), skipped(4), core(5), core(6), core(7), bonus(8)];
+    expect(getLiveCoreSlots(slots, 5).map((s) => s.slot_index)).toEqual([0, 2, 5, 6, 7]);
+  });
+
+  it('keeps a skip whose replacement never arrived', () => {
+    const slots = [answered(0), skipped(1), core(2), core(3), core(4)];
+    expect(getLiveCoreSlots(slots, 5).map((s) => s.slot_index)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('never counts bonus or second-look slots', () => {
+    const slots = [core(0), bonus(1), core(2), slot({ slot_index: 3, return_scope: 'wrong' })];
+    expect(getLiveCoreSlots(slots, 5).map((s) => s.slot_index)).toEqual([0, 2]);
   });
 });
