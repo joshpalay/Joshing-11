@@ -19,7 +19,7 @@ import { FromFriendsStreak } from '@/components/feed/FromFriendsStreak';
 import { DirectQuestionAnswer } from './DirectQuestionAnswer';
 import { InlineAnswerFlow } from './InlineAnswerFlow';
 import { ActivityIcon, QuestionTriangle, specForIcon } from './ActivityIcon';
-import { ActorLink, Line, QuestionProvenance } from './stream-card-helpers';
+import { ActorLink, Line, QuestionProvenance, questionProvenance } from './stream-card-helpers';
 import { FF, FM, INK, INK2, INK3, PAPER, RULE } from '@/components/lately/tokens';
 import { assertNever } from '@/lib/assert-never';
 
@@ -55,6 +55,38 @@ const HEADLINE_NAME_STYLE: CSSProperties = {
   letterSpacing: 0.2,
   color: INK,
   textDecoration: 'none',
+};
+
+// B-13.1: a revealed question is the most important content on the card, so it
+// reads as body text — the serif in its UPRIGHT roman at medium weight, full ink —
+// not the light display italic (slow across 3+ lines at phone width). No curly
+// quotes: the reveal's left rule already signals "quoted". The italic display
+// serif stays reserved for short single-line flourishes (the "Lately." masthead).
+const REVEALED_QUESTION_STYLE: CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-serif)',
+  fontWeight: 500,
+  fontSize: 17,
+  lineHeight: 1.45,
+  color: INK,
+};
+
+// B-13.3: the icon-only Send affordance. The 44px box is the tap target (§9.1),
+// but negative vertical margins keep it from adding height to the row, so the
+// reveal's left rule ends where the content ends rather than past an empty gap.
+const SEND_BUTTON_STYLE: CSSProperties = {
+  flexShrink: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'transparent',
+  border: 'none',
+  padding: 0,
+  minWidth: 44,
+  minHeight: 44,
+  margin: '-12px -12px -12px 0',
+  color: INK,
+  cursor: 'pointer',
 };
 
 function questionBacked(expand: StreamExpand | null): boolean {
@@ -469,7 +501,9 @@ export function ActivityStreamItem({
                 margin: 0,
                 fontSize: 15,
                 lineHeight: 1.5,
-                letterSpacing: 0.2,
+                // B-13.2: a sentence-length headline takes no extra tracking —
+                // letter-spacing is the short caps-label signature (TODAY, nav).
+                letterSpacing: 0,
                 color: INK,
               }}
             >
@@ -847,20 +881,7 @@ export function ConvergenceExpansion({
     >
       {expand.questions.map((q) => (
         <div key={q.questionId} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <p
-            style={{
-              margin: 0,
-              flex: 1,
-              minWidth: 0,
-              fontFamily: 'var(--font-serif)',
-              fontStyle: 'italic',
-              fontSize: 14,
-              lineHeight: 1.55,
-              color: INK2,
-            }}
-          >
-            &ldquo;{q.text}&rdquo;
-          </p>
+          <p style={{ ...REVEALED_QUESTION_STYLE, flex: 1, minWidth: 0 }}>{q.text}</p>
           {/* Quiet, icon-only share affordance per quote — the paper-plane Send
               glyph, matching the homepage share treatment. Opens the same
               SendQuestionDrawer. */}
@@ -868,21 +889,7 @@ export function ConvergenceExpansion({
             type="button"
             onClick={() => setSendQuestionId(q.questionId)}
             aria-label="Send to a friend"
-            style={{
-              flexShrink: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'transparent',
-              border: 'none',
-              // §9.1/§3.4: icon-only, so the 15px glyph is the whole target. The
-              // box is transparent, so growing it to 44px changes nothing visually.
-              padding: 4,
-              minWidth: 44,
-              minHeight: 44,
-              color: INK,
-              cursor: 'pointer',
-            }}
+            style={{ ...SEND_BUTTON_STYLE, marginTop: -11 }}
           >
             <Send size={15} strokeWidth={1.8} aria-hidden="true" />
           </button>
@@ -918,23 +925,27 @@ function SendOnwardExpansion({
         paddingLeft: 12,
       }}
     >
-      <p
+      <p style={REVEALED_QUESTION_STYLE}>{question.text}</p>
+
+      {/* B-13.3: one footer line — the byline left, the Send glyph right —
+          instead of a lone icon on its own row beneath a gap. Honest authorship
+          (§4): house/LLM questions are marked so the reveal never implies a
+          person wrote machine content; a human-authored question has no byline
+          (the row frame already attributes it), so the Send sits alone at right. */}
+      <div
         style={{
-          margin: '0 0 4px',
-          fontFamily: 'var(--font-serif)',
-          fontStyle: 'italic',
-          fontSize: 14,
-          lineHeight: 1.55,
-          color: INK2,
+          marginTop: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
         }}
       >
-        &ldquo;{question.text}&rdquo;
-      </p>
-      {/* Honest authorship (§4): house/LLM questions are marked so the reveal
-          never implies a person wrote machine content. */}
-      <QuestionProvenance q={question} style={{ margin: '0 0 12px' }} />
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+        {questionProvenance(question) ? (
+          <QuestionProvenance q={question} style={{ margin: 0 }} />
+        ) : (
+          <span />
+        )}
         {/* Quiet, icon-only share affordance — no oversized labeled button.
             Send (paper plane) is the homepage's share glyph by request; the
             knowledge surfaces still use Share2. Opens the same SendQuestionDrawer. */}
@@ -942,28 +953,18 @@ function SendOnwardExpansion({
           type="button"
           onClick={() => setSendOpen(true)}
           aria-label="Send to a friend"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'transparent',
-            border: 'none',
-            // §9.1/§3.4: icon-only, so the 15px glyph is the whole target. The
-            // box is transparent, so growing it to 44px changes nothing visually.
-            padding: 4,
-            minWidth: 44,
-            minHeight: 44,
-            color: INK,
-            cursor: 'pointer',
-          }}
+          style={SEND_BUTTON_STYLE}
         >
           <Send size={15} strokeWidth={1.8} aria-hidden="true" />
         </button>
+      </div>
 
-        {expand.kind === 'niche_match' && expand.strangerId ? (
+      {expand.kind === 'niche_match' && expand.strangerId ? (
+        <div style={{ marginTop: 12 }}>
           <Link
             href={`/users/${expand.strangerId}`}
             style={{
+              display: 'inline-block',
               background: 'transparent',
               color: INK,
               border: `1.5px solid ${INK}`,
@@ -976,8 +977,8 @@ function SendOnwardExpansion({
           >
             DISCOVER {expand.strangerName.split(/\s+/)[0]?.toUpperCase() ?? 'THEM'} →
           </Link>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <SendQuestionDrawer
         isOpen={sendOpen}

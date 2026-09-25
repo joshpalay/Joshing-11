@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
 
-import { FM, INK2, INK3, RULE } from '@/components/lately/tokens';
+import { FF, INK2, INK3, RULE } from '@/components/lately/tokens';
 import type { StreamLinePart, StreamQuestion } from '@/lib/activity-stream';
 import { HOUSE_AUTHOR, LLM_QUESTION_ATTRIBUTION } from '@/lib/questions-types';
 
@@ -99,6 +99,9 @@ export function questionProvenance(q: StreamQuestion): string | null {
   return null;
 }
 
+// B-13.3: reads as a byline ("Asked by Maid Acasa") in sentence case, not a
+// spaced all-caps System label — in caps the persona name read like a heading
+// or a typo rather than a name.
 export function QuestionProvenance({ q, style }: { q: StreamQuestion; style?: CSSProperties }) {
   const label = questionProvenance(q);
   if (!label) return null;
@@ -106,14 +109,14 @@ export function QuestionProvenance({ q, style }: { q: StreamQuestion; style?: CS
     <p
       style={{
         margin: '4px 0 0',
-        fontFamily: FM,
-        fontSize: 10,
-        letterSpacing: 1,
+        fontFamily: FF,
+        fontSize: 13,
+        lineHeight: 1.4,
         color: INK3,
         ...style,
       }}
     >
-      {label.toUpperCase()}
+      Asked by {label}
     </p>
   );
 }
