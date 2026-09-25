@@ -179,6 +179,8 @@ export type ChatMessage =
       scoreLine: string;
       interpretiveLine: string | null;
       summaryHref?: string;
+      /** Button text; defaults to "See my recap →". */
+      summaryLabel?: string;
     }
   | {
       id: string;
@@ -1678,10 +1680,12 @@ function SessionCloseRow({
   scoreLine,
   interpretiveLine,
   summaryHref,
+  summaryLabel = 'See my recap →',
 }: {
   scoreLine: string;
   interpretiveLine: string | null;
   summaryHref?: string;
+  summaryLabel?: string;
 }) {
   return (
     <ThreadCard
@@ -1694,7 +1698,7 @@ function SessionCloseRow({
       {summaryHref ? (
         <div className="pt-3">
           <Link href={summaryHref} replace className="btn-primary inline-flex">
-            See my recap →
+            {summaryLabel}
           </Link>
         </div>
       ) : null}
@@ -1965,6 +1969,7 @@ export function GameplayChatThread({
                 scoreLine={m.scoreLine}
                 interpretiveLine={m.interpretiveLine}
                 summaryHref={m.summaryHref}
+                summaryLabel={m.summaryLabel}
               />
             );
           case 'bonus_offer':

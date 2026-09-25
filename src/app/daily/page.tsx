@@ -818,6 +818,10 @@ export default function DailyPage() {
         summaryHref: ceremonyRedirectId
           ? `/ceremony/${ceremonyRedirectId}?then=summary`
           : '/daily/summary',
+        // An unviewed weekly ceremony intercepts on the way to today's recap
+        // (B-CEREMONY-PLACEMENT-01). Say so: "See my recap" opened LAST WEEK's
+        // ceremony first, which read as the wrong recap (QA 2026-09-25, S7).
+        ...(ceremonyRedirectId ? { summaryLabel: 'See your week, then today →' } : {}),
       });
     }
 
