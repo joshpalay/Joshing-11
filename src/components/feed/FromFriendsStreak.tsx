@@ -466,7 +466,9 @@ function StreakQuestionCard({
             margin: spent || revealed ? 0 : '0 0 14px',
           }}
         >
-          &ldquo;{question.text}&rdquo;
+          {/* B-13.1: no curly quotes — the card frame already sets the question
+              apart, and the quote marks only added noise to a long stem. */}
+          {question.text}
         </p>
 
         {/* Answer AFTER the question, both for the settled read-back and for the

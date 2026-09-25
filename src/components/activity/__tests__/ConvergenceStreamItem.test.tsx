@@ -167,8 +167,8 @@ describe('ConvergenceExpansion — the streamlined reveal (commit 151b5a1)', () 
     // ConvergenceExpansion documents this), so the §4 honesty invariant holds
     // vacuously: a house/LLM question is never rendered AS IF a person wrote it
     // because no author is shown. The LLM attribution label is not used here…
-    expect(html).not.toContain('JOSHING · EDITORIAL');
-    expect(html).not.toContain(LLM_QUESTION_ATTRIBUTION.toUpperCase());
+    expect(html).not.toContain('Asked by');
+    expect(html).not.toContain(LLM_QUESTION_ATTRIBUTION);
     // …and the human author is likewise not surfaced.
     expect(html).not.toContain('Sadie');
     // The questions themselves still render.

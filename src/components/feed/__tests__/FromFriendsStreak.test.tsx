@@ -305,7 +305,7 @@ describe('FromFriendsStreak — relay via-attribution (D-4 "via Josh")', () => {
       />,
     );
     // Authored by Maid Acasa (LLM) AND reached the viewer via Josh — both render.
-    expect(html).toContain('MAID ACASA');
+    expect(html).toContain('Asked by Maid Acasa');
     expect(html).toContain('via ');
     expect(html).toContain('href="/users/josh-1"');
   });
@@ -323,8 +323,8 @@ describe('FromFriendsStreak — honest provenance pre-answer (D-D canon)', () =>
       />,
     );
     // House content shows the house marker; LLM content shows the machine label.
-    expect(html).toContain('JOSHING · EDITORIAL');
-    expect(html).toContain('MAID ACASA');
+    expect(html).toContain('Asked by Joshing · Editorial');
+    expect(html).toContain('Asked by Maid Acasa');
     // Canon gate: machine content NEVER renders as if a person wrote it.
     expect(html).not.toContain('A friend');
     // All three cards are answerable (provenance renders pre-answer).
