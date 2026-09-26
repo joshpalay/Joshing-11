@@ -10,11 +10,13 @@ beforeAll(async () => {
   ({ findAnswerLeaks } = await import('@/server/daily/generate-questions'));
 });
 
-// Minimal stand-in for the LlmQuestion shape findAnswerLeaks reads. Only
-// question_text and answer are inspected; the rest satisfy the type.
-function q(question_text: string, answer: string) {
+// Minimal stand-in for the LlmQuestion shape findAnswerLeaks reads:
+// question_text, answer, and the topic label (canonical_subcategory, checked by
+// the topic-label rule). The default topic is deliberately neutral so the stem
+// cases below test the stem alone.
+function q(question_text: string, answer: string, canonical_subcategory = 'Product Design') {
   return {
-    canonical_subcategory: 'User Experience Design',
+    canonical_subcategory,
     broad_category: 'Design',
     question_text,
     answer,
@@ -27,6 +29,19 @@ function q(question_text: string, answer: string) {
 }
 
 describe('findAnswerLeaks', () => {
+  it('drops a question whose topic chip names the answer (QA 2026-09-25, S16)', () => {
+    const result = findAnswerLeaks([
+      q(
+        "In Joseph Heller's novel, what is the name of the bureaucratic rule that traps Yossarian?",
+        'Catch-22',
+        'Catch-22',
+      ),
+      q('Who wrote the Moonlight Sonata?', 'Ludwig van Beethoven', 'Classical Piano'),
+    ]);
+    expect([...result.toDrop]).toEqual([0]);
+    expect(result.reasons[0]).toContain('topic label');
+  });
+
   it('drops the reported case where the answer appears in the question text', () => {
     const result = findAnswerLeaks([
       q(

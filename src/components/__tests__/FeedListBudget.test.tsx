@@ -184,7 +184,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     // From Friends is promoted to a peer of "For you" and carries a descriptive
     // subtitle beneath its heading — it now names the tap-to-open model
     // (B-FROMFRIENDS-STREAK-PAGE-01), not inline answering.
-    expect(html).toContain('Tap a streak to play your friend')
+    expect(html).toContain('Tap a set to play your friend')
+    // Never "streak" on a player-facing surface (QA 2026-09-25, S8).
+    expect(html).not.toMatch(/streak/i)
     expect(html.indexOf('questions your friends created or sent directly to you')).toBeLessThan(
       html.indexOf('Past 7 days'),
     )

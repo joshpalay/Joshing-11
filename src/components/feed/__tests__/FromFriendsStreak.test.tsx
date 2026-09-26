@@ -71,14 +71,16 @@ describe('FromFriendsStreak — header-presence fork (D-C)', () => {
     expect(html).not.toContain('via ');
   });
 
-  it('renders a single card with NO header and a "via {friend}’s streak" line for a 1-question bundle', () => {
+  it('renders a single card with NO header and a "via {friend}’s set" line for a 1-question bundle', () => {
     const html = renderToStaticMarkup(<FromFriendsStreak item={streakItem([q('solo')])} />);
     // No header: the streak predicate / domain roll-up sentence is absent.
     expect(html).not.toContain('has been wandering through');
     // The lone card carries the compact answerer-streak attribution instead.
     expect(html).toContain('via ');
     expect(html).toContain('Joshua P');
-    expect(html).toContain('streak');
+    expect(html).toContain('’s set');
+    // Never "streak" on a player-facing surface (QA 2026-09-25, S8).
+    expect(html).not.toMatch(/streak/i);
     // The card still leads with its category eyebrow.
     expect(html).toContain('Tennis Fundamentals');
     expect(answerCardCount(html)).toBe(1);

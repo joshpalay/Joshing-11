@@ -66,6 +66,14 @@ describe('getCommonGroundPromo', () => {
     expect(await getCommonGroundPromo('user-1', NOW)).toBeNull();
   });
 
+  it('never claims overlap in a topic the viewer has 0 points in (QA 2026-09-25, S20)', async () => {
+    getFriendsMock.mockResolvedValue([friend('f1', 'Duo Prova')]);
+    const untouched = latentDomain('American City Nicknames');
+    untouched.viewer.mastery_points = 0;
+    getCommonGroundMock.mockResolvedValue({ proven: [], latent: [untouched], isEmpty: false });
+    expect(await getCommonGroundPromo('user-1', NOW)).toBeNull();
+  });
+
   it('builds one carousel slide per distinct friend', async () => {
     getFriendsMock.mockResolvedValue([friend('f1', 'Robyn Lee'), friend('f2', 'Sam')]);
     getCommonGroundMock.mockImplementation((_viewer: string, friendId: string) =>

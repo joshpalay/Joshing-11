@@ -44,7 +44,7 @@ export const DEFAULT_WELCOME_TOUR_STEPS: WelcomeTourStep[] = [
   {
     target: 'five',
     label: "Today's Five",
-    copy: 'Your five questions for the day show up <b>right here</b> — tap Play to start. A new set lands every afternoon.',
+    copy: 'Your five questions for the day show up <b>right here</b> — tap Play to start. A new set lands every day.',
   },
   {
     target: 'customize',

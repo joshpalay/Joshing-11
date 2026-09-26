@@ -506,6 +506,20 @@ export function getOutgoingFriendInvitationStatus(
   return 'pending';
 }
 
+/**
+ * An accepted invite whose invitee is gone is not listed: account deletion
+ * nulls inviteeUserId, and the row used to linger as "Accepted · You're not
+ * connected right now" under the old name, even after someone new took the
+ * number and became a friend (QA 2026-09-25, S14). Deleted people don't appear
+ * anywhere else, so they don't appear here either.
+ */
+export function isListedOutgoingInvitation(invitation: {
+  status: OutgoingFriendInvitationStatus;
+  inviteeUserId: string | null;
+}): boolean {
+  return !(invitation.status === 'accepted' && invitation.inviteeUserId === null);
+}
+
 export async function listOutgoingFriendInvitations({
   inviterUserId,
   now = new Date(),
@@ -519,11 +533,15 @@ export async function listOutgoingFriendInvitations({
     .where(eq(friendInvitations.inviterUserId, inviterUserId))
     .orderBy(desc(friendInvitations.sentAt));
 
-  return invitations.map((invitation) => ({
-    ...invitation,
-    status: getOutgoingFriendInvitationStatus(invitation, now),
-    suggestedInterests: parseInvitationInterests(invitation.preSeededInterests),
-  }));
+  return (
+    invitations
+      .map((invitation) => ({
+        ...invitation,
+        status: getOutgoingFriendInvitationStatus(invitation, now),
+        suggestedInterests: parseInvitationInterests(invitation.preSeededInterests),
+      }))
+      .filter(isListedOutgoingInvitation)
+  );
 }
 
 export type UpdateFriendInvitationInput = {

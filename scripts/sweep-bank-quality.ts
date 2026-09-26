@@ -124,7 +124,7 @@ async function main() {
   // Pass 1 — deterministic. Free, no API key, catches the lexical defects.
   const survivors: BankRow[] = [];
   for (const row of population) {
-    const defect = findBankSourceDefect(row);
+    const defect = findBankSourceDefect({ ...row, topicLabel: row.canonicalSubcategory });
     if (defect) findings.push({ row, reason: defect, kind: 'deterministic' });
     else survivors.push(row);
   }

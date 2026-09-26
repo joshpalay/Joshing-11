@@ -439,6 +439,9 @@ export default function LoginPanel({
 
   function updateDisplayName(nextDisplayName: string) {
     setDisplayName(nextDisplayName);
+    // An error from the last submit ("Enter your display name.") is about the
+    // old value; editing answers it (QA 2026-09-25, S18).
+    setError(null);
 
     if (!handleManuallyEdited) {
       const suggested = sanitizeForSuggestedHandle(nextDisplayName);
@@ -913,9 +916,28 @@ export default function LoginPanel({
               className={INPUT_CLASS}
               placeholder="jpalay"
               value={handle}
+              // Once the player is in this field it is theirs: stop copying the
+              // display name into it (QA 2026-09-25, S18).
+              onFocus={() => setHandleManuallyEdited(true)}
               onChange={(event) => {
                 setHandleManuallyEdited(true);
-                setHandle(sanitizeForSuggestedHandle(event.target.value.replace(/^@+/, '')));
+                setError(null);
+                const input = event.target;
+                const raw = input.value.replace(/^@+/, '');
+                const next = sanitizeForSuggestedHandle(raw);
+                setHandle(next);
+                // Sanitizing can change the text (uppercase, spaces, symbols),
+                // and a controlled input whose value changes under the caret
+                // jumps it to the end, so the next keystrokes land in the wrong
+                // place ("quaddprovauoprova"). Put the caret back where the
+                // typed text puts it.
+                if (next !== raw && input.selectionStart !== null) {
+                  const caret = Math.min(
+                    sanitizeForSuggestedHandle(raw.slice(0, input.selectionStart)).length,
+                    next.length,
+                  );
+                  requestAnimationFrame(() => input.setSelectionRange(caret, caret));
+                }
               }}
               disabled={loading}
               maxLength={HANDLE_MAX}

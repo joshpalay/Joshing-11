@@ -53,6 +53,7 @@ type AuthUser = {
   timezone: string;
   onboardingComplete: boolean;
   smsOptIn: ReminderOptInState;
+  reminderPromptDismissedAt: Date | null;
 };
 
 const USER_SELECTION = {
@@ -70,7 +71,13 @@ const USER_SELECTION = {
   // Drives the post-OTP reminder offer (see offerRemindersAfterLogin). Read
   // here so the login response can route without a second query.
   smsOptIn: users.smsOptIn,
+  reminderPromptDismissedAt: users.reminderPromptDismissedAt,
 };
+
+// When this login offer shipped (#1706). A "Not right now" stamped from here on
+// was said to an ask that could actually be accepted, so it retires the offer;
+// older stamps stay ignored for the reason below.
+const LOGIN_REMINDER_OFFER_SINCE = new Date('2026-09-23T00:00:00.000Z');
 
 /**
  * Whether a just-authenticated returning user should land on /reminders
@@ -88,10 +95,15 @@ const USER_SELECTION = {
  * dismissed/interstitial-seen stamps it retires on were accrued while the
  * ask was impossible to satisfy, so honoring them here would re-suppress
  * exactly the people this exists for. An explicit opted_out IS honored —
- * that one is a real answer to a real question.
+ * that one is a real answer to a real question. So is a "Not right now"
+ * given since this offer existed: without it the page came back at every
+ * sign-in (QA 2026-09-25, S11).
  */
 function offerRemindersAfterLogin(user: AuthUser): boolean {
   if (!user.onboardingComplete) return false; // onboarding runs its own ask
+  if (user.reminderPromptDismissedAt && user.reminderPromptDismissedAt >= LOGIN_REMINDER_OFFER_SINCE) {
+    return false;
+  }
   return user.smsOptIn !== 'opted_in' && user.smsOptIn !== 'opted_out';
 }
 

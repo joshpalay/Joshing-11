@@ -541,13 +541,18 @@ export default function WelcomeTourScreen({
               {/* Common ground — the full-bleed sage editorial band. -mx-3 cancels
                   the mock home's 12px gutter so it reaches the column edges. */}
               <div className="-mx-3 mt-5 bg-[var(--interlude-sage)] px-5 pt-8 pb-8">
+                {/* A tour mock, not data: it pairs the REAL inviter with sample
+                    circles, so it must not claim an overlap that doesn't exist.
+                    "You and Duo keep meeting in the same places · American City
+                    Nicknames · Bikini Bottom…" read as fact to a brand-new player
+                    who had neither (QA 2026-09-25, S20). */}
                 <h3 className="max-w-[20ch] font-serif text-[26px] leading-[1.15] font-medium text-[var(--brand-ink)]">
-                  You and {inviter} keep meeting in the same places.
+                  Where you and {inviter} overlap shows up here.
                 </h3>
                 <div className="mt-7 flex items-start gap-8">
                   {[
-                    { label: 'American City Nicknames', color: 'var(--tri-orange)' },
-                    { label: 'Bikini Bottom Animated Series', color: 'var(--brand-navy)' },
+                    { label: 'A topic you share', color: 'var(--tri-orange)' },
+                    { label: 'And another', color: 'var(--brand-navy)' },
                   ].map((d) => (
                     <span key={d.label} className="flex flex-col gap-2">
                       <span

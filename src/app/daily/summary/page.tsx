@@ -504,33 +504,16 @@ function ResultDot({
 // D-F1 / D-F1b: one continuous track — core dots, then (only when there are
 // bonus questions) a visible separator, the bonus dots, and the generic
 // "+{N} friend bonus" label. The bonus signal is the gap + label (real
-// text), never color. Mirrors the live-session GeometricProgress track.
+// text), never color. Dots come from `trackDot`, the same track the live
+// round (GeometricProgress) and home draw, so all three agree (QA
+// 2026-09-25, S5): a Second look has no dot there and none here, and bonus
+// numbering counts bonus questions only.
 function ResultDots({ questions }: { questions: QuestionRecap[] }) {
-  // D-F3 / D-MISSED-RETURN-01: the additive tail is friend bonus AND missed-
-  // question return ("Second look") rows — both are appended past the core
-  // five and neither enters the spoken X/5. `isBonus` (narrower) still
-  // decides the per-dot "from friends" wording so a Second look doesn't get
-  // mislabeled as a friend's gift.
-  const core = questions.filter((q) => !q.isAdditive)
-  const additive = questions.filter((q) => q.isAdditive)
-  const friendBonusCount = additive.filter((q) => q.isBonus).length
+  const core = questions.filter((q) => q.trackDot === 'core')
+  const bonus = questions.filter((q) => q.trackDot === 'bonus')
 
   const outcome = (q: QuestionRecap) =>
     q.isSkipped ? 'skipped' : q.isCorrect ? 'correct' : 'not this time'
-
-  if (additive.length === 0) {
-    return (
-      <div className="flex items-center gap-2" aria-label="Question results">
-        {core.map((question, index) => (
-          <ResultDot
-            key={question.questionId}
-            question={question}
-            ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
-          />
-        ))}
-      </div>
-    )
-  }
 
   return (
     <div className="flex items-center gap-2" aria-label="Question results">
@@ -541,26 +524,24 @@ function ResultDots({ questions }: { questions: QuestionRecap[] }) {
           ariaLabel={`Question ${index + 1}: ${outcome(question)}`}
         />
       ))}
-      <span
-        aria-hidden
-        className="mx-0.5 h-3 w-px shrink-0"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
-      />
-      {additive.map((question, index) => (
-        <ResultDot
-          key={question.questionId}
-          question={question}
-          ariaLabel={
-            question.isBonus
-              ? `Bonus question ${index + 1} of ${additive.length}, from friends: ${outcome(question)}`
-              : `Second look question ${index + 1} of ${additive.length}: ${outcome(question)}`
-          }
-        />
-      ))}
-      {friendBonusCount > 0 ? (
-        <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
-          +{friendBonusCount} friend bonus
-        </span>
+      {bonus.length > 0 ? (
+        <>
+          <span
+            aria-hidden
+            className="mx-0.5 h-3 w-px shrink-0"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--brand-ink) 28%, transparent)' }}
+          />
+          {bonus.map((question, index) => (
+            <ResultDot
+              key={question.questionId}
+              question={question}
+              ariaLabel={`Bonus question ${index + 1} of ${bonus.length}, from friends: ${outcome(question)}`}
+            />
+          ))}
+          <span className="ml-1 text-[0.7rem] font-medium text-[var(--brand-ink-400)]">
+            +{bonus.length} friend bonus
+          </span>
+        </>
       ) : null}
     </div>
   )
@@ -744,6 +725,11 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
     observer.observe(el)
     return () => observer.disconnect()
   }, [isExplainerOpen, question.explanation])
+  // A skipped core question comes back in Catch up ("We'll bring it back
+  // later"), so its recap must not give the answer away (QA 2026-09-25, S7).
+  // A skipped bonus is a rested "not my bag" opt-out that never returns, so
+  // there is nothing to spoil there.
+  const savedForLater = question.isSkipped && !question.isBonus
   const statusLabel = question.isSkipped
     ? 'Skipped'
     : question.isCorrect
@@ -853,12 +839,14 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             className="mt-1 text-sm leading-6 font-medium"
             style={{ color: question.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
           >
-            {question.correctAnswer || 'No answer available'}
+            {savedForLater
+              ? 'Saved for Catch up'
+              : question.correctAnswer || 'No answer available'}
           </p>
         </div>
       </div>
 
-      {question.explanation ? (
+      {question.explanation && !savedForLater ? (
         <section className="mt-5 pl-1">
           <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
             Why this is the answer

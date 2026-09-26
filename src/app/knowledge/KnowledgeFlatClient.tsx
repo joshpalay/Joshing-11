@@ -498,8 +498,19 @@ function KnowledgePageContent({
       const key = domainKey(territory.domain);
       if (!merged.has(key)) merged.set(key, territory);
     }
-    return [...merged.values()];
-  }, [treeSuggestionPool, catalogSuggestions]);
+    // Never suggest a territory the player already has: "Add a territory"
+    // offered Mozart to someone who already owned it (QA 2026-09-25, S21).
+    // One added from this carousel THIS visit stays, so its circle keeps
+    // reading "Added" (with Undo) after the post-add reload.
+    const ownedKeys = new Set([
+      ...(data?.pageData.allDomains ?? []).map((domain) => domainKey(domain.domain)),
+      ...(data?.pageData.declaredInterests ?? []).map((domain) => domainKey(domain)),
+    ]);
+    return [...merged.values()].filter((territory) => {
+      const key = domainKey(territory.domain);
+      return !ownedKeys.has(key) || addedKeys.has(key);
+    });
+  }, [treeSuggestionPool, catalogSuggestions, data, addedKeys]);
   // Stable per-visit order: seeded Fisher–Yates (small LCG) keyed on the offset.
   const shuffledPool = useMemo(() => {
     const shuffled = [...suggestionPool];
@@ -625,12 +636,13 @@ function KnowledgePageContent({
       })),
     [topCardDomains],
   );
-  const shareOverflowCount = Math.max(
-    0,
-    visibleDomains.filter((domain) => domain.points > 0).length - topCardDomains.length,
-  );
+  // Circles + "+N more" and "across N territories" count the SAME set — topics
+  // with points. Counting zero-point topics in only one of them made the card
+  // read "5 shown, +3 more" beside "15 territories" (QA 2026-09-25, S12).
+  const pointPositiveCount = visibleDomains.filter((domain) => domain.points > 0).length;
+  const shareOverflowCount = Math.max(0, pointPositiveCount - topCardDomains.length);
   const shareTierSignature = data
-    ? `${formatNumber(data.mastery.totalPoints)} knowledge points across ${visibleDomains.length} territories`
+    ? `${formatNumber(data.mastery.totalPoints)} knowledge points across ${pointPositiveCount} territories`
     : '';
 
   // Pre-capture the portrait image in the background so the card's Share button

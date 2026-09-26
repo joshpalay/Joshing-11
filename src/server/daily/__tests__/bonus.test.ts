@@ -4,11 +4,13 @@ import type { QueueSlot } from '@/server/daily/types';
 import {
   getBonusCount,
   getBonusSlots,
+  getCoreNumbers,
   getCoreSlots,
   getLiveCoreSlots,
   getSlotPresence,
   isBonusSlot,
 } from '@/server/daily/bonus';
+import { buildBonusOutcomes, buildCoreOutcomes } from '@/server/daily/status-outcomes';
 
 function slot(overrides: Partial<QueueSlot>): QueueSlot {
   return {
@@ -134,5 +136,76 @@ describe('getLiveCoreSlots', () => {
   it('never counts bonus or second-look slots', () => {
     const slots = [core(0), bonus(1), core(2), slot({ slot_index: 3, return_scope: 'wrong' })];
     expect(getLiveCoreSlots(slots, 5).map((s) => s.slot_index)).toEqual([0, 2]);
+  });
+});
+
+describe('getCoreNumbers (QA 2026-09-25, S7)', () => {
+  it('gives a skip replacement the number the skip freed, never "6"', () => {
+    const slots = [
+      core(0),
+      core(1),
+      slot({ slot_index: 2, skipped: true }),
+      core(3),
+      core(4),
+      core(5), // replacement for slot 2
+    ];
+    const numbers = getCoreNumbers(slots, 5);
+    expect(numbers.get(2)).toBe(3);
+    expect(numbers.get(5)).toBe(3);
+    expect(Math.max(...numbers.values())).toBe(5);
+  });
+
+  it('passes the number on again when the replacement is skipped too', () => {
+    const slots = [
+      slot({ slot_index: 0, skipped: true }),
+      core(1),
+      core(2),
+      core(3),
+      core(4),
+      slot({ slot_index: 5, skipped: true }),
+      core(6),
+    ];
+    const numbers = getCoreNumbers(slots, 5);
+    expect([numbers.get(0), numbers.get(5), numbers.get(6)]).toEqual([1, 1, 1]);
+  });
+
+  it('leaves bonus slots out of the numbering', () => {
+    expect(getCoreNumbers([core(0), bonus(1)], 5).has(1)).toBe(false);
+  });
+});
+
+describe('home dots match the round and summary (QA 2026-09-25, S5)', () => {
+  it('a short round with additive slots at slot_index 2-4 draws 2 core dots, not 5', () => {
+    const slots = [
+      slot({ slot_index: 0, answered: true, answer_state: 'correct' }),
+      slot({ slot_index: 1, answered: true, answer_state: 'incorrect' }),
+      slot({ slot_index: 2, return_scope: 'wrong', answered: true, answer_state: 'correct' }),
+      bonus(3, { answered: true, answer_state: 'incorrect' }),
+      bonus(4, { answered: true, answer_state: 'correct' }),
+    ];
+    expect(buildCoreOutcomes(slots)).toEqual(['correct', 'incorrect']);
+    expect(buildBonusOutcomes(slots)).toEqual(['incorrect', 'correct']);
+  });
+
+  it('a skip replacement takes the skipped dot', () => {
+    const slots = [
+      core(0),
+      core(1),
+      slot({ slot_index: 2, skipped: true }),
+      core(3),
+      core(4),
+      slot({ slot_index: 5, answered: true, answer_state: 'correct' }),
+    ];
+    expect(buildCoreOutcomes(slots)).toEqual([
+      'unanswered',
+      'unanswered',
+      'unanswered',
+      'unanswered',
+      'correct',
+    ]);
+  });
+
+  it('no queue yet: the five the round will hold', () => {
+    expect(buildCoreOutcomes([])).toHaveLength(5);
   });
 });

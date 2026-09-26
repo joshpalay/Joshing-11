@@ -4,6 +4,8 @@
 // Shared so the in-game result card and the feed reveal sheet truncate
 // identically.
 
+import { stripInlineMarkdown } from '@/lib/plain-text'
+
 // Common abbreviations whose trailing period is NOT a sentence end. Without
 // this guard the naive splitter cuts "The opening chorus of the St. Matthew
 // Passion…" at "St.". Matched case-insensitively against the word immediately
@@ -33,13 +35,16 @@ const ABBREVIATIONS = new Set([
 // Single capital-letter initials ("J. S. Bach", "U. S.") also end in a period
 // followed by a space but never close a sentence.
 function isAbbreviationBreak(textBeforePeriod: string): boolean {
-  const lastWord = textBeforePeriod.match(/(\S+)$/)?.[1] ?? ''
+  // Drop leading punctuation so a parenthesised abbreviation still matches:
+  // "Fidelio (Op. 72)" was cut to "Fidelio (Op." because the last word read
+  // as "(Op" (QA 2026-09-25, S17).
+  const lastWord = (textBeforePeriod.match(/(\S+)$/)?.[1] ?? '').replace(/^[^A-Za-z]+/, '')
   if (/^[A-Za-z]$/.test(lastWord)) return true
   return ABBREVIATIONS.has(lastWord.toLowerCase())
 }
 
 export function firstSentence(text: string): string {
-  const trimmed = text.trim()
+  const trimmed = stripInlineMarkdown(text).trim()
   // Walk each candidate terminator and accept the first that is a real sentence
   // end — i.e. not the period of a known abbreviation or a single initial.
   const terminator = /[.!?](?=\s|$)/g

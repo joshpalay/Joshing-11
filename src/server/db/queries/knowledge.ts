@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import {
   db,
   dailyQueues,
+  declaredInterests,
   generatedQuestions,
   joshingGameResponses,
   masteryEvents,
@@ -731,6 +732,55 @@ export async function getUserMasteryOverview(
   };
 }
 
+/**
+ * Give a domain with no usable broad category the one other players' rows
+ * file it under. A topic seeded from an invite link is stored with no broad
+ * category, so it fell into "Other interests" while the same player's
+ * Beethoven sat under Music — Mozart, Shakespeare and Renaissance Florence all
+ * landed in Other (QA 2026-09-25, S21). The most common specific category
+ * across PLAYER_MASTERY and DeclaredInterest for the same domain wins.
+ * Read-time only; nothing is written.
+ */
+async function fillMissingBroadCategories(
+  domains: Map<string, { domain: string; broadCategory: string | null }>,
+): Promise<void> {
+  const isUnresolved = (category: string | null) => {
+    const normalized = normalizeBroadCategory(category);
+    return !normalized || normalized === 'General Knowledge';
+  };
+  const unresolved = [...domains.entries()].filter(([, entry]) => isUnresolved(entry.broadCategory));
+  if (unresolved.length === 0) return;
+
+  const names = unresolved.map(([, entry]) => entry.domain);
+  const [masteryRows, declaredRows] = await Promise.all([
+    db
+      .select({ domain: playerMastery.canonicalSubcategory, category: playerMastery.broadCategory })
+      .from(playerMastery)
+      .where(and(inArray(playerMastery.canonicalSubcategory, names), isNotNull(playerMastery.broadCategory))),
+    db
+      .select({ domain: declaredInterests.domain, category: declaredInterests.broadCategory })
+      .from(declaredInterests)
+      .where(and(inArray(declaredInterests.domain, names), isNotNull(declaredInterests.broadCategory))),
+  ]);
+
+  const votes = new Map<string, Map<string, number>>();
+  for (const row of [...masteryRows, ...declaredRows]) {
+    const category = normalizeBroadCategory(row.category);
+    if (!category || category === 'General Knowledge') continue;
+    const key = domainKey(row.domain);
+    const tally = votes.get(key) ?? new Map<string, number>();
+    tally.set(category, (tally.get(category) ?? 0) + 1);
+    votes.set(key, tally);
+  }
+
+  for (const [key, entry] of unresolved) {
+    const tally = votes.get(key);
+    if (!tally) continue;
+    const [best] = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (best) entry.broadCategory = best[0];
+  }
+}
+
 export async function getKnowledgePageData(
   userId: string,
   inputs?: KnowledgeInputs,
@@ -796,6 +846,8 @@ export async function getKnowledgePageData(
   // and history survive; re-adding the interest deletes the exclusion and
   // the domain returns.
   for (const key of excludedDomainKeys) knowledgeDomainNames.delete(key);
+
+  await fillMissingBroadCategories(knowledgeDomainNames);
 
   const allDomains = [...knowledgeDomainNames.values()]
     .map((knowledgeDomain) => toDomainMasteryRow(knowledgeDomain, masteryByDomain, statsByDomain, hiddenDomainKeys))

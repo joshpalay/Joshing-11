@@ -115,6 +115,27 @@ export function getLiveCoreSlots(slots: QueueSlot[], size: number): QueueSlot[] 
   return live;
 }
 
+/**
+ * The number (1..size) each core slot shows in the round. A skip keeps the
+ * skipped slot and appends a replacement at the next slot_index, so numbering
+ * by slot_index made the replacement "6." The replacement instead takes the
+ * number the skip freed, the same way it takes the skipped slot's dot in
+ * getLiveCoreSlots (QA 2026-09-25, S7). A replacement that is itself skipped
+ * passes its number on again.
+ */
+export function getCoreNumbers(slots: QueueSlot[], size: number): Map<number, number> {
+  const numbers = new Map<number, number>();
+  const freed: number[] = [];
+  getCoreSlots(slots)
+    .sort((a, b) => a.slot_index - b.slot_index)
+    .forEach((slot, index) => {
+      const number = index < size ? index + 1 : (freed.shift() ?? index + 1);
+      numbers.set(slot.slot_index, number);
+      if (slot.skipped && !slot.answered) freed.push(number);
+    });
+  return numbers;
+}
+
 /** Return slots, input order preserved. */
 export function getReturnSlots(slots: QueueSlot[]): QueueSlot[] {
   return slots.filter(isReturnSlot);

@@ -1355,6 +1355,21 @@ export async function findFactualFailures(generated: LlmQuestion[]): Promise<{
 // textContainsAnswer() at create time; this gives daily-generated questions the
 // same fallback. It is pure (no LLM, no DB) so it cannot fail open. Only
 // question_text is checked — the explainer is *supposed* to contain the answer.
+/**
+ * The topic chip shown above a question (its canonical subcategory) names the
+ * answer: a "CATCH-22" chip over "In Joseph Heller's novel, what is the name of
+ * the bureaucratic rule…" (QA 2026-09-25, S16). The stem-only checks can't see
+ * this — the leak is in the label, not the text. Same whole-answer match as the
+ * stem check, run against the label.
+ */
+export function topicLabelLeaksAnswer(
+  topicLabel: string,
+  answer: string,
+  acceptableVariants: string[] = [],
+): boolean {
+  return textContainsAnswer(topicLabel, answer, acceptableVariants);
+}
+
 export function findAnswerLeaks(generated: LlmQuestion[]): {
   toDrop: Set<number>;
   reasons: Record<number, string>;
@@ -1369,6 +1384,11 @@ export function findAnswerLeaks(generated: LlmQuestion[]): {
     if (leaksWholeAnswer(q)) {
       toDrop.add(i);
       reasons[i] = `answer "${q.answer}" appears in question text`.slice(0, 200);
+      continue;
+    }
+    if (topicLabelLeaksAnswer(q.canonical_subcategory, q.answer, q.acceptable_variants ?? [])) {
+      toDrop.add(i);
+      reasons[i] = `topic label "${q.canonical_subcategory}" gives away answer "${q.answer}"`.slice(0, 200);
       continue;
     }
     // Partial leak (the "dental plan" class): the stem hands over the answer's
@@ -1607,10 +1627,15 @@ export function findBankSourceDefect(source: {
   questionText: string;
   answer: string;
   acceptableVariants?: string[];
+  /** The topic the slot will be labelled with (its chip). See topicLabelLeaksAnswer. */
+  topicLabel?: string;
 }): string | null {
   const { questionText, answer } = source;
   if (textContainsAnswer(questionText, answer, source.acceptableVariants ?? [])) {
     return `answer "${answer}" appears in question text`;
+  }
+  if (source.topicLabel && topicLabelLeaksAnswer(source.topicLabel, answer, source.acceptableVariants ?? [])) {
+    return `topic label "${source.topicLabel}" gives away answer "${answer}"`;
   }
   // Reuses the generation-path gate on a single-element batch so the two paths
   // can never drift apart in what counts as a bad answer shape.
@@ -3626,7 +3651,7 @@ async function pickBankPicksForDomains(
         ).catch(() => null);
         if (!candidate) break; // no stock left at this tier — try the next one
         bankCandidatesConsidered += 1;
-        const defect = findBankSourceDefect(candidate);
+        const defect = findBankSourceDefect({ ...candidate, topicLabel: domain });
         if (!defect) {
           source = candidate;
           servedTier = tier;

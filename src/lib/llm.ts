@@ -25,6 +25,7 @@ import {
 } from '@/server/llm/provider';
 import { recordLlmUsage } from '@/server/db/queries/llm-provider-experiment';
 import { textContainsAnswer } from '@/server/questions/self-answering';
+import { stripInlineMarkdown } from '@/lib/plain-text';
 
 export type { LlmProvider };
 
@@ -824,7 +825,9 @@ Return only valid JSON with keys: result, confidence, consolation. Put result fi
       }
 
       const confidence = clampConfidence(parsed.confidence, 0);
-      const consolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
+      const rawConsolation = result === 'wrong' ? asNullableString(parsed.consolation) : null;
+      // Rendered as plain text; unwrap any stray *emphasis* (QA 2026-09-25, S17).
+      const consolation = rawConsolation ? stripInlineMarkdown(rawConsolation) : null;
 
       // No `reason` field is requested or read on this path: the verdict is
       // emitted first and nothing downstream consumes a justification, so asking

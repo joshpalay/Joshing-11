@@ -29,10 +29,27 @@ export type DailyStatus = {
    * "of 5" count. Empty when there's no queue or no bonus slots.
    */
   bonusOutcomes: SlotOutcome[]
+  /**
+   * When the server built this snapshot (ISO). The client router can hand a
+   * cached home render back after the round moves on — finishing and tapping
+   * home showed "Ready when you are! · Play now" until a reload (QA
+   * 2026-09-25, S4) — so an old snapshot is refetched rather than trusted.
+   */
+  snapshotAt?: string
+}
+
+// A server snapshot younger than this is the render that just streamed in and
+// is trusted as-is; anything older (or from a skewed clock) is refetched.
+const SNAPSHOT_FRESH_MS = 10_000
+
+function isFreshSnapshot(status: DailyStatus | null): boolean {
+  if (!status?.snapshotAt) return false
+  const age = Date.now() - Date.parse(status.snapshotAt)
+  return age >= 0 && age < SNAPSHOT_FRESH_MS
 }
 
 type TodaysFiveCardProps = {
-  /** When supplied, the initial /api/daily/status fetch is skipped. */
+  /** When supplied and fresh, the initial /api/daily/status fetch is skipped. */
   initialStatus?: DailyStatus | null
   /**
    * Outstanding catch-up questions for this player. Drives the completed-state
@@ -85,15 +102,16 @@ const VALID_OUTCOMES: ReadonlySet<SlotOutcome> = new Set<SlotOutcome>([
   'unanswered',
 ])
 
+// One dot per live core slot (1–5): a graceful-degraded round has fewer than
+// five, and home draws what the round and the summary draw (QA 2026-09-25, S5).
 function normalizeSlotOutcomes(value: unknown): SlotOutcome[] {
   const fallback: SlotOutcome[] = ['unanswered', 'unanswered', 'unanswered', 'unanswered', 'unanswered']
-  if (!Array.isArray(value)) return fallback
-  return fallback.map((unanswered, index) => {
-    const candidate = value[index]
-    return typeof candidate === 'string' && VALID_OUTCOMES.has(candidate as SlotOutcome)
+  if (!Array.isArray(value) || value.length === 0) return fallback
+  return value.slice(0, 5).map((candidate) =>
+    typeof candidate === 'string' && VALID_OUTCOMES.has(candidate as SlotOutcome)
       ? (candidate as SlotOutcome)
-      : unanswered
-  })
+      : 'unanswered',
+  )
 }
 
 // Bonus outcomes are variable-length (0–2) and additive, so unlike the fixed
@@ -160,8 +178,9 @@ export default function TodaysFiveCard({
     getResetTimeSnapshot,
     getResetTimeServerSnapshot,
   )
-  // Skip the initial /api/daily/status fetch when the server already provided it.
-  const skipInitialFetchRef = useRef(initialStatus !== null)
+  // Skip the initial /api/daily/status fetch only when the server snapshot was
+  // just rendered — a router-cached one can be minutes out of date.
+  const skipInitialFetchRef = useRef(isFreshSnapshot(initialStatus))
 
   useEffect(() => {
     if (skipInitialFetchRef.current) {
