@@ -684,18 +684,25 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
         expand: null,
       };
 
-    case 'ceremony_ready':
+    case 'ceremony_ready': {
+      // Once opened, it's no longer news: stop calling it "ready" (QA 2026-09-26, N19).
+      const viewed = item.reference.ceremony?.viewed === true;
       return {
         ...base,
-        line: [txt('Your weekly reflection is ready')],
+        line: [txt(viewed ? 'Your weekly reflection' : 'Your weekly reflection is ready')],
         secondLine: 'A look at the questions, friends, and territories that defined your week.',
         // System event — viewer-only, not a friend's activity.
         friendId: null,
         action: item.referenceId
-          ? { kind: 'link', href: `/ceremony/${item.referenceId}`, label: 'See it now' }
+          ? {
+              kind: 'link',
+              href: `/ceremony/${item.referenceId}`,
+              label: viewed ? 'Look again' : 'See it now',
+            }
           : null,
         expand: null,
       };
+    }
 
     case 'friend_request':
     case 'follow_request': {

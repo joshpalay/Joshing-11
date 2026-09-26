@@ -234,7 +234,11 @@ function sessionCloseLines(slots: QueueSlot[]): {
   // plumbing that doesn't exist on the daily page yet; for now we only
   // populate the slot fields needed for the slot-derived priority levels
   // (sweep, wipeout, streaks, all-wrong-in-domain).
-  const summaries: SessionSlotSummary[] = slots
+  //
+  // Core five only: counting the +2 bonus and "second look" slots made a 4/5
+  // round read "Untouched." (the 5-correct line) and fed bonus answers into the
+  // "in a row" run (QA 2026-09-26, N14).
+  const summaries: SessionSlotSummary[] = getLiveCoreSlots(slots, DAILY_QUEUE_SIZE)
     .filter((slot) => slot.answered)
     .map((slot) => ({
       domain: slot.domain ?? null,
@@ -1242,6 +1246,7 @@ export default function DailyPage() {
             onNotForMe={() => setNotForMeOpen(true)}
             notForMeDisabled={submitting}
             reportSurface="daily_five"
+            activeQuestionId={currentSlot ? `q-${currentSlot.slot_index}` : null}
           />
           </>
         )}

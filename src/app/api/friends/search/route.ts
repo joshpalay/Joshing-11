@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { getSession } from '@/server/auth/session'
-import { searchFriendByHandleOrPhone } from '@/server/db/queries/friend-search'
+import { searchFriendOutcome } from '@/server/db/queries/friend-search'
 import { logTelemetry } from '@/server/telemetry'
 
 export const dynamic = 'force-dynamic'
@@ -167,9 +167,9 @@ export async function GET(request: Request) {
   // input short-circuits above without consuming the budget — it leaks nothing.
   recordSearchAttempt(session.userId, ip)
 
-  const match = await searchFriendByHandleOrPhone(session.userId, parsed.data.q)
+  const { match, blockedByViewer } = await searchFriendOutcome(session.userId, parsed.data.q)
   // F9 abuse signal — outcome only (match found or not). Never the query
   // string, never the resolved user's handle/phone/id.
   logTelemetry('friend_search_performed', { outcome: match ? 'match' : 'no_match' })
-  return NextResponse.json({ match })
+  return NextResponse.json(blockedByViewer ? { match, blockedByViewer } : { match })
 }

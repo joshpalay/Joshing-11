@@ -57,13 +57,14 @@ export function FindFriendsSearch() {
   const [match, setMatch] = useState<Match | null>(null)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [blockedByViewer, setBlockedByViewer] = useState(false)
   const debounceRef = useRef<number | null>(null)
   const sectionRef = useRef<HTMLElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [searchRequest] = useState(() => createFriendSearchRequest<Match>({
-    start: () => { setSearching(true); setError(null); setMatch(null) },
-    result: (value) => { setMatch(value); setSearched(true) },
+    start: () => { setSearching(true); setError(null); setMatch(null); setBlockedByViewer(false) },
+    result: (value, extra) => { setMatch(value); setBlockedByViewer(extra?.blockedByViewer ?? false); setSearched(true) },
     error: (message) => { setError(message); setMatch(null); setSearched(true) },
     finish: () => setSearching(false),
   }))
@@ -108,6 +109,7 @@ export function FindFriendsSearch() {
     setQuery(value)
     setSearching(plan === 'search')
     setMatch(null)
+    setBlockedByViewer(false)
     // A name can't be looked up, so it goes straight to the no-match handoff
     // without spending a rate-limited search (see searchPlanFor).
     setSearched(plan === 'no_lookup')
@@ -122,6 +124,10 @@ export function FindFriendsSearch() {
 
   function refreshAfterAction() {
     void searchRequest.run(query)
+    // Keep the roster's "Requests sent" in step with the card: cancelling here
+    // left "Waiting" showing below "Add friend" until a reload (QA 2026-09-26, S9).
+    window.dispatchEvent(new Event('friend-invitations:refresh'))
+    window.dispatchEvent(new Event('nav:refresh'))
   }
 
   const matchDisplayName = match
@@ -179,7 +185,10 @@ export function FindFriendsSearch() {
             >
               {initials}
             </span>
-            <div className="min-w-0 flex-1">
+            {/* basis-40: with "Requested" + "Cancel" beside it the name used to
+                shrink to "Tre / Prov / a" at 390px; now the buttons wrap below
+                instead (QA 2026-09-26, S8). */}
+            <div className="min-w-0 flex-1 basis-40">
               <h3 className="text-foreground font-medium break-words">{matchDisplayName}</h3>
               {match.handle ? (
                 <p className="text-muted-foreground text-xs">@{match.handle}</p>
@@ -195,6 +204,14 @@ export function FindFriendsSearch() {
               onChange={refreshAfterAction}
             />
           </article>
+        ) : outcome.kind === 'no_match' && blockedByViewer ? (
+          <p className="text-muted-foreground text-sm">
+            You’ve blocked this person.{' '}
+            <a href="/blocked" className="underline underline-offset-2">
+              Manage blocked people
+            </a>
+            .
+          </p>
         ) : outcome.kind === 'no_match' ? (
           <p className="text-muted-foreground text-sm">
             No matching player found. Check the full username or phone number,{' '}

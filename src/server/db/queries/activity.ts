@@ -2,6 +2,7 @@ import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } fr
 
 import {
   activityItems,
+  biweeklyCeremonies,
   db,
   feedItems,
   follows,
@@ -137,6 +138,9 @@ export type ActivityItemView = Pick<
       inviteeDisplayName: string | null;
       maskedPhone: string;
     };
+    // ceremony_ready rows: whether the reflection was already opened, so the
+    // row stops saying "is ready · See it now" afterwards (QA 2026-09-26, N19).
+    ceremony?: { viewed: boolean };
   };
 };
 
@@ -908,6 +912,22 @@ async function hydrateFriendInvitationReminders(items: ActivityItemRow[]) {
   ] as const));
 }
 
+async function hydrateCeremonies(items: ActivityItemRow[]) {
+  const ids = [
+    ...new Set(
+      items
+        .filter((item) => item.type === 'ceremony_ready' && item.referenceId)
+        .map((item) => item.referenceId!),
+    ),
+  ];
+  if (ids.length === 0) return new Map<string, { viewed: boolean }>();
+  const rows = await db
+    .select({ id: biweeklyCeremonies.id, viewedAt: biweeklyCeremonies.viewedAt })
+    .from(biweeklyCeremonies)
+    .where(inArray(biweeklyCeremonies.id, ids));
+  return new Map(rows.map((row) => [row.id, { viewed: row.viewedAt !== null }] as const));
+}
+
 async function hydrateActivityRows(
   rows: ActivityItemRow[],
   userId: string,
@@ -926,6 +946,7 @@ async function hydrateActivityRows(
     declaredPromotedById,
     gradeDisputesById,
     friendInvitationRemindersById,
+    ceremoniesById,
   ] = await Promise.all([
     hydrateActors(rows),
     hydrateFriendshipRequests(rows),
@@ -940,6 +961,7 @@ async function hydrateActivityRows(
     hydrateDeclaredPromoted(rows),
     hydrateGradeDisputes(rows),
     hydrateFriendInvitationReminders(rows),
+    hydrateCeremonies(rows),
   ]);
   const actorIds = [...new Set(rows.map((row) => row.actorUserId).filter((id): id is string => Boolean(id)))];
   const relationshipActorIds = [
@@ -1017,6 +1039,9 @@ async function hydrateActivityRows(
           : undefined,
         friendInvitationReminder: row.type === 'friend_invitation_reminder' && row.referenceId
           ? friendInvitationRemindersById.get(row.referenceId)
+          : undefined,
+        ceremony: row.type === 'ceremony_ready' && row.referenceId
+          ? ceremoniesById.get(row.referenceId)
           : undefined,
       },
     }));

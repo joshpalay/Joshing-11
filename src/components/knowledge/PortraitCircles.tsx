@@ -496,23 +496,12 @@ export function PortraitCircles({
         null
       ) : (
         <div style={legendStyle}>
-          {TIER_ORDER.map((tier) => (
-            <div key={tier} style={legendItemStyle}>
-              <div
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--warm-ink-500)',
-                  opacity: 0.4,
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ fontSize: 9.5, color: 'var(--warm-ink-500)' }}>
-                {KNOWLEDGE_TIER_LABEL[tier]}
-              </span>
-            </div>
-          ))}
+          {/* The levels are the section headings below; the old legend drew the
+              same grey dot beside each name, so it looked like a color key that
+              keyed nothing (QA 2026-09-26, N7). Name the order in words. */}
+          <span style={{ fontSize: 9.5, color: 'var(--warm-ink-500)' }}>
+            Grouped by level: {TIER_ORDER.map((tier) => KNOWLEDGE_TIER_LABEL[tier]).join(' → ')}
+          </span>
           <span
             style={{
               fontSize: 9,

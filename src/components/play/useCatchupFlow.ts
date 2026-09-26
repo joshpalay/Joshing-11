@@ -142,8 +142,13 @@ function formatQuestionSubhead(item: CatchupQueueItem): string {
   // queueAge 0 is today's own round (the home card's "play missed questions"
   // replays it straight away); it used to share the <= 1 branch and read
   // "FROM YESTERDAY" minutes after the player answered it (QA 2026-09-25).
-  if (item.queueAge <= 0) return 'FROM TODAY';
-  if (item.queueAge === 1) return 'FROM YESTERDAY';
+  //
+  // queueAge counts ROUNDS (a round runs 1 PM to 1 PM), not calendar days, so
+  // name the round: a question missed at 8 PM and replayed at 11 AM the next
+  // morning is still in "Today's five", but "FROM TODAY" read as wrong on the
+  // calendar (QA 2026-09-26, S13).
+  if (item.queueAge <= 0) return 'FROM TODAY’S FIVE';
+  if (item.queueAge === 1) return 'FROM YESTERDAY’S FIVE';
   if (item.queueAge > 1 && item.queueAge <= 6) return `FROM ${item.queueAge} DAYS AGO`;
 
   const date = new Date(`${item.queueDate}T12:00:00.000Z`);

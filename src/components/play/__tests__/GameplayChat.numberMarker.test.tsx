@@ -44,7 +44,7 @@ describe('GameplayChat question number marker', () => {
     // must be ignored: bonus is additive and never enters the denominator.
     const rendered = html([questionMessage({ numberMarker: { value: 6, bonus: true } })]);
     expect(rendered).toContain('✦');
-    expect(rendered).toContain('Bonus question'); // accessible label
+    expect(rendered).toContain('Extra question'); // accessible label
     // The marker must not leak the underlying core-style numeral.
     expect(rendered).not.toContain('6.');
   });
@@ -69,7 +69,8 @@ describe('GameplayChat question number marker', () => {
     // inventing a position in a sequence it does not belong to.
     const rendered = html([questionMessage({ numberMarker: { value: 7, bonus: true } })]);
     expect(rendered).toContain('✦');
-    expect(rendered).toContain('Bonus question');
+    // Not "Bonus question": the return slot isn't part of the friend +2 (QA 2026-09-26, N19).
+    expect(rendered).toContain('Extra question');
     expect(rendered).not.toContain(' of ');
   });
 
@@ -77,5 +78,6 @@ describe('GameplayChat question number marker', () => {
     const rendered = html([questionMessage({})]);
     expect(rendered).not.toContain('aria-label="Question');
     expect(rendered).not.toContain('aria-label="Bonus question"');
+    expect(rendered).not.toContain('aria-label="Extra question"');
   });
 });

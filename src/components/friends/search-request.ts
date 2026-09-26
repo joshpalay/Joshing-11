@@ -1,6 +1,6 @@
 export type SearchCallbacks<T> = {
   start: () => void
-  result: (match: T | null) => void
+  result: (match: T | null, extra?: { blockedByViewer: boolean }) => void
   error: (message: string) => void
   finish: () => void
 }
@@ -42,9 +42,9 @@ export function createFriendSearchRequest<T>(
           : 'Search failed. Press Enter to try again.')
         return
       }
-      const body = await response.json() as { match: T | null }
+      const body = await response.json() as { match: T | null; blockedByViewer?: boolean }
       if (current !== version) return
-      callbacks.result(body.match ?? null)
+      callbacks.result(body.match ?? null, { blockedByViewer: body.blockedByViewer === true })
     } catch {
       if (current === version) callbacks.error('Network error. Press Enter to try again.')
     } finally {

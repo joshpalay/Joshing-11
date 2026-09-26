@@ -68,6 +68,16 @@ export function Nav({
   const [badgeCount, setBadgeCount] = useState(bellBadgeCount);
   const [friendRequests, setFriendRequests] = useState(friendRequestCount);
   const [friendsDot, setFriendsDot] = useState(friendsDotVisible);
+  // Bumped by a window 'nav:refresh' event so a surface that settles a request
+  // can clear the badge without a reload — declining one left the Friends "1"
+  // up until the next page (QA 2026-09-26, S9).
+  const [navRefreshKey, setNavRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setNavRefreshKey((key) => key + 1);
+    window.addEventListener('nav:refresh', bump);
+    return () => window.removeEventListener('nav:refresh', bump);
+  }, []);
 
   useEffect(() => {
     if (!initialUserId) return;
@@ -96,7 +106,7 @@ export function Nav({
     return () => {
       active = false;
     };
-  }, [initialUserId]);
+  }, [initialUserId, navRefreshKey]);
 
   const accountInitials = displayName ? initialsFor(displayName) || null : null;
   const isOtherUserProfilePath = (() => {

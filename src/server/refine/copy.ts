@@ -26,13 +26,19 @@ export function subdomainLabel(domain: string): string {
   return domain.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+// "a"/"an" by the first letter's sound — good enough for topic names; it read
+// "You got a American Auto History question" (QA 2026-09-26, N20).
+function withArticle(label: string): string {
+  return /^[aeiou]/i.test(label) ? `an ${label}` : `a ${label}`;
+}
+
 /** Evidence + the decision question, shown in the open state. */
 export function openText(candidate: RefineCandidate): string {
   const label = candidate.subdomainLabel;
   switch (candidate.type) {
     case 'friend_expansion': {
       const friend = candidate.friendName?.trim() || 'a friend';
-      return `You got a ${label} question from ${friend}'s world right. Add it to your rotation?`;
+      return `You got ${withArticle(label)} question from ${friend}'s world right. Add it to your rotation?`;
     }
     case 'difficulty_escalation':
       return `You're mastering ${label}, so its questions are getting harder. Ease off?`;

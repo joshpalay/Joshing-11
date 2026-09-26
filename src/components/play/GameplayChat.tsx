@@ -1849,6 +1849,7 @@ export function GameplayChatThread({
   notForMeDisabled,
   onSlotClosed,
   reportSurface = 'catchup_thread',
+  activeQuestionId: activeQuestionIdOverride,
 }: {
   messages: ChatMessage[];
   onGiveUp?: () => void;
@@ -1866,6 +1867,12 @@ export function GameplayChatThread({
   // to. The catch-up page leaves this at its default; the Daily Five live
   // thread (src/app/daily/page.tsx) passes 'daily_five'.
   reportSurface?: 'catchup_thread' | 'daily_five';
+  /** The question actually awaiting an answer, when the caller knows it. `null`
+   *  means none (round finished). Without it the thread guesses "last question
+   *  with no result after it", which picked a skipped question — followed by a
+   *  system note, not a result — and left dead buttons under it after the round
+   *  ended (QA 2026-09-26, S7). */
+  activeQuestionId?: string | null;
 }) {
   // "Show me the answer" and "Dismiss" belong only under the active (still-
   // unanswered) question — the last question message with no result after it.
@@ -1877,7 +1884,9 @@ export function GameplayChatThread({
     return -1;
   })();
   const activeQuestionId =
-    lastQuestionIndex >= 0 &&
+    activeQuestionIdOverride !== undefined
+      ? activeQuestionIdOverride
+      : lastQuestionIndex >= 0 &&
     !messages.slice(lastQuestionIndex + 1).some((m) => m.kind === 'result')
       ? messages[lastQuestionIndex].id
       : null;

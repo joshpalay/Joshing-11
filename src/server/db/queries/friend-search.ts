@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm'
 import { isUsPhoneNumber, normalizePhone } from '@/server/auth'
 import { db, users } from '@/server/db'
 import { getRelationship, type RelationshipResult } from '@/server/db/queries/friend-requests'
+import { hasBlocked } from '@/server/db/queries/user-blocks'
 
 export type FriendSearchMatch = {
   id: string
@@ -31,8 +32,25 @@ export async function searchFriendByHandleOrPhone(
   viewerId: string,
   query: string,
 ): Promise<FriendSearchMatch | null> {
+  return (await searchFriendOutcome(viewerId, query)).match
+}
+
+export type FriendSearchOutcome = {
+  match: FriendSearchMatch | null
+  /** The viewer has blocked the person they searched for. Only ever true for
+   *  the blocker, who already knows — the blocked side still gets a plain
+   *  no-match. Lets the UI say "You've blocked this person" instead of
+   *  suggesting a personal invite to them (QA 2026-09-26, N5). */
+  blockedByViewer: boolean
+}
+
+export async function searchFriendOutcome(
+  viewerId: string,
+  query: string,
+): Promise<FriendSearchOutcome> {
+  const none: FriendSearchOutcome = { match: null, blockedByViewer: false }
   const trimmed = query.trim()
-  if (!trimmed) return null
+  if (!trimmed) return none
 
   let candidate: {
     id: string
@@ -72,12 +90,14 @@ export async function searchFriendByHandleOrPhone(
     candidate = row ?? null
   }
 
-  if (!candidate) return null
+  if (!candidate) return none
   // Self-match returns null (don't surface the viewer's own profile).
-  if (candidate.id === viewerId) return null
+  if (candidate.id === viewerId) return none
 
   const relationship = await getRelationship(viewerId, candidate.id)
-  if (relationship.isBlocked) return null
+  if (relationship.isBlocked) {
+    return { match: null, blockedByViewer: await hasBlocked(viewerId, candidate.id) }
+  }
 
-  return { ...candidate, relationship }
+  return { match: { ...candidate, relationship }, blockedByViewer: false }
 }

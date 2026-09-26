@@ -175,7 +175,9 @@ export function AccountActions({
         throw new Error(body?.error ?? 'Could not delete your account.');
       }
 
-      router.push('/login');
+      // Land on login with a line saying it worked; it used to be the bare
+      // sign-in screen (QA 2026-09-26, N21).
+      router.push('/login?deleted=1');
     } catch (caught) {
       setDeleteError(caught instanceof Error ? caught.message : 'Could not delete your account.');
       setDeletingAccount(false);
@@ -498,7 +500,9 @@ export function AccountActions({
 
         <div className="mt-6">
           {confirmingDelete ? (
-            <div className="border-destructive bg-destructive/5 rounded-xl border p-4">
+            // mb-24 lets the box scroll clear of the floating "+" button, which
+            // sat on top of the DELETE field at phone width (QA 2026-09-26, N21).
+            <div className="border-destructive bg-destructive/5 mb-24 rounded-xl border p-4">
               <p className="text-destructive text-sm font-semibold">
                 Delete your account permanently?
               </p>
@@ -511,6 +515,7 @@ export function AccountActions({
               </label>
               <input
                 id="delete-confirmation"
+                autoFocus
                 value={deleteConfirmation}
                 onChange={(event) => {
                   setDeleteConfirmation(event.target.value);

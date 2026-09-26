@@ -9,6 +9,7 @@ const { dbMock, state, getRelationshipMock } = vi.hoisted(() => {
   const state = {
     userRow: undefined as Record<string, unknown> | undefined,
     isBlocked: false,
+    viewerIsBlocker: false,
   }
 
   const dbMock = {
@@ -36,11 +37,14 @@ vi.mock('@/server/db', () => ({
   users: { id: 'users.id', handle: 'users.handle', phoneNumber: 'users.phoneNumber', displayName: 'users.displayName', avatarColor: 'users.avatarColor', createdAt: 'users.createdAt' },
 }))
 
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  hasBlocked: async () => state.viewerIsBlocker,
+}))
 vi.mock('@/server/db/queries/friend-requests', () => ({
   getRelationship: getRelationshipMock,
 }))
 
-import { searchFriendByHandleOrPhone } from '@/server/db/queries/friend-search'
+import { searchFriendByHandleOrPhone, searchFriendOutcome } from '@/server/db/queries/friend-search'
 
 const VIEWER = 'viewer-1'
 const CANDIDATE = 'candidate-1'
@@ -48,6 +52,7 @@ const CANDIDATE = 'candidate-1'
 beforeEach(() => {
   state.userRow = undefined
   state.isBlocked = false
+  state.viewerIsBlocker = false
   getRelationshipMock.mockClear()
 })
 
@@ -80,5 +85,17 @@ describe('searchFriendByHandleOrPhone', () => {
     const result = await searchFriendByHandleOrPhone(VIEWER, '@bob')
     expect(result).not.toBeNull()
     expect(result?.id).toBe(CANDIDATE)
+  })
+
+  // QA 2026-09-26, N5: the blocker may be told they blocked the person (they
+  // already know); the blocked side must still get a plain no-match.
+  it('tells only the blocker that the searched person is blocked', async () => {
+    state.userRow = { id: CANDIDATE, handle: 'bob', displayName: 'Bob', avatarColor: null, createdAt: new Date() }
+    state.isBlocked = true
+    state.viewerIsBlocker = true
+    expect(await searchFriendOutcome(VIEWER, '@bob')).toEqual({ match: null, blockedByViewer: true })
+
+    state.viewerIsBlocker = false
+    expect(await searchFriendOutcome(CANDIDATE, '@bob')).toEqual({ match: null, blockedByViewer: false })
   })
 })

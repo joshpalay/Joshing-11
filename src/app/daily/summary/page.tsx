@@ -795,7 +795,14 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
               ) : (
                 <span>{authorLabel}</span>
               )}
-              {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+              {/* The space keeps "Joshing" and the badge apart for screen
+                  readers and copy-paste ("JoshingEDITORIAL", QA 2026-09-26, N9). */}
+              {question.authorIsHouse ? (
+                <>
+                  {' '}
+                  <EditorialBadge style={{ marginLeft: '2px' }} />
+                </>
+              ) : null}
             </p>
             {question.bonusPresence ? (
               <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
