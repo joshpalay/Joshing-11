@@ -255,7 +255,7 @@ export function OnboardingReminderStep({
         </p>
         <StepHeader
           title={name ? `${name}, we’re writing your first five.` : 'We’re writing your first five.'}
-          subtitle="Made from your topics, not pulled off a shelf. A new five lands every afternoon."
+          subtitle="Made from your topics, not pulled off a shelf. A new five lands every day."
         />
       </div>
 

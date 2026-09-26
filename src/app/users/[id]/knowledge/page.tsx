@@ -90,7 +90,7 @@ export default async function FriendKnowledgePage({
     : sortedDomains.reduce((sum, domain) => sum + domain.points, 0)
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(visibleTotalPoints),
-  )} knowledge points across ${sortedDomains.length} territories`
+  )} knowledge points across ${totalPointPositiveDomains} territories`
   const friendFirstName = firstName(portrait.user.displayName)
 
   return (
@@ -119,6 +119,7 @@ export default async function FriendKnowledgePage({
       {topDomains.length > 0 ? (
         <KnowledgeCard
           playerDisplayName={portrait.user.displayName}
+          ownerView={isOwner}
           portraitStatement={mindStatement}
           domains={topDomains.map(toKnowledgeCardDomain)}
           overflowCount={Math.max(

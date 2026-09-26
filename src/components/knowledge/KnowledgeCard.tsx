@@ -18,6 +18,12 @@ export interface KnowledgeDomainCircle {
 
 export interface KnowledgeCardProps {
   playerDisplayName: string
+  /**
+   * The viewer owns this portrait. Defaults to true; another player's profile
+   * passes false so the card reads "{Name}'s Knowledge Portrait", not "Your"
+   * (QA 2026-09-25, S13).
+   */
+  ownerView?: boolean
   portraitStatement: string
   domains: KnowledgeDomainCircle[]
   overflowCount: number
@@ -45,6 +51,9 @@ function getCircleDiameter(
 
 export function KnowledgeCard(props: KnowledgeCardProps) {
   const [shareLabel, setShareLabel] = useState('Share')
+  const ownerFirstName = props.playerDisplayName.trim().split(/\s+/)[0]
+  const owner = props.ownerView === false && ownerFirstName ? `${ownerFirstName}’s` : 'Your'
+  const portraitTitle = `${owner} Knowledge Portrait`
   const sorted = useMemo(
     () =>
       [...props.domains].sort((a, b) => b.lifetimePoints - a.lifetimePoints),
@@ -77,7 +86,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
   }
 
   return (
-    <section style={boxStyle} aria-label="Your Knowledge Portrait">
+    <section style={boxStyle} aria-label={portraitTitle}>
       <div style={headerStyle}>
         <p style={wordmarkStyle}>Joshing</p>
         {(!props.readOnly || props.onShareClick) && (
@@ -86,7 +95,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
             style={shareButtonStyle}
             onClick={onShare}
             data-portrait-share="true"
-            aria-label="Share your knowledge portrait"
+            aria-label={`Share ${owner === 'Your' ? 'your' : owner} knowledge portrait`}
           >
             <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
             <span>{shareLabel}</span>
@@ -94,7 +103,7 @@ export function KnowledgeCard(props: KnowledgeCardProps) {
         )}
       </div>
       <CardTriangleStrip />
-      <h2 style={titleStyle}>Your Knowledge Portrait</h2>
+      <h2 style={titleStyle}>{portraitTitle}</h2>
 
       <p style={statementStyle}>{props.portraitStatement}</p>
 

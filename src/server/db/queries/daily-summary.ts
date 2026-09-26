@@ -34,8 +34,9 @@ import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports'
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
 import { buildRefineSection } from '@/server/db/queries/refine';
 import { getFeedPagePayload } from '@/server/feed/get-feed-page';
-import type { QueueSlot } from '@/server/daily/types';
-import { getSlotPresence, isAdditiveSlot, isBonusSlot } from '@/server/daily/bonus';
+import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
+import { stripInlineMarkdown } from '@/lib/plain-text';
+import { getLiveCoreSlots, getSlotPresence, isAdditiveSlot, isBonusSlot } from '@/server/daily/bonus';
 import { scrubBlockedPresence } from '@/server/daily/scrub-blocked-presence';
 import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
@@ -149,6 +150,15 @@ export type QuestionRecap = {
    * denominator. Never enters the spoken X/5.
    */
   isAdditive: boolean;
+  /**
+   * Which dot this row owns on the recap's progress track — the SAME track the
+   * round (/daily) and home draw: one dot per live core slot (a skip's
+   * replacement takes the skipped slot's dot), then one per +2 bonus. Null for
+   * rows with no dot (a skipped slot that was replaced, a Second look). The
+   * summary used to draw a dot for every row, so it disagreed with home and
+   * the round (QA 2026-09-25, S5).
+   */
+  trackDot: 'core' | 'bonus' | null;
   /**
    * Presence attribution for a +2 bonus row: the named friend whose knowledge
    * surfaced this domain, for the quiet "from {Name}'s knowledge" sub-line (D-F4).
@@ -316,6 +326,9 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     .filter((id): id is string => Boolean(id));
   const bankedById = await checkBankedQuestions(userId, recapQuestionIds);
 
+  const liveCoreIndexes = new Set(
+    getLiveCoreSlots(slots, DAILY_QUEUE_SIZE).map((slot) => slot.slot_index),
+  );
   const recaps = slots.map<QuestionRecap>((slot) => {
     const generated = slot.generated_question_id ? questionById.get(slot.generated_question_id) : null;
     const presence = getSlotPresence(slot);
@@ -329,7 +342,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       correctAnswer: slot.reveal_canonical_answer ?? generated?.answer ?? '',
       isCorrect: slot.answer_state === 'correct',
       isSkipped: Boolean(slot.skipped),
-      explanation: slot.reveal_explainer ?? generated?.explainer ?? '',
+      explanation: stripInlineMarkdown(slot.reveal_explainer ?? generated?.explainer ?? ''),
       domain,
       domainDisplayName: displayNameForDomain(domain),
       isInBank: slot.question_id ? Boolean(bankedById[slot.question_id]) : false,
@@ -340,6 +353,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       authorIsHouse: slot.source === 'house',
       isBonus: isBonusSlot(slot),
       isAdditive: isAdditiveSlot(slot),
+      trackDot: isBonusSlot(slot) ? 'bonus' : liveCoreIndexes.has(slot.slot_index) ? 'core' : null,
       bonusPresence:
         presence && presence.name
           ? { name: presence.name, extraCount: presence.extraCount }

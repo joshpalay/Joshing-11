@@ -19,6 +19,7 @@ import Link from 'next/link'
 import { useEffect, useMemo } from 'react'
 
 import type { FirstSessionRecapView } from '@/server/daily/first-session-recap'
+import { formatNextResetDayTimeLocal } from '@/lib/games/timezone'
 
 export function FirstSessionPanel({
   recap,
@@ -42,13 +43,12 @@ export function FirstSessionPanel({
     }).catch(() => undefined)
   }, [preview])
 
-  // The next Daily Five lands tomorrow at noon (matches the summary page copy).
-  // Name the weekday so the cadence reads concretely.
-  const nextWeekday = useMemo(() => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toLocaleDateString(undefined, { weekday: 'long' })
-  }, [])
+  // Same clock and wording as the home card and the summary's "Five new …"
+  // line. This used to hardcode "every day at noon — next up {weekday} at
+  // noon", which contradicted "Five new tomorrow at 1 PM" on the same page:
+  // the reset is a fixed UTC hour, so its local time varies by zone and
+  // season (QA 2026-09-25, S6).
+  const nextFiveAt = useMemo(() => formatNextResetDayTimeLocal(), [])
 
   return (
     <section className="mt-6 rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-5">
@@ -66,8 +66,7 @@ export function FirstSessionPanel({
         Nice start{recap.firstName ? `, ${recap.firstName}` : ''}.
       </h2>
       <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-700)]">
-        New questions come every day at noon — next up {nextWeekday} at noon. You
-        can change the types of questions anytime on{' '}
+        New questions come every day — next up {nextFiveAt}. You can change the types of questions anytime on{' '}
         <Link
           href="/knowledge"
           className="text-[var(--brand-link)] underline underline-offset-4"

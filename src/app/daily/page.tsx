@@ -35,6 +35,7 @@ import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily
 import {
   getBonusCount,
   getBonusSlots,
+  getCoreNumbers,
   getLiveCoreSlots,
   getSlotPresence,
   isAdditiveSlot,
@@ -678,8 +679,9 @@ export default function DailyPage() {
       getBonusSlots(queue.slots).map((bonusSlot, index) => [bonusSlot.slot_index, index + 1]),
     );
     const bonusTotal = bonusOrder.size;
+    const coreNumbers = getCoreNumbers(queue.slots, DAILY_QUEUE_SIZE);
     const markerFor = (slot: QueueSlot) => ({
-      value: slot.slot_index + 1,
+      value: coreNumbers.get(slot.slot_index) ?? slot.slot_index + 1,
       bonus: isAdditiveSlot(slot),
       bonusIndex: bonusOrder.get(slot.slot_index),
       bonusTotal: bonusOrder.has(slot.slot_index) ? bonusTotal : undefined,
@@ -762,6 +764,23 @@ export default function DailyPage() {
         continue;
       }
       if (slot.skipped) {
+        // Keep the skipped question on screen, the way an answered one stays,
+        // with the note under it. Dropping the card left "Skipped. We'll bring
+        // it back later." hanging off the PREVIOUS question, so it read as that
+        // one being skipped and the real one vanished (QA 2026-09-25, S7).
+        rows.push({
+          id: `q-${slot.slot_index}`,
+          kind: 'question',
+          assignmentId: String(slot.slot_index),
+          questionText: slot.question_text,
+          creatorName: null,
+          presenceSourceName: getSlotPresence(slot)?.name ?? null,
+          presenceSourceExtraCount: getSlotPresence(slot)?.extraCount ?? 0,
+          returnLastSeenAt: returnBannerLastSeen(slot),
+          numberMarker: markerFor(slot),
+          badges: questionBadges(slot),
+          reportTarget: reportTargetFor(slot),
+        });
         // A rested bonus slot ("This is {Name}'s bag but not mine") is closed via
         // the same skip path, but it's an opt-out, not a "bring it back later" —
         // so it gets its own copy naming the category we've stopped surfacing.

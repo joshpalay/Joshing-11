@@ -2355,7 +2355,7 @@ function FeedListContent({
                     unifiedHome={unifiedHome}
                     prominent
                     windowLabel={bandLabelVisible && bandHasContent ? 'Past 7 days' : undefined}
-                    subtitle="Tap a streak to play your friend's questions."
+                    subtitle="Tap a set to play your friend's questions."
                   >
                     From Friends
                   </FeedSectionHeading>

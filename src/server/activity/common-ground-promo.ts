@@ -87,7 +87,14 @@ export async function getCommonGroundPromo(
   const promoFriends: CommonGroundPromoFriend[] = [];
   for (let i = 0; i < candidates.length && promoFriends.length < MAX_PROMO_FRIENDS; i++) {
     const friend = candidates[i];
-    const latent = grounds[i].latent;
+    // "You and {friend} keep meeting in the same places" is a claim about BOTH
+    // people. A mastery row can exist with 0 points (a domain touched but never
+    // earned in), and a brand-new player was told they kept meeting a friend in
+    // two topics they had never scored in (QA 2026-09-25, S20). Only ground
+    // both have actually earned points in counts here.
+    const latent = grounds[i].latent.filter(
+      (d) => d.viewer.mastery_points > 0 && d.friend.mastery_points > 0,
+    );
     if (latent.length === 0) continue;
 
     // The friend's strongest shared-but-untested domains (up to two), strongest

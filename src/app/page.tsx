@@ -1,10 +1,7 @@
 import { Suspense } from 'react'
 import FeedList from '@/components/FeedList'
 import { Skeleton } from '@/components/ui/Skeleton'
-import TodaysFiveCard, {
-  type DailyStatus,
-  type SlotOutcome,
-} from '@/components/TodaysFiveCard'
+import TodaysFiveCard, { type DailyStatus } from '@/components/TodaysFiveCard'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
@@ -14,7 +11,8 @@ import { getHomeFriendRequests, getMutualFriendSuggestions } from '@/server/db/q
 import { buildHomeEdition } from '@/server/home/build-edition'
 import { getWelcomeInviterName } from '@/server/home/welcome-inviter-name'
 import { DAILY_QUEUE_SIZE, isRoundComplete, type QueueSlot } from '@/server/daily/types'
-import { getBonusSlots, getCoreSlots } from '@/server/daily/bonus'
+import { getCoreSlots } from '@/server/daily/bonus'
+import { buildBonusOutcomes, buildCoreOutcomes } from '@/server/daily/status-outcomes'
 import { getCatchupQuestions, getTodaysDailyQueue } from '@/server/db/queries/daily'
 import { getNextDailyResetBoundary } from '@/lib/games/timezone'
 import { timeServerWork } from '@/server/lib/server-timing'
@@ -303,45 +301,18 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
   )
 }
 
-function buildSlotOutcomes(slots: QueueSlot[]): SlotOutcome[] {
-  const outcomes: SlotOutcome[] = Array.from({ length: DAILY_QUEUE_SIZE }, () => 'unanswered')
-  for (const slot of slots) {
-    const idx = slot.slot_index
-    if (!Number.isInteger(idx) || idx < 0 || idx >= DAILY_QUEUE_SIZE) continue
-    if (slot.answered) {
-      outcomes[idx] = slot.answer_state === 'incorrect' ? 'incorrect' : 'correct'
-    } else if (slot.skipped) {
-      outcomes[idx] = 'skipped'
-    }
-  }
-  return outcomes
-}
-
-// Mirror of /api/daily/status: outcomes for the additive +2 bonus slots, in
-// order (0–2). Rendered as the home card's set-apart bonus dot-group; never
-// counted toward "of 5".
-function buildBonusOutcomes(slots: QueueSlot[]): SlotOutcome[] {
-  return getBonusSlots(slots).map((slot) =>
-    slot.answered
-      ? slot.answer_state === 'incorrect'
-        ? 'incorrect'
-        : 'correct'
-      : slot.skipped
-        ? 'skipped'
-        : 'unanswered',
-  )
-}
-
 function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDailyQueue>>): DailyStatus {
   const nextRoundAt = getNextDailyResetBoundary().toISOString()
+  const snapshotAt = new Date().toISOString()
   if (!queue) {
     return {
+      snapshotAt,
       questionsRemaining: DAILY_QUEUE_SIZE,
       questionsAnswered: 0,
       isComplete: false,
       nextRoundAt,
       queueId: null,
-      slotOutcomes: buildSlotOutcomes([]),
+      slotOutcomes: buildCoreOutcomes([]),
       bonusOutcomes: buildBonusOutcomes([]),
     }
   }
@@ -361,12 +332,13 @@ function buildDailyStatusSnapshot(queue: Awaited<ReturnType<typeof getTodaysDail
     ? 0
     : Math.max(DAILY_QUEUE_SIZE - questionsAnswered, 0)
   return {
+    snapshotAt,
     questionsRemaining,
     questionsAnswered,
     isComplete,
     nextRoundAt,
     queueId: queue.id,
-    slotOutcomes: buildSlotOutcomes(slots),
+    slotOutcomes: buildCoreOutcomes(slots),
     bonusOutcomes: buildBonusOutcomes(slots),
   }
 }

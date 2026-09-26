@@ -160,7 +160,9 @@ function MasteredRoom({ active, reduced, list }: { active: boolean; reduced: boo
   return (
     <Shell th={th}>
       <Reveal show={active} reduced={reduced}>
-        <Eyebrow color={th.accent}>What you mastered</Eyebrow>
+        {/* Any tier crossing lands here (Establishing → Familiar included), so
+            "What you mastered" overclaimed (QA 2026-09-25, S19). */}
+        <Eyebrow color={th.accent}>Where you moved up</Eyebrow>
       </Reveal>
       {list.map((m, i) => (
         <Reveal key={`${m.domain}-${m.toTier}`} show={active && t >= i} reduced={reduced} style={{ marginBottom: 28 }}>
@@ -519,10 +521,16 @@ function Hint({ fg, show }: { fg: string; show: boolean }) {
   );
 }
 
+// The cycle is the 7×24h before the ceremony fired (fire-ceremony.ts), so its
+// start and end dates are the same weekday a week apart. Printing both read as
+// eight days under "Seven days of knowing things" (Sep 13 – Sep 20, QA
+// 2026-09-25, S19); label the seven dates it actually covers.
 function formatRange(start: string, end: string): string {
   try {
     const fmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
-    return `${fmt.format(new Date(`${start}T00:00:00`))} – ${fmt.format(new Date(`${end}T00:00:00`))}`;
+    const firstDay = new Date(`${start}T00:00:00`);
+    firstDay.setDate(firstDay.getDate() + 1);
+    return `${fmt.format(firstDay)} – ${fmt.format(new Date(`${end}T00:00:00`))}`;
   } catch {
     return `${start} – ${end}`;
   }

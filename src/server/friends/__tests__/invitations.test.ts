@@ -196,6 +196,7 @@ import {
   getInvitationByToken,
   getInvitePrefillByToken,
   getPendingInvitationForPhone,
+  isListedOutgoingInvitation,
   updateFriendInvitation,
 } from '@/server/friends/invitations';
 import { parsePreSeededInterests } from '@/server/db/queries/users';
@@ -705,5 +706,17 @@ describe('friend invitation helpers', () => {
       { label: 'Jazz', description: 'Blue Note', broadCategory: 'music' },
       { label: 'Poetry', description: null, broadCategory: 'literature' },
     ]);
+  });
+});
+
+describe('isListedOutgoingInvitation (QA 2026-09-25, S14)', () => {
+  it('hides an accepted invite whose invitee deleted their account', () => {
+    expect(isListedOutgoingInvitation({ status: 'accepted', inviteeUserId: null })).toBe(false);
+  });
+
+  it('keeps accepted invites with a live invitee and every unaccepted invite', () => {
+    expect(isListedOutgoingInvitation({ status: 'accepted', inviteeUserId: 'user-1' })).toBe(true);
+    expect(isListedOutgoingInvitation({ status: 'pending', inviteeUserId: null })).toBe(true);
+    expect(isListedOutgoingInvitation({ status: 'expired', inviteeUserId: null })).toBe(true);
   });
 });

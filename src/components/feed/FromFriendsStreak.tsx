@@ -394,7 +394,7 @@ function StreakQuestionCard({
             <Hourglass />
             <span style={{ fontFamily: FF, fontSize: 12.5, color: INK2 }}>
               via <ActorLink name={friendName} userId={friendId} />
-              &rsquo;s streak
+              &rsquo;s set
             </span>
           </div>
         ) : null}

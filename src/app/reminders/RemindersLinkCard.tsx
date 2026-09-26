@@ -28,6 +28,16 @@ async function optIn(): Promise<{ ok: true } | { ok: false; message: string }> {
   }
 }
 
+function dismissAsk() {
+  void fetch('/api/account/reminders', {
+    method: 'PATCH',
+    credentials: 'include',
+    keepalive: true,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ dismissed: true }),
+  }).catch(() => undefined);
+}
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <section className="relative z-10 mx-auto w-full max-w-md rounded-[var(--radius-md)] bg-[var(--brand-cream-card)] px-6 py-8 shadow-[0_4px_4px_0_rgba(0,0,0,0.25),var(--shadow-card)] ring-1 ring-black/5 sm:px-10 sm:py-10">
@@ -131,7 +141,11 @@ export function RemindersLinkCard({
             {state.error}
           </p>
         ) : null}
-        <Link href="/daily" className="btn-ghost inline-flex w-full">
+        {/* Records the answer before leaving: this used to be a bare link, so
+            nothing was saved and the page came back at every sign-in (QA
+            2026-09-25, S11). keepalive lets the save outlive the navigation;
+            a failed save just means one more ask later. */}
+        <Link href="/daily" className="btn-ghost inline-flex w-full" onClick={dismissAsk}>
           Not right now
         </Link>
       </div>

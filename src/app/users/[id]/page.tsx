@@ -183,7 +183,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains);
   const tierSignature = `${new Intl.NumberFormat().format(
     Math.round(mastery.totalPoints),
-  )} knowledge points across ${sortedDomains.length} territories`;
+  )} knowledge points across ${totalPointPositiveDomains} territories`;
 
   // Owner self-view: the consolidated profile + settings surface. Header
   // card, visibility toggles, preview links, discovery + invite, reminder
@@ -495,6 +495,7 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
             <div className="mt-3">
               <KnowledgeCard
                 playerDisplayName={portrait.user.displayName}
+                ownerView={isOwnerView}
                 portraitStatement={mindStatement}
                 domains={topDomains.map(toKnowledgeCardDomain)}
                 overflowCount={Math.max(0, totalPointPositiveDomains - topDomains.length)}
