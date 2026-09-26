@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-25
+last-reviewed: 2026-09-26
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -1336,3 +1336,151 @@ still isn't due (200-row threshold, currently 170).
    passes today but is no longer the binding condition) — currently 170
    rows.
 5. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).
+
+### 2026-09-26 (diagnosis-review) — Phase 2's gate (both date AND row-count) is met for the first time; accessible-share reversal falls back 4pts instead of extending a third time; Phase 3 dip narrows again to 7.9 points, back under the ≤10-point line; a first non-zero `failed_open` (1/267) since the 2026-09-07 fail-open day; no new relevant code; all five PRs confirmed still merged
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`, ACTIVE_HEALTHY, us-west-2 —
+matches this doc's prior sessions) available this session. No `.env` file
+exists in this checkout (only `.env.example`), so none of this doc's env
+flags (`PARTIAL_ANSWER_LEAK_ENABLED`, `DOMAIN_DRIFT_DROP_ENABLED`,
+`VERIFICATION_UNVERIFIABLE_HOLD_ENABLED`, `DECLARED_DOMAIN_FLOOR_ENABLED`,
+`ANTHROPIC_API_KEY`) could be grepped for a live value this session — same
+gap as 2026-09-12/2026-09-14. Checked their code-level semantics instead
+(below). Deploy was 2026-09-11T19:14:09Z, so this review lands at
+deploy+~15.0 days.
+
+**All five `related-pr` PRs re-checked via `pull_request_read` and confirmed
+still `merged: true`, unchanged from every prior reading:** #1654
+(merged 2026-09-11T18:45:36Z), #1662 (merged 2026-09-11T19:03:57Z), #1666
+(merged 2026-09-11T19:35:35Z), #1683 (merged 2026-09-13T21:17:34Z), #1698
+(merged 2026-09-16T22:07:16Z). No reverts, no state changes.
+
+**Env-flag code semantics re-checked by grep on the source (not the
+runtime env, which isn't available here):**
+`src/server/adaptive-difficulty.ts:257` still reads
+`process.env.DECLARED_DOMAIN_FLOOR_ENABLED` at the same line every prior
+review checked; `src/server/daily/generate-questions.ts` still documents
+and reads `DOMAIN_DRIFT_DROP_ENABLED` (default OFF, line ~1159) and
+`PARTIAL_ANSWER_LEAK_ENABLED` (default OFF, line ~1446) the same way. No
+code change flips any default — consistent with `git log --since=2026-09-24`
+on both files returning nothing (see below).
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-25 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 170 | **200** | — | ordinary generation (+30) — and this is exactly the Phase 2 row-count threshold, see below |
+| Mean words/question | 29.7 | **30.3** | ≤24 | still barely moved |
+| Rows over 25 words | 61% | **63%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 54% | **50%** | 30-45% | fell back 4pts instead of extending the reversal a third time — see below |
+
+**The accessible-share reversal did not extend a third time — it fell back
+toward the band instead.** The 2026-09-25 entry asked whether a third
+reading would hold flat/rise (which would have been "the first real
+challenge" confirmed) or resume moving toward the band. Today's reading
+(54%→50%) is neither a clean continuation of the reversal nor a return to
+the pre-reversal cooling streak's pace, but it is a move *back toward* the
+30-45% target band rather than away from it or flat. Read plainly: the
+46%→54%→54%→50% sequence looks more like noise around the high-40s/low-50s
+than a durable second regime change. Not calling this settled either way —
+one more reading either direction would clarify it — but it does not
+extend or strengthen the 2026-09-24/25 concern.
+
+**Quality-gate drop rate since deploy:** 99/267 = **37.1%** (considered
+267, up from 239; dropped 99, up from 90) — inside the 35-45% acceptable
+band, essentially flat versus the last two readings (37.7%, 37.0%).
+`difficulty_floor`: 2/267 = **0.75%**, well under the 5% stop condition.
+
+**New this reading — `failed_open: 1`** on the `quality` gate (was 0 on
+every single reading since deploy, going back to 2026-09-15's first Phase 1
+run). This is the first non-zero `failed_open` count this doc has recorded
+outside the 2026-09-07 pre-deploy fail-open day the §3 "load-bearing
+assumption" names (229 fail-opens, all on that one day, 0 every other day).
+At n=1 out of 267 considered, this reads as an isolated transient (a single
+LLM-call failure defaulting the gate open for one question), not a
+recurrence of the systemic 2026-09-07 pattern — but flagging it plainly per
+that same load-bearing assumption's own logic: if fail-opens become a
+recurring rather than one-off event, every gate-side number in this doc
+becomes invalid for the affected rows. Not escalating on a single instance;
+worth checking whether it repeats next time this is reviewed.
+
+**Per-defect breakdown** (`quality:%`, day≥2026-09-11): `DEFINITION_SUPPLIED`
+44/258 (largest, as every prior reading, up from 42/230), `GENERIC_AT_TIER`
+27/258 (up from 23/230 — the largest one-reading jump this counter has
+shown), `FALSE_PREMISE` 9/258 (up from 7/230), `SELF_ANSWERING` 8/258 (up
+from 7/230), `ANSWER_LEAKED` 6/258 (flat), `OPINION_OR_VAGUE` 1/258 (flat),
+`MISLEADING_SETUP` 1/258 (flat), `MULTI_PART` 0/258, `OFF_DOMAIN` 0/258.
+
+**None of Phase 1's checkable stop conditions trip.** The one Phase 1 exit
+criterion this environment has never been able to check — short-queue /
+`generation_failed` build counts from Vercel function logs — remains
+unchecked.
+
+**Phase 3 (correct-rate) — narrows for a fourth straight reading, now
+clearly back under the ≤10-point line on the largest cohort yet:**
+accessible-tier mean `empirical_correct_rate`, post-deploy cohort now
+**0.627** (38 rows/55 answers, up from 35/50), pre-deploy cohort **0.706**
+(51 rows/89 answers, up from 48/81 — the "frozen" pre-deploy population
+keeps moving as more answers land on old rows, same dynamic noted since
+2026-09-16). Dip: **7.9 points** (was 9.8, 12.3, 16.2, 18.2 at the peak) —
+the fourth consecutive narrowing reading and the first time the dip has
+been comfortably clear of the ≤10-point line rather than sitting just under
+it. Per Josh's 2026-09-22 resolution of decision 3 ("only a widening trend
+on a larger sample would be new evidence"), this continues to be the
+opposite of new evidence. Not re-escalating; decision 3 stays resolved
+(accept). Logging the number per this doc's convention.
+
+**Phase 2's gate — BOTH conditions are now met for the first time.** The
+plan's own criterion is "deploy + 14 days, or once ≥ 200 post-deploy live
+rows exist, whichever is later." The 14-day date mark passed yesterday
+(2026-09-25T19:14:09Z, noted in that day's entry), and today's row count
+query returned exactly **200** — the row-count threshold is now also met.
+This is the first review at which Phase 2's hand read is actually due by
+the plan's own stated gate, not just "getting closer." **Not performing the
+hand read myself** — it requires a seeded random sample and a human
+labeller applying the audit's rubric (§4 Phase 2), which is out of scope
+for a read-only diagnosis-review pass — but flagging this plainly as the
+new leading item: someone (Josh, or whoever the audit's labeller is) can
+now actually run Phase 2, which is the prerequisite this doc's open
+decision 1 (keep or revert R1's accessible bar) needs to be scored against
+real numbers instead of the running Phase-1 proxy signals.
+
+**No new relevant code:** `git log --since=2026-09-24` on
+`generate-questions.ts` (for `SYSTEM_PROMPT`/`QUALITY_GATE_SYSTEM_PROMPT`)
+and `adaptive-difficulty.ts` returns nothing. Six commits landed on `main`
+since the 2026-09-25 diagnosis-review commit (`#1710` daily bonus/
+second-look slot carry-forward fix, `#1711`/`#1712` Lately card readability
+and glyph-alignment fixes, `#1713` QA pass, `#1714` a new QA-walkthrough
+skill, `#1715` a feed activity-visibility fix) — none touch this doc's
+tracked prompt/gate/adaptive-difficulty paths, confirmed both by the
+path-scoped `git log` above and by each commit's own file list.
+
+**No decision-resolving change.** Status stays `active` (decision 3 already
+resolved 2026-09-22; decisions 1, 2, 4, 5 unchanged — decision 1 is now
+scoreable at Phase 2, which just became due, but scoring it requires the
+hand read itself, not a re-verification pass). Phase 2's hand read is now
+due for the first time (200 rows, 14-day mark passed yesterday).
+
+### Next steps (revised)
+1. **New, and now the leading item:** Phase 2's hand read is due — both the
+   14-day date mark (passed 2026-09-25) and the 200-row mark (met today)
+   are satisfied. Run the seeded random sample hand-read (100 accessible-tier
+   rows, 100 across all tiers) per §4 Phase 2's method; its decision table
+   scores open decisions 1 and 2.
+2. Watch whether the new `failed_open: 1` reading repeats — if it does,
+   the doc's own load-bearing assumption in §3 says every gate-side number
+   here becomes suspect for the affected rows; a single instance is not yet
+   that.
+3. Keep watching accessible share — 50% this reading, back down from the
+   54%/54% reversal readings; one more reading would clarify whether that
+   reversal is settling back into the band or was noise.
+4. Keep reading Phase 3's correct-rate query every review — dip narrowed to
+   7.9pts (fourth straight narrowing reading, clearly under the ≤10-point
+   line) on the largest cohort yet (55 answers); decision 3 stays resolved
+   (accept).
+5. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked, now 8 days past its
+   checkpoint date.
+6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).

@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-25
+last-reviewed: 2026-09-26
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709"
 ---
@@ -1004,5 +1004,90 @@ on `main` at all since the 2026-09-24 diagnosis-review commit.
    build-time p50 recovers.
 3. Keep an eye on `batch_dedup` `failed_open` (16/203 on the rolling
    14-day window, eased slightly) and `recent_history` (3/203, flat).
+4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-26 (diagnosis-review) — a new pending dispute appeared but still no new reviews since 09-19/09-23; `recent_history` failed_open ticks up again; `batch_dedup` flat for a second review; `subject_entity` coverage holds; build p50 eases slightly; all four tracked PRs re-confirmed merged; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`, `ACTIVE_HEALTHY`, `us-west-2`)
+available this session, same as the last several reviews. This session's
+filesystem still has no real `.env`/`.env.local` — only `.env.example` is
+present (confirmed via `ls .env*`), same environment-access constraint as
+every prior review since 2026-09-12; no live-env flag value to report
+beyond what `.env.example` shows (`ANTHROPIC_API_KEY=""` placeholder,
+`DATABASE_URL` a template string, neither a real credential).
+
+**All four tracked PRs re-confirmed merged and unreverted, checked directly
+via the GitHub API this pass (not just `git log`):** `#1646` (merged
+2026-09-10T10:23:28Z), `#1698` (merged 2026-09-16T22:07:16Z), `#1702`
+(merged 2026-09-18T12:04:17Z), `#1709` (merged 2026-09-23T19:45:18Z). All
+`state: closed`, `merged: true`. No change from what this doc already had
+recorded.
+
+**`#1702` dispute queue: a new pending row appeared, but still zero new
+reviews.** `GradeDispute` status counts (all-time): `pending` **43** (was
+42), `alternative_added` 29 (unchanged), `dismissed` 5 (unchanged). Latest
+`reviewed_at` across the whole table is still **2026-09-23T23:33:01Z** —
+byte-identical to the last review, so the two `#1709`-adjacent rows remain
+the most recent activity and the open question from 2026-09-24/25 (whether
+those two resolutions came from the automated recheck path or actual staff
+review) is still unresolved and still not re-investigated this pass. The
+one new `pending` row is unreviewed, consistent with "the queue remains
+barely used," not evidence of new review activity.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard requirement
+(2026-09-16T22:07:16Z): **0 of 136** newly-generated rows missing it (was 0
+of 99 last review).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`, summed across daily rows — this table is
+per-day aggregated, not per-event):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 214 | 17 | **4** |
+| `batch_dedup` | 214 | 7 | 16 |
+| `quality` | 214 | 83 (38.8%) | 0 |
+
+`recent_history`'s `failed_open` ticked up again, 3→4 — its fourth-ever
+movement (previously 1→2 on 09-22, 2→3 on 09-24, flat at 3 on 09-25).
+`batch_dedup`'s `failed_open` is flat at 16 for a second consecutive review
+(was 17→16 easing on 09-25's rolling window, now steady at 16) — the first
+time this counter has held flat across back-to-back reviews since it
+started climbing. `quality`'s scoped drop rate (38.8%) stays inside the
+acceptable band. Neither counter is root-caused; same "flagging for
+awareness" posture as every prior entry.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 35,750ms** (n=24),
+down slightly from the last reading (36,208ms, n=23) — still well above the
+25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s 2026-09-25 entry (not re-run
+independently this pass, just read): the elevated/outlier-residual cluster
+it tracks is now 6 of 30 post-deferral rows (up from 5), still untraced —
+so the standing explanation for the elevated p50 is unchanged even though
+this reading itself ticked down slightly.
+
+**No code change since the last review:** `git log --since=2026-09-25` on
+`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, and `src/server/db/queries/grade-disputes.ts`
+returns nothing. Six commits landed on `main` since the 2026-09-25
+diagnosis-review commit (`a245c9f`, `875120d`→ already prior, `6108c2c`,
+`7e2a1b9`, `6caa5fe`, `30d4fa4`, `ae27d6f`); none touch this doc's tracked
+paths — spot-checked directly.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Check how `#1709`'s automated recheck path labels its `GradeDispute`
+   resolutions — still not investigated; no new resolutions since
+   2026-09-23 to check against anyway (one new *unreviewed* pending row
+   doesn't change this).
+2. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers — now 6 named outliers per the cross-referenced
+   doc, still untraced.
+3. Keep an eye on `batch_dedup` `failed_open` (16/214, flat for the second
+   straight review) and `recent_history` (4/214, ticked up again).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

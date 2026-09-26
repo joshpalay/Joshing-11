@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-25
+last-reviewed: 2026-09-26
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1530,3 +1530,94 @@ reviews), but still needs access this session doesn't have.
 2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 3. Question 4 (is the bonus worth its cost) — unresolved, and the growing
    outlier share makes it harder to answer with a single number.
+
+### 2026-09-26 (diagnosis-review) — three new built rows, two more join the outlier cluster (now 8 of 32, 25%); median saving rises to 14,311.5ms (n=32); still zero races; one new PR touches queue-orchestrator.ts but not the tracked persist-race path
+
+**Environment note:** no `.env` file in this session (only `.env.example`),
+and no `node_modules` installed at all, so `npm run check:build-latency`
+itself fails immediately (`ERR_MODULE_NOT_FOUND: dotenv`) rather than
+reporting "no DB access" — a different failure mode than the 2026-09-12/14
+reviews, but the same practical result for that one command. Worked around
+it the way the 2026-09-15-onward reviews already do: a live, read-only
+Supabase MCP connection to the production project (`grixooyecvnugpxvcbct`)
+is available, so the same read-only queries the script would run were
+issued directly against `DailyBuildMetric`.
+
+**`DailyBuildMetric` totals:** `built=33` (1 baseline + 32 post-deferral,
+up from 31 total / 30 post-deferral at the last review — see discrepancy
+note below), `carry_forward=464`, `existing_queue=41`,
+`partial_carry_forward=5`. **`outcome='lost_persist_race'` is still 0
+rows**, cumulative, all time — no change from every prior reading.
+
+**Three new post-deferral rows since the last-named build (`758748d3-…`,
+2026-09-24T17:05:18.461Z)**, all from yesterday's 17:05 UTC cron pass, all
+`deferred: true`, `target_size=5`, `final_size=6`:
+
+| build_id | started_at | saved | bonus (`generationMs`) | residual |
+|---|---|---:|---:|---:|
+| `4f9efefa-…` | 2026-09-25 17:05:16.166Z | 31,229 | 750 | **30,479 — outlier-class** |
+| `76790f46-…` | 2026-09-25 17:05:21.271Z | 26,823 | 739 | **26,084 — outlier-class** |
+| `a000b944-…` | 2026-09-25 17:05:21.898Z | 14,330 | 13,510 | 820 — normal band |
+
+**Two of the three are new outliers, both the small-bonus/huge-residual
+shape** (750ms and 739ms of bonus generation paired with 30.5s and 26.1s of
+unexplained residual) — the same pattern as `84e717bd-…` and `87e51589-…`,
+not the "large bonus + inflated residual" shape of `cff84520-…` /
+`758748d3-…`. **This raises the outlier/elevated count from 6 of 30 to 8 of
+32 (25%)**, continuing the same successive-review growth this doc has
+tracked (3→5→6→8) without narrowing the mechanism. Full named set now:
+`84e717bd-…` (09-09), `87e51589-…` (09-14), `cff84520-…` (09-15),
+`42f757d7-…` and `8753461a-…` (09-23), `758748d3-…` (09-24), and today's
+`4f9efefa-…` and `76790f46-…` (09-25). Not traced this pass — still needs
+Vercel function logs this session doesn't have.
+
+**Phase 3a (mechanism) still holds** on all three new rows: `saved ≥` each
+row's own bonus `generationMs`.
+
+**3b population: median saving 14,311.5ms** (n=32, up from 13,408.5ms at
+n=30), computed directly via `percentile_cont(0.5)` over all post-deferral
+rows, not just the three new ones.
+
+**Discrepancy noted, not chased down:** counting post-deferral rows with
+`started_at <=` the last-reviewed build's timestamp gives **29**, not the
+**30** the 2026-09-25 entry stated. The three new rows above are confirmed
+new (all dated after that timestamp), so this is a pre-existing one-row
+mismatch in either that entry's count or this one's filter, not evidence of
+a deleted or miscounted row today. Flagging honestly rather than silently
+reconciling it; doesn't change the direction or magnitude of anything above
+by more than one row.
+
+**One new commit touches a tracked file, but not the tracked mechanism:**
+`#1710` ("fix(daily): stop unanswered bonus/second-look slots from carrying
+into next day as slot 0"), merged 2026-09-25T10:52:45Z — after the
+2026-09-25 review's git check (which correctly found nothing as of its
+06:20 UTC run) and before this one. Confirmed merged via
+`mcp__github__pull_request_read`. Read the diff directly: it changes
+`topUpAndCarryForwardPartialQueue` in `queue-orchestrator.ts` (now exported)
+to filter carried slots through `getCoreSlots` instead of taking every
+unanswered slot, so a lone unanswered +2/Second-look slot no longer gets
+re-indexed to `slot_index 0` of the next day's queue. It does **not** touch
+`persistDailyQueue`'s `{ row, won }` contract in `daily.ts`, the
+orchestrator's `if (!persistResult.won)` bail-out, or anything in
+`build-context.ts` — confirmed by reading the commit's file list (only
+`queue-orchestrator.ts` + its test file changed). Open question 5's fix is
+unaffected; this is a different bug in an adjacent function.
+
+PRs `#1620` and `#1626` reconfirmed `MERGED` to `main` via
+`mcp__github__pull_request_read` (`merged: true`, unchanged from every
+prior reading). `#1710` also confirmed `MERGED`.
+
+**No decision-resolving change.** Status stays `active`. The outlier-trace
+next step is more urgent still (3→5→6→8 occurrences across successive
+reviews, now a quarter of all post-deferral rows), but still needs Vercel
+access this session doesn't have. Question 4 (is the bonus worth its cost)
+remains open and unresolved.
+
+### Next steps (unchanged)
+1. **Trace the now-eight outsized/elevated-residual builds** — needs Vercel
+   function logs. Named: `84e717bd-…` (09-09), `87e51589-…` (09-14),
+   `cff84520-…` (09-15), `42f757d7-…` and `8753461a-…` (09-23),
+   `758748d3-…` (09-24), `4f9efefa-…` and `76790f46-…` (09-25).
+2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+3. Question 4 (is the bonus worth its cost) — unresolved, and the growing
+   outlier share (now 25%) makes it harder to answer with a single number.

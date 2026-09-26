@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-25
+last-reviewed: 2026-09-26
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701"
 ---
@@ -2144,4 +2144,105 @@ action (blind-labeling) rather than "keep watching."
    rule) — same Phase-1 process, not yet run.
 4. The three open `ContentReport` rows remain unaddressed, now 19 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-26 (diagnosis-review) — 19 clean days on both established flags; `answer_leak_any_token` gains three more drops; first `failed_open` since 2026-09-07 shows up on the shared `quality` gate, in a scope this doc hadn't previously called out; `ContentReport` rows now 20 days open; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. No `.env`/`.env.local` present locally at all
+(only `.env.example`) — `PARTIAL_ANSWER_LEAK_ENABLED`,
+`DOMAIN_DRIFT_DROP_ENABLED`, `ANSWER_SHAPE_GATE_ENABLED`,
+`SINGLE_WORD_ANSWER_LEAK_ENABLED`, `ANY_TOKEN_ANSWER_LEAK_ENABLED`, and
+`ANTHROPIC_API_KEY` are all absent from a grep of `.env`. Expected — these
+are Vercel-dashboard-only production env vars and this repo's local
+eval-runner key, not part of this repo's `.env` — and not informative about
+production values either way; only `GateDropStat` telemetry is, per this
+doc's own long-standing convention.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 333 | 0 | 0 |
+| `domain_drift` | 333 | 0 | 0 |
+| `answer_leak_single_word` | 230 | 2 | 0 |
+| `answer_leak_any_token` | 147 | **18** | 0 |
+| `answer_shape` | 333 | 2 | 0 |
+| `quality` | 333 | 123 | **230** (was 229 — see below) |
+
+`answer_leak_partial` / `domain_drift` are now at **19 consecutive clean
+days**, 333 considered (up from 305), still 0 drops each — Mechanism-2
+code-fix decision unchanged, still waiting on `domain_drift` to catch
+something real. `answer_leak_single_word` gained 28 considered (202→230),
+no new drop (still 2). `answer_leak_any_token` gained three more drops (15→18,
+119→147 considered) — it crossed the ~13-hit blind-labeling threshold in the
+last review and remains well past it; the blind-labeling pass the last entry
+recommended has **not** been run (still outside this review's recon scope,
+same as stated yesterday). Not resolving open decision 6.
+
+**New data point, not decision-resolving but worth logging precisely: the
+shared `quality` gate recorded its first `failed_open` since 2026-09-07** —
+breaking an 18-day-old pattern this doc had re-confirmed on every prior
+review ("failed_open confirmed still isolated to 2026-09-07 only"). Traced
+to the day level: 1 of 10 considered on **2026-09-25**, in a
+`scope='non_player'` row (`considered:10, dropped:3, failed_open:1`); the
+same day's `scope='daily_build'` row reads `failed_open:0`, and
+`domain_drift`'s own counter (both scopes) reads `failed_open:0` for
+2026-09-25 too. This is the first time a review has queried `GateDropStat`
+by its `scope` column (mentioned but not exploited in the 2026-09-14 entry
+re #1646) rather than just by day — prior reviews' daily numbers folded
+`daily_build` and `non_player` rows together without noting the split, so
+this isn't necessarily new behavior, just the first time it's been looked at
+this way. A single failed-open call is far too small a sample to diagnose
+(could be an ordinary transient Haiku hiccup, not a repeat of the
+credit-exhaustion incident), and `domain_drift`'s own zero-failure reading
+on the same day says the shared Haiku plumbing it depends on wasn't broadly
+down. Flagging it because the "still isolated to 2026-09-07" claim this doc
+has repeated verbatim for 18 reviews is now literally false by one event —
+worth a quick look at what `scope='non_player'` traffic actually is (looks
+like non-player/test/admin-triggered generation, distinct from real daily
+builds) if it recurs, but not chasing it further this pass.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id: `139e1932…` created 2026-09-06T01:15:10Z, `800c44a3…`
+and `357618e3…` both created 2026-09-06T14:53:3{8,9}Z), now **20 days**
+since they were filed. Not this doc's action item, but the age keeps
+growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,396**, up from 2,366 —
+ordinary generation, not investigated further.
+
+**No new code:** `git log --since=2026-09-25` on `self-answering.ts`,
+`off-domain-second-opinion.ts`, `generate-questions.ts`,
+`sweep-bank-quality.ts`, and `rewrite-bank-demotions.ts` returns nothing.
+Six commits landed on `main` since the last review's commit (`#1710`–`#1715`:
+a skip-cap/close-out fix, two `Lately`-surface UI fixes, a QA pass on
+block/dev-tools, a new `/qa-walkthrough` skill, and a feed fix for
+deleted/blocked people) — confirmed by diff, none touch this doc's tracked
+gate/flag paths. `git log --all --grep=revert --since=2026-09-25` found no
+reverts of anything this doc references.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment's `.env`, same self-skip condition as every prior review.
+Per its last real run (#1701 era / 2026-09-08 entries), it stands at 9/11,
+unchanged; nothing new to log there.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass.
+
+### Next steps (unchanged, plus one)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now 19+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 230).
+3. **A blind-labeling pass on `answer_leak_any_token` is still due** (now 18
+   of 147, further past the ~13-hit threshold) — recommended in the last
+   review, still not run.
+4. **New:** if `quality`'s `failed_open` shows up again on a day after
+   2026-09-07 (especially another `scope='non_player'` hit), stop treating
+   "isolated to 2026-09-07" as settled and look at what `non_player`-scoped
+   generation traffic actually is.
+5. The three open `ContentReport` rows remain unaddressed, now 20 days old.
+6. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
