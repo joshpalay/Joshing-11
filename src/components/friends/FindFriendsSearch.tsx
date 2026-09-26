@@ -7,6 +7,7 @@ import { createFriendSearchRequest } from '@/components/friends/search-request'
 import {
   ADD_SOMEONE_FOCUS_EVENT,
   resolveAddSomeoneOutcome,
+  searchPlanFor,
   type QueryClassification,
 } from '@/components/friends/add-someone'
 import { colorForUser, formatRelativeTime } from '@/components/feed/visual'
@@ -73,7 +74,7 @@ export function FindFriendsSearch() {
   // body (linter rule react-hooks/set-state-in-effect). The "clear on
   // empty query" path is handled in handleQueryChange below.
   useEffect(() => {
-    if (!query.trim()) return
+    if (searchPlanFor(query) !== 'search') return
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
     debounceRef.current = window.setTimeout(() => {
       debounceRef.current = null
@@ -103,11 +104,20 @@ export function FindFriendsSearch() {
   function handleQueryChange(value: string) {
     searchRequest.invalidate()
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    const plan = searchPlanFor(value)
     setQuery(value)
-    setSearching(Boolean(value.trim()))
+    setSearching(plan === 'search')
     setMatch(null)
-    setSearched(false)
+    // A name can't be looked up, so it goes straight to the no-match handoff
+    // without spending a rate-limited search (see searchPlanFor).
+    setSearched(plan === 'no_lookup')
     setError(null)
+  }
+
+  function searchNow() {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    debounceRef.current = null
+    if (searchPlanFor(query) === 'search') void searchRequest.run(query)
   }
 
   function refreshAfterAction() {
@@ -146,9 +156,7 @@ export function FindFriendsSearch() {
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault()
-            if (debounceRef.current) window.clearTimeout(debounceRef.current)
-            debounceRef.current = null
-            void searchRequest.run(query)
+            searchNow()
           }
         }}
         placeholder="@username or US phone number"
@@ -156,7 +164,9 @@ export function FindFriendsSearch() {
       />
 
       <div className="mt-3 min-h-[44px]" aria-live="polite" aria-busy={searching}>
-        {outcome.kind === 'searching' ? (
+        {outcome.kind === 'idle' && searchPlanFor(query) === 'partial_phone' ? (
+          <p className="text-muted-foreground text-sm">Keep going — enter the full 10-digit number.</p>
+        ) : outcome.kind === 'searching' ? (
           <p className="text-muted-foreground text-sm">Searching…</p>
         ) : outcome.kind === 'error' ? (
           <p className="text-destructive text-sm">{error}</p>
