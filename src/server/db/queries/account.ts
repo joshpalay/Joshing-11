@@ -591,7 +591,7 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     );
     await tx.execute(sql`delete from "ActivityItem" where "userId" = ${userId}`);
     await tx.execute(
-      sql`update "ActivityItem" set "actorUserId" = null where "actorUserId" = ${userId}`,
+      sql`update "ActivityItem" set "actorUserId" = null, "actorNameSnapshot" = null where "actorUserId" = ${userId}`,
     );
 
     // Partition this author's questions: TOMBSTONE (A1) when a RETAINED user still

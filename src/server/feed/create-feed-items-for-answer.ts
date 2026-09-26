@@ -105,10 +105,7 @@ async function _createFeedItemsForFriendsFromAnswer(
   // friends with see that I answered correctly. Phase 1 has no asymmetric
   // following, so a one-directional follower is not an audience for this.
   const friends = await getFriends(userId);
-  if (friends.length === 0) {
-    await notifyPreviousAnswerers(userId, questionId);
-    return;
-  }
+  if (friends.length === 0) return;
 
   const friendIds = friends.map((f) => f.id);
 
@@ -221,10 +218,19 @@ async function _createFeedItemsForFriendsFromAnswer(
     await Promise.all(eligibleRecipientIds.map((id) => rollOffOldItems(id)));
   }
 
-  await notifyPreviousAnswerers(userId, questionId);
+  await notifyPreviousAnswerers(userId, questionId, friendIds);
 }
 
-async function notifyPreviousAnswerers(userId: string, questionId: string): Promise<void> {
+// Tells the answerer's MUTUAL friends who already got this question right that
+// the answerer got it too. Friends only: this row names the answerer, and a
+// stranger who happened to answer the same question is not an audience for
+// that (the consent-gated stranger path is notifyNicheMatch). getFriends
+// already excludes blocked pairs, since a block tears down the follow edges.
+async function notifyPreviousAnswerers(
+  userId: string,
+  questionId: string,
+  friendIds: string[],
+): Promise<void> {
   const previousAnswerers = await db
     .select({ userId: masteryEvents.userId })
     .from(masteryEvents)
@@ -232,6 +238,7 @@ async function notifyPreviousAnswerers(userId: string, questionId: string): Prom
       eq(masteryEvents.questionId, questionId),
       eq(masteryEvents.answeredByUserId, masteryEvents.userId),
       inArray(masteryEvents.sourceType, ['live_correct', 'catchup_correct']),
+      inArray(masteryEvents.userId, friendIds),
     ));
 
   const notifyIds = [...new Set(

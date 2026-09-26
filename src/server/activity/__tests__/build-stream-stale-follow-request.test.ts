@@ -17,11 +17,11 @@ vi.mock('@/app/activities/filter-utility-activities', () => ({
   filterUtilityActivities: (items: unknown[]) => items,
 }));
 vi.mock('@/lib/activity-stream', () => ({
-  activityToStreamItem: (x: { id: string }) => x,
-  momentToStreamItem: (x: unknown) => x,
-  bundleAnswerToStreamItem: (x: unknown) => x,
-  convergenceToStreamItem: (_c: unknown, questions: unknown) => ({ kind: 'convergence', questions }),
-  friendActivityToStreamItem: (card: { id: string }, questions: unknown) => ({ kind: 'milestone', id: card.id, questions }),
+  activityToStreamItem: (x: object) => ({ line: [], ...x }),
+  momentToStreamItem: (x: object) => ({ line: [], ...x }),
+  bundleAnswerToStreamItem: (x: object) => ({ line: [], ...x }),
+  convergenceToStreamItem: (_c: unknown, questions: unknown) => ({ kind: 'convergence', line: [], questions }),
+  friendActivityToStreamItem: (card: { id: string }, questions: unknown) => ({ kind: 'milestone', line: [], id: card.id, questions }),
 }));
 vi.mock('@/lib/lately', () => ({
   sortByProminence: (items: unknown[]) => items,
@@ -29,6 +29,9 @@ vi.mock('@/lib/lately', () => ({
 }));
 vi.mock('@/lib/lately-milestones', () => ({ MILESTONE_CARD_QUESTION_CAP: 5 }));
 vi.mock('@/server/db/queries/activity', () => ({ getActivitiesForUser: getActivitiesForUserMock }));
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  blockedIdsAmong: vi.fn(async () => new Set<string>()),
+}));
 vi.mock('@/server/db/queries/content-reports', () => ({
   getViewerHiddenQuestionIds: vi.fn(async () => new Set<string>()),
 }));
