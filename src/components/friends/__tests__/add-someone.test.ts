@@ -7,6 +7,7 @@ import {
   classifyQuery,
   describeMatchStatus,
   resolveAddSomeoneOutcome,
+  searchPlanFor,
 } from '@/components/friends/add-someone'
 import type { RelationshipState } from '@/server/db/queries/friend-requests'
 
@@ -131,5 +132,27 @@ describe('addSuccessToast (phase-1 friend-request framing)', () => {
     // (the asymmetric follow vocabulary returns in phase 2).
     expect(addSuccessToast('auto_approved', 'none')).toBe("You're now friends.")
     expect(addSuccessToast('auto_approved', 'follows_you')).toBe("You're now friends.")
+  })
+})
+
+describe('searchPlanFor — only a term that could match spends a rate-limited lookup (QA 2026-09-25)', () => {
+  it('searches a handle-shaped term or a full US number', () => {
+    expect(searchPlanFor('triothird')).toBe('search')
+    expect(searchPlanFor('@TrioThird')).toBe('search')
+    expect(searchPlanFor('(555) 333-3333')).toBe('search')
+    expect(searchPlanFor('+1 555 333 3333')).toBe('search')
+  })
+
+  it('waits on a phone number that is still being typed', () => {
+    expect(searchPlanFor('(555) 333')).toBe('partial_phone')
+    expect(searchPlanFor('555')).toBe('partial_phone')
+  })
+
+  it('sends a free-text name straight to the invite handoff', () => {
+    expect(searchPlanFor('Trio Third')).toBe('no_lookup')
+  })
+
+  it('does nothing for an empty box', () => {
+    expect(searchPlanFor('   ')).toBeNull()
   })
 })

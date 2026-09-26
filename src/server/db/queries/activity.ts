@@ -179,18 +179,18 @@ function isActivityType(value: string): value is ActivityItemType {
 
 
 // Types that still make sense with no actor: viewer-own or system rows that
-// never name a person, plus the question-backed "answered your question" rows
-// that degrade to an anonymized line (filtered further in build-stream).
+// never name a person. Anything that would name someone renders as "Someone"
+// once the actor is gone, and players never see anonymous activity from
+// people they can't identify (Josh, QA 2026-09-25 follow-up) — so the
+// "answered your question" rows no longer degrade to an anonymized line.
 const ACTORLESS_OK_TYPES = new Set<string>([
   'ceremony_ready',
   'authored_question_shared',
   'joshing_game_result',
   'friend_invitation_reminder',
-  'friend_answered_your_question',
-  'niche_match_answered_your_question',
 ]);
 
-function needsLiveActor(type: string): boolean {
+export function needsLiveActor(type: string): boolean {
   return !ACTORLESS_OK_TYPES.has(type);
 }
 
@@ -913,10 +913,8 @@ async function hydrateActivityRows(
     // A block is enforced bidirectionally on every read (user-blocks.ts): no
     // row names someone on either side of a block.
     .filter((row) => !row.actorUserId || !blockedActorIds.has(row.actorUserId))
-    // A row that is only ABOUT a person ("X is now a friend", "X played their
-    // first five") has nothing left to say once that account is gone. The
-    // question-backed "answered your question" types stay, anonymized, and
-    // build-stream drops the ones whose question can't be shown either.
+    // A row about a person ("X is now a friend", "X answered your question")
+    // has nothing to say once that account is gone: never shown as "Someone".
     .filter((row) => Boolean(row.actorUserId) || !needsLiveActor(row.type))
     .map((row) => ({
       id: row.id,
