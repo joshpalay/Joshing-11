@@ -36,6 +36,7 @@ export function FriendRequestActions({
       // dead button behind a confusing message.
       if (response.ok || response.status === 404) {
         router.refresh()
+        window.dispatchEvent(new Event('nav:refresh'))
         return
       }
 
@@ -62,7 +63,10 @@ export function FriendRequestActions({
           disabled={Boolean(pendingAction)}
           onClick={() => void submit('ignore')}
         >
-          {pendingAction === 'ignore' ? 'Setting aside…' : 'Not now'}
+          {/* Same silent decline as the "Wants to connect" card's Decline; the
+              two labels for one request read as two different choices
+              (QA 2026-09-26, N12). */}
+          {pendingAction === 'ignore' ? 'Declining…' : 'Decline'}
         </button>
       </div>
       {error ? (

@@ -1,3 +1,6 @@
+import { inArray } from 'drizzle-orm';
+
+import { db, users } from '@/server/db';
 import { blockedIdsAmong } from '@/server/db/queries/user-blocks';
 import { isBonusSlot } from '@/server/daily/bonus';
 import type { QueueSlot } from '@/server/daily/types';
@@ -7,6 +10,10 @@ import type { QueueSlot } from '@/server/daily/types';
  * If the viewer and that friend block each other afterwards, the stored name
  * would keep reaching the viewer (QA 2026-09-25, C2). Build-time sourcing
  * already excludes blocked people (getFollowing); this is the read-time half.
+ *
+ * The same goes for a friend who deletes their account: the snapshot outlives
+ * the person, so the recap kept saying "from Quat's knowledge" after Quat was
+ * gone (QA 2026-09-26, S14).
  *
  * Only the name is dropped: presence_source_id stays because it is the bonus
  * marker (isBonusSlot), and the slot still counts as a bonus.
@@ -20,11 +27,16 @@ export async function scrubBlockedPresence(
   ];
   if (sourceIds.length === 0) return slots;
 
-  const blocked = await blockedIdsAmong(viewerId, sourceIds);
-  if (blocked.size === 0) return slots;
+  const [blocked, existingRows] = await Promise.all([
+    blockedIdsAmong(viewerId, sourceIds),
+    db.select({ id: users.id }).from(users).where(inArray(users.id, sourceIds)),
+  ]);
+  const existing = new Set(existingRows.map((row) => row.id));
+  const hidden = new Set(sourceIds.filter((id) => blocked.has(id) || !existing.has(id)));
+  if (hidden.size === 0) return slots;
 
   return slots.map((slot) =>
-    isBonusSlot(slot) && blocked.has(slot.presence_source_id as string)
+    isBonusSlot(slot) && hidden.has(slot.presence_source_id as string)
       ? { ...slot, presence_source_name: null, presence_source_extra_count: 0 }
       : slot,
   );

@@ -382,8 +382,10 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
                 ))}
               </div>
             ) : (
-              <p className="text-destructive text-sm" role="status">
-                Choose at least one category to save.
+              // Guidance, not an error: it showed in red before the player had
+              // touched anything (QA 2026-09-26, N2).
+              <p className="text-muted-foreground text-sm" role="status">
+                Pick at least one category to create the link.
               </p>
             )}
 
@@ -475,9 +477,11 @@ export function InviteLinksSection({ initialTopics, initialLinks, creatorName }:
               className="mt-3 rounded-lg p-2.5 text-sm"
               style={{ background: 'var(--success-surface)', color: 'var(--success)' }}
             >
-              The {pendingDeleteLink.joinedCount}{' '}
-              {pendingDeleteLink.joinedCount === 1 ? 'person' : 'people'} who already joined through
-              this link stay your friends. Nothing changes for them.
+              {pendingDeleteLink.joinedCount === 0
+                ? 'No one has joined through this link yet.'
+                : `The ${pendingDeleteLink.joinedCount} ${
+                    pendingDeleteLink.joinedCount === 1 ? 'person' : 'people'
+                  } who already joined through this link stay your friends. Nothing changes for them.`}
             </p>
             <p
               className="mt-2 rounded-lg p-2.5 text-sm"

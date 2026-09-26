@@ -171,12 +171,23 @@ export default function FriendRequestsSection({ initial }: FriendRequestsSection
   const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set())
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // "You and Tre are now friends." Accepting used to just make the card vanish,
+  // with nothing saying it worked (QA 2026-09-26, N11).
+  const [confirmation, setConfirmation] = useState<string | null>(null)
 
   const { requests, totalCount } = deriveVisibleRequests(initial, removedIds)
 
   // Zero-state is invisible: this section simply isn't rendered when there are
-  // no pending requests (quiet over loud — no empty chrome).
-  if (requests.length === 0) return null
+  // no pending requests (quiet over loud — no empty chrome) — except to show
+  // the confirmation for the request just accepted.
+  if (requests.length === 0 && !confirmation) return null
+  if (requests.length === 0) {
+    return (
+      <p role="status" className="text-sm text-[var(--brand-ink-700)]">
+        {confirmation}
+      </p>
+    )
+  }
 
   async function actOnRequest(
     request: SerializedIncomingRequest,
@@ -197,11 +208,13 @@ export default function FriendRequestsSection({ initial }: FriendRequestsSection
         next.add(request.id)
         return next
       })
+      setConfirmation(action === 'accept' ? `You and ${request.requesterName} are now friends.` : null)
       // Keep the other home surfaces in sync: the same pending request also
       // shows in the Recent Activity stream ("wants to be friends"). Re-render
       // the server components so that duplicate clears too — otherwise it lingers
       // and its Accept button 404s on the now-settled request.
       router.refresh()
+      window.dispatchEvent(new Event('nav:refresh'))
     } else {
       // Failure: the card stays put and we surface an inline error.
       setError(result.message)
@@ -234,6 +247,11 @@ export default function FriendRequestsSection({ initial }: FriendRequestsSection
       {error ? (
         <p role="alert" className="text-sm font-medium text-[var(--brand-ink)]">
           {error}
+        </p>
+      ) : null}
+      {confirmation ? (
+        <p role="status" className="text-sm text-[var(--brand-ink-700)]">
+          {confirmation}
         </p>
       ) : null}
 

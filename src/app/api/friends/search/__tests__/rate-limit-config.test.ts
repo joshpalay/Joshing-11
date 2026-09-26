@@ -12,7 +12,13 @@ const { getSessionMock, searchMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/server/auth/session', () => ({ getSession: getSessionMock }))
-vi.mock('@/server/db/queries/friend-search', () => ({ searchFriendByHandleOrPhone: searchMock }))
+vi.mock('@/server/db/queries/friend-search', () => ({
+  searchFriendByHandleOrPhone: searchMock,
+  searchFriendOutcome: async (viewerId: string, query: string) => ({
+    match: await searchMock(viewerId, query),
+    blockedByViewer: false,
+  }),
+}))
 vi.mock('@/server/telemetry', () => ({ logTelemetry: vi.fn() }))
 
 function searchRequest(q: string) {

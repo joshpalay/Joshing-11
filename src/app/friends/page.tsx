@@ -26,8 +26,9 @@ import {
 } from '@/server/db/queries/contact-hashes';
 import { getActiveDeclaredInterestsBulk } from '@/server/db/queries/declared-interests';
 import { listInviteReflections } from '@/server/db/queries/friend-invitations';
-import { getMutualFriendSuggestions } from '@/server/db/queries/friends';
-import { listLiveInviteLinks } from '@/server/db/queries/invite-links';
+import { getMutualFollows, getMutualFriendSuggestions } from '@/server/db/queries/friends';
+import { listInviteLinkJoiners, listLiveInviteLinks } from '@/server/db/queries/invite-links';
+import { blockedIdsAmong } from '@/server/db/queries/user-blocks';
 import { sanitizeInviteLinkCategories } from '@/lib/invite-links';
 import {
   buildInviteUrl,
@@ -78,8 +79,16 @@ export default async function FriendsPage() {
   // Nav-tab dot and the Invitations-tab passive row on next render.
   await markDiscoveryChecked(session.userId);
 
-  const [reflections, contactMatches, lastContactUpload, resolvedTopics, liveLinks, mutualFriendSuggestionsRaw] =
-    await Promise.all([
+  const [
+    reflections,
+    contactMatches,
+    lastContactUpload,
+    resolvedTopics,
+    liveLinks,
+    mutualFriendSuggestionsRaw,
+    linkJoinersRaw,
+    mutualFollows,
+  ] = await Promise.all([
       listInviteReflections(session.userId),
       viewer.discoverableByContacts ? listContactMatches(session.userId) : Promise.resolve([]),
       viewer.discoverableByContacts
@@ -88,7 +97,25 @@ export default async function FriendsPage() {
       getInviteLinkSeedTopics(session.userId),
       listLiveInviteLinks(session.userId),
       getMutualFriendSuggestions(session.userId, MUTUAL_FRIEND_SUGGESTIONS_FETCH_LIMIT),
+      listInviteLinkJoiners(session.userId),
+      getMutualFollows(session.userId),
     ]);
+  // People who joined through the viewer's links, for "People you invited"
+  // (QA 2026-09-26, S6). A block hides them here like everywhere else.
+  const blockedJoinerIds = await blockedIdsAmong(
+    session.userId,
+    linkJoinersRaw.map((joiner) => joiner.userId),
+  );
+  const friendIds = new Set(mutualFollows.map((friend) => friend.id));
+  const linkJoiners = linkJoinersRaw
+    .filter((joiner) => !blockedJoinerIds.has(joiner.userId))
+    .map((joiner) => ({
+      userId: joiner.userId,
+      displayName: joiner.displayName?.trim() || (joiner.handle ? `@${joiner.handle}` : 'A friend'),
+      joinedAt: joiner.joinedAt.toISOString(),
+      linkTopics: joiner.linkTopics,
+      connected: friendIds.has(joiner.userId),
+    }));
   const contactRefreshDue = isRefreshDue(lastContactUpload);
 
   // A person can qualify for both the invite-reflection list and the
@@ -241,7 +268,7 @@ export default async function FriendsPage() {
               <h2 className="text-foreground font-serif text-xl font-semibold">
                 People you invited
               </h2>
-              <PeopleYouInvited />
+              <PeopleYouInvited linkJoiners={linkJoiners} />
             </section>
           }
         />

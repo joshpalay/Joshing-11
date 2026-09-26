@@ -2,6 +2,7 @@ import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } fr
 
 import {
   activityItems,
+  biweeklyCeremonies,
   db,
   feedItems,
   follows,
@@ -137,6 +138,9 @@ export type ActivityItemView = Pick<
       inviteeDisplayName: string | null;
       maskedPhone: string;
     };
+    // ceremony_ready rows: whether the reflection was already opened, so the
+    // row stops saying "is ready · See it now" afterwards (QA 2026-09-26, N19).
+    ceremony?: { viewed: boolean };
   };
 };
 
@@ -192,6 +196,42 @@ const ACTORLESS_OK_TYPES = new Set<string>([
 
 export function needsLiveActor(type: string): boolean {
   return !ACTORLESS_OK_TYPES.has(type);
+}
+
+// Rows whose whole message is "you two are connected". They stop being true the
+// moment the friendship ends, so they are only shown while the actor is still a
+// mutual friend — after an unfriend, or a block that is later lifted, B's feed
+// kept saying "Duo Prova accepted your friend request" / "is now a friend"
+// (QA 2026-09-26, S4).
+const RELATIONSHIP_ASSERTION_TYPES = new Set<string>(['follow', 'follow_approved', 'follow_mutual']);
+
+export function assertsLiveRelationship(type: string): boolean {
+  return RELATIONSHIP_ASSERTION_TYPES.has(type);
+}
+
+// Which of `candidateIds` are currently mutual friends of `userId` (an approved
+// follow in both directions — the migrated symmetric friendship).
+async function mutualFriendIdsAmong(userId: string, candidateIds: string[]): Promise<Set<string>> {
+  if (candidateIds.length === 0) return new Set();
+  const rows = await db
+    .select({ followerId: follows.followerId, followeeId: follows.followeeId })
+    .from(follows)
+    .where(
+      and(
+        eq(follows.state, 'approved'),
+        or(
+          and(eq(follows.followerId, userId), inArray(follows.followeeId, candidateIds)),
+          and(eq(follows.followeeId, userId), inArray(follows.followerId, candidateIds)),
+        ),
+      ),
+    );
+  const outgoing = new Set<string>();
+  const incoming = new Set<string>();
+  for (const row of rows) {
+    if (row.followerId === userId) outgoing.add(row.followeeId);
+    else incoming.add(row.followerId);
+  }
+  return new Set([...outgoing].filter((id) => incoming.has(id)));
 }
 
 function parseFriendshipRequestInterests(value: unknown): string[] {
@@ -872,6 +912,22 @@ async function hydrateFriendInvitationReminders(items: ActivityItemRow[]) {
   ] as const));
 }
 
+async function hydrateCeremonies(items: ActivityItemRow[]) {
+  const ids = [
+    ...new Set(
+      items
+        .filter((item) => item.type === 'ceremony_ready' && item.referenceId)
+        .map((item) => item.referenceId!),
+    ),
+  ];
+  if (ids.length === 0) return new Map<string, { viewed: boolean }>();
+  const rows = await db
+    .select({ id: biweeklyCeremonies.id, viewedAt: biweeklyCeremonies.viewedAt })
+    .from(biweeklyCeremonies)
+    .where(inArray(biweeklyCeremonies.id, ids));
+  return new Map(rows.map((row) => [row.id, { viewed: row.viewedAt !== null }] as const));
+}
+
 async function hydrateActivityRows(
   rows: ActivityItemRow[],
   userId: string,
@@ -890,6 +946,7 @@ async function hydrateActivityRows(
     declaredPromotedById,
     gradeDisputesById,
     friendInvitationRemindersById,
+    ceremoniesById,
   ] = await Promise.all([
     hydrateActors(rows),
     hydrateFriendshipRequests(rows),
@@ -904,9 +961,20 @@ async function hydrateActivityRows(
     hydrateDeclaredPromoted(rows),
     hydrateGradeDisputes(rows),
     hydrateFriendInvitationReminders(rows),
+    hydrateCeremonies(rows),
   ]);
   const actorIds = [...new Set(rows.map((row) => row.actorUserId).filter((id): id is string => Boolean(id)))];
-  const blockedActorIds = await blockedIdsAmong(userId, actorIds);
+  const relationshipActorIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.actorUserId && assertsLiveRelationship(row.type))
+        .map((row) => row.actorUserId as string),
+    ),
+  ];
+  const [blockedActorIds, currentFriendIds] = await Promise.all([
+    blockedIdsAmong(userId, actorIds),
+    mutualFriendIdsAmong(userId, relationshipActorIds),
+  ]);
 
   return rows
     .filter((row): row is ActivityItemRow & { type: ActivityItemType } => isActivityType(row.type))
@@ -916,6 +984,11 @@ async function hydrateActivityRows(
     // A row about a person ("X is now a friend", "X answered your question")
     // has nothing to say once that account is gone: never shown as "Someone".
     .filter((row) => Boolean(row.actorUserId) || !needsLiveActor(row.type))
+    .filter(
+      (row) =>
+        !assertsLiveRelationship(row.type) ||
+        (row.actorUserId !== null && currentFriendIds.has(row.actorUserId)),
+    )
     .map((row) => ({
       id: row.id,
       userId: row.userId,
@@ -966,6 +1039,9 @@ async function hydrateActivityRows(
           : undefined,
         friendInvitationReminder: row.type === 'friend_invitation_reminder' && row.referenceId
           ? friendInvitationRemindersById.get(row.referenceId)
+          : undefined,
+        ceremony: row.type === 'ceremony_ready' && row.referenceId
+          ? ceremoniesById.get(row.referenceId)
           : undefined,
       },
     }));

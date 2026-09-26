@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull } from 'drizzle-orm';
 
 import { db, userInviteLinks, users } from '@/server/db';
 import { sanitizeInviteLinkCategories, type InviteLinkCategory } from '@/lib/invite-links';
@@ -28,6 +28,45 @@ export type InviteLinkRow = {
   createdAt: Date;
   joinedCount: number;
 };
+
+export type InviteLinkJoinerRow = {
+  userId: string;
+  displayName: string | null;
+  handle: string | null;
+  joinedAt: Date;
+  /** Topic names on the link they came through (empty for legacy links). */
+  linkTopics: string[];
+};
+
+// Everyone who signed up through one of this user's invite links — deleted
+// links included, since the join still happened. Newest first. Feeds "People
+// you invited", which used to list only personal-note invites, so a link
+// reading "2 friends joined" sat above "No notes sent yet." (QA 2026-09-26, S6).
+export async function listInviteLinkJoiners(userId: string): Promise<InviteLinkJoinerRow[]> {
+  const rows = await db
+    .select({
+      userId: users.id,
+      displayName: users.displayName,
+      handle: users.handle,
+      joinedAt: users.createdAt,
+      categories: userInviteLinks.categories,
+    })
+    .from(users)
+    .innerJoin(userInviteLinks, eq(users.joinedViaInviteLinkId, userInviteLinks.id))
+    .where(eq(userInviteLinks.userId, userId))
+    .orderBy(desc(users.createdAt));
+
+  return rows.map((row) => ({
+    userId: row.userId,
+    displayName: row.displayName,
+    handle: row.handle,
+    joinedAt: row.joinedAt,
+    linkTopics:
+      row.categories === null
+        ? []
+        : sanitizeInviteLinkCategories(row.categories).map((category) => category.label),
+  }));
+}
 
 // Live (non-deleted) links for a user, oldest first — slot 0 (untagged) may
 // repeat; slots 1-3 cannot, enforced by UserInviteLink_user_id_slot_live_key.

@@ -727,9 +727,10 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
   }, [isExplainerOpen, question.explanation])
   // A skipped core question comes back in Catch up ("We'll bring it back
   // later"), so its recap must not give the answer away (QA 2026-09-25, S7).
-  // A skipped bonus is a rested "not my bag" opt-out that never returns, so
-  // there is nothing to spoil there.
-  const savedForLater = question.isSkipped && !question.isBonus
+  // Bonus slots get the same treatment: the Not-for-me sheet offers "Skip for
+  // now · It'll come back another day." on a bonus too, and the recap can't
+  // tell that apart from a "not my bag" rest (QA 2026-09-26, S2).
+  const savedForLater = question.isSkipped
   const statusLabel = question.isSkipped
     ? 'Skipped'
     : question.isCorrect
@@ -794,7 +795,14 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
               ) : (
                 <span>{authorLabel}</span>
               )}
-              {question.authorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
+              {/* The space keeps "Joshing" and the badge apart for screen
+                  readers and copy-paste ("JoshingEDITORIAL", QA 2026-09-26, N9). */}
+              {question.authorIsHouse ? (
+                <>
+                  {' '}
+                  <EditorialBadge style={{ marginLeft: '2px' }} />
+                </>
+              ) : null}
             </p>
             {question.bonusPresence ? (
               <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
@@ -840,7 +848,9 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             style={{ color: question.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
           >
             {savedForLater
-              ? 'Saved for Catch up'
+              ? question.isBonus
+                ? 'Not shown for skipped questions'
+                : 'Saved for Catch up'
               : question.correctAnswer || 'No answer available'}
           </p>
         </div>

@@ -41,7 +41,20 @@ export function isCatchUpQueueDateEligible(
  * becomes ordinary catch-up tomorrow, when its queue is no longer today's.
  * Wrong answers from today are unaffected and still surface immediately.
  */
-export function isCatchUpSlotEligible(slot: QueueSlot, isTodaysQueue = false): boolean {
+/**
+ * After a wrong catch-up attempt the slot sits out this long before it is
+ * offered again. Without it, "That's the round — 0 of 1. You're all caught up."
+ * was followed by home re-offering the very same question seconds later, in a
+ * loop (QA 2026-09-26, S5). Long enough to mean "another day", short enough
+ * that tomorrow's catch-up has it.
+ */
+export const CATCHUP_RETRY_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+
+export function isCatchUpSlotEligible(
+  slot: QueueSlot,
+  isTodaysQueue = false,
+  now: Date = new Date(),
+): boolean {
   if (slot.dismissed_at) return false;
   // Bot slots carry generated_question_id; friend-authored slots carry
   // question_id (the canonical Question.id). Either is sufficient to
@@ -52,6 +65,12 @@ export function isCatchUpSlotEligible(slot: QueueSlot, isTodaysQueue = false): b
   // because recovery deliberately leaves the live verdict untouched so the
   // daily-five dots keep showing the original wrong/skipped result.
   if (slot.catchup_answer_state === 'correct') return false;
+  if (slot.catchup_answer_state === 'incorrect' && slot.catchup_answered_at) {
+    const attemptedAt = new Date(slot.catchup_answered_at).getTime();
+    if (!Number.isNaN(attemptedAt) && now.getTime() - attemptedAt < CATCHUP_RETRY_COOLDOWN_MS) {
+      return false;
+    }
+  }
   // Wrong daily-5 answers are eligible for re-attempt; correct ones are not.
   if (slot.answered) return slot.answer_state === 'incorrect';
   // Unanswered: genuinely missed on a past day, still pending on today's.

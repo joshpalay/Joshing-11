@@ -145,7 +145,24 @@ export async function buildActivityStream(
       );
     })
     .map(activityToStreamItem);
-  const momentItems = moments.map(momentToStreamItem);
+  // One correct answer to a stranger's question produced both the niche-match
+  // row ("You answered X's question — you found someone") and a Lately moment
+  // ("You came through on X's … question") — the same event twice
+  // (QA 2026-09-26, N6). The niche row carries the discovery, so it wins.
+  const nicheKeys = new Set(
+    items
+      .filter(
+        (item) =>
+          (item.type === 'niche_match_you_answered' ||
+            item.type === 'niche_match_answered_your_question') &&
+          item.referenceId &&
+          item.actorUserId,
+      )
+      .map((item) => `${item.referenceId}:${item.actorUserId}`),
+  );
+  const momentItems = moments
+    .filter((moment) => !nicheKeys.has(`${moment.questionId}:${moment.friendId}`))
+    .map(momentToStreamItem);
   const bundleAnswerItems = bundleAnswers.map(bundleAnswerToStreamItem);
   const friendActivityItems = friendCards
     .map((card, i) => {

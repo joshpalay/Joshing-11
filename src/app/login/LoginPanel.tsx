@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -18,7 +18,7 @@ const HANDLE_FORMAT = /^[a-z][a-z0-9_]{2,19}$/;
 function formatPhoneForDisplay(e164: string): string {
   const digits = e164.replace(/\D/g, '').replace(/^1/, '');
   if (digits.length !== 10) return e164;
-  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 const CARD_CLASS =
@@ -58,6 +58,10 @@ function sendTelemetry(event: string) {
     keepalive: true,
   }).catch(() => undefined);
 }
+
+// Minimum gap between "Send a new code" taps, so a double tap can't fire two
+// texts back to back.
+const RESEND_COOLDOWN_MS = 30_000;
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -300,6 +304,16 @@ export default function LoginPanel({
   const [inviteDeadEnd, setInviteDeadEnd] = useState(previewDeadEnd);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "Send a new code" on the code step (QA 2026-09-26, S10: re-entering the
+  // number via "Change number" was the only way to get another code).
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
+  // The error sits under the card; on a short phone screen the invite-only
+  // message landed below the fold (QA 2026-09-26, S10). Bring it into view.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [error]);
   // Controls the bottom-card transition: the title card (in page.tsx) stays
   // fixed; only this form card animates out, swaps content, then animates in.
   const [entering, setEntering] = useState(true);
@@ -453,8 +467,9 @@ export default function LoginPanel({
   // phone-first invite). The submitted phone is authoritative for the gate;
   // the invitation token rides along as the credential, re-validated against
   // that phone server-side (D-AUTH-INVITE-PHONE-FIRST §4 default stance).
-  async function requestCodeForPhone(normalized: string) {
+  async function requestCodeForPhone(normalized: string, { resend = false } = {}) {
     setError(null);
+    setResendNotice(null);
     setInviteDeadEnd(false);
 
     if (!US_E164_REGEX.test(normalized)) {
@@ -496,7 +511,13 @@ export default function LoginPanel({
       }
 
       setPhone(normalized);
-      swapStep('code');
+      setResendAvailableAt(Date.now() + RESEND_COOLDOWN_MS);
+      if (resend) {
+        setCode('');
+        setResendNotice('New code sent.');
+      } else {
+        swapStep('code');
+      }
     } finally {
       setLoading(false);
     }
@@ -684,6 +705,12 @@ export default function LoginPanel({
         transition: 'opacity 200ms ease, transform 200ms ease',
       }}
     >
+      {step === 'phone' && searchParams.get('deleted') === '1' ? (
+        // Set by the Delete account flow (QA 2026-09-26, N21).
+        <p role="status" className="mb-4 text-center text-sm text-[var(--brand-ink-700)]">
+          Your account was deleted.
+        </p>
+      ) : null}
       {step === 'phone' ? (
         <form className="space-y-3.5" onSubmit={continueWithPhone}>
           {/* Phone artwork for the entry step (uploaded asset). */}
@@ -861,12 +888,35 @@ export default function LoginPanel({
               className={SUBTLE_LINK_CLASS}
               onClick={() => {
                 setCode('');
+                setResendNotice(null);
+                // The code step holds the E.164 form; refill the field the way
+                // the player typed it, not as "+15554444444" (QA 2026-09-26, N8).
+                setPhone(formatUsPhoneInput(phone));
                 swapStep('phone');
               }}
               disabled={loading}
             >
               Change number
             </button>
+            <button
+              type="button"
+              className={`${SUBTLE_LINK_CLASS} min-h-11`}
+              onClick={() => {
+                if (Date.now() < resendAvailableAt) {
+                  setResendNotice('Give it a few seconds, then try again.');
+                  return;
+                }
+                void requestCodeForPhone(normalizePhone(phone.trim()), { resend: true });
+              }}
+              disabled={loading}
+            >
+              Send a new code
+            </button>
+            {resendNotice ? (
+              <p role="status" className="text-center text-sm text-[var(--brand-ink-700)]">
+                {resendNotice}
+              </p>
+            ) : null}
           </div>
         </form>
       ) : (
@@ -892,7 +942,7 @@ export default function LoginPanel({
               type="text"
               autoComplete="name"
               className={INPUT_CLASS}
-              placeholder="Jane Palay"
+              placeholder="Alex Rivera"
               value={displayName}
               onChange={(event) => updateDisplayName(event.target.value)}
               disabled={loading}
@@ -914,7 +964,7 @@ export default function LoginPanel({
               type="text"
               autoComplete="username"
               className={INPUT_CLASS}
-              placeholder="jpalay"
+              placeholder="alexrivera"
               value={handle}
               // Once the player is in this field it is theirs: stop copying the
               // display name into it (QA 2026-09-25, S18).
@@ -986,7 +1036,11 @@ export default function LoginPanel({
       )}
 
       {error ? (
-        <p className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-center text-sm">
+        <p
+          ref={errorRef}
+          role="alert"
+          className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-center text-sm"
+        >
           {error}
         </p>
       ) : null}

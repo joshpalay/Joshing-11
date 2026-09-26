@@ -14,6 +14,7 @@ const ERROR_COPY: Record<string, string> = {
   invalid_invitee_display_name: 'Use a shorter, real display name.',
   invalid_suggested_interests: 'Keep each idea short and friendly.',
   invite_cooldown: 'Give this invite a little breathing room before trying again.',
+  blocked_by_viewer: 'You’ve blocked this person. Unblock them in Privacy settings first.',
 }
 
 type Step = 'identity' | 'interests' | 'handoff'
@@ -224,7 +225,29 @@ export function PersonalInviteFlow() {
     if (error === ERROR_COPY.too_many_suggested_interests) setError(null)
   }
 
-  function goToInterests(event: FormEvent<HTMLFormElement>) {
+  // Before asking for ideas, check whether this number is already a friend (or
+  // someone the viewer blocked). The server said so only after the ideas step,
+  // so the player filled in ideas for nothing (QA 2026-09-26, N4). Uses the
+  // same exact-phone lookup as Find; any failure (including its rate limit)
+  // just falls through to the normal flow, where the server check still runs.
+  async function preflightExistingFriend(): Promise<'friends' | 'blocked' | null> {
+    try {
+      const response = await fetch(`/api/friends/search?q=${encodeURIComponent(phone)}`, {
+        credentials: 'include',
+      })
+      if (!response.ok) return null
+      const body = (await response.json().catch(() => null)) as {
+        match?: { relationship?: { state?: string } } | null
+        blockedByViewer?: boolean
+      } | null
+      if (body?.blockedByViewer) return 'blocked'
+      return body?.match?.relationship?.state === 'friends' ? 'friends' : null
+    } catch {
+      return null
+    }
+  }
+
+  async function goToInterests(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!trimmedName) {
       setError(ERROR_COPY.missing_invitee_display_name)
@@ -235,6 +258,29 @@ export function PersonalInviteFlow() {
       return
     }
     setError(null)
+    setSubmitting(true)
+    const existing = await preflightExistingFriend()
+    setSubmitting(false)
+    if (existing === 'blocked') {
+      setError(ERROR_COPY.blocked_by_viewer)
+      return
+    }
+    if (existing === 'friends') {
+      setResult({
+        ok: true,
+        type: 'friendship_request',
+        state: 'already_following',
+        id: '',
+        inviteUrl: null,
+        message: null,
+        inviteeDisplayName: trimmedName,
+        inviteePhone: phone,
+        suggestedInterests: [],
+      })
+      setMessageText('')
+      setStep('handoff')
+      return
+    }
     setStep('interests')
   }
 
@@ -305,7 +351,7 @@ export function PersonalInviteFlow() {
       className="bg-card text-card-foreground rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-card)]"
     >
       {step === 'identity' ? (
-        <form className="space-y-5" onSubmit={goToInterests}>
+        <form className="space-y-5" onSubmit={(event) => void goToInterests(event)}>
           <div>
             <p className="text-muted-foreground text-xs font-medium tracking-[0.1em] uppercase">
               Personal invite
@@ -365,8 +411,8 @@ export function PersonalInviteFlow() {
 
           {error ? <p className="text-destructive text-sm font-medium">{error}</p> : null}
 
-          <button type="submit" className="btn-primary w-full">
-            Next
+          <button type="submit" className="btn-primary w-full" disabled={submitting}>
+            {submitting ? 'Checking…' : 'Next'}
           </button>
         </form>
       ) : null}

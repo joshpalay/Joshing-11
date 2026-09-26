@@ -209,7 +209,7 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
         questionText: 'Which composer wrote the Goldberg Variations?',
         creatorName: 'Dana',
         creatorIsHouse: false,
-        subhead: 'FROM YESTERDAY',
+        subhead: 'FROM YESTERDAY’S FIVE',
         numberMarker: { value: 2, bonus: false },
         badges: [],
       },

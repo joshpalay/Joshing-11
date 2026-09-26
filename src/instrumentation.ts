@@ -2609,6 +2609,12 @@ export async function register() {
         )
       `);
         await db.execute(sql`ALTER TABLE "HiddenQuestion" ENABLE ROW LEVEL SECURITY`);
+        // 0149: 0131 shipped the table without an id default, so a table
+        // created by the migration (rather than the CREATE above) rejects every
+        // insert. Idempotent.
+        await db.execute(
+          sql`ALTER TABLE "HiddenQuestion" ALTER COLUMN "id" SET DEFAULT gen_random_uuid()::text`,
+        );
         await db.execute(
           sql`CREATE INDEX IF NOT EXISTS "HiddenQuestion_user_id_idx" ON "HiddenQuestion" ("user_id")`,
         );

@@ -124,7 +124,10 @@ export function QuestionNumberMarker({
       return (
         <span
           role="img"
-          aria-label="Bonus question"
+          // In practice this is the "second look" return slot, which is extra
+          // but not one of the friend +2, so it isn't read as a bonus
+          // (QA 2026-09-26, N19).
+          aria-label="Extra question"
           style={{ ...boxBaseStyle, width: BOX_HEIGHT, fontSize: BONUS_FONT_SIZE }}
         >
           <span aria-hidden>✦</span>

@@ -415,8 +415,8 @@ export default function WelcomeTourScreen({
               </span>
               <span className="flex items-center gap-2 text-[var(--brand-ink-400)]">
                 <Bell className="size-[18px]" strokeWidth={1.9} />
-                <span className="grid size-6 place-items-center rounded-full bg-[var(--brand-border)] text-[10px] font-semibold text-[var(--brand-ink-700)]">
-                  JP
+                <span className="grid size-6 place-items-center rounded-full bg-[var(--brand-border)] text-[var(--brand-ink-700)]">
+                  <User className="size-3.5" strokeWidth={2} aria-hidden="true" />
                 </span>
               </span>
             </div>
@@ -456,15 +456,19 @@ export default function WelcomeTourScreen({
             {/* Friends section — `friends` (For You + From Friends merged) */}
             <section data-tour="friends" className="mt-5">
               <p className="mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink-400)] uppercase">
-                For you
+                For you <span className="font-medium normal-case tracking-normal">· example</span>
               </p>
+              {/* The For You and From Friends cards are invented samples, so they
+                  name a generic "A friend", never the real inviter: pinning a
+                  made-up question and a made-up "aced all five" on a real person
+                  read as fact to a new player (QA 2026-09-26, S3). */}
               {/* For You — mirrors SparkleEnvelope (the real directed-send card):
                   sans signal + overflow, a short rule, the serif question with
                   faded quotes, Dismiss / Answer. */}
               <article className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--feed-card-elevated)] p-3.5">
                 <div className="flex w-full items-start justify-between gap-3">
                   <p className="font-sans text-[15px] leading-[23px] tracking-[0.05em] text-[var(--brand-ink)]">
-                    <span className="font-semibold">{inviter}</span> sent you a question they wrote
+                    <span className="font-semibold">A friend</span> sent you a question they wrote
                   </p>
                   <MoreHorizontal
                     className="size-5 shrink-0 text-[var(--brand-ink-400)]"
@@ -487,16 +491,16 @@ export default function WelcomeTourScreen({
                 </div>
               </article>
               <p className="mt-4 mb-2 pl-0.5 text-quiet font-bold tracking-[0.1em] text-[var(--brand-ink)] uppercase">
-                From Friends
+                From Friends <span className="font-medium normal-case tracking-normal text-[var(--brand-ink-400)]">· example</span>
               </p>
               <div className="rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-serif text-[1.1rem] font-semibold text-[var(--brand-ink)]">
-                    {inviter}
+                    A friend
                   </p>
-                  {/* The friend's streak — five aced questions, one Joshing
-                      triangle each (the brand motif). */}
-                  <div className="flex items-end gap-1" aria-label="5 of 5 aced">
+                  {/* Five aced questions, one Joshing triangle each (the brand
+                      motif). */}
+                  <div className="flex items-end gap-1" aria-label="Example: 5 of 5 aced">
                     {[
                       'var(--tri-orange)',
                       'var(--tri-darkyellow)',

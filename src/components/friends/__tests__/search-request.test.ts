@@ -39,7 +39,7 @@ describe('latest exact friend lookup', () => {
     await request.run('@newquery')
     body.resolve({ match: { id: 'old-person' } })
     await old
-    expect(callbacks.result.mock.calls).toEqual([[{ id: 'new-person' }]])
+    expect(callbacks.result.mock.calls).toEqual([[{ id: 'new-person' }, { blockedByViewer: false }]])
     expect(callbacks.finish).toHaveBeenCalledTimes(1)
   })
 
@@ -71,6 +71,6 @@ describe('latest exact friend lookup', () => {
     await request.run('@auditquery')
     await request.run('@auditquery')
     expect(callbacks.error).toHaveBeenCalledWith('Network error. Press Enter to try again.')
-    expect(callbacks.result).toHaveBeenCalledWith(null)
+    expect(callbacks.result).toHaveBeenCalledWith(null, { blockedByViewer: false })
   })
 })

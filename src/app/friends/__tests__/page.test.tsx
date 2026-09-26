@@ -49,10 +49,15 @@ vi.mock('@/server/db/queries/contact-hashes', () => ({
 vi.mock('@/server/db/queries/friend-invitations', () => ({
   listInviteReflections: listInviteReflectionsMock,
 }));
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  blockedIdsAmong: vi.fn(async () => new Set<string>()),
+}));
 vi.mock('@/server/db/queries/invite-links', () => ({
+  listInviteLinkJoiners: vi.fn(async () => []),
   listLiveInviteLinks: listLiveInviteLinksMock,
 }));
 vi.mock('@/server/db/queries/friends', () => ({
+  getMutualFollows: vi.fn(async () => []),
   getMutualFriendSuggestions: getMutualFriendSuggestionsMock,
 }));
 vi.mock('@/server/db/queries/declared-interests', () => ({
