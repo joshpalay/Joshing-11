@@ -305,6 +305,28 @@ describe('ignore / cancel clean up the stale follow_request activity', () => {
     expect(softDeleteActivityMock).not.toHaveBeenCalled()
   })
 
+  it('cancelling MY request that was declined keeps the row (and its cooldown), marked withdrawn (QA 2026-09-25, S10)', async () => {
+    const declined = {
+      id: 'edge-1',
+      followerId: FOLLOWER,
+      followeeId: FOLLOWEE,
+      state: 'declined',
+      requestContext: { suggestedInterests: ['Jazz'] },
+    }
+    dbMock._selectQueue.push([declined])
+    state.returnedEdge = declined
+    const now = new Date('2026-09-25T12:00:00.000Z')
+
+    const edge = await cancelPendingFriendshipRequest({ friendshipId: 'edge-1', userId: FOLLOWER, now })
+
+    expect(edge).not.toBeNull()
+    expect(dbMock.delete).not.toHaveBeenCalled()
+    const set = (dbMock.update.mock.results[0]?.value as { set: ReturnType<typeof vi.fn> }).set
+    expect(set).toHaveBeenCalledWith({
+      requestContext: { suggestedInterests: ['Jazz'], withdrawnAt: now.toISOString() },
+    })
+  })
+
   it('does NOT touch activity when there is no matching edge to cancel', async () => {
     state.deleteReturnsEdge = false
 

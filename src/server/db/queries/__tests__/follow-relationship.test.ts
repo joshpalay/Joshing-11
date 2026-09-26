@@ -108,10 +108,18 @@ describe('getRelationship over follow edges', () => {
     })
   })
 
-  // B-FRIENDS-SAFETY-01 Phase 2: 'declined' must not count as a friend, a
-  // follower, or a pending request -- resolve() treats it as an absent edge.
-  it('returns none for a declined outbound edge (not pending_outbound)', async () => {
+  // B-FRIENDS-SAFETY-01 Phase 2: a request I declined is no relationship at
+  // all; a request of mine that was declined still reads as pending to me.
+  it('shows MY declined request as still pending, so the decline is never revealed (QA 2026-09-25, S10)', async () => {
     state.rows = [outbound('declined')]
+    await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
+      state: 'pending_outbound',
+      friendshipId: 'out',
+    })
+  })
+
+  it('returns none for my declined request once I cancelled it', async () => {
+    state.rows = [{ ...outbound('declined'), requestContext: { withdrawnAt: '2026-09-25T00:00:00.000Z' } }]
     await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
       state: 'none',
       friendshipId: null,
@@ -126,12 +134,12 @@ describe('getRelationship over follow edges', () => {
     })
   })
 
-  it('falls back to the other direction when one side is declined', async () => {
-    // My outbound was declined, but they separately follow me -- still follows_you.
-    state.rows = [outbound('declined'), inbound('approved')]
+  it('falls back to the other direction when the side I declined is theirs', async () => {
+    // I declined their request, but I separately follow them -- still following.
+    state.rows = [outbound('approved'), inbound('declined')]
     await expect(getRelationship(VIEWER, TARGET)).resolves.toMatchObject({
-      state: 'follows_you',
-      friendshipId: null,
+      state: 'following',
+      friendshipId: 'out',
     })
   })
 })

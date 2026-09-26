@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, or } from 'drizzle-orm'
 
+import { dropSeveredBonusSlotsBetween } from '@/server/daily/drop-severed-bonus'
 import { cleanupFollowRequestActivity } from '@/server/friends/friendships'
 import { db, follows, userBlocks, users } from '@/server/db'
 
@@ -26,7 +27,11 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
     )
     .returning({ id: follows.id })
 
-  await Promise.all(edges.map((edge) => cleanupFollowRequestActivity(edge.id)))
+  await Promise.all([
+    ...edges.map((edge) => cleanupFollowRequestActivity(edge.id)),
+    // Neither side keeps being served the other's +2 bonus question today.
+    dropSeveredBonusSlotsBetween(blockerId, blockedId),
+  ])
 }
 
 // Does NOT restore any follow edge that blockUser tore down -- unblocking
@@ -64,6 +69,25 @@ export async function hasBlocked(blockerId: string, blockedId: string): Promise<
     .limit(1)
 
   return Boolean(row)
+}
+
+// The blocked person as the BLOCKER sees them, or null when `blockerId` didn't
+// block `blockedId` (including when the block runs the other way). Lets the
+// blocker's own view of that profile say "you blocked them" with a way to
+// undo it, instead of the generic not-found the blocked side gets (QA
+// 2026-09-25, S22).
+export async function getUserBlockedBy(
+  blockerId: string,
+  blockedId: string,
+): Promise<{ displayName: string | null } | null> {
+  const [row] = await db
+    .select({ displayName: users.displayName })
+    .from(userBlocks)
+    .innerJoin(users, eq(users.id, userBlocks.blockedId))
+    .where(and(eq(userBlocks.blockerId, blockerId), eq(userBlocks.blockedId, blockedId)))
+    .limit(1)
+
+  return row ?? null
 }
 
 // Bulk version for list surfaces (search results, contact matches, feed

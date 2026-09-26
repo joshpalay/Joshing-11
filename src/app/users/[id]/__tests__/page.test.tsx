@@ -15,6 +15,7 @@ const {
   getFriendsMock,
   resolvePreviewAsMock,
   getCommonGroundMock,
+  getUserBlockedByMock,
 } = vi.hoisted(() => ({
   getFriendPortraitDataMock: vi.fn(),
   getSessionMock: vi.fn(),
@@ -30,6 +31,7 @@ const {
   getFriendsMock: vi.fn(async () => []),
   resolvePreviewAsMock: vi.fn(async () => null),
   getCommonGroundMock: vi.fn(),
+  getUserBlockedByMock: vi.fn(async (): Promise<{ displayName: string | null } | null> => null),
 }))
 
 vi.mock('next/link', () => ({
@@ -71,6 +73,10 @@ vi.mock('@/server/db/queries/knowledge', () => ({
 
 vi.mock('@/server/db/queries/questions', () => ({
   getAuthoredQuestionsForUser: getAuthoredQuestionsForUserMock,
+}))
+
+vi.mock('@/server/db/queries/user-blocks', () => ({
+  getUserBlockedBy: getUserBlockedByMock,
 }))
 
 vi.mock('@/server/db/queries/common-ground', () => ({
@@ -317,6 +323,21 @@ describe('/users/[id] friend profile page', () => {
         searchParams: Promise.resolve({}),
       }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+
+  it('tells the blocker who they blocked instead of a bare 404 (QA 2026-09-25, S22)', async () => {
+    getSessionMock.mockResolvedValueOnce({ userId: 'viewer-1' })
+    getFriendPortraitDataMock.mockResolvedValueOnce(null)
+    getUserBlockedByMock.mockResolvedValueOnce({ displayName: 'Trio Third' })
+    const element = await UserProfilePage({
+      params: Promise.resolve({ id: 'blocked-1' }),
+      searchParams: Promise.resolve({}),
+    })
+    const html = renderToStaticMarkup(element)
+
+    expect(getUserBlockedByMock).toHaveBeenCalledWith('viewer-1', 'blocked-1')
+    expect(html).toContain('blocked Trio Third')
+    expect(html).toContain('href="/blocked"')
   })
 
   it('forwards previewAs through resolvePreviewAs into the portrait fetch', async () => {

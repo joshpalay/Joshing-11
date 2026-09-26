@@ -1624,7 +1624,11 @@ export const follows = pgTable(
     // Carried from the originating request so the incoming-request card can
     // still render a personal note and suggested interests.
     personalNote: text('personalNote'),
-    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[] }>(),
+    // `withdrawnAt` (ISO string) is set only on a 'declined' edge whose sender
+    // pressed Cancel: the sender sees a declined request as still pending (a
+    // decline is never revealed), so Cancel can't delete the row without also
+    // erasing the decline cooldown. See followEdgeVisibleToSender.
+    requestContext: jsonb('requestContext').$type<{ suggestedInterests?: string[]; withdrawnAt?: string }>(),
     createdAt: createdAt(),
     approvedAt: timestamp('approvedAt', { withTimezone: true }),
     // B-FRIENDS-SAFETY-01 Phase 2 — when a 'declined' edge was declined. Drives

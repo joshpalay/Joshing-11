@@ -218,15 +218,18 @@ function LoadingLabel({ verb }: { verb: string }) {
   );
 }
 
+// The invite is the consent: signing in from it makes the two of you friends
+// with no separate Accept step. Say so here, before the code is entered, so
+// nobody (new or returning) becomes someone's friend without being told (QA
+// 2026-09-25, S1).
 function InviteContextCard({ invite }: { invite: InviteContext }) {
+  const name = inviterFirstName(invite.inviterName);
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--accent-gold)]/40 bg-white/55 p-4 text-center">
       <p className="text-[15px] leading-6 text-black/75">
-        <strong className="font-semibold text-[var(--brand-navy)]">
-          {inviterFirstName(invite.inviterName)}
-        </strong>{' '}
-        invited you to Joshing, a trivia game built for you. We just need to verify your phone number
-        and then you can start playing.
+        <strong className="font-semibold text-[var(--brand-navy)]">{name}</strong> invited you to
+        Joshing, a trivia game built for you. Verify your phone number and you and {name} will be
+        friends.
       </p>
     </div>
   );

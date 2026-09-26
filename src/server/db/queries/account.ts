@@ -1,5 +1,6 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 
+import { dropSeveredBonusSlots } from '@/server/daily/drop-severed-bonus';
 import { contactHashes, db, users } from '@/server/db';
 import {
   SMS_CONSENT_POLICY_VERSION,
@@ -590,6 +591,9 @@ export async function deleteUserAccount(userId: string): Promise<void> {
       sql`delete from "FeedItem" where "recipientUserId" = ${userId} or "sourceUserId" = ${userId} or "joshingGameId" in (select id from "JoshingGame" where "creatorId" = ${userId})`,
     );
     await tx.execute(sql`delete from "ActivityItem" where "userId" = ${userId}`);
+    // Friends stop being served this person's unanswered +2 bonus questions
+    // today (QA 2026-09-25, S3).
+    await dropSeveredBonusSlots(userId, undefined, tx);
     await tx.execute(
       sql`update "ActivityItem" set "actorUserId" = null, "actorNameSnapshot" = null where "actorUserId" = ${userId}`,
     );

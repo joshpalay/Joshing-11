@@ -72,7 +72,7 @@ describe('getFriendsHub — declined edges are fully excluded', () => {
   it('a declined edge contributes NEITHER a friend/follower NOR a pending request; a real pending edge still shows', async () => {
     const now = new Date('2026-09-08T00:00:00.000Z')
     const edges = [
-      // Declined: must not appear anywhere in the hub output.
+      // My request, declined by them: shows only as my own sent request.
       {
         id: 'e-declined',
         followerId: VIEWER,
@@ -99,7 +99,10 @@ describe('getFriendsHub — declined edges are fully excluded', () => {
     // selects run.
     state.selectQueue.push(
       edges,
-      [{ id: 'requester-1', displayName: 'Requester One', phoneNumber: '+15550001111' }],
+      [
+        { id: 'requester-1', displayName: 'Requester One', phoneNumber: '+15550001111' },
+        { id: 'declined-user', displayName: 'Declined User', phoneNumber: '+15550002222' },
+      ],
       [],
       [{ followPrivacy: 'approval_required' }],
     )
@@ -108,7 +111,9 @@ describe('getFriendsHub — declined edges are fully excluded', () => {
 
     expect(hub.following).toEqual([])
     expect(hub.followers).toEqual([])
-    expect(hub.outboundRequests).toEqual([])
+    // My declined request stays in my Sent list, like one still waiting, so
+    // the decline is never revealed (QA 2026-09-25, S10).
+    expect(hub.outboundRequests.map((r) => r.id)).toEqual(['e-declined'])
     expect(hub.incomingRequests).toHaveLength(1)
     expect(hub.incomingRequests[0]).toMatchObject({
       id: 'e-pending-in',

@@ -14,6 +14,7 @@ import {
 import { getRelationships, type RelationshipResult } from '@/server/db/queries/friend-requests';
 import { blockedIdsAmong, isBlockedBetween } from '@/server/db/queries/user-blocks';
 import { DIRECT_SENT_FEED_SOURCE_TYPE } from '@/server/feed/visibility';
+import { followEdgeVisibleToSender } from '@/server/friends/friendships';
 import { resolveDisplayName } from '@/server/lib/display-name';
 
 export type User = typeof users.$inferSelect;
@@ -333,10 +334,14 @@ export async function getFriendsHub(userId: string): Promise<FriendsHub> {
   for (const edge of edges) {
     const outboundEdge = edge.followerId === userId
     const other = outboundEdge ? edge.followeeId : edge.followerId
-    if (edge.state === 'approved') {
+    // A request of mine that was declined stays in my Sent list, exactly like
+    // one still waiting — the decline is never revealed to me (QA 2026-09-25,
+    // S10). One I declined is skipped below.
+    const state = outboundEdge ? followEdgeVisibleToSender(edge) : edge.state
+    if (state === 'approved') {
       if (outboundEdge) followingIds.add(other)
       else followerIds.add(other)
-    } else if (edge.state === 'pending') {
+    } else if (state === 'pending') {
       if (outboundEdge) {
         outbound.push({ id: edge.id, recipientId: other, personalNote: edge.personalNote, createdAt: edge.createdAt })
       } else {
