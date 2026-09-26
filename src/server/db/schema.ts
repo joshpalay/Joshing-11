@@ -1879,11 +1879,9 @@ export const activityItems = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     type: text('type').notNull(),
     actorUserId: text('actorUserId').references(() => users.id, { onDelete: 'set null' }),
-    // Snapshot of the actor's display name at write time. actorUserId is
-    // SET NULL when that account is deleted, which otherwise leaves the row
-    // with no way to say who did this ('Someone' fallback in
-    // src/lib/activity-stream.ts). Read as a fallback once the live actor
-    // join comes back empty; never overwritten after insert.
+    // RETIRED (2026-09-25): no longer written or read. It kept a deleted
+    // account's name in other people's feeds, contradicting
+    // D-ACCOUNT-DELETION-TERRITORY-01 Decision C; account deletion nulls it.
     actorNameSnapshot: text('actorNameSnapshot'),
     referenceId: text('referenceId'),
     referenceType: text('referenceType'),

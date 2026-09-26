@@ -24,6 +24,7 @@ import { convergenceCaptionTemplate, sortByProminence } from '@/lib/lately';
 import { MILESTONE_CARD_QUESTION_CAP } from '@/lib/lately-milestones';
 import { getActivitiesForUser } from '@/server/db/queries/activity';
 import { getViewerHiddenQuestionIds } from '@/server/db/queries/content-reports';
+import { blockedIdsAmong } from '@/server/db/queries/user-blocks';
 import {
   getBundleAnswerMoments,
   getFriendActivity,
@@ -217,11 +218,53 @@ export async function buildActivityStream(
     return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id, sharedTopic), sharedTopic);
   });
 
-  return sortByProminence([
+  const all = [
     ...momentItems,
     ...bundleAnswerItems,
     ...friendActivityItems,
     ...convergenceItems,
     ...utilityItems,
-  ]);
+  ];
+
+  // Blocks are enforced bidirectionally on every read (user-blocks.ts). Activity
+  // rows are already filtered at the query, but moments, bundles and
+  // convergences come from other tables — so drop any row that names someone
+  // on either side of a block, whatever its source. A blocked person who is
+  // only the "via" relay on a friend's question loses the via line, not the
+  // friend's whole card.
+  const viaIds = all.flatMap((item) =>
+    item.expand?.kind === 'milestone'
+      ? item.expand.questions.flatMap((q) => (q.via ? [q.via.userId] : []))
+      : [],
+  );
+  const blocked = await blockedIdsAmong(userId, [...new Set([...all.flatMap(personIdsIn), ...viaIds])]);
+  if (blocked.size === 0) return sortByProminence(all);
+
+  const visible = all
+    .filter((item) => !personIdsIn(item).some((id) => blocked.has(id)))
+    .map((item) =>
+      item.expand?.kind === 'milestone'
+        ? {
+            ...item,
+            expand: {
+              ...item.expand,
+              questions: item.expand.questions.map((q) =>
+                q.via && blocked.has(q.via.userId) ? { ...q, via: null } : q,
+              ),
+            },
+          }
+        : item,
+    );
+  return sortByProminence(visible);
+}
+
+// Every person a stream row is about: its owning friend and any actor link in
+// the one-liner.
+function personIdsIn(item: StreamItem): string[] {
+  const ids: string[] = [];
+  if (item.friendId) ids.push(item.friendId);
+  for (const part of item.line) {
+    if (part.t === 'actor' && part.userId) ids.push(part.userId);
+  }
+  return ids;
 }

@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
-import { activityItems, db, users } from '@/server/db';
+import { activityItems, db } from '@/server/db';
 import { HOME_TOP3_ELIGIBLE_TYPES, type ActivityItemType } from '@/lib/activity-types';
 
 // The activity-type vocabulary and the home-eligible set live in the DB-free
@@ -19,26 +19,13 @@ export async function writeActivity(params: {
   referenceType?: string;
 }): Promise<void> {
   try {
-    // Snapshot the actor's current display name into the row. actorUserId is
-    // SET NULL when that account is deleted (schema.ts), which would
-    // otherwise leave the row with no way to say who did this — the feed
-    // falls back to the generic "Someone" copy. Best-effort: a lookup miss
-    // just leaves the snapshot null, same as before this existed.
-    let actorNameSnapshot: string | null = null;
-    if (params.actorUserId) {
-      const [actor] = await db
-        .select({ displayName: users.displayName })
-        .from(users)
-        .where(eq(users.id, params.actorUserId))
-        .limit(1);
-      actorNameSnapshot = actor?.displayName?.trim() || null;
-    }
-
+    // No actorNameSnapshot: a deleted account's name must leave other people's
+    // feeds with it (D-ACCOUNT-DELETION-TERRITORY-01 Decision C), so the row
+    // keeps only the actorUserId FK, which SET NULLs on delete.
     await db.insert(activityItems).values({
       userId: params.userId,
       type: params.type,
       actorUserId: params.actorUserId,
-      actorNameSnapshot,
       referenceId: params.referenceId,
       referenceType: params.referenceType,
       read: false,

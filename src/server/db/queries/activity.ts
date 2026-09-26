@@ -23,6 +23,7 @@ import { getCannedReaction } from '@/lib/reactions';
 import { resolveAuthorDisplay } from '@/lib/questions-types';
 import { HOME_TOP3_ELIGIBLE_TYPES, type ActivityItemType } from '@/server/activity/write-activity';
 import { pgErrorCode, pgErrorMessage } from '@/server/db/pg-error';
+import { blockedIdsAmong } from '@/server/db/queries/user-blocks';
 import type { MasteryTier } from '@/types/db';
 
 type ActivityItemRow = typeof activityItems.$inferSelect;
@@ -176,6 +177,22 @@ function isActivityType(value: string): value is ActivityItemType {
   ].includes(value);
 }
 
+
+// Types that still make sense with no actor: viewer-own or system rows that
+// never name a person, plus the question-backed "answered your question" rows
+// that degrade to an anonymized line (filtered further in build-stream).
+const ACTORLESS_OK_TYPES = new Set<string>([
+  'ceremony_ready',
+  'authored_question_shared',
+  'joshing_game_result',
+  'friend_invitation_reminder',
+  'friend_answered_your_question',
+  'niche_match_answered_your_question',
+]);
+
+function needsLiveActor(type: string): boolean {
+  return !ACTORLESS_OK_TYPES.has(type);
+}
 
 function parseFriendshipRequestInterests(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
@@ -888,9 +905,19 @@ async function hydrateActivityRows(
     hydrateGradeDisputes(rows),
     hydrateFriendInvitationReminders(rows),
   ]);
+  const actorIds = [...new Set(rows.map((row) => row.actorUserId).filter((id): id is string => Boolean(id)))];
+  const blockedActorIds = await blockedIdsAmong(userId, actorIds);
 
   return rows
     .filter((row): row is ActivityItemRow & { type: ActivityItemType } => isActivityType(row.type))
+    // A block is enforced bidirectionally on every read (user-blocks.ts): no
+    // row names someone on either side of a block.
+    .filter((row) => !row.actorUserId || !blockedActorIds.has(row.actorUserId))
+    // A row that is only ABOUT a person ("X is now a friend", "X played their
+    // first five") has nothing left to say once that account is gone. The
+    // question-backed "answered your question" types stay, anonymized, and
+    // build-stream drops the ones whose question can't be shown either.
+    .filter((row) => Boolean(row.actorUserId) || !needsLiveActor(row.type))
     .map((row) => ({
       id: row.id,
       userId: row.userId,
@@ -900,14 +927,10 @@ async function hydrateActivityRows(
       referenceType: row.referenceType,
       read: row.read,
       createdAt: row.createdAt,
-      // Prefer the live join (reflects a display-name change since the row
-      // was written); if the actor's account is gone (actorUserId SET NULL
-      // on delete) or was never resolvable, fall back to the name snapshot
-      // taken at write time so the row doesn't collapse to "Someone" just
-      // because the account no longer exists.
-      actor:
-        (row.actorUserId ? actorsById.get(row.actorUserId) : undefined) ??
-        (row.actorNameSnapshot ? { displayName: row.actorNameSnapshot } : null),
+      // Live join only. A deleted account (actorUserId SET NULL) renders
+      // anonymized — never from the retired actorNameSnapshot column
+      // (D-ACCOUNT-DELETION-TERRITORY-01 Decision C).
+      actor: (row.actorUserId ? actorsById.get(row.actorUserId) : undefined) ?? null,
       reference: {
         friendshipRequest: (row.referenceType === 'friendship' || row.referenceType === 'follow') && row.referenceId
           ? friendshipRequestsById.get(row.referenceId)
