@@ -54,6 +54,8 @@ If you think one hurts the experience, list it under "Questions for Josh" with y
 - "Show me the answer" counts as a wrong answer (red / "Not this time") on purpose (Josh, 2026-09-26).
 - Test accounts playing may send notifications to real users (niche-match, author notices). That's accepted for now (Josh, 2026-09-26).
 - Players never see anonymous activity ("Someone …"). A feed row that can't name a real, identifiable person is a bug (Josh, 2026-09-26).
+- Partly-right answers can be graded wrong (e.g. "the Queen" for the Queen of the Night) even when the feedback says they were close. Accepted as-is (Josh, 2026-09-26).
+- Right/wrong dots on the round, summary and home differ by color only. Accepted as-is (Josh, 2026-09-26).
 - "Let people I've never met discover me" is ON by default on purpose (test phase).
 - An unviewed weekly ceremony is shown on the way to the daily summary, then continues to the summary. Check that the button copy is honest about it.
 - "Play missed questions" can replay TODAY's misses right away. That's intended; check only that labels and dates are right.
