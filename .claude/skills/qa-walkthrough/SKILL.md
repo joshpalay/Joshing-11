@@ -50,7 +50,10 @@ Put both the "as found" and the "baseline" states in the report.
 ### Known deliberate decisions: do NOT file these as bugs
 If you think one hurts the experience, list it under "Questions for Josh" with your reasoning instead.
 - Reactions were REMOVED on purpose. Don't look for a way to react on wrong answers, and don't report their absence.
-- "Maid Acasa" is Joshing's own question-writing bot, not a real person. Judge whether players can TELL it's a bot, but don't treat its name as a privacy leak.
+- "Maid Acasa" is Joshing's own question-writing bot, not a real person. It is deliberately NOT marked as a bot (Josh, 2026-09-26). Don't treat its name as a privacy leak, and don't ask again whether players can tell.
+- "Show me the answer" counts as a wrong answer (red / "Not this time") on purpose (Josh, 2026-09-26).
+- Test accounts playing may send notifications to real users (niche-match, author notices). That's accepted for now (Josh, 2026-09-26).
+- Players never see anonymous activity ("Someone …"). A feed row that can't name a real, identifiable person is a bug (Josh, 2026-09-26).
 - "Let people I've never met discover me" is ON by default on purpose (test phase).
 - An unviewed weekly ceremony is shown on the way to the daily summary, then continues to the summary. Check that the button copy is honest about it.
 - "Play missed questions" can replay TODAY's misses right away. That's intended; check only that labels and dates are right.
