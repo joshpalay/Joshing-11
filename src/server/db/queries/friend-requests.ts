@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from 'drizzle-orm'
 
 import { db, follows } from '@/server/db'
 import { blockedIdsAmong, isBlockedBetween } from '@/server/db/queries/user-blocks'
+import { followEdgeVisibleToSender, type FriendshipRequestContext } from '@/server/friends/friendships'
 
 export type RelationshipState =
   | 'none'
@@ -33,16 +34,16 @@ type EdgeRow = {
   followeeId: string
   state: 'pending' | 'approved' | 'declined'
   approvedAt: Date | null
+  requestContext: FriendshipRequestContext | null
 }
 
 // Resolve the relationship from the viewer's two directional edges.
 //   outbound = viewer -> target, inbound = target -> viewer
 function resolve(outbound: EdgeRow | undefined, inbound: EdgeRow | undefined): RelationshipResult {
-  // B-FRIENDS-SAFETY-01 Phase 2 — a 'declined' edge is not a relationship of
-  // any kind: not a friend, a follower, or a pending request. Treat it
-  // exactly as if the edge didn't exist on that side, rather than letting it
-  // fall through the branches below by accident.
-  const out = outbound?.state === 'declined' ? undefined : outbound?.state
+  // B-FRIENDS-SAFETY-01 Phase 2 — a request I declined is no relationship at
+  // all from my side. A request of mine that was declined still reads as
+  // pending to me, so the decline is never revealed (followEdgeVisibleToSender).
+  const out = outbound ? (followEdgeVisibleToSender(outbound) ?? undefined) : undefined
   const inb = inbound?.state === 'declined' ? undefined : inbound?.state
 
   if (out === 'approved' && inb === 'approved') {
@@ -80,6 +81,7 @@ export async function getRelationship(
       followeeId: follows.followeeId,
       state: follows.state,
       approvedAt: follows.approvedAt,
+      requestContext: follows.requestContext,
     })
     .from(follows)
     .where(
@@ -115,6 +117,7 @@ export async function getRelationships(
       followeeId: follows.followeeId,
       state: follows.state,
       approvedAt: follows.approvedAt,
+      requestContext: follows.requestContext,
     })
     .from(follows)
     .where(

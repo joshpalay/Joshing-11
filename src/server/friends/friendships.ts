@@ -1,6 +1,7 @@
 import { and, eq, sql, type SQL } from 'drizzle-orm'
 
 import { softDeleteActivityByReference, writeActivity } from '@/server/activity/write-activity'
+import { dropSeveredBonusSlotsBetween } from '@/server/daily/drop-severed-bonus'
 import { db, follows, userBlocks, users } from '@/server/db'
 import { backfillFollowedUserFeedItems } from '@/server/feed/backfill-inviter-feed'
 
@@ -21,6 +22,23 @@ export type FriendshipRequestState =
 
 export type FriendshipRequestContext = {
   suggestedInterests?: string[]
+  withdrawnAt?: string
+}
+
+/**
+ * How the SENDER sees their own outbound edge. A decline is never revealed:
+ * to the sender a declined request reads exactly like one still waiting
+ * ("Requested", kept in their Sent list). It only disappears if they cancel
+ * it themselves (`withdrawnAt`). Without this the sent row vanished and the
+ * button fell back to "Add friend" the moment the other person declined,
+ * which gave the decline away (QA 2026-09-25, S10).
+ */
+export function followEdgeVisibleToSender(edge: {
+  state: 'pending' | 'approved' | 'declined'
+  requestContext: FriendshipRequestContext | null
+}): 'pending' | 'approved' | null {
+  if (edge.state !== 'declined') return edge.state
+  return edge.requestContext?.withdrawnAt ? null : 'pending'
 }
 
 // Env-tunable re-request cooldown after a decline. Default 30 days.
@@ -154,9 +172,15 @@ export async function createOrReusePendingFriendshipRequest({
     const declinedAt = existing.declinedAt ?? existing.createdAt
     const cooldownElapsed = now.getTime() - declinedAt.getTime() >= declineCooldownMs()
     if (!cooldownElapsed) {
-      // No edge created or revived — the decliner is never exposed, and the
-      // requester's UI renders this exactly like a fresh send.
-      return { friendship: existing, state: 'declined_cooldown' }
+      // No request reaches the decliner and the edge stays declined — but the
+      // requester's side must read exactly like a fresh send, so refresh the
+      // note and clear any earlier Cancel (followEdgeVisibleToSender).
+      const [refreshed] = await db
+        .update(follows)
+        .set({ personalNote: trimmedNote, requestContext })
+        .where(eq(follows.id, existing.id))
+        .returning()
+      return { friendship: refreshed ?? existing, state: 'declined_cooldown' }
     }
     // Cooldown elapsed: fall through and revive the existing row below (the
     // insert becomes an upsert specifically to handle this case).
@@ -356,10 +380,35 @@ export async function ignorePendingFriendshipRequest({
 export async function cancelPendingFriendshipRequest({
   friendshipId,
   userId,
+  now = new Date(),
 }: {
   friendshipId: string
   userId: string
+  now?: Date
 }): Promise<Follow | null> {
+  // The sender sees a declined request as still pending, so they can cancel
+  // it. Keep the row (it carries the decline cooldown) and just mark it
+  // withdrawn so it drops out of their view like a real cancel would.
+  const [declined] = await db
+    .select()
+    .from(follows)
+    .where(
+      and(
+        eq(follows.id, friendshipId),
+        eq(follows.state, 'declined'),
+        eq(follows.followerId, userId),
+      ),
+    )
+    .limit(1)
+  if (declined) {
+    const [withdrawn] = await db
+      .update(follows)
+      .set({ requestContext: { ...declined.requestContext, withdrawnAt: now.toISOString() } })
+      .where(eq(follows.id, declined.id))
+      .returning()
+    return withdrawn ?? null
+  }
+
   const [edge] = await db
     .delete(follows)
     .where(
@@ -402,6 +451,10 @@ export async function removeFriendship({
   await db
     .delete(follows)
     .where(and(eq(follows.followerId, edge.followeeId), eq(follows.followeeId, userId)))
+
+  // Their +2 bonus questions were picked while you were friends; drop the
+  // ones not yet answered today, on both sides (QA 2026-09-25, S3).
+  await dropSeveredBonusSlotsBetween(userId, edge.followeeId)
 
   return edge
 }

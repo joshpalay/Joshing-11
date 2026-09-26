@@ -51,15 +51,18 @@ type InviteResult = {
 type FriendshipStateCopy = {
   eyebrow: string
   headline: (name: string) => string
-  blurb: string
+  blurb: (hasIdeas: boolean) => string
   needsNudge: boolean
 }
 
 const CREATED_COPY: FriendshipStateCopy = {
   eyebrow: 'Already on Joshing',
   headline: (name) => `${name} is already on Joshing.`,
-  blurb:
-    'We turned your invite into a friend request. They’ll see it — and the areas you flagged — in their activity. Want to nudge them?',
+  // Only mention "the areas you flagged" when some were (QA 2026-09-25, S2).
+  blurb: (hasIdeas) =>
+    hasIdeas
+      ? 'We turned your invite into a friend request. They’ll see it — and the areas you flagged — in their activity. Want to nudge them?'
+      : 'We turned your invite into a friend request. They’ll see it in their activity. Want to nudge them?',
   needsNudge: true,
 }
 
@@ -69,19 +72,19 @@ const FRIENDSHIP_STATE_COPY: Record<FriendshipRequestState, FriendshipStateCopy>
   pending_existing: {
     eyebrow: 'Request still pending',
     headline: (name) => `You’ve already sent ${name} a friend request.`,
-    blurb: 'Your earlier request is still waiting for them. Send a gentle nudge if you’d like.',
+    blurb: () => 'Your earlier request is still waiting for them. Send a gentle nudge if you’d like.',
     needsNudge: true,
   },
   auto_approved: {
     eyebrow: 'You’re connected',
     headline: (name) => `You’re now friends with ${name}.`,
-    blurb: 'Their profile is open, so you’re already connected — nothing to send.',
+    blurb: () => 'Their profile is open, so you’re already connected — nothing to send.',
     needsNudge: false,
   },
   already_following: {
     eyebrow: 'Already friends',
     headline: (name) => `You’re already friends with ${name}.`,
-    blurb: 'You’re connected — nothing else to do here.',
+    blurb: () => 'You’re connected — nothing else to do here.',
     needsNudge: false,
   },
 }
@@ -425,7 +428,7 @@ export function PersonalInviteFlow() {
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
               {friendshipCopy
-                ? friendshipCopy.blurb
+                ? friendshipCopy.blurb(result.suggestedInterests.length > 0)
                 : 'You’ll send the message yourself — Joshing won’t text them for you.'}
             </p>
           </div>

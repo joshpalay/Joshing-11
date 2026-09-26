@@ -678,6 +678,24 @@ export async function POST(request: Request) {
 
   try {
     const { inviteeDisplayName, phone, suggestedInterests } = parsed.value
+    const matchedUser = await getUserByPhone(phone)
+
+    // A block is a hard edge (QA 2026-09-25, C1/S2). The blocker gets a plain
+    // answer, ahead of the cooldowns — they used to see a vague "breathing
+    // room" message instead.
+    if (matchedUser && matchedUser.id !== session.userId) {
+      if (await hasBlocked(session.userId, matchedUser.id)) {
+        return NextResponse.json(
+          {
+            error: 'blocked_by_you',
+            message:
+              'You’ve blocked this person. Unblock them in Privacy settings first.',
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     const rateLimitReason = checkInviteRateLimit(session.userId, phone)
     if (rateLimitReason) {
       logTelemetry('add_friend_invite_rate_limited', {
@@ -695,7 +713,15 @@ export async function POST(request: Request) {
       )
     }
 
-    const existingUser = await getUserByPhone(phone)
+    // The blocked side sees the person the way search does: not on Joshing.
+    // So the number gets an ordinary text-them-yourself note, exactly as for
+    // someone who hasn't joined. It used to claim a friend request was sent
+    // when nothing was (S2). The note's link can't form a friendship across
+    // the block (acceptFriendInvitation refuses it).
+    const existingUser =
+      matchedUser && (await isBlockedBetween(session.userId, matchedUser.id))
+        ? null
+        : matchedUser
 
     if (existingUser) {
       if (existingUser.id === session.userId) {
@@ -722,45 +748,6 @@ export async function POST(request: Request) {
           },
           { status: 429 }
         )
-      }
-
-      // A block is a hard edge here too (QA 2026-09-25, C1): this route used to
-      // turn an invite into a follow request with no block check at all, and
-      // reported the pair as "already friends" off a stale edge. The blocker
-      // gets a plain answer; the blocked side gets the exact response a fresh
-      // send would produce, with nothing written — a block must not be
-      // distinguishable from an ordinary pending request.
-      if (await isBlockedBetween(session.userId, existingUser.id)) {
-        recordInviteAttempt(session.userId, phone)
-        if (await hasBlocked(session.userId, existingUser.id)) {
-          return NextResponse.json(
-            {
-              error: 'blocked_by_you',
-              message:
-                'You’ve blocked this person. Unblock them in Privacy settings first.',
-            },
-            { status: 409 }
-          )
-        }
-        const inviteUrl = `${getBaseUrl(request)}/activities`
-        const message = buildExistingUserFriendInvitationMessage({
-          inviterName: await getInviterFirstName(session.userId),
-          inviteUrl,
-          suggestedInterests,
-        })
-        return NextResponse.json({
-          ok: true,
-          type: 'friendship_request',
-          state: 'created',
-          id: '',
-          invitationId: null,
-          inviteUrl,
-          message,
-          inviteeDisplayName,
-          inviteePhone: phone,
-          suggestedInterests,
-          expiresAt: null,
-        })
       }
 
       // Inviting an existing user from the invite flow follows them (pending or

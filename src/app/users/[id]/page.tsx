@@ -36,6 +36,7 @@ import { getCommonGround } from '@/server/db/queries/common-ground';
 import { getFriends } from '@/server/db/queries/friends';
 import { getKnowledgePageData, getUserMasteryOverview } from '@/server/db/queries/knowledge';
 import { getAuthoredQuestionsForUser } from '@/server/db/queries/questions';
+import { getUserBlockedBy } from '@/server/db/queries/user-blocks';
 import { getFriendPortraitData } from '@/server/profile/friend';
 import { toKnowledgeCardDomain, topPointPositiveDomains } from '@/server/profile/knowledge-view';
 import { resolvePreviewAs } from '@/server/profile/preview';
@@ -83,6 +84,24 @@ function buildMindStatement(displayName: string, topDomains: { displayName: stri
   return `${subject}'s mind will take shape as they answer and write questions.`;
 }
 
+function BlockedProfileNotice({ displayName }: { displayName: string | null }) {
+  const name = displayName?.trim() || 'this person';
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-5 pb-28">
+      <h1 className="text-foreground mt-10 font-serif text-2xl font-semibold">
+        You&apos;ve blocked {name}
+      </h1>
+      <p className="text-muted-foreground mt-1 mb-5 text-sm leading-6">
+        Their profile stays hidden while they&apos;re blocked. You can unblock them from Blocked
+        people.
+      </p>
+      <Link href="/blocked" className="btn-primary w-full">
+        Blocked people
+      </Link>
+    </main>
+  );
+}
+
 export default async function UserProfilePage({ params, searchParams }: UserProfilePageProps) {
   const session = await getSession();
   if (!session) notFound();
@@ -93,7 +112,14 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
   // even if the URL has ?previewAs=… so a shared URL is inert.
   const previewAs = await resolvePreviewAs(rawPreviewAs, id, session.userId);
   const portrait = await getFriendPortraitData(id, session.userId, previewAs);
-  if (!portrait) notFound();
+  if (!portrait) {
+    // The person who pressed Block gets a plain answer and the way back; the
+    // blocked side (and a missing profile) gets the generic not-found page
+    // (QA 2026-09-25, S22).
+    const blocked = await getUserBlockedBy(session.userId, id);
+    if (!blocked) notFound();
+    return <BlockedProfileNotice displayName={blocked.displayName} />;
+  }
 
   // isOwnerView: the requester is the real profile owner, regardless of
   // any active preview. Drives owner-only chrome.

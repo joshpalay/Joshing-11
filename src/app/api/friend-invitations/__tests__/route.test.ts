@@ -475,10 +475,11 @@ describe('POST /api/friend-invitations', () => {
     expect(dbMock.insert).not.toHaveBeenCalled()
   })
 
-  it('looks like an ordinary sent request to someone who was blocked, and writes nothing', async () => {
+  it('treats a number whose owner blocked you as not on Joshing: an ordinary text-it-yourself note, no friend request (QA 2026-09-25, S2)', async () => {
     state.existingUser = { id: 'user-invitee' }
     state.blockedEitherWay = true
     state.sessionUserIsBlocker = false
+    mockInvitation()
 
     const response = await POST(
       jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' })
@@ -486,11 +487,24 @@ describe('POST /api/friend-invitations', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.type).toBe('friendship_request')
-    expect(body.state).toBe('created')
-    expect(typeof body.message).toBe('string')
-    expect(dbMock.insert).not.toHaveBeenCalled()
-    expect(createFriendInvitationMock).not.toHaveBeenCalled()
+    // Same answer as search ("not found"): a plain invite note, never a claim
+    // that a friend request went out.
+    expect(body.type).toBe('friend_invitation')
+    expect(body.inviteUrl).toBe('https://joshing.example/invite/token-1')
+    expect(createFriendInvitationMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells the blocker plainly even when a cooldown would otherwise answer first', async () => {
+    state.existingUser = { id: 'user-invitee' }
+    state.blockedEitherWay = true
+    state.sessionUserIsBlocker = true
+
+    const first = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+    const second = await POST(jsonRequest({ inviteeDisplayName: 'Sara', phone: '7345551234' }))
+
+    expect(first.status).toBe(409)
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual(expect.objectContaining({ error: 'blocked_by_you' }))
   })
 
   it('rejects 4 interests', async () => {

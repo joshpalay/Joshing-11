@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //  2. isBlockedBetween / blockedIdsAmong are direction-agnostic: either party
 //     having blocked the other is enough.
 
-const { dbMock, state, userBlocksTable, followsTable, usersTable, cleanupMock } = vi.hoisted(() => {
+const { dbMock, state, userBlocksTable, followsTable, usersTable, cleanupMock, dropBonusMock } = vi.hoisted(() => {
   const userBlocksTable = { id: 'userBlocks.id', blockerId: 'userBlocks.blockerId', blockedId: 'userBlocks.blockedId', createdAt: 'userBlocks.createdAt' }
   const followsTable = { id: 'follows.id', followerId: 'follows.followerId', followeeId: 'follows.followeeId' }
   const usersTable = { id: 'users.id', handle: 'users.handle', displayName: 'users.displayName', avatarColor: 'users.avatarColor' }
@@ -32,6 +32,7 @@ const { dbMock, state, userBlocksTable, followsTable, usersTable, cleanupMock } 
   }
 
   const cleanupMock = vi.fn(async () => undefined)
+  const dropBonusMock = vi.fn(async () => undefined)
 
   const dbMock = {
     select: vi.fn(() => chain(state.selectResult)),
@@ -46,7 +47,7 @@ const { dbMock, state, userBlocksTable, followsTable, usersTable, cleanupMock } 
     }),
   }
 
-  return { dbMock, state, userBlocksTable, followsTable, usersTable, cleanupMock }
+  return { dbMock, state, userBlocksTable, followsTable, usersTable, cleanupMock, dropBonusMock }
 })
 
 vi.mock('@/server/db', () => ({
@@ -54,6 +55,10 @@ vi.mock('@/server/db', () => ({
   userBlocks: userBlocksTable,
   follows: followsTable,
   users: usersTable,
+}))
+
+vi.mock('@/server/daily/drop-severed-bonus', () => ({
+  dropSeveredBonusSlotsBetween: dropBonusMock,
 }))
 
 vi.mock('@/server/friends/friendships', () => ({
@@ -78,6 +83,7 @@ beforeEach(() => {
   dbMock.delete.mockClear()
   dbMock.select.mockClear()
   cleanupMock.mockClear()
+  dropBonusMock.mockClear()
 })
 
 describe('blockUser', () => {
@@ -92,6 +98,12 @@ describe('blockUser', () => {
     expect(cleanupMock).toHaveBeenCalledTimes(2)
     expect(cleanupMock).toHaveBeenCalledWith('edge-alice-bob')
     expect(cleanupMock).toHaveBeenCalledWith('edge-bob-alice')
+  })
+
+  it("drops each side's unanswered bonus questions from the other (QA 2026-09-25, S3)", async () => {
+    await blockUser(ALICE, BOB)
+
+    expect(dropBonusMock).toHaveBeenCalledWith(ALICE, BOB)
   })
 
   it('is a no-op on cleanup when there was no existing follow edge', async () => {
