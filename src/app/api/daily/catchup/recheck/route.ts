@@ -257,6 +257,7 @@ export async function POST(request: NextRequest) {
       });
 
       masteryDelta = await writeMasteryEvent({
+        overturnIncorrect: true,
         userId: session.userId,
         questionId: generatedQuestionId ?? canonicalQuestionId ?? `${queue.id}:${dispatch.slotIndex}`,
         domain,

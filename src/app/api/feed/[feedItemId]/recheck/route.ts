@@ -144,6 +144,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
 
       await writeMasteryEvent({
+        overturnIncorrect: true,
         userId: session.userId,
         questionId: question.id,
         domain,

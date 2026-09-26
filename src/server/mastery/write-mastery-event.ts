@@ -72,6 +72,14 @@ export type WriteMasteryEventParams = {
   // WITHOUT deferring the event/mastery write itself (the daily summary reads
   // the mastery tables, so the write must stay synchronous). Defaults to inline.
   deferSideEffects?: boolean;
+  // Set by the recheck ("argue it") routes when a disputed miss is overturned.
+  // The original miss already holds the (source_type, question_id,
+  // answered_by_user_id) unique key, so a fresh insert for the same question is
+  // silently dropped by ON CONFLICT DO NOTHING — the win never reached
+  // MASTERY_EVENTS or PLAYER_MASTERY (28 of 30 accepted disputes as of
+  // 2026-09-26). With this set, a conflicting insert instead flips that
+  // incorrect row in place to the new answer state/points and credits mastery.
+  overturnIncorrect?: boolean;
 };
 
 export type MasteryEventWriteResult = {
@@ -216,6 +224,14 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   const tierChanged = previousTier !== nextTier;
   const openedNewTerritory = !existing && params.pointsAwarded > 0;
 
+  const eventSourceType =
+    params.sourceType === 'author_credit' || params.sourceType === 'curator_credit'
+      ? params.sourceType
+      : params.sourceType === 'catchup'
+        ? 'catchup_correct'
+        : 'live_correct';
+  const answeredByUserId = params.answeredByUserId ?? params.userId;
+
   const eventInserted = await db.transaction(async (tx) => {
     // ON CONFLICT DO NOTHING covers the two unique constraints on
     // MASTERY_EVENTS: the answer_id key (per-submission idempotency for
@@ -241,16 +257,10 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       ) values (
         ${params.userId},
         ${domain},
-        ${
-          params.sourceType === 'author_credit' || params.sourceType === 'curator_credit'
-            ? params.sourceType
-            : params.sourceType === 'catchup'
-              ? 'catchup_correct'
-              : 'live_correct'
-        },
+        ${eventSourceType},
         ${params.eventQuestionId ?? null},
-        ${params.answeredByUserId ?? params.userId},
-        ${`${params.sourceType}:${params.sourceId}:${params.questionId}:${params.answeredByUserId ?? params.userId}`},
+        ${answeredByUserId},
+        ${`${params.sourceType}:${params.sourceId}:${params.questionId}:${answeredByUserId}`},
         ${Math.round(params.basePoints ?? params.pointsAwarded)},
         ${params.weight ?? (params.pointsAwarded > 0 ? 1 : 0)},
         ${params.pointsAwarded},
@@ -262,7 +272,23 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       returning "id"
     `);
 
-    const inserted = insertResult.rows.length > 0;
+    let inserted = insertResult.rows.length > 0;
+
+    if (!inserted && params.overturnIncorrect && params.eventQuestionId) {
+      const overturned = await tx.execute<{ id: string }>(sql`
+        update "MASTERY_EVENTS"
+        set "answer_state" = ${params.answerState ?? null},
+            "awarded_points" = ${params.pointsAwarded},
+            "base_points" = ${Math.round(params.basePoints ?? params.pointsAwarded)},
+            "weight" = ${params.weight ?? (params.pointsAwarded > 0 ? 1 : 0)}
+        where "source_type" = ${eventSourceType}
+          and "question_id" = ${params.eventQuestionId}
+          and "answered_by_user_id" = ${answeredByUserId}
+          and "answer_state" = 'incorrect'
+        returning "id"
+      `);
+      inserted = overturned.rows.length > 0;
+    }
 
     // Ask-before-add: a bonus answer that would OPEN a new territory (no
     // existing row) skips the knowledge-base write entirely — the MASTERY_
