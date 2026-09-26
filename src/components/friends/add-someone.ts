@@ -39,6 +39,27 @@ export function classifyQuery(value: string): QueryClassification {
   return 'name'
 }
 
+// What typing a term should do. The search endpoint is rate-limited (8/min per
+// account, D-FRIEND-SEARCH-PRIVACY-01) and matches EXACT handles and FULL US
+// numbers only, yet the box used to fire on every typing pause — a slowly
+// typed phone number burned 2-4 lookups that could never match, so a player
+// hit the limit after 2-3 people (QA 2026-09-25). Only a term that could match
+// spends a lookup:
+//   - 'search'        a handle-shaped term or a full US number
+//   - 'partial_phone' digits still being typed — wait, spend nothing
+//   - 'no_lookup'     a free-text name the endpoint can't resolve — show the
+//                     no-match invite handoff straight away, spend nothing
+export type SearchPlan = 'search' | 'partial_phone' | 'no_lookup'
+
+const PHONE_CHARACTERS = /^[\d\s()+.-]+$/
+
+export function searchPlanFor(value: string): SearchPlan | null {
+  const classification = classifyQuery(value)
+  if (classification === 'empty') return null
+  if (classification === 'handle' || classification === 'phone') return 'search'
+  return PHONE_CHARACTERS.test(value.trim()) ? 'partial_phone' : 'no_lookup'
+}
+
 // What the lookup should offer for a matched account, derived from the existing
 // relationship. The match card delegates to AddFriendButton for the actual
 // controls; this is the honest top-level summary the branches are tested on.
