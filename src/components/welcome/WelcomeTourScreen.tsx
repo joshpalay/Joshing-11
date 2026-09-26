@@ -532,9 +532,19 @@ export default function WelcomeTourScreen({
                   fill="currentColor"
                   aria-hidden="true"
                 />
+                {/* Recent activity only ever comes from people you know, so the
+                    mock row names the inviter with something true — never an
+                    anonymous "Someone played their first five questions" (QA
+                    2026-09-25). */}
                 <p className="text-sm leading-6 text-[var(--brand-ink-700)]">
-                  <span className="font-semibold text-[var(--brand-ink)]">Someone</span> played their
-                  first five questions
+                  {inviterName?.trim() ? (
+                    <>
+                      <span className="font-semibold text-[var(--brand-ink)]">{inviter}</span> is now
+                      a friend
+                    </>
+                  ) : (
+                    'Your friends’ milestones show up here'
+                  )}
                 </p>
               </div>
 
