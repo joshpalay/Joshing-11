@@ -26,6 +26,18 @@ type OutgoingInvite = {
   connected: boolean
 }
 
+// Someone who signed up through one of the viewer's invite links. Resolved
+// server-side on the Friends page (QA 2026-09-26, S6).
+export type InviteLinkJoiner = {
+  userId: string
+  displayName: string
+  joinedAt: string
+  linkTopics: string[]
+  // Friends right now (mutual). Joining by link makes you friends, but either
+  // side can unfriend later.
+  connected: boolean
+}
+
 type InvitationsResponse = {
   ok: boolean
   invitations: OutgoingInvite[]
@@ -76,7 +88,11 @@ function statusDetail(invite: OutgoingInvite) {
   return cancelled ? `Set aside ${cancelled}` : 'This note was set aside.'
 }
 
-export default function PeopleYouInvited() {
+export default function PeopleYouInvited({
+  linkJoiners = [],
+}: {
+  linkJoiners?: InviteLinkJoiner[]
+}) {
   const [invites, setInvites] = useState<OutgoingInvite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -272,12 +288,47 @@ export default function PeopleYouInvited() {
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading invites…</p>
-      ) : invites.length === 0 ? (
+      ) : invites.length === 0 && linkJoiners.length === 0 ? (
         <p className="text-muted-foreground bg-muted rounded-xl px-3 py-2 text-sm">
-          No notes sent yet.
+          No one yet. People who join through your notes or links show up here.
         </p>
       ) : (
         <div className="space-y-3">
+          {linkJoiners.map((joiner) => {
+            const joined = friendlyDate(joiner.joinedAt)
+            const header = (
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-foreground font-medium">{joiner.displayName}</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {joined ? `Joined through your link · ${joined}` : 'Joined through your link'}
+                  </p>
+                </div>
+                <Chip>{joiner.connected ? 'Friends' : 'Not connected'}</Chip>
+              </div>
+            )
+            return (
+              <article key={`link-${joiner.userId}`} className="bg-background rounded-xl border p-3">
+                {joiner.connected ? (
+                  <Link
+                    href={`/users/${joiner.userId}`}
+                    className="hover:border-foreground/30 -m-3 block rounded-xl p-3 transition hover:shadow-[var(--shadow-card)]"
+                  >
+                    {header}
+                  </Link>
+                ) : (
+                  header
+                )}
+                {joiner.linkTopics.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {joiner.linkTopics.map((topic) => (
+                      <Chip key={topic}>{topic}</Chip>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            )
+          })}
           {invites.map((invite) => {
             const canMessage =
               invite.status === 'pending' &&

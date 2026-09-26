@@ -265,6 +265,19 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A failed Not-for-me action (hide / rest / skip). Kept apart from `error`,
+  // which is the page-level load failure and replaces the whole thread — a
+  // failed opt-out must leave the round on screen (QA 2026-09-26, C1).
+  // Tied to the slot it happened on, so it disappears once play moves on.
+  const [actionError, setActionError] = useState<{ slotIndex: number; message: string } | null>(
+    null,
+  );
+  // Which Not-for-me option closed each slot this session, so the note under it
+  // says what actually happened. Not persisted: after a reload a closed slot
+  // falls back to the plain "Skipped" note, which is never a false claim.
+  const [closedScopes, setClosedScopes] = useState<
+    Record<number, 'skip' | 'hide_question' | 'rest_category'>
+  >({});
   // Inline answer-bar notice for the grade itself: a warm "retrying…" note while
   // the grader is transiently unavailable, then a terminal "try again later" once
   // the auto-retries are spent. Kept separate from the page-level `error` (which
@@ -781,16 +794,20 @@ export default function DailyPage() {
           badges: questionBadges(slot),
           reportTarget: reportTargetFor(slot),
         });
-        // A rested bonus slot ("This is {Name}'s bag but not mine") is closed via
-        // the same skip path, but it's an opt-out, not a "bring it back later" —
-        // so it gets its own copy naming the category we've stopped surfacing.
-        const restedLabel = slotCategoryLabel(slot);
+        // Every Not-for-me option closes the slot through the same skip path, so
+        // the note has to come from the option actually chosen. Keying it off
+        // isBonusSlot() told "Skip for now" players their whole topic was rested
+        // (QA 2026-09-26, S1).
+        const closedScope = closedScopes[slot.slot_index];
         rows.push({
           id: `s-${slot.slot_index}`,
           kind: 'system',
-          text: isBonusSlot(slot)
-            ? `Resting ${restedLabel}. You won't see these in your five.`
-            : "Skipped. We'll bring it back later.",
+          text:
+            closedScope === 'rest_category'
+              ? `Resting ${slotCategoryLabel(slot)}. You won't see these in your five.`
+              : closedScope === 'hide_question'
+                ? "Hidden. You won't see this question again."
+                : "Skipped. We'll bring it back later.",
         });
         continue;
       }
@@ -857,6 +874,7 @@ export default function DailyPage() {
     pendingGiveUp,
     openedTerritoryBySlot,
     ceremonyRedirectId,
+    closedScopes,
   ]);
 
   // Each dot belongs to ONE slot: core dots are the core slots in slot order,
@@ -1043,7 +1061,7 @@ export default function DailyPage() {
       if (!queue || !currentSlot || submitting) return;
       const slotIndex = currentSlot.slot_index;
       const { domain } = currentSlot;
-      setError(null);
+      setActionError(null);
       setQueue((existing) =>
         existing
           ? {
@@ -1089,6 +1107,7 @@ export default function DailyPage() {
           body: JSON.stringify({ queue_id: queue.queue_id, slot_index: slotIndex, scope }),
         });
         if (!skipResponse.ok) throw new Error('Could not close that question.');
+        setClosedScopes((existing) => ({ ...existing, [slotIndex]: scope }));
         const body = (await skipResponse.json().catch(() => null)) as { slots?: QueueSlot[] } | null;
         if (Array.isArray(body?.slots)) {
           const nextSlots = body.slots;
@@ -1106,7 +1125,10 @@ export default function DailyPage() {
               }
             : existing,
         );
-        setError(caught instanceof Error ? caught.message : 'Could not update that question.');
+        setActionError({
+          slotIndex,
+          message: caught instanceof Error ? caught.message : 'Could not update that question.',
+        });
       }
     },
     [queue, currentSlot, submitting],
@@ -1203,6 +1225,16 @@ export default function DailyPage() {
             </button>
           </div>
         ) : (
+          <>
+            {actionError && actionError.slotIndex === currentSlot?.slot_index ? (
+              <p
+                role="alert"
+                className="mx-4 mt-3 rounded-[var(--radius-sm)] border px-3 py-2 text-sm text-[var(--text-muted)]"
+                style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+              >
+                {actionError.message} The question is still here — try again, or answer it.
+              </p>
+            ) : null}
           <GameplayChatThread
             messages={messages}
             onGiveUp={() => void giveUpCurrent()}
@@ -1211,6 +1243,7 @@ export default function DailyPage() {
             notForMeDisabled={submitting}
             reportSurface="daily_five"
           />
+          </>
         )}
       </section>
 

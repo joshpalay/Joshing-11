@@ -102,7 +102,8 @@ export const queueSlotSchema = z.object({
    * catch-up must never rewrite the live-round verdict (that drives the daily
    * progress dots and the summary totals); the original wrong/skipped result
    * stays put. A `catchup_answer_state` of 'correct' closes the slot for
-   * catch-up (see isCatchUpSlotEligible); 'incorrect' leaves it re-attemptable.
+   * catch-up (see isCatchUpSlotEligible); 'incorrect' leaves it re-attemptable
+   * once CATCHUP_RETRY_COOLDOWN_MS has passed since `catchup_answered_at`.
    */
   catchup_answer_state: queueSlotAnswerStateSchema.optional(),
   /** Text the player typed in their most recent catch-up attempt. */

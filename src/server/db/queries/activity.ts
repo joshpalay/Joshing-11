@@ -194,6 +194,42 @@ export function needsLiveActor(type: string): boolean {
   return !ACTORLESS_OK_TYPES.has(type);
 }
 
+// Rows whose whole message is "you two are connected". They stop being true the
+// moment the friendship ends, so they are only shown while the actor is still a
+// mutual friend — after an unfriend, or a block that is later lifted, B's feed
+// kept saying "Duo Prova accepted your friend request" / "is now a friend"
+// (QA 2026-09-26, S4).
+const RELATIONSHIP_ASSERTION_TYPES = new Set<string>(['follow', 'follow_approved', 'follow_mutual']);
+
+export function assertsLiveRelationship(type: string): boolean {
+  return RELATIONSHIP_ASSERTION_TYPES.has(type);
+}
+
+// Which of `candidateIds` are currently mutual friends of `userId` (an approved
+// follow in both directions — the migrated symmetric friendship).
+async function mutualFriendIdsAmong(userId: string, candidateIds: string[]): Promise<Set<string>> {
+  if (candidateIds.length === 0) return new Set();
+  const rows = await db
+    .select({ followerId: follows.followerId, followeeId: follows.followeeId })
+    .from(follows)
+    .where(
+      and(
+        eq(follows.state, 'approved'),
+        or(
+          and(eq(follows.followerId, userId), inArray(follows.followeeId, candidateIds)),
+          and(eq(follows.followeeId, userId), inArray(follows.followerId, candidateIds)),
+        ),
+      ),
+    );
+  const outgoing = new Set<string>();
+  const incoming = new Set<string>();
+  for (const row of rows) {
+    if (row.followerId === userId) outgoing.add(row.followeeId);
+    else incoming.add(row.followerId);
+  }
+  return new Set([...outgoing].filter((id) => incoming.has(id)));
+}
+
 function parseFriendshipRequestInterests(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
   const interests = (value as { suggestedInterests?: unknown }).suggestedInterests;
@@ -906,7 +942,17 @@ async function hydrateActivityRows(
     hydrateFriendInvitationReminders(rows),
   ]);
   const actorIds = [...new Set(rows.map((row) => row.actorUserId).filter((id): id is string => Boolean(id)))];
-  const blockedActorIds = await blockedIdsAmong(userId, actorIds);
+  const relationshipActorIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.actorUserId && assertsLiveRelationship(row.type))
+        .map((row) => row.actorUserId as string),
+    ),
+  ];
+  const [blockedActorIds, currentFriendIds] = await Promise.all([
+    blockedIdsAmong(userId, actorIds),
+    mutualFriendIdsAmong(userId, relationshipActorIds),
+  ]);
 
   return rows
     .filter((row): row is ActivityItemRow & { type: ActivityItemType } => isActivityType(row.type))
@@ -916,6 +962,11 @@ async function hydrateActivityRows(
     // A row about a person ("X is now a friend", "X answered your question")
     // has nothing to say once that account is gone: never shown as "Someone".
     .filter((row) => Boolean(row.actorUserId) || !needsLiveActor(row.type))
+    .filter(
+      (row) =>
+        !assertsLiveRelationship(row.type) ||
+        (row.actorUserId !== null && currentFriendIds.has(row.actorUserId)),
+    )
     .map((row) => ({
       id: row.id,
       userId: row.userId,
