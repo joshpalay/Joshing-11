@@ -152,6 +152,20 @@ describe('POST /api/admin/knowledge', () => {
     expect(body.existing?.label).toBe('Renaissance Italy'); // surfaced, offer edit
   });
 
+  it('returns a failed edit with the unhandled table details', async () => {
+    updateNodeMock.mockResolvedValueOnce({
+      ok: false,
+      reason: 'unhandled_tables',
+      detail: ['UnexpectedDomainOwner.domain (1 rows)'],
+    } as never);
+    const res = await post({ action: 'edit_node', id: 'n1', label: 'New Name' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: 'unhandled_tables',
+      detail: ['UnexpectedDomainOwner.domain (1 rows)'],
+    });
+  });
+
   it('creates an edge', async () => {
     const res = await post({
       action: 'create_edge',
