@@ -1098,16 +1098,22 @@ export type CanonicalCorpusMatch = {
   similarity: number;
 };
 
-// SQL mirror of domainKey() (src/lib/knowledge/domain-key.ts): fold curly
-// apostrophes to ASCII, collapse internal whitespace, trim, lowercase. Kept as a
-// single fragment so the JS and SQL key definitions can't drift — the
-// converge-domain test asserts parity. The fold-set chars and the regex pattern
-// are bound params (not inlined literals) so the apostrophe escaping stays sane.
+// SQL mirror of domainKey() (src/lib/knowledge/domain-key.ts). Keep the
+// transformations in the same order: apostrophes, connector punctuation,
+// spaced hyphens, ampersands, then whitespace/case. The integration test runs
+// findExactCanonicalMatch against Postgres for the same labels as domainKey().
 const CONVERGE_CURLY_APOSTROPHES = '‘’ʼ';
 const CONVERGE_ASCII_APOSTROPHES = "'''";
+const CONVERGE_CONNECTOR_PATTERN = '\\s*[:–—]\\s*';
+const CONVERGE_SPACED_HYPHEN_PATTERN = '\\s+-\\s+';
+const CONVERGE_AMPERSAND_PATTERN = '\\s*&\\s*';
 const CONVERGE_WHITESPACE_PATTERN = '\\s+';
 function foldedCanonicalSubcategoryExpr() {
-  return sql`lower(btrim(regexp_replace(translate(${playerMastery.canonicalSubcategory}, ${CONVERGE_CURLY_APOSTROPHES}, ${CONVERGE_ASCII_APOSTROPHES}), ${CONVERGE_WHITESPACE_PATTERN}, ' ', 'g')))`;
+  const apostrophes = sql`translate(${playerMastery.canonicalSubcategory}, ${CONVERGE_CURLY_APOSTROPHES}, ${CONVERGE_ASCII_APOSTROPHES})`;
+  const connectors = sql`regexp_replace(${apostrophes}, ${CONVERGE_CONNECTOR_PATTERN}, ' ', 'g')`;
+  const spacedHyphens = sql`regexp_replace(${connectors}, ${CONVERGE_SPACED_HYPHEN_PATTERN}, ' ', 'g')`;
+  const ampersands = sql`regexp_replace(${spacedHyphens}, ${CONVERGE_AMPERSAND_PATTERN}, ' and ', 'g')`;
+  return sql`lower(btrim(regexp_replace(${ampersands}, ${CONVERGE_WHITESPACE_PATTERN}, ' ', 'g')))`;
 }
 
 const BROAD_CATEGORY_MODE = sql<string | null>`mode() within group (order by ${playerMastery.broadCategory})`;
