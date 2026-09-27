@@ -22,6 +22,7 @@
     "check:binary": "node scripts/check-binary-sources.mjs",
     "check:build-latency": "node scripts/build-latency-check.mjs",
     "check:gate-flags": "node scripts/check-gate-flags.mjs",
+    "check:category-integrity": "tsx scripts/category-integrity-audit.ts",
     "check:question-lifecycle": "node scripts/check-question-lifecycle.mjs",
     "sweep:bank-quality": "tsx scripts/sweep-bank-quality.ts",
     "smoke:daily-catchup": "tsx scripts/daily-catchup.smoke.ts",
