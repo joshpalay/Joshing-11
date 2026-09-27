@@ -1104,13 +1104,19 @@ export type CanonicalCorpusMatch = {
 // findExactCanonicalMatch against Postgres for the same labels as domainKey().
 const CONVERGE_CURLY_APOSTROPHES = '‘’ʼ';
 const CONVERGE_ASCII_APOSTROPHES = "'''";
+// JS /\s/ includes Unicode spaces that PostgreSQL's \s does not (notably
+// NBSP). Map the ECMAScript whitespace set to plain spaces before applying
+// the connector regexes so the SQL fold agrees with domainKey() on all of it.
+const CONVERGE_JS_WHITESPACE = '\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
+const CONVERGE_JS_WHITESPACE_SPACES = ' '.repeat(CONVERGE_JS_WHITESPACE.length);
 const CONVERGE_CONNECTOR_PATTERN = '\\s*[:–—]\\s*';
 const CONVERGE_SPACED_HYPHEN_PATTERN = '\\s+-\\s+';
 const CONVERGE_AMPERSAND_PATTERN = '\\s*&\\s*';
 const CONVERGE_WHITESPACE_PATTERN = '\\s+';
 function foldedCanonicalSubcategoryExpr() {
   const apostrophes = sql`translate(${playerMastery.canonicalSubcategory}, ${CONVERGE_CURLY_APOSTROPHES}, ${CONVERGE_ASCII_APOSTROPHES})`;
-  const connectors = sql`regexp_replace(${apostrophes}, ${CONVERGE_CONNECTOR_PATTERN}, ' ', 'g')`;
+  const whitespace = sql`translate(${apostrophes}, ${CONVERGE_JS_WHITESPACE}, ${CONVERGE_JS_WHITESPACE_SPACES})`;
+  const connectors = sql`regexp_replace(${whitespace}, ${CONVERGE_CONNECTOR_PATTERN}, ' ', 'g')`;
   const spacedHyphens = sql`regexp_replace(${connectors}, ${CONVERGE_SPACED_HYPHEN_PATTERN}, ' ', 'g')`;
   const ampersands = sql`regexp_replace(${spacedHyphens}, ${CONVERGE_AMPERSAND_PATTERN}, ' and ', 'g')`;
   return sql`lower(btrim(regexp_replace(${ampersands}, ${CONVERGE_WHITESPACE_PATTERN}, ' ', 'g')))`;
