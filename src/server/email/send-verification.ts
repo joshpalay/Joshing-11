@@ -32,14 +32,19 @@ function appBaseUrl(): string {
 // failure. Used by:
 //   - POST /api/account/email/verify/send (explicit resend)
 //   - PATCH /api/account/reminders (auto-trigger on pendingEmail change)
-// optInOnConfirm remains supported for verification tokens minted by the retired
-// onboarding-email flow before SMS became the acquisition channel.
+//
+// optInOnConfirm: confirming the link also turns email reminders on. Every
+// place a player can type an address (the Email reminders card in settings) is
+// an ask FOR email, so a second trip to flip the switch only lost people —
+// one confirmed player sat at email_opt_in='not_asked' for exactly that reason.
+// Defaults on unless the player has explicitly turned email off (opted_out),
+// in which case confirming a new address changes the address only.
 export async function sendVerificationEmail(
   userId: string,
   options: { optInOnConfirm?: boolean } = {},
 ): Promise<SendVerificationEmailResult> {
   const [row] = await db
-    .select({ pendingEmail: users.pendingEmail })
+    .select({ pendingEmail: users.pendingEmail, emailOptIn: users.emailOptIn })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
@@ -49,7 +54,7 @@ export async function sendVerificationEmail(
   }
 
   const tokenResult = await createVerificationToken(userId, row.pendingEmail, {
-    optInOnConfirm: options.optInOnConfirm,
+    optInOnConfirm: options.optInOnConfirm ?? row.emailOptIn !== 'opted_out',
   });
   if (!tokenResult.ok) {
     return { ok: false, reason: 'rate_limited', retryAfterMs: tokenResult.retryAfterMs };

@@ -24,6 +24,7 @@ const bodySchema = z
     // The one post-onboarding acquisition surface stamps itself seen as soon as
     // it is displayed, retiring further contextual asks while leaving Settings.
     interstitialSeen: z.literal(true).optional(),
+    weeklyDigestOptIn: z.boolean().optional(),
   })
   .refine(
     (b) =>
@@ -31,7 +32,8 @@ const bodySchema = z
       b.emailOptIn !== undefined ||
       b.pendingEmail !== undefined ||
       b.dismissed === true ||
-      b.interstitialSeen === true,
+      b.interstitialSeen === true ||
+      b.weeklyDigestOptIn !== undefined,
     'must specify at least one change',
   )
   .refine(

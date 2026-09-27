@@ -280,6 +280,11 @@ export const users = pgTable(
       withTimezone: true,
     }),
     lastActivityBellOpenedAt: timestamp('last_activity_bell_opened_at', { withTimezone: true }),
+    // Weekly friends email (migration 0150). The switch defaults on but only
+    // ever reaches a confirmed address that hasn't unsubscribed; sent_at is the
+    // cron's atomic once-a-week claim.
+    weeklyDigestOptIn: boolean('weekly_digest_opt_in').notNull().default(true),
+    weeklyDigestSentAt: timestamp('weekly_digest_sent_at', { withTimezone: true }),
     knowledgeCardShareToken: text('knowledge_card_share_token'),
     knowledgeCardShareExpiresAt: timestamp('knowledge_card_share_expires_at', {
       withTimezone: true,

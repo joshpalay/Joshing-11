@@ -227,6 +227,9 @@ export type ReminderState = {
   // When the one allowed post-onboarding follow-up was shown. Null means the
   // player may still receive that single contextual opportunity.
   reminderInterstitialSeenAt: string | null;
+  // The Sunday "your week with friends" email (migration 0150). Independent of
+  // the daily email; only ever sent to a confirmed, not-unsubscribed address.
+  weeklyDigestOptIn: boolean;
 };
 
 export async function getReminderState(userId: string): Promise<ReminderState | null> {
@@ -245,6 +248,7 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
       smsConsentPolicyVersion: users.smsConsentPolicyVersion,
       reminderPromptDismissedAt: users.reminderPromptDismissedAt,
       reminderInterstitialSeenAt: users.reminderInterstitialSeenAt,
+      weeklyDigestOptIn: users.weeklyDigestOptIn,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -266,6 +270,7 @@ export async function getReminderState(userId: string): Promise<ReminderState | 
     smsConsentPolicyVersion: row.smsConsentPolicyVersion,
     reminderPromptDismissedAt: row.reminderPromptDismissedAt?.toISOString() ?? null,
     reminderInterstitialSeenAt: row.reminderInterstitialSeenAt?.toISOString() ?? null,
+    weeklyDigestOptIn: row.weeklyDigestOptIn,
   };
 }
 
@@ -287,6 +292,7 @@ export type ReminderPreferenceUpdate = {
   // Records that the one allowed post-onboarding follow-up was shown. Once set,
   // the shared acquisition rule retires every contextual reminder prompt.
   interstitialSeen?: true;
+  weeklyDigestOptIn?: boolean;
 };
 
 export type ReminderPreferenceResult =
@@ -329,6 +335,7 @@ export async function updateReminderPreferences(
   if (patch.pendingEmail !== undefined) set.pendingEmail = patch.pendingEmail;
   if (patch.dismissed === true) set.reminderPromptDismissedAt = new Date();
   if (patch.interstitialSeen === true) set.reminderInterstitialSeenAt = new Date();
+  if (patch.weeklyDigestOptIn !== undefined) set.weeklyDigestOptIn = patch.weeklyDigestOptIn;
 
   await db.update(users).set(set).where(eq(users.id, userId));
 

@@ -334,7 +334,8 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         <section className="mb-8" id="notifications">
           <h2 className="mb-3 font-serif text-2xl font-semibold">Notifications</h2>
           <p className="text-muted-foreground mb-3 text-sm">
-            We&apos;ll only message you when a new round opens. One per day, max.
+            One nudge a day when your five are ready, plus an optional Sunday email about your
+            friends.
           </p>
           <NotificationsForm
             initialState={reminderState}

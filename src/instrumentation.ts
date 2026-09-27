@@ -2635,6 +2635,20 @@ export async function register() {
         // migrate() creates them all in normal migration order.
       }
 
+      // Migration 0150 adds the weekly friends email columns to "User". Many
+      // reads select the whole users row (e.g. getMutualFollows), so a
+      // recorded-but-absent migration would 42703 across the app. Idempotent.
+      try {
+        await db.execute(
+          sql`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "weekly_digest_opt_in" boolean DEFAULT true NOT NULL`,
+        );
+        await db.execute(
+          sql`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "weekly_digest_sent_at" timestamp with time zone`,
+        );
+      } catch {
+        // Fresh databases create "User" in normal migration order.
+      }
+
       // Migration 0135 adds UserInviteLink (up to 3 named invite links per
       // user, replacing the single evergreen users.invite_token) and
       // users.joined_via_invite_link_id. Both /u/<handle>/<token> resolution

@@ -1051,6 +1051,13 @@
       "when": 1788987600000,
       "tag": "0149_hidden_question_id_default",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1789074000000,
+      "tag": "0150_weekly_friends_digest",
+      "breakpoints": true
     }
   ]
 }

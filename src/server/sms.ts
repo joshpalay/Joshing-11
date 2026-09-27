@@ -244,9 +244,22 @@ export function buildDailyReminderMessage(groupNames: string[], baseUrl: string)
   return buildDailyReminderSmsBody(baseUrl);
 }
 
-export function buildDailyReminderSmsBody(baseUrl: string): string {
+// Longest friend line the daily text will carry. Keeps the whole body inside two
+// SMS segments even with a long base URL; anything longer is dropped rather than
+// cut mid-sentence (the plain reminder is always a fine fallback).
+const MAX_SMS_FRIEND_LINE = 80;
+
+/**
+ * The daily reminder text. `friendLine` (see smsFriendLine) is one optional,
+ * people-first sentence ("Neil answered 2 of your questions.") placed ahead of
+ * the reminder. It is still the same once-a-day daily_questions message — the
+ * A2P campaign's single daily reminder — not a separate social notification.
+ */
+export function buildDailyReminderSmsBody(baseUrl: string, friendLine?: string | null): string {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
-  return `Joshing: Your five for today are ready: ${normalizedBaseUrl}/daily. Reply STOP to opt out, HELP for help. Msg & data rates may apply.`;
+  const line = friendLine?.trim();
+  const lead = line && line.length <= MAX_SMS_FRIEND_LINE ? `${line} ` : '';
+  return `Joshing: ${lead}Your five for today are ready: ${normalizedBaseUrl}/daily. Reply STOP to opt out, HELP for help. Msg & data rates may apply.`;
 }
 
 export function isEligibleForDailyReminder(user: {

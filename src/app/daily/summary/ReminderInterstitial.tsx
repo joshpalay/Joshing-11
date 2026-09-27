@@ -32,7 +32,8 @@ async function patchReminders(body: Record<string, unknown>): Promise<boolean> {
 }
 
 type State =
-  // Two equal-weight buttons: "Text me" / "Not now".
+  // Two equal-weight buttons: "Text me" / "Not now" (or, after the quieter
+  // "Email me instead", an address field in their place).
   | { kind: 'ask'; error: string | null }
   // An opt-in or skip write is in flight.
   | { kind: 'working' }
@@ -55,6 +56,8 @@ export function ReminderInterstitial({
   const reduced = usePrefersReducedMotion()
   const th = roomTheme('open')
   const [state, setState] = useState<State>({ kind: 'ask', error: null })
+  const [emailDraft, setEmailDraft] = useState('')
+  const [emailMode, setEmailMode] = useState(false)
 
   // In preview mode every write is a no-op that reports success, so the state
   // machine advances exactly as it would live without mutating anything.
@@ -97,6 +100,29 @@ export function ReminderInterstitial({
     setState({
       kind: 'ask',
       error: "We couldn't turn on text reminders. Try again or choose Not now.",
+    })
+  }
+
+  // Saving the address sends a confirmation link; confirming it turns email
+  // reminders (and the weekly friends email) on — see sendVerificationEmail.
+  async function optInWithEmail() {
+    const email = emailDraft.trim()
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setState({ kind: 'ask', error: 'Enter an email address.' })
+      return
+    }
+    setState({ kind: 'working' })
+    const ok = await save({ pendingEmail: email, interstitialSeen: true })
+    if (ok) {
+      setState({
+        kind: 'done',
+        message: `Check ${email} for a confirmation link. Tap it and you're set.`,
+      })
+      return
+    }
+    setState({
+      kind: 'ask',
+      error: "We couldn't save that address. Try again or choose Not now.",
     })
   }
 
@@ -154,33 +180,89 @@ export function ReminderInterstitial({
 
             <Reveal show={shown} delay={reduced ? 0 : 0.24} reduced={reduced}>
               <div className="space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void optInWithSms()}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
-                    style={{ backgroundColor: th.fg, color: th.bg }}
+                {emailMode ? (
+                  <form
+                    className="flex flex-col gap-3"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void optInWithEmail()
+                    }}
                   >
-                    {busy ? 'Turning on…' : 'Text me'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={skip}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
-                    style={{ borderColor: th.fg, color: th.fg }}
-                  >
-                    Not now
-                  </button>
-                </div>
-                <div style={{ color: th.sub }}>
-                  <SmsReminderDisclosure
-                    phoneNumber={phoneNumber}
-                    actionLabel="Text me"
-                    className="text-xs leading-5"
-                  />
-                </div>
+                    <input
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      aria-label="Email address"
+                      value={emailDraft}
+                      onChange={(event) => setEmailDraft(event.target.value)}
+                      className="min-h-11 w-full rounded-[var(--radius-xs)] border bg-transparent px-5 text-base focus-visible:outline-none focus-visible:ring-2"
+                      style={{ borderColor: th.fg, color: th.fg }}
+                    />
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="submit"
+                        disabled={busy}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius-xs)] px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                        style={{ backgroundColor: th.fg, color: th.bg }}
+                      >
+                        {busy ? 'Saving…' : 'Email me'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={skip}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius-xs)] border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                        style={{ borderColor: th.fg, color: th.fg }}
+                      >
+                        Not now
+                      </button>
+                    </div>
+                    <p className="text-xs leading-5" style={{ color: th.sub }}>
+                      One email a day when your five open, and a Sunday note when your friends
+                      were up to something. Turn either off any time in settings.
+                    </p>
+                  </form>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void optInWithSms()}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                        style={{ backgroundColor: th.fg, color: th.bg }}
+                      >
+                        {busy ? 'Turning on…' : 'Text me'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={skip}
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+                        style={{ borderColor: th.fg, color: th.fg }}
+                      >
+                        Not now
+                      </button>
+                    </div>
+                    <div style={{ color: th.sub }}>
+                      <SmsReminderDisclosure
+                        phoneNumber={phoneNumber}
+                        actionLabel="Text me"
+                        className="text-xs leading-5"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setEmailMode(true)}
+                      className="inline-flex min-h-11 items-center text-sm underline underline-offset-2 disabled:opacity-50"
+                      style={{ color: th.sub }}
+                    >
+                      Rather get email? Email me instead
+                    </button>
+                  </>
+                )}
                 {state.kind === 'ask' && state.error ? (
                   <p style={{ fontSize: 13, color: th.fg }} role="alert">
                     {state.error}

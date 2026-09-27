@@ -16,8 +16,13 @@ import { isCronAuthorized } from '@/server/auth/cron';
 import { buildDailyReminderSmsBody, isEligibleForDailyReminder, sendSms } from '@/server/sms';
 import { sendEmail } from '@/server/email/client';
 import { buildDailyReminderTemplate } from '@/server/email/templates/daily-reminder';
-import { formatActivityForEmail, topicsForReminder } from '@/server/email/daily-reminder-data';
-import { getRecentActivityForHome } from '@/server/db/queries/activity';
+import { topicsForReminder } from '@/server/email/daily-reminder-data';
+import { EMPTY_FRIEND_NEWS, getFriendNews, type FriendNews } from '@/server/db/queries/friend-news';
+import {
+  dailyEmailFriendLines,
+  friendAuthorsInSlots,
+  smsFriendLine,
+} from '@/server/notifications/friend-news-copy';
 import { createUnsubscribeToken } from '@/server/email/unsubscribe-token';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +69,23 @@ const USER_BUDGET_MS =
 
 function asQueueSlots(value: unknown): QueueSlot[] {
   return Array.isArray(value) ? (value as QueueSlot[]) : [];
+}
+
+// Friend news covers the day since the previous reminder run.
+const FRIEND_NEWS_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Friend news is decoration on a reminder, never a reason to skip one: a failed
+// lookup falls back to the plain reminder.
+async function loadFriendNews(userId: string): Promise<FriendNews> {
+  try {
+    return await getFriendNews(userId, new Date(Date.now() - FRIEND_NEWS_WINDOW_MS));
+  } catch (error) {
+    console.warn('[cron/daily-assignments] friend news unavailable', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return EMPTY_FRIEND_NEWS;
+  }
 }
 
 function getBaseUrl(request: NextRequest): string {
@@ -139,13 +161,21 @@ export async function GET(request: NextRequest) {
         results.existing += 1;
       }
 
+      // Loaded at most once per user, and only when a reminder might go out.
+      let friendNews: FriendNews | null = null;
+      const friendNewsFor = async () => (friendNews ??= await loadFriendNews(user.id));
+
       if (queue && isEligibleForDailyReminder(user)) {
         const slots = asQueueSlots(queue.slots);
         const hasQuestionsReady = slots.some((slot) => !slot.answered && !slot.skipped);
         if (hasQuestionsReady && (await claimDailySmsReminder(queue.id))) {
+          const friendLine = smsFriendLine(
+            await friendNewsFor(),
+            friendAuthorsInSlots(slots, user.id),
+          );
           const smsResult = await sendSms(
             user.phoneNumber,
-            buildDailyReminderSmsBody(baseUrl),
+            buildDailyReminderSmsBody(baseUrl, friendLine),
             'daily_questions',
             user.id,
           );
@@ -178,9 +208,12 @@ export async function GET(request: NextRequest) {
         // Claim before send so concurrent retries race on the DB, not the
         // provider; a losing claim (already sent today) skips silently.
         if (teaserSlot && (await claimDailyEmailReminder(queue.id))) {
-          // Quiet, people-first "Meanwhile" lines from the same home-eligible
-          // activity Home surfaces; empty → the section is omitted downstream.
-          const activity = formatActivityForEmail(await getRecentActivityForHome(user.id, 3));
+          // Quiet, people-first "Meanwhile" lines from the last day's friend
+          // news (the same source as the text); empty → section omitted.
+          const activity = dailyEmailFriendLines(
+            await friendNewsFor(),
+            friendAuthorsInSlots(slots, user.id),
+          );
           // Session-less unsubscribe: the footer link points at the friendly
           // /unsubscribe page; the List-Unsubscribe header at the RFC 8058
           // one-click POST endpoint. Both verify the same signed token. Gmail/

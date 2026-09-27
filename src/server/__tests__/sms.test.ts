@@ -43,6 +43,20 @@ describe('A2P SMS campaign boundaries and copy', () => {
     );
   });
 
+  it('leads the daily reminder with one friend line, and drops an over-long one', () => {
+    expect(
+      buildDailyReminderSmsBody('https://joshing.example', 'Neil answered 2 of your questions.'),
+    ).toBe(
+      'Joshing: Neil answered 2 of your questions. Your five for today are ready: https://joshing.example/daily. Reply STOP to opt out, HELP for help. Msg & data rates may apply.',
+    );
+    expect(buildDailyReminderSmsBody('https://joshing.example', 'x'.repeat(81))).toBe(
+      buildDailyReminderSmsBody('https://joshing.example'),
+    );
+    expect(buildDailyReminderSmsBody('https://joshing.example', '  ')).toBe(
+      buildDailyReminderSmsBody('https://joshing.example'),
+    );
+  });
+
   it('requires verified phone plus explicit opt-in for daily reminders', () => {
     expect(
       isEligibleForDailyReminder({
