@@ -329,6 +329,13 @@ describe('POST /api/admin/knowledge', () => {
     expect(res.status).toBe(400);
   });
 
+  it('merge_node reports a graph cycle as a rejected edit', async () => {
+    mergeDomainMock.mockResolvedValueOnce({ ok: false, reason: 'self_edge' } as never);
+    const res = await post({ action: 'merge_node', sourceDomainKey: 'a', targetDomainKey: 'c' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'self_edge' });
+  });
+
   // ─── the structure suggester ───
 
   it('propose_structure returns draft groups and commits NOTHING', async () => {

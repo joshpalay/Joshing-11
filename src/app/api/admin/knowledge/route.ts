@@ -310,7 +310,9 @@ export async function POST(request: NextRequest) {
       );
       if (!result.ok) {
         const status =
-          result.reason === 'self_merge' ? 400 : result.reason === 'unknown_node' ? 422 : 409;
+          result.reason === 'self_merge' || result.reason === 'self_edge'
+            ? 400
+            : result.reason === 'unknown_node' ? 422 : 409;
         return NextResponse.json({ error: result.reason, detail: result.detail }, { status });
       }
       return NextResponse.json(result);

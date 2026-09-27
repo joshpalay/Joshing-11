@@ -42,7 +42,7 @@ describe('normalizeMergeSpecs', () => {
 // statement recorded so the test can assert WHICH writes the merge performed.
 // This is what proves the unification — the label path (applyDomainMerges) now
 // runs the SAME graph fold as the tree's merge, instead of orphaning nodes.
-function fakeClient(nodeKeys: string[]) {
+function fakeClient(nodeKeys: string[], cycleOnFold = false) {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const client = {
     query: async (text: string, params?: unknown[]) => {
@@ -50,6 +50,9 @@ function fakeClient(nodeKeys: string[]) {
       calls.push({ sql, params });
       if (sql.includes('information_schema.columns')) {
         return { rows: [{ table_name: 'GeneratedQuestion', column_name: 'canonical_subcategory' }] };
+      }
+      if (cycleOnFold && sql.includes('WITH RECURSIVE ancestors')) {
+        return { rows: [{ '?column?': 1 }] };
       }
       // Census read (the only GROUP BY select in the flow).
       if (sql.includes('GROUP BY 1')) {
@@ -104,6 +107,14 @@ describe('applyDomainMerges — graph follow-through (the unified engine)', () =
     expect(result.ok).toBe(true);
     expect(has(calls, '"KnowledgeEdge"')).toBe(false);
     expect(has(calls, 'DELETE FROM "KnowledgeNode"')).toBe(false);
+  });
+
+  it('rolls back the entire label merge when its graph fold would make a loop', async () => {
+    const { client, calls } = fakeClient(['evil spy school', 'spy school'], true);
+    expect(await mod.applyDomainMerges(client, spec)).toEqual({
+      ok: false, reason: 'self_edge', unhandled: [],
+    });
+    expect(calls[calls.length - 1].sql).toBe('ROLLBACK');
   });
 });
 

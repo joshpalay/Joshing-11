@@ -2,7 +2,7 @@ import type pg from 'pg';
 
 import { pool } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
-import { applyCorpusRetarget, applyGraphFold } from '@/server/knowledge/merge-domain';
+import { applyCorpusRetarget, applyGraphFold, GraphCycleError } from '@/server/knowledge/merge-domain';
 
 /**
  * The shared applier behind BOTH the ops CLI (scripts/merge-fragmented-domains.ts)
@@ -38,7 +38,7 @@ export type MergePreview = {
 
 export type MergeApplyResult =
   | { ok: true; retargeted: number; log: string[] }
-  | { ok: false; reason: 'no_source_rows' | 'unhandled_tables'; unhandled: MergeCensusRow[] };
+  | { ok: false; reason: 'no_source_rows' | 'unhandled_tables' | 'self_edge'; unhandled: MergeCensusRow[] };
 
 // A pg.Client and a pooled client both satisfy this — the CLI and API each supply
 // their own, and neither the preview nor apply manages the connection lifecycle.
@@ -193,6 +193,9 @@ export async function applyDomainMerges(
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
+    if (err instanceof GraphCycleError) {
+      return { ok: false, reason: 'self_edge', unhandled: [] };
+    }
     throw err;
   }
 

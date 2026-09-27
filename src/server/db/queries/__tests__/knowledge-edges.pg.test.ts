@@ -146,4 +146,40 @@ describe.skipIf(!testDatabaseUrl)('knowledge edge cycle guard — Postgres', () 
       (await pool.query(`SELECT node_kind FROM "KnowledgeNode" WHERE id = 'a'`)).rows[0].node_kind,
     ).toBe('leaf');
   });
+
+  it('rejects folding an ancestor into its descendant before the merge commits', async () => {
+    await edge('a', 'b');
+    await edge('b', 'c');
+    const { applyGraphFold, GraphCycleError } = await import('@/server/knowledge/merge-domain');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await expect(
+        applyGraphFold(client, {
+          sourceKey: 'a',
+          targetKey: 'c',
+          targetLabel: 'C',
+        }),
+      ).rejects.toBeInstanceOf(GraphCycleError);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+    expect((await pool.query(`SELECT domain_key FROM "KnowledgeNode" ORDER BY 1`)).rows).toEqual([
+      { domain_key: 'a' },
+      { domain_key: 'b' },
+      { domain_key: 'c' },
+      { domain_key: 'x' },
+    ]);
+    expect(
+      (
+        await pool.query(
+          `SELECT child_domain_key, parent_domain_key FROM "KnowledgeEdge" ORDER BY 1`,
+        )
+      ).rows,
+    ).toEqual([
+      { child_domain_key: 'a', parent_domain_key: 'b' },
+      { child_domain_key: 'b', parent_domain_key: 'c' },
+    ]);
+  });
 });

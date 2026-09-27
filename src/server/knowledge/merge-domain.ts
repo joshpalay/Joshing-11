@@ -29,6 +29,7 @@
 import type pg from 'pg';
 
 import { pool } from '@/server/db';
+import { lockKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // Minimal query surface — a pg.Client (the merge CLI) and a pooled client both
@@ -38,7 +39,13 @@ type QueryClient = Pick<pg.ClientBase, 'query'>;
 
 export type MergeDomainResult =
   | { ok: true; targetLabel: string; sourceLabels: string[]; retargeted: number; consolidated: number }
-  | { ok: false; reason: 'unknown_node' | 'self_merge' | 'unhandled_tables'; detail?: string[] };
+  | { ok: false; reason: 'unknown_node' | 'self_merge' | 'self_edge' | 'unhandled_tables'; detail?: string[] };
+
+export class GraphCycleError extends Error {
+  constructor() {
+    super('Folding these nodes would create a knowledge graph cycle');
+  }
+}
 
 const RETARGET: Array<{ table: string; column: string }> = [
   { table: 'Question', column: 'canonical_subcategory' },
@@ -282,6 +289,7 @@ export async function applyGraphFold(
   log?: string[],
 ): Promise<GraphFoldOutcome> {
   if (sourceKey === targetKey) return 'none';
+  await lockKnowledgeGraph(client);
   const nodes = await client.query<{ domain_key: string }>(
     `SELECT domain_key FROM "KnowledgeNode" WHERE domain_key = ANY($1)`,
     [[sourceKey, targetKey]],
@@ -315,6 +323,19 @@ export async function applyGraphFold(
     `UPDATE "KnowledgeEdge" SET child_domain_key = $2 WHERE child_domain_key = $1`,
     [sourceKey, targetKey],
   );
+
+  // Every newly created cycle must pass through the folded target key. Check
+  // before any transaction commits; UNION terminates even on legacy loops.
+  const cycle = await client.query(
+    `WITH RECURSIVE ancestors(domain_key) AS (
+       SELECT parent_domain_key FROM "KnowledgeEdge" WHERE child_domain_key = $1
+       UNION
+       SELECT e.parent_domain_key FROM "KnowledgeEdge" e
+       JOIN ancestors a ON e.child_domain_key = a.domain_key
+     ) SELECT 1 FROM ancestors WHERE domain_key = $1 LIMIT 1`,
+    [targetKey],
+  );
+  if (cycle.rows.length > 0) throw new GraphCycleError();
 
   // Frozen parent mastery re-keys; a player frozen on BOTH keeps the target
   // row (terminal either way, §B).
@@ -493,6 +514,7 @@ export async function mergeDomainIntoTarget(
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
+      if (err instanceof GraphCycleError) return { ok: false, reason: 'self_edge' };
       throw err;
     }
 

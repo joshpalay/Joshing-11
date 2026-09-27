@@ -250,7 +250,7 @@ export type EdgeResult =
 // sees every previously committed edit before it inserts an edge.
 const GRAPH_LOCK = [728761, 1];
 
-async function lockKnowledgeGraph(client: PoolClient): Promise<void> {
+export async function lockKnowledgeGraph(client: Pick<PoolClient, 'query'>): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock($1, $2)', GRAPH_LOCK);
 }
 
