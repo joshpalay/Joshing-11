@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-26
+last-reviewed: 2026-09-27
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1621,3 +1621,89 @@ remains open and unresolved.
 2. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 3. Question 4 (is the bonus worth its cost) — unresolved, and the growing
    outlier share (now 25%) makes it harder to answer with a single number.
+
+### 2026-09-27 (diagnosis-review) — three new built rows: one more outlier (now 9 of 35, 26%), and the FIRST-EVER `deferred: false` row on a real build, with no bonus phase at all; median saving flat at 14,293ms (n=35); still zero races; no new code touching the tracked persist-race path
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**`DailyBuildMetric` totals:** `built=36` (1 baseline + 35 post-deferral, up
+from 33 total / 32 post-deferral at the last review), `carry_forward=486`,
+`existing_queue=52`, `partial_carry_forward=5`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**Three new post-deferral rows since the last review, all from the
+2026-09-26 17:00–17:05 UTC cron window:**
+
+| build_id | started_at | deferred | span_ms | user_visible_ms | saved | bonus (`generationMs`) | residual |
+|---|---|---|---:|---:|---:|---:|---:|
+| `4bf5cfb6-…` | 17:00:37.802Z | true | 39,587 | 37,974 | 1,613 | 900 | 713 — normal band |
+| `4206ffb0-…` | 17:03:40.219Z | **false** | 50,757 | 50,616 | 141 | — (`rounds: []`, 0 bonus rounds) | n/a |
+| `87cf2e9a-…` | 17:05:20.294Z | true | 37,555 | 11,653 | **25,902** | 740 | **25,162 — outlier-class** |
+
+**Two things worth naming precisely.**
+
+1. **`87cf2e9a-…` joins the outlier cluster** — the same small-bonus/huge-
+   residual shape as `84e717bd-…`, `87e51589-…`, `4f9efefa-…`, and
+   `76790f46-…` (740ms of bonus generation paired with 25.2s of unexplained
+   residual). **This raises the outlier/elevated count to 9 of 35
+   post-deferral rows (26%)**, continuing the same successive-review growth
+   this doc has tracked (3→5→6→8→9). Not traced this pass — still needs
+   Vercel function logs this session doesn't have. Full named set: the
+   eight from the last review plus today's `87cf2e9a-…`.
+2. **`4206ffb0-…` is the first `deferred: false` row this doc has ever
+   recorded on a genuine post-deferral build** (`rounds: []`,
+   `round_count: 0`, `generate_call_count: 3` — no bonus phase ran at all).
+   This is exactly the second failure signature §6 has warned about since
+   this doc opened but never actually seen: *"`deferred: false` on a cron
+   build → `after()` was unavailable and the tail ran inline. Correct, but
+   not faster — and it means the deferral is inert on the one path that
+   matters."* `saved` on this row is a negligible 141ms, consistent with
+   the tail running inline rather than being deferred. Landed inside the
+   same 17:05 UTC cron window as the other two rows above (17:03:40, one
+   minute before), so this looks like an ordinary cron-triggered build
+   where `after()` simply wasn't available on that invocation — not a
+   crash or an error (no anomalous `final_size`, `target_size=5` as usual).
+   Not investigated further this pass (reconnaissance, not a fix), but
+   naming it because it's a new occurrence of a previously-only-theoretical
+   failure mode, worth watching for a repeat.
+
+**Phase 3a (mechanism) holds** on the two rows with a bonus phase
+(`saved ≥` each row's own bonus `generationMs`); not applicable to
+`4206ffb0-…` (no bonus phase recorded to check against).
+
+**3b population: median saving 14,293ms** (n=35, up from 14,311.5ms at
+n=32) — essentially flat; the new rows split around the existing
+distribution without moving the median materially.
+
+**No code change since the last review** to `queue-orchestrator.ts`,
+`daily.ts`, or `build-context.ts` — the one commit landing on `main` since
+the last review's commit that touches a tracked file
+(`generate-questions.ts`, via `#1717`) does not touch any of these three
+paths; confirmed by diffing its file list directly. `#1717` and `#1720`
+both confirmed `merged: true` via the GitHub API — neither is relevant to
+this doc's tracked persist-race mechanism (see
+`question-lifecycle-quality-plan.md` and
+`answer-leak-domain-drift-plan.md`'s own entries today for what each is
+relevant to instead).
+
+**No decision-resolving change.** Status stays `active`. The outlier-trace
+next step is more urgent still (3→5→6→8→9 occurrences across successive
+reviews, now over a quarter of all post-deferral rows), but still needs
+Vercel access this session doesn't have. The new `deferred: false` sighting
+is a second, independent thing worth tracing if it recurs. Question 4 (is
+the bonus worth its cost) remains open and unresolved.
+
+### Next steps (revised)
+1. **Trace the now-nine outsized/elevated-residual builds** — needs Vercel
+   function logs. Named: `84e717bd-…` (09-09), `87e51589-…` (09-14),
+   `cff84520-…` (09-15), `42f757d7-…` and `8753461a-…` (09-23),
+   `758748d3-…` (09-24), `4f9efefa-…` and `76790f46-…` (09-25), `87cf2e9a-…`
+   (09-26).
+2. **New:** watch for a repeat of `4206ffb0-…`'s `deferred: false` /
+   no-bonus-phase shape — the first such row this doc has ever recorded on
+   a real build. A second occurrence would be worth tracing via Vercel logs
+   for whether `after()` availability is becoming less reliable.
+3. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+4. Question 4 (is the bonus worth its cost) — unresolved, and the growing
+   outlier share (now 26%) makes it harder to answer with a single number.

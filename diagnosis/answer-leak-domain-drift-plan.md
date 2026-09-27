@@ -2,9 +2,9 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-26
+last-reviewed: 2026-09-27
 owner: Josh
-related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701"
+related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
 
 # Diagnosis: answer-leak & domain-drift gate rollout
@@ -2244,5 +2244,94 @@ recommended-but-unrun blind-labeling pass.
    "isolated to 2026-09-07" as settled and look at what `non_player`-scoped
    generation traffic actually is.
 5. The three open `ContentReport` rows remain unaddressed, now 20 days old.
+6. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-09-27 (diagnosis-review) — 20 clean days on both established flags; `answer_leak_any_token` keeps accelerating (now 25 of 204); the shared `quality` gate's `failed_open` did NOT recur on 2026-09-26; a new, unconditional topic-label leak check shipped in #1717
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. No `.env`/`.env.local` present locally (only
+`.env.example`) — same as every prior review since 2026-09-12.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 390 | 0 | 0 |
+| `domain_drift` | 390 | 0 | 0 |
+| `answer_leak_single_word` | 287 | 2 | 0 |
+| `answer_leak_any_token` | 204 | **25** | 0 |
+| `answer_shape` | 390 | 2 | 0 |
+| `quality` | 390 | 148 | 230 (unchanged since 2026-09-25) |
+
+`answer_leak_partial` / `domain_drift` are now at **20 consecutive clean
+days**, 390 considered (up from 333), still 0 drops each — Mechanism-2
+code-fix decision unchanged, still waiting on `domain_drift` to catch
+something real. `answer_leak_single_word` gained 57 considered (230→287),
+no new drop (still 2). `answer_leak_any_token` gained 7 more drops in one
+day (18→25, 147→204 considered) — continuing the acceleration flagged on
+2026-09-24/25; the recommended blind-labeling pass (open decision 6) has
+still **not** been run (outside this review's recon scope, same as every
+prior entry).
+
+**Last review's "watch if `quality`'s `failed_open` recurs" did not
+materialize.** Queried by `scope`: 2026-09-26 reads `failed_open: 0` on
+both `daily_build` (40 considered, 1 dropped) and `non_player` (19
+considered, 2 dropped) scopes — the single `non_player`-scope failed-open
+from 2026-09-25 was a one-off, not the start of a recurring pattern. Not
+re-treating "isolated to 2026-09-07" as fully restored (one clean day after
+one hit isn't proof either), but nothing here escalates it further.
+
+**New code since the last review, directly relevant to this doc's subject
+matter but not to any of its six open decisions: `#1717`** ("fix: QA
+2026-09-25 round, profile and content follow-ups"), merged
+2026-09-26T13:07:23Z. Confirmed by reading the diff: adds
+`topicLabelLeaksAnswer()` to `generate-questions.ts`, wired into
+`findAnswerLeaks` (generation path) and `findBankSourceDefect` (bank-serve
++ `sweep:bank-quality`) — catching the case where the topic **chip label**
+shown above a question gives away the answer (e.g. a "CATCH-22" chip over
+a stem asking to name that novel), which none of the stem-only checks can
+see. Per the PR's own description, this hit **6 of 2,396 bank rows in
+prod, all genuine** (Catch-22 ×3, Ring Cycle "the ring" ×3). Unlike every
+gate this doc already tracks, this one is **unconditional** — same
+posture as the original full-leak stem check, not measure-only behind a
+flag — so there is no flag decision to add to §2. It folds into the
+existing `answer_leak` gate counter (not a separately named one; verified
+by reading the `recordGateDrops` call site, `generate-questions.ts:2610`),
+so its own hit rate isn't separately visible in `GateDropStat`. Logging it
+here since it's the same defect family this doc tracks, not duplicating it
+as a new decision.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id: `139e1932…`, `800c44a3…`, `357618e3…`), now **21 days**
+since they were filed (2026-09-06). Not this doc's action item, but the age
+keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,411**, up from 2,396 —
+ordinary generation, not investigated further.
+
+**No other new code:** `git log --since=2026-09-26` on `self-answering.ts`,
+`off-domain-second-opinion.ts`, and `generate-questions.ts` shows only
+`#1717` (above). `domain-drift.eval.test.ts` remains unrun (no
+`ANTHROPIC_API_KEY` in this environment); stands at 9/11 from its last real
+run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now with a larger sample (25 of
+204) than when it was first recommended.
+
+### Next steps (unchanged, plus one)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now 20+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 287).
+3. **A blind-labeling pass on `answer_leak_any_token` remains due** (now 25
+   of 204, further past the ~13-hit threshold) — recommended since
+   2026-09-25, still not run.
+4. **New:** `#1717`'s topic-label leak check has no dedicated telemetry
+   (folds into the `answer_leak` counter) — nothing to watch numerically,
+   just noting it exists so it isn't rediscovered as new.
+5. The three open `ContentReport` rows remain unaddressed, now 21 days old.
 6. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

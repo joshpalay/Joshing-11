@@ -2,9 +2,9 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-26
+last-reviewed: 2026-09-27
 owner: Josh
-related-pr: "#1646, #1698, #1702, #1709"
+related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
 
 # Diagnosis: question lifecycle quality and grading fairness
@@ -1090,4 +1090,112 @@ paths — spot-checked directly.
 3. Keep an eye on `batch_dedup` `failed_open` (16/214, flat for the second
    straight review) and `recent_history` (4/214, ticked up again).
 4. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-27 (diagnosis-review) — a new PR directly fixes a real, confirmed grading-fairness bug (dropped mastery credit on won disputes); the dispute queue's newest resolution is the exact case that bug describes, and predates the fix; `batch_dedup`/`recent_history` failed_open both tick up; `subject_entity` coverage holds; build p50 eases
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. No `.env`/`.env.local` present locally.
+
+**New PR directly relevant to decision 4, read by diff not title:
+`#1720`** ("fix(recheck): record won disputes in MASTERY_EVENTS instead of
+dropping them"), merged 2026-09-26T17:19:50Z. This is a real, confirmed bug
+in the exact mechanism this doc's decision 4 depends on: when a player wins
+an "argue it" recheck, the route inserts a `first_correct` MASTERY_EVENTS
+row, but the original miss already holds the same
+`(source_type, question_id, answered_by_user_id)` unique key, so
+`ON CONFLICT DO NOTHING` silently dropped the win — **per the PR's own
+read-only prod check, 28 of 30 accepted disputes never reached
+MASTERY_EVENTS or PLAYER_MASTERY.** Fix: `writeMasteryEvent` gains an
+`overturnIncorrect` option that, on a conflicting insert, UPDATEs the
+existing `incorrect` row in place instead of silently no-op'ing; wired into
+all four recheck routes (daily, catch-up, feed, lately milestone).
+**Historical rows are intentionally NOT backfilled** (Josh's call, stated
+in the PR) — only future wins are fixed going forward.
+
+**This matters directly for this doc's own reading of the `GradeDispute`
+counter, and confirms a suspicion the 2026-09-24/25 entries already
+raised.** `GradeDispute` status counts (all-time): `pending` 43
+(unchanged), `alternative_added` **30** (was 29), `dismissed` 5 (unchanged).
+The new resolution: `id 786b3661…`, `review_decision: accept`,
+`accepted_alternative: "Scooby gang"`, question text "On Buffy the Vampire
+Slayer, what does the group of friends who help Buffy fight evil call
+themselves as an informal team name?", `reviewed_at 2026-09-26T17:08:08Z`.
+**This is the exact "2026-09-26 Buffy dispute" the #1720 PR description
+names as "the one stranded incorrect row" its fix targets** — and its
+`reviewed_at` (17:08:08Z) is ~11 minutes **before** the fix merged
+(17:19:50Z). So this specific resolution predates the fix and, per the
+PR's own read-only check, is one of the 28 still-stranded rows — its
+credit was very likely dropped the same silent way, and per Josh's
+no-backfill decision it will stay that way. Not confirmed by directly
+querying `MASTERY_EVENTS` this pass (would need to resolve
+`answered_by_user_id` from `answer_id`, out of scope for this read-only
+review), but the timing match to the PR's own named case is exact. This
+also reinforces the 2026-09-24/25 entries' standing question (is
+`GradeDispute` growth measuring staff review or the automated recheck path
+agreeing with itself?) — this resolution's shape (an `accept` with an
+`accepted_alternative`, arriving via what the PR's mechanism describes) is
+consistent with the automated recheck path again, not a human working the
+`/admin/disputes` queue by hand. Not re-investigated with certainty this
+pass, same posture as every prior entry on this question.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard requirement
+(2026-09-16T22:07:16Z): **0 of 151** newly-generated rows missing it (was 0
+of 136 last review).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 241 | 24 | **3** |
+| `batch_dedup` | 241 | 10 | **17** |
+| `quality` | 241 | 96 (39.8%) | 0 |
+
+`recent_history`'s `failed_open` is flat at 3 (was 4/214 — a rolling
+14-day window, so the count can fall as an old day rolls out; not a new
+drop, just the window moving). `batch_dedup`'s `failed_open` ticked up
+16→17 on the same rolling-window basis. `quality`'s scoped drop rate
+(39.8%) stays inside the acceptable band. Neither counter is root-caused;
+same "flagging for awareness" posture as every prior entry.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 35,750ms** (n=26),
+eased slightly from a comparable recent reading — still well above the
+25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s 2026-09-27 entry (read, not
+re-derived): the elevated/outlier-residual cluster it tracks is now 9 of 35
+post-deferral rows (up from 8), plus a first-ever `deferred: false` row —
+still untraced, still the standing explanation for the elevated p50.
+
+**No code change to this doc's own tracked files** (`verification-gating.test.ts`,
+`check-question-lifecycle.mjs`, `src/server/llm/recheck.ts`,
+`src/server/db/queries/grade-disputes.ts`) since the last review beyond
+`#1720`'s changes to the four recheck routes and
+`write-mastery-event.ts` (already covered above). `#1720` and `#1717`
+both confirmed `merged: true` via the GitHub API.
+
+**No decision-resolving change to the six items in §2** — #1720 is a
+confirmed bug fix that materially improves what future `GradeDispute`
+resolutions can measure for decision 4, but it does not itself answer
+"did grading become fairer in real use" (still needs Phase 4's labeled
+set) and explicitly does not touch the historical backlog. Status stays
+`active`.
+
+### Next steps (revised)
+1. **New:** once a genuinely NEW recheck-driven dispute resolution lands
+   (i.e. one with `reviewed_at` after 2026-09-26T17:19:50Z, when #1720
+   deployed), check whether it now shows a matching credited
+   `MASTERY_EVENTS` row — that would be direct confirmation the fix is
+   working live, not just reasoned about from the diff and prod read-only
+   checks in the PR.
+2. Check how `#1709`'s automated recheck path labels its `GradeDispute`
+   resolutions — still not directly investigated; today's new resolution
+   is consistent with that path but not confirmed with certainty.
+3. Once the outlier builds are traced, re-check whether this doc's
+   build-time p50 recovers — now 9 named outliers per the cross-referenced
+   doc, still untraced.
+4. Keep an eye on `batch_dedup` `failed_open` (17/241) and `recent_history`
+   (3/241) on the rolling 14-day window.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
