@@ -31,6 +31,7 @@ import type pg from 'pg';
 import { pool } from '@/server/db';
 import { lockKnowledgeGraph } from '@/server/db/queries/knowledge-graph';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import type { KnowledgeNodeRow, NodeResult, UpdateNodeInput } from '@/server/db/queries/knowledge-graph';
 
 // Minimal query surface — a pg.Client (the merge CLI) and a pooled client both
 // satisfy it, so the shared corpus/graph helpers below serve BOTH merge
@@ -411,52 +412,192 @@ async function findUnhandledTables(client: QueryClient, sources: string[]): Prom
   return unhandled;
 }
 
-/**
- * Rename follow-through: a node's label changed, so the corpus rows that
- * carried the OLD label move to the new one (same retarget/consolidate
- * machinery as a merge, no graph changes — the node itself was already
- * renamed by updateKnowledgeNode). Without this, a rename strands the
- * territory's questions under the old label and the tree shows 0 Qs.
- */
-export async function retargetRenamedDomain(
-  input: { oldLabel: string; newLabel: string },
-  actorUserId: string,
-): Promise<
-  | { ok: true; retargeted: number; consolidated: number }
-  | { ok: false; reason: 'unhandled_tables'; detail: string[] }
-> {
-  const oldKey = domainKey(input.oldLabel);
-  const client = await pool.connect();
-  try {
-    const sources = (await collectSourceLabels(client, oldKey, [input.oldLabel])).filter(
-      (label) => label !== input.newLabel,
+// Label census does not see rows keyed by the normalized domain key. A rename
+// handles the known key owners below; reject any newly introduced key owner
+// with data before changing the graph, rather than silently stranding it.
+async function findUnhandledRenameKeyTables(client: QueryClient, oldKey: string): Promise<string[]> {
+  const handled = new Set([
+    'KnowledgeNode.domain_key',
+    'KnowledgeEdge.child_domain_key',
+    'KnowledgeEdge.parent_domain_key',
+    'KnowledgeParentMastery.parent_domain_key',
+    'KnowledgeLeafMastery.leaf_domain_key',
+    'GeneratedQuestion.domain_key',
+    'DomainDepthEstimate.domain_key',
+  ]);
+  const columns = await client.query<{ table_name: string; column_name: string }>(`
+    SELECT table_name, column_name FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND column_name IN ('domain_key', 'child_domain_key', 'parent_domain_key', 'leaf_domain_key')
+    ORDER BY table_name, column_name
+  `);
+  const unhandled: string[] = [];
+  for (const { table_name: table, column_name: column } of columns.rows) {
+    if (handled.has(`${table}.${column}`)) continue;
+    const quotedTable = `"${table.replace(/"/g, '""')}"`;
+    const rows = await client.query<{ n: string }>(
+      `SELECT count(*) AS n FROM ${quotedTable} WHERE "${column}" = $1`,
+      [oldKey],
     );
-    if (sources.length === 0) return { ok: true, retargeted: 0, consolidated: 0 };
-
-    const unhandled = await findUnhandledTables(client, sources);
-    if (unhandled.length > 0) return { ok: false, reason: 'unhandled_tables', detail: unhandled };
-
-    await client.query('BEGIN');
-    let result: { retargeted: number; consolidated: number };
-    try {
-      result = await applyCorpusRetarget(client, {
-        target: input.newLabel,
-        targetKey: domainKey(input.newLabel),
-        sources,
-      });
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
+    if (Number(rows.rows[0].n) > 0) {
+      unhandled.push(`${table}.${column} (${rows.rows[0].n} rows)`);
     }
-    console.info('[knowledge-admin] rename corpus retargeted', {
+  }
+  return unhandled;
+}
+
+const NODE_COLUMNS = `id, label, domain_key AS "domainKey", node_kind AS "nodeKind",
+  mastery_threshold AS "masteryThreshold", broad_category AS "broadCategory",
+  field_hue AS "fieldHue", wikidata_qid AS "wikidataQid", created_at AS "createdAt"`;
+
+// A rename is the same authored territory under a new key. Keep both earned
+// award ledgers, retaining the earlier crossing if the destination already has
+// a row for that player. This moves awards only; answer-based point accounting
+// remains in applyCorpusRetarget.
+async function rekeyRenameAwards(client: QueryClient, oldKey: string, nextKey: string): Promise<void> {
+  for (const { table, column } of [
+    { table: 'KnowledgeParentMastery', column: 'parent_domain_key' },
+    { table: 'KnowledgeLeafMastery', column: 'leaf_domain_key' },
+  ]) {
+    await client.query(
+      `UPDATE "${table}" target SET mastered_at = least(target.mastered_at, source.mastered_at)
+       FROM "${table}" source
+       WHERE source."${column}" = $1 AND target."${column}" = $2
+         AND target.user_id = source.user_id`,
+      [oldKey, nextKey],
+    );
+    await client.query(
+      `DELETE FROM "${table}" source WHERE source."${column}" = $1
+       AND EXISTS (SELECT 1 FROM "${table}" target
+                   WHERE target."${column}" = $2 AND target.user_id = source.user_id)`,
+      [oldKey, nextKey],
+    );
+    await client.query(`UPDATE "${table}" SET "${column}" = $2 WHERE "${column}" = $1`, [
+      oldKey, nextKey,
+    ]);
+  }
+}
+
+/** Change a node, its edges, corpus labels, and earned awards in one transaction. */
+export async function updateKnowledgeNodeAtomically(
+  input: UpdateNodeInput,
+  actorUserId: string,
+): Promise<NodeResult> {
+  const client = await pool.connect();
+  let inTransaction = false;
+  let nextKey: string | undefined;
+  try {
+    await client.query('BEGIN');
+    inTransaction = true;
+    const current = await client.query<KnowledgeNodeRow>(
+      `SELECT ${NODE_COLUMNS} FROM "KnowledgeNode" WHERE id = $1 FOR UPDATE`,
+      [input.id],
+    );
+    const node = current.rows[0];
+    if (!node) return { ok: false, reason: 'not_found' };
+
+    const nextLabel = input.label?.trim() || node.label;
+    nextKey = domainKey(nextLabel);
+    if (nextKey !== node.domainKey) {
+      const collision = await client.query<KnowledgeNodeRow>(
+        `SELECT ${NODE_COLUMNS} FROM "KnowledgeNode" WHERE domain_key = $1`,
+        [nextKey],
+      );
+      if (collision.rows[0]) {
+        return { ok: false, reason: 'domain_key_collision', existing: collision.rows[0] };
+      }
+    }
+
+    let sources: string[] = [];
+    if (nextLabel !== node.label) {
+      sources = (await collectSourceLabels(client, node.domainKey, [node.label]))
+        .filter((label) => label !== nextLabel);
+      const unhandled = await findUnhandledTables(client, sources);
+      if (unhandled.length > 0) {
+        return { ok: false, reason: 'unhandled_tables', detail: unhandled };
+      }
+    }
+    if (nextKey !== node.domainKey) {
+      const unhandled = await findUnhandledRenameKeyTables(client, node.domainKey);
+      if (unhandled.length > 0) {
+        return { ok: false, reason: 'unhandled_tables', detail: unhandled };
+      }
+      const estimates = await client.query<{ domain_key: string }>(
+        `SELECT domain_key FROM "DomainDepthEstimate" WHERE domain_key = ANY($1) FOR UPDATE`,
+        [[node.domainKey, nextKey]],
+      );
+      if (estimates.rows.length === 2) {
+        return {
+          ok: false,
+          reason: 'unhandled_tables',
+          detail: ['DomainDepthEstimate.domain_key (old and new keys both have estimates)'],
+        };
+      }
+    }
+
+    const changed = await client.query<KnowledgeNodeRow>(
+      `UPDATE "KnowledgeNode" SET label = $2, domain_key = $3, node_kind = $4,
+         mastery_threshold = $5, broad_category = $6, field_hue = $7
+       WHERE id = $1 RETURNING ${NODE_COLUMNS}`,
+      [input.id, nextLabel, nextKey, input.nodeKind ?? node.nodeKind,
+        input.masteryThreshold === undefined ? node.masteryThreshold : input.masteryThreshold,
+        input.broadCategory === undefined ? node.broadCategory : input.broadCategory,
+        input.fieldHue === undefined ? node.fieldHue : input.fieldHue],
+    );
+
+    if (nextKey !== node.domainKey) {
+      await client.query(
+        `UPDATE "KnowledgeEdge" SET child_domain_key = $2 WHERE child_domain_key = $1`,
+        [node.domainKey, nextKey],
+      );
+      await client.query(
+        `UPDATE "KnowledgeEdge" SET parent_domain_key = $2 WHERE parent_domain_key = $1`,
+        [node.domainKey, nextKey],
+      );
+      await rekeyRenameAwards(client, node.domainKey, nextKey);
+    }
+    if (nextLabel !== node.label || nextKey !== node.domainKey) {
+      await client.query(
+        `UPDATE "DomainDepthEstimate" SET domain_key = $2, sample_label = $3 WHERE domain_key = $1`,
+        [node.domainKey, nextKey, nextLabel],
+      );
+    }
+    if (sources.length > 0) {
+      await applyCorpusRetarget(client, { target: nextLabel, targetKey: nextKey, sources });
+    }
+
+    await client.query('COMMIT');
+    inTransaction = false;
+    console.info('[knowledge-admin] node updated', {
       actorUserId,
-      ...input,
-      sources,
-      ...result,
+      id: input.id,
+      renamed: nextKey !== node.domainKey ? { from: node.domainKey, to: nextKey } : false,
     });
-    return { ok: true, ...result };
+    return { ok: true, node: changed.rows[0] };
+  } catch (err) {
+    if (inTransaction) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+    }
+    if ((err as { code?: string }).code === '23505' && nextKey) {
+      if ((err as { constraint?: string }).constraint === 'DomainDepthEstimate_domain_key') {
+        return {
+          ok: false,
+          reason: 'unhandled_tables',
+          detail: ['DomainDepthEstimate.domain_key (new key gained an estimate during rename)'],
+        };
+      }
+      const collision = await client.query<KnowledgeNodeRow>(
+        `SELECT ${NODE_COLUMNS} FROM "KnowledgeNode" WHERE domain_key = $1`,
+        [nextKey],
+      );
+      if (collision.rows[0]) {
+        return { ok: false, reason: 'domain_key_collision', existing: collision.rows[0] };
+      }
+    }
+    throw err;
   } finally {
+    if (inTransaction) await client.query('ROLLBACK');
     client.release();
   }
 }

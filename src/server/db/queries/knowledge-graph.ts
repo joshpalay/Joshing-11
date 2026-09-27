@@ -7,10 +7,10 @@ import { domainKey } from '@/lib/knowledge/domain-key';
 // B-KNOWLEDGE-ADMIN-01 P1 — write layer for the human-authored knowledge graph
 // (D-KNOWLEDGE-TAXONOMY-MODEL-01 §4: structure is a human decision; the LLM
 // only proposes). Every write here is a deliberate, logged act. This module
-// touches ONLY KnowledgeNode/KnowledgeEdge — never questions, playerMastery,
-// or masteryEvents. The domainKey collision check is the fragmentation
-// tripwire this whole model exists to enforce: a label that folds onto an
-// existing node must surface that node, never mint a sibling.
+// delegates renames to the shared corpus/graph transaction so all territory
+// references change together. The domainKey collision check is the
+// fragmentation tripwire: a label that folds onto an existing node must
+// surface that node, never mint a sibling.
 
 export type NodeKind = 'leaf' | 'parent' | 'both';
 
@@ -113,9 +113,10 @@ export type CreateNodeInput = {
 };
 
 export type NodeResult =
-  | { ok: true; node: KnowledgeNodeRow; corpusWarning?: string }
+  | { ok: true; node: KnowledgeNodeRow }
   | { ok: false; reason: 'domain_key_collision'; existing: KnowledgeNodeRow }
-  | { ok: false; reason: 'not_found' };
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'unhandled_tables'; detail: string[] };
 
 export async function createKnowledgeNode(
   input: CreateNodeInput,
@@ -163,82 +164,14 @@ export async function createKnowledgeNode(
 
 export type UpdateNodeInput = Partial<CreateNodeInput> & { id: string };
 
-// Editing a node's label changes its domainKey — edges are keyed by domainKey
-// (so they survive label edits by design), which means a rename must rewrite
-// the node's edge keys in the same act. Threshold edits never touch mastery
-// here: mastery is computed at read (P4) and earned mastery is never revoked
-// (§5) — the ADMIN P2 impact preview is where a risky lowering gets a warning.
+// Renames also touch corpus labels and earned mastery keys, so the complete
+// update lives in one transaction in the shared corpus/graph write module.
 export async function updateKnowledgeNode(
   input: UpdateNodeInput,
   actorUserId: string,
 ): Promise<NodeResult> {
-  const [node] = await db
-    .select()
-    .from(knowledgeNodes)
-    .where(eq(knowledgeNodes.id, input.id))
-    .limit(1);
-  if (!node) return { ok: false, reason: 'not_found' };
-
-  const nextLabel = input.label?.trim() || node.label;
-  const nextKey = domainKey(nextLabel);
-
-  if (nextKey !== node.domainKey) {
-    const [collision] = await db
-      .select()
-      .from(knowledgeNodes)
-      .where(eq(knowledgeNodes.domainKey, nextKey))
-      .limit(1);
-    if (collision) return { ok: false, reason: 'domain_key_collision', existing: collision };
-  }
-
-  const [updated] = await db
-    .update(knowledgeNodes)
-    .set({
-      label: nextLabel,
-      domainKey: nextKey,
-      ...(input.nodeKind !== undefined ? { nodeKind: input.nodeKind } : {}),
-      ...(input.masteryThreshold !== undefined ? { masteryThreshold: input.masteryThreshold } : {}),
-      ...(input.broadCategory !== undefined ? { broadCategory: input.broadCategory } : {}),
-      ...(input.fieldHue !== undefined ? { fieldHue: input.fieldHue } : {}),
-    })
-    .where(eq(knowledgeNodes.id, input.id))
-    .returning();
-
-  if (nextKey !== node.domainKey) {
-    // Rename: carry the node's edges to the new key.
-    await db
-      .update(knowledgeEdges)
-      .set({ childDomainKey: nextKey })
-      .where(eq(knowledgeEdges.childDomainKey, node.domainKey));
-    await db
-      .update(knowledgeEdges)
-      .set({ parentDomainKey: nextKey })
-      .where(eq(knowledgeEdges.parentDomainKey, node.domainKey));
-  }
-
-  // Rename follow-through: the territory's QUESTIONS (and player progress)
-  // carry the old label, so move them along — otherwise the renamed node
-  // shows 0 Qs while the corpus sits stranded under the old spelling (the
-  // Bikini Bottom → SpongeBob lesson, 2026-07-03). Dynamic import to keep
-  // this module free of a static pg dependency in unit tests.
-  let corpusWarning: string | undefined;
-  if (nextLabel !== node.label) {
-    const { retargetRenamedDomain } = await import('@/server/knowledge/merge-domain');
-    const moved = await retargetRenamedDomain(
-      { oldLabel: node.label, newLabel: nextLabel },
-      actorUserId,
-    );
-    if (!moved.ok) {
-      corpusWarning = `Renamed, but ${moved.detail.join(', ')} still hold the old label — extend the merge tables before re-running.`;
-    }
-  }
-
-  console.info('[knowledge-admin] node updated', {
-    actorUserId,
-    id: input.id,
-    renamed: nextKey !== node.domainKey ? { from: node.domainKey, to: nextKey } : false,
-  });
-  return { ok: true, node: updated, ...(corpusWarning ? { corpusWarning } : {}) };
+  const { updateKnowledgeNodeAtomically } = await import('@/server/knowledge/merge-domain');
+  return updateKnowledgeNodeAtomically(input, actorUserId);
 }
 
 export type EdgeResult =

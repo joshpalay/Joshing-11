@@ -26,7 +26,8 @@ export const dynamic = 'force-dynamic';
 
 // B-KNOWLEDGE-ADMIN-01 P1 — the human-authoring API for the knowledge graph
 // (D-doc §4: structure is human-authored; no auto-mint). Edits nodes, edges,
-// thresholds, and edge types ONLY — never questions, mastery, or player data.
+// thresholds, and edge types; node renames carry corpus and earned award keys
+// in the same database transaction.
 // The domainKey collision response carries the existing node so the client can
 // surface it and offer edit instead (the anti-fragmentation tripwire).
 
@@ -165,11 +166,15 @@ export async function POST(request: NextRequest) {
       const result = await updateKnowledgeNode(data, session.userId);
       if (!result.ok) {
         return NextResponse.json(
-          { error: result.reason, existing: 'existing' in result ? result.existing : null },
+          {
+            error: result.reason,
+            existing: 'existing' in result ? result.existing : null,
+            detail: 'detail' in result ? result.detail : null,
+          },
           { status: result.reason === 'not_found' ? 404 : 409 },
         );
       }
-      return NextResponse.json({ node: result.node, corpusWarning: result.corpusWarning ?? null });
+      return NextResponse.json({ node: result.node });
     }
 
     case 'create_edge': {
