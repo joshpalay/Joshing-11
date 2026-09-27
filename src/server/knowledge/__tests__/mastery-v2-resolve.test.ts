@@ -39,6 +39,25 @@ describe('resolveV2Mastery — leaf grain (points ÷ threshold)', () => {
   });
 });
 
+describe('mastery v2 switch', () => {
+  it('does not turn on for the misspelled environment variable', () => {
+    const names = ['KNOWLEDGE_GRAPH_ENABLED', 'KNOWLEDGE_MASTERY_V2', 'NOWLEDGE_MASTERY_V2'] as const;
+    const previous = names.map((name) => process.env[name]);
+    try {
+      process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
+      delete process.env.KNOWLEDGE_MASTERY_V2;
+      process.env.NOWLEDGE_MASTERY_V2 = 'true';
+      expect(mod.isKnowledgeMasteryV2Enabled()).toBe(false);
+    } finally {
+      names.forEach((name, index) => {
+        const value = previous[index];
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      });
+    }
+  });
+});
+
 describe('resolveV2Mastery — parent grain (rolled-up points ÷ own independent threshold)', () => {
   const NODES = [
     parent('shakespearean tragedy', 15000), // whole-area threshold — big, independent
@@ -67,6 +86,17 @@ describe('resolveV2Mastery — parent grain (rolled-up points ÷ own independent
     const out = mod.resolveV2Mastery(NODES, EDGES, new Map([['king lear', 1500]]));
     expect(out.get('king lear')?.isMaster).toBe(true); // the leaf is mastered…
     expect(out.get('shakespearean tragedy')?.isMaster).toBe(false); // …the area is not
+  });
+
+  it('a facet freeze alone does not master the containing parent', () => {
+    const out = mod.resolveV2Mastery(
+      [parent('ulysses', 15000), leaf('ulysses structure', 1000)],
+      [edge('ulysses structure', 'ulysses')],
+      new Map(),
+      new Set(['ulysses structure']),
+    );
+    expect(out.get('ulysses structure')?.isMaster).toBe(true);
+    expect(out.get('ulysses')?.isMaster).toBe(false);
   });
 
   it('a parent masters once its rolled-up points cross 75% of ITS threshold', () => {

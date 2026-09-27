@@ -273,16 +273,16 @@ export async function applyCorpusRetarget(
 export type GraphFoldOutcome = 'none' | 'merged_into_target_node' | 'rekeyed_source_node';
 
 /**
- * The graph side of a merge, shared by BOTH merge entry points. When the source
- * key has a KnowledgeNode: its edges re-point to the target key (self-edges and
- * duplicates dropped first — the unique index would reject them) and its frozen
- * parent-mastery rows re-key (frozen on both keeps the target row, terminal
- * either way). Then:
+ * The graph side of a same-territory merge, shared by BOTH admin entry points.
+ * Leaf awards re-key even when the source node has already disappeared. When
+ * the source key has a KnowledgeNode, its edges re-point to the target key
+ * (self-edges and duplicates dropped first — the unique index would reject
+ * them) and its frozen parent-mastery rows re-key. Then:
  *  - target node EXISTS  → the source node is deleted (classic node merge);
  *  - target node ABSENT  → the source node is re-keyed/renamed to the target
  *    (label folding used to orphan the node here — the authored structure now
  *    follows the label instead of pointing at an emptied territory).
- * No source node → nothing to do. Runs INSIDE the caller's transaction.
+ * No source node → no graph change. Runs INSIDE the caller's transaction.
  */
 export async function applyGraphFold(
   client: QueryClient,
@@ -296,8 +296,27 @@ export async function applyGraphFold(
     [[sourceKey, targetKey]],
   );
   const hasSource = nodes.rows.some((n) => n.domain_key === sourceKey);
-  if (!hasSource) return 'none';
   const hasTarget = nodes.rows.some((n) => n.domain_key === targetKey);
+
+  // These admin merges declare two names to be the SAME territory. Carry each
+  // earned leaf award to the surviving key even if the source graph node was
+  // already removed. Tidy's facet-to-parent merge does not use this helper:
+  // mastery of a facet must never become mastery of the whole parent. Keep the
+  // earliest crossing when a player already has both names frozen.
+  const leafAwards = await client.query(
+    `INSERT INTO "KnowledgeLeafMastery" (user_id, leaf_domain_key, mastered_at)
+     SELECT user_id, $2, mastered_at FROM "KnowledgeLeafMastery"
+     WHERE leaf_domain_key = $1
+     ON CONFLICT (user_id, leaf_domain_key) DO UPDATE
+       SET mastered_at = LEAST("KnowledgeLeafMastery".mastered_at, EXCLUDED.mastered_at)`,
+    [sourceKey, targetKey],
+  );
+  await client.query(`DELETE FROM "KnowledgeLeafMastery" WHERE leaf_domain_key = $1`, [sourceKey]);
+  if (leafAwards.rowCount) {
+    log?.push(`KnowledgeLeafMastery: carried ${leafAwards.rowCount} earned awards to "${targetLabel}"`);
+  }
+
+  if (!hasSource) return 'none';
 
   // Child edges: the source's children re-file under the target (skip
   // self-edges and duplicates — the unique index would reject them).
