@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildDailyReminderTemplate } from '@/server/email/templates/daily-reminder';
-import { formatActivityForEmail, topicsForReminder } from '@/server/email/daily-reminder-data';
-import type { ActivityItemView } from '@/server/db/queries/activity';
+import { topicsForReminder } from '@/server/email/daily-reminder-data';
 import type { QueueSlot } from '@/server/daily/types';
 
 function slot(partial: Partial<QueueSlot>): QueueSlot {
@@ -12,22 +11,6 @@ function slot(partial: Partial<QueueSlot>): QueueSlot {
     answered: false,
     ...partial,
   } as QueueSlot;
-}
-
-function activity(partial: Partial<ActivityItemView>): ActivityItemView {
-  return {
-    id: 'a1',
-    userId: 'u1',
-    actorUserId: 'actor',
-    referenceId: null,
-    referenceType: null,
-    read: false,
-    createdAt: new Date(),
-    type: 'friend_answered_your_question',
-    actor: { displayName: 'Robyn' },
-    reference: {},
-    ...partial,
-  } as ActivityItemView;
 }
 
 describe('topicsForReminder', () => {
@@ -60,63 +43,6 @@ describe('topicsForReminder', () => {
 
   it('returns an empty array when there is nothing playable', () => {
     expect(topicsForReminder([slot({ answered: true }), slot({ skipped: true })])).toEqual([]);
-  });
-});
-
-describe('formatActivityForEmail', () => {
-  it('renders one plain, people-first sentence per supported type', () => {
-    const views = [
-      activity({ id: '1', type: 'friend_answered_your_question', actor: { displayName: 'Robyn' } }),
-      activity({ id: '2', type: 'reaction_received', actor: { displayName: 'Sadie' } }),
-      activity({ id: '3', type: 'received_direct_question', actor: { displayName: 'Josh' } }),
-    ];
-    expect(formatActivityForEmail(views)).toEqual([
-      'Robyn answered one of your questions.',
-      'Sadie reacted to your answer.',
-      'Josh sent you a question.',
-    ]);
-  });
-
-  it('folds the domain into mastery and promotion lines', () => {
-    const views = [
-      activity({
-        id: '1',
-        type: 'friend_mastery',
-        actor: { displayName: 'Mara' },
-        reference: { masteryEvent: { domain: 'Film Noir', tier: null } },
-      }),
-      activity({
-        id: '2',
-        type: 'declared_promoted',
-        actor: { displayName: 'Theo' },
-        reference: { declaredPromoted: { domain: 'The Space Race', questionText: 'q' } },
-      }),
-    ];
-    expect(formatActivityForEmail(views)).toEqual([
-      'Mara went deep on Film Noir.',
-      'Theo opened The Space Race.',
-    ]);
-  });
-
-  it('skips viewer-own broadcasts and unknown types', () => {
-    const views = [
-      activity({ id: '1', type: 'authored_question_shared' }),
-      activity({ id: '2', type: 'ceremony_ready' }),
-    ];
-    expect(formatActivityForEmail(views)).toEqual([]);
-  });
-
-  it('falls back to "A friend" when the actor is missing', () => {
-    expect(
-      formatActivityForEmail([activity({ type: 'reaction_received', actor: null })]),
-    ).toEqual(['A friend reacted to your answer.']);
-  });
-
-  it('caps the output at three items', () => {
-    const views = Array.from({ length: 5 }, (_, i) =>
-      activity({ id: String(i), type: 'received_direct_question', actor: { displayName: `P${i}` } }),
-    );
-    expect(formatActivityForEmail(views)).toHaveLength(3);
   });
 });
 

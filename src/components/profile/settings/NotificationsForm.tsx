@@ -83,6 +83,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [savingEmailToggle, setSavingEmailToggle] = useState(false);
+  const [savingWeekly, setSavingWeekly] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -157,6 +158,18 @@ export function NotificationsForm({ initialState, phone }: Props) {
     setEmailError(null);
     const result = await patchReminders({ emailOptIn: next });
     setSavingEmailToggle(false);
+    if (!result.ok || !result.state) {
+      setEmailError(result.errorMessage ?? 'Could not save.');
+      return;
+    }
+    setState(result.state);
+  }
+
+  async function toggleWeekly(checked: boolean) {
+    setSavingWeekly(true);
+    setEmailError(null);
+    const result = await patchReminders({ weeklyDigestOptIn: checked });
+    setSavingWeekly(false);
     if (!result.ok || !result.state) {
       setEmailError(result.errorMessage ?? 'Could not save.');
       return;
@@ -468,13 +481,30 @@ export function NotificationsForm({ initialState, phone }: Props) {
             On. We&apos;ll email you each day when your five are ready.
           </p>
         ) : null}
+        {hasVerifiedEmail && state.emailOptIn !== 'opted_out' ? (
+          <div className="mt-4 flex items-start justify-between gap-3 border-t pt-4">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <h4 className="text-sm font-semibold">Weekly friends email</h4>
+              <p className="text-muted-foreground mt-1 text-xs">
+                On Sundays: who answered your questions, new questions from friends, and who
+                joined. Only sent when there&apos;s news.
+              </p>
+            </div>
+            <Switch
+              checked={state.weeklyDigestOptIn}
+              onCheckedChange={(checked) => void toggleWeekly(checked)}
+              label="Weekly friends email"
+              disabled={savingWeekly}
+            />
+          </div>
+        ) : null}
         {resendNotice ? <p className="mt-2 text-xs text-[var(--success)]">{resendNotice}</p> : null}
         {emailError ? <p className="text-destructive mt-2 text-xs">{emailError}</p> : null}
       </section>
 
       <p className="text-muted-foreground text-xs">
-        Once your email is confirmed and reminders are on, we&apos;ll send a daily nudge when your
-        five are ready — with a no-spoiler peek at the first question.
+        Once your email is confirmed, we&apos;ll send a daily nudge when your five are ready —
+        with a no-spoiler peek at the first question and a line about what your friends did.
       </p>
     </div>
   );

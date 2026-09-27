@@ -18,7 +18,10 @@ describe('ReminderInterstitial', () => {
     expect(html).toContain('Not now')
     expect(html).toContain('(734) 555-0123')
     expect(html).toContain('automated Joshing reminder texts')
-    expect(html).not.toContain('Email me')
+    // Email is offered only as a quieter alternative link; the SMS ask and its
+    // consent language above stay exactly as submitted for the A2P campaign,
+    // and no email field is shown until the player chooses it.
+    expect(html).toContain('Email me instead')
     expect(html).not.toContain('type="email"')
   })
 })
