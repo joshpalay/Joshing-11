@@ -16,6 +16,12 @@ easy to make, not to make it.
 ## Steps
 
 1. Read `diagnosis/README.md` for the current conventions and index.
+   Run `npm run check:category-integrity -- --summary` once if a database
+   connection is available. Include its counts and verdict in the final
+   summary; if it fails, run the same command without `--summary` locally to
+   inspect labels. This command is read-only and does not call an LLM. The
+   scheduled workflow `.github/workflows/category-integrity-nightly.yml`
+   runs the summary check independently of this manual review.
 2. List the target files: every `diagnosis/*.md` except `README.md` and
    `_TEMPLATE.md`, or just the one named in `$ARGUMENTS` if given. Skip any
    file whose frontmatter says `status: done` unless `$ARGUMENTS` names it

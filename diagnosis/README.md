@@ -60,6 +60,10 @@ daily cron yet: these docs mostly live on feature branches until their PR
 merges, and a scheduled job would need to know which branch to check.
 Revisit once diagnosis docs settle on `main` as their normal home.
 
+The category integrity check is separate: its [nightly GitHub workflow](../docs/qa/category-integrity-nightly.md)
+runs aggregate, read-only graph and label diagnostics. It does not review or
+edit these standing decision documents.
+
 ## Index
 
 | File | Status | Opened | Last reviewed | Related PR |
