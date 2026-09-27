@@ -177,7 +177,86 @@ vi.mock('@/server/db', async () => {
   };
 });
 
-import { applyMergesForUser } from '@/server/mastery/ceremony';
+import { applyMergesForUser, chooseTidyMergeTargets } from '@/server/mastery/ceremony';
+
+describe('chooseTidyMergeTargets', () => {
+  const proposal = (sources: string[], target: string) => ({ sources, target, rationale: 'test' });
+
+  it('uses the authored graph spelling for stage-1-equivalent connector variants', () => {
+    expect(chooseTidyMergeTargets(
+      [proposal(['Star Trek: TNG', 'Star Trek – TNG'], 'Star Trek - TNG')],
+      ['Star Trek: TNG', 'Star Trek – TNG'],
+      ['Star Trek: TNG'],
+    )).toEqual([{
+      ...proposal(['Star Trek: TNG', 'Star Trek – TNG'], 'Star Trek: TNG'),
+      aiSuggestedTarget: 'Star Trek - TNG',
+    }]);
+    expect(chooseTidyMergeTargets(
+      [proposal(['Rock & Roll', 'Rock and Roll'], 'Rock and Roll')],
+      ['Rock & Roll', 'Rock and Roll'],
+      ['Rock & Roll'],
+    )[0].target).toBe('Rock & Roll');
+  });
+
+  it('uses an owned spelling when there is no authored graph node', () => {
+    expect(chooseTidyMergeTargets(
+      [proposal(['Joyce’s Ulysses', 'Ulysses'], 'JOyCE\'S Ulysses')],
+      ['Joyce’s Ulysses', 'Ulysses'],
+      [],
+    )[0].target).toBe('Joyce’s Ulysses');
+    expect(chooseTidyMergeTargets(
+      [proposal(['Star Trek: TNG', 'Star Trek – TNG'], 'Star Trek - TNG')],
+      ['Star Trek: TNG', 'Star Trek – TNG'],
+      [],
+    )[0].target).toBe('Star Trek: TNG');
+  });
+
+  it('allows a new parent name derived from an owned facet', () => {
+    expect(chooseTidyMergeTargets(
+      [proposal(['Ulysses – Structure & Symbolism'], 'Ulysses')],
+      ['Ulysses – Structure & Symbolism'],
+      [],
+    )).toEqual([{
+      ...proposal(['Ulysses – Structure & Symbolism'], 'Ulysses'),
+      aiSuggestedTarget: 'Ulysses',
+    }]);
+    expect(chooseTidyMergeTargets(
+      [proposal(['Mrs. Dalloway: Themes'], 'Mrs. Dalloway')],
+      ['Mrs. Dalloway: Themes'],
+      [],
+    )[0].target).toBe('Mrs. Dalloway');
+  });
+
+  it('rejects a novel synonym or a parent derived only from an unowned source', () => {
+    expect(chooseTidyMergeTargets(
+      [proposal(['UX Design', 'User Experience Design'], 'The Study of UX')],
+      ['UX Design', 'User Experience Design'],
+      [],
+    )).toEqual([]);
+    expect(chooseTidyMergeTargets(
+      [proposal(['Ulysses – Structure'], 'Ulysses')],
+      ['Mrs. Dalloway – Structure'],
+      [],
+    )).toEqual([]);
+    expect(chooseTidyMergeTargets(
+      [proposal(['Star Trek: TNG'], 'Star Trek')],
+      ['Star Trek: TNG'],
+      [],
+    )).toEqual([]);
+  });
+
+  it('skips and reports a proposal that would merge away an authored graph topic', () => {
+    const skipped = vi.fn();
+    const suggestion = proposal(['Shakespearean Tragedy'], 'Hamlet');
+    expect(chooseTidyMergeTargets(
+      [suggestion],
+      ['Shakespearean Tragedy', 'Hamlet'],
+      ['Shakespearean Tragedy', 'Hamlet'],
+      skipped,
+    )).toEqual([]);
+    expect(skipped).toHaveBeenCalledWith(suggestion, 'authored_graph_source');
+  });
+});
 
 describe('applyMergesForUser', () => {
   beforeEach(() => {
@@ -194,6 +273,71 @@ describe('applyMergesForUser', () => {
     state.sourceDomains = ['Ulysses – Structure & Symbolism'];
     state.targetDomain = 'Ulysses';
     vi.clearAllMocks();
+  });
+
+  it('does not move a player graph topic into another authored topic', async () => {
+    const row = (id: string, canonicalSubcategory: string) => ({
+      id,
+      userId: 'user-1',
+      canonicalSubcategory,
+      broadCategory: 'Literature',
+      totalPoints: 20,
+      tier: 'familiar' as const,
+      tierReachedAt: null,
+      lifetimePointsBaseline: 0,
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    });
+    const rows = [row('tragedy', 'Shakespearean Tragedy'), row('hamlet', 'Hamlet')];
+    state.playerMastery = rows.map((entry) => ({ ...entry }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(await applyMergesForUser('user-1', rows, [{
+        sources: ['Shakespearean Tragedy'], target: 'Hamlet', rationale: 'incorrect',
+      }], ['Shakespearean Tragedy', 'Hamlet'])).toEqual([]);
+      expect(state.playerMastery).toEqual(rows);
+      expect(state.masteryEvents).toEqual([]);
+      expect(warn).toHaveBeenCalledWith('[tidy] merge suggestion skipped', expect.objectContaining({
+        userId: 'user-1', reason: 'authored_graph_source',
+      }));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('consolidates every stored spelling under one comparison key', async () => {
+    const row = (id: string, canonicalSubcategory: string, totalPoints: number) => ({
+      id,
+      userId: 'user-1',
+      canonicalSubcategory,
+      broadCategory: 'Television',
+      totalPoints,
+      tier: 'familiar' as const,
+      tierReachedAt: null,
+      lifetimePointsBaseline: 0,
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    });
+    const rows = [row('target', 'Star Trek: TNG', 30), row('source', 'Star Trek – TNG', 12)];
+    state.playerMastery = rows.map((entry) => ({ ...entry }));
+    state.sourceDomains = ['Star Trek – TNG'];
+    state.targetDomain = 'Star Trek: TNG';
+    state.questions = [{ id: 'q1', creatorId: 'user-1', canonicalSubcategory: 'Star Trek – TNG' }];
+
+    const details = await applyMergesForUser('user-1', rows, [{
+      sources: ['Star Trek – TNG'],
+      target: 'Star Trek - TNG',
+      rationale: 'Same series',
+    }], ['Star Trek: TNG']);
+
+    expect(details).toEqual([{ sources: ['Star Trek: TNG', 'Star Trek – TNG'], target: 'Star Trek: TNG', rationale: 'Same series' }]);
+    expect(state.playerMastery).toEqual([expect.objectContaining({
+      canonicalSubcategory: 'Star Trek: TNG', totalPoints: 42,
+    })]);
+    expect(state.questions[0].canonicalSubcategory).toBe('Star Trek: TNG');
+    expect(state.masteryEvents.find((event) => event.sourceType === 'domain_merged')?.metadata).toMatchObject({
+      aiSuggestedTarget: 'Star Trek - TNG',
+      targetChanged: true,
+      target: 'Star Trek: TNG',
+    });
   });
 
   it('creates a missing parent domain from a single facet source merge and retargets related rows', async () => {
@@ -227,7 +371,7 @@ describe('applyMergesForUser', () => {
       sources: ['Ulysses – Structure & Symbolism'],
       target: 'Ulysses',
       rationale: 'Facet should roll up to parent work.',
-    }]);
+    }], []);
 
     expect(details).toEqual([{ sources: ['Ulysses – Structure & Symbolism'], target: 'Ulysses', rationale: 'Facet should roll up to parent work.' }]);
     expect(state.playerMastery).toEqual([
@@ -289,7 +433,7 @@ describe('applyMergesForUser', () => {
       sources: ['Ulysses – Structure & Symbolism'],
       target: 'Ulysses',
       rationale: 'Facet should roll up to parent work.',
-    }]);
+    }], []);
 
     expect(state.profileDomainVisibility).toEqual([
       expect.objectContaining({
@@ -361,7 +505,7 @@ describe('applyMergesForUser', () => {
       sources: ['Ulysses – Structure & Symbolism'],
       target: 'Ulysses',
       rationale: 'Facet should roll up to parent work.',
-    }]);
+    }], []);
 
     expect(state.dailyPreferences[0].selectedDomains).toEqual(['Ulysses', 'Modernism']);
     expect(state.userDomainDifficulties).toEqual([
