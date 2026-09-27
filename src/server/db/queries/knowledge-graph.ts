@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import type { PoolClient } from 'pg';
 
-import { db, generatedQuestions, knowledgeEdges, knowledgeNodes, questions } from '@/server/db';
+import { db, pool, generatedQuestions, knowledgeEdges, knowledgeNodes, questions } from '@/server/db';
 import { domainKey } from '@/lib/knowledge/domain-key';
 
 // B-KNOWLEDGE-ADMIN-01 P1 — write layer for the human-authored knowledge graph
@@ -244,6 +245,55 @@ export type EdgeResult =
   | { ok: true; edge: KnowledgeEdgeRow }
   | { ok: false; reason: 'self_edge' | 'unknown_node' | 'duplicate' | 'not_found' };
 
+// Serialize graph writes that can add or reverse links. A single transaction-
+// scoped lock is enough for the admin-only editor; the recursive check then
+// sees every previously committed edit before it inserts an edge.
+const GRAPH_LOCK = [728761, 1];
+
+export async function lockKnowledgeGraph(client: Pick<PoolClient, 'query'>): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock($1, $2)', GRAPH_LOCK);
+}
+
+// Caller holds GRAPH_LOCK and an open transaction. Edges point child -> parent;
+// adding child -> parent loops exactly when parent is already below child.
+// UNION (not UNION ALL) also terminates if legacy data already has a cycle.
+async function insertKnowledgeEdge(
+  client: PoolClient,
+  input: { childDomainKey: string; parentDomainKey: string },
+): Promise<EdgeResult> {
+  if (input.childDomainKey === input.parentDomainKey) {
+    return { ok: false, reason: 'self_edge' };
+  }
+
+  const nodes = await client.query<{ domain_key: string }>(
+    'SELECT domain_key FROM "KnowledgeNode" WHERE domain_key = ANY($1)',
+    [[input.childDomainKey, input.parentDomainKey]],
+  );
+  if (nodes.rows.length !== 2) return { ok: false, reason: 'unknown_node' };
+
+  const cycle = await client.query(
+    `WITH RECURSIVE descendants(domain_key) AS (
+       SELECT $1::text
+       UNION
+       SELECT e.child_domain_key FROM "KnowledgeEdge" e
+       JOIN descendants d ON e.parent_domain_key = d.domain_key
+     ) SELECT 1 FROM descendants WHERE domain_key = $2 LIMIT 1`,
+    [input.childDomainKey, input.parentDomainKey],
+  );
+  if (cycle.rows.length > 0) return { ok: false, reason: 'self_edge' };
+
+  const inserted = await client.query<KnowledgeEdgeRow>(
+    `INSERT INTO "KnowledgeEdge" (child_domain_key, parent_domain_key)
+     VALUES ($1, $2) ON CONFLICT (child_domain_key, parent_domain_key) DO NOTHING
+     RETURNING id, child_domain_key AS "childDomainKey",
+       parent_domain_key AS "parentDomainKey", created_at AS "createdAt"`,
+    [input.childDomainKey, input.parentDomainKey],
+  );
+  return inserted.rows[0]
+    ? { ok: true, edge: inserted.rows[0] }
+    : { ok: false, reason: 'duplicate' };
+}
+
 export async function createKnowledgeEdge(
   input: { childDomainKey: string; parentDomainKey: string },
   actorUserId: string,
@@ -251,24 +301,20 @@ export async function createKnowledgeEdge(
   if (input.childDomainKey === input.parentDomainKey) {
     return { ok: false, reason: 'self_edge' };
   }
-
-  // Both endpoints must be authored nodes — no dangling edges into labels
-  // nobody has ratified (§4).
-  const [child, parent] = await Promise.all([
-    db.select({ id: knowledgeNodes.id }).from(knowledgeNodes).where(eq(knowledgeNodes.domainKey, input.childDomainKey)).limit(1),
-    db.select({ id: knowledgeNodes.id }).from(knowledgeNodes).where(eq(knowledgeNodes.domainKey, input.parentDomainKey)).limit(1),
-  ]);
-  if (child.length === 0 || parent.length === 0) {
-    return { ok: false, reason: 'unknown_node' };
-  }
-
+  const client = await pool.connect();
+  let inTransaction = false;
   try {
-    const [edge] = await db.insert(knowledgeEdges).values(input).returning();
-    console.info('[knowledge-admin] edge created', { actorUserId, ...input });
-    return { ok: true, edge };
-  } catch (err) {
-    if (isUniqueViolation(err)) return { ok: false, reason: 'duplicate' };
-    throw err;
+    await client.query('BEGIN');
+    inTransaction = true;
+    await lockKnowledgeGraph(client);
+    const result = await insertKnowledgeEdge(client, input);
+    await client.query(result.ok ? 'COMMIT' : 'ROLLBACK');
+    inTransaction = false;
+    if (result.ok) console.info('[knowledge-admin] edge created', { actorUserId, ...input });
+    return result;
+  } finally {
+    if (inTransaction) await client.query('ROLLBACK');
+    client.release();
   }
 }
 
@@ -328,77 +374,74 @@ export async function ratifyProposedParent(
   );
 }
 
-// Tree-editor verb: attach a child under a parent (substantive), optionally
-// moving it FROM its current parent in the same act. Ordering is
-// create-before-delete so a fault can duplicate an edge but never orphan the
-// child. Filing something under a LEAF promotes that leaf to 'both' (D-doc §3
-// — Bach is masterable AND parent of WTC); its leaf mastery is untouched.
 // Flip a child above its own parent ("drag Shakespeare so it is the parent of
 // Shakespearean Drama"): the child takes the parent's memberships, the parent
-// files under the child, everything else stays put. Create-before-delete
-// ordering — a fault can leave a transient extra edge, never an orphan.
+// files under the child, everything else stays put. The old link must be
+// removed before testing the reverse one; a transaction keeps that sequence
+// invisible to other sessions and rolls it back if the new link would loop.
 export async function invertKnowledgeEdge(
   input: { childDomainKey: string; parentDomainKey: string },
   actorUserId: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'self_edge' }> {
   if (input.childDomainKey === input.parentDomainKey) return { ok: false, reason: 'self_edge' };
-  const [edge] = await db
-    .select({ id: knowledgeEdges.id })
-    .from(knowledgeEdges)
-    .where(
-      and(
-        eq(knowledgeEdges.childDomainKey, input.childDomainKey),
-        eq(knowledgeEdges.parentDomainKey, input.parentDomainKey),
-      ),
-    )
-    .limit(1);
-  if (!edge) return { ok: false, reason: 'not_found' };
+  const client = await pool.connect();
+  let inTransaction = false;
+  try {
+    await client.query('BEGIN');
+    inTransaction = true;
+    await lockKnowledgeGraph(client);
+    const edge = await client.query<{ id: string }>(
+      `SELECT id FROM "KnowledgeEdge"
+       WHERE child_domain_key = $1 AND parent_domain_key = $2 FOR UPDATE`,
+      [input.childDomainKey, input.parentDomainKey],
+    );
+    if (!edge.rows[0]) return { ok: false, reason: 'not_found' };
 
-  // The child inherits the parent's own memberships (grandparents). Drop the
-  // parent's membership rows the child already holds, then re-point the rest.
-  const [childParentEdges, parentParentEdges] = await Promise.all([
-    db
-      .select({ parentDomainKey: knowledgeEdges.parentDomainKey })
-      .from(knowledgeEdges)
-      .where(eq(knowledgeEdges.childDomainKey, input.childDomainKey)),
-    db
-      .select({ id: knowledgeEdges.id, parentDomainKey: knowledgeEdges.parentDomainKey })
-      .from(knowledgeEdges)
-      .where(eq(knowledgeEdges.childDomainKey, input.parentDomainKey)),
-  ]);
-  const childAlreadyUnder = new Set(childParentEdges.map((e) => e.parentDomainKey));
-  for (const grand of parentParentEdges) {
-    if (childAlreadyUnder.has(grand.parentDomainKey) || grand.parentDomainKey === input.childDomainKey) {
-      await db.delete(knowledgeEdges).where(eq(knowledgeEdges.id, grand.id));
-    } else {
-      await db
-        .update(knowledgeEdges)
-        .set({ childDomainKey: input.childDomainKey })
-        .where(eq(knowledgeEdges.id, grand.id));
+    const childParents = await client.query<{ parent_domain_key: string }>(
+      `SELECT parent_domain_key FROM "KnowledgeEdge" WHERE child_domain_key = $1`,
+      [input.childDomainKey],
+    );
+    const parentParents = await client.query<{ id: string; parent_domain_key: string }>(
+      `SELECT id, parent_domain_key FROM "KnowledgeEdge" WHERE child_domain_key = $1`,
+      [input.parentDomainKey],
+    );
+    const childAlreadyUnder = new Set(childParents.rows.map((e) => e.parent_domain_key));
+    for (const grand of parentParents.rows) {
+      if (childAlreadyUnder.has(grand.parent_domain_key) || grand.parent_domain_key === input.childDomainKey) {
+        await client.query(`DELETE FROM "KnowledgeEdge" WHERE id = $1`, [grand.id]);
+      } else {
+        await client.query(
+          `UPDATE "KnowledgeEdge" SET child_domain_key = $2 WHERE id = $1`,
+          [grand.id, input.childDomainKey],
+        );
+      }
     }
-  }
 
-  // The parent files under the child; the child becomes a parent-ish node.
-  const created = await createKnowledgeEdge(
-    {
+    await client.query(`DELETE FROM "KnowledgeEdge" WHERE id = $1`, [edge.rows[0].id]);
+    const reversed = await insertKnowledgeEdge(client, {
       childDomainKey: input.parentDomainKey,
       parentDomainKey: input.childDomainKey,
-    },
-    actorUserId,
-  );
-  if (!created.ok && created.reason !== 'duplicate') return { ok: false, reason: 'not_found' };
-  await db
-    .update(knowledgeNodes)
-    .set({ nodeKind: 'both' })
-    .where(and(eq(knowledgeNodes.domainKey, input.childDomainKey), eq(knowledgeNodes.nodeKind, 'leaf')));
-
-  // Last: sever the old downward edge (create-before-delete).
-  await db.delete(knowledgeEdges).where(eq(knowledgeEdges.id, edge.id));
-
-  console.info('[knowledge-admin] edge inverted', { actorUserId, ...input });
-  return { ok: true };
+    });
+    if (!reversed.ok && reversed.reason !== 'duplicate') {
+      return { ok: false, reason: reversed.reason === 'self_edge' ? 'self_edge' : 'not_found' };
+    }
+    await client.query(
+      `UPDATE "KnowledgeNode" SET node_kind = 'both'
+       WHERE domain_key = $1 AND node_kind = 'leaf'`,
+      [input.childDomainKey],
+    );
+    await client.query('COMMIT');
+    inTransaction = false;
+    console.info('[knowledge-admin] edge inverted', { actorUserId, ...input });
+    return { ok: true };
+  } finally {
+    if (inTransaction) await client.query('ROLLBACK');
+    client.release();
+  }
 }
 
+// Tree-editor verb: attach a child under a parent, optionally moving it FROM
+// its current parent. Filing under a leaf promotes that leaf to 'both'.
 export async function attachChild(
   input: {
     childDomainKey: string;
@@ -410,32 +453,6 @@ export async function attachChild(
 ): Promise<EdgeResult> {
   if (input.childDomainKey === input.toParentDomainKey) {
     return { ok: false, reason: 'self_edge' };
-  }
-
-  // Reject a move/copy that would create a cycle: the destination must not be
-  // a descendant of the child (walking all substantive edges).
-  const allEdges = await db
-    .select({
-      childDomainKey: knowledgeEdges.childDomainKey,
-      parentDomainKey: knowledgeEdges.parentDomainKey,
-    })
-    .from(knowledgeEdges);
-  const childrenByParent = new Map<string, string[]>();
-  for (const edge of allEdges) {
-    const list = childrenByParent.get(edge.parentDomainKey);
-    if (list) list.push(edge.childDomainKey);
-    else childrenByParent.set(edge.parentDomainKey, [edge.childDomainKey]);
-  }
-  const seen = new Set<string>();
-  const queue = [input.childDomainKey];
-  while (queue.length > 0) {
-    const next = queue.pop()!;
-    if (seen.has(next)) continue;
-    seen.add(next);
-    if (next === input.toParentDomainKey && next !== input.childDomainKey) {
-      return { ok: false, reason: 'self_edge' }; // destination is inside the child's subtree
-    }
-    queue.push(...(childrenByParent.get(next) ?? []));
   }
 
   const created = await createKnowledgeEdge(
