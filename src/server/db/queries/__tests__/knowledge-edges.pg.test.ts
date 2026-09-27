@@ -29,16 +29,22 @@ describe.skipIf(!testDatabaseUrl)('knowledge edge cycle guard — Postgres', () 
       child_domain_key text NOT NULL, parent_domain_key text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(child_domain_key, parent_domain_key))`);
+    // applyGraphFold moves same-topic leaf awards before checking graph cycles.
+    await pool.query(`CREATE TABLE "KnowledgeLeafMastery" (
+      user_id text NOT NULL, leaf_domain_key text NOT NULL,
+      mastered_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(user_id, leaf_domain_key))`);
   });
 
   beforeEach(async () => {
-    await pool.query(`TRUNCATE "KnowledgeEdge", "KnowledgeNode"`);
+    await pool.query(`TRUNCATE "KnowledgeEdge", "KnowledgeNode", "KnowledgeLeafMastery"`);
     await pool.query(`INSERT INTO "KnowledgeNode" (id, label, domain_key)
       VALUES ('a', 'A', 'a'), ('b', 'B', 'b'), ('c', 'C', 'c'), ('x', 'X', 'x')`);
   });
 
   afterAll(async () => {
     if (!pool) return;
+    await pool.query('DROP TABLE IF EXISTS "KnowledgeLeafMastery"');
     await pool.query('DROP TABLE IF EXISTS "KnowledgeEdge"');
     await pool.query('DROP TABLE IF EXISTS "KnowledgeNode"');
     await pool.end();
@@ -161,8 +167,8 @@ describe.skipIf(!testDatabaseUrl)('knowledge edge cycle guard — Postgres', () 
           targetLabel: 'C',
         }),
       ).rejects.toBeInstanceOf(GraphCycleError);
-      await client.query('ROLLBACK');
     } finally {
+      await client.query('ROLLBACK');
       client.release();
     }
     expect((await pool.query(`SELECT domain_key FROM "KnowledgeNode" ORDER BY 1`)).rows).toEqual([
