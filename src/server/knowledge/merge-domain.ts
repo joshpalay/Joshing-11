@@ -391,6 +391,40 @@ async function findUnhandledTables(client: QueryClient, sources: string[]): Prom
   return unhandled;
 }
 
+// Label census does not see rows keyed by the normalized domain key. A rename
+// handles the known key owners below; reject any newly introduced key owner
+// with data before changing the graph, rather than silently stranding it.
+async function findUnhandledRenameKeyTables(client: QueryClient, oldKey: string): Promise<string[]> {
+  const handled = new Set([
+    'KnowledgeNode.domain_key',
+    'KnowledgeEdge.child_domain_key',
+    'KnowledgeEdge.parent_domain_key',
+    'KnowledgeParentMastery.parent_domain_key',
+    'KnowledgeLeafMastery.leaf_domain_key',
+    'GeneratedQuestion.domain_key',
+    'DomainDepthEstimate.domain_key',
+  ]);
+  const columns = await client.query<{ table_name: string; column_name: string }>(`
+    SELECT table_name, column_name FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND column_name IN ('domain_key', 'child_domain_key', 'parent_domain_key', 'leaf_domain_key')
+    ORDER BY table_name, column_name
+  `);
+  const unhandled: string[] = [];
+  for (const { table_name: table, column_name: column } of columns.rows) {
+    if (handled.has(`${table}.${column}`)) continue;
+    const quotedTable = `"${table.replace(/"/g, '""')}"`;
+    const rows = await client.query<{ n: string }>(
+      `SELECT count(*) AS n FROM ${quotedTable} WHERE "${column}" = $1`,
+      [oldKey],
+    );
+    if (Number(rows.rows[0].n) > 0) {
+      unhandled.push(`${table}.${column} (${rows.rows[0].n} rows)`);
+    }
+  }
+  return unhandled;
+}
+
 const NODE_COLUMNS = `id, label, domain_key AS "domainKey", node_kind AS "nodeKind",
   mastery_threshold AS "masteryThreshold", broad_category AS "broadCategory",
   field_hue AS "fieldHue", wikidata_qid AS "wikidataQid", created_at AS "createdAt"`;
@@ -462,6 +496,23 @@ export async function updateKnowledgeNodeAtomically(
         return { ok: false, reason: 'unhandled_tables', detail: unhandled };
       }
     }
+    if (nextKey !== node.domainKey) {
+      const unhandled = await findUnhandledRenameKeyTables(client, node.domainKey);
+      if (unhandled.length > 0) {
+        return { ok: false, reason: 'unhandled_tables', detail: unhandled };
+      }
+      const estimates = await client.query<{ domain_key: string }>(
+        `SELECT domain_key FROM "DomainDepthEstimate" WHERE domain_key = ANY($1) FOR UPDATE`,
+        [[node.domainKey, nextKey]],
+      );
+      if (estimates.rows.length === 2) {
+        return {
+          ok: false,
+          reason: 'unhandled_tables',
+          detail: ['DomainDepthEstimate.domain_key (old and new keys both have estimates)'],
+        };
+      }
+    }
 
     const changed = await client.query<KnowledgeNodeRow>(
       `UPDATE "KnowledgeNode" SET label = $2, domain_key = $3, node_kind = $4,
@@ -484,6 +535,12 @@ export async function updateKnowledgeNodeAtomically(
       );
       await rekeyRenameAwards(client, node.domainKey, nextKey);
     }
+    if (nextLabel !== node.label || nextKey !== node.domainKey) {
+      await client.query(
+        `UPDATE "DomainDepthEstimate" SET domain_key = $2, sample_label = $3 WHERE domain_key = $1`,
+        [node.domainKey, nextKey, nextLabel],
+      );
+    }
     if (sources.length > 0) {
       await applyCorpusRetarget(client, { target: nextLabel, targetKey: nextKey, sources });
     }
@@ -502,6 +559,13 @@ export async function updateKnowledgeNodeAtomically(
       inTransaction = false;
     }
     if ((err as { code?: string }).code === '23505' && nextKey) {
+      if ((err as { constraint?: string }).constraint === 'DomainDepthEstimate_domain_key') {
+        return {
+          ok: false,
+          reason: 'unhandled_tables',
+          detail: ['DomainDepthEstimate.domain_key (new key gained an estimate during rename)'],
+        };
+      }
       const collision = await client.query<KnowledgeNodeRow>(
         `SELECT ${NODE_COLUMNS} FROM "KnowledgeNode" WHERE domain_key = $1`,
         [nextKey],

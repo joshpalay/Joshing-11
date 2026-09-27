@@ -28,7 +28,7 @@ import { InfoTerm } from '@/app/admin/InfoTerm';
 async function post(body: Record<string, unknown>): Promise<{
   ok: boolean;
   status: number;
-  body: { error?: string; existing?: { label: string } | null } | null;
+  body: { error?: string; existing?: { label: string } | null; detail?: string[] | null } | null;
 }> {
   try {
     const res = await fetch('/api/admin/knowledge', {
@@ -1485,11 +1485,13 @@ function TreeRow({
       masteryThreshold: editThreshold.trim() ? Math.max(1, Number(editThreshold)) : null,
     });
     if (!res.ok) {
-      setRowError(
-        res.status === 409
-          ? `That label folds onto "${res.body?.existing?.label ?? 'another territory'}".`
-          : `Save failed (${res.status}).`,
-      );
+      if (res.body?.error === 'domain_key_collision') {
+        setRowError(`That label folds onto "${res.body.existing?.label ?? 'another territory'}".`);
+      } else if (res.body?.error === 'unhandled_tables') {
+        setRowError(`Rename blocked by ${res.body.detail?.join(', ') ?? 'unhandled tables'}.`);
+      } else {
+        setRowError(`Save failed (${res.status}).`);
+      }
       return;
     }
     setEditing(false);

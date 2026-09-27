@@ -29,6 +29,7 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
       `CREATE TABLE "KnowledgeEdge" (id text PRIMARY KEY, child_domain_key text NOT NULL, parent_domain_key text NOT NULL, UNIQUE(child_domain_key, parent_domain_key))`,
       `CREATE TABLE "KnowledgeParentMastery" (id text PRIMARY KEY, user_id text NOT NULL, parent_domain_key text NOT NULL, mastered_at timestamptz NOT NULL, UNIQUE(user_id, parent_domain_key))`,
       `CREATE TABLE "KnowledgeLeafMastery" (id text PRIMARY KEY, user_id text NOT NULL, leaf_domain_key text NOT NULL, mastered_at timestamptz NOT NULL, UNIQUE(user_id, leaf_domain_key))`,
+      `CREATE TABLE "DomainDepthEstimate" (id text PRIMARY KEY, domain_key text NOT NULL UNIQUE, sample_label text, manual_estimated_questions integer, generation_capped_at timestamptz)`,
       `CREATE TABLE "Question" (id text PRIMARY KEY, canonical_subcategory text)`,
       `CREATE TABLE "GeneratedQuestion" (id text PRIMARY KEY, canonical_subcategory text, domain_key text)`,
       `CREATE TABLE "MASTERY_EVENTS" (id text PRIMARY KEY, canonical_subcategory text)`,
@@ -52,6 +53,7 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
       'KnowledgeEdge',
       'KnowledgeParentMastery',
       'KnowledgeLeafMastery',
+      'DomainDepthEstimate',
       'Question',
       'GeneratedQuestion',
       'MASTERY_EVENTS',
@@ -81,11 +83,15 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
     );
     await pool.query(`INSERT INTO "Question" VALUES ('q1', 'Old Name')`);
     await pool.query(`INSERT INTO "GeneratedQuestion" VALUES ('g1', 'Old Name', 'old name')`);
+    await pool.query(
+      `INSERT INTO "DomainDepthEstimate" VALUES ('d1', 'old name', 'Old Name', 77, '2026-01-01T00:00:00Z')`,
+    );
   });
 
   afterAll(async () => {
     if (!pool) return;
     await pool.query('DROP TABLE IF EXISTS "UnexpectedDomainOwner"');
+    await pool.query('DROP TABLE IF EXISTS "UnexpectedKeyOwner"');
     await pool.query('DROP FUNCTION IF EXISTS fail_question_rename() CASCADE');
     for (const table of [
       'RetrievalDomainHealth',
@@ -102,6 +108,7 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
       'GeneratedQuestion',
       'Question',
       'KnowledgeLeafMastery',
+      'DomainDepthEstimate',
       'KnowledgeParentMastery',
       'KnowledgeEdge',
       'KnowledgeNode',
@@ -133,6 +140,20 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
     expect(
       (await pool.query(`SELECT canonical_subcategory, domain_key FROM "GeneratedQuestion"`)).rows,
     ).toEqual([{ canonical_subcategory: 'New Name', domain_key: 'new name' }]);
+    expect(
+      (
+        await pool.query(
+          `SELECT domain_key, sample_label, manual_estimated_questions, generation_capped_at FROM "DomainDepthEstimate"`,
+        )
+      ).rows,
+    ).toEqual([
+      {
+        domain_key: 'new name',
+        sample_label: 'New Name',
+        manual_estimated_questions: 77,
+        generation_capped_at: new Date('2026-01-01T00:00:00Z'),
+      },
+    ]);
     for (const [table, column] of [
       ['KnowledgeParentMastery', 'parent_domain_key'],
       ['KnowledgeLeafMastery', 'leaf_domain_key'],
@@ -155,6 +176,9 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
     expect(
       (await pool.query(`SELECT id, parent_domain_key FROM "KnowledgeParentMastery"`)).rows,
     ).toEqual([{ id: 'p1', parent_domain_key: 'old name' }]);
+    expect(
+      (await pool.query(`SELECT domain_key, sample_label FROM "DomainDepthEstimate"`)).rows,
+    ).toEqual([{ domain_key: 'old name', sample_label: 'OLD NAME' }]);
   });
 
   it('aborts before writing when the label census finds an unhandled table', async () => {
@@ -175,6 +199,72 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
     } finally {
       await pool.query('DROP TABLE "UnexpectedDomainOwner"');
     }
+  });
+
+  it('aborts when another key-owned table would be stranded', async () => {
+    await pool.query(`CREATE TABLE "UnexpectedKeyOwner" (id text, domain_key text)`);
+    await pool.query(`INSERT INTO "UnexpectedKeyOwner" VALUES ('x1', 'old name')`);
+    try {
+      expect(await update({ id: 'n1', label: 'New Name' }, 'admin')).toMatchObject({
+        ok: false,
+        reason: 'unhandled_tables',
+        detail: ['UnexpectedKeyOwner.domain_key (1 rows)'],
+      });
+      expect((await pool.query(`SELECT label FROM "KnowledgeNode"`)).rows[0].label).toBe(
+        'Old Name',
+      );
+      expect(
+        (await pool.query(`SELECT domain_key FROM "DomainDepthEstimate"`)).rows[0].domain_key,
+      ).toBe('old name');
+    } finally {
+      await pool.query('DROP TABLE "UnexpectedKeyOwner"');
+    }
+  });
+
+  it('does not discard either estimate when both old and new keys have one', async () => {
+    await pool.query(
+      `INSERT INTO "DomainDepthEstimate" VALUES ('d2', 'new name', 'New Name', 200, NULL)`,
+    );
+    expect(await update({ id: 'n1', label: 'New Name' }, 'admin')).toMatchObject({
+      ok: false,
+      reason: 'unhandled_tables',
+      detail: ['DomainDepthEstimate.domain_key (old and new keys both have estimates)'],
+    });
+    expect(
+      (
+        await pool.query(
+          `SELECT domain_key, manual_estimated_questions FROM "DomainDepthEstimate" ORDER BY domain_key`,
+        )
+      ).rows,
+    ).toEqual([
+      { domain_key: 'new name', manual_estimated_questions: 200 },
+      { domain_key: 'old name', manual_estimated_questions: 77 },
+    ]);
+    expect((await pool.query(`SELECT label FROM "KnowledgeNode"`)).rows[0].label).toBe('Old Name');
+  });
+
+  it('surfaces a taken node key without changing the original node', async () => {
+    await pool.query(
+      `INSERT INTO "KnowledgeNode" (id, label, domain_key) VALUES ('n2', 'New Name', 'new name')`,
+    );
+    expect(await update({ id: 'n1', label: 'New Name' }, 'admin')).toMatchObject({
+      ok: false,
+      reason: 'domain_key_collision',
+      existing: { id: 'n2', label: 'New Name' },
+    });
+    expect(
+      (await pool.query(`SELECT label FROM "KnowledgeNode" WHERE id = 'n1'`)).rows[0].label,
+    ).toBe('Old Name');
+  });
+
+  it('returns not_found for a missing node without writing anything', async () => {
+    expect(await update({ id: 'missing', label: 'New Name' }, 'admin')).toEqual({
+      ok: false,
+      reason: 'not_found',
+    });
+    expect(
+      (await pool.query(`SELECT label FROM "KnowledgeNode" WHERE id = 'n1'`)).rows[0].label,
+    ).toBe('Old Name');
   });
 
   it('rolls back node, edges, and awards when question retargeting fails midway', async () => {
@@ -203,6 +293,9 @@ describe.skipIf(!testDatabaseUrl)('knowledge node rename — Postgres transactio
         expect((await pool.query(`SELECT "${column}" AS key FROM "${table}"`)).rows[0].key).toBe(
           'old name',
         );
+      expect(
+        (await pool.query(`SELECT domain_key FROM "DomainDepthEstimate"`)).rows[0].domain_key,
+      ).toBe('old name');
     } finally {
       await pool.query('DROP TRIGGER fail_question_rename ON "Question"');
       await pool.query('DROP FUNCTION fail_question_rename()');
