@@ -51,7 +51,20 @@ type SuggestedMerge = {
   sources: string[];
   target: string;
   rationale: string;
+  /** Model output before Tidy chose an owned or authored display label. */
+  aiSuggestedTarget?: string;
 };
+
+type TidyMergeSkipReason = 'authored_graph_source' | 'unrecognized_target';
+
+function logSkippedTidyMerge(userId: string, suggestion: SuggestedMerge, reason: TidyMergeSkipReason): void {
+  console.warn('[tidy] merge suggestion skipped', {
+    userId,
+    reason,
+    sources: suggestion.sources,
+    aiSuggestedTarget: suggestion.aiSuggestedTarget ?? suggestion.target,
+  });
+}
 
 type PlayerMasteryMergeRow = Pick<
   typeof playerMastery.$inferSelect,
@@ -454,6 +467,7 @@ export function chooseTidyMergeTargets(
   suggestions: readonly SuggestedMerge[],
   ownedLabels: readonly string[],
   graphLabels: readonly string[],
+  onSkip?: (suggestion: SuggestedMerge, reason: TidyMergeSkipReason) => void,
 ): SuggestedMerge[] {
   const ownedByKey = new Map<string, string>();
   for (const label of ownedLabels) {
@@ -465,14 +479,37 @@ export function chooseTidyMergeTargets(
     const proposed = normalizeDomain(suggestion.target);
     const key = domainKey(proposed);
     const existing = graphByKey.get(key) ?? ownedByKey.get(key);
-    if (existing) return [{ ...suggestion, target: existing }];
+
+    // Tidy is a per-player label merge, not a graph edit. If it rewrites an
+    // authored node's territory into a different key, the graph node and its
+    // frozen awards remain behind. An admin must decide that graph merge.
+    const authoredSource = suggestion.sources.find((source) => {
+      const sourceKey = domainKey(source);
+      return ownedByKey.has(sourceKey) && graphByKey.has(sourceKey) && sourceKey !== key;
+    });
+    if (authoredSource) {
+      onSkip?.(suggestion, 'authored_graph_source');
+      return [];
+    }
+    if (existing) {
+      return [{ ...suggestion, target: existing, aiSuggestedTarget: suggestion.aiSuggestedTarget ?? proposed }];
+    }
 
     const hasOwnedFacetParent = suggestion.sources.some((source) => {
       if (!ownedByKey.has(domainKey(source))) return false;
       const facetSeparator = source.search(/\s+[–—-]\s+/);
-      return facetSeparator > 0 && domainKey(source.slice(0, facetSeparator)) === key;
+      if (facetSeparator > 0 && domainKey(source.slice(0, facetSeparator)) === key) return true;
+      // A colon also marks facets, but only with an explicit facet suffix:
+      // "Mrs. Dalloway: Themes" qualifies; "Star Trek: TNG" does not.
+      const colonSeparator = source.indexOf(': ');
+      return colonSeparator > 0 && domainKey(source.slice(0, colonSeparator)) === key
+        && /^(?:themes?|characters?|structure|symbolism|technique|style|form|narrative|plot)\b/i.test(source.slice(colonSeparator + 2));
     });
-    return hasOwnedFacetParent ? [{ ...suggestion, target: proposed }] : [];
+    if (hasOwnedFacetParent) {
+      return [{ ...suggestion, target: proposed, aiSuggestedTarget: suggestion.aiSuggestedTarget ?? proposed }];
+    }
+    onSkip?.(suggestion, 'unrecognized_target');
+    return [];
   });
 }
 
@@ -498,15 +535,16 @@ Examples:
 "Mrs. Dalloway – Characters & Themes" → merge into "Mrs. Dalloway"
 "Mrs. Dalloway – Themes & Characters" → merge into "Mrs. Dalloway"
 "Mrs. Dalloway – Narrative Technique" → merge into "Mrs. Dalloway"
+"Mrs. Dalloway: Themes" → merge into "Mrs. Dalloway"
 "Ulysses – Structure & Symbolism" → merge into "Ulysses"
 "Ulysses – Structure & Technique" → merge into "Ulysses"
 
-If the parent does not yet exist, CREATE it from the merge.
+If the parent does not yet exist, CREATE it from a label with an explicit facet suffix (a spaced dash, or a colon followed by a facet such as Themes or Narrative Technique).
 
 2. AGGRESSIVE on near-duplicate merges. Any two labels that refer to the same body of knowledge with different wording must be merged. This includes acronyms and abbreviations vs. their spelled-out forms.
 Examples:
 "Late Tchaikovsky" + "Tchaikovsky's Late Period" → one domain
-"Joyce's Ulysses" + "James Joyce's Ulysses" + "Ulysses" → one domain (prefer the most concise canonical name)
+"Joyce's Ulysses" + "James Joyce's Ulysses" + "Ulysses" → "Ulysses" when that name is already in the user's domains or authored labels
 "UX Design" + "User Experience Design" → one domain (prefer the most common form, e.g. "UX Design")
 "AI" + "Artificial Intelligence" → one domain
 "NYC History" + "New York City History" → one domain
@@ -523,7 +561,7 @@ ${domainList}
 Existing authored knowledge-map labels (use their exact spelling for a matching target):
 ${graphLabels.map((label) => `- ${label}`).join('\n')}
 
-For a near-duplicate merge, choose a target from the user's domains or the authored labels. Invent a new target only when it is the parent name obtained by removing a facet suffix from a user's domain.
+For a near-duplicate merge, choose a target from the user's domains or the authored labels. Invent a new target only when it is the parent name obtained by removing an explicit facet suffix from a user's domain. Do not merge away an authored knowledge-map label into a different topic; leave that graph decision to an admin.
 
 Propose merges. Respond in JSON only:
 { "merges": [ { "sources": ["...", "..."], "target": "...", "rationale": "brief explanation" } ] }
@@ -566,6 +604,7 @@ export async function applyMergesForUser(
     suggestions,
     masteryRows.map((row) => row.canonicalSubcategory),
     graphLabels,
+    (suggestion, reason) => logSkippedTidyMerge(userId, suggestion, reason),
   );
 
   await db.transaction(async (tx) => {
@@ -658,12 +697,12 @@ export async function applyMergesForUser(
       // related). The survivor's tree rebuilds lazily on its next thin-crossing.
       // DomainRelation is a GLOBAL cache (not user-scoped); deleting here is
       // idempotent — a later user's merge of the same pair simply finds none.
-      if (sourceDomains.length > 0) {
+      if (sourceDomainsToDelete.length > 0) {
         await tx
           .delete(domainRelations)
           .where(or(
-            inArray(domainRelations.childDomain, sourceDomains),
-            inArray(domainRelations.relatedDomain, sourceDomains),
+            inArray(domainRelations.childDomain, sourceDomainsToDelete),
+            inArray(domainRelations.relatedDomain, sourceDomainsToDelete),
           ));
       }
 
@@ -746,6 +785,8 @@ export async function applyMergesForUser(
         metadata: {
           sources: sourceDomains,
           target,
+          aiSuggestedTarget: suggestion.aiSuggestedTarget ?? suggestion.target,
+          targetChanged: (suggestion.aiSuggestedTarget ?? suggestion.target) !== target,
           rationale: suggestion.rationale,
         },
       });
@@ -809,6 +850,7 @@ export async function runDomainMergesForUser(userId: string): Promise<MergeResul
     await suggestAggressiveDomainMerges(domainsWithContext, graphLabels),
     masteryRows.map((row) => row.canonicalSubcategory),
     graphLabels,
+    (suggestion, reason) => logSkippedTidyMerge(userId, suggestion, reason),
   );
   if (suggestions.length === 0) {
     return { mergesApplied: 0, domainsBefore, domainsAfter: domainsBefore, details: [] };
@@ -870,6 +912,7 @@ export async function runAggressiveDomainBackfillForUser(
     await suggestAggressiveDomainMerges(domainsWithContext, graphLabels),
     masteryRows.map((row) => row.canonicalSubcategory),
     graphLabels,
+    (suggestion, reason) => logSkippedTidyMerge(userId, suggestion, reason),
   );
   const mergesProposed = suggestions.length;
 
