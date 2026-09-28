@@ -858,15 +858,13 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
 
 // Pool — bundle answers: YOU answered a creator-less (LLM) question from a
 // friend's From Friends bundle. The friend played the question, they didn't
-// write it, so every line stays in the shared-territory register and never
-// claims authorship ("{friend}'s question" is reserved for questions a person
-// actually wrote). Hash-selected per event id like the other pools.
-const BUNDLE_ANSWER_LINES = [
-  'You followed {friend} into {topic}',
-  'You played along with {friend} on {topic}',
-  'You kept {friend} company in {topic}',
-] as const;
-const BUNDLE_ANSWER_NO_TOPIC = 'You played a question from {friend}';
+// write it, so the line never claims authorship ("{friend}'s question" is
+// reserved for questions a person actually wrote). A single fixed template, not
+// a rotating pool: rotated phrasings made one event type read as three
+// different relationships (B-ACTIVITY-DIRECTION-COPY-01). The line names who
+// answered (you) and where the question came from ({friend} played it).
+const BUNDLE_ANSWER_LINES = ['You answered a {topic} question {friend} played'] as const;
+const BUNDLE_ANSWER_NO_TOPIC = 'You answered a question {friend} played';
 
 // A bundle answer, as a quiet you-did-this one-liner. Same prominence tier as a
 // you_got_them moment (the viewer's own action — texture, not headline). The

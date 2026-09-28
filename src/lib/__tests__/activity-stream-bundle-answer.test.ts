@@ -29,14 +29,30 @@ function lineText(parts: { v?: string; name?: string }[]): string {
 }
 
 describe('bundleAnswerToStreamItem', () => {
-  it('names the friend and the topic in the shared-territory voice', () => {
+  it('says who answered (you) and where the question came from (the friend played it)', () => {
     const item = bundleAnswerToStreamItem(moment());
     const text = lineText(item.line);
+    expect(text).toMatch(/^You /);
+    expect(text).toContain('answered');
     expect(text).toContain('David');
+    expect(text).toContain('played');
     expect(text).toContain('Tom Stoppard Plays');
-    // Never an authorship claim: these lines describe shared territory, not
-    // "{friend}'s question".
+    // Never an authorship claim: the friend played the question, didn't write
+    // it, so no "{friend}'s question".
     expect(text).not.toMatch(/David's/);
+  });
+
+  it('uses one fixed line for every event, so one kind of event reads as one relationship', () => {
+    const lines = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) =>
+      lineText(bundleAnswerToStreamItem(moment({ momentId: id })).line),
+    );
+    expect(new Set(lines).size).toBe(1);
+    expect(lines[0]).toBe('You answered a Tom Stoppard Plays question David played');
+  });
+
+  it('falls back to a topic-less line that keeps the same direction', () => {
+    const text = lineText(bundleAnswerToStreamItem(moment({ category: '' })).line);
+    expect(text).toBe('You answered a question David played');
   });
 
   it('links the friend as an actor part and the topic as a serif category part', () => {
