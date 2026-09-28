@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-27
+last-reviewed: 2026-09-28
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1707,3 +1707,100 @@ the bonus worth its cost) remains open and unresolved.
 3. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 4. Question 4 (is the bonus worth its cost) — unresolved, and the growing
    outlier share (now 26%) makes it harder to answer with a single number.
+
+### 2026-09-28 (diagnosis-review) — a second `deferred: false` row lands the very next cron cycle, with a different shape than the first (four core rounds, 89.5s span); two new outlier-class residuals, one an all-time high (82.9s); outlier/elevated cluster grows from 9 to 11 of 39 (28%); median saving flat at 14,293ms; still zero races
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**`DailyBuildMetric` totals:** `built=40` (1 baseline + 39 post-deferral, up
+from 36/35 at the last review), `carry_forward=508`, `existing_queue=61`,
+`partial_carry_forward=5`. **`outcome='lost_persist_race'` is still 0
+rows**, cumulative, all time — no change from every prior reading.
+
+**Four new post-deferral rows since the last review, three from the
+2026-09-27 17:05 UTC cron window and one late-night build:**
+
+| build_id | started_at | deferred | span_ms | user_visible_ms | saved | bonus (`generationMs`) | residual |
+|---|---|---|---:|---:|---:|---:|---:|
+| `9c0361e9-…` | 17:05:16.027Z | **false** | 89,474 | 89,353 | 121 | — (4 `core`-phase rounds, no bonus round) | n/a |
+| `90da8604-…` | 17:05:20.165Z | true | 87,647 | 4,224 | **83,423** | 545 | **82,878 — new all-time high, more than double the prior max** |
+| `ae49589e-…` | 17:05:20.947Z | true | 87,102 | 59,703 | 27,399 | 785 | **26,614 — outlier-class** |
+| `526edf0d-…` | 23:35:51.810Z | true | 26,253 | 24,321 | 1,932 | 923 | 1,009 — normal band |
+
+**Three of the four are anomalous, and two things here are new, not just
+more of the same pattern:**
+
+1. **`90da8604-…`'s residual (82,878ms) is the largest this doc has ever
+   recorded** — more than double the previous high (`4f9efefa-…`,
+   30,479ms, 2026-09-25). Same small-bonus/huge-residual shape as the other
+   outliers in that family (`84e717bd-…`, `87e51589-…`, `4f9efefa-…`,
+   `76790f46-…`, `87cf2e9a-…`) — 545ms of bonus generation paired with 82.9
+   seconds of unexplained residual.
+2. **`ae49589e-…` joins the outlier cluster too** (26,614ms residual) — two
+   new outliers in the same cron window, both landing within one second of
+   `9c0361e9-…`, the window's third anomalous row.
+3. **`9c0361e9-…` is only the second `deferred: false` row this doc has
+   ever recorded on a real build — and it's shaped differently from the
+   first.** The first (`4206ffb0-…`, 2026-09-26) had `rounds: []` and a
+   negligible 141ms `saved` — consistent with "the tail ran inline, fast,
+   nothing unusual besides the missing deferral." This one has **four
+   recorded `core`-phase rounds** (totaling ~43.7s of `generationMs`) but a
+   span of **89.5 seconds** — roughly 45.8s of the build is unaccounted for
+   by generation time, even before considering that no bonus phase ran at
+   all. This is a different failure signature from the first `deferred:
+   false` row, not a repeat of it — it looks like a slow build in its own
+   right, with the deferral separately inert on top of that.
+
+**This raises the outlier/elevated count from 9 of 35 to 11 of 39 (28%)** —
+continuing the same successive-review growth this doc has tracked
+(3→5→6→8→9→11), now joined by a second `deferred: false` occurrence that
+last review's next-step #2 specifically asked to watch for — but with a
+shape unlike the first, so this reads as two distinct unexplained patterns
+rather than one recurring one. Full named outlier set: `84e717bd-…`
+(09-09), `87e51589-…` (09-14), `cff84520-…` (09-15), `42f757d7-…` and
+`8753461a-…` (09-23), `758748d3-…` (09-24), `4f9efefa-…` and `76790f46-…`
+(09-25), `87cf2e9a-…` (09-26), `90da8604-…` and `ae49589e-…` (09-27). Named
+`deferred: false` set: `4206ffb0-…` (09-26, `rounds: []`), `9c0361e9-…`
+(09-27, 4 core rounds, 89.5s span). Neither cluster traced this pass —
+still needs Vercel function logs this session doesn't have.
+
+**Phase 3a (mechanism) still holds** on all three rows with a bonus phase:
+`saved ≥` each row's own bonus `generationMs`. Not applicable to
+`9c0361e9-…` (no bonus phase recorded to check against, same as the first
+`deferred: false` row).
+
+**3b population: median saving 14,293ms** (n=39, unchanged from n=35 at the
+last review) — the new rows split around the existing distribution without
+moving the median, even though the cluster driving the spread got both
+wider and more extreme.
+
+**No code change since the last review** to `queue-orchestrator.ts`,
+`daily.ts`, or `build-context.ts` — the seven commits landing on `main`
+since the last review (`#1722` friend-news notifications, `#1723`
+category-name matching, `#1724`–`#1729` knowledge-graph safety work) touch
+none of them, confirmed by diffing each commit's file list directly. `#1722`
+does touch `src/app/api/cron/daily-assignments/route.ts` (adding
+friend-news lines to the SMS/email daily reminder), but only downstream of
+an already-built queue — it reads `queue`, never calls into
+`persistDailyQueue` or the orchestrator, and doesn't touch build timing.
+
+**No decision-resolving change.** Status stays `active`. The outlier-trace
+next step is more urgent still — now covering two distinct unexplained
+patterns (the residual outliers and the `deferred: false` rows) rather than
+one, both still needing Vercel access this session doesn't have. Question 4
+(is the bonus worth its cost) remains open and unresolved.
+
+### Next steps (revised)
+1. **Trace the now-eleven outsized/elevated-residual builds** — needs
+   Vercel function logs. Named above; the newest, `90da8604-…`, is now the
+   largest single residual ever recorded (82.9s) and worth prioritizing if
+   only one can be traced first.
+2. **Watch for a third `deferred: false` occurrence** — now two, with
+   different shapes (`rounds: []` vs. four recorded core rounds plus an
+   89.5s span). A third would make this a real trend rather than two
+   isolated incidents, and the two different shapes suggest more than one
+   mechanism could be at play.
+3. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+4. Question 4 (is the bonus worth its cost) — unresolved, and the growing
+   outlier share (now 28%) makes it harder to answer with a single number.

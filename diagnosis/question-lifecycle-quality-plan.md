@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-27
+last-reviewed: 2026-09-28
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -1197,5 +1197,93 @@ set) and explicitly does not touch the historical backlog. Status stays
    doc, still untraced.
 4. Keep an eye on `batch_dedup` `failed_open` (17/241) and `recent_history`
    (3/241) on the rolling 14-day window.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-28 (diagnosis-review) — #1720's dispute-mastery fix CONFIRMED working live on a real post-deploy resolution, closing last review's leading watch item; `batch_dedup`/`recent_history` failed_open flat on the rolling window; `subject_entity` coverage holds; build p50 jumps, consistent with today's new outlier finding in the cross-referenced latency doc; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**Last review's leading item is now answered: `#1720`'s fix is confirmed
+working on a real, post-deploy dispute resolution.** `GradeDispute` status
+counts (all-time): `pending` 43 (unchanged), `alternative_added` **31**
+(was 30), `dismissed` 5 (unchanged). The new resolution — `id 0c307cc6…`,
+`review_decision: accept`, `accepted_alternative: "thorn bush"`,
+`reviewed_at 2026-09-27T17:11:14.935Z` — is the first `GradeDispute`
+resolution with a `reviewed_at` after `#1720`'s 2026-09-26T17:19:50Z
+deploy. Per last review's own next step, checked whether it now shows a
+matching credited `MASTERY_EVENTS` row: **it does.** A `MASTERY_EVENTS` row
+exists for the same `question_id`/`answered_by_user_id` pair,
+`source_type: 'live_correct'`, `answer_state: 'first_correct'`,
+`awarded_points: 50`, `created_at: 2026-09-27T17:08:14.169609Z` — 3 minutes
+before the dispute's own `reviewed_at`. Before `#1720`, this exact shape (a
+won recheck dispute) silently dropped its mastery credit via `ON CONFLICT
+DO NOTHING`; this one didn't. **This is direct, live confirmation the fix
+works**, not just the diff-reading and prod read-only check the PR
+description itself offered. Still doesn't resolve decision 4 by itself —
+one resolution proves the plumbing fix works, not that grading in general
+became fairer — and the standing question of whether `GradeDispute` growth
+reflects staff review or the automated recheck path agreeing with itself is
+unchanged: this resolution's shape (an `accept` with an
+`accepted_alternative`, no `/admin/disputes` staff signal checked) is, once
+again, consistent with the automated path rather than human review.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard requirement
+(2026-09-16T22:07:16Z): **0 of 170** newly-generated rows missing it (was 0
+of 151 last review).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 260 | 29 | **3** |
+| `batch_dedup` | 260 | 10 | **17** |
+| `quality` | 260 | 106 (40.8%) | 0 |
+
+Both `recent_history` and `batch_dedup` are flat on this rolling-window
+basis versus the last review (3/241 → 3/260; 17/241 → 17/260 — a rolling
+14-day count, not cumulative-since-a-fixed-date, per the 2026-09-25 entry's
+own note). `quality`'s scoped drop rate (40.8%) stays inside the acceptable
+band. Neither counter is root-caused; same "flagging for awareness" posture
+as every prior entry.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 37,974ms** (n=27),
+up sharply from the last reading (35,750ms, n=26). Cross-checked against
+`daily-build-latency-deferral-plan.md`'s 2026-09-28 entry (read, not
+re-derived): the outlier/elevated-residual cluster it tracks jumped from 9
+to 11 of 39 post-deferral rows today, including the largest single residual
+ever recorded (82.9s, on a build that landed inside this doc's own 14-day
+p50 window) — very likely the direct driver of this reading's sharp jump.
+Still the standing explanation for the elevated p50, still untraced.
+
+**No code change since the last review:** `git log --since=2026-09-27` on
+`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, and `src/server/db/queries/grade-disputes.ts`
+returns nothing. Seven commits landed on `main` since the 2026-09-27
+diagnosis-review commit (`#1722`, `#1723`, `#1724`, `#1725`, `#1726`,
+`#1728`, `#1729`); none touch this doc's tracked paths — spot-checked
+directly.
+
+**No decision-resolving change to the six items in §2** — `#1720`'s live
+confirmation strengthens the evidence base decision 4 will eventually draw
+on, but doesn't itself answer "did grading become fairer in real use"
+(still needs Phase 4's labeled set). Status stays `active`.
+
+### Next steps (revised)
+1. Decision 4 still needs Phase 4's labeled set — `#1720`'s fix is now
+   confirmed live, which means future `GradeDispute` resolutions can be
+   trusted to actually credit mastery, but that's a plumbing confirmation,
+   not evidence about grading fairness itself.
+2. Check how `#1709`'s automated recheck path labels its `GradeDispute`
+   resolutions — still not directly investigated; today's new resolution
+   is, once again, consistent with that path but not confirmed with
+   certainty.
+3. Once the outlier builds are traced (now 11 named, including a new
+   all-time-high residual), re-check whether this doc's build-time p50
+   recovers.
+4. Keep an eye on `batch_dedup` `failed_open` (17/260) and `recent_history`
+   (3/260) on the rolling 14-day window — both flat this reading.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
