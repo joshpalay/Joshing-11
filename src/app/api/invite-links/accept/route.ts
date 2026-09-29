@@ -44,6 +44,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
+    alreadyFriends: result.alreadyFriends === true,
     nextHref: user.onboardingComplete ? '/' : '/onboarding',
   });
 }

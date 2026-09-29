@@ -551,7 +551,10 @@ export function ActivityStreamItem({
                   color: INK3,
                 }}
               >
-                {milestoneProgress.answered} of {milestoneProgress.total} questions
+                {/* Same remaining count as the elevated (home) card above — the
+                    two layouts read "0 of 4" vs "4 of 4" for one bundle when
+                    this line counted answered instead (QA 2026-09-27, S1). */}
+                {milestoneProgress.total - milestoneProgress.answered} of {milestoneProgress.total} questions
               </p>
             ) : null}
           </div>

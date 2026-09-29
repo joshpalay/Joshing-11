@@ -155,6 +155,8 @@ type PeaksDetailData = {
   variant?: 'portrait' | 'manage';
   tree: KnowledgeTreeNode;
   frequencyByDomain: DomainPreferenceFrequency;
+  /** Held topics the Daily Five doesn't draw from yet (server: getParkedDomains). */
+  parkedDomains?: readonly string[];
   fullyExploredDomains: ReadonlySet<string>;
   /**
    * Manage-variant only: Daily Five settings rendered near the TOP of the page,
@@ -246,6 +248,7 @@ function KnowledgePageContent({
   variant = 'portrait',
   tree,
   frequencyByDomain,
+  parkedDomains,
   fullyExploredDomains,
   manageExtra,
 }: PeaksDetailData) {
@@ -281,6 +284,7 @@ function KnowledgePageContent({
   const { tree: detailTree, resolveFrequency, setFrequency, adoptNode } = usePeakDetail(
     tree,
     frequencyByDomain,
+    parkedDomains,
   );
   const [selectedLeaf, setSelectedLeaf] = useState<LeafInfo | null>(null);
   const treeIndex = useMemo(() => indexTree(detailTree), [detailTree]);

@@ -76,9 +76,9 @@ export type AnswerSuggestionResult = {
   suggested_phrasings?: string[];
 };
 
-// Generation/gate model. Env-overridable so the Sonnet 5 upgrade is a single,
-// reversible env flip (ANTHROPIC_MODEL=claude-sonnet-5) after validating on
-// preview — Sonnet 5 is same price at standard ($3/$15), cheaper until 2026-08-31.
+// Generation/gate model. Env-overridable so a model upgrade is a single,
+// reversible env flip (ANTHROPIC_MODEL=claude-sonnet-5-5; claude-sonnet-5 before
+// it) after validating on preview — Sonnet 5.5 is the same price as Sonnet 5.
 // loggedMessagesCreate sanitizes params per model, so the newer Sonnet-5/Opus-4.7+
 // line (which rejects temperature and defaults thinking ON) is safe to select here
 // without touching the ~15 call sites that pass temperature.
@@ -97,6 +97,12 @@ export function modelRejectsSamplingParams(model: string): boolean {
 // rejects an explicit `disabled`, but we never select Fable here.)
 export function modelDefaultsThinkingOn(model: string): boolean {
   return /sonnet-5|mythos/.test(model);
+}
+// Sonnet 5.5 REJECTS `thinking: {type: 'disabled'}` (HTTP 400); its lowest
+// setting is `between_tools` — no up-front thinking, and without tools the
+// response is text only. Sonnet 5 takes `disabled`. Exported for the test.
+export function modelLowestThinkingConfig(model: string): { type: 'disabled' | 'between_tools' } {
+  return /sonnet-5-5/.test(model) ? { type: 'between_tools' } : { type: 'disabled' };
 }
 // Grading is a simple binary task — Haiku is ~5-10x faster than Sonnet with adequate accuracy.
 const GRADING_MODEL = 'claude-haiku-4-5-20251001';
@@ -282,15 +288,21 @@ export function sanitizeParamsForModel(
   const needsSamplingStrip = modelRejectsSamplingParams(model)
     && (p.temperature !== undefined || p.top_p !== undefined || p.top_k !== undefined);
   const needsThinkingDefault = p.thinking === undefined && modelDefaultsThinkingOn(model);
-  if (!needsSamplingStrip && !needsThinkingDefault) return params;
+  // A caller's explicit `disabled` would 400 on a model whose floor is
+  // `between_tools` (Sonnet 5.5); map it to that floor.
+  const lowestThinking = modelLowestThinkingConfig(model);
+  const needsThinkingFloor =
+    lowestThinking.type !== 'disabled' &&
+    (p.thinking as { type?: string } | undefined)?.type === 'disabled';
+  if (!needsSamplingStrip && !needsThinkingDefault && !needsThinkingFloor) return params;
   const next = { ...p };
   if (needsSamplingStrip) {
     delete next.temperature;
     delete next.top_p;
     delete next.top_k;
   }
-  if (needsThinkingDefault) {
-    next.thinking = { type: 'disabled' };
+  if (needsThinkingDefault || needsThinkingFloor) {
+    next.thinking = lowestThinking;
   }
   return next as unknown as Anthropic.MessageCreateParamsNonStreaming;
 }

@@ -153,7 +153,7 @@ export function resolveAuthorDisplay(
 }
 
 // True when an attribution name is the LLM/non-person label, used to gate
-// person-style copy (e.g. "{name} gave you this") so it never fires for machine
+// person-style copy (e.g. "{name} wrote this") so it never fires for machine
 // questions. Keeps consumers decoupled from the literal value above.
 export function isLlmAttribution(name: string | null | undefined): boolean {
   return name?.trim() === LLM_QUESTION_ATTRIBUTION;

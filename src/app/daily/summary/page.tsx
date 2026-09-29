@@ -731,8 +731,16 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
   // now · It'll come back another day." on a bonus too, and the recap can't
   // tell that apart from a "not my bag" rest (QA 2026-09-26, S2).
   const savedForLater = question.isSkipped
+  // "Never show this question" and "not my bag" also close a slot as skipped;
+  // say which, rather than "Skipped" for all three (QA 2026-09-27, N10).
+  const skippedLabel =
+    question.skipReason === 'hidden'
+      ? 'Hidden'
+      : question.skipReason === 'rested'
+        ? 'Rested'
+        : 'Skipped'
   const statusLabel = question.isSkipped
-    ? 'Skipped'
+    ? skippedLabel
     : question.isCorrect
       ? 'Correct'
       : 'Not this time'
@@ -835,7 +843,7 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
           </p>
           <p className="mt-1 text-sm leading-6 text-[var(--brand-ink)]">
             {question.isSkipped
-              ? 'Skipped'
+              ? skippedLabel
               : question.submittedAnswer?.trim() || 'No answer submitted'}
           </p>
         </div>
@@ -848,9 +856,11 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
             style={{ color: question.isCorrect ? 'var(--game-correct)' : 'var(--brand-ink)' }}
           >
             {savedForLater
-              ? question.isBonus
-                ? 'Not shown for skipped questions'
-                : 'Saved for Catch up'
+              ? question.skipReason
+                ? 'Not shown'
+                : question.isBonus
+                  ? 'Not shown for skipped questions'
+                  : 'Saved for Catch up'
               : question.correctAnswer || 'No answer available'}
           </p>
         </div>

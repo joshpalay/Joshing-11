@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bell, Brain, Home, Pencil, Plus, User, Users } from 'lucide-react';
 import { CreateChooser } from '@/components/CreateChooser';
+import { useFabSuppressed } from '@/components/useFabSuppressed';
 
 const navItems = [
   { href: '/', label: 'Home', Icon: Home },
@@ -130,7 +131,9 @@ export function Nav({
     pathname.startsWith('/admin') ||
     pathname === '/dev/invite-redesign/creator' ||
     isOtherUserProfilePath;
-  const showCreateShortcut = !hidesCreateShortcut;
+  // Steps aside while typing or while an inline confirm is open (useFabSuppressed).
+  const fabSuppressed = useFabSuppressed();
+  const showCreateShortcut = !hidesCreateShortcut && !fabSuppressed;
 
   // The weekly ceremony (/ceremony/<id>) is a full-screen, self-contained
   // takeover with its own progress dots and X-to-exit — same as the game play

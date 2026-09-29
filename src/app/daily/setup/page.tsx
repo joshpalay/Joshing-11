@@ -5,6 +5,7 @@ import { getSession } from '@/server/auth/session';
 import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree';
 import { getFullyExploredDomains } from '@/server/knowledge/fully-explored';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getParkedDomains } from '@/server/knowledge/rotation-display';
 import { isMissedReturnEnabledForUser } from '@/server/db/queries/missed-return';
 import { MissedReturnSection } from './MissedReturnSection';
 
@@ -32,12 +33,15 @@ export default async function DailySetupPage() {
     getFullyExploredDomains(session.userId),
     isMissedReturnEnabledForUser(session.userId),
   ]);
+  // Held topics the Daily Five doesn't draw from (QA 2026-09-27, S2).
+  const parkedDomains = await getParkedDomains(session.userId, tree);
 
   return (
     <KnowledgeFlatClient
       variant="manage"
       tree={tree}
       frequencyByDomain={preferences.domainPreferenceFrequency}
+      parkedDomains={parkedDomains}
       fullyExploredDomains={fullyExplored}
       manageExtra={<MissedReturnSection initialEnabled={returnEnabled} />}
     />

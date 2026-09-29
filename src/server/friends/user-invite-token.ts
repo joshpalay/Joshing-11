@@ -5,6 +5,7 @@ import { safeInviteName, sanitizeInviteLinkCategories } from '@/lib/invite-links
 import { db, follows, profileDomainVisibility, users } from '@/server/db';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getRelationship } from '@/server/db/queries/friend-requests';
 import { isBlockedBetween } from '@/server/db/queries/user-blocks';
 import {
   attributeInviteLinkJoin,
@@ -278,13 +279,19 @@ export async function acceptUserInviteLink({
   token: string;
   inviteeUserId: string;
   now?: Date;
-}): Promise<{ accepted: boolean }> {
+}): Promise<{ accepted: boolean; alreadyFriends?: boolean }> {
   const inviter = await resolveInviteLink(handle, token);
   if (!inviter) return { accepted: false };
   if (inviter.inviterUserId === inviteeUserId) return { accepted: false };
   if (await isBlockedBetween(inviter.inviterUserId, inviteeUserId)) {
     return { accepted: false };
   }
+  // Re-opening a friend's link: nothing to form. Skipping the writes below keeps
+  // it from posting a second "is now a friend" row to the inviter's feed and
+  // lets the page say "already friends" instead of "now friends"
+  // (QA 2026-09-27, N8).
+  const existing = await getRelationship(inviteeUserId, inviter.inviterUserId);
+  if (existing.state === 'friends') return { accepted: true, alreadyFriends: true };
 
   try {
     // Keep the two directional approved edges atomic. The named-invitation

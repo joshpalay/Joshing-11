@@ -188,6 +188,7 @@ export function AddFriendButton({
         {relationship.state === 'friends' || relationship.state === 'following' ? (
           confirmingRemove ? (
             <div
+              data-hide-fab
               className="flex flex-wrap items-center gap-2"
               role="group"
               aria-label={removeCopy.prompt}

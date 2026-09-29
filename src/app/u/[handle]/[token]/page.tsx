@@ -27,6 +27,8 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
   const inviter = await resolveInviteLink(handle, token);
 
   if (!inviter) {
+    // A signed-in player gets a way home, not "Go to login" (QA 2026-09-27, N9).
+    const signedIn = Boolean((await getSession())?.userId);
     return (
       <InvitationPageShell>
         <div className="space-y-4 text-center">
@@ -35,10 +37,12 @@ export default async function UserInvitePage({ params }: InvitePageProps) {
             This invitation link is no longer valid.
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
-            Ask your friend for a fresh link, or continue to Joshing if you already have an account.
+            {signedIn
+              ? 'Ask your friend for a fresh link.'
+              : 'Ask your friend for a fresh link, or continue to Joshing if you already have an account.'}
           </p>
-          <Link href="/login" className="btn-ghost w-full">
-            Go to login
+          <Link href={signedIn ? '/' : '/login'} className="btn-ghost w-full">
+            {signedIn ? 'Back to Joshing' : 'Go to login'}
           </Link>
         </div>
       </InvitationPageShell>

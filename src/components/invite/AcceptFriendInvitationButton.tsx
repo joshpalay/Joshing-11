@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -67,9 +68,16 @@ export function AcceptFriendInvitationButton({
         </p>
       ) : null}
       {error ? (
-        <p className="text-destructive text-sm leading-5" role="alert">
-          {error}
-        </p>
+        <>
+          <p className="text-destructive text-sm leading-5" role="alert">
+            {error}
+          </p>
+          {/* No app chrome on the invite page — give a failed accept a way out
+              (QA 2026-09-27, N9). */}
+          <Link href="/" className="btn-ghost w-full">
+            Back to Joshing
+          </Link>
+        </>
       ) : null}
     </div>
   );

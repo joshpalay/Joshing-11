@@ -53,7 +53,7 @@ export type ChatMessage =
       /**
        * D-3: the named author is the non-human house/editorial author. Renders
        * the persistent `Editorial` badge and suppresses all relational copy
-       * ("gave you this", "{name} carries this one"). Set explicitly by the
+       * ("wrote this", "{name} carries this one"). Set explicitly by the
        * server resolver — never inferred from the name string, so a human named
        * "Joshing" is never mistaken for the house author.
        */
@@ -291,6 +291,34 @@ function bonusSourceLabel(sourceName: string, extraCount: number): string {
  * Returns null on an unparseable timestamp so a bad date degrades to no banner
  * rather than to "LAST SEEN INVALID DATE".
  */
+function RecheckAcceptedNote({ message }: { message: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        marginTop: '8px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
+        background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
+        color: 'var(--game-correct)',
+        padding: '8px 12px',
+        fontSize: '0.85rem',
+        fontWeight: 500,
+        lineHeight: 1.35,
+      }}
+    >
+      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>
+        ✓
+      </span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
 function returnSourceLabel(lastSeenAt: string): string | null {
   const seen = new Date(lastSeenAt);
   if (Number.isNaN(seen.getTime())) return null;
@@ -803,8 +831,12 @@ function QuestionRow({
                       <span style={{ fontWeight: 600 }}>{creatorName}</span>
                       {creatorIsHouse ? <EditorialBadge style={{ marginLeft: '6px' }} /> : null}
                       {creatorIsHouse || isLlmAttribution(creatorName) ? null : (
+                        // "wrote this", not "gave you this": catch-up and returns
+                        // serve questions the game picked, and for a stranger's
+                        // public question "gave you" read as if they'd chosen this
+                        // player (QA 2026-09-27, N22).
                         <span style={{ marginLeft: '6px', opacity: 0.55, fontStyle: 'italic' }}>
-                          gave you this
+                          wrote this
                         </span>
                       )}
                     </span>
@@ -1592,30 +1624,7 @@ function ResultRow({
                 </button>
                 {recheckMessage ? (
                   recheckAccepted ? (
-                    <div
-                      role="status"
-                      aria-live="polite"
-                      style={{
-                        marginTop: '8px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        borderRadius: 'var(--radius-md)',
-                        border:
-                          '1px solid color-mix(in srgb, var(--game-correct) 35%, var(--border))',
-                        background: 'color-mix(in srgb, var(--game-correct) 12%, var(--surface))',
-                        color: 'var(--game-correct)',
-                        padding: '8px 12px',
-                        fontSize: '0.85rem',
-                        fontWeight: 500,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>
-                        ✓
-                      </span>
-                      <span>{recheckMessage}</span>
-                    </div>
+                    <RecheckAcceptedNote message={recheckMessage} />
                   ) : (
                     <p
                       role="status"
@@ -1635,6 +1644,13 @@ function ResultRow({
             ) : null}
           </>
         )}
+        {/* A won argument flips the slot to correct, which unmounts the wrong-
+            answer block (and the argue sheet) that carried the "✓ Recheck
+            accepted" note — so the player saw the card change with no word why
+            (QA 2026-09-27, N25). Keep the note on the now-correct card. */}
+        {correct && recheckAccepted && recheckMessage ? (
+          <RecheckAcceptedNote message={recheckMessage} />
+        ) : null}
         {argueOpen && recheckAction ? (
           <ArguePointSheet
             question={questionText}

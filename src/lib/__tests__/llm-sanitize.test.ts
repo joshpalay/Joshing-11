@@ -38,6 +38,33 @@ describe('modelDefaultsThinkingOn', () => {
   });
 });
 
+describe('Sonnet 5.5 (claude-sonnet-5-5)', () => {
+  it('rejects sampling params and defaults thinking on, like Sonnet 5', () => {
+    expect(mod.modelRejectsSamplingParams('claude-sonnet-5-5')).toBe(true);
+    expect(mod.modelDefaultsThinkingOn('claude-sonnet-5-5')).toBe(true);
+  });
+
+  it('turns thinking down with between_tools, never disabled (400 on Sonnet 5.5)', () => {
+    const out = rec(base('claude-sonnet-5-5', { temperature: 0.3 }));
+    expect(out.temperature).toBeUndefined();
+    expect(out.thinking).toEqual({ type: 'between_tools' });
+  });
+
+  it('maps a caller-specified disabled to between_tools', () => {
+    const out = rec(base('claude-sonnet-5-5', { thinking: { type: 'disabled' } }));
+    expect(out.thinking).toEqual({ type: 'between_tools' });
+  });
+
+  it('keeps a caller-specified adaptive thinking', () => {
+    const out = rec(base('claude-sonnet-5-5', { thinking: { type: 'adaptive' } }));
+    expect(out.thinking).toEqual({ type: 'adaptive' });
+  });
+
+  it('still sends disabled on Sonnet 5', () => {
+    expect(mod.modelLowestThinkingConfig('claude-sonnet-5')).toEqual({ type: 'disabled' });
+  });
+});
+
 describe('sanitizeParamsForModel', () => {
   it('leaves Sonnet 4.6 params untouched (same reference)', () => {
     const p = base('claude-sonnet-4-6', { temperature: 0.2 });

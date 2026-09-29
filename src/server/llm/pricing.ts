@@ -49,6 +49,14 @@ export const MODEL_PRICING: Record<string, ModelPrice> = {
     cacheReadPerMtok: 0.3, // ~0.1x input
     cacheWritePerMtok: 3.75, // ~1.25x input (5m TTL)
   },
+  // Sonnet 5.5 — same price as Sonnet 5 (Anthropic migration guide). Row added
+  // before the ANTHROPIC_MODEL flip so its calls are never ledgered as $0.
+  'claude-sonnet-5-5': {
+    inputPerMtok: 3.0,
+    outputPerMtok: 15.0,
+    cacheReadPerMtok: 0.3, // ~0.1x input
+    cacheWritePerMtok: 3.75, // ~1.25x input (5m TTL)
+  },
   // Sonnet 4.6 — generation.
   'claude-sonnet-4-6': {
     inputPerMtok: 3.0,

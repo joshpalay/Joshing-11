@@ -4,6 +4,7 @@ import { getSession } from '@/server/auth/session';
 import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree';
 import { getFullyExploredDomains } from '@/server/knowledge/fully-explored';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { getParkedDomains } from '@/server/knowledge/rotation-display';
 import { KnowledgePeaksView } from '@/components/knowledge/KnowledgePeaksView';
 import { KnowledgeViewSwitcher } from '@/components/knowledge/KnowledgeViewSwitcher';
 
@@ -23,6 +24,8 @@ export async function KnowledgePeaksPage() {
     getDailyPreferences(session.userId),
     getFullyExploredDomains(session.userId),
   ]);
+  // Held topics the Daily Five doesn't draw from (QA 2026-09-27, S2).
+  const parkedDomains = await getParkedDomains(session.userId, tree);
 
   return (
     <main className="mx-auto flex h-dvh max-w-3xl flex-col px-4 py-5">
@@ -37,6 +40,7 @@ export async function KnowledgePeaksPage() {
       <KnowledgePeaksView
         data={tree}
         frequencyByDomain={preferences.domainPreferenceFrequency}
+      parkedDomains={parkedDomains}
         fullyExploredDomains={fullyExplored}
       />
     </main>

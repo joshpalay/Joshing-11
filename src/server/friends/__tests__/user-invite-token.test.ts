@@ -70,6 +70,10 @@ const {
   isBlockedBetweenMock: vi.fn(async () => false),
 }));
 
+const { getRelationshipMock } = vi.hoisted(() => ({
+  getRelationshipMock: vi.fn(async () => ({ state: 'none' })),
+}));
+
 vi.mock('@/server/db', () => ({
   db: dbMock,
   users,
@@ -102,6 +106,9 @@ vi.mock('@/server/friends/friendships', () => ({
 vi.mock('@/server/db/queries/user-blocks', () => ({
   isBlockedBetween: isBlockedBetweenMock,
 }));
+vi.mock('@/server/db/queries/friend-requests', () => ({
+  getRelationship: getRelationshipMock,
+}));
 
 import {
   acceptUserInviteLink,
@@ -119,6 +126,7 @@ function resetAll() {
   state.updateSetCalls = [];
   getDailyPreferencesMock.mockResolvedValue({ domainPreferenceFrequency: {} });
   isBlockedBetweenMock.mockResolvedValue(false);
+  getRelationshipMock.mockResolvedValue({ state: 'none' });
 }
 
 describe('getInviteLinkSeedTopics', () => {
@@ -435,6 +443,28 @@ describe('acceptUserInviteLink', () => {
     });
 
     expect(result).toEqual({ accepted: true });
+  });
+
+  it('an existing friend reopening the link is told so, with no second "now a friend" trace (QA 2026-09-27, N8)', async () => {
+    seedHandle();
+    findLiveInviteLinkByTokenMock.mockResolvedValueOnce({
+      id: 'link-1',
+      userId: 'inviter-1',
+      slot: 1,
+    });
+    state.profileDomainVisibilityQueue.push([]);
+    getRelationshipMock.mockResolvedValueOnce({ state: 'friends' });
+
+    const result = await acceptUserInviteLink({
+      handle: 'josh',
+      token: 'tok123',
+      inviteeUserId: 'invitee-1',
+    });
+
+    expect(result).toEqual({ accepted: true, alreadyFriends: true });
+    expect(upsertInvitationFriendshipMock).not.toHaveBeenCalled();
+    expect(notifyInvitationFriendshipFormedMock).not.toHaveBeenCalled();
+    expect(attributeInviteLinkJoinMock).not.toHaveBeenCalled();
   });
 
   it('reopening an accepted reusable link remains idempotent at the friendship boundary', async () => {

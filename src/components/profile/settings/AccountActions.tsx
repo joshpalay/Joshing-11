@@ -473,7 +473,10 @@ export function AccountActions({
           />
         </SettingsGroup>
         {confirmingLogout ? (
-          <div className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-[var(--radius-card)] border p-4">
+          <div
+            data-hide-fab
+            className="border-destructive/30 bg-card text-card-foreground mt-3 rounded-[var(--radius-card)] border p-4"
+          >
             <p className="text-sm font-medium">Are you sure you want to log out?</p>
             <div className="mt-3 flex gap-2">
               <button
@@ -500,9 +503,11 @@ export function AccountActions({
 
         <div className="mt-6">
           {confirmingDelete ? (
-            // mb-24 lets the box scroll clear of the floating "+" button, which
-            // sat on top of the DELETE field at phone width (QA 2026-09-26, N21).
-            <div className="border-destructive bg-destructive/5 mb-24 rounded-xl border p-4">
+            // mb-24 lets the box scroll clear of the floating "+" button, and
+            // data-hide-fab tucks the button away while the box is open — it
+            // still sat on the DELETE field at phone width (QA 2026-09-26 N21,
+            // 2026-09-27 N26).
+            <div data-hide-fab className="border-destructive bg-destructive/5 mb-24 rounded-xl border p-4">
               <p className="text-destructive text-sm font-semibold">
                 Delete your account permanently?
               </p>
