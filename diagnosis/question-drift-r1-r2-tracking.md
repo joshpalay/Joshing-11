@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-09-28
+last-reviewed: 2026-09-29
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698"
 ---
@@ -1648,5 +1648,96 @@ a third straight review.
    largest cohort yet (68 answers); decision 3 stays resolved (accept).
 5. Get a real reading on short-queue / `generation_failed` build counts —
    still the one Phase 1 exit criterion never checked, now 10 days past its
+   checkpoint date.
+6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).
+
+### 2026-09-29 (diagnosis-review) — Phase 3's dip FLIPS SIGN for the first time ever: post-deploy accessible correct-rate now exceeds pre-deploy; accessible share stays in the noise band; Phase 2 hand read overdue for a fourth review; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session. Deploy
+was 2026-09-11T19:14:09Z, so this review lands at deploy+~17.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-09-28 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 236 | **269** | — | ordinary generation (+33) |
+| Mean words/question | 30.6 | **30.6** | ≤24 | unchanged, still barely moved |
+| Rows over 25 words | 64% | **65%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 52% | **51%** | 30-45% | still above target band — stays in the high-40s/low-50s noise band (46→54→54→50→49→52→51) |
+
+**Quality-gate drop rate since deploy:** 157/397 = **39.5%** (considered
+397, up from 379; dropped 157, up from 152) — inside the 35-45% acceptable
+band, essentially flat versus the last reading (40.1%). `difficulty_floor`:
+3/397 = **0.76%**, well under the 5% stop condition, flat. `failed_open`
+reads **1** for the whole window — still the same single 2026-09-25
+`non_player`-scope event, unrecurred.
+
+**Per-defect breakdown** (`quality:%`, day≥2026-09-11): `DEFINITION_SUPPLIED`
+63/388 (largest, as every prior reading), `GENERIC_AT_TIER` 51/388,
+`FALSE_PREMISE` 15/388, `SELF_ANSWERING` 12/388, `ANSWER_LEAKED` 9/388,
+`MISLEADING_SETUP` 3/388, `OPINION_OR_VAGUE` 1/388, `MULTI_PART` 0/388,
+`OFF_DOMAIN` 0/388 — all growing in ordinary proportion to the larger
+window, no new defect category appearing.
+
+**None of Phase 1's checkable stop conditions trip.** The one Phase 1 exit
+criterion this environment has never been able to check — short-queue /
+`generation_failed` build counts from Vercel function logs — remains
+unchecked, now 11 days past its checkpoint date.
+
+**Phase 3 (correct-rate) — the dip flips sign for the first time in this
+doc's history: post-deploy now reads HIGHER than pre-deploy.**
+Accessible-tier mean `empirical_correct_rate`, post-deploy cohort now
+**0.738** (49 rows/75 answers, up from 46/68), pre-deploy cohort **0.705**
+(63 rows/129 answers, up from 62/124 — the "frozen" pre-deploy population
+keeps moving as more answers land on old rows, same dynamic noted since
+2026-09-16). This is no longer a "dip" — post-deploy exceeds pre-deploy by
+**3.3 points** (0.738 vs 0.705), the first time in the full run of readings
+(7.5→9.1→5.9→8.7→8.7→17.4→18.2→16.2→12.3→9.8→7.9→9.4→9.1→**-3.3**) that the
+sign has crossed zero. Per Josh's 2026-09-22 resolution of decision 3
+("only a widening trend on a larger sample would be new evidence"), this is
+emphatically not a widening trend — if anything it's the strongest evidence
+yet that the accepted cost was transient rather than durable. Not reopening
+decision 3 (already resolved, and this result only strengthens "accept," it
+doesn't call it into question) — logging plainly because a sign flip is a
+qualitatively different reading than every prior "narrowed/widened by a few
+points" entry, and worth flagging even though it needs no action. The
+sample (75 answers) is still the largest post-deploy cohort yet but remains
+modest in absolute terms — one more reading would help confirm this holds
+rather than being another swing in a noisy small-sample metric.
+
+**Phase 2's hand read remains due (both gates met as of 2026-09-26) and was
+again not performed this pass** — same out-of-scope reasoning as every
+prior entry (needs a seeded random sample and a human labeller, per §4
+Phase 2; this skill's own instruction is reconnaissance only, never the
+action a doc is deciding about). Now due for a fourth consecutive review
+without being run.
+
+**No new relevant code:** `git log` confirms zero commits landed on `main`
+at all since the 2026-09-28 diagnosis-review commit (which is also `HEAD`),
+so `SYSTEM_PROMPT`, `QUALITY_GATE_SYSTEM_PROMPT`, and
+`adaptive-difficulty.ts` are byte-identical to the last review.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-09-28 left them** (decision 3 already resolved 2026-09-22, now
+with a strongly favorable reading behind it). Status stays `active`. Phase
+2's hand read is due and unperformed, now for a fourth straight review.
+
+### Next steps (unchanged, plus one)
+1. **Leading item, now overdue for a fourth review:** Phase 2's hand read is
+   due (both the 14-day date mark and the 200-row mark passed as of
+   2026-09-26) but has not been performed — needs a seeded random sample and
+   a human labeller, per §4 Phase 2.
+2. Watch whether `failed_open` recurs on the shared `quality` gate — still
+   just the one isolated hit on 2026-09-25.
+3. Keep watching accessible share — 51% this reading, still in the
+   high-40s/low-50s noise band.
+4. **New:** watch whether Phase 3's sign flip (post now +3.3pts over pre)
+   holds on the next reading or reverts — this is the first time this
+   metric has crossed zero in either direction; decision 3 stays resolved
+   (accept) regardless of which way it goes.
+5. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked, now 11 days past its
    checkpoint date.
 6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).

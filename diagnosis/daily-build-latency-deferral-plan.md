@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-28
+last-reviewed: 2026-09-29
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1804,3 +1804,68 @@ one, both still needing Vercel access this session doesn't have. Question 4
 3. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 4. Question 4 (is the bonus worth its cost) — unresolved, and the growing
    outlier share (now 28%) makes it harder to answer with a single number.
+
+### 2026-09-29 (diagnosis-review) — three new built rows, one normal, two more join the outlier cluster (now 13 of 42, 31%); median saving flat at 14,311.5ms; still zero races; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**`DailyBuildMetric` totals:** `built=43` (1 baseline + 42 post-deferral, up
+from 40/39 at the last review), `carry_forward=530`, `existing_queue=61`,
+`partial_carry_forward=5`. **`outcome='lost_persist_race'` is still 0
+rows**, cumulative, all time — no change from every prior reading.
+
+**Three new post-deferral rows since the last review, all from the
+2026-09-28 17:05 UTC cron window:**
+
+| build_id | started_at | span_ms | user_visible_ms | saved | bonus (`generationMs`) | residual |
+|---|---|---:|---:|---:|---:|---:|
+| `322ada51-…` | 17:05:18.812Z | 89,345 | 80,035 | 9,310 | 8,022 | 1,288 — normal band |
+| `05589486-…` | 17:05:18.875Z | 82,317 | 21,020 | 61,297 | 722 | **60,575 — outlier-class** |
+| `459c10fc-…` | 17:05:19.335Z | 81,924 | 27,083 | 54,841 | 732 | **54,109 — outlier-class** |
+
+**Two of the three are new outliers, both the small-bonus/huge-residual
+shape** (722ms and 732ms of bonus generation paired with 60.6s and 54.1s of
+unexplained residual) — the same pattern as `84e717bd-…`, `87e51589-…`,
+`4f9efefa-…`, `76790f46-…`, `87cf2e9a-…`, and the prior review's all-time-high
+`90da8604-…` (82.9s, still the record — neither of today's two beats it).
+**This raises the outlier/elevated count from 11 of 39 to 13 of 42 (31%)** —
+continuing the same successive-review growth this doc has tracked
+(3→5→6→8→9→11→13), now practically a third of all post-deferral rows. Not
+traced this pass — still needs Vercel function logs this session doesn't
+have. Full named outlier set now includes today's `05589486-…` and
+`459c10fc-…` alongside every prior entry's named set.
+
+**No third `deferred: false` occurrence** — all three new rows show
+`deferred: true`. The two named `deferred: false` rows (`4206ffb0-…`
+09-26, `9c0361e9-…` 09-27) remain the only two on record.
+
+**Phase 3a (mechanism) holds** on all three new rows: `saved ≥` each row's
+own bonus `generationMs`.
+
+**3b population: median saving 14,311.5ms** (n=42, unchanged from n=39 at
+the last review) — computed via `percentile_cont(0.5)` over all post-deferral
+rows. The one normal-band row and two extreme outliers landed such that the
+median itself didn't move even though the outlier cluster grew again.
+
+**No code change since the last review:** `git log` confirms zero commits
+landed on `main` at all since the 2026-09-28 diagnosis-review commit (which
+is also `HEAD`), so `queue-orchestrator.ts`, `daily.ts`, and
+`build-context.ts` are byte-identical to the last review.
+
+**No decision-resolving change.** Status stays `active`. The outlier-trace
+next step is more urgent still (3→5→6→8→9→11→13 occurrences across
+successive reviews, now practically a third of all post-deferral rows), but
+still needs Vercel access this session doesn't have. Question 4 (is the
+bonus worth its cost) remains open and unresolved.
+
+### Next steps (unchanged)
+1. **Trace the now-thirteen outsized/elevated-residual builds** — needs
+   Vercel function logs. The all-time-high residual remains `90da8604-…`
+   (82.9s, 2026-09-27); today's two new outliers (60.6s, 54.1s) don't beat
+   it but keep the cluster growing.
+2. Watch for a third `deferred: false` occurrence — still only two on
+   record, unchanged this reading.
+3. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+4. Question 4 (is the bonus worth its cost) — unresolved, and the growing
+   outlier share (now 31%) makes it harder to answer with a single number.
