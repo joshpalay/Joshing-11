@@ -155,7 +155,7 @@ export function PersonActivityCard({
         {reacted.length ? <SubLine>{name} reacted to your question</SubLine> : null}
         {playedAlong.length ? (
           <SubLine>
-            played along with {name}
+            answered questions {name} played
             {playedAlongTopics.length ? ` — ${playedAlongTopics.join(', ')}` : ''}
           </SubLine>
         ) : null}
