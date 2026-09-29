@@ -45,7 +45,7 @@ export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
 
   if (confirming) {
     return (
-      <div className="mt-3 text-sm">
+      <div data-hide-fab className="mt-3 text-sm">
         <p className="text-muted-foreground">
           Block {targetDisplayName}? This removes any existing connection between you. They
           won&apos;t be told.

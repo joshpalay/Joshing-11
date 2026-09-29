@@ -11,6 +11,9 @@ const BROAD_CATEGORY_ALIASES: Record<string, string> = {
   'other': 'General Knowledge',
   'general': 'General Knowledge',
   'potpourri': 'General Knowledge',
+  'mythology': 'Religion & Mythology',
+  'religion': 'Religion & Mythology',
+  'religion and mythology': 'Religion & Mythology',
 };
 
 // The top-level portrait buckets. "General Knowledge" is the catch-all and is
@@ -24,6 +27,8 @@ export const STABLE_BROAD_CATEGORIES = [
   'Technology',
   'Sports',
   'History',
+  'Geography',
+  'Religion & Mythology',
   'Science',
   'Philosophy',
   'Pop Culture',
@@ -100,5 +105,40 @@ export function normalizeBroadCategory(value: string | null | undefined): string
     return 'Literature';
   }
 
+  // A territory-sized label that ends in a bucket name ("American Auto History",
+  // "European Military History") belongs in that bucket rather than becoming a
+  // top-level section of its own (QA 2026-09-27, S3).
+  const lower = cleaned.toLowerCase();
+  const trailingBucket = [...STABLE_BROAD_CATEGORIES].find((category) => {
+    const bucket = category.toLowerCase();
+    return lower !== bucket && lower.endsWith(` ${bucket}`);
+  });
+  if (trailingBucket) return trailingBucket;
+
   return cleaned;
+}
+
+// Topic names that say which bucket they belong in. The categorizer model has
+// filed "Australian Geography" under History and "Greek Mythology" under History
+// (QA 2026-09-27, S3); when the player's own label names the field, trust it.
+const DOMAIN_BUCKET_PATTERNS: Array<[RegExp, string]> = [
+  [/\bgeograph(?:y|ical)\b/i, 'Geography'],
+  [/\bmytholog(?:y|ies|ical)\b/i, 'Religion & Mythology'],
+];
+
+/**
+ * The broad category to store for a declared topic: the topic's own name wins
+ * when it names a bucket outright, otherwise the proposed (usually LLM) category
+ * is normalized as usual.
+ */
+export function broadCategoryForDomain(
+  domain: string | null | undefined,
+  proposed: string | null | undefined,
+): string | null {
+  if (typeof domain === 'string') {
+    for (const [pattern, bucket] of DOMAIN_BUCKET_PATTERNS) {
+      if (pattern.test(domain)) return bucket;
+    }
+  }
+  return normalizeBroadCategory(proposed);
 }

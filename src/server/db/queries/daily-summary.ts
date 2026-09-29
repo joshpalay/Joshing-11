@@ -7,6 +7,7 @@ import {
   db,
   declaredInterests,
   generatedQuestions,
+  hiddenQuestions,
   masteryEvents,
   playerMastery,
   users,
@@ -118,6 +119,13 @@ export type QuestionRecap = {
   correctAnswer: string;
   isCorrect: boolean;
   isSkipped: boolean;
+  /**
+   * Why a skipped slot closed, when the recap can tell: 'hidden' (Never show
+   * this question — a HiddenQuestion row) or 'rested' (not my bag / Rest — the
+   * slot's domain is set to resting). Null for a plain "Skip for now". Lets the
+   * recap label them "Hidden" / "Rested" instead of "Skipped" (QA 2026-09-27, N10).
+   */
+  skipReason: 'hidden' | 'rested' | null;
   explanation: string;
   domain: string;
   domainDisplayName: string;
@@ -250,6 +258,32 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     getDailyPreferences(userId),
   ]);
 
+  const skippedIds = slots
+    .filter((slot) => slot.skipped)
+    .flatMap((slot) => [slot.question_id, slot.generated_question_id])
+    .filter((id): id is string => Boolean(id));
+  const hiddenRows =
+    skippedIds.length > 0
+      ? await db
+          .select({
+            questionId: hiddenQuestions.questionId,
+            generatedQuestionId: hiddenQuestions.generatedQuestionId,
+          })
+          .from(hiddenQuestions)
+          .where(and(
+            eq(hiddenQuestions.userId, userId),
+            sql`(${inArray(hiddenQuestions.questionId, skippedIds)} or ${inArray(hiddenQuestions.generatedQuestionId, skippedIds)})`,
+          ))
+      : [];
+  const neverShowIds = new Set(
+    hiddenRows.flatMap((row) => [row.questionId, row.generatedQuestionId]).filter(Boolean),
+  );
+  const restingDomains = new Set(
+    Object.entries(prefs.domainPreferenceFrequency ?? {})
+      .filter(([, frequency]) => frequency === 'resting')
+      .map(([domain]) => domain.toLowerCase()),
+  );
+
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const pointsByDomain = new Map<string, number>();
   const touchedDomains = new Set<string>();
@@ -342,6 +376,14 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
       correctAnswer: slot.reveal_canonical_answer ?? generated?.answer ?? '',
       isCorrect: slot.answer_state === 'correct',
       isSkipped: Boolean(slot.skipped),
+      skipReason: !slot.skipped
+        ? null
+        : (slot.question_id && neverShowIds.has(slot.question_id)) ||
+            (slot.generated_question_id && neverShowIds.has(slot.generated_question_id))
+          ? 'hidden'
+          : restingDomains.has(domain.toLowerCase())
+            ? 'rested'
+            : null,
       explanation: stripInlineMarkdown(slot.reveal_explainer ?? generated?.explainer ?? ''),
       domain,
       domainDisplayName: displayNameForDomain(domain),

@@ -41,7 +41,7 @@ describe('GameplayChat house author labeling (D-3 Stage 2)', () => {
     expect(rendered).toContain('Editorial'); // the persistent badge
     expect(rendered).toContain('editorial-badge');
     // Non-relational: a machine/house question never implies a person.
-    expect(rendered).not.toContain('gave you this');
+    expect(rendered).not.toContain('wrote this');
     // Invariant H-1 at the render layer: house never falls back to 'A friend'.
     expect(rendered).not.toContain('A friend');
     // Invariant H-3: the house author's name is never a follow/peer-profile
@@ -58,7 +58,7 @@ describe('GameplayChat house author labeling (D-3 Stage 2)', () => {
       questionMessage({ creatorName: 'Joshing', creatorIsHouse: false }),
     ]);
     expect(rendered).toContain('Joshing');
-    expect(rendered).toContain('gave you this'); // treated as a person
+    expect(rendered).toContain('wrote this'); // treated as a person
     expect(rendered).not.toContain('editorial-badge');
     expect(rendered).not.toContain('Editorial');
   });
@@ -68,7 +68,7 @@ describe('GameplayChat house author labeling (D-3 Stage 2)', () => {
       questionMessage({ creatorName: LLM_QUESTION_ATTRIBUTION, creatorIsHouse: false }),
     ]);
     expect(rendered).toContain(LLM_QUESTION_ATTRIBUTION);
-    expect(rendered).not.toContain('gave you this');
+    expect(rendered).not.toContain('wrote this');
     expect(rendered).not.toContain('editorial-badge');
   });
 });
@@ -101,7 +101,7 @@ describe('GameplayChat house commentary (D-3 Stage 5)', () => {
     expect(rendered).not.toContain('Between you and');
     expect(rendered).not.toContain('Why Joshing asked');
     // No relational copy anywhere on a house result.
-    expect(rendered).not.toContain('gave you this');
+    expect(rendered).not.toContain('wrote this');
     expect(rendered).not.toContain('carries this one');
     expect(rendered).not.toContain('From Joshing');
   });

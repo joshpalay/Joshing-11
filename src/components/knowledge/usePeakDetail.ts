@@ -34,8 +34,18 @@ export type PeakDetailController = {
 export function usePeakDetail(
   initialTree: KnowledgeTreeNode,
   frequencyByDomain: DomainPreferenceFrequency = {},
+  parkedDomains: readonly string[] = [],
 ): PeakDetailController {
   const [tree, setTree] = useState<KnowledgeTreeNode>(initialTree);
+
+  // Held leaves the Daily Five doesn't draw from yet — typically a topic a +2
+  // bonus opened and the player answered "Not now" to (server: getParkedDomains).
+  // They read as "Never" whatever the saved map says, and a real frequency pick
+  // adopts them (creating the row the rotation needs) instead of only saving a
+  // preference the rotation would ignore (QA 2026-09-27, S2).
+  const [parked, setParked] = useState<Set<string>>(
+    () => new Set(parkedDomains.map(freqKey)),
+  );
 
   // Optimistic frequency map, keyed by normalized domain. Seeded from the server
   // preference and updated in place on write, so the face pill and detail sheet
@@ -49,8 +59,9 @@ export function usePeakDetail(
   });
 
   const resolveFrequency = useCallback(
-    (name: string): TerritoryFrequency => freqMap[freqKey(name)] ?? DEFAULT_FREQUENCY,
-    [freqMap],
+    (name: string): TerritoryFrequency =>
+      parked.has(freqKey(name)) ? 'resting' : (freqMap[freqKey(name)] ?? DEFAULT_FREQUENCY),
+    [freqMap, parked],
   );
 
   // Optimistic write: flip local state, POST the single-domain change, revert on
@@ -59,14 +70,27 @@ export function usePeakDetail(
     async (name: string, frequency: TerritoryFrequency): Promise<boolean> => {
       const key = freqKey(name);
       const previous = freqMap[key];
+      const adopting = parked.has(key) && frequency !== 'resting';
       setFreqMap((prev) => ({ ...prev, [key]: frequency }));
-      try {
-        const res = await fetch('/api/daily/preferences/domain-frequency', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ domain: name, frequency }),
+      if (adopting) {
+        setParked((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
         });
+      }
+      try {
+        const res = await fetch(
+          adopting
+            ? '/api/daily/preferences/adopt-bonus-domain'
+            : '/api/daily/preferences/domain-frequency',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ domain: name, frequency }),
+          },
+        );
         if (!res.ok) throw new Error('frequency update failed');
         return true;
       } catch {
@@ -76,10 +100,11 @@ export function usePeakDetail(
           else next[key] = previous;
           return next;
         });
+        if (adopting) setParked((prev) => new Set(prev).add(key));
         return false;
       }
     },
-    [freqMap],
+    [freqMap, parked],
   );
 
   // Optimistic confirmed add: flip the target into a real, owned node so it jumps

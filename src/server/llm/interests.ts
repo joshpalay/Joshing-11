@@ -220,7 +220,7 @@ Rules:
 - Bad domains: "Music", "Books", "Movies", "History", "General Trivia".
 - Distribute across the warm-up answers. Include at least one candidate per non-empty warm-up field if possible.
 - Each rationale is one short, inviting sentence under 12 words that starts with a verb like Explore, Discover, Revisit, or Learn about. Make it sound like a friend suggesting it. Never describe how the suggestion was generated or reference the warm-up answers, clusters, interests, or any internal process.
-- broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
+- broadCategory is a stable top-level bucket, such as Music, Literature, Film & Television, History, Geography, Religion & Mythology, Science, Philosophy, Sports, Pop Culture, Language, General Knowledge. It must not be an author/work/movement-specific territory; for example, James Joyce, Irish Modernism, novels, poetry, and fiction all use Literature.
 - Never return "Other" as a broadCategory. Use "General Knowledge" only when no more precise top-level bucket applies.
 - Do not invent private facts. Infer plausible interest territories only from the answers and cultural anchor context.${demographicLine ? `\n\n${demographicLine}` : ''}${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
@@ -424,7 +424,7 @@ Rules:
 - Every item must be hyper-specific — a person, era, movement, work, scene, or sub-field — never another broad category.
 - Good for "Music": "Late Beethoven String Quartets", "Delta Blues", "1990s Hip-Hop", "Film Scores of Ennio Morricone".
 - Bad for "Music": "Classical Music", "Rock", "Jazz" (still too broad).
-- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design. Never "Other" or "General".
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Geography, Religion & Mythology, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design. Never "Other" or "General".
 Respond in JSON array only, no markdown: [ { "label": "...", "broadCategory": "..." } ]${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 
   const response = await loggedMessagesCreate(client, 'interests-expand', {
@@ -760,8 +760,8 @@ export async function categorizeInterestDomain(domain: string): Promise<string |
 
   const systemPrompt = `Assign one stable, top-level "broad category" to a user's declared trivia interest.
 Respond in JSON only: { "broadCategory": "..." }
-- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design.
-- It must NOT be a person/work/movement/era-specific territory. Examples: "Romantic Era Classical symphony music" -> Music; "90's Bollywood" -> Film & Television; "Mortgage backed securities" -> Finance; "James Joyce" -> Literature.
+- broadCategory is a stable top-level bucket such as Music, Literature, Film & Television, History, Geography, Religion & Mythology, Science, Philosophy, Sports, Pop Culture, Language, Technology, Food & Cuisine, Architecture & Design.
+- It must NOT be a person/work/movement/era-specific territory. Examples: "Romantic Era Classical symphony music" -> Music; "90's Bollywood" -> Film & Television; "Mortgage backed securities" -> Finance; "James Joyce" -> Literature; "Australian Geography" -> Geography; "Greek Mythology" -> Religion & Mythology; "American Auto History" -> History.
 - If none of the listed buckets fit, name the closest real top-level field as a 1-2 word label.
 - NEVER return "General Knowledge", "Other", "General", or "Potpourri" — these are forbidden catch-alls. Always pick the closest real category.${INSTRUCTION_USER_INPUT_GUIDANCE}`;
 

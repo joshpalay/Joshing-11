@@ -8,6 +8,7 @@ import {
   questions,
 } from '@/server/db';
 import { pgErrorCode } from '@/server/db/pg-error';
+import { DAILY_RESET_HOUR_UTC } from '@/lib/game-constants';
 import { CATCHUP_LOOKBACK_DAYS } from '@/server/daily/catchup';
 import {
   MISSED_RETURN_COOLDOWN_DAYS,
@@ -82,8 +83,21 @@ export async function getEligibleReturnCandidates(
           slot->>'answer_state'                           AS answer_state,
           slot->>'catchup_answer_state'                   AS catchup_answer_state,
           slot->>'dismissed_at'                           AS dismissed_at,
-          q.queue_date::timestamptz                       AS queue_date
-        FROM "DailyQueue" q, LATERAL jsonb_array_elements(q.slots) AS slot
+          q.queue_date::timestamptz                       AS queue_date,
+          -- "Last seen" is shown to the player (SECOND LOOK · LAST SEEN …), so it
+          -- must be a real moment, not the round's date at midnight UTC — that
+          -- rendered a day early in the Americas and could predate the account
+          -- (QA 2026-09-27, S4). The round opens at DAILY_RESET_HOUR_UTC on its
+          -- queue_date; a player who joined mid-round can't have seen it before
+          -- their account existed; a later catch-up attempt moves it forward.
+          GREATEST(
+            (q.queue_date::timestamp + make_interval(hours => ${DAILY_RESET_HOUR_UTC})) AT TIME ZONE 'UTC',
+            u.created_at,
+            (slot->>'catchup_answered_at')::timestamptz
+          )                                               AS seen_at
+        FROM "DailyQueue" q
+        JOIN "User" u ON u.id = q.user_id,
+        LATERAL jsonb_array_elements(q.slots) AS slot
         WHERE q.user_id = ${userId}
           AND slot->>'generated_question_id' IS NOT NULL
       ),
@@ -94,13 +108,13 @@ export async function getEligibleReturnCandidates(
         WHERE answer_state = 'correct' OR catchup_answer_state = 'correct'
       ),
       gen_wrong AS (
-        SELECT gid, max(queue_date) AS last_seen
+        SELECT gid, max(seen_at) AS last_seen
         FROM gen_slots
         WHERE answered AND answer_state = 'incorrect' AND dismissed_at IS NULL
         GROUP BY gid
       ),
       gen_expired AS (
-        SELECT gid, max(queue_date) AS last_seen
+        SELECT gid, max(seen_at) AS last_seen
         FROM gen_slots
         WHERE NOT answered AND dismissed_at IS NULL AND queue_date < ${expiredBefore}
         GROUP BY gid
@@ -161,8 +175,13 @@ export async function getEligibleReturnCandidates(
       expired_scope AS (
         SELECT DISTINCT
           slot->>'question_id' AS "questionId",
-          max(q.queue_date::timestamptz) OVER (PARTITION BY slot->>'question_id') AS "lastSeenAt"
-        FROM "DailyQueue" q, LATERAL jsonb_array_elements(q.slots) AS slot
+          max(GREATEST(
+            (q.queue_date::timestamp + make_interval(hours => ${DAILY_RESET_HOUR_UTC})) AT TIME ZONE 'UTC',
+            u.created_at
+          )) OVER (PARTITION BY slot->>'question_id') AS "lastSeenAt"
+        FROM "DailyQueue" q
+        JOIN "User" u ON u.id = q.user_id,
+        LATERAL jsonb_array_elements(q.slots) AS slot
         WHERE q.user_id = ${userId}
           AND q.queue_date::timestamptz < ${expiredBefore}
           AND slot->>'question_id' IS NOT NULL

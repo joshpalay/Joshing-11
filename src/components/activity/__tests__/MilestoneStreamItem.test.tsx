@@ -139,6 +139,14 @@ describe('ActivityStreamItem — playable milestone card on the home feed', () =
     expect(html).not.toContain('2 of 3 questions');
   });
 
+  it('shows the same REMAINING count in the Lately (non-elevated) layout (QA 2026-09-27, S1)', () => {
+    const html = renderToStaticMarkup(
+      <ActivityStreamItem item={MILESTONE_ITEM} timestamp="2:00 PM" />,
+    );
+    expect(html).toContain('1 of 3 questions');
+    expect(html).not.toContain('2 of 3 questions');
+  });
+
   it('removes the playable card once every question is consumed (dismiss-as-answered)', () => {
     // A playable bundle with nothing left to answer — every question answered
     // (right or wrong) OR dismissed — has nothing to act on, so it leaves the

@@ -136,6 +136,7 @@ export function KnowledgePeaksView({
   data,
   variant = 'own',
   frequencyByDomain = {},
+  parkedDomains = [],
   fullyExploredDomains = EMPTY_DOMAIN_SET,
 }: {
   data: KnowledgeTreeNode;
@@ -146,6 +147,7 @@ export function KnowledgePeaksView({
    * change. Self-only: never passed for the friend variant.
    */
   frequencyByDomain?: DomainPreferenceFrequency;
+  parkedDomains?: readonly string[];
   /**
    * Domains the viewer has no unanswered available questions left in (P4 / D7).
    * A distinct signal — NOT `mastered`. Currently gated/empty; when non-empty
@@ -158,7 +160,11 @@ export function KnowledgePeaksView({
 
   // The optimistic tree, per-leaf rotation map, and the frequency/adopt writes
   // are shared with the flat portrait page via this controller.
-  const { tree, resolveFrequency, setFrequency, adoptNode } = usePeakDetail(data, frequencyByDomain);
+  const { tree, resolveFrequency, setFrequency, adoptNode } = usePeakDetail(
+    data,
+    frequencyByDomain,
+    parkedDomains,
+  );
 
   // "Fully explored" honor (P4) — resolve per node by normalized domain key,
   // same match as frequency. Currently the source set is gated/empty.

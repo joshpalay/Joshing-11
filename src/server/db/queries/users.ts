@@ -8,6 +8,7 @@ import {
   categorizeInterestDomain,
   isCatchAllBroadCategory,
 } from '@/server/llm/interests';
+import { broadCategoryForDomain } from '@/lib/knowledge/broad-category';
 import { titleCaseDomain } from '@/lib/knowledge/domain-casing';
 import { assertSpecificInterest } from '@/lib/knowledge/interest-specificity';
 
@@ -179,19 +180,24 @@ async function upsertDeclaredInterestRow(
   // omits it and gets "now", which correctly reads as a newer, lighter signal.
   declaredAt: Date = new Date(),
 ) {
+  // A topic whose own name names its field ("Australian Geography", "Greek
+  // Mythology") is filed there even when the categorizer said History, and a
+  // territory-sized category ("American Auto History") folds to its bucket
+  // (QA 2026-09-27, S3).
+  const broadCategory = broadCategoryForDomain(interest.label, interest.broadCategory);
   await tx
     .insert(declaredInterests)
     .values({
       userId,
       domain: interest.label,
-      broadCategory: interest.broadCategory ?? null,
+      broadCategory,
       declaredAt,
       isActive: true,
     })
     .onConflictDoUpdate({
       target: [declaredInterests.userId, declaredInterests.domain],
       set: {
-        broadCategory: interest.broadCategory ?? null,
+        broadCategory,
         declaredAt,
         isActive: true,
       },
@@ -207,7 +213,7 @@ async function upsertDeclaredInterestRow(
     .values({
       userId,
       canonicalSubcategory: interest.label,
-      broadCategory: interest.broadCategory ?? null,
+      broadCategory,
       totalPoints: 0,
       tier: 'establishing',
       lifetimePointsBaseline: 0,
