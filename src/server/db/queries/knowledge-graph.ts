@@ -39,6 +39,35 @@ export async function listKnowledgeGraph(): Promise<{
   return { nodes, edges };
 }
 
+// The canonical Question's CURRENT domain — the label re-files and finest-node
+// tagging keep up to date. A player's served GeneratedQuestion copy keeps the
+// slot domain it was generated under, so the two can disagree (the copy says
+// "Shakespearean Tragedy", the canonical row was later filed under "Hamlet").
+export async function getCanonicalQuestionDomain(questionId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ canonicalSubcategory: questions.canonicalSubcategory })
+    .from(questions)
+    .where(eq(questions.id, questionId))
+    .limit(1);
+  return row?.canonicalSubcategory ?? null;
+}
+
+// Whether `ancestorKey` sits (transitively) above `childKey` in the authored
+// graph. Edges point child -> parent; UNION terminates on a legacy cycle.
+export async function isGraphAncestor(childKey: string, ancestorKey: string): Promise<boolean> {
+  if (childKey === ancestorKey) return false;
+  const result = await pool.query(
+    `WITH RECURSIVE anc(key) AS (
+       SELECT parent_domain_key FROM "KnowledgeEdge" WHERE child_domain_key = $1
+       UNION
+       SELECT e.parent_domain_key FROM "KnowledgeEdge" e JOIN anc ON e.child_domain_key = anc.key
+     )
+     SELECT 1 FROM anc WHERE key = $2 LIMIT 1`,
+    [childKey, ancestorKey],
+  );
+  return result.rows.length > 0;
+}
+
 export type DomainQuestionPeek = {
   text: string;
   answer: string;
