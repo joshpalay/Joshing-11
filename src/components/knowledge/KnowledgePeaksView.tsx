@@ -5,6 +5,7 @@ import { Check, ChevronRight, Plus, X } from 'lucide-react';
 
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import { isHeldNode } from '@/components/knowledge/held';
 import { freqKey, usePeakDetail } from '@/components/knowledge/usePeakDetail';
 import {
   MIN_SIZE,
@@ -98,9 +99,7 @@ const ZONES: Array<{ value: TerritoryFrequency; title: string; copy: string }> =
   }));
 
 function isOwnedLeaf(node: KnowledgeTreeNode): boolean {
-  return (
-    !node.ghost && (node.value ?? 0) > 0 && (!node.children || node.children.length === 0)
-  );
+  return isHeldNode(node) && (!node.children || node.children.length === 0);
 }
 
 export type LeafInfo = {
@@ -624,7 +623,7 @@ function KnowledgeCircleCell({
           ) : null}
           {moons.map((child, i) => {
             const angle = ((-90 + i * (360 / moons.length)) * Math.PI) / 180;
-            const held = !child.ghost && (child.value ?? 0) > 0;
+            const held = isHeldNode(child);
             return (
               <circle
                 key={child.id}
@@ -756,12 +755,12 @@ export function PeakDetailCard({
   const node = leaf.node;
   const parent = leaf.parent;
   const siblings = (parent?.children ?? []).filter((c) => c.id !== node.id);
-  const ownedSiblings = siblings.filter((c) => !c.ghost && (c.value ?? 0) > 0);
+  const ownedSiblings = siblings.filter(isHeldNode);
   const ghostSiblings = siblings.filter((c) => c.ghost);
 
   // "Within this" = the child areas held inside this node (container cells).
   const ownChildren = node.children ?? [];
-  const heldChildren = ownChildren.filter((c) => !c.ghost && (c.value ?? 0) > 0);
+  const heldChildren = ownChildren.filter(isHeldNode);
   const ghostChildren = ownChildren.filter((c) => c.ghost);
 
   // "Related" expands sideways. With a parent (a leaf/sub-area opened from the
@@ -773,13 +772,15 @@ export function PeakDetailCard({
   const sectionBorder = { borderColor: 'var(--border)' };
 
   // The "Part of" container (own map only): a held area the leaf rolls up into,
-  // but one the player hasn't itself adopted into rotation — it carries no own
-  // points (`value`) and isn't mastered. That's the "add when unowned" case, so
-  // it earns a "+ Add" that folds the whole container into the Daily Five.
+  // but one the player hasn't itself adopted into rotation — it isn't itself on
+  // the map (`held` — which a just-added, 0-point container already is) and
+  // isn't mastered. That's the "add when unowned" case, so it earns a "+ Add"
+  // that folds the whole container into the Daily Five.
   const parentAddable =
     variant === 'own' &&
     parent != null &&
     !parent.ghost &&
+    !parent.held &&
     parent.value === undefined &&
     !parent.mastered;
 
@@ -986,26 +987,29 @@ export function PeakDetailCard({
           top-level area, which rolls up to nothing. */}
       {leaf.path.length > 0 ? (
         <div className="mt-4 border-t pt-3" style={sectionBorder}>
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+          <p className="text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]">Part of</p>
+          {/* The "+ Add" sits on the row it acts on (the container's name),
+              centred with it — pinned beside the small label it floated and
+              pushed the name down (Josh, 2026-09-30). */}
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <p className="flex min-w-0 flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
+              {leaf.path.map((ancestor, i) => (
+                <span key={ancestor.id} className="flex items-center gap-1">
+                  {i > 0 ? (
+                    <ChevronRight className="size-3 text-[var(--text-muted)]" aria-hidden />
+                  ) : (
+                    <span
+                      aria-hidden
+                      className="size-2.5 rounded-full"
+                      style={{ background: fieldColor(ancestor.field) }}
+                    />
+                  )}
+                  {ancestor.name}
+                </span>
+              ))}
+            </p>
             {parentAddable && parent ? inlineAddButton(parent.id, parent.name) : null}
           </div>
-          <p className="mt-1.5 flex flex-wrap items-center gap-1 font-serif text-[var(--brand-ink)]">
-            {leaf.path.map((ancestor, i) => (
-              <span key={ancestor.id} className="flex items-center gap-1">
-                {i > 0 ? (
-                  <ChevronRight className="size-3 text-[var(--text-muted)]" aria-hidden />
-                ) : (
-                  <span
-                    aria-hidden
-                    className="size-2.5 rounded-full"
-                    style={{ background: fieldColor(ancestor.field) }}
-                  />
-                )}
-                {ancestor.name}
-              </span>
-            ))}
-          </p>
         </div>
       ) : null}
 

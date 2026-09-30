@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pencil, UserPlus } from 'lucide-react';
+import { Pencil, Sparkles, UserPlus } from 'lucide-react';
 
 // The chooser used to split "add a question" into three destination-specific
 // intents (bank / send to friends / send to specific people) surfaced as
@@ -13,7 +13,7 @@ import { Pencil, UserPlus } from 'lucide-react';
 // TodaysFiveCard and FeedList's inline composer entry points still pass
 // `intent=bank` directly — this only changes what the chooser itself offers.
 const OPTIONS: ReadonlyArray<{
-  key: 'question' | 'friend';
+  key: 'question' | 'topic' | 'friend';
   icon: typeof Pencil;
   title: string;
   description: string;
@@ -25,6 +25,15 @@ const OPTIONS: ReadonlyArray<{
     title: 'Add a question',
     description: 'Save it to your bank, then choose who sees it.',
     href: '/questions?create=1',
+  },
+  {
+    // Lands on the Daily Five setup page with the cursor already in its
+    // "Add a topic" field (Josh, 2026-09-30).
+    key: 'topic',
+    icon: Sparkles,
+    title: 'Add a topic',
+    description: 'Put something new on your map.',
+    href: '/daily/setup?add=1',
   },
   {
     key: 'friend',

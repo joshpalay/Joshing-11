@@ -116,8 +116,9 @@ export function usePeakDetail(
     async (id: string, name: string): Promise<boolean> => {
       const findPrior = (
         subtree: KnowledgeTreeNode,
-      ): { ghost?: boolean; value?: number } | null => {
-        if (subtree.id === id) return { ghost: subtree.ghost, value: subtree.value };
+      ): { ghost?: boolean; held?: boolean; value?: number } | null => {
+        if (subtree.id === id)
+          return { ghost: subtree.ghost, held: subtree.held, value: subtree.value };
         for (const child of subtree.children ?? []) {
           const found = findPrior(child);
           if (found) return found;
@@ -127,12 +128,17 @@ export function usePeakDetail(
       const prior = findPrior(tree) ?? { ghost: true, value: 40 };
       const setNode = (
         subtree: KnowledgeTreeNode,
-        next: { ghost?: boolean; value?: number },
+        next: { ghost?: boolean; held?: boolean; value?: number },
       ): KnowledgeTreeNode =>
         subtree.id === id
-          ? { ...subtree, ghost: next.ghost || undefined, value: next.value }
+          ? {
+              ...subtree,
+              ghost: next.ghost || undefined,
+              held: next.held || undefined,
+              value: next.value,
+            }
           : { ...subtree, children: subtree.children?.map((c) => setNode(c, next)) };
-      setTree((prev) => setNode(prev, { ghost: false, value: 1 }));
+      setTree((prev) => setNode(prev, { ghost: false, held: true, value: 1 }));
       const ok = await adoptDomain(name);
       if (!ok) setTree((prev) => setNode(prev, prior));
       return ok;

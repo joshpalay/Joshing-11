@@ -501,17 +501,6 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
         />
       ) : null}
 
-      {/* Common ground is relational and never shown to strangers — it derives
-          from the viewer's knowledge overlap and the teaser intentionally omits
-          it. Friends only (self never saw it). */}
-      {!isStranger && !isSelf ? (
-        <CommonGround
-          data={commonGround}
-          friendFirstName={friendFirstName}
-          limit={COMMON_GROUND_LIMIT}
-        />
-      ) : null}
-
       {portrait.sectionVisibleTo.knowledge_base ? (
         <section
           className="mt-8 border-t border-[var(--brand-rule)] pt-8"
@@ -547,6 +536,18 @@ export default async function UserProfilePage({ params, searchParams }: UserProf
               : `View ${friendFirstName}’s full knowledge base →`}
           </Link>
         </section>
+      ) : null}
+
+      {/* Common ground is relational and never shown to strangers — it derives
+          from the viewer's knowledge overlap and the teaser intentionally omits
+          it. Friends only (self never saw it). Sits below the knowledge base (Josh,
+          2026-09-30): their map first, then what you share. */}
+      {!isStranger && !isSelf ? (
+        <CommonGround
+          data={commonGround}
+          friendFirstName={friendFirstName}
+          limit={COMMON_GROUND_LIMIT}
+        />
       ) : null}
 
       {!isSelf && portrait.sectionVisibleTo.friends_list ? (

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Check, Combine, Plus, Trash2, X } from 'lucide-react';
@@ -16,6 +16,7 @@ import { RecentlyExpanding, type ExpandingDomain } from '@/components/knowledge/
 import { AskFriendForDomain } from '@/components/knowledge/AskFriendForDomain';
 import { PeakDetailCard, type LeafInfo } from '@/components/knowledge/KnowledgePeaksView';
 import { usePeakDetail, freqKey } from '@/components/knowledge/usePeakDetail';
+import { isHeldNode } from '@/components/knowledge/held';
 import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
@@ -168,7 +169,7 @@ type PeaksDetailData = {
 type TreeIndex = { byId: Map<string, LeafInfo>; byFreqKey: Map<string, LeafInfo> };
 
 function isOwnedTreeLeaf(node: KnowledgeTreeNode): boolean {
-  return !node.ghost && (node.value ?? 0) > 0 && (!node.children || node.children.length === 0);
+  return isHeldNode(node) && (!node.children || node.children.length === 0);
 }
 
 // One walk of the tree → every non-root node as a LeafInfo (with its lineage),
@@ -257,6 +258,11 @@ function KnowledgePageContent({
   const highlightedDomainSlug = searchParams.get('domain');
   const tierCrossed = searchParams.get('tier_crossed');
   const manageInterestsParam = searchParams.get('interests');
+  // `?add=1` (the + menu's "Add a topic"): drop the cursor straight into the
+  // manage page's add-topic field.
+  const addTopicParam = isManage && searchParams.get('add') === '1';
+  const addTopicInputRef = useRef<HTMLInputElement | null>(null);
+  const addTopicFocusedRef = useRef(false);
   const emptyDomainParam = searchParams.get('emptyDomain')?.trim() || searchParams.get('askDomain')?.trim() || '';
   const emptyQuestionDomain = emptyDomainParam || null;
 
@@ -324,6 +330,20 @@ function KnowledgePageContent({
     url.searchParams.delete('tier_crossed');
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
   }, [tierCrossed]);
+
+  useEffect(() => {
+    if (!addTopicParam || addTopicFocusedRef.current) return;
+    const input = addTopicInputRef.current;
+    // The field mounts once the page data has loaded; until then, wait for a
+    // later render rather than stripping the param.
+    if (!input) return;
+    addTopicFocusedRef.current = true;
+    input.scrollIntoView({ block: 'center' });
+    input.focus();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('add');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  });
 
   useEffect(() => {
     if (manageInterestsParam !== 'manage') return;
@@ -925,6 +945,7 @@ function KnowledgePageContent({
           <AddTopicField
             existingLabels={sortedDomains.map((domain) => domain.displayName)}
             convergeBeforeAdd
+            inputRef={addTopicInputRef}
             // Standard field radius (--radius-xs, the login/field corner) rather
             // than the pill default, per Josh's request for this surface.
             inputClassName="min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] disabled:opacity-60"

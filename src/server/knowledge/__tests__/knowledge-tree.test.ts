@@ -54,6 +54,30 @@ function findNode(
 }
 
 describe('buildKnowledgeTree', () => {
+  it('a just-added 0-point topic is held, not a ghost (Hamlet, 2026-09-30)', () => {
+    const owned = [
+      ...OWNED,
+      { domain: 'Machiavelli', points: 0, mastered: false, broadCategory: 'History' },
+    ];
+    const tree = mod.buildKnowledgeTree(owned, NODES, EDGES);
+    const added = findNode(tree, 'machiavelli');
+    expect(added).toMatchObject({ held: true });
+    expect(added!.ghost).toBeUndefined();
+    // Held but pointless: no value, so it adds nothing to real totals.
+    expect(added!.value).toBeUndefined();
+    expect(mod.sumRealPoints(tree)).toBe(500);
+    // The untouched sibling is still an addable ghost.
+    expect(findNode(tree, 'venetian trade')?.ghost).toBe(true);
+  });
+
+  it('a 0-point topic the graph does not know lands under the root as held', () => {
+    const owned = [{ domain: 'Hamlet', points: 0, mastered: false, broadCategory: 'Literature' }];
+    const tree = mod.buildKnowledgeTree(owned, NODES, EDGES);
+    const added = findNode(tree, 'hamlet');
+    expect(added).toMatchObject({ held: true, name: 'Hamlet' });
+    expect(added!.value).toBeUndefined();
+  });
+
   it('ghosts never inflate totals — parent real points = sum of non-ghost descendants', () => {
     const tree = mod.buildKnowledgeTree(OWNED, NODES, EDGES);
     const parent = findNode(tree, 'renaissance italy');
