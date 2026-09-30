@@ -21,6 +21,8 @@ export type SelectedNodeInfo = {
   mastered: boolean;
   /** Real points when the player owns this node directly; null otherwise. */
   points: number | null;
+  /** On the player's map, even at 0 points (a topic just added). */
+  held?: boolean;
   hasChildren: boolean;
   progress?: KnowledgeParentProgress;
   /** Direct-child ghosts — the "fill this out" roster (own variant only). */
@@ -171,7 +173,7 @@ export function KnowledgeNodeCard({
   }
 
   // ── Default view: identity, progress framing, explicit actions ─────────────
-  const owned = node.points !== null && node.points > 0;
+  const owned = node.points !== null && (node.points > 0 || Boolean(node.held));
   const showFillOut = variant === 'own' && node.ghostChildren.length > 0;
 
   return (

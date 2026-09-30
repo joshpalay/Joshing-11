@@ -9,6 +9,8 @@
  * Rules carried from the D-doc:
  *   - value only on owned nodes = REAL points (bubble area). Parents carry no
  *     own value; their area is the sum of real descendants.
+ *   - held marks every owned node, including a just-added topic with 0 points
+ *     (no value yet) — "on your map" is ownership, not points.
  *   - ghosts are unheld roster siblings: a layout footprint, ZERO real points
  *     (§5.1 — they never inflate a parent's total).
  *   - one home-parent per leaf for containment (§E — first substantive edge);
@@ -57,6 +59,8 @@ export type KnowledgeTreeNode = {
   name: string;
   field: string | null;
   value?: number;
+  /** On the player's map — set even at 0 points (a topic just added). */
+  held?: boolean;
   mastered?: boolean;
   ghost?: boolean;
   progress?: KnowledgeParentProgress;
@@ -250,6 +254,7 @@ export function buildKnowledgeTree(
       id: key,
       name: node.label,
       field: node.fieldHue ?? hueForBroadCategory(node.broadCategory ?? ownedLeaf?.broadCategory ?? null),
+      ...(ownedLeaf ? { held: true } : {}),
       ...(ownedLeaf && ownedLeaf.points > 0 ? { value: ownedLeaf.points } : {}),
       ...(mastered ? { mastered: true } : {}),
       ...(progress ? { progress } : {}),
@@ -269,15 +274,17 @@ export function buildKnowledgeTree(
   }
 
   // Owned leaves the graph doesn't know yet — straight under the root, so the
-  // map is complete even while the authored graph is sparse.
+  // map is complete even while the authored graph is sparse. A 0-point leaf
+  // (just added) is held with no value.
   const graphKeys = new Set(nodeByKey.keys());
   for (const [key, leaf] of ownedByKey) {
-    if (graphKeys.has(key) || leaf.points <= 0) continue;
+    if (graphKeys.has(key)) continue;
     rootChildren.push({
       id: key,
       name: leaf.domain,
       field: hueForBroadCategory(leaf.broadCategory),
-      value: leaf.points,
+      held: true,
+      ...(leaf.points > 0 ? { value: leaf.points } : {}),
       ...(leaf.mastered ? { mastered: true } : {}),
     });
   }
@@ -349,7 +356,15 @@ export async function getKnowledgeMapData(
   ]);
 
   const visible = pageData.allDomains.filter((d) => d.points > 0 && !d.isHidden);
-  const owned: OwnedLeaf[] = visible.map((d) => ({
+  // Own map: a topic the player added counts as on the map before it earns its
+  // first point — otherwise it rendered as a ghost offering "Add it" again. A
+  // friend's read-only map (includeGhosts: false) keeps showing only what they
+  // have points in.
+  const includeAdded = options.includeGhosts ?? true;
+  const onMap = pageData.allDomains.filter(
+    (d) => !d.isHidden && (d.points > 0 || (includeAdded && d.isDeclared)),
+  );
+  const owned: OwnedLeaf[] = onMap.map((d) => ({
     domain: d.displayName || d.domain,
     points: d.points,
     mastered: d.tier === 'mastery',

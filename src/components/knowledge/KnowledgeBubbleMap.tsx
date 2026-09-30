@@ -8,6 +8,7 @@ import { hierarchy, pack, type HierarchyCircularNode } from 'd3-hierarchy';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
 import { KnowledgeNodeCard, type SelectedNodeInfo } from '@/components/knowledge/KnowledgeNodeCard';
 import { adoptDomain } from '@/components/knowledge/adopt';
+import { isHeldNode } from '@/components/knowledge/held';
 import { Chip } from '@/components/ui/Chip';
 
 // B-KNOWLEDGE-TAXONOMY-01 P5 — the nested circle-pack knowledge map, ported
@@ -43,10 +44,14 @@ type ListSection = {
   leaves: Array<{ id: string; name: string; field: string | null; points: number; mastered: boolean }>;
 };
 
+// Layout footprint for a held leaf with no points yet (just added) — mirrors
+// knowledge-tree's GHOST_FOOTPRINT (not imported: that module is server-only).
+const HELD_ZERO_FOOTPRINT = 40;
+
 function collectListLeaves(node: KnowledgeTreeNode): ListSection['leaves'] {
   if (node.ghost) return [];
   const own =
-    (node.value ?? 0) > 0
+    (node.value ?? 0) > 0 || (isHeldNode(node) && !(node.children && node.children.length > 0))
       ? [
           {
             id: node.id,
@@ -70,7 +75,7 @@ function buildListSections(tree: KnowledgeTreeNode): ListSection[] {
       if (leaves.length > 0) {
         sections.push({ id: child.id, title: child.name, progress: child.progress, leaves });
       }
-    } else if ((child.value ?? 0) > 0) {
+    } else if (isHeldNode(child)) {
       standalone.push({
         id: child.id,
         name: child.name,
@@ -136,7 +141,11 @@ export function KnowledgeBubbleMap({
 
   const root = useMemo<PackedNode>(() => {
     const h = hierarchy<KnowledgeTreeNode>(tree)
-      .sum((d) => d.value ?? 0)
+      .sum(
+        (d) =>
+          d.value ??
+          (isHeldNode(d) && !(d.children && d.children.length > 0) ? HELD_ZERO_FOOTPRINT : 0),
+      )
       .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
     return pack<KnowledgeTreeNode>().size([size.w, size.h]).padding(6)(h);
   }, [tree, size]);
@@ -241,7 +250,10 @@ export function KnowledgeBubbleMap({
         field: selected.data.field,
         ghost: Boolean(selected.data.ghost),
         mastered: Boolean(selected.data.mastered),
-        points: selected.data.ghost ? null : (selected.data.value ?? null),
+        points: selected.data.ghost
+          ? null
+          : (selected.data.value ?? (selected.data.held ? 0 : null)),
+        held: isHeldNode(selected.data),
         hasChildren: Boolean(selected.children && selected.children.length > 0),
         progress: selected.data.progress,
         ghostChildren: (selected.children ?? [])
