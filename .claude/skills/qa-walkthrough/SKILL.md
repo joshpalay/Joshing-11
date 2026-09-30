@@ -34,7 +34,7 @@ You're testing Joshing, a social trivia app, in this Chrome tab. Do an exhaustiv
 Joshing is used mostly on phones. Do the whole walkthrough at phone size (about 390×844). At the end, do one short pass at desktop width and note only what differs.
 
 ### Step 0: record and reset the starting state (before any testing)
-For A and B (if B exists), write down and screenshot: friends list, pending requests (in and out), Blocked people list, invite links, "People you invited", today's round progress, and privacy toggles.
+For A and B (if B exists), write down and screenshot: friends list, pending requests (in and out), Blocked people list, invite links, "People you invited", today's round progress, privacy toggles, and every topic with its frequency level (from "Customize" / `/daily/setup`).
 Then reset to this baseline and screenshot it again:
 - A and B are NOT friends, NOT blocked, and have no pending requests either way.
 If anything won't reset (for example, unblocking brings a friendship back), that is a finding. Log it and continue from wherever it lands.
@@ -104,6 +104,16 @@ Also check: search rate limiting, mutual-friend suggestions (where they surface)
 - Declare an interest. Does it visibly change which questions come next?
 - Bubble/map views and the mastery and frequency legends. Can each level be told apart without color?
 - Where do user-added topics land in the taxonomy?
+- Add and remove topics (home card "Customize" → `/daily/setup`, and any other place a topic can be added or dropped). For each:
+  - Add a brand-new topic. Is there a confirmation? Does it show up on the profile, the knowledge page, and the setup screen? Does it show up in the next five?
+  - Remove a topic. Is it gone everywhere, or does it linger (profile "building around…" line, knowledge map, invite-link topics, bonus questions)? Is there a way to undo, and is the copy clear about what removing does?
+  - Re-add the topic you removed. Does its old progress come back or start from zero, and does the app say which?
+- Change how often a topic comes up (the frequency levels: Often → Sometimes → Blue moon → Resting). For each change:
+  - Move a topic between levels. Does it save, and does the change survive a page reload?
+  - Does the new level show the same way everywhere it appears (setup screen, knowledge page, legends)? Can the levels be told apart without color?
+  - Set a topic to Resting. Does it stop appearing in the five, catch-up, missed-question returns and bonus questions?
+  - Record the topic, the old and new level, and the time, so it can be matched against the next round.
+- Put A's topics and frequencies back to how they were at the start (note them in Step 0), and say in the report if anything wouldn't go back.
 
 **5. Invite system**
 - A creates an invite link.

@@ -8,9 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // won — it can never overwrite the five the player is already answering. (The
 // old setWhere:untouched rule overwrote a served-but-unanswered queue, which is
 // exactly how a returning user got a brand-new set after answering question 1.)
+// The one exception is a row with NO slots (QA 2026-09-29, C1): nothing there
+// can be in play, and leaving it stranded the player for the day. The real
+// SQL behaviour is covered in daily/__tests__/empty-round-recovery.pg.test.ts.
 
 // Capture every insert builder call so we can assert the conflict STRATEGY, not
-// just the outcome — a regression back to onConflictDoUpdate must fail loudly.
+// just the outcome — an UNFENCED overwrite must fail loudly.
 const insertCalls: Array<{
   values: unknown;
   conflict: 'doNothing' | 'doUpdate' | null;
@@ -113,16 +116,20 @@ beforeEach(() => {
 });
 
 describe('persistDailyQueue — first-writer-wins (B-DAILY-QUEUE-SWAP-01)', () => {
-  it('uses ON CONFLICT DO NOTHING keyed on (userId, queueDate) — never DO UPDATE', async () => {
+  it('conflicts on (userId, queueDate) and only overwrites a row with no slots', async () => {
     returningRows = [{ id: 'q', userId: USER, queueDate: '2026-06-18', slots: slotsA }];
 
     await persistDailyQueue(USER, slotsA, []);
 
     expect(insertCalls).toHaveLength(1);
-    expect(insertCalls[0].conflict).toBe('doNothing');
-    // Crucially NOT an overwrite — that's the regression we're guarding against.
-    expect(insertCalls[0].conflict).not.toBe('doUpdate');
-    expect(insertCalls[0].conflictArg).toEqual({ target: ['user_id', 'queue_date'] });
+    expect(insertCalls[0].conflict).toBe('doUpdate');
+    const arg = insertCalls[0].conflictArg as { target: unknown; set: object; setWhere?: unknown };
+    expect(arg.target).toEqual(['user_id', 'queue_date']);
+    expect(Object.keys(arg.set).sort()).toEqual(['slots', 'targetSize']);
+    // Crucially FENCED — an update without this guard is the served-queue
+    // overwrite regression.
+    expect(JSON.stringify(arg.setWhere)).toContain('jsonb_array_length');
+    expect(JSON.stringify(arg.setWhere)).toContain('= 0');
   });
 
   it('winner: returns { row, won: true } and flags its generated questions used', async () => {

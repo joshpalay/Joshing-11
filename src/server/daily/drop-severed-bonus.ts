@@ -20,6 +20,12 @@ type Executor = Pick<typeof db, 'update'>;
  * source from every queue (account deletion). Removing a slot leaves a gap in
  * slot_index, which every reader tolerates (they sort; the skip append takes
  * max + 1).
+ *
+ * The keep-predicate is written so a slot WITHOUT presence_source_id is kept.
+ * A plain `slot->>'presence_source_id' = $1` is NULL for a core slot, and a
+ * NULL WHERE drops the row -- the earlier `not (… = $1 and unanswered)` form
+ * deleted every unanswered core slot, so an unfriend emptied a new player's
+ * whole first round (QA 2026-09-29, C1).
  */
 export async function dropSeveredBonusSlots(
   sourceUserId: string,
@@ -35,10 +41,8 @@ export async function dropSeveredBonusSlots(
       slots: sql`(
         select coalesce(jsonb_agg(slot order by position), '[]'::jsonb)
         from jsonb_array_elements(${dailyQueues.slots}) with ordinality as t(slot, position)
-        where not (
-          slot->>'presence_source_id' = ${sourceUserId}
-          and coalesce((slot->>'answered')::boolean, false) = false
-        )
+        where coalesce(slot->>'presence_source_id', '') <> ${sourceUserId}
+           or coalesce((slot->>'answered')::boolean, false)
       )`,
     })
     .where(
