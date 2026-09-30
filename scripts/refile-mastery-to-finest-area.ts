@@ -284,7 +284,8 @@ async function main() {
           await client.query(
             `INSERT INTO "PLAYER_MASTERY"
                (user_id, canonical_subcategory, broad_category, total_points, tier, tier_reached_at, rotation_eligible)
-             VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 <> 'establishing' THEN now() END, false)`,
+             VALUES ($1, $2, $3, $4, $5::"MasteryTier",
+                     CASE WHEN $5::"MasteryTier" <> 'establishing' THEN now() END, false)`,
             [p.userId, p.label, p.broad, p.after, p.tierAfter],
           );
         }
